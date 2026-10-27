@@ -61,8 +61,9 @@ enabled = true
 head_sampling_rate = 1
 invocation_logs = true
 
-# One hibernating object per account. Presence and, later, notifications
-# publish into it by topic. Sockets stay open only while a tab is visible.
+# One hibernating object per account. Presence and notifications publish
+# into it by topic. Sockets stay open only while a tab is visible.
+# Do not add a second class or binding.
 [[durable_objects.bindings]]
 name = "ACCOUNT_CHANNEL"
 class_name = "AccountChannel"

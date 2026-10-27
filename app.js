@@ -815,6 +815,7 @@
       out[key] = {
         mode: row.mode,
         since: Number(row.since) || 0,
+        updatedAt: Number(row.updatedAt) || Number(row.since) || 0,
         ids: ids.length ? ids : [key],
         handles: handles,
         handle: String(row.handle || "").replace(/^@/, "").slice(0, 80),
@@ -830,9 +831,13 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
+      const kinds = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
+        kind: kinds[item.kind] ? item.kind : (item.mention === true ? "mention" : "post"),
+        read: item.read === true,
+        recipientId: /^\d{12}$/.test(String(item.recipientId || "")) ? String(item.recipientId) : "",
         handle: String(item.handle || "").replace(/^@/, "").slice(0, 80),
         name: String(item.name || "").slice(0, 80),
         text: String(item.text || "").slice(0, 280),
@@ -886,6 +891,8 @@
         kind: item.kind === "verified" || item.kind === "mentions" ? item.kind : "",
         members: members,
         readAt: Number(item.readAt) || 0,
+        updatedAt: Number(item.updatedAt) || 0,
+        deletedAt: Number(item.deletedAt) || 0,
         sort: item.sort === "popular" ? "popular" : "recent"
       });
     });
@@ -916,15 +923,23 @@
     return editingNoteTabs() ? noteTabs() : feedTabs();
   }
 
+  function tabAlive(tab) {
+    if (!tab) return false;
+    const deleted = Number(tab.deletedAt) || 0;
+    if (!deleted) return true;
+    return deleted < (Number(tab.updatedAt) || 0);
+  }
+
   function visibleNoteTabs() {
     const list = noteTabsSame() ? feedTabs() : noteTabs();
-    return list.filter((tab) => tab.showNotes !== false);
+    return list.filter((tab) => tabAlive(tab) && tab.showNotes !== false);
   }
 
   function noteTabById(id) {
     const wanted = String(id || "");
     const list = noteTabsSame() ? feedTabs() : noteTabs();
-    return list.find((tab) => tab.id === wanted) || null;
+    const found = list.find((tab) => tab.id === wanted) || null;
+    return tabAlive(found) ? found : null;
   }
 
   function noteTabLabel(tab) {
@@ -1188,6 +1203,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!list.length) return;
     list.forEach((item) => setFollowed(item, on));
     saveSettings();
+    if (!navigator.onLine) {
+      list.forEach((item) => queueOffline({ type: "follow", id: item, on: !!on, snapshot: followSnapshot(item) }));
+      render();
+      return;
+    }
     const accounts = window.ViktorychAccounts;
     if (accounts && accounts.changeFollow) {
       Promise.all(list.map((item) => accounts.changeFollow(item, on, followSnapshot(item)))).then((results) => {
@@ -1588,7 +1608,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function parseAccountInput(raw) {
     const text = String(raw || "").trim();
     if (!text || text.length > 300) return null;
-    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok):(\S+)$/i);
+    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok|bsky|mastodon):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
     if (/^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}(?:\/[A-Za-z0-9_/%?&=.+~-]*)?$/i.test(text)) return { platform: "x", account: text };
     if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
@@ -1596,6 +1616,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (/instagram\.com\/[A-Za-z0-9._]+/i.test(text)) return { platform: "instagram", account: text };
     if (/(?:youtube\.com|youtu\.be)\//i.test(text)) return { platform: "youtube", account: text };
     if (/vk\.com\/[A-Za-z0-9_.]+/i.test(text)) return { platform: "vk", account: text };
+    if (/^https?:\/\/(?:www\.)?bsky\.app\/profile\/[A-Za-z0-9._:%-]+/i.test(text)) return { platform: "bsky", account: text };
+    if (/^https?:\/\/[A-Za-z0-9.-]+\/@[A-Za-z0-9_]{1,64}\/?$/i.test(text)) return { platform: "mastodon", account: text };
     if (/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?[A-Za-z][A-Za-z0-9_]{4,31}(?:\/\d+)?\/?$/i.test(text)) return { platform: "telegram", account: text };
     if (/^@?[A-Za-z][A-Za-z0-9_]{16,32}$/.test(text)) return { platform: "telegram", account: text.replace(/^@/, "") };
     if (/^(?:https?:\/\/)?(?:www\.|m\.)?tiktok\.com\/@[A-Za-z0-9._]{2,24}(?:[/?#].*)?$/i.test(text)) return { platform: "tiktok", account: text };
@@ -1616,7 +1638,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       instagram: /instagram\.com\/([A-Za-z0-9._]+)/i,
       threads: /threads\.(?:com|net)\/@([A-Za-z0-9._]+)/i,
       youtube: /(?:youtube\.com\/(?:@|channel\/|c\/|user\/)?|youtu\.be\/)([A-Za-z0-9._-]+)/i,
-      vk: /vk\.com\/([A-Za-z0-9_.]+)/i
+      vk: /vk\.com\/([A-Za-z0-9_.]+)/i,
+      bsky: /bsky\.app\/profile\/([A-Za-z0-9._:%-]+)/i,
+      mastodon: /\/@([A-Za-z0-9_]{1,64})/i
     };
     const pattern = patterns[parsed.platform];
     const fromUrl = pattern ? text.match(pattern) : null;
@@ -4450,6 +4474,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function fetchJson(url) {
+    if (window.ViktorychDirect && window.ViktorychDirect.allows(url)) {
+      return window.ViktorychDirect.json(url);
+    }
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -6599,8 +6626,12 @@ const here = parseRoute();
   }
 
   function bellUnread() {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
+      const server = notesServer();
+      return Number(server.unread) > 0 ? Number(server.unread) : 0;
+    }
     const read = Number(STATE.settings && STATE.settings.bellRead) || 0;
-    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => (Number(note.at) || 0) > read).length;
+    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
   }
 
   function bellBadgeHtml() {
@@ -7355,7 +7386,7 @@ const here = parseRoute();
       </div>
       <div class="tabs-bar">
         <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button>
-        <div class="tabs" role="tablist" aria-label="${tr("Home timeline")}">
+        <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
           ${tabWithMenu("foryou", tr("For you"))}
           ${tabWithMenu("following", tr("Following"))}
           ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, "", item.id)).join("")}
@@ -8277,6 +8308,117 @@ const here = parseRoute();
     return Promise.resolve();
   }
 
+  function publicJson(url) {
+    const direct = window.ViktorychDirect;
+    if (direct && direct.allows(url)) return direct.json(url);
+    return fetchJson(url);
+  }
+
+  function loadBskyHeader(handle) {
+    const actor = window.ViktorychDirect ? window.ViktorychDirect.splitBsky(handle) : String(handle || "").replace(/^@/, "");
+    const url = window.ViktorychDirect ? window.ViktorychDirect.bskyProfileUrl(actor) : "https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=" + encodeURIComponent(actor);
+    return publicJson(url).then((data) => {
+      if (!data || !data.handle) return null;
+      return {
+        id: "bsky:" + data.handle,
+        platform: "bsky",
+        handle: data.handle,
+        name: data.displayName || data.handle,
+        avatar: data.avatar || "",
+        banner: data.banner || "",
+        bio: data.description || "",
+        followers: data.followersCount,
+        following: data.followsCount,
+        postsCount: data.postsCount,
+        url: "https://bsky.app/profile/" + data.handle
+      };
+    }).catch(() => null);
+  }
+
+  function bskyPost(item) {
+    const post = item && (item.post || item);
+    const record = post && post.record;
+    if (!post || !record) return null;
+    return {
+      id: post.uri || post.cid || "",
+      statusId: post.uri || "",
+      platform: "bsky",
+      kind: "post",
+      author: (post.author && (post.author.displayName || post.author.handle)) || "",
+      handle: (post.author && post.author.handle) || "",
+      avatar: (post.author && post.author.avatar) || "",
+      text: record.text || "",
+      date: record.createdAt || "",
+      url: post.uri ? "https://bsky.app/profile/" + ((post.author && post.author.handle) || "") + "/post/" + String(post.uri).split("/").pop() : ""
+    };
+  }
+
+  function loadBskyLive(row, handle) {
+    const actor = window.ViktorychDirect ? window.ViktorychDirect.splitBsky(handle) : handle;
+    const feedUrl = window.ViktorychDirect ? window.ViktorychDirect.bskyFeedUrl(actor) : "";
+    return Promise.all([loadBskyHeader(actor), feedUrl ? publicJson(feedUrl).catch(() => null) : Promise.resolve(null)]).then((pair) => {
+      row.profile = pair[0] || limitedProfile("bsky", actor);
+      row.posts = ((pair[1] && pair[1].feed) || []).map(bskyPost).filter(Boolean);
+      row.replies = [];
+      row.media = row.posts.filter((post) => post && post.media && post.media.length);
+      row.source = "bsky";
+      row.fetchedAt = Date.now();
+      snapshotProfile("bsky:" + actor, row);
+    });
+  }
+
+  function loadMastodonHeader(handle) {
+    const who = window.ViktorychDirect ? window.ViktorychDirect.splitMastodon(handle) : { instance: "mastodon.social", acct: handle };
+    const url = window.ViktorychDirect ? window.ViktorychDirect.mastodonLookup(who.instance, who.acct) : "https://mastodon.social/api/v1/accounts/lookup?acct=" + encodeURIComponent(who.acct);
+    return publicJson(url).then((data) => {
+      if (!data || !data.id) return null;
+      return {
+        id: "mastodon:" + who.instance + ":" + data.id,
+        platform: "mastodon",
+        handle: data.acct || who.acct,
+        name: data.display_name || data.username || who.acct,
+        avatar: data.avatar || "",
+        banner: data.header || "",
+        bio: data.note || "",
+        followers: data.followers_count,
+        following: data.following_count,
+        postsCount: data.statuses_count,
+        url: data.url || ("https://" + who.instance + "/@" + who.acct),
+        remoteId: data.id,
+        instance: who.instance
+      };
+    }).catch(() => null);
+  }
+
+  function loadMastodonLive(row, handle) {
+    const who = window.ViktorychDirect ? window.ViktorychDirect.splitMastodon(handle) : { instance: "mastodon.social", acct: handle };
+    return loadMastodonHeader(handle).then((profile) => {
+      row.profile = profile || limitedProfile("mastodon", who.acct);
+      if (!profile || !profile.remoteId || !window.ViktorychDirect) {
+        row.posts = [];
+        row.fetchedAt = Date.now();
+        return null;
+      }
+      return publicJson(window.ViktorychDirect.mastodonStatuses(who.instance, profile.remoteId)).then((list) => {
+        row.posts = (list || []).map((item) => ({
+          id: item.id,
+          statusId: item.id,
+          platform: "mastodon",
+          kind: "post",
+          author: profile.name,
+          handle: profile.handle,
+          avatar: profile.avatar,
+          text: item.content || "",
+          date: item.created_at || "",
+          url: item.url || profile.url
+        }));
+        row.source = "mastodon";
+        row.fetchedAt = Date.now();
+        snapshotProfile("mastodon:" + who.instance + ":" + who.acct, row);
+      });
+    });
+  }
+
   function ensureLiveHeader(platform, handle) {
     const key = liveKey(platform, handle);
     const row = STATE.liveUsers[key] || (STATE.liveUsers[key] = blankLive(platform, handle));
@@ -8284,6 +8426,8 @@ const here = parseRoute();
     if (row.headerTask) return row.headerTask;
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
+      : platform === "bsky" ? loadBskyHeader(clean)
+      : platform === "mastodon" ? loadMastodonHeader(clean)
       : platform === "vk" ? Promise.resolve(limitedProfile("vk", clean))
       : platform === "telegram" ? Promise.resolve(limitedProfile("telegram", clean))
       : (platform === "instagram" || platform === "threads") ? Promise.resolve(limitedProfile(platform, clean))
@@ -8306,6 +8450,8 @@ const here = parseRoute();
     row.loading = !row.profile;
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtLive(row, clean)
+      : platform === "bsky" ? loadBskyLive(row, clean)
+      : platform === "mastodon" ? loadMastodonLive(row, clean)
       : platform === "vk" ? loadVkSaved(row, clean)
       : platform === "telegram" ? loadTelegramSaved(row, clean)
       : (platform === "instagram" || platform === "threads") ? loadLimited(row, platform, clean)
@@ -8844,6 +8990,7 @@ const here = parseRoute();
     if (!text || text.length > 120) return;
     const next = [text].concat(recentSearches().filter((item) => item.toLowerCase() !== text.toLowerCase())).slice(0, 8);
     writeStored(localStorage, SEARCH_SUFFIX, JSON.stringify(next));
+    if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("search", "recent", { items: next });
   }
 
   function forgetSearch(q) {
@@ -8925,6 +9072,7 @@ const here = parseRoute();
     });
     trendCache = out;
     trendKey = key;
+    if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("explore", "trends", { items: out });
     return out;
   }
 
@@ -10428,20 +10576,42 @@ const here = parseRoute();
   function markNoteTabRead(active) {
     if (!STATE.settings) return;
     if (active === "all") {
-      const newest = ((STATE.settings.bellNotes) || []).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
-      if (newest && (Number(STATE.settings.bellRead) || 0) < newest) {
-        STATE.settings.bellRead = Date.now();
-        saveSettings();
-        updateBadge(0);
-      }
+      const notes = STATE.settings.bellNotes || [];
+      const newest = notes.reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
+      const until = Math.max(newest, Number(notesServer().readUntil) || 0);
+      if (!until || (Number(STATE.settings.bellRead) || 0) >= until && !(notes.some((note) => !note.read))) return;
+      const ids = [];
+      notes.forEach((note) => {
+        if ((Number(note.at) || 0) <= until) {
+          if (!note.read && note.id) ids.push(note.id);
+          note.read = true;
+        }
+      });
+      STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
+      const server = notesServer();
+      server.unread = 0;
+      server.readUntil = Math.max(Number(server.readUntil) || 0, until);
+      writeNotesServer(server);
+      const pending = notePending();
+      pending.until = server.readUntil;
+      pending.ids = (pending.ids || []).concat(ids).slice(-80);
+      writeNotePending(pending);
+      updateBadge(0);
+      saveSettings();
+      scheduleNoteSync();
       return;
     }
     const tab = noteTabById(active);
     if (!tab) return;
     const newest = notesForTab(tab).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
     if (newest && (Number(tab.readAt) || 0) < newest) {
-      tab.readAt = Date.now();
+      tab.readAt = newest;
+      tab.updatedAt = Date.now();
+      const pending = notePending();
+      pending.tabs = true;
+      writeNotePending(pending);
       saveSettings();
+      scheduleNoteSync();
     }
   }
 
@@ -10452,11 +10622,23 @@ const here = parseRoute();
     return `<div class="tab-pair on">${btn}<button class="tab-caret" type="button" data-act="note-tab-menu" data-tab="${esc(id)}" aria-label="${esc(tr("{label} options", { label: label }))}" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
   }
 
+  function noteTitle(note) {
+    const who = esc((note && (note.name || note.handle)) || tr("Someone"));
+    const kind = note && note.kind;
+    if (kind === "like") return tr("{name} liked your post", { name: who });
+    if (kind === "repost") return tr("{name} reposted your post", { name: who });
+    if (kind === "reply") return tr("{name} replied to you", { name: who });
+    if (kind === "mention" || (note && note.mention)) return tr("{name} mentioned you", { name: who });
+    if (kind === "follow") return tr("{name} followed you", { name: who });
+    if (kind === "live") return tr("{name} is live", { name: who });
+    return tr("New post notifications for @{handle}", { handle: who });
+  }
+
   function noteRow(note) {
     const who = note.handle || note.name || "account";
     const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
     const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${tr("New post notifications for @{handle}", { handle: esc(who) })}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
   }
 
   function notificationsView(route) {
@@ -11184,9 +11366,13 @@ if (STATE.histClear) {
         histUpsert("bookmarks", likedPost || findAnyPost(id), { id: id });
         if (!navigator.onLine) toast(tr("Saved. Images download when you’re back online."));
       }
-      if (act === "like") histUpsert("likes", likedPost, { id: id });
+      if (act === "like") {
+        histUpsert("likes", likedPost, { id: id });
+        queueLikeNote(likedPost, id);
+      }
     }
     saveSettings();
+    if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
     if (parseRoute().name !== "shorts") render();
     return !!STATE.settings[bucket][id];
   }
@@ -11428,6 +11614,10 @@ if (STATE.histClear) {
       saveSettings();
       toast(tr("Couldn't save that repost."));
       render();
+      return;
+    }
+    if (!navigator.onLine) {
+      queueOffline({ type: "repost", id: post.id, on: !!on, postKey: postKey, snapshot: snap });
       return;
     }
     const req = on
@@ -12774,6 +12964,7 @@ if (STATE.histClear) {
     }
     if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = pageY();
     scrollFreeze = true;
+    hscrollNav = true;
     location.hash = wanted;
   }
 
@@ -12836,45 +13027,467 @@ if (STATE.histClear) {
 
   let tabScrollLeft = null;
   let tabScrollRoute = "";
+  let hscrollNav = false;
+  let hscrollTouching = false;
+  let hscrollHolding = false;
+  let hscrollHoldGen = 0;
+  let hscrollWidth = 0;
+  let hscrollMem = null;
+  let hscrollSaveTimer = 0;
+  let hscrollRestoreQueued = false;
+  const hscrollActiveMem = {};
+  const HSCROLL_SELECTOR = ".tabs, .sp-row, .story-tray, .pills, .yt-chips, .yt-strip, .hist-chips, .cm-filter-bar, .games-row, .mu-hscroll, .shorts, .vault-nav-tabs, .tv-tabs-nav, .tv-streams-scroll, [data-hscroll]";
+  const HSCROLL_KEEP_ATTR = { "data-arrows": 1, "data-hscroll-live": 1, "data-hscroll-key": 1, "data-mark": 1, "data-hscroll-revealed": 1, "data-seen": 1 };
 
-  function revealSelectedTab(scroller) {
-    const current = scroller.querySelector(".tab-pair.on") || scroller.querySelector(".tab.on");
-    if (!current) return;
-    const pad = 48;
-    const box = current.getBoundingClientRect();
-    const host = scroller.getBoundingClientRect();
-    if (box.right > host.right - pad) scroller.scrollLeft += box.right - (host.right - pad);
-    else if (box.left < host.left + pad) scroller.scrollLeft -= host.left + pad - box.left;
+  function hscrollStore() {
+    if (hscrollMem) return hscrollMem;
+    hscrollMem = {};
+    try {
+      const raw = readStored(sessionStorage, "hscroll-v1");
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) hscrollMem = parsed;
+    } catch (err) { hscrollMem = {}; }
+    return hscrollMem;
   }
 
-  function syncTabArrows() {
-    const scroller = document.querySelector(".tabs");
-    const bar = document.querySelector(".tabs-bar");
-    const left = document.querySelector(".tab-arrow.left");
-    const right = document.querySelector(".tab-arrow.right");
-    if (!scroller || !left || !right) return;
-    const route = routeScrollKey();
-    if (scroller.dataset.seen !== "1") {
-      scroller.dataset.seen = "1";
-      const sameTab = tabScrollRoute === route && tabScrollLeft != null;
-      tabScrollRoute = route;
-      if (sameTab) scroller.scrollLeft = tabScrollLeft;
-      else revealSelectedTab(scroller);
+  function hscrollSaveSoon() {
+    if (hscrollSaveTimer) return;
+    hscrollSaveTimer = setTimeout(() => {
+      hscrollSaveTimer = 0;
+      hscrollFlush();
+    }, 200);
+  }
+
+  function hscrollFlush() {
+    try { writeStored(sessionStorage, "hscroll-v1", JSON.stringify(hscrollStore())); } catch (err) { /* the in-memory copy still covers this visit */ }
+  }
+
+  function hscrollScreen() {
+    let route = { name: "home" };
+    try { route = parseRoute() || route; } catch (err) { /* the first paint still has a screen */ }
+    const name = route.name || "home";
+    if (name === "profile" || name === "user" || name === "connections") return name + ":" + (route.platform || "") + ":" + String(route.handle || "").toLowerCase();
+    if (name === "settings") return "settings:" + (route.section || "") + ":" + (route.sub || "");
+    if (name === "list") return "list:" + (route.id || "");
+    if (name === "history" || name === "bookmarks") return "history";
+    return name;
+  }
+
+  function hscrollClassKey(el) {
+    const known = ["tabs", "sp-row", "story-tray", "pills", "yt-chips", "yt-strip", "hist-chips", "cm-filter-bar", "games-row", "mu-hscroll", "shorts", "vault-nav-tabs", "tv-tabs-nav", "tv-streams-scroll"];
+    for (let i = 0; i < known.length; i++) if (el.classList.contains(known[i])) return known[i];
+    return el.classList.length ? el.classList[0] : el.tagName.toLowerCase();
+  }
+
+  function hscrollId(el, root) {
+    const explicit = el.getAttribute("data-hscroll");
+    const screen = hscrollScreen();
+    if (explicit) return screen + ":" + explicit;
+    const key = hscrollClassKey(el);
+    const label = el.getAttribute("aria-label") || "";
+    const selector = el.classList.contains(key) ? "." + key : (el.tagName.toLowerCase() + (el.classList.length ? "." + el.classList[0] : ""));
+    let index = 0;
+    if (root && root.querySelectorAll) {
+      const peers = [...root.querySelectorAll(selector)].filter((node) => !node.getAttribute("data-hscroll") && (node.getAttribute("aria-label") || "") === label);
+      const at = peers.indexOf(el);
+      index = at < 0 ? 0 : at;
     }
+    return screen + ":" + key + ":" + label + ":" + index;
+  }
+
+  function hscrollList(root) {
+    if (!root || !root.querySelectorAll) return [];
+    return [...root.querySelectorAll(HSCROLL_SELECTOR)];
+  }
+
+  function hscrollMatches(el) {
+    if (!el || el.nodeType !== 1 || !el.matches) return false;
+    if (el.matches(HSCROLL_SELECTOR)) return true;
+    if (el.id === "app" || el.classList.contains("center") || el.classList.contains("app")) return false;
+    if (el.scrollWidth <= el.clientWidth + 8) return false;
+    if (el.clientHeight > 180 && el.scrollHeight > el.clientHeight + 24) return false;
+    try {
+      const ox = getComputedStyle(el).overflowX;
+      return ox === "auto" || ox === "scroll" || ox === "overlay";
+    } catch (err) { return false; }
+  }
+
+  function hscrollListLive(root) {
+    const found = hscrollList(root);
+    const seen = new Set(found);
+    if (!root || !root.querySelectorAll) return found;
+    const nodes = root.querySelectorAll("div, ul, ol, nav");
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      if (seen.has(el) || !hscrollMatches(el)) continue;
+      seen.add(el);
+      found.push(el);
+    }
+    return found;
+  }
+
+  function hscrollFromTarget(node) {
+    const start = node && node.nodeType === 1 ? node : (node && node.parentElement);
+    if (start && start.closest) {
+      const bar = start.closest(".tabs-bar, .tabs, .sp-row, .sp-row-wrap, .story-tray, .yt-chips, .yt-strip, .hist-chips, .cm-filter-bar, .games-row, .mu-hscroll, .vault-nav-tabs, .tv-tabs-nav, .tv-streams-scroll");
+      if (bar) return bar;
+    }
+    let el = start;
+    while (el && el !== document.body && el !== document.documentElement) {
+      if (hscrollMatches(el)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function hscrollRememberEl(el) {
+    if (!el || el.nodeType !== 1) return;
+    const root = (el.closest && el.closest("#app")) || document.getElementById("app") || document.body;
+    const id = el.dataset.hscrollKey || hscrollId(el, root);
+    el.dataset.hscrollKey = id;
+    const left = el.scrollLeft || 0;
+    const max = el.scrollWidth - el.clientWidth;
+    const store = hscrollStore();
+    if (left <= 0 && store[id] > 1 && (max <= 1 || hscrollHolding)) return;
+    store[id] = left;
+    if (el.classList.contains("tabs")) {
+      tabScrollLeft = left;
+      tabScrollRoute = routeScrollKey();
+    }
+    hscrollSaveSoon();
+  }
+
+  function hscrollRemember(root) {
+    hscrollListLive(root || document.getElementById("app") || document.body).forEach(hscrollRememberEl);
+  }
+
+  function hscrollActive(el) {
+    const current = el.querySelector(".tab.on, [role='tab'][aria-selected='true']");
+    if (!current) return "";
+    return current.getAttribute("data-tab") || current.getAttribute("href") || "";
+  }
+
+  function isTabRow(el) {
+    return !!(el && (el.classList.contains("tabs") || el.getAttribute("role") === "tablist" || el.classList.contains("cm-filter-bar") || el.classList.contains("vault-nav-tabs") || el.classList.contains("tv-tabs-nav")));
+  }
+
+  function copyScrollerAttrs(from, to) {
+    [...from.attributes].forEach((attr) => {
+      if (HSCROLL_KEEP_ATTR[attr.name]) return;
+      if (to.getAttribute(attr.name) !== attr.value) to.setAttribute(attr.name, attr.value);
+    });
+  }
+
+  function tabSlotKey(slot) {
+    if (!slot || slot.nodeType !== 1) return "";
+    const tab = slot.matches(".tab, [role='tab']") ? slot : (slot.querySelector && slot.querySelector(".tab, [role='tab']"));
+    if (!tab) return "node:" + (slot.className || slot.tagName);
+    return (tab.getAttribute("data-tab") || tab.getAttribute("href") || (tab.textContent || "").replace(/\s+/g, " ").trim()).slice(0, 180);
+  }
+
+  function patchSubtree(live, fresh) {
+    if (!live || !fresh) return;
+    if (!live.children.length && !fresh.children.length) {
+      if (live.textContent !== fresh.textContent) live.textContent = fresh.textContent;
+      return;
+    }
+    if (live.childNodes.length !== fresh.childNodes.length) {
+      live.innerHTML = fresh.innerHTML;
+      return;
+    }
+    for (let i = 0; i < fresh.childNodes.length; i++) {
+      const have = live.childNodes[i];
+      const want = fresh.childNodes[i];
+      if (have.nodeType === 3 && want.nodeType === 3) {
+        if (have.nodeValue !== want.nodeValue) have.nodeValue = want.nodeValue;
+        continue;
+      }
+      if (have.nodeType !== 1 || want.nodeType !== 1 || have.tagName !== want.tagName) {
+        live.replaceChild(want.cloneNode(true), have);
+        continue;
+      }
+      copyScrollerAttrs(want, have);
+      patchSubtree(have, want);
+    }
+  }
+
+  function patchTabRow(live, fresh) {
+    copyScrollerAttrs(fresh, live);
+    const pool = new Map();
+    [...live.children].forEach((node) => {
+      const key = tabSlotKey(node);
+      if (!pool.has(key)) pool.set(key, []);
+      pool.get(key).push(node);
+    });
+    const ordered = [];
+    [...fresh.children].forEach((slot) => {
+      const key = tabSlotKey(slot);
+      const list = pool.get(key);
+      const old = list && list.shift();
+      if (!old || old.tagName !== slot.tagName) {
+        if (old) old.remove();
+        ordered.push(slot.cloneNode(true));
+        return;
+      }
+      copyScrollerAttrs(slot, old);
+      patchSubtree(old, slot);
+      ordered.push(old);
+    });
+    pool.forEach((list) => list.forEach((node) => node.remove()));
+    ordered.forEach((node, index) => {
+      if (live.children[index] !== node) live.insertBefore(node, live.children[index] || null);
+    });
+    while (live.children.length > ordered.length) live.removeChild(live.lastChild);
+  }
+
+  function hscrollReuse(liveRoot, frag) {
+    const liveRows = hscrollList(liveRoot);
+    const freshRows = hscrollList(frag);
+    const used = new Set();
+    freshRows.forEach((fresh) => {
+      const id = hscrollId(fresh, frag);
+      let live = null;
+      for (let i = 0; i < liveRows.length; i++) {
+        if (used.has(liveRows[i])) continue;
+        const liveId = liveRows[i].dataset.hscrollKey || hscrollId(liveRows[i], liveRoot);
+        if (liveId === id) { live = liveRows[i]; break; }
+      }
+      if (!live) return;
+      used.add(live);
+      const left = live.scrollLeft || 0;
+      try {
+        if (isTabRow(live) && isTabRow(fresh)) patchTabRow(live, fresh);
+        else if (live.innerHTML !== fresh.innerHTML || live.className !== fresh.className) return;
+      } catch (err) { return; }
+      live.dataset.hscrollLive = "1";
+      live.dataset.hscrollKey = id;
+      fresh.replaceWith(live);
+      if (left && Math.abs((live.scrollLeft || 0) - left) > 1) live.scrollLeft = left;
+    });
+  }
+
+  function commitApp(html) {
+    const app = document.getElementById("app");
+    if (!app) return;
+    hscrollHolding = true;
+    hscrollHoldGen = STATE.renderGen || 0;
+    hscrollRemember(app);
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    hscrollReuse(app, tpl.content);
+    while (app.firstChild) app.removeChild(app.firstChild);
+    app.appendChild(tpl.content);
+    hscrollSettle({ reveal: true });
+  }
+
+  function hscrollRestoreSaved(retry) {
+    const root = document.getElementById("app") || document.body;
+    const store = hscrollStore();
+    let pending = false;
+    hscrollListLive(root).forEach((el) => {
+      if (!el.isConnected || el.dataset.hscrollRevealed === "1") return;
+      const id = el.dataset.hscrollKey || hscrollId(el, root);
+      el.dataset.hscrollKey = id;
+      const saved = store[id];
+      if (typeof saved !== "number" || saved < 0) return;
+      if (Math.abs((el.scrollLeft || 0) - saved) <= 1) return;
+      if (hscrollTouching && el.scrollLeft > 1) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if (saved > 1 && max <= 1) { pending = true; return; }
+      el.scrollLeft = saved;
+    });
+    if (pending && retry !== false) {
+      const left = typeof retry === "number" ? retry : 12;
+      if (left <= 0) return;
+      const schedule = window.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+      schedule(() => hscrollRestoreSaved(left - 1));
+    }
+  }
+
+  function hscrollSettle(opts) {
+    const reveal = !!(opts && opts.reveal && hscrollNav);
+    const root = document.getElementById("app") || document.body;
+    const store = hscrollStore();
+    hscrollListLive(root).forEach((el) => {
+      const id = el.dataset.hscrollKey || hscrollId(el, root);
+      el.dataset.hscrollKey = id;
+      const saved = store[id];
+      const active = hscrollActive(el);
+      const prev = hscrollActiveMem[id] || "";
+      const changed = !!(reveal && prev && active && prev !== active);
+      if (!changed && typeof saved === "number" && saved > 0 && Math.abs((el.scrollLeft || 0) - saved) > 1) {
+        const max = el.scrollWidth - el.clientWidth;
+        if (max > 1 || el.scrollWidth > el.clientWidth) el.scrollLeft = saved;
+      }
+      if (changed) {
+        const next = revealSelectedTab(el, true);
+        if (typeof next === "number") store[id] = next;
+        el.dataset.hscrollRevealed = "1";
+        setTimeout(() => {
+          try { delete el.dataset.hscrollRevealed; } catch (err) { /* already gone */ }
+          hscrollRememberEl(el);
+        }, 450);
+      } else if (!prev && !(saved > 0) && active) {
+        const next = revealSelectedTab(el, false);
+        if (typeof next === "number" && next > 0) store[id] = next;
+      }
+      if (active) hscrollActiveMem[id] = active;
+      if (el.dataset.hscrollBound !== "1") {
+        el.dataset.hscrollBound = "1";
+        el.addEventListener("scroll", () => hscrollRememberEl(el), { passive: true });
+      }
+    });
+    if (opts && opts.reveal) hscrollNav = false;
+    syncTabArrows();
+    const gen = STATE.renderGen || 0;
+    const release = () => {
+      if ((STATE.renderGen || 0) !== gen) return;
+      hscrollRestoreSaved();
+      if (hscrollHoldGen === gen) hscrollHolding = false;
+    };
+    if (window.requestAnimationFrame) window.requestAnimationFrame(release);
+    else release();
+  }
+
+  function hscrollQueueRestore() {
+    if (hscrollRestoreQueued) return;
+    hscrollRestoreQueued = true;
+    const schedule = window.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+    schedule(() => {
+      hscrollRestoreQueued = false;
+      hscrollRestoreSaved();
+      syncTabArrows();
+    });
+  }
+
+  function revealSelectedTab(scroller, smooth) {
+    if (!scroller) return 0;
+    const current = scroller.querySelector(".tab-pair.on") || scroller.querySelector(".tab.on") || scroller.querySelector("[role='tab'][aria-selected='true']");
+    if (!current) return scroller.scrollLeft || 0;
+    const pad = 8;
+    const box = current.getBoundingClientRect();
+    const host = scroller.getBoundingClientRect();
+    if (!host.width || !box.width) return scroller.scrollLeft || 0;
+    let delta = 0;
+    if (box.right > host.right - pad) delta = box.right - (host.right - pad);
+    else if (box.left < host.left + pad) delta = box.left - (host.left + pad);
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const next = Math.max(0, Math.min(max, (scroller.scrollLeft || 0) + delta));
+    if (Math.abs(next - (scroller.scrollLeft || 0)) < 2) return next;
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (smooth && !reduced && scroller.scrollTo) scroller.scrollTo({ left: next, behavior: "smooth" });
+    else scroller.scrollLeft = next;
+    return next;
+  }
+
+  function syncOneTabArrows(bar, scroller) {
+    const left = bar.querySelector(".tab-arrow.left");
+    const right = bar.querySelector(".tab-arrow.right");
+    if (!left || !right) return;
     const max = scroller.scrollWidth - scroller.clientWidth;
     const canLeft = max > 2 && scroller.scrollLeft > 2;
     const canRight = max > 2 && scroller.scrollLeft < max - 2;
     left.hidden = !canLeft;
     right.hidden = !canRight;
-    if (bar) {
-      bar.classList.toggle("is-fade-left", canLeft);
-      bar.classList.toggle("is-fade-right", canRight);
+    bar.classList.toggle("is-fade-left", canLeft);
+    bar.classList.toggle("is-fade-right", canRight);
+    if (!(scroller.scrollLeft === 0 && max <= 1 && tabScrollLeft > 1)) {
+      tabScrollLeft = scroller.scrollLeft;
+      tabScrollRoute = routeScrollKey();
     }
-    tabScrollLeft = scroller.scrollLeft;
     if (scroller.dataset.arrows !== "1") {
       scroller.dataset.arrows = "1";
-      scroller.addEventListener("scroll", syncTabArrows, { passive: true });
+      scroller.addEventListener("scroll", () => {
+        hscrollRememberEl(scroller);
+        const host = scroller.closest(".tabs-bar");
+        if (host) syncOneTabArrows(host, scroller);
+      }, { passive: true });
     }
+  }
+
+  function syncTabArrows() {
+    document.querySelectorAll(".tabs-bar").forEach((bar) => {
+      const scroller = bar.querySelector(".tabs");
+      if (scroller) syncOneTabArrows(bar, scroller);
+    });
+  }
+
+  function hscrollOnResize() {
+    const width = window.innerWidth || 0;
+    const widthChanged = hscrollWidth && Math.abs(width - hscrollWidth) > 1;
+    hscrollWidth = width;
+    if (!widthChanged) {
+      hscrollRestoreSaved();
+      return;
+    }
+    syncTabArrows();
+    placeTabMenu();
+    placeBellMenu();
+    placeFloatMenu(".assign-menu");
+    placeFloatMenu(".tab-context");
+  }
+
+  function hscrollInstall() {
+    if (hscrollInstall.done) return;
+    hscrollInstall.done = true;
+    hscrollWidth = window.innerWidth || 0;
+    document.addEventListener("scroll", (event) => {
+      const target = event.target;
+      if (!target || target.nodeType !== 1 || target === document.documentElement) return;
+      if (!hscrollMatches(target)) return;
+      hscrollRememberEl(target);
+    }, true);
+    document.addEventListener("touchstart", (event) => {
+      if (hscrollFromTarget(event.target)) hscrollTouching = true;
+    }, { passive: true, capture: true });
+    document.addEventListener("touchend", () => { hscrollTouching = false; }, { passive: true, capture: true });
+    document.addEventListener("touchcancel", () => { hscrollTouching = false; }, { passive: true, capture: true });
+    window.addEventListener("pagehide", () => {
+      hscrollRemember(document.getElementById("app"));
+      hscrollFlush();
+    });
+    if (window.MutationObserver && document.body) {
+      const observer = new MutationObserver((records) => {
+        for (let i = 0; i < records.length; i++) {
+          if (records[i].addedNodes && records[i].addedNodes.length) {
+            hscrollQueueRestore();
+            return;
+          }
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", () => {
+        const width = window.visualViewport.width || window.innerWidth || 0;
+        if (hscrollWidth && Math.abs(width - hscrollWidth) <= 1) hscrollRestoreSaved();
+      }, { passive: true });
+    }
+    window.ViktorychHScroll = {
+      remember: () => { hscrollRemember(document.getElementById("app") || document.body); hscrollFlush(); },
+      refresh: async () => {
+        const before = STATE.renderGen || 0;
+        try { await refreshFeeds(true); } catch (err) { /* a failed fetch still has to prove the row survives a paint */ }
+        if ((STATE.renderGen || 0) === before) render();
+        return STATE.renderGen || 0;
+      },
+      badge: () => {
+        if (!STATE.settings) return;
+        const notes = Array.isArray(STATE.settings.bellNotes) ? STATE.settings.bellNotes.slice() : [];
+        notes.unshift({ id: "hscroll-badge-" + Date.now(), at: Date.now(), handle: "news", name: "News", text: "badge", hash: "#/" });
+        STATE.settings.bellNotes = cleanBellNotes(notes);
+        paintBellBadge();
+        render();
+      },
+      resizeHeight: () => hscrollOnResize(),
+      generation: () => STATE.renderGen || 0,
+      positions: () => hscrollListLive(document.getElementById("app") || document.body).map((el) => ({
+        id: el.dataset.hscrollKey || "",
+        left: el.scrollLeft || 0,
+        live: el.dataset.hscrollLive || "",
+        mark: el.dataset.mark || ""
+      }))
+    };
   }
 
   function bindNavSplit() {
@@ -12964,27 +13577,11 @@ if (STATE.histClear) {
       if (STATE.snapTop) y = 0;
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
-      /* A render rebuilds the whole shell, which would throw away the pill
-         row's horizontal position (hydration and shard loads re-render while
-         the user scrolls). Read it off the live row before the swap, then
-         paint it back on the new one so the row does not jump to its start. */
-      const pillsRow = document.querySelector(".sp-row");
-      const pillsLeft = pillsRow ? pillsRow.scrollLeft : 0;
-      document.getElementById("app").innerHTML = shell(view(route), route);
+      /* The shell swap used to throw away every horizontal row. Tab rows are
+         patched in place; every other row, including the live pills, gets its
+         scrollLeft written back. Presence then paints dots on the new shell. */
+      commitApp(shell(view(route), route));
       if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
-      if (pillsLeft) {
-        const restorePills = () => {
-          const paintedRow = document.querySelector(".sp-row");
-          if (paintedRow && paintedRow.scrollLeft !== pillsLeft) paintedRow.scrollLeft = pillsLeft;
-        };
-        restorePills();
-        /* Layout is not necessarily final on the first frame. */
-        if (window.requestAnimationFrame) {
-          window.requestAnimationFrame(() => {
-            if (gen === STATE.renderGen) restorePills();
-          });
-        }
-      }
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
         else window.ViktorychShorts.unmount();
@@ -13073,6 +13670,7 @@ if (STATE.histClear) {
       if (route.name === "explore") bindExploreSearchFit();
       else clearExploreSearchFit();
       bindNavSplit();
+      scheduleRemember(route);
     };
     const endRoute = () => {
       if (gen !== STATE.renderGen) return;
@@ -13416,6 +14014,12 @@ if (STATE.histClear) {
         render();
         return;
       }
+      if (!navigator.onLine && seed.trim()) {
+        queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+        if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
+        render();
+        return;
+      }
       render();
       toast(tr("Posts come from your feeds"));
       return;
@@ -13533,7 +14137,8 @@ if (STATE.histClear) {
       return;
     }
     if (act === "tab-scroll") {
-      const scroller = document.querySelector(".tabs");
+      const bar = el.closest && el.closest(".tabs-bar");
+      const scroller = (bar && bar.querySelector(".tabs")) || document.querySelector(".tabs");
       if (!scroller) return;
       const dir = Number(el.dataset.dir) || 1;
       const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
@@ -13543,6 +14148,7 @@ if (STATE.histClear) {
       tabScrollLeft = next;
       tabScrollRoute = routeScrollKey();
       scroller.scrollTo({ left: next, behavior: reduced ? "auto" : "smooth" });
+      hscrollRememberEl(scroller);
       syncTabArrows();
       return;
     }
@@ -14078,8 +14684,14 @@ if (STATE.histClear) {
     if (act === "confirm-delete") {
       if (STATE.confirm && STATE.confirm.kind === "feed-tab") {
         const id = STATE.confirm.id;
-        if (editingNoteTabs() || (!noteTabsSame() && noteTabs().some((tab) => tab.id === id) && !feedTabById(id))) STATE.settings.noteTabs = noteTabs().filter((tab) => tab.id !== id);
-        else STATE.settings.feedTabs = feedTabs().filter((tab) => tab.id !== id);
+        if (editingNoteTabs() || (!noteTabsSame() && noteTabs().some((tab) => tab.id === id) && !feedTabById(id))) {
+          const now = Date.now();
+          STATE.settings.noteTabs = noteTabs().map((tab) => tab.id === id ? Object.assign({}, tab, { deletedAt: now, updatedAt: now, showNotes: false }) : tab);
+          const pending = notePending();
+          pending.tabs = true;
+          writeNotePending(pending);
+          scheduleNoteSync();
+        } else STATE.settings.feedTabs = feedTabs().filter((tab) => tab.id !== id);
         if (STATE.settings.lastNoteTab === id) STATE.settings.lastNoteTab = "all";
         STATE.confirm = null;
         STATE.modal = null;
@@ -15044,7 +15656,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.addEventListener) motion.addEventListener("change", () => schedulePreview());
   }
-  window.addEventListener("resize", () => { syncTabArrows(); placeTabMenu(); placeBellMenu(); placeFloatMenu(".assign-menu"); placeFloatMenu(".tab-context"); });
+  window.addEventListener("resize", () => hscrollOnResize());
   window.addEventListener("scroll", () => {
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;
@@ -15138,6 +15750,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (pageY() <= 4) STATE.snapTop = false;
     if (routing || scrollFreeze || !STATE.scrollKey) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
+    if (window.ViktorychLocal) window.ViktorychLocal.noteScroll(STATE.scrollKey, window.scrollY, SCROLLS);
     const route = parseRoute();
     if (route.name !== "article") return;
     clearTimeout(STATE.articleScrollTimer);
@@ -15205,6 +15818,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.headerHidden = false;
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
+    hscrollNav = true;
     showPill(pendingPillPosts());
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
@@ -15354,7 +15968,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     let list = Array.isArray(posts) ? posts.filter(Boolean) : [];
     if (route.name !== "home") { el.hidden = true; return; }
     list = list.filter((post) => homeShows(post, route));
-    if (!list.length) { el.hidden = true; return; }
+    if (!list.length) {
+      el.hidden = true;
+      if (window.ViktorychLocal) window.ViktorychLocal.savePill([]);
+      return;
+    }
     const faces = [];
     const seen = {};
     list.forEach((post) => {
@@ -15368,6 +15986,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const avatars = faces.map((src) => `<img class="pill-ava" alt="" src="${esc(src)}">`).join("");
     el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
     el.hidden = false;
+    if (window.ViktorychLocal) {
+      window.ViktorychLocal.savePill(list.slice(0, 20).map((post) => ({
+        id: post.id,
+        text: post.text || "",
+        handle: post.handle || "",
+        avatar: post.avatar || "",
+        date: post.date || ""
+      })));
+    }
   }
 
   function memoryPosts() {
@@ -16441,19 +17068,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function bellNoteFrom(post, row) {
     const text = String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180);
+    const platform = post.platform || "x";
+    const handle = String((row && row.handle) || post.handle || "").replace(/^@/, "");
+    const raw = String(canonicalPostId(post) || post.id || "");
+    const mention = noteIsMention({ text: String(post.text || post.title || "") });
+    const live = (row && row.mode === "live") || postIsLiveVideo(post);
+    const id = !raw ? "" : (live ? ("live:" + platform + ":" + handle.toLowerCase() + ":" + raw) : (mention ? ("mention:" + raw) : ("post:" + raw)));
     return {
-      id: String(canonicalPostId(post) || post.id || ""),
-      at: Date.now(),
-      handle: (row && row.handle) || post.handle || "",
+      id: id,
+      at: Date.parse(post.date || "") || 0,
+      kind: live ? "live" : (mention ? "mention" : "post"),
+      read: false,
+      handle: handle,
       name: post.author || (row && row.name) || post.handle || "",
       text: text,
       avatar: httpsUrl(post.avatar),
       image: postImageUrl(post),
       hash: statusHash(post),
       verified: !!(post.verifiedType && post.verifiedType !== "none"),
-      mention: noteIsMention({ text: String(post.text || post.title || "") }),
+      mention: mention,
       feedId: String(post.feedId || ((row && row.ids && row.ids[0]) || "")),
-      platform: post.platform || "x",
+      platform: platform,
       ids: (row && row.ids) || [],
       handles: (row && row.handles) || []
     };
@@ -16486,6 +17121,381 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
 
+  function notesServer() {
+    try {
+      const doc = JSON.parse(readStored(localStorage, "notes-server") || "null");
+      return doc && typeof doc === "object" ? doc : {};
+    } catch (err) { return {}; }
+  }
+
+  function writeNotesServer(doc) {
+    writeStored(localStorage, "notes-server", JSON.stringify(doc || {}));
+  }
+
+  function notePending() {
+    try {
+      const doc = JSON.parse(readStored(localStorage, "notes-pending") || "null");
+      return doc && typeof doc === "object" ? doc : {};
+    } catch (err) { return {}; }
+  }
+
+  function writeNotePending(doc) {
+    writeStored(localStorage, "notes-pending", JSON.stringify(doc || {}));
+  }
+
+  function noteAcked() {
+    try {
+      const list = JSON.parse(readStored(localStorage, "notes-acked") || "[]");
+      return Array.isArray(list) ? list : [];
+    } catch (err) { return []; }
+  }
+
+  function rememberAcked(ids) {
+    const have = {};
+    noteAcked().concat(ids || []).forEach((id) => { if (id) have[String(id)] = true; });
+    writeStored(localStorage, "notes-acked", JSON.stringify(Object.keys(have).slice(-500)));
+  }
+
+  function presenceDnd() {
+    const presence = window.ViktorychPresence;
+    if (presence && typeof presence.dnd === "function") {
+      try { return !!presence.dnd(); }
+      catch (err) { return false; }
+    }
+    return false;
+  }
+
+  function mergeLocalNotes(local, remote, readUntil) {
+    const map = {};
+    function take(item, fromServer) {
+      if (!item || !item.id) return;
+      const id = String(item.id).slice(0, 160);
+      const at = Number(item.at) || 0;
+      const read = item.read === true || !!(readUntil && at > 0 && at <= readUntil);
+      const prev = map[id];
+      if (!prev) {
+        map[id] = Object.assign({}, item, { id: id, at: at, read: read, lockAt: !!fromServer });
+        return;
+      }
+      const atKept = prev.lockAt ? prev.at : (fromServer ? at : (prev.at || at));
+      map[id] = Object.assign({}, prev, item, { id: id, at: atKept, read: !!(prev.read || read), lockAt: !!(prev.lockAt || fromServer) });
+    }
+    (Array.isArray(remote) ? remote : []).forEach((item) => take(item, true));
+    (Array.isArray(local) ? local : []).forEach((item) => take(item, false));
+    return Object.keys(map).map((key) => map[key]).sort((a, b) => (b.at - a.at) || (a.id < b.id ? -1 : 1));
+  }
+
+  function mergeLocalTabs(local, remote) {
+    const map = {};
+    function take(tab) {
+      if (!tab || !tab.id) return;
+      const prev = map[tab.id];
+      if (!prev) { map[tab.id] = tab; return; }
+      const newer = (Number(tab.updatedAt) || 0) >= (Number(prev.updatedAt) || 0) ? tab : prev;
+      const next = Object.assign({}, prev, newer);
+      next.readAt = Math.max(Number(tab.readAt) || 0, Number(prev.readAt) || 0);
+      next.deletedAt = Math.max(Number(tab.deletedAt) || 0, Number(prev.deletedAt) || 0);
+      next.updatedAt = Math.max(Number(tab.updatedAt) || 0, Number(prev.updatedAt) || 0);
+      map[tab.id] = next;
+    }
+    (Array.isArray(remote) ? remote : []).forEach(take);
+    (Array.isArray(local) ? local : []).forEach(take);
+    return Object.keys(map).map((key) => map[key]);
+  }
+
+  let noteSyncTimer = 0;
+  let noteApplying = false;
+  let hubPoll = 0;
+  let channelBound = false;
+
+  function scheduleNoteSync() {
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    clearTimeout(noteSyncTimer);
+    noteSyncTimer = setTimeout(() => { pullNotes(); }, 800);
+  }
+
+  function queueReadIds(ids) {
+    const pending = notePending();
+    pending.ids = (pending.ids || []).concat(ids || []).filter(Boolean).slice(-80);
+    writeNotePending(pending);
+    scheduleNoteSync();
+  }
+
+  function queueLikeNote(post, id) {
+    if (!post || !(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    const feed = String(post.feedId || "");
+    if (feed.indexOf("app:") !== 0) return;
+    const recipient = feed.slice(4);
+    if (!/^\d{12}$/.test(recipient)) return;
+    const me = signedAccount();
+    if (!me || !me.publicId || me.publicId === recipient) return;
+    const pending = notePending();
+    pending.items = Array.isArray(pending.items) ? pending.items : [];
+    pending.items.push({
+      id: "like:" + me.publicId + ":" + String(canonicalPostId(post) || id || ""),
+      kind: "like",
+      recipientId: recipient,
+      at: Date.parse(post.date || "") || Date.now(),
+      handle: me.handle || "",
+      name: me.displayName || me.handle || "",
+      text: String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180),
+      hash: statusHash(post),
+      feedId: "app:" + me.publicId,
+      platform: "app"
+    });
+    pending.items = pending.items.slice(-40);
+    writeNotePending(pending);
+    scheduleNoteSync();
+  }
+
+  function clientNoteItem(note) {
+    const kind = note.kind === "mention" || note.kind === "live" || note.kind === "like" || note.kind === "repost" ? note.kind : "post";
+    const item = {
+      id: note.id,
+      kind: kind,
+      at: Number(note.at) || 0,
+      handle: note.handle || "",
+      name: note.name || "",
+      text: note.text || "",
+      avatar: note.avatar || "",
+      image: note.image || "",
+      hash: note.hash || "#/",
+      feedId: note.feedId || "",
+      platform: note.platform || "",
+      verified: note.verified === true,
+      mention: note.mention === true || kind === "mention"
+    };
+    if (note.recipientId) item.recipientId = note.recipientId;
+    return item;
+  }
+
+  function applyServerNotes(view) {
+    if (!view || !STATE.settings) return;
+    const until = Number(view.readUntil) || 0;
+    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], view.items || [], until));
+    STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
+    if (Array.isArray(view.tabs)) {
+      STATE.settings.noteTabs = cleanFeedTabs(mergeLocalTabs(STATE.settings.noteTabs || [], view.tabs));
+      if (view.noteTabsSame === false) STATE.settings.noteTabsSame = false;
+      if (view.noteTabsSame === true) STATE.settings.noteTabsSame = true;
+      if (view.lastNoteTab) STATE.settings.lastNoteTab = cleanLastNoteTab(view.lastNoteTab, STATE.settings.noteTabsSame === false ? STATE.settings.noteTabs : STATE.settings.feedTabs);
+    }
+    if (view.bells && typeof view.bells === "object" && Number(view.bellsAt) >= Number(STATE.settings.bellsAt || 0)) {
+      STATE.settings.bells = cleanBells(view.bells);
+      STATE.settings.bellsAt = Number(view.bellsAt) || 0;
+    }
+    const server = notesServer();
+    server.unread = Number(view.unread) || 0;
+    server.readUntil = until;
+    server.fetchedAt = Date.now();
+    writeNotesServer(server);
+    saveSettings();
+    paintBellBadge();
+    if (parseRoute().name === "notifications") render();
+  }
+
+  function applyHubEvent(data) {
+    if (!data || !STATE.settings) return;
+    if (data.type === "read") {
+      const until = Number(data.readUntil || data.until) || 0;
+      const server = notesServer();
+      server.unread = Number(data.unread) || 0;
+      if (until) server.readUntil = Math.max(Number(server.readUntil) || 0, until);
+      writeNotesServer(server);
+      const ids = Array.isArray(data.ids) ? data.ids : [];
+      (STATE.settings.bellNotes || []).forEach((note) => {
+        if (ids.indexOf(note.id) >= 0 || (until && (Number(note.at) || 0) <= until)) note.read = true;
+      });
+      if (until) STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
+      saveSettings();
+      paintBellBadge();
+      if (parseRoute().name === "notifications") render();
+      return;
+    }
+    if (data.type === "upsert" && Array.isArray(data.items)) {
+      const until = Number(data.readUntil) || Number(notesServer().readUntil) || 0;
+      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], data.items, until));
+      const server = notesServer();
+      server.unread = Number(data.unread) || 0;
+      if (data.readUntil) server.readUntil = Number(data.readUntil);
+      writeNotesServer(server);
+      saveSettings();
+      paintBellBadge();
+      if (parseRoute().name === "notifications") render();
+      return;
+    }
+    if (data.type === "tabs" && Array.isArray(data.tabs)) {
+      STATE.settings.noteTabs = cleanFeedTabs(mergeLocalTabs(STATE.settings.noteTabs || [], data.tabs));
+      if (data.lastNoteTab) STATE.settings.lastNoteTab = data.lastNoteTab;
+      saveSettings();
+      if (parseRoute().name === "notifications") render();
+    }
+  }
+
+  async function pullNotes() {
+    const accounts = window.ViktorychAccounts;
+    if (!accounts || !accounts.token || !accounts.token() || noteApplying) return;
+    noteApplying = true;
+    const sent = notePending();
+    try {
+      const acked = {};
+      noteAcked().forEach((id) => { acked[id] = true; });
+      const localItems = ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => note && note.id && !acked[note.id] && note.kind !== "follow" && note.kind !== "reply");
+      const queued = Array.isArray(sent.items) ? sent.items : [];
+      const items = queued.concat(localItems).slice(0, 40).map(clientNoteItem);
+      const body = {};
+      if (items.length) body.items = items;
+      if (sent.until) body.until = sent.until;
+      if (sent.ids && sent.ids.length) body.ids = sent.ids.slice(-80);
+      if (sent.tabs && STATE.settings) {
+        body.tabs = noteTabs();
+        body.noteTabsSame = STATE.settings.noteTabsSame !== false;
+        body.lastNoteTab = STATE.settings.lastNoteTab || "all";
+      }
+      if (sent.bells && STATE.settings) {
+        body.bells = cleanBells(STATE.settings.bells);
+        body.bellsAt = Number(STATE.settings.bellsAt) || Date.now();
+      }
+      const posting = Object.keys(body).length > 0;
+      const res = await accountCall("/v1/notifications", posting ? { method: "POST", body: body } : { method: "GET" });
+      if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
+      applyServerNotes(res);
+      rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
+      const nowPending = notePending();
+      if (sent.until && Number(nowPending.until) === Number(sent.until)) delete nowPending.until;
+      if (sent.tabs) delete nowPending.tabs;
+      if (sent.bells) delete nowPending.bells;
+      if (Array.isArray(sent.ids)) {
+        const sentIds = {};
+        sent.ids.forEach((id) => { sentIds[id] = true; });
+        nowPending.ids = (nowPending.ids || []).filter((id) => !sentIds[id]);
+        if (!nowPending.ids.length) delete nowPending.ids;
+      }
+      if (Array.isArray(sent.items)) {
+        const sentItems = {};
+        sent.items.forEach((item) => { if (item && item.id) sentItems[item.id] = true; });
+        nowPending.items = (nowPending.items || []).filter((item) => item && !sentItems[item.id]);
+        if (!nowPending.items.length) delete nowPending.items;
+      }
+      writeNotePending(nowPending);
+    } catch (err) { /* the next visible fetch tries again */ }
+    finally { noteApplying = false; }
+  }
+
+  function channelOpen() {
+    const presence = window.ViktorychPresence;
+    return !!(presence && presence.channelOpen && presence.channelOpen());
+  }
+
+  function onChannelMessage(msg) {
+    if (!msg) return;
+    if (msg.op === "state") {
+      if (msg.open) stopPoll();
+      else if (document.visibilityState === "visible") startPoll();
+      return;
+    }
+    if (msg.op === "event" && msg.topic === "notifications" && msg.data) applyHubEvent(msg.data);
+  }
+
+  function bindChannel() {
+    const presence = window.ViktorychPresence;
+    if (!presence || !presence.onChannel || channelBound) return;
+    presence.onChannel(onChannelMessage);
+    channelBound = true;
+  }
+
+  function stopPoll() {
+    if (hubPoll) { clearInterval(hubPoll); hubPoll = 0; }
+  }
+
+  function startPoll() {
+    if (hubPoll || document.visibilityState !== "visible" || channelOpen()) return;
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    hubPoll = setInterval(() => {
+      if (document.visibilityState !== "visible" || channelOpen()) {
+        stopPoll();
+        return;
+      }
+      pullNotes();
+    }, 20000);
+  }
+
+  function stopHub() {
+    stopPoll();
+  }
+
+  function ensureHub() {
+    bindChannel();
+    if (document.visibilityState !== "visible") return;
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    ensurePush();
+    if (channelOpen()) stopPoll();
+    else startPoll();
+  }
+
+  function urlBase64ToBytes(value) {
+    const pad = "=".repeat((4 - (String(value || "").length % 4)) % 4);
+    const raw = atob(String(value || "").replace(/-/g, "+").replace(/_/g, "/") + pad);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  async function ensurePush() {
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (!reg.pushManager) return;
+      const vapid = await accountCall("/v1/push/vapid");
+      const key = vapid && vapid.publicKey;
+      if (!key || vapid.status !== 200) return;
+      let sub = await reg.pushManager.getSubscription();
+      const soon = sub && sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000;
+      if (sub && soon) {
+        try { await sub.unsubscribe(); } catch (err) { /* a fresh subscription follows */ }
+        sub = null;
+      }
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToBytes(key) });
+      const json = sub.toJSON ? sub.toJSON() : {};
+      STATE.pushEndpoint = json.endpoint || "";
+      if (!json.endpoint || !json.keys) return;
+      await accountCall("/v1/push/subscribe", {
+        method: "PUT",
+        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0 }
+      });
+    } catch (err) { /* in-app notes still sync */ }
+  }
+
+  async function beforeSignOut(all, token) {
+    stopHub();
+    const endpoint = STATE.pushEndpoint || "";
+    const accounts = window.ViktorychAccounts;
+    if (accounts && accounts.call && token) {
+      try {
+        await accounts.call("/v1/push/subscribe", {
+          method: "DELETE",
+          token: token,
+          body: all ? { all: true } : (endpoint ? { endpoint: endpoint } : {})
+        });
+      } catch (err) { /* the session logout still runs */ }
+    }
+    if (STATE.settings) {
+      STATE.settings.bellNotes = [];
+      STATE.settings.bellSeen = [];
+      STATE.settings.bellRead = 0;
+      writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
+    }
+    removeStored(localStorage, "notes-server");
+    removeStored(localStorage, "notes-acked");
+    removeStored(localStorage, "notes-pending");
+    updateBadge(0);
+  }
+
+  window.ViktorychNotes = { beforeSignOut: beforeSignOut };
+  if (!window.ViktorychPresence) window.ViktorychPresence = { dnd: function () { return false; } };
+
   function commitBellNotes(list) {
     const seen = {};
     (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
@@ -16504,6 +17514,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.settings.bellSeen = Object.keys(seen).slice(-500);
     STATE.settings.bellNotes = cleanBellNotes(added.concat(STATE.settings.bellNotes || []));
     saveSettings();
+    scheduleNoteSync();
     if (parseRoute().name === "notifications") render();
     else paintBellBadge();
   }
@@ -16560,12 +17571,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const list = (notes || []).filter((note) => note && note.id);
     if (!list.length) return;
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    const quiet = presenceDnd();
     if (!worker) {
       commitBellNotes(list);
-      list.forEach(showPageNotification);
+      if (!quiet) list.forEach(showPageNotification);
       return;
     }
-    worker.postMessage({ type: "bell-deliver", notes: list });
+    worker.postMessage({ type: "bell-deliver", notes: list, dnd: quiet });
   }
 
   function pullBellQueue() {
@@ -16580,7 +17592,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!keys.length) return;
     const seen = {};
     (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+    const cursor = Math.max(Number(STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
     const fresh = [];
+    let markedOld = false;
     (list || posts()).forEach((post) => {
       if (!post || hiddenPost(post)) return;
       const id = String(canonicalPostId(post) || post.id || "");
@@ -16600,9 +17614,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!hit) return;
       const note = bellNoteFrom(post, hit);
       if (!note.id) return;
+      if (!note.at || note.at <= cursor) {
+        seen[note.id] = true;
+        markedOld = true;
+        return;
+      }
       seen[note.id] = true;
       fresh.push(note);
     });
+    if (markedOld) STATE.settings.bellSeen = Object.keys(seen).slice(-500);
+    if (markedOld && !fresh.length) saveSettings();
     if (fresh.length) deliverBellNotes(fresh);
   }
 
@@ -16639,7 +17660,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.bellMenu = null;
     if (mode !== "all" && mode !== "live") {
       delete STATE.settings.bells[key];
+      STATE.settings.bellsAt = Date.now();
+      const pending = notePending();
+      pending.bells = true;
+      writeNotePending(pending);
       saveSettings();
+      scheduleNoteSync();
       render();
       return;
     }
@@ -16653,17 +17679,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       toast(tr("Notifications stay off"));
       return;
     }
+    const now = Date.now();
+    STATE.settings.bellsAt = now;
     STATE.settings.bells[key] = {
       mode: mode,
-      since: Date.now(),
+      since: now,
+      updatedAt: now,
       ids: targets.ids,
       handles: targets.handles,
       handle: String(handle || bellHandle(id)).replace(/^@/, ""),
       name: bellName(id)
     };
     rememberLoadedPosts();
+    const pending = notePending();
+    pending.bells = true;
+    writeNotePending(pending);
     saveSettings();
+    scheduleNoteSync();
     registerPeriodic();
+    ensurePush();
     render();
     toast(tr("You'll get notified when @{handle} posts.", { handle: STATE.settings.bells[key].handle }));
   }
@@ -16674,7 +17708,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (permission !== "granted") permission = await Notification.requestPermission();
     STATE.settings.notify = permission === "granted";
     saveSettings();
-    if (STATE.settings.notify) registerPeriodic();
+    if (STATE.settings.notify) {
+      registerPeriodic();
+      ensurePush();
+    }
     render();
     toast(STATE.settings.notify ? tr("Notifications on") : tr("Notifications stay off"));
   }
@@ -16723,6 +17760,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
       if (data.type === "feeds-updated") refreshFeeds(false);
       if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
+      if (data.type === "push-note") pullNotes();
+      if (data.type === "note-open") {
+        if (data.hash) location.hash = data.hash;
+        if (data.id) queueReadIds([data.id]);
+      }
       if (data.type === "reload-when-idle") {
         STATE.swUpdate = true;
         showUpdate();
@@ -16734,7 +17776,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function bindShell() {
     if (shellBound) return;
     shellBound = true;
-    window.addEventListener("online", () => setOffline(false));
+    window.addEventListener("online", () => {
+      setOffline(false);
+      if (window.ViktorychLocal) window.ViktorychLocal.flush(syncOffline);
+    });
     window.addEventListener("offline", () => setOffline(true));
     setOffline(!navigator.onLine);
     const updateGo = document.getElementById("update-go");
@@ -16805,16 +17850,24 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       else render({ y: y, anchorId: anchorId, anchorTop: anchorTop });
     });
     let pullStart = 0;
+    let pullStartX = 0;
     let pulling = false;
     document.addEventListener("touchstart", (event) => {
-      if (STATE.viewer || window.scrollY > 2 || event.touches.length !== 1) { pulling = false; return; }
+      if (hscrollFromTarget(event.target) || STATE.viewer || window.scrollY > 2 || event.touches.length !== 1) { pulling = false; return; }
       pullStart = event.touches[0].clientY;
+      pullStartX = event.touches[0].clientX;
       pulling = true;
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
-      if (!pulling) return;
+      if (!pulling || !event.touches || !event.touches[0]) return;
+      const dx = event.touches[0].clientX - pullStartX;
       const dy = event.touches[0].clientY - pullStart;
       const el = document.getElementById("pull");
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        pulling = false;
+        if (el) el.classList.remove("on", "ready");
+        return;
+      }
       if (dy > 8 && window.scrollY <= 2) {
         el.classList.add("on");
         el.classList.toggle("ready", dy > 70);
@@ -16831,10 +17884,21 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         refreshLiveTimeline(true);
       }
     }, { passive: true });
+    window.addEventListener("focus", () => {
+      if (document.visibilityState !== "visible") return;
+      pullNotes();
+      ensureHub();
+    });
     document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") {
+        stopHub();
+        return;
+      }
       if (document.visibilityState === "visible") {
         writeStored(localStorage, "seen-at", String(Date.now()));
         updateBadge(bellUnread());
+        pullNotes();
+        ensureHub();
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
         pullBellQueue();
@@ -16893,9 +17957,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       if (event.touches.length !== 1) return;
       if (event.target.closest && event.target.closest(".story-tray, #stories")) return;
-      /* Sideways drags on the pill row belong to the row's own scrolling, not
-         to the home tab swipe (swiping there switched tabs and re-rendered). */
-      if (event.target.closest && event.target.closest(".sp-row-wrap, .sp-row")) { swipe = null; return; }
+      /* A sideways drag on a tab row or pill row scrolls that row. It must
+         not switch Home tabs or refresh the feed. */
+      if (hscrollFromTarget(event.target) || (event.target.closest && event.target.closest(".sp-row-wrap, .sp-row, .tabs, .tabs-bar"))) { swipe = null; return; }
       swipe = { x: event.touches[0].clientX, y: event.touches[0].clientY, viewer: false };
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
@@ -16958,8 +18022,259 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }, { passive: true });
   }
 
+  let rememberTimer = 0;
+  function queueOffline(action) {
+    if (navigator.onLine || !window.ViktorychLocal) return;
+    window.ViktorychLocal.enqueue(action);
+    toast(tr("Pending"));
+  }
+  function syncOffline(action) {
+    if (!action) return false;
+    if (action.type === "follow" && window.ViktorychAccounts && window.ViktorychAccounts.changeFollow) {
+      window.ViktorychAccounts.changeFollow(action.id, !!action.on, action.snapshot || null);
+    } else if (action.type === "repost") {
+      const on = !!action.on;
+      const req = on
+        ? accountCall("/v1/reposts", { method: "PUT", body: { kind: "repost", post: action.snapshot || {} } })
+        : accountCall("/v1/reposts", { method: "POST", body: { postKey: action.postKey || "" } });
+      Promise.resolve(req).catch(() => {});
+    } else if (action.type === "reply" && window.ViktorychLocal) {
+      window.ViktorychLocal.saveDoc("drafts", "compose", { text: action.body || "" });
+    }
+    return true;
+  }
+  window.ViktorychAppSync = syncOffline;
+  function feedOrderKey(post) {
+    if (window.FeedOrder) return window.FeedOrder.key(post);
+    return canonicalPostId(post);
+  }
+
+  function feedOrderCompare(a, b) {
+    if (window.FeedOrder) return window.FeedOrder.compare(a, b);
+    return byStamp(a, b);
+  }
+
+  function orderedUnique(list) {
+    const local = window.ViktorychLocal;
+    if (local && local.orderPosts) return local.orderPosts(list, feedOrderCompare, feedOrderKey);
+    const seen = {};
+    const unique = [];
+    (list || []).forEach((post) => {
+      const id = feedOrderKey(post);
+      if (!post || !id || seen[id]) return;
+      seen[id] = true;
+      unique.push(post);
+    });
+    unique.sort(feedOrderCompare);
+    return unique;
+  }
+
+  function cacheRow(post) {
+    const row = slimPost(post);
+    if (!row) return null;
+    if (post.sortDate) row.sortDate = post.sortDate;
+    if (post.repostDate) row.repostDate = post.repostDate;
+    if (post.repostedAt) row.repostedAt = post.repostedAt;
+    if (post.kind) row.kind = post.kind;
+    if (post.channelId) row.channelId = post.channelId;
+    if (post.repostedBy) row.repostedBy = { handle: post.repostedBy.handle || "", name: post.repostedBy.name || "", platform: post.repostedBy.platform || "", feedId: post.repostedBy.feedId || "" };
+    if (post.forwardedFrom && typeof post.forwardedFrom === "object") row.forwardedFrom = { handle: post.forwardedFrom.handle || "", name: post.forwardedFrom.name || "" };
+    return row;
+  }
+
+  function homeTabIds() {
+    const ids = ["foryou", "following"];
+    const seen = { foryou: true, following: true };
+    ((STATE.settings && STATE.settings.lists) || []).forEach((list) => {
+      if (!list || !list.id) return;
+      const id = "list:" + list.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    feedTabs().forEach((item) => {
+      if (!item || !item.id || item.showHome === false) return;
+      const id = "cat:" + item.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  function saveFeedTab(local, tab) {
+    const visible = posts().filter((post) => homeShows(post, { name: "home", tab: tab }));
+    const rows = orderedUnique(visible).slice(0, 24).map(cacheRow).filter(Boolean);
+    local.saveDoc("feeds", "tab:" + tab, { tab: tab, order: "utc", posts: rows });
+    return rows;
+  }
+
+  function profileSnapshot(feed, live, tab) {
+    const src = (live && live.profile) || feed || {};
+    const base = (feed && (feed.handle || feed.id)) ? feed : src;
+    let loaded = [];
+    try { if (base && base.handle) loaded = postsFor(base); } catch (err) { loaded = []; }
+    const pages = {};
+    const take = (name, list) => {
+      const rows = orderedUnique(list || []).slice(0, 12).map(cacheRow).filter(Boolean);
+      if (rows.length) pages[name] = rows;
+    };
+    take("posts", (live && live.posts && live.posts.length) ? live.posts : loaded.filter((post) => post.kind !== "reply"));
+    take("replies", (live && live.replies && live.replies.length) ? live.replies : loaded.filter((post) => post.kind === "reply"));
+    take("media", (live && live.media && live.media.length) ? live.media : loaded.filter((post) => (post.media || []).length));
+    take("videos", live && live.videos);
+    take("community", live && live.community);
+    const pinned = ((live && live.posts) || loaded).find((post) => post && post.pinned) || null;
+    return {
+      name: src.name || "",
+      handle: src.handle || (feed && feed.handle) || "",
+      bio: src.bio || (feed && feed.bio) || "",
+      avatar: src.avatar || (feed && feed.avatar) || "",
+      banner: src.banner || (feed && feed.banner) || "",
+      followers: src.followers != null ? src.followers : (feed && feed.followers),
+      following: src.following != null ? src.following : (feed && feed.following),
+      postsCount: src.postsCount != null ? src.postsCount : (feed && feed.postsCount),
+      pinned: pinned ? cacheRow(pinned) : null,
+      tab: tab || "posts",
+      order: "utc",
+      tabs: pages
+    };
+  }
+
+  function snapshotProfile(id, row, feed, tab) {
+    if (!window.ViktorychLocal || !id) return;
+    window.ViktorychLocal.saveDoc("profiles", id, profileSnapshot(feed || (row && row.profile) || {}, row, tab || "posts"));
+  }
+
+  function warmSavedMedia(local, rows) {
+    if (!local || !local.cacheFirstSegment) return;
+    if (!local.prefetchLimit(null, local.prefetchEnabled())) return;
+    (rows || []).slice(0, 8).forEach((post) => {
+      (post.media || []).forEach((item) => {
+        if (!item) return;
+        const hls = item.hls || "";
+        const url = item.url || "";
+        if (/\.m3u8(\?|$)/i.test(hls)) local.cacheFirstSegment(hls);
+        else if (/\.m3u8(\?|$)/i.test(url) || local.isFirstSegment(url)) local.cacheFirstSegment(url);
+      });
+    });
+  }
+
+  function warmOpened(hash) {
+    const local = window.ViktorychLocal;
+    if (!local || !STATE.data) return;
+    const path = String(hash || "").split("?")[0].replace(/^#/, "");
+    const parts = path.split("/").filter(Boolean).map((part) => {
+      try { return decodeURIComponent(part); } catch (err) { return part; }
+    });
+    if (!parts.length || parts[0] === "home" || parts[0] === "following" || parts[0] === "tab" || parts[0] === "cat") {
+      let tab = "foryou";
+      if (parts[0] === "following" || parts[1] === "following") tab = "following";
+      else if (parts[0] === "tab" && parts[1]) tab = "list:" + parts[1];
+      else if (parts[1] === "tab" && parts[2]) tab = "list:" + parts[2];
+      else if (parts[0] === "cat" && parts[1]) tab = "cat:" + parts[1];
+      else if (parts[1] === "cat" && parts[2]) tab = "cat:" + parts[2];
+      const rows = saveFeedTab(local, tab);
+      warmSavedMedia(local, rows);
+      return;
+    }
+    let platform = "";
+    let handle = "";
+    if (parts[0] === "u" && parts[2]) {
+      platform = parts[1] === "twitter" ? "x" : parts[1];
+      handle = parts[2];
+    } else if (parts[0].charAt(0) === "@") {
+      platform = "x";
+      handle = parts[0].slice(1);
+    } else if (["x", "threads", "instagram", "youtube", "vk", "discord", "telegram", "tiktok", "bsky", "mastodon", "app"].indexOf(parts[0]) >= 0 && parts[1] && parts[2] !== "status") {
+      platform = parts[0];
+      handle = parts[1];
+    }
+    if (!platform || !handle) return;
+    const feed = findFeed(platform, handle);
+    const live = STATE.liveUsers && STATE.liveUsers[liveKey(platform, handle)];
+    if (feed || (live && live.profile)) snapshotProfile((platform || "x") + ":" + handle, live, feed, "posts");
+  }
+
+  function rememberLocal(route) {
+    const local = window.ViktorychLocal;
+    if (!local) return;
+    const app = document.getElementById("app");
+    local.capture({
+      hash: location.hash || "#/",
+      html: app ? app.innerHTML : "",
+      scrollKey: STATE.scrollKey,
+      y: window.scrollY,
+      scrolls: SCROLLS
+    });
+    local.noteOpen(location.hash || "#/");
+    local.paintPending();
+    if (app) local.warmMedia(app);
+    if (!route) return;
+    if (route.name === "home" && STATE.data) {
+      let current = [];
+      homeTabIds().forEach((tab) => {
+        const rows = saveFeedTab(local, tab);
+        if (tab === "foryou") local.saveDoc("feeds", "home", { order: "utc", posts: rows });
+        if (tab === (route.tab || "foryou")) current = rows;
+      });
+      warmSavedMedia(local, current);
+    }
+    if ((route.name === "profile" || route.name === "user") && route.handle) {
+      const feed = findFeed(route.platform, route.handle);
+      const live = STATE.liveUsers && STATE.liveUsers[liveKey(route.platform, route.handle)];
+      const tab = route.query && route.query.get ? (route.query.get("tab") || "posts") : "posts";
+      if (feed || (live && live.profile)) snapshotProfile((route.platform || "x") + ":" + route.handle, live, feed, tab);
+    }
+    if (route.name === "status" && route.id) {
+      const post = findPost(route.platform, route.handle, route.id);
+      const bucket = STATE.replies[String(route.id)] || {};
+      if (post) {
+        const chain = ancestorChain(post);
+        const parent = chain.nodes.length ? chain.nodes[chain.nodes.length - 1] : (post.replyParent || null);
+        const replies = orderedUnique(bucket.replies || []).slice(0, 20).map(cacheRow).filter(Boolean);
+        local.saveDoc("threads", String(route.id), {
+          order: "utc",
+          post: cacheRow(post),
+          parent: parent ? cacheRow(parent) : null,
+          quote: post.quoted ? cacheRow(post.quoted) : null,
+          replies: replies
+        });
+      }
+    }
+    if (route.name === "notifications" && STATE.settings) {
+      local.saveDoc("notifications", "all", {
+        notes: (STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
+        readThrough: Number(STATE.settings.bellRead) || 0,
+        seen: STATE.settings.bellSeen || []
+      });
+    }
+    if (route.name === "explore") {
+      const q = route.query ? route.query.get("q") || "" : "";
+      local.saveDoc("explore", "home", { q: q });
+      if (q) {
+        const found = orderedUnique(posts().filter((post) => post && !hiddenPost(post) && postHay(post).toLowerCase().includes(q.toLowerCase()))).slice(0, 20).map(cacheRow).filter(Boolean);
+        local.saveDoc("search", "q:" + q.toLowerCase().slice(0, 80), { q: q, order: "utc", posts: found });
+      }
+    }
+    if (STATE.composeSeed) local.saveDoc("drafts", "compose", { text: STATE.composeSeed });
+    if (window.ViktorychShorts && window.ViktorychShorts.snapshot) window.ViktorychShorts.snapshot();
+    if (window.SIntelMusic && window.SIntelMusic.snapshot) window.SIntelMusic.snapshot();
+    if (window.FeedsDiscord && window.FeedsDiscord.snapshot) window.FeedsDiscord.snapshot();
+    if (window.ViktorychCommunities && window.ViktorychCommunities.snapshot) window.ViktorychCommunities.snapshot();
+  }
+  function scheduleRemember(route) {
+    clearTimeout(rememberTimer);
+    rememberTimer = setTimeout(() => rememberLocal(route), 350);
+  }
+  window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
+
   async function boot() {
     syncRuVisitorGeo();
+    if (window.ViktorychLocal) {
+      const savedScrolls = window.ViktorychLocal.readScrolls();
+      if (savedScrolls) Object.assign(SCROLLS, savedScrolls);
+    }
     if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
       registerSW();
       applyTheme();
@@ -16986,6 +18301,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
     const snap = loadTimelineSnap();
+    const pill = window.ViktorychLocal ? window.ViktorychLocal.readPill() : [];
+    if (pill && pill.length) STATE.pendingFeed = { posts: pill, feeds: (snap && snap.feeds) || [] };
+    const painted = window.ViktorychLocal && window.ViktorychLocal.wasRestored();
     if (snap) {
       notePublished(snap);
       STATE.data = snap;
@@ -16993,7 +18311,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
+    } else if (painted) {
+      STATE.loading = false;
     } else {
       STATE.loading = true;
       render();
@@ -17052,6 +18373,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         updateBadge(bellUnread());
       } else if (fresh.length || bellUnread()) updateBadge(Math.max(fresh.length, bellUnread()));
       scanBellPosts(STATE.data.posts);
+      if (document.visibilityState === "visible") {
+        pullNotes();
+        ensureHub();
+      }
       if ("serviceWorker" in navigator) navigator.serviceWorker.ready.then(() => pullBellQueue()).catch(() => {});
       refreshLiveTimeline(false);
       if (!STATE.liveTimer) {
@@ -17069,6 +18394,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         STATE.error = null;
         if (!navigator.onLine) setOffline(true);
         render();
+      } else if (window.ViktorychLocal && window.ViktorychLocal.wasRestored()) {
+        STATE.error = null;
+        if (!navigator.onLine) setOffline(true);
       } else {
         STATE.error = err;
         render({ reset: true });
@@ -17452,6 +18780,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render();
   });
 
+  window.addEventListener("viktorych-warm", (event) => {
+    const local = window.ViktorychLocal;
+    if (!local || !local.prefetchLimit(null, local.prefetchEnabled())) return;
+    ((event && event.detail) || []).forEach((hash) => {
+      try { warmOpened(String(hash || "")); } catch (err) { /* a cold tab stays on the last good copy */ }
+    });
+  });
+
   initTooltipController();
+  hscrollInstall();
   boot();
 })();

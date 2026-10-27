@@ -259,6 +259,7 @@
       state.index = mergeBuiltins(doc);
       state.indexAt = Date.now();
       state.indexPromise = null;
+      rememberCommunities();
       return state.index;
     }
     var url = basePath() + "data/communities/index.json";
@@ -288,6 +289,7 @@
     }).then(function (doc) {
       state.docs[name] = doc || { name: name, posts: [] };
       delete state.docPromises[name];
+      rememberCommunities();
       return state.docs[name];
     }).catch(function () {
       return fetch("data/communities/" + encodeURIComponent(name) + ".json", { cache: "no-cache" }).then(function (res2) {
@@ -296,6 +298,7 @@
       }).then(function (doc2) {
         state.docs[name] = doc2 || { name: name, posts: [] };
         delete state.docPromises[name];
+        rememberCommunities();
         return state.docs[name];
       }).catch(function () {
         state.docs[name] = { name: name, title: name, posts: [], missing: true };
@@ -1241,6 +1244,30 @@
     el.src = next;
   }, true);
 
+  function rememberCommunities() {
+    var local = window.ViktorychLocal;
+    if (!local || !local.saveDoc) return;
+    var rows = ((state.index && state.index.communities) || []).slice(0, 40).map(function (row) {
+      return { name: row.name || "", title: row.title || row.name || "" };
+    });
+    if (rows.length) local.saveDoc("feeds", "communities", { communities: rows });
+    Object.keys(state.docs || {}).forEach(function (name) {
+      var doc = state.docs[name];
+      if (!doc || !Array.isArray(doc.posts)) return;
+      var items = doc.posts.map(function (post) {
+        var created = Number(post && post.created) || 0;
+        return {
+          id: String((post && post.id) || ""),
+          platform: "reddit",
+          date: created ? new Date(created * 1000).toISOString() : "",
+          text: (post && (post.title || post.text)) || ""
+        };
+      }).filter(function (post) { return post.id; });
+      var ordered = local.orderPosts && window.FeedOrder ? local.orderPosts(items, window.FeedOrder.compare, window.FeedOrder.key) : items;
+      local.saveDoc("feeds", "community:" + name, { tab: "community:" + name, order: "utc", posts: ordered.slice(0, 24) });
+    });
+  }
+
   window.ViktorychCommunities = {
     page: page,
     takeCompose: takeCompose,
@@ -1248,6 +1275,7 @@
     requestRender: null,
     toast: null,
     hidden: null,
-    note: null
+    note: null,
+    snapshot: rememberCommunities
   };
 })();

@@ -255,6 +255,7 @@
     });
     data.feeds = feeds;
     data.posts = posts;
+    rememberShorts();
     var settings = hooks.settings() || {};
     if (!Array.isArray(settings.follows)) settings.follows = [];
     var changed = false;
@@ -673,6 +674,7 @@
       recordingsState = "ready";
       if (!body || !body.items) return body;
       recordings = { cap: body.cap || 12, active: body.active || 0, items: body.items, past: body.past || [] };
+      rememberShorts();
       schedulePaint();
       return body;
     }).catch(function () {
@@ -3543,6 +3545,53 @@
     if (!statsTimer) statsTimer = setInterval(statsTick, 15000);
   });
 
+  function rememberShorts() {
+    var local = window.ViktorychLocal;
+    if (!local || !local.saveDoc) return;
+    var clips = [];
+    try {
+      var rows = forYou();
+      if (local.orderPosts && window.FeedOrder) rows = local.orderPosts(rows, window.FeedOrder.compare, window.FeedOrder.key);
+      clips = rows.slice(0, 24).map(function (post) {
+        var media = (post.media || [])[0] || {};
+        return {
+          id: post.id || "",
+          platform: post.platform || "",
+          text: post.text || post.title || "",
+          handle: post.handle || "",
+          date: post.date || "",
+          sortDate: post.sortDate || "",
+          poster: media.poster || "",
+          hls: media.hls || ""
+        };
+      });
+    } catch (err) { clips = []; }
+    local.saveDoc("shorts", "foryou", { order: "utc", posts: clips });
+    var past = pastSource().slice(0, 24).map(function (row) {
+      var thumb = typeof row.thumb === "string" && row.thumb.indexOf("https://") === 0 ? row.thumb : "";
+      var cover = typeof row.cover === "string" ? row.cover : "";
+      return {
+        id: String(row.roomId || row.handle || ""),
+        platform: "tiktok",
+        handle: row.handle || "",
+        title: row.title || "",
+        roomId: row.roomId || "",
+        date: row.endedAt || row.startedAt || "",
+        endedAt: row.endedAt || "",
+        startedAt: row.startedAt || "",
+        duration: row.duration || 0,
+        cover: cover,
+        keyframe: thumb || cover
+      };
+    });
+    if (local.orderPosts && window.FeedOrder) {
+      past = local.orderPosts(past, window.FeedOrder.compare, function (row) {
+        return "live:" + (row.roomId || row.handle || row.date || "");
+      });
+    }
+    local.saveDoc("lives", "past", { order: "utc", items: past });
+  }
+
   window.ViktorychShorts = {
     bind: function (next) { if (next) Object.keys(hooks).forEach(function (key) { if (next[key]) hooks[key] = next[key]; }); },
     visible: visible,
@@ -3573,7 +3622,9 @@
         items: (next && next.items) || {},
         past: (next && next.past) || []
       };
+      rememberShorts();
     },
+    snapshot: rememberShorts,
     setLiveState: function (items) {
       if (!cached) cached = { live: {} };
       cached.live = {};

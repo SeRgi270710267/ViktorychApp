@@ -28,6 +28,8 @@ SITE_FILES = (
     "owner-keys.js",
     "storage.js",
     "storage.css",
+    "localfirst.js",
+    "direct.js",
     "accounts.css",
     "accounts.config.js",
     "shorts.js",

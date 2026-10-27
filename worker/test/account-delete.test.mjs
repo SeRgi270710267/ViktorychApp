@@ -241,6 +241,17 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO account_status (public_id, emoji, text, clear_at, updated_at) VALUES (?, '✨', 'here', 0, ?)", b, now);
   await sql("INSERT INTO channel_tickets (token_hash, public_id, expires_at) VALUES ('ticket-ada', ?, ?)", a, now + 1000);
   await sql("INSERT INTO channel_tickets (token_hash, public_id, expires_at) VALUES ('ticket-bee', ?, ?)", b, now + 1000);
+  await sql("INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, 'note-ada', 'post', ?, 0, '', 'ada', 'note-ada', '{}', ?, 0)", a, now, now);
+  await sql("INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, 'note-bee', 'post', ?, 0, '', 'bee', 'note-bee', '{}', ?, 0)", b, now, now);
+  await sql("INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at) VALUES (?, 0, '', 0, ?)", a, now);
+  await sql("INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at) VALUES (?, 0, '', 0, ?)", b, now);
+  await sql("INSERT INTO notification_bells (public_id, feed_key, mode, since, handle, name, ids, handles, updated_at, deleted_at) VALUES (?, 'x:ada', 'all', ?, 'ada', 'Ada', '[]', '[]', ?, 0)", a, now, now);
+  await sql("INSERT INTO notification_bells (public_id, feed_key, mode, since, handle, name, ids, handles, updated_at, deleted_at) VALUES (?, 'x:bee', 'all', ?, 'bee', 'Bee', '[]', '[]', ?, 0)", b, now, now);
+  await sql("INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at) VALUES (?, 'push-ada', 'https://push.example/ada', 'p', 'a', '', ?, ?, 0)", a, now, now);
+  await sql("INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at) VALUES (?, 'push-bee', 'https://push.example/bee', 'p', 'a', '', ?, ?, 0)", b, now, now);
+  await sql("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, 'note-ada', ?)", a, now);
+  await sql("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, 'note-bee', ?)", b, now);
+  await sql("INSERT INTO push_vapid (id, public_key, private_jwk, created_at) VALUES (1, 'pub', 'priv', ?)", now);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + a, now + 100000);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + b, now + 100000);
   await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES ('shared.bin', 'file', 0, '', 'fid', 1, 4, 'abc', 'application/octet-stream', 0, 0, 0, 0, ?)", now);
@@ -322,6 +333,10 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_presence WHERE public_id = ?", a), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_status WHERE public_id = ?", a), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM channel_tickets WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM notifications WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM push_subscriptions WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM notifications WHERE public_id = ?", b), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM push_vapid WHERE id = 1"), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_presence WHERE public_id = ?", b), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_status WHERE public_id = ?", b), 1);
   assert.ok(await one("SELECT public_id FROM accounts WHERE public_id = ?", b));
