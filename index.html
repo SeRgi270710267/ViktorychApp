@@ -138,20 +138,39 @@
       } catch (err) {}
     })();
   </script>
+  <script>
+    (function () {
+      function readable(key) {
+        try {
+          var raw = localStorage.getItem(key);
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch (err) { return null; }
+      }
+      var screen = readable("viktorych-screen-v1");
+      var snap = readable("viktorychapp-timeline-v1") || readable("superintelapp-timeline-v1");
+      if (screen && typeof screen.html === "string" && screen.html && (screen.schema == null || Number(screen.schema) === 1)) return;
+      if (snap && Array.isArray(snap.posts) && snap.posts.length) return;
+      window.__VIKTORYCH_FEED = fetch("feeds.json", { credentials: "omit" }).then(function (res) {
+        if (!res.ok) throw new Error("feed");
+        return res.text();
+      }).catch(function () { return ""; });
+    })();
+  </script>
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="presence.css">
-  <link rel="stylesheet" href="translate.css">
-  <link rel="stylesheet" href="people.css">
-  <link rel="stylesheet" href="tv.css">
-  <link rel="stylesheet" href="discord-ui.css">
-  <link rel="stylesheet" href="spaces.css">
-  <link rel="stylesheet" href="stories.css">
-  <link rel="stylesheet" href="music.css">
-  <link rel="stylesheet" href="accounts.css">
-  <link rel="stylesheet" href="storage.css">
-  <link rel="stylesheet" href="yt-player.css">
-  <link rel="stylesheet" href="scores.css">
-  <link rel="stylesheet" href="weather.css">
+  <link rel="stylesheet" href="presence.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="translate.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="people.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="tv.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="discord-ui.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="spaces.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="stories.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="music.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="accounts.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="storage.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="yt-player.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="scores.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="weather.css" media="print" onload="this.media='all'">
   <script>
     (function () {
       var isRu = false;
@@ -179,7 +198,6 @@
       }
     })();
   </script>
-  <link rel="preload" href="feeds.json" as="fetch" crossorigin="anonymous">
   <script>
     (function () {
       try {
@@ -313,6 +331,67 @@
   </script>
   <div class="wco" aria-hidden="true"></div>
   <div id="app"></div>
+  <script>
+    (function () {
+      var app = document.getElementById("app");
+      if (!app) return;
+      function read(key) {
+        try {
+          var raw = localStorage.getItem(key);
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch (err) { return null; }
+      }
+      function esc(value) {
+        return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+        });
+      }
+      function textOf(post) {
+        if (!post) return "";
+        var article = post.article || {};
+        var bits = [post.text, post.title, article.title, article.preview];
+        var out = "";
+        for (var i = 0; i < bits.length; i++) {
+          var part = String(bits[i] || "").replace(/\s+/g, " ").trim();
+          if (part) out += (out ? " " : "") + part;
+        }
+        return out.slice(0, 280);
+      }
+      function paintPosts(posts) {
+        if (!app || app.childElementCount || !posts || !posts.length) return false;
+        var rows = posts.filter(function (post) { return post && textOf(post).length > 20; });
+        rows.sort(function (a, b) { return (Date.parse(b.date || "") || 0) - (Date.parse(a.date || "") || 0); });
+        var html = "";
+        for (var i = 0; i < rows.length && i < 6; i++) {
+          var post = rows[i];
+          html += '<article class="post boot-card" data-boot-card="1"><div class="pbody"><b>' + esc(post.author || post.handle || "") + '</b><p>' + esc(textOf(post)) + '</p></div></article>';
+        }
+        if (!html) return false;
+        app.innerHTML = html;
+        return true;
+      }
+      function paintScreen(saved) {
+        if (!saved || typeof saved.html !== "string" || !saved.html) return false;
+        if (saved.schema != null && Number(saved.schema) !== 1) return false;
+        if (saved.html.indexOf("<script") >= 0 || app.childElementCount) return false;
+        app.innerHTML = saved.html;
+        document.documentElement.classList.add("is-restored");
+        return true;
+      }
+      try {
+        if (paintScreen(read("viktorych-screen-v1"))) return;
+        var snap = read("viktorychapp-timeline-v1") || read("superintelapp-timeline-v1");
+        if (snap && paintPosts(snap.posts)) return;
+        var pending = window.__VIKTORYCH_FEED;
+        if (!pending || !pending.then) return;
+        pending.then(function (text) {
+          if (!text) return;
+          try { paintPosts(JSON.parse(text).posts); } catch (err) { /* the app paints the feed when it loads */ }
+        }).catch(function () {});
+      } catch (err) { /* a broken saved copy must not stop the shell */ }
+    })();
+  </script>
   <div id="account-layer"></div>
   <div id="hover"></div>
   <div id="x-tooltip" class="x-tooltip" role="tooltip" aria-hidden="true"></div>
@@ -328,29 +407,67 @@
   <div id="pills-manage-sheet" hidden role="dialog" aria-modal="true" data-i18n-aria="Customize Pills" aria-label="Customize Pills"></div>
   <script src="i18n.js" defer></script>
   <script src="i18n/en.js" defer></script>
-  <script src="i18n/ru.js" defer></script>
-  <script src="i18n/es.js" defer></script>
-  <script src="marks.js" defer></script>
-  <script src="translate.js" defer></script>
-  <script src="shared/feed-order.js" type="module"></script>
-  <script src="people.js" defer></script>
-  <script src="tv.js" defer></script>
-  <script src="split.js" defer></script>
-  <script src="discord-ui.js" defer></script>
-  <script src="shared/pill-data.js" type="module"></script>
-  <script src="scores.js" defer></script>
-  <script src="weather.js" defer></script>
-  <script src="spaces.js" defer></script>
-  <script src="stories.js" defer></script>
-  <script src="music.js" defer></script>
+  <template id="late-scripts">
+    <script src="i18n/ru.js" defer></script>
+    <script src="i18n/es.js" defer></script>
+    <script src="marks.js" defer></script>
+    <script src="translate.js" defer></script>
+    <script src="shared/feed-order.js" type="module"></script>
+    <script src="people.js" defer></script>
+    <script src="tv.js" defer></script>
+    <script src="split.js" defer></script>
+    <script src="discord-ui.js" defer></script>
+    <script src="shared/pill-data.js" type="module"></script>
+    <script src="scores.js" defer></script>
+    <script src="weather.js" defer></script>
+    <script src="spaces.js" defer></script>
+    <script src="stories.js" defer></script>
+    <script src="music.js" defer></script>
+    <script src="shared/handle-skeleton.js" type="module"></script>
+    <script src="shared/reposts.js" type="module"></script>
+    <script src="presence.js" type="module"></script>
+    <script src="owner-keys.js" defer></script>
+    <script src="yt-player.js" defer></script>
+  </template>
+  <script>
+    (function () {
+      var lang = document.documentElement.lang || "";
+      if (lang === "ru" || lang === "es") {
+        var pack = document.createElement("script");
+        pack.src = "i18n/" + lang + ".js";
+        pack.async = false;
+        document.head.appendChild(pack);
+      }
+      function mount() {
+        var tpl = document.getElementById("late-scripts");
+        if (!tpl || !tpl.content || tpl.dataset.mounted) return;
+        tpl.dataset.mounted = "1";
+        var nodes = Array.prototype.slice.call(tpl.content.querySelectorAll("script"));
+        var i = 0;
+        function next() {
+          if (i >= nodes.length) {
+            try { window.dispatchEvent(new Event("viktorych-late")); } catch (err) { /* the shell is already up */ }
+            return;
+          }
+          var node = nodes[i++];
+          var src = node.getAttribute("src");
+          if (!src || document.querySelector('script[src="' + src + '"]')) { next(); return; }
+          var el = document.createElement("script");
+          var type = node.getAttribute("type");
+          if (type) el.type = type;
+          el.async = false;
+          el.src = src;
+          el.onload = el.onerror = next;
+          document.body.appendChild(el);
+        }
+        next();
+      }
+      window.addEventListener("load", function () { setTimeout(mount, 6500); });
+    })();
+  </script>
   <script src="accounts.config.js" defer></script>
-  <script src="shared/handle-skeleton.js" type="module"></script>
-  <script src="shared/reposts.js" type="module"></script>
   <script src="shared/lazy-modules.js" defer></script>
-  <script src="presence.js" type="module"></script>
   <script src="accounts.js" defer></script>
-  <script src="owner-keys.js" defer></script>
-  <script src="yt-player.js" defer></script>
   <script src="update.js" defer></script>
   <script src="storage.js" defer></script>
   <script src="localfirst.js" defer></script>

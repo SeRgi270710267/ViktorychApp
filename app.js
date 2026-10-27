@@ -6667,8 +6667,6 @@ const here = parseRoute();
         return { id: "subscriptions", href: subsHash((STATE.settings && STATE.settings.subsGroup) || ""), icon: "subs", label: tr("Subscriptions"), active: (r) => r.name === "subscriptions" };
       case "vault":
         return { id: "vault", href: "#/vault", icon: "vault", label: tr("Vault"), active: (r) => r.name === "vault", visible: () => !!(window.ViktorychVault && window.ViktorychVault.visible()) };
-      case "storage":
-        return { id: "storage", href: "#/storage", icon: "storage", label: tr("brand.storage"), active: (r) => r.name === "drive", visible: () => !!(window.ViktorychDrive && window.ViktorychDrive.visible()) };
       case "settings":
         return { id: "settings", href: "#/settings", icon: "more", label: tr("More"), listLabel: tr("Settings"), active: (r) => r.name === "settings" };
       default:
@@ -6943,7 +6941,7 @@ const here = parseRoute();
   const BOTTOM_NAV_IDS = [
     "home", "explore", "tv", "communities", "notifications", "messages",
     "feeds", "lists", "history", "music", "shorts", "games",
-    "subscriptions", "vault", "storage", "settings"
+    "subscriptions", "vault", "settings"
   ];
   const BOTTOM_NAV_DEFAULT_ON = ["home", "explore", "tv", "communities", "notifications", "messages"];
 
@@ -11067,10 +11065,15 @@ const here = parseRoute();
   function drawer() {
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
-    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
+    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().filter((def) => def.id !== "games" && def.id !== "music").map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
+    const storageLink = window.ViktorychDrive && window.ViktorychDrive.visible && window.ViktorychDrive.visible()
+      ? `<a href="#/storage">${icon("storage")} ${esc(tr("brand.storage"))}</a>`
+      : "";
+    const menuLinks = `${storageLink}<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
+      ${menuLinks}
       ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${tr("Install app")}</button>`}
     </div></div>`;
   }
@@ -15782,6 +15785,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }, true);
   window.addEventListener("hashchange", () => {
     if (window.ViktorychAccounts?.blocking?.()) return;
+    showPill(pendingPillPosts());
     const nextHash = location.hash || "#/";
     const prevHash = lastKey || "";
     if (/^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
@@ -15806,7 +15810,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
     hscrollNav = true;
-    showPill(pendingPillPosts());
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
     render({
@@ -16436,6 +16439,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   async function fetchFeeds(fresh) {
+    if (!fresh && window.__VIKTORYCH_FEED) {
+      try {
+        const early = await window.__VIKTORYCH_FEED;
+        if (early) {
+          const parsed = await parseFeedOffThread(early);
+          if (parsed && Array.isArray(parsed.posts)) return parsed;
+          return JSON.parse(early);
+        }
+      } catch (err) { /* a live fetch still loads the timeline */ }
+    }
     const headers = fresh ? { "X-Feed-Refresh": "1" } : {};
     const init = fresh ? { cache: "no-store", headers: headers } : { credentials: "omit" };
     const res = await fetch("feeds.json", init);
@@ -18356,7 +18369,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
-    loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
+    setTimeout(() => { loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {}); }, 8000);
     const snap = loadTimelineSnap();
     const pill = window.ViktorychLocal ? window.ViktorychLocal.readPill() : [];
     if (pill && pill.length) STATE.pendingFeed = { posts: pill, feeds: (snap && snap.feeds) || [] };
@@ -18370,7 +18383,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       render({ reset: true });
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
-    } else if (painted) {
+    } else if (painted || document.querySelector("#app [data-boot-card]")) {
       STATE.loading = false;
     } else {
       STATE.loading = true;
@@ -18435,12 +18448,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         ensureHub();
       }
       if ("serviceWorker" in navigator) navigator.serviceWorker.ready.then(() => pullBellQueue()).catch(() => {});
-      refreshLiveTimeline(false);
-      if (!STATE.liveTimer) {
-        STATE.liveTimer = setInterval(() => {
-          if (document.visibilityState === "visible") refreshLiveTimeline(false);
-        }, LIVE_REFRESH_MS);
-      }
+      setTimeout(() => {
+        refreshLiveTimeline(false);
+        if (!STATE.liveTimer) {
+          STATE.liveTimer = setInterval(() => {
+            if (document.visibilityState === "visible") refreshLiveTimeline(false);
+          }, LIVE_REFRESH_MS);
+        }
+      }, 8000);
     } catch (err) {
       STATE.loading = false;
       if (window.ViktorychShorts && window.ViktorychShorts.visible()) {
@@ -18476,58 +18491,76 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render();
     syncWorkerState();
   });
-  if (window.FeedsTV && window.FeedsTV.attach) window.FeedsTV.attach();
-  if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
-  if (window.FeedsPeople) {
-    window.FeedsPeople.bind({
-      esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
-      followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
-      sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
-      statusHash: statusHash, watchHash: watchHash, render: render,
-      connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
-      extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
-      ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsPeople.start();
+  function bindShellModules(andRender) {
+    const blocked = window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking();
+    if (window.FeedsTV && window.FeedsTV.attach && !window.FeedsTV.__shell) {
+      window.FeedsTV.__shell = true;
+      window.FeedsTV.attach();
+    }
+    if (window.FeedsTranslate && !window.FeedsTranslate.__shell) {
+      window.FeedsTranslate.__shell = true;
+      window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
+    }
+    if (window.FeedsPeople && !window.FeedsPeople.__shell) {
+      window.FeedsPeople.__shell = true;
+      window.FeedsPeople.bind({
+        esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
+        followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
+        sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
+        statusHash: statusHash, watchHash: watchHash, render: render,
+        connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
+        extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
+        ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
+      });
+      if (!blocked) window.FeedsPeople.start();
+    }
+    if (window.FeedsDiscord && !window.FeedsDiscord.__shell) {
+      window.FeedsDiscord.__shell = true;
+      window.FeedsDiscord.bind({
+        esc: esc,
+        render: render,
+        stay: () => { scrollFreeze = false; routing = false; },
+        noteHash: (hash) => {
+          lastKey = hash || (location.hash || "#/");
+          STATE.scrollKey = "#/messages";
+        }
+      });
+      if (!blocked) window.FeedsDiscord.start();
+    }
+    if (window.Stories && !window.Stories.__shell) {
+      window.Stories.__shell = true;
+      window.Stories.bind({
+        icon: icon,
+        render: render,
+        follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
+        dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
+      });
+      if (!blocked) window.Stories.start();
+    }
+    if (window.Spaces && !window.Spaces.__shell) {
+      window.Spaces.__shell = true;
+      window.Spaces.bind({
+        isFollowed: isFollowed,
+        render: render,
+        findFeed: findFeed,
+        shareRoot: shareRoot,
+        toast: toast
+      });
+      if (!blocked) window.Spaces.start();
+    }
+    if (window.SIntelMusic && window.SIntelMusic.bind && !window.SIntelMusic.__shell && !blocked) {
+      window.SIntelMusic.__shell = true;
+      window.SIntelMusic.bind({
+        render: function () { render(); },
+        toast: toast,
+        go: goHash,
+        repo: function () { return GITHUB_REPO; }
+      });
+    }
+    if (andRender && !blocked) render();
   }
-  if (window.FeedsDiscord) {
-    window.FeedsDiscord.bind({
-      esc: esc,
-      render: render,
-      stay: () => { scrollFreeze = false; routing = false; },
-      noteHash: (hash) => {
-        lastKey = hash || (location.hash || "#/");
-        STATE.scrollKey = "#/messages";
-      }
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsDiscord.start();
-  }
-  if (window.Stories) {
-    window.Stories.bind({
-      icon: icon,
-      render: render,
-      follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
-      dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
-    });
-  }
-  if (window.Spaces) {
-    window.Spaces.bind({
-      isFollowed: isFollowed,
-      render: render,
-      findFeed: findFeed,
-      shareRoot: shareRoot,
-      toast: toast
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.Spaces.start();
-  }
-  if (window.SIntelMusic && window.SIntelMusic.bind && !(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) {
-    window.SIntelMusic.bind({
-      render: function () { render(); },
-      toast: toast,
-      go: goHash,
-      repo: function () { return GITHUB_REPO; }
-    });
-  }
+  bindShellModules(false);
+  window.addEventListener("viktorych-late", () => bindShellModules(true));
   function bindCommunitiesModule() {
     if (!window.ViktorychCommunities) return;
     window.ViktorychCommunities.requestRender = function () { render(); };
@@ -18565,9 +18598,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (info.name === "communities") bindCommunitiesModule();
     if (!info.silent) render();
   });
-  if (window.ViktorychLazy && window.ViktorychLazy.preload) {
-    window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
-  }
+  setTimeout(() => {
+    if (window.ViktorychLazy && window.ViktorychLazy.preload) {
+      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
+    }
+  }, 8000);
   window.addEventListener("viktorych-key-alert", function (event) {
     const detail = event.detail || {};
     if (!detail.id || !detail.text) return;
