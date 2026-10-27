@@ -377,18 +377,56 @@
       savedBytes: Number(src.savedBytes) || 0,
       savedRequests: Number(src.savedRequests) || 0,
       direct: Number(src.direct) || 0,
-      server: Number(src.server) || 0
+      server: Number(src.server) || 0,
+      peerBytes: Number(src.peerBytes) || 0,
+      originBytes: Number(src.originBytes) || 0
     };
+  }
+
+  function byteStat(field) {
+    return field === "savedBytes" || field === "peerBytes" || field === "originBytes";
   }
 
   function bump(db, field, amount) {
     return metaGet(db, "storage-stats").then(function (stats) {
       var next = emptyStats(stats);
-      if (field === "savedBytes") next.savedBytes += Math.max(0, Number(amount) || 0);
+      if (byteStat(field)) next[field] += Math.max(0, Number(amount) || 0);
       else if (field === "savedRequests") next.savedRequests += 1;
       else next[field] = (Number(next[field]) || 0) + 1;
       return metaSet(db, "storage-stats", next).then(function () { return next; });
     });
+  }
+
+  function noteTransfer(db, field, bytes) {
+    if (!byteStat(field) || field === "savedBytes") return Promise.resolve(null);
+    return bump(db, field, bytes);
+  }
+
+  function rangeCacheUrl(url, rangeHeader) {
+    var match = /^bytes=(\d+)-(\d+)$/i.exec(String(rangeHeader || "").trim());
+    if (!match) return "";
+    var start = Number(match[1]);
+    var end = Number(match[2]);
+    if (!isFinite(start) || !isFinite(end) || end < start) return "";
+    if ((end - start + 1) > RANGE_LIMIT) return "";
+    try {
+      var parsed = new URL(String(url || ""), "https://local.invalid");
+      parsed.searchParams.set("vkrange", start + "-" + end);
+      return parsed.href;
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function cacheableRange(rangeHeader, size) {
+    var match = /^bytes=(\d+)-(\d+)$/i.exec(String(rangeHeader || "").trim());
+    if (!match) return false;
+    var start = Number(match[1]);
+    var end = Number(match[2]);
+    var len = end - start + 1;
+    if (!isFinite(len) || len < 1 || len > RANGE_LIMIT) return false;
+    if (size && Number(size) > 0 && len > RANGE_LIMIT) return false;
+    return true;
   }
 
   function readStats(db) {
@@ -765,7 +803,7 @@
     var free = snap && snap.quota > snap.usage ? snap.quota - snap.usage : 0;
     var freeLine = snap && snap.quota ? tr("{size} free", { size: formatBytes(free) }) : (measuring ? tr("Measuring storage…") : tr("Free on this device"));
     var persistLine = persistText(snap && snap.persisted);
-    var stats = snap && snap.stats || { hits: 0, network: 0, savedBytes: 0, savedRequests: 0, direct: 0, server: 0 };
+    var stats = snap && snap.stats || { hits: 0, network: 0, savedBytes: 0, savedRequests: 0, direct: 0, server: 0, peerBytes: 0, originBytes: 0 };
     if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.counts) {
       var live = window.ViktorychDirect.counts();
       stats.direct = Math.max(stats.direct || 0, Number(live.direct) || 0);
@@ -780,7 +818,7 @@
     return '<div class="stor-hero"><div class="stor-donut" style="' + donutStyle(summed.by, summed.total) + '" role="img" aria-label="' + esc(tr("{size} used", { size: formatBytes(summed.total) })) + '"><div class="stor-hole"><b>' + esc(formatBytes(summed.total)) + "</b><span>" + esc(tr("Storage usage")) + "</span></div></div>" +
       '<p class="stor-free">' + esc(freeLine) + "</p><p class=\"phandle\">" + esc(persistLine) + "</p></div>" +
       '<div class="stor-list">' + list + "</div>" + controlsHtml() +
-      '<p class="stor-debug">' + esc(tr("Cache hits {count}", { count: String(stats.hits) })) + " · " + esc(tr("Network requests {count}", { count: String(stats.network) })) + " · " + esc(tr("Hit rate {percent}", { percent: hitRate(stats) + "%" })) + " · " + esc(tr("Saved {size}", { size: formatBytes(stats.savedBytes || 0) })) + " · " + esc(tr("Saved requests {count}", { count: String(stats.savedRequests || 0) })) + " · " + esc(tr("Direct {count}", { count: String(stats.direct || 0) })) + " · " + esc(tr("Server {count}", { count: String(stats.server || 0) })) + "</p>";
+      '<p class="stor-debug">' + esc(tr("Cache hits {count}", { count: String(stats.hits) })) + " · " + esc(tr("Network requests {count}", { count: String(stats.network) })) + " · " + esc(tr("Hit rate {percent}", { percent: hitRate(stats) + "%" })) + " · " + esc(tr("Saved {size}", { size: formatBytes(stats.savedBytes || 0) })) + " · " + esc(tr("Saved requests {count}", { count: String(stats.savedRequests || 0) })) + " · " + esc(tr("Direct {count}", { count: String(stats.direct || 0) })) + " · " + esc(tr("Server {count}", { count: String(stats.server || 0) })) + " · " + esc(tr("From peers {size}", { size: formatBytes(stats.peerBytes || 0) })) + " · " + esc(tr("From origin {size}", { size: formatBytes(stats.originBytes || 0) })) + "</p>";
   }
 
   function clearStored(category) {
@@ -926,6 +964,9 @@
     replaceFiles: replaceFiles,
     touch: touch,
     bump: bump,
+    noteTransfer: noteTransfer,
+    rangeCacheUrl: rangeCacheUrl,
+    cacheableRange: cacheableRange,
     readStats: readStats,
     hitRate: hitRate,
     docKey: docKey,

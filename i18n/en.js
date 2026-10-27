@@ -1548,5 +1548,15 @@ SI18n.addPack("en", {
   "Play in a window": "Play in a window",
   "manifest.Home": "Home",
   "manifest.Messages": "Messages",
-  "manifest.Post": "Post"
+  "manifest.Post": "Post",
+  "Peer-assisted media": "Peer-assisted media",
+  "Peers can see each other's IP address while sharing.": "Peers can see each other's IP address while sharing.",
+  "Upload cap": "Upload cap",
+  "Share only while watching": "Share only while watching",
+  "From peers {size}": "From peers {size}",
+  "From origin {size}": "From origin {size}",
+  "32 KB/s": "32 KB/s",
+  "64 KB/s": "64 KB/s",
+  "128 KB/s": "128 KB/s",
+  "256 KB/s": "256 KB/s"
 });
