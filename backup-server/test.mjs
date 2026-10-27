@@ -20,6 +20,7 @@ const child = spawn(process.execPath, [path.resolve(__dirname, "server.mjs")], {
     HOST: "127.0.0.1",
     DATA_DIR: TEST_DATA_DIR,
     ACCOUNT_PEPPER: "test-pepper-1234",
+    SIGNUP_GUARD: "off",
     PBKDF2_ITERATIONS: "1000",
     ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080"
   }),
