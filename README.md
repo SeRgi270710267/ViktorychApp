@@ -276,6 +276,14 @@ Follow on a profile that is not in the private catalog, or Add account on the Fe
 
 Subscription groups are saved on this device immediately. **Save groups to the site** opens a prefilled issue titled `Subscription groups`. The same owner-only workflow writes the `groups` field in the private catalog and starts a sync, so the groups show up on every device. Edits on this device win until the published list matches. Issues from anyone else are ignored.
 
+## Handle guard
+
+`.github/workflows/handle-guard.yml` runs on pull requests and on pushes to `main`. It reads the private catalog from R2 with the same Cloudflare credentials the catalog job and the site job already use, and builds the comparison list in memory: every followed account handle, plus owner handles, owner ids, and the tracked and unlocked TikTok lists. The list is not printed, saved, or uploaded. Each kept value is hashed with sha256, and the tree is compared by hash. A match is a path and a count.
+
+A platform name, an ordinary English or code word, a token shorter than four characters, or a numeric id shorter than eight digits is left out, so a handle that is only a common word does not flag the source. Those skip rules apply to every list. `HANDLE_ALLOWLIST` is an optional secret of extra words to skip, one per line. `HANDLE_DENYLIST` and `OWNER_IDS` are optional extra lists and are merged in when they are set. None of these three secrets has to exist.
+
+A pull request from a fork, or a run without those R2 credentials, uses the optional lists when they are present and otherwise skips the comparison. The structural self-test still passes. A push to `main`, and a pull request opened from this repository, read the R2 catalog and fail if it cannot be read.
+
 ## Discord
 
 Discord is read from the channels listed in the config. The default is a bot you create, using Discord’s official HTTP API. The bot token lives only in the Actions secret `DISCORD_BOT_TOKEN`. It is sent as `Authorization: Bot …` to `discord.com` and is never written into the repo, the site, or the log. If that secret is missing, or Discord rejects it, bot servers are skipped and the rest of the sync continues. Previous Discord posts stay in `feeds.json`. Message files already on the site are copied forward when they can be downloaded.

@@ -17,6 +17,7 @@ permissions:
 jobs:
   guard:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -24,10 +25,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compare the tree with the private handle list
+      - name: Structural self-test
+        run: python3 scripts/handle_guard.py --selftest
+
+      - name: Compare the tree with the private catalog
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           HANDLE_DENYLIST: ${{ secrets.HANDLE_DENYLIST }}
           OWNER_IDS: ${{ secrets.OWNER_IDS }}
+          HANDLE_ALLOWLIST: ${{ secrets.HANDLE_ALLOWLIST }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          HANDLE_GUARD_REQUIRE_CATALOG: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: python3 scripts/handle_guard.py

@@ -57,7 +57,7 @@ function workerOptions() {
       }
       if ((url.hostname === "www.tiktok.com" || url.hostname === "tiktok.com") && url.pathname.indexOf("/live") >= 0) {
         liveHits.page += 1;
-        const html = '<script id="SIGI_STATE">{"LiveRoom":{"liveRoomUserInfo":{"user":{"roomId":"7699647509498710804"}}}}</script>';
+        const html = '<script id="SIGI_STATE">{"LiveRoom":{"liveRoomUserInfo":{"user":{"roomId":"7100000000000000002"}}}}</script>';
         return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
       }
       if (url.hostname === "www.tiktok.com" || url.hostname === "tiktok.com") {
@@ -235,24 +235,24 @@ test("owner adds and removes a TikTok account in private storage", async () => {
     method: "POST",
     ip: "203.0.113.82",
     token: owner.body.token,
-    body: { handle: "https://www.tiktok.com/@noranaslundddd?_r=1&_t=ZN-9AmQevSXE18" }
+    body: { handle: "https://www.tiktok.com/@zzsamplelive01?lang=en" }
   });
   assert.equal(share.status, 200);
-  assert.equal(share.body.account.handle, "noranaslundddd");
+  assert.equal(share.body.account.handle, "zzsamplelive01");
   assert.equal(share.body.account.name, "");
   assert.equal(share.body.preview, false);
 
   await bindings.DATA.put("owner/tiktok-accounts.json", JSON.stringify({
-    added: [{ handle: "https://www.tiktok.com/@noranaslundddd?_r=1&_t=ZN-9AmQevSXE18", name: "N", avatar: "", addedAt: "2026-10-22T00:00:00Z" }],
+    added: [{ handle: "https://www.tiktok.com/@zzsamplelive01?lang=en", name: "N", avatar: "", addedAt: "2026-10-22T00:00:00Z" }],
     removed: ["https://www.tiktok.com/@lockclip"]
   }));
   const repaired = await call("/v1/owner/tiktok/accounts", { ip: "203.0.113.83", token: owner.body.token });
   assert.equal(repaired.status, 200);
   assert.equal(repaired.body.added.length, 1);
-  assert.equal(repaired.body.added[0].handle, "noranaslundddd");
+  assert.equal(repaired.body.added[0].handle, "zzsamplelive01");
   assert.equal(repaired.body.added[0].name, "N");
   const repairedDoc = JSON.parse(await (await bindings.DATA.get("owner/tiktok-accounts.json")).text());
-  assert.equal(repairedDoc.added[0].handle, "noranaslundddd");
+  assert.equal(repairedDoc.added[0].handle, "zzsamplelive01");
   assert.equal(repairedDoc.removed[0], "lockclip");
 
   const mediaDenied = await call("/v1/owner/media?url=" + encodeURIComponent("https://v16.tiktokcdn.com/live.m3u8"), {
@@ -305,13 +305,13 @@ test("live stats use user_count and keep the origin url", async () => {
   liveHits.page = 0;
   liveHits.room = 0;
   roomMode = "hd";
-  const lower = await call("/v1/owner/live/canddeserrano_?stats=1", { ip: "203.0.113.92", token: ownerToken });
+  const lower = await call("/v1/owner/live/zzsamplelive02?stats=1", { ip: "203.0.113.92", token: ownerToken });
   assert.equal(lower.status, 200);
   assert.equal(lower.body.live, false);
   assert.equal(lower.body.viewers, 0);
   assert.equal(lower.text.indexOf("m3u8"), -1);
   assert.equal(liveHits.room, 0);
-  const opened = await call("/v1/owner/live/canddeserrano_", { ip: "203.0.113.93", token: ownerToken });
+  const opened = await call("/v1/owner/live/zzsamplelive02", { ip: "203.0.113.93", token: ownerToken });
   assert.equal(opened.status, 200);
   assert.equal(opened.body.quality, "hd");
   assert.equal(opened.body.viewers, 9);
@@ -323,24 +323,24 @@ test("live stats use user_count and keep the origin url", async () => {
   assert.equal(liveHits.page, 1);
   assert.equal(liveHits.room, 1);
   roomMode = "origin";
-  const raised = await call("/v1/owner/live/canddeserrano_", { ip: "203.0.113.94", token: ownerToken });
+  const raised = await call("/v1/owner/live/zzsamplelive02", { ip: "203.0.113.94", token: ownerToken });
   assert.equal(raised.body.quality, "origin");
   assert.equal(raised.body.viewers, 4);
   assert.match(raised.body.hls, /\/origin\/index\.m3u8/);
   assert.equal(raised.body.qualityNote, "");
   assert.equal(liveHits.room, 2);
   roomMode = "hd";
-  const kept = await call("/v1/owner/live/canddeserrano_", { ip: "203.0.113.95", token: ownerToken });
+  const kept = await call("/v1/owner/live/zzsamplelive02", { ip: "203.0.113.95", token: ownerToken });
   assert.equal(kept.body.quality, "origin");
   assert.match(kept.body.hls, /\/origin\/index\.m3u8/);
   assert.equal(liveHits.room, 2);
   roomMode = "origin";
-  const fresh = await call("/v1/owner/live/canddeserrano_?fresh=1", { ip: "203.0.113.99", token: ownerToken });
+  const fresh = await call("/v1/owner/live/zzsamplelive02?fresh=1", { ip: "203.0.113.99", token: ownerToken });
   assert.equal(fresh.body.quality, "origin");
   assert.match(fresh.body.hls, /\/origin\/index\.m3u8/);
   assert.equal(liveHits.room, 3);
   roomMode = "hd";
-  const stats = await call("/v1/owner/live/canddeserrano_?stats=1&room=7699647509498710804", { ip: "203.0.113.96", token: ownerToken });
+  const stats = await call("/v1/owner/live/zzsamplelive02?stats=1&room=7100000000000000002", { ip: "203.0.113.96", token: ownerToken });
   assert.equal(stats.status, 200);
   assert.equal(stats.body.viewers, 9);
   assert.equal(stats.text.indexOf("m3u8"), -1);
@@ -362,21 +362,21 @@ test("recordings stay owner-only and hide backup channel ids", async () => {
   const anon = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.110" });
   assert.equal(anon.status, 401);
   const bindings = await mf.getBindings();
-  const handle = "canddeserrano_";
+  const handle = "zzsamplelive02";
   const openHandle = "aa_fixture";
-  const key = "tiktok/" + handle + "/7699647509498710804/live";
+  const key = "tiktok/" + handle + "/7100000000000000002/live";
   const openKey = "tiktok/" + openHandle + "/1000000000000000001/live";
   await bindings.DATA.put("owner/tiktok-recordings.json", JSON.stringify({
     cap: 12,
     active: 1,
     items: {
-      [handle]: { state: "saved", quality: "origin", qualityNote: "", title: "now", key, parts: 1, roomId: "7699647509498710804" },
+      [handle]: { state: "saved", quality: "origin", qualityNote: "", title: "now", key, parts: 1, roomId: "7100000000000000002" },
       [openHandle]: { state: "recording", quality: "origin", title: "open", roomId: "1000000000000000001", startedAt: "2026-10-02T00:00:00Z" }
     }
   }));
   await bindings.DATA.put("owner/live-jobs/" + handle + ".json", JSON.stringify({
-    public: { state: "saved", quality: "hd", qualityNote: "best available", title: "now", key, parts: 2, roomId: "7699647509498710804" },
-    saved: [{ state: "saved", quality: "hd", qualityNote: "best available", title: "earlier", key, parts: 2, roomId: "7699647509498710804", startedAt: "2026-10-01T00:00:00Z", viewers: 4, duration: 90 }]
+    public: { state: "saved", quality: "hd", qualityNote: "best available", title: "now", key, parts: 2, roomId: "7100000000000000002" },
+    saved: [{ state: "saved", quality: "hd", qualityNote: "best available", title: "earlier", key, parts: 2, roomId: "7100000000000000002", startedAt: "2026-10-01T00:00:00Z", viewers: 4, duration: 90 }]
   }));
   await bindings.DATA.put("owner/live-jobs/" + openHandle + ".json", JSON.stringify({
     public: { state: "recording", quality: "origin", title: "open", roomId: "1000000000000000001", startedAt: "2026-10-02T00:00:00Z" },
@@ -487,7 +487,7 @@ test("the live board is owner-only, etagged, and has no stream urls", async () =
   const bindings = await mf.getBindings();
   await bindings.DATA.put("owner/tiktok.json", JSON.stringify({
     live: {
-      more_viewers: { handle: "more_viewers", live: true, viewers: 80, title: "busy", roomId: "7699647509498710804", hls: "https://v16.tiktokcdn.com/secret.m3u8" },
+      more_viewers: { handle: "more_viewers", live: true, viewers: 80, title: "busy", roomId: "7100000000000000002", hls: "https://v16.tiktokcdn.com/secret.m3u8" },
       few_viewers: { handle: "few_viewers", live: true, viewers: 2, title: "quiet", roomId: "7699647509498710805" }
     }
   }));
