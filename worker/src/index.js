@@ -2016,6 +2016,31 @@ function publicMediaHostOk(hostname) {
   return PUBLIC_MEDIA_HOST.test(String(hostname || ""));
 }
 
+function twimgVideoHost(hostname) {
+  return /(^|\.)video\.twimg\.com$/i.test(String(hostname || ""));
+}
+
+// X video bytes stay on the original file. The relay may fetch them, but
+// Cloudflare must not cache that response, and the bytes are not re-encoded.
+// X-Frame-Options from the upstream response is copied unchanged. The tweet
+// embed itself is never requested through this route.
+export function publicMediaPolicy(hostname) {
+  if (twimgVideoHost(hostname)) {
+    return {
+      video: true,
+      cf: { cacheTtl: 0, cacheEverything: false },
+      cacheControl: "private, no-store",
+      cdnCacheControl: "no-store"
+    };
+  }
+  return {
+    video: false,
+    cf: { cacheTtl: 604800, cacheEverything: true },
+    cacheControl: "public, max-age=86400, s-maxage=604800",
+    cdnCacheControl: "public, max-age=604800"
+  };
+}
+
 async function handlePublicMediaProxy(request, env, url) {
   const target = url.searchParams.get("url") || "";
   let parsed = null;
@@ -2023,10 +2048,11 @@ async function handlePublicMediaProxy(request, env, url) {
   if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password || !publicMediaHostOk(parsed.hostname)) {
     return json(400, { error: "bad_url" });
   }
+  const policy = publicMediaPolicy(parsed.hostname);
   const headers = new Headers();
   headers.set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
   headers.set("accept", "image/*,video/*,*/*");
-  headers.set("referer", parsed.origin + "/");
+  if (!policy.video) headers.set("referer", parsed.origin + "/");
   const range = request.headers.get("range") || "";
   if (/^bytes=\d*-\d*$/.test(range)) headers.set("range", range);
   let upstream = null;
@@ -2035,7 +2061,7 @@ async function handlePublicMediaProxy(request, env, url) {
       headers,
       redirect: "follow",
       signal: AbortSignal.timeout(10000),
-      cf: { cacheTtl: 604800, cacheEverything: true }
+      cf: policy.cf
     });
   } catch (err) {
     return json(502, { error: "upstream" });
@@ -2055,8 +2081,10 @@ async function handlePublicMediaProxy(request, env, url) {
   if (contentRange) respHeaders.set("content-range", contentRange);
   const acceptRanges = upstream.headers.get("accept-ranges");
   if (acceptRanges) respHeaders.set("accept-ranges", acceptRanges);
-  respHeaders.set("cache-control", "public, max-age=86400, s-maxage=604800");
-  respHeaders.set("cdn-cache-control", "public, max-age=604800");
+  respHeaders.set("cache-control", policy.cacheControl);
+  respHeaders.set("cdn-cache-control", policy.cdnCacheControl);
+  const frameOptions = upstream.headers.get("x-frame-options");
+  if (frameOptions) respHeaders.set("x-frame-options", frameOptions);
   respHeaders.set("x-content-type-options", "nosniff");
   respHeaders.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
   return new Response(upstream.body, { status: upstream.status, headers: respHeaders });

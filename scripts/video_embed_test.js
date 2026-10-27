@@ -91,10 +91,83 @@ assert.strictEqual(peer.url, "https://peer.example/videos/embed/11111111-1111-11
 const peerShort = api.match("https://peer.example/w/11111111-1111-1111-1111-111111111111");
 assert.ok(peerShort.url.indexOf("/videos/embed/11111111-1111-1111-1111-111111111111") >= 0);
 
-const tweet = api.match("https://platform.twitter.com/embed/Tweet.html?id=1000000000000001");
+const STATUS = "1000000000000001";
+const tweet = api.match("https://platform.twitter.com/embed/Tweet.html?id=" + STATUS);
 assert.strictEqual(tweet.site, "x");
-assert.strictEqual(tweet.url, "https://platform.twitter.com/embed/Tweet.html?id=1000000000000001");
-assert.strictEqual(api.match("https://video.twimg.com/clip.mp4 https://platform.twitter.com/embed/Tweet.html?id=1000000000000001"), null);
+assert.strictEqual(tweet.url, "https://platform.twitter.com/embed/Tweet.html?id=" + STATUS + "&theme=dark&dnt=true");
+assert.ok(tweet.url.indexOf("theme=dark") >= 0);
+assert.ok(tweet.url.indexOf("dnt=true") >= 0);
+assert.strictEqual(api.match("https://video.twimg.com/clip.mp4 https://platform.twitter.com/embed/Tweet.html?id=" + STATUS), null);
+
+const space = api.match("https://x.com/i/spaces/1AAAAAAAAAAAAAA");
+assert.strictEqual(space.kind, "link");
+assert.strictEqual(space.url, "https://x.com/i/spaces/1AAAAAAAAAAAAAA");
+const cast = api.xExternal("https://twitter.com/i/broadcasts/1BBBBBBBBBBBBBB");
+assert.strictEqual(cast.kind, "link");
+assert.strictEqual(cast.openUrl, "https://x.com/i/broadcasts/1BBBBBBBBBBBBBB");
+assert.ok(!/@/.test(space.url + cast.openUrl));
+
+assert.strictEqual(api.xStatusId({ statusId: STATUS, id: "repost:" + STATUS }), STATUS);
+assert.strictEqual(api.xEmbedUrl(STATUS), tweet.url);
+assert.strictEqual(api.xOpenUrl(STATUS, "status"), "https://x.com/i/status/" + STATUS);
+assert.strictEqual(api.xOpenUrl("bad/id", "status"), "");
+assert.strictEqual(api.X_STALL_MS, 3000);
+
+const original = "https://video.twimg.com/ext_tw_video/" + STATUS + "/vid/avc1/1280x720/a.mp4";
+const small = "https://video.twimg.com/ext_tw_video/" + STATUS + "/vid/avc1/640x360/b.mp4";
+const hls = "https://video.twimg.com/ext_tw_video/" + STATUS + "/hls/pl.m3u8";
+const picked = api.xPrimary({
+  variants: [
+    { url: small, bitrate: 256000 },
+    { url: original, bitrate: 2176000 },
+    { url: hls, bitrate: 0 }
+  ]
+});
+assert.strictEqual(picked.kind, "mp4");
+assert.strictEqual(picked.url, original);
+const onlyHls = api.xPrimary({ url: "", hls: hls, variants: [{ url: hls }] });
+assert.strictEqual(onlyHls.kind, "hls");
+assert.strictEqual(onlyHls.url, hls);
+const expired = api.xPrimary({ url: original + "?oe=1" }, { expired: () => true });
+assert.strictEqual(expired, null);
+
+const direct = api.xRoute(original, { networkMode: "direct", relay: "https://relay.example/v1/media?url=1" });
+assert.strictEqual(direct.url, original);
+assert.strictEqual(direct.relay, "");
+const maxed = api.xRoute(original, { networkMode: "max", relay: "https://relay.example/v1/media?url=1" });
+assert.strictEqual(maxed.url, "https://relay.example/v1/media?url=1");
+assert.strictEqual(maxed.relay, "");
+const auto = api.xRoute(original, { networkMode: "auto", relay: "https://relay.example/v1/media?url=1" });
+assert.strictEqual(auto.url, original);
+assert.strictEqual(auto.relay, "https://relay.example/v1/media?url=1");
+const failed = api.xRoute(original, {
+  networkMode: "auto",
+  relay: "https://relay.example/v1/media?url=1",
+  playbackUrl: (file, relay) => relay
+});
+assert.strictEqual(failed.url, "https://relay.example/v1/media?url=1");
+assert.strictEqual(failed.relay, "");
+const planned = api.xPlan({
+  post: { platform: "x", statusId: STATUS },
+  media: { type: "video", variants: [{ url: original, bitrate: 2176000 }, { url: small, bitrate: 256000 }] },
+  route: (url) => api.xRoute(url, { networkMode: "auto", relay: "https://relay.example/v1/media?url=1" })
+});
+assert.strictEqual(planned.primary.url, original);
+assert.strictEqual(planned.primary.origin, original);
+assert.strictEqual(planned.relay.url, "https://relay.example/v1/media?url=1");
+assert.strictEqual(planned.embedUrl, tweet.url);
+const missing = api.xPlan({ post: { platform: "x", statusId: STATUS }, media: { type: "video" } });
+assert.strictEqual(missing.primary, null);
+assert.strictEqual(missing.embedUrl, tweet.url);
+
+const fake = { attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } };
+api.prepareXVideo(fake, original, { gif: true });
+assert.strictEqual(fake.loop, true);
+assert.strictEqual(fake.muted, true);
+assert.strictEqual(fake.playsInline, true);
+assert.strictEqual(fake.disablePictureInPicture, false);
+assert.strictEqual(fake.referrerPolicy, "no-referrer");
+assert.strictEqual(fake.attrs.playsinline, "");
 
 assert.strictEqual(api.referrerFor("https://video.twimg.com/clip.mp4"), "no-referrer");
 assert.strictEqual(api.referrerFor("https://cdninstagram.com/clip.mp4"), "no-referrer");
