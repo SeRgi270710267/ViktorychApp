@@ -34,6 +34,7 @@ UI_FILES = (
     "communities.js",
     "yt-player.js",
     "update.js",
+    "storage.js",
     "scores.js",
     "weather.js",
 )
