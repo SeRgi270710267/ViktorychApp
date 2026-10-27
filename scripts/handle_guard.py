@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -438,20 +439,31 @@ def r2_fetch(key: str) -> tuple[str, bytes | None]:
     quoted = urllib.parse.quote(key, safe="/")
     url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/{BUCKET}/objects/{quoted}"
     req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as res:
-            status = getattr(res, "status", 200)
-            if status == 404:
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as res:
+                status = getattr(res, "status", 200)
+                if status == 404:
+                    return "missing", None
+                if status != 200:
+                    if attempt < 2 and status >= 500:
+                        time.sleep(1 + attempt)
+                        continue
+                    return "error", None
+                return "ok", res.read()
+        except urllib.error.HTTPError as err:
+            if err.code == 404:
                 return "missing", None
-            if status != 200:
-                return "error", None
-            return "ok", res.read()
-    except urllib.error.HTTPError as err:
-        if err.code == 404:
-            return "missing", None
-        return "error", None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        return "error", None
+            if attempt < 2 and err.code >= 500:
+                time.sleep(1 + attempt)
+                continue
+            return "error", None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            if attempt < 2:
+                time.sleep(1 + attempt)
+                continue
+            return "error", None
+    return "error", None
 
 
 def parse_usable(blob, key: str):
