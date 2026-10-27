@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T22:38:42Z",
+  "fetchedAt": "2026-10-27T01:02:31Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -582,17 +582,42 @@
       "repliesTotal": 1
     },
     {
+      "id": "43100",
+      "title": "GrapheneOS TalkBack version 23 released",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 14,
+      "comments": 14,
+      "views": 315,
+      "participantCount": 9,
+      "created": 1792982355,
+      "lastPostedAt": 1793061953,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released",
+      "media": [],
+      "text": "GrapheneOS TalkBack version 23 released:\n\nhttps://github.com/GrapheneOS/TalkBack/releases/tag/23\n\nSee the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.",
+      "replies": [],
+      "repliesTotal": 14
+    },
+    {
       "id": "43111",
       "title": "Sensor permissions: the final word?",
       "author": "WelcomeMilk89",
       "authorUsername": "WelcomeMilk89",
       "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
+      "score": 4,
+      "comments": 4,
+      "views": 105,
+      "participantCount": 3,
       "created": 1793051197,
-      "lastPostedAt": 1793053526,
+      "lastPostedAt": 1793060518,
       "category": "Pixel 8",
       "categoryColor": "#7659e8",
       "tags": [
@@ -605,7 +630,107 @@
       "media": [],
       "text": "Went through a few discussions from some time ago here and it feels like no real solid answer has been clearly given when it comes to revoking sensor permissions or not.\n\nThe PrivacyGear site states \"revoke sensor permissions for all apps that clearly don't need them.\" But I don't think it's ever been clearly stated in simple terms what apps really need them. Can someone please explain to me like I'm 5 what apps do and do not need them? My thought as of now is that if sensors are automatically granted as a default, there's a reason for that, right? So, if that is the case, why are some people reluctant to give permission to sensors? Is there a presumed (or verified) security issue with having them running on some apps?\n\nThanks for clearing this up. Again, all of the older discussions, even with GOS guide explanations, seem incredibly vague and nebulous to not very technical users like me who don't know the jargon.",
       "replies": [],
-      "repliesTotal": 2
+      "repliesTotal": 4
+    },
+    {
+      "id": "40870",
+      "title": "Vela Maps - Alternative front end for google maps.",
+      "author": "W1zardK1ng",
+      "authorUsername": "W1zardK1ng",
+      "authorAvatar": "",
+      "score": 83,
+      "comments": 83,
+      "views": 1050,
+      "participantCount": 30,
+      "created": 1785583985,
+      "lastPostedAt": 1793057310,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/40870-vela-maps-alternative-front-end-for-google-maps",
+      "media": [],
+      "text": "It scraps data from google maps giving an option to use google map without sharing much data. Just sharing for people who are still not aware this option exists.\n\nhttps://github.com/redacted_handle/Vela",
+      "replies": [],
+      "repliesTotal": 83
+    },
+    {
+      "id": "42926",
+      "title": "Browser-Fingerprinting over multiple profiles",
+      "author": "magic-carpet-ride",
+      "authorUsername": "magic-carpet-ride",
+      "authorAvatar": "",
+      "score": 19,
+      "comments": 19,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1792352495,
+      "lastPostedAt": 1793056767,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles",
+      "media": [],
+      "text": "Hello,\n\ni've discovered a hackernews article with the headline \"Fingerprints are the new cookies\"\n\n( https://news.ycombinator.com/item?id=50048642 ).\n\nThe linked site does some browser fingerprints via javascript and shows it as a tag.\n\nTested it today with my multi-profile setup (one profile with vpn and one without).\n\nI've opened the site in Vanadium and Ironfox, noted the tags, switched profile, opened it again.\n\nBoth browsers had the same fingerprint after switching profiles.\n\nI didn't had that on the radar and now i'm looking for ways to get rid of that.\n\nAny Suggestions?\n\nAlso, thank you for this important work and awesome Project.\n\nI've switched a few month ago and don't regret it for a second.",
+      "replies": [],
+      "repliesTotal": 19
+    },
+    {
+      "id": "43113",
+      "title": "Could/does GOS exclusively allow an app local network access?",
+      "author": "SovereignCopper",
+      "authorUsername": "SovereignCopper",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/xiFBXmvJugP3tJrX.png",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1793055944,
+      "lastPostedAt": 1793055944,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43113-coulddoes-gos-exclusively-allow-an-app-local-network-access",
+      "media": [],
+      "text": "Android 17 introduces the new Local network runtime permission.\n\nI have a couple of apps that I'd like to only grant local network access (if they target the Android 17 SDK).\n\nHowever, I have a VPN running perpetually and I don't think it's advisable to disable Block connections without VPN, considering this has proven to result in some leaking.\n\n• I guess in its current form, Block connections without VPN would also block/override the Local network permission? This is an assumption, so I'd like to know if this is true.\n\n• If so, would GrapheneOS be able/willing to give the option to give the Local Network permission priority, in order to allow specific apps to have local network access, even if the VPN tunnel is locked down using Block connections without VPN otherwise?\n\nIt may not be wise or another solution would be better (I was thinking about e.g. a separate profile/work profile/private space, but I'd like to have access to the files in the main profile while having them synced over the local network), but if so, I'd very much like to hear about it.",
+      "replies": [],
+      "repliesTotal": 1
+    },
+    {
+      "id": "43112",
+      "title": "Can a captive portal use JavaScript to fingerprint me",
+      "author": "jennifer2e9c3e",
+      "authorUsername": "jennifer2e9c3e",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1793055016,
+      "lastPostedAt": 1793055016,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43112-can-a-captive-portal-use-javascript-to-fingerprint-me",
+      "media": [],
+      "text": "Is the captive portal app fingerprint resistant? Will the WiFi operator be able to identity me uniquely? Will they be able to identify which phone I'm using? And will they be able to identify that I'm using GrapheneOS? I have WiFi connectivity checks set to google to try to blend in but I don't know if that's effective or if its making me stand out more",
+      "replies": [],
+      "repliesTotal": 1
     },
     {
       "id": "36234",
@@ -709,31 +834,6 @@
       "text": "I was looking for a way to let DeepL give me the pronunciation of a word and activated Talkback in accessibility services, from this moment on every element I touch on the screen gets a green frame and I can do nothing more, no gesture navigation, phone is locked after pressing the power button to reboot the phone but I can't reboot or unlock.\n\nWhat to do now to stop this?",
       "replies": [],
       "repliesTotal": 16
-    },
-    {
-      "id": "43100",
-      "title": "GrapheneOS TalkBack version 23 released",
-      "author": "GrapheneOS",
-      "authorUsername": "GrapheneOS",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-      "score": 12,
-      "comments": 12,
-      "views": 280,
-      "participantCount": 8,
-      "created": 1792982355,
-      "lastPostedAt": 1793049935,
-      "category": "Announcements",
-      "categoryColor": "#f00a0a",
-      "tags": [
-        "Announcements"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released",
-      "media": [],
-      "text": "GrapheneOS TalkBack version 23 released:\n\nhttps://github.com/GrapheneOS/TalkBack/releases/tag/23\n\nSee the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.",
-      "replies": [],
-      "repliesTotal": 12
     },
     {
       "id": "789",
@@ -1013,31 +1113,6 @@
       "text": "We're planning on phasing out support for 32-bit apps on 5th/6th generation Pixels where they're still supported. They were already phased out by Android for 7th generation Pixels and later, and by ARM for 2nd generation ARMv9 Cortex cores onwards. Since 7th/8th generation Pixel users are doing fine without them, we want to bring the improved security to users on 6th generation Pixels which still have a lot of support ahead of them. It will also save a significant amount of build time and bandwidth, particularly when we can move to 64-bit-only builds of Vanadium.\n\nThe main benefit is dropping all the 32-bit ABI support from the kernel including a bunch of awful legacy cruft for emulating legacy ARM features no longer supported by hardware.\n\nThe next release will add a clear warning to each launch of 32-bit-only apps. In nearly all cases, people just need to switch to proper builds of apps which aren't 32-bit-only such as the ones distributed by certain 3rd party mirror sites where users accidentally ended up on 32-bit-only builds.\n\nIt hasn't been possible to install 32-bit-only apps from the Play Store on 64-bit-capable devices since August 2021 and they blocked uploading either new apps or app updates without 64-bit support since August 2019.",
       "replies": [],
       "repliesTotal": 49
-    },
-    {
-      "id": "42926",
-      "title": "Browser-Fingerprinting over multiple profiles",
-      "author": "magic-carpet-ride",
-      "authorUsername": "magic-carpet-ride",
-      "authorAvatar": "",
-      "score": 18,
-      "comments": 18,
-      "views": 175,
-      "participantCount": 5,
-      "created": 1792352495,
-      "lastPostedAt": 1793043461,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles",
-      "media": [],
-      "text": "Hello,\n\ni've discovered a hackernews article with the headline \"Fingerprints are the new cookies\"\n\n( https://news.ycombinator.com/item?id=50048642 ).\n\nThe linked site does some browser fingerprints via javascript and shows it as a tag.\n\nTested it today with my multi-profile setup (one profile with vpn and one without).\n\nI've opened the site in Vanadium and Ironfox, noted the tags, switched profile, opened it again.\n\nBoth browsers had the same fingerprint after switching profiles.\n\nI didn't had that on the radar and now i'm looking for ways to get rid of that.\n\nAny Suggestions?\n\nAlso, thank you for this important work and awesome Project.\n\nI've switched a few month ago and don't regret it for a second.",
-      "replies": [],
-      "repliesTotal": 18
     },
     {
       "id": "43092",
@@ -1345,84 +1420,6 @@
       "text": "It just doesn't let me select anything. Which means I have to open and log in to the bank app each time. Is there any way to fix this?",
       "replies": [],
       "repliesTotal": 3
-    },
-    {
-      "id": "43027",
-      "title": "Wi-Fi reconnect on restart doesn't work",
-      "author": "Onlyfun",
-      "authorUsername": "Onlyfun",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792709856,
-      "lastPostedAt": 1793018520,
-      "category": "Pixel 8",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 8"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43027-wi-fi-reconnect-on-restart-doesnt-work",
-      "media": [],
-      "text": "That's it in the title. It's probably not a common issue since my other p8 reconnects as expected. But still asking if anybody seen this to happen? Any remedy?",
-      "replies": [],
-      "repliesTotal": 4
-    },
-    {
-      "id": "5182",
-      "title": "Apps installation are very slow",
-      "author": "Matt",
-      "authorUsername": "Matt",
-      "authorAvatar": "",
-      "score": 5,
-      "comments": 5,
-      "views": 175,
-      "participantCount": 5,
-      "created": 1684875111,
-      "lastPostedAt": 1793017590,
-      "category": "Pixel 4a (5G) (extended support)",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 4a (5G) (extended support)",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/5182-apps-installation-are-very-slow",
-      "media": [],
-      "text": "Apps installation from both Play Store, as well as the manual install is very slow. I read on the forum that it recompiles or optimizes it. Can we disable this option and get a faster install without prior optimization of apps?",
-      "replies": [],
-      "repliesTotal": 5
-    },
-    {
-      "id": "43007",
-      "title": "Donate from India",
-      "author": "mumbai",
-      "authorUsername": "mumbai",
-      "authorAvatar": "",
-      "score": 7,
-      "comments": 7,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792643046,
-      "lastPostedAt": 1793016914,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43007-donate-from-india",
-      "media": [],
-      "text": "How can I make donations to @GrapheneOS I don't use any Debit or Credit or UPI app\n\nEasiest way to Donate i'll say someone else to Donate for me",
-      "replies": [],
-      "repliesTotal": 7
     }
   ]
 }
