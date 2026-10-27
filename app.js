@@ -2583,7 +2583,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${altAttr}${lead ? ' data-tg-first="1" data-fallback-src="' + esc(rawSrc) + '"' : ""}` : "";
       const sourceAttr = sourceUrl ? ` data-source="${esc(sourceUrl)}"` : "";
       const loading = first ? "eager" : "lazy";
-      const priority = first ? ` fetchpriority="high"` : "";
+      const priority = first ? ` fetchpriority="high"` : ` fetchpriority="low"`;
       const srcAttr = lead ? "" : ` src="${esc(src)}"${src === rawSrc ? imageSrcset(src) : ""}`;
       const framed = n === 1 ? frameAttrs(post, m) : { attr: "", cls: "" };
       return `<div class="tile${framed.cls || ""}" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
@@ -15607,6 +15607,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   });
   window.addEventListener("scroll", () => {
     if (!routing && Math.abs(window.scrollY - previewAnchor) >= 24) STATE.scrolled = true;
+    const native = window.ViktorychNative;
+    if (native && native.yieldThread) {
+      native.yieldThread().then(() => schedulePreview());
+      return;
+    }
     schedulePreview();
   }, { passive: true });
   window.addEventListener("resize", () => schedulePreview(), { passive: true });
@@ -16398,12 +16403,42 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return liveRefreshFlight;
   }
 
+  let feedWorker = null;
+  function parseFeedOffThread(text) {
+    if (typeof Worker === "undefined") return Promise.resolve(null);
+    if (feedWorker === false) return Promise.resolve(null);
+    if (!feedWorker) {
+      try { feedWorker = new Worker("feed-worker.js", { type: "module" }); }
+      catch (err) { feedWorker = false; return Promise.resolve(null); }
+    }
+    return new Promise((resolve) => {
+      const id = "f" + Date.now() + Math.random();
+      const timer = setTimeout(() => {
+        feedWorker.removeEventListener("message", onMsg);
+        resolve(null);
+      }, 2500);
+      const onMsg = (event) => {
+        const data = event.data || {};
+        if (data.id !== id) return;
+        clearTimeout(timer);
+        feedWorker.removeEventListener("message", onMsg);
+        resolve(data.doc || null);
+      };
+      feedWorker.addEventListener("message", onMsg);
+      try { feedWorker.postMessage({ id: id, text: text }); }
+      catch (err) { clearTimeout(timer); resolve(null); }
+    });
+  }
+
   async function fetchFeeds(fresh) {
     const headers = fresh ? { "X-Feed-Refresh": "1" } : {};
     const init = fresh ? { cache: "no-store", headers: headers } : { credentials: "omit" };
     const res = await fetch("feeds.json", init);
     if (!res.ok) throw new Error(String(res.status));
-    return res.json();
+    const text = await res.text();
+    const parsed = await parseFeedOffThread(text);
+    if (parsed && Array.isArray(parsed.posts)) return parsed;
+    return JSON.parse(text);
   }
 
   function catalogSignature(doc) {
@@ -16513,7 +16548,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
-        try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
+        const title = tr("New posts");
+        const body = trn("newPosts", fresh.length);
+        const payload = { body: body, icon: "icons/icon-192.png", tag: "feeds", data: { hash: "#/" } };
+        const viaWorker = ("serviceWorker" in navigator)
+          ? navigator.serviceWorker.ready.then((reg) => (reg && reg.showNotification ? reg.showNotification(title, payload) : Promise.reject()))
+          : Promise.reject();
+        Promise.resolve(viaWorker).catch(() => { try { new Notification(title, { body: body, icon: payload.icon, tag: "feeds" }); } catch (err) { /* permission can change */ } });
       }
       ensureVideoOwners();
     } catch (err) { /* keep the posts already on screen */ }
@@ -16928,10 +16969,29 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return "";
   }
 
+  function applyNativeLaunch(detail) {
+    if (!detail) return;
+    if (detail.hash) {
+      try { location.hash = detail.hash; } catch (err) { /* the current screen stays */ }
+    }
+    if (detail.compose) {
+      STATE.modal = "compose";
+      if (detail.text) STATE.composeSeed = detail.text;
+    }
+  }
+
   function consumeShareTarget() {
     const params = new URLSearchParams(location.search);
-    if (!params.has("url") && !params.has("text") && !params.has("title")) return;
-    STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "" };
+    const media = params.get("media") || "";
+    const posting = params.get("post") === "1";
+    if (!params.has("url") && !params.has("text") && !params.has("title") && !media && !posting) return;
+    if ((posting || media) && !params.has("url")) {
+      STATE.modal = "compose";
+      STATE.composeSeed = [params.get("title") || "", params.get("text") || ""].filter(Boolean).join("\n");
+      history.replaceState(null, "", location.pathname + "#/home");
+      return;
+    }
+    STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "", media: media };
     const shared = parseSharedLink([params.get("url"), params.get("text"), params.get("title")].filter(Boolean).join(" "));
     const hash = shared || (location.hash && location.hash !== "#/" && location.hash !== "#/home" ? location.hash : "#/incoming");
     history.replaceState(null, "", location.pathname + hash);
@@ -17422,6 +17482,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (!("serviceWorker" in navigator)) return;
+    const iosPush = /iphone|ipad|ipod/i.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (iosPush && !isStandalone()) return;
     try {
       const reg = await navigator.serviceWorker.ready;
       if (!reg.pushManager) return;
@@ -17508,7 +17570,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const item = new Notification(note.name || ("@" + (note.handle || "post")), {
         body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
-        tag: "bell-" + note.id
+        tag: "note-" + note.id
       });
       item.onclick = () => {
         window.focus();
@@ -17529,7 +17591,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       body: note.text || tr("New post"),
       icon: note.avatar || "icons/icon-192.png",
       image: note.image || undefined,
-      tag: "bell-" + note.id,
+      tag: "note-" + note.id,
       data: { hash: note.hash || "#/" }
     };
     const title = note.name || ("@" + (note.handle || "post"));
@@ -17697,7 +17759,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.ready.then((reg) => {
       if (!reg.periodicSync) return;
-      return reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 });
+      const tags = ["feeds", "notifications", "weather"];
+      return Promise.all(tags.map((tag) => reg.periodicSync.register(tag, { minInterval: 30 * 60 * 1000 }).catch(() => {})));
     }).catch(() => {});
   }
 
@@ -17784,9 +17847,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       STATE.installPrompt = event;
+      window.__VIKTORYCH_INSTALL = event;
+      try { document.dispatchEvent(new CustomEvent("viktorych-install-ready")); } catch (err) { /* the menu install button still works */ }
       render();
     });
-    window.addEventListener("appinstalled", () => { STATE.installPrompt = null; render(); });
+    window.addEventListener("appinstalled", () => {
+      STATE.installPrompt = null;
+      window.__VIKTORYCH_INSTALL = null;
+      if (window.ViktorychStorage && window.ViktorychStorage.askPersist) window.ViktorychStorage.askPersist();
+      render();
+    });
     matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
       if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
     });
@@ -18266,6 +18336,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     consumeShareTarget();
+    document.addEventListener("viktorych-launch", (event) => {
+      applyNativeLaunch(event.detail);
+      render();
+    });
+    if (window.ViktorychNative && window.ViktorychNative.takeLaunch) applyNativeLaunch(window.ViktorychNative.takeLaunch());
     bindShell();
     registerSW();
     STATE.error = null;

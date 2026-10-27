@@ -1506,5 +1506,15 @@ SI18n.addPack("en", {
   "Clear status": "Clear status",
   "Status saved": "Status saved",
   "Couldn’t save your status.": "Couldn’t save your status.",
-  "Your status": "Your status"
+  "Your status": "Your status",
+  "Install ViktorychApp": "Install ViktorychApp",
+  "Not now": "Not now",
+  "Persistent storage isn’t available in this browser.": "Persistent storage isn’t available in this browser.",
+  "Storage is nearly full on this device.": "Storage is nearly full on this device.",
+  "You're offline. Saved posts stay on this device.": "You're offline. Saved posts stay on this device.",
+  "Choose a contact": "Choose a contact",
+  "Play in a window": "Play in a window",
+  "manifest.Home": "Home",
+  "manifest.Messages": "Messages",
+  "manifest.Post": "Post"
 });

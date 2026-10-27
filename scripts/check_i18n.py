@@ -40,6 +40,8 @@ UI_FILES = (
     "direct.js",
     "scores.js",
     "weather.js",
+    "native.js",
+    "offline.html",
 )
 # Short words that also appear as data, and phrases that are allowed to stay
 # in English because they are product names or technical tokens.

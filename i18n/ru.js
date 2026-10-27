@@ -1506,5 +1506,15 @@ SI18n.addPack("ru", {
   "Clear status": "Убрать статус",
   "Status saved": "Статус сохранён",
   "Couldn’t save your status.": "Не удалось сохранить статус.",
-  "Your status": "Ваш статус"
+  "Your status": "Ваш статус",
+  "Install ViktorychApp": "Установите ViktorychApp",
+  "Not now": "Не сейчас",
+  "Persistent storage isn’t available in this browser.": "Этот браузер не может хранить данные постоянно.",
+  "Storage is nearly full on this device.": "На устройстве почти не осталось места.",
+  "You're offline. Saved posts stay on this device.": "Нет сети. Сохранённые посты остаются на этом устройстве.",
+  "Choose a contact": "Выбрать контакт",
+  "Play in a window": "Играть в окне",
+  "manifest.Home": "Главная",
+  "manifest.Messages": "Сообщения",
+  "manifest.Post": "Пост"
 });
