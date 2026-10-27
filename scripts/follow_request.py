@@ -21,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from owner_gate import allowed  # noqa: E402
 from site_paths import user_agent  # noqa: E402
 
 CONFIG = ROOT / "feeds.config.json"
@@ -38,10 +39,6 @@ HANDLE = {
 
 class Reject(Exception):
     pass
-
-
-def allowed(actor: str, owner: str) -> bool:
-    return bool(actor) and actor == owner
 
 
 def _fields(body: str) -> dict:
@@ -531,23 +528,54 @@ def _dispatch(repo: str) -> None:
     subprocess.run(["gh", "workflow", "run", "sync.yml", "--repo", repo], check=False, env=os.environ)
 
 
+def _load_private_config() -> dict | None:
+    from tiktok_sync import r2_get
+
+    blob = r2_get("feeds.config.json")
+    if not blob:
+        return None
+    try:
+        data = json.loads(blob.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or data.get("catalogSeed") is True:
+        return None
+    return data
+
+
+def _store_private_config(doc: dict) -> bool:
+    from log_redact import collect, install
+    from tiktok_sync import r2_put
+
+    handles: set[str] = set()
+    collect(doc, handles)
+    install(handles)
+    payload = (json.dumps(doc, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    return bool(r2_put("feeds.config.json", payload))
+
+
 def main() -> int:
     actor = os.environ.get("ACTOR") or ""
-    owner = os.environ.get("OWNER") or ""
+    owner = os.environ.get("OWNER_ACTOR_SHA256") or os.environ.get("OWNER") or ""
+    if actor:
+        print("::add-mask::" + actor, flush=True)
     if not allowed(actor, owner):
-        print("ignoring issue from", actor or "unknown")
+        print("ignoring issue")
         return 0
     title = os.environ.get("ISSUE_TITLE") or ""
     body = os.environ.get("ISSUE_BODY") or ""
     number = os.environ.get("ISSUE_NUMBER") or ""
     repo = os.environ.get("REPO") or ""
-    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    config = _load_private_config()
+    if config is None:
+        print("private catalog unavailable")
+        return 0
     try:
-        message, updated = run(actor, owner, title, body, config)
+        _message, updated = run(actor, owner, title, body, config)
     except Reject as exc:
         if number and repo:
-            _comment_and_close(number, "Not applied: " + str(exc), repo)
-        print("rejected:", exc, file=sys.stderr)
+            _comment_and_close(number, "Not applied.", repo)
+        print("rejected")
         return 0
     try:
         from account_deletions import load_deletions, scrub_value
@@ -559,21 +587,13 @@ def main() -> int:
                 updated = scrubbed
     except (ImportError, TypeError, ValueError):
         pass
-    CONFIG.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
-    subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
-    subprocess.run(["git", "add", "feeds.config.json"], check=True)
-    commit = subprocess.run(["git", "diff", "--cached", "--quiet"])
-    if commit.returncode == 0:
-        message = message + " No file change."
-    else:
-        subject = message.rstrip(".")
-        subprocess.run(["git", "commit", "-m", subject], check=True)
-        subprocess.run(["git", "push", "origin", "HEAD:main"], check=True)
-        _dispatch(repo)
+    if not _store_private_config(updated):
+        print("private catalog was not stored")
+        return 1
+    _dispatch(repo)
     if number and repo:
-        _comment_and_close(number, message + " A sync is queued.", repo)
-    print(message)
+        _comment_and_close(number, "Saved. A sync is queued.", repo)
+    print("saved")
     return 0
 
 

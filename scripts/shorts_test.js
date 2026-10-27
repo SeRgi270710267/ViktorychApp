@@ -85,12 +85,21 @@ shorts.bind({
   fullTime: (iso) => iso || "",
   posts: () => [
     {
-      id: "tiktok:gabii_g5:1",
+      id: "tiktok:sampleclip:1",
       platform: "tiktok",
-      handle: "gabii_g5",
-      author: "Gabii",
+      handle: "sampleclip",
+      author: "Sample",
+      text: "Open clip",
+      url: "https://www.tiktok.com/@sampleclip/video/1",
+      media: [{ type: "video", url: "https://example.com/v0.mp4" }]
+    },
+    {
+      id: "tiktok:lockclip:1",
+      platform: "tiktok",
+      handle: "lockclip",
+      author: "Lock",
       text: "Dance video #dance",
-      url: "https://www.tiktok.com/@gabii_g5/video/1",
+      url: "https://www.tiktok.com/@lockclip/video/1",
       media: [{ type: "video", url: "https://example.com/v1.mp4" }]
     },
     {
@@ -113,6 +122,9 @@ shorts.bind({
   logo: () => "<svg class=\"logo\"></svg>"
 });
 
+shorts.setUnlocked(["sampleclip"]);
+shorts.setAdded([{ handle: "lockclip", name: "Lock" }]);
+
 console.log("Testing default locked state (initial state)...");
 assert.strictEqual(shorts.isLocked(), true, "Shorts should be locked by default");
 
@@ -121,14 +133,14 @@ shorts.setLocked(false);
 assert.strictEqual(shorts.isLocked(), false, "Shorts should be unlocked");
 
 const liveHtmlUnlocked = shorts.page({ live: true });
-assert(liveHtmlUnlocked.includes("@pepsi"), "Unlocked live must include @pepsi");
-assert(liveHtmlUnlocked.includes("@gabii_g5"), "Unlocked live must include current account @gabii_g5");
+assert(liveHtmlUnlocked.includes("@sampleclip"), "Unlocked live must include the unlocked account");
+assert(liveHtmlUnlocked.includes("@lockclip"), "Unlocked live must include the added account");
 assert(liveHtmlUnlocked.includes("data-shorts=\"toggle-lock\""), "Live HTML must include lock button");
 assert(liveHtmlUnlocked.includes("tiktok-captcha-modal"), "Live HTML must include captcha modal");
 
 const forYouHtmlUnlocked = shorts.page({ live: false });
-assert(forYouHtmlUnlocked.includes("@pepsi"), "Unlocked For You must include @pepsi");
-assert(forYouHtmlUnlocked.includes("@gabii_g5"), "Unlocked For You must include @gabii_g5");
+assert(forYouHtmlUnlocked.includes("@sampleclip"), "Unlocked For You must include the unlocked account");
+assert(forYouHtmlUnlocked.includes("@lockclip"), "Unlocked For You must include the added account");
 assert(forYouHtmlUnlocked.includes("@yt_creator"), "Unlocked For You must include @yt_creator");
 assert(forYouHtmlUnlocked.includes("tiktok-captcha-modal"), "For You HTML must include captcha modal");
 
@@ -137,13 +149,13 @@ shorts.setLocked(true);
 assert.strictEqual(shorts.isLocked(), true, "Shorts should be locked");
 
 const liveHtmlLocked = shorts.page({ live: true });
-assert(liveHtmlLocked.includes("@pepsi"), "Locked live must include unlocked account @pepsi");
-assert(!liveHtmlLocked.includes("@gabii_g5"), "Locked live must lock behind @gabii_g5");
+assert(liveHtmlLocked.includes("@sampleclip"), "Locked live must include the unlocked account");
+assert(!liveHtmlLocked.includes("@lockclip"), "Locked live must hide the added account");
 assert(liveHtmlLocked.includes("is-locked"), "Lock button must have is-locked class");
 
 const forYouHtmlLocked = shorts.page({ live: false });
-assert(forYouHtmlLocked.includes("@pepsi"), "Locked For You must include unlocked account @pepsi");
-assert(!forYouHtmlLocked.includes("@gabii_g5"), "Locked For You must lock behind @gabii_g5");
+assert(forYouHtmlLocked.includes("@sampleclip"), "Locked For You must include the unlocked account");
+assert(!forYouHtmlLocked.includes("@lockclip"), "Locked For You must hide the added account");
 assert(!forYouHtmlLocked.includes("@yt_creator"), "Locked For You must lock behind youtube creator");
 
 console.log("Testing lock toggle...");
@@ -156,25 +168,25 @@ console.log("Testing account sheet...");
 assert(liveHtmlLocked.includes("shorts-lock-panel"), "Account sheet must contain locked mode panel");
 assert(liveHtmlLocked.includes("Unlocked accounts"), "Account sheet must contain Unlocked accounts heading");
 assert(liveHtmlLocked.includes("added accounts"), "Account sheet must contain added accounts heading");
-assert(liveHtmlUnlocked.includes("@gabii_g5"), "Account sheet must list @gabii_g5 under locked accounts when unlocked");
+assert(liveHtmlUnlocked.includes("@lockclip"), "Account sheet must list the added account when unlocked");
 assert(liveHtmlUnlocked.includes("Locked behind"), "Account sheet must show Locked behind pill");
 
 console.log("Testing site-wide isolation when locked...");
-assert.strictEqual(shorts.isUnlocked("pepsi"), true, "pepsi is unlocked");
-assert.strictEqual(shorts.isUnlocked("gabii_g5"), false, "gabii_g5 is locked");
+assert.strictEqual(shorts.isUnlocked("sampleclip"), true, "the configured account is unlocked");
+assert.strictEqual(shorts.isUnlocked("lockclip"), false, "the added account stays locked");
 
 // Mock site data with TikTok accounts
 const sitePosts = [
-  { id: "x:1", platform: "x", handle: "redacted_handle", text: "Mars!" },
-  { id: "tiktok:pepsi:pinned", platform: "tiktok", handle: "pepsi", text: "Pepsi post" },
-  { id: "tiktok:gabii_g5:1", platform: "tiktok", handle: "gabii_g5", text: "Secret dance" },
+  { id: "x:1", platform: "x", handle: "copperlane", text: "Mars!" },
+  { id: "tiktok:sampleclip:pinned", platform: "tiktok", handle: "sampleclip", text: "Sampleclip post" },
+  { id: "tiktok:lockclip:1", platform: "tiktok", handle: "lockclip", text: "Secret dance" },
   { id: "tiktok:another_locked:1", platform: "tiktok", handle: "another_locked", text: "Hidden" }
 ];
 
 const siteFeeds = [
-  { id: "x:redacted_handle", platform: "x", handle: "redacted_handle", name: "Elon Musk" },
-  { id: "tiktok:pepsi", platform: "tiktok", handle: "pepsi", name: "Pepsi" },
-  { id: "tiktok:gabii_g5", platform: "tiktok", handle: "gabii_g5", name: "Gabii" },
+  { id: "x:copperlane", platform: "x", handle: "copperlane", name: "Elon Musk" },
+  { id: "tiktok:sampleclip", platform: "tiktok", handle: "sampleclip", name: "Sampleclip" },
+  { id: "tiktok:lockclip", platform: "tiktok", handle: "lockclip", name: "Gabii" },
   { id: "tiktok:another_locked", platform: "tiktok", handle: "another_locked", name: "Another" }
 ];
 
@@ -183,10 +195,7 @@ function isShortsLocked() {
 }
 
 function isTiktokUnlocked(handle) {
-  if (window.ViktorychShorts && window.ViktorychShorts.isUnlocked) {
-    return window.ViktorychShorts.isUnlocked(handle);
-  }
-  return String(handle || "").toLowerCase().replace(/^@/, "") === "pepsi";
+  return window.ViktorychShorts.isUnlocked(handle);
 }
 
 function isLockedTiktok(entity) {
@@ -199,14 +208,14 @@ function isLockedTiktok(entity) {
 // When locked:
 shorts.setLocked(true);
 const lockedVisiblePosts = sitePosts.filter((p) => !isLockedTiktok(p));
-assert(lockedVisiblePosts.some((p) => p.handle === "pepsi"), "Pepsi post should be visible while locked");
-assert(lockedVisiblePosts.some((p) => p.handle === "redacted_handle"), "Non-tiktok posts should be visible");
-assert(!lockedVisiblePosts.some((p) => p.handle === "gabii_g5"), "Locked TikTok account gabii_g5 must NOT be visible");
+assert(lockedVisiblePosts.some((p) => p.handle === "sampleclip"), "Sampleclip post should be visible while locked");
+assert(lockedVisiblePosts.some((p) => p.handle === "copperlane"), "Non-tiktok posts should be visible");
+assert(!lockedVisiblePosts.some((p) => p.handle === "lockclip"), "Locked TikTok account lockclip must NOT be visible");
 assert(!lockedVisiblePosts.some((p) => p.handle === "another_locked"), "Locked TikTok account another_locked must NOT be visible");
 
 const lockedVisibleFeeds = siteFeeds.filter((f) => !isLockedTiktok(f));
-assert(lockedVisibleFeeds.some((f) => f.handle === "pepsi"), "Pepsi feed should be visible while locked");
-assert(!lockedVisibleFeeds.some((f) => f.handle === "gabii_g5"), "Locked TikTok account gabii_g5 feed must NOT be visible");
+assert(lockedVisibleFeeds.some((f) => f.handle === "sampleclip"), "Sampleclip feed should be visible while locked");
+assert(!lockedVisibleFeeds.some((f) => f.handle === "lockclip"), "Locked TikTok account lockclip feed must NOT be visible");
 assert(!lockedVisibleFeeds.some((f) => f.handle === "another_locked"), "Locked TikTok account another_locked feed must NOT be visible");
 
 // When unlocked:
@@ -221,8 +230,8 @@ let retryCalled = false;
 const mockModal = { hidden: true, setAttribute: () => {} };
 mockElements["tiktok-captcha-modal"] = mockModal;
 shorts.showCaptcha({
-  handle: "pepsi",
-  url: "https://www.tiktok.com/@pepsi/live",
+  handle: "sampleclip",
+  url: "https://www.tiktok.com/@sampleclip/live",
   onRetry: () => { retryCalled = true; }
 });
 assert.strictEqual(mockModal.hidden, false, "Modal must be shown after showCaptcha");
@@ -232,28 +241,28 @@ assert.strictEqual(mockModal.hidden, true, "Modal must be hidden after closeCapt
 console.log("Testing live order, past lives, and playback steps...");
 shorts.setLocked(false);
 const ordered = shorts.orderLiveNow([
-  { handle: "gabii_g5", live: true, viewers: 40 },
-  { handle: "pepsi", live: true, viewers: 2 },
+  { handle: "lockclip", live: true, viewers: 40 },
+  { handle: "sampleclip", live: true, viewers: 2 },
   { handle: "other", live: false, viewers: 0 }
 ], []);
-assert.deepStrictEqual(ordered.map((row) => row.handle), ["pepsi", "gabii_g5", "other"]);
-assert.strictEqual(shorts.neighborHandle(ordered, "pepsi", 1), "gabii_g5");
-assert.strictEqual(shorts.neighborHandle(ordered, "gabii_g5", -1), "pepsi");
-assert.strictEqual(shorts.neighborHandle(ordered, "pepsi", -1), "");
+assert.deepStrictEqual(ordered.map((row) => row.handle), ["sampleclip", "lockclip", "other"]);
+assert.strictEqual(shorts.neighborHandle(ordered, "sampleclip", 1), "lockclip");
+assert.strictEqual(shorts.neighborHandle(ordered, "lockclip", -1), "sampleclip");
+assert.strictEqual(shorts.neighborHandle(ordered, "sampleclip", -1), "");
 const tied = shorts.orderLiveNow([
   { handle: "b_name", live: true, viewers: 5 },
   { handle: "a_name", live: true, viewers: 5 }
 ], ["b_name", "a_name"]);
 assert.strictEqual(tied[0].handle, "b_name");
 shorts.setLiveState([
-  { handle: "gabii_g5", live: true, viewers: 40 },
-  { handle: "pepsi", live: true, viewers: 2 }
+  { handle: "lockclip", live: true, viewers: 40 },
+  { handle: "sampleclip", live: true, viewers: 2 }
 ]);
 const nowHtml = shorts.page({ live: true, livePane: "now" });
 assert(nowHtml.includes("shorts-preview"), "A live card has a muted preview video");
 assert(nowHtml.includes("Live now"), "Live now sub-tab is present");
 assert(nowHtml.includes("Past lives"), "Past lives sub-tab is present");
-assert(nowHtml.indexOf("@pepsi") < nowHtml.indexOf("@gabii_g5"), "Fewer viewers stay above more viewers");
+assert(nowHtml.indexOf("@sampleclip") < nowHtml.indexOf("@lockclip"), "Fewer viewers stay above more viewers");
 assert(!nowHtml.includes('data-shorts="saved"'), "Live now does not embed past playback");
 const emptyPast = shorts.page({ live: true, livePane: "past" });
 assert(emptyPast.includes("No recordings yet."), "An empty past list says there are no recordings yet");
@@ -261,16 +270,16 @@ shorts.setRecordings({
   cap: 12,
   active: 1,
   items: {
-    gabii_g5: { state: "recording", endedAt: "2026-10-02T00:00:00Z", title: "current-only" },
-    pepsi: { state: "saved", key: "tiktok/pepsi/1/live", endedAt: "2026-10-01T00:00:00Z" }
+    lockclip: { state: "recording", endedAt: "2026-10-02T00:00:00Z", title: "current-only" },
+    sampleclip: { state: "saved", key: "tiktok/sampleclip/1/live", endedAt: "2026-10-01T00:00:00Z" }
   },
   past: [
-    { handle: "gabii_g5", state: "recording", startedAt: "2026-10-02T00:00:00Z", key: "tiktok/gabii_g5/1/live" },
-    { handle: "pepsi", state: "saved", startedAt: "2026-10-01T00:00:00Z", key: "tiktok/pepsi/1/live", title: "earlier", bytes: 2 * 1024 * 1024, duration: 125, roomId: "7699647509498710805", thumb: "owner/live-thumbs/pepsi/7699647509498710805.mp4" }
+    { handle: "lockclip", state: "recording", startedAt: "2026-10-02T00:00:00Z", key: "tiktok/lockclip/1/live" },
+    { handle: "sampleclip", state: "saved", startedAt: "2026-10-01T00:00:00Z", key: "tiktok/sampleclip/1/live", title: "earlier", bytes: 2 * 1024 * 1024, duration: 125, roomId: "7699647509498710805", thumb: "owner/live-thumbs/sampleclip/7699647509498710805.mp4" }
   ]
 });
 const pastHtml = shorts.page({ live: true, livePane: "past" });
-assert(pastHtml.indexOf("@gabii_g5") < pastHtml.indexOf("@pepsi"), "Past lives are newest first");
+assert(pastHtml.indexOf("@lockclip") < pastHtml.indexOf("@sampleclip"), "Past lives are newest first");
 assert(pastHtml.includes("Recording ({n} of {cap})"), "In-progress captures are marked Recording");
 assert(pastHtml.includes("earlier"), "Past lives read the per-handle history");
 assert(!pastHtml.includes("current-only"), "Past lives do not fall back to the current row when history exists");

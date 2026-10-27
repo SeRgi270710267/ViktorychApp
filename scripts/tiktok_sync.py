@@ -11,6 +11,7 @@ runs once without it. No impersonation package and no captcha bypass.
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 import subprocess
@@ -24,7 +25,6 @@ from pathlib import Path
 
 from adapters.common import feed_sort_key, post_shell, trusted_time
 
-TRACKED = ["gabii_g5", "pepsi"]
 HANDLE_RE = re.compile(r"^[A-Za-z0-9._]{2,24}$")
 ROOT = Path(__file__).resolve().parents[1]
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -922,6 +922,22 @@ def removed_handles(doc: dict | None) -> set[str]:
     return found
 
 
+def env_tracked() -> list[str]:
+    """Handles named by the TIKTOK_TRACKED secret. Empty when it is unset."""
+    from account_identity import norm_handle
+
+    found = []
+    seen = set()
+    raw = os.environ.get("TIKTOK_TRACKED") or ""
+    for part in re.split(r"[\s,]+", raw):
+        name = norm_handle(part)
+        if not HANDLE_RE.fullmatch(name) or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        found.append(name)
+    return found
+
+
 def sync_handles(config: dict | None, accounts: dict | None = None) -> list[str]:
     """Private added handles, then config rows, then the fallback list.
 
@@ -953,13 +969,14 @@ def sync_handles(config: dict | None, accounts: dict | None = None) -> list[str]
             continue
         add(str(row.get("handle") or ""))
         alias(row)
-    for row in config.get("tiktok") or []:
-        if not isinstance(row, dict):
-            continue
-        add(str(row.get("handle") or ""))
-        alias(row)
-    for row in TRACKED:
-        add(row)
+    if not config.get("catalogSeed"):
+        for row in config.get("tiktok") or []:
+            if not isinstance(row, dict):
+                continue
+            add(str(row.get("handle") or ""))
+            alias(row)
+    for part in env_tracked():
+        add(part)
     return handles
 
 
@@ -1316,6 +1333,16 @@ def main(argv: list[str] | None = None) -> int:
     accounts = load_added_accounts()
     before_accounts = json.dumps(accounts, sort_keys=True, ensure_ascii=False)
     handles = sync_handles(config, accounts)
+    try:
+        from log_redact import collect, install
+
+        quiet = set(handles)
+        collect(config, quiet)
+        collect(accounts, quiet)
+        install(quiet)
+    except Exception:
+        pass
+    seeded = isinstance(config, dict) and config.get("catalogSeed") is True
     owner_path = ROOT / "owner" / "tiktok.json"
     downloaded = r2_get("owner/tiktok.json")
     if downloaded is not None:
@@ -1334,7 +1361,7 @@ def main(argv: list[str] | None = None) -> int:
             doc["posts"] = previous.get("posts") or []
             doc["audience"] = previous.get("audience") or mode
         place(doc, "owner" if live_only else mode, ROOT / "feeds.json", owner_path)
-        if not live_only and config_path.is_file():
+        if not live_only and config_path.is_file() and not seeded:
             commit_file(config_path, config)
         if json.dumps(accounts, sort_keys=True, ensure_ascii=False) != before_accounts:
             save_added_accounts(accounts)

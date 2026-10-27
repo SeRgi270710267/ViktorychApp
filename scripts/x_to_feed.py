@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Merge a local X API v2 timeline file into feeds.json.
 
-  python3 scripts/x_to_feed.py response.json --feed x:redacted_handle --handle redacted_handle
+  python3 scripts/x_to_feed.py response.json --feed x:copperlane --handle copperlane
 
 This reads the file you pass. It does not call api.x.com or api.twitter.com.
 """
@@ -23,8 +23,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Merge an X API v2 payload into feeds.json")
     parser.add_argument("payload", help="path to an X API v2 JSON response")
     parser.add_argument("--feeds", default="feeds.json")
-    parser.add_argument("--feed", default="x:redacted_handle", help="feed id to assign")
-    parser.add_argument("--handle", default="redacted_handle")
+    parser.add_argument("--feed", default="x:copperlane", help="feed id to assign")
+    parser.add_argument("--handle", default="copperlane")
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
     text = Path(args.payload).read_text(encoding="utf-8")

@@ -8,6 +8,7 @@ another deploy. Nothing here prints credentials or file bodies.
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -75,6 +76,14 @@ def pull(root: Path) -> int:
     return 0
 
 
+def is_seed(payload: bytes) -> bool:
+    try:
+        doc = json.loads(payload.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return False
+    return isinstance(doc, dict) and doc.get("catalogSeed") is True
+
+
 def push(root: Path) -> int:
     from account_deletions import load_deletions, scrub_bytes
     from accounts_publish import collect
@@ -84,6 +93,7 @@ def push(root: Path) -> int:
     started = time.monotonic()
     stored = 0
     deferred = 0
+    skipped_seed = 0
     priority_failed = False
     priority = set(PULL_KEYS)
 
@@ -98,8 +108,13 @@ def push(root: Path) -> int:
     cache = root / ".feed-http-cache.json"
     extras = []
     for key, path in ordered:
+        payload = path.read_bytes()
+        if key in priority and is_seed(payload):
+            skipped_seed += 1
+            print(f"[r2] seed skipped {key}")
+            continue
         if key in priority:
-            if send(key, path.read_bytes()):
+            if send(key, payload):
                 stored += 1
             else:
                 priority_failed = True
@@ -123,7 +138,12 @@ def push(root: Path) -> int:
     if deferred:
         print(f"[r2] deferred {deferred} catalog files")
     print(f"[r2] stored {stored} catalog files")
-    if priority_failed or stored == 0:
+    if priority_failed:
+        return 1
+    if stored == 0 and skipped_seed:
+        print("[r2] private catalog unchanged")
+        return 0
+    if stored == 0:
         return 1
     return 0
 

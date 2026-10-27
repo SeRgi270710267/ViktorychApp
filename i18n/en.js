@@ -1165,7 +1165,7 @@ SI18n.addPack("en", {
   "Lock": "Lock",
   "Locked": "Locked",
   "Locked mode": "Locked mode",
-  "When locked, only unlocked accounts (@pepsi) are visible.": "When locked, only unlocked accounts (@pepsi) are visible.",
+  "When locked, only unlocked accounts are visible.": "When locked, only unlocked accounts are visible.",
   "Unlocked accounts": "Unlocked accounts",
   "Unlocked": "Unlocked",
   "Locked behind": "Locked behind",

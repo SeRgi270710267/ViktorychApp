@@ -4,15 +4,15 @@
     "items": [
       {
         "id": 1,
-        "owner_id": -22822305,
-        "from_id": -22822305,
+        "owner_id": -10000041,
+        "from_id": -10000041,
         "date": 1700000000,
         "text": "Hello"
       }
     ],
     "groups": [
       {
-        "id": 22822305,
+        "id": 10000041,
         "name": "VK",
         "screen_name": "vkteam",
         "type": "page",

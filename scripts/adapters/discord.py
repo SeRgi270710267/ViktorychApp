@@ -59,10 +59,10 @@ PINS_IN_PATH = re.compile(r"/channels/\d{1,22}/pins$")
 GUILD_READ = re.compile(r"/guilds/\d{1,22}(?:/preview)?$")
 # These channels 403 for this guest. That is not an account failure.
 QUIET_CHANNELS = frozenset({
-    "1218290760126828544",  # wfs-general
-    "1540408515661926501",  # boosters-chat
-    "1544030558017818644",  # boosters-apps
-    "1544031346077339790",  # fun-apps
+    "0100000000000000525",  # wfs-general
+    "0100000000000000542",  # boosters-chat
+    "0100000000000000559",  # boosters-apps
+    "0100000000000000644",  # fun-apps
 })
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v"}

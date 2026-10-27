@@ -44,13 +44,13 @@ def main() -> int:
     picked = choose_format([h264, low, top])
     assert picked["url"].endswith("bytevc1.mp4")
     assert choose_format([h264])["url"].endswith("h264.mp4")
-    missing = entry_to_post({"id": "123456", "description": "no time"}, "gabii_g5")
+    missing = entry_to_post({"id": "123456", "description": "no time"}, "lockclip")
     assert missing is None
     post = entry_to_post({
         "id": "7695476356548660503",
         "timestamp": 1791742719,
         "description": "caption",
-        "uploader": "gabii_g5",
+        "uploader": "lockclip",
         "nickname": "gabii",
         "avatar": "https://cdn.example/face.jpg",
         "like_count": 43,
@@ -59,7 +59,7 @@ def main() -> int:
         "duration": 19,
         "formats": [low, top, h264],
         "thumbnails": [{"url": "https://cdn.example/poster.jpg"}],
-    }, "gabii_g5")
+    }, "lockclip")
     assert post["date"] == iso
     assert post["ownerOnly"] is True
     assert post["short"] is True
@@ -76,7 +76,7 @@ def main() -> int:
             {"ext": "jpeg", "vcodec": "none", "url": "https://p16.tiktokcdn.com/2.jpg"},
         ],
         "images": [{"url": "https://p16.tiktokcdn.com/3.jpg"}],
-    }, "gabii_g5")
+    }, "lockclip")
     urls = [item["url"] for item in slides["media"]]
     assert urls == [
         "https://p16.tiktokcdn.com/1.jpg",
@@ -91,7 +91,7 @@ def main() -> int:
     feeds = tmp / "feeds.json"
     owner = tmp / "owner.json"
     feeds.write_text(json.dumps({"feeds": [{"id": "x:a", "platform": "x"}], "posts": [{"id": "1", "platform": "x"}]}), encoding="utf-8")
-    doc = {"feeds": [post and {"id": "tiktok:gabii_g5", "platform": "tiktok"}], "posts": [post], "live": {}}
+    doc = {"feeds": [post and {"id": "tiktok:lockclip", "platform": "tiktok"}], "posts": [post], "live": {}}
     before = feeds.read_text(encoding="utf-8")
     place(doc, "owner", feeds, owner)
     assert feeds.read_text(encoding="utf-8") == before
@@ -105,7 +105,7 @@ def main() -> int:
     owner.unlink()
     tmp.rmdir()
     config = {}
-    accounts = {"added": [{"handle": "old_name", "permanentId": "991122", "platform": "tiktok"}], "removed": ["gabii_g5"]}
+    accounts = {"added": [{"handle": "old_name", "permanentId": "991122", "platform": "tiktok"}], "removed": ["lockclip"]}
     renamed = apply_fetch_identity(config, accounts, "old_name", {
         "uploader_id": "991122",
         "channel_id": "MS4wLjABAAAA12345678",
@@ -119,7 +119,7 @@ def main() -> int:
     handles = sync_handles({"tiktok": [{"handle": "config_one"}]}, accounts)
     assert handles[0] == "new_name"
     assert "config_one" in handles
-    assert "gabii_g5" not in handles
+    assert "lockclip" not in handles
     assert backoff_seconds(0, 0) == (300, 1)
     assert backoff_seconds(1, 0) == (900, 2)
     assert backoff_seconds(2, 0) == (3600, 3)
@@ -133,48 +133,48 @@ def main() -> int:
     assert checked_recent(stale, 240, moment) is False
     merged = merge_handle_posts(
         [
-            {"statusId": "11", "date": "2026-01-02T00:00:00Z", "handle": "pepsi", "text": "old winter post"},
-            {"statusId": "12", "date": "2025-06-01T00:00:00Z", "handle": "pepsi", "text": "very old post"},
+            {"statusId": "11", "date": "2026-01-02T00:00:00Z", "handle": "sampleclip", "text": "old winter post"},
+            {"statusId": "12", "date": "2025-06-01T00:00:00Z", "handle": "sampleclip", "text": "very old post"},
         ],
         [
-            {"statusId": "13", "date": "2026-03-01T00:00:00Z", "handle": "pepsi", "text": "new post"},
-            {"statusId": "11", "date": "2026-01-02T00:00:00Z", "handle": "pepsi", "text": "old winter post", "stats": {"views": 9}},
+            {"statusId": "13", "date": "2026-03-01T00:00:00Z", "handle": "sampleclip", "text": "new post"},
+            {"statusId": "11", "date": "2026-01-02T00:00:00Z", "handle": "sampleclip", "text": "old winter post", "stats": {"views": 9}},
         ],
     )
     ids = [row["statusId"] for row in merged]
     assert ids == ["13", "11", "12"]
     assert merged[1]["stats"]["views"] == 9
     forced = merge_handle_posts(
-        [{"statusId": "41", "date": "2020-01-01T00:00:00Z", "handle": "pepsi"}],
-        [dict({"statusId": "4" + str(n), "date": "2026-04-01T00:00:00Z", "handle": "pepsi"}) for n in range(POST_CAP + 2)],
+        [{"statusId": "41", "date": "2020-01-01T00:00:00Z", "handle": "sampleclip"}],
+        [dict({"statusId": "4" + str(n), "date": "2026-04-01T00:00:00Z", "handle": "sampleclip"}) for n in range(POST_CAP + 2)],
     )
     assert len(forced) == POST_CAP
     assert all(row.get("statusId") for row in forced)
     saved_post = {
         "statusId": "13",
-        "id": "tiktok:pepsi:13",
+        "id": "tiktok:sampleclip:13",
         "platform": "tiktok",
-        "handle": "pepsi",
+        "handle": "sampleclip",
         "date": "2026-03-01T00:00:00Z",
     }
     backward = {
         "posts": [dict(saved_post, statusId="12", date="2025-06-01T00:00:00Z")],
-        "feeds": [{"id": "tiktok:pepsi", "platform": "tiktok", "handle": "pepsi"}],
-        "backfills": {"pepsi": {"done": True, "at": "2026-10-20T00:00:00Z", "posts": 8}},
+        "feeds": [{"id": "tiktok:sampleclip", "platform": "tiktok", "handle": "sampleclip"}],
+        "backfills": {"sampleclip": {"done": True, "at": "2026-10-20T00:00:00Z", "posts": 8}},
     }
     entries = [
         {
             "id": "13",
             "timestamp": 1791742719,
             "description": "new post",
-            "uploader": "pepsi",
+            "uploader": "sampleclip",
             "formats": [h264],
         },
         {
             "id": "14",
             "timestamp": 1791829119,
             "description": "newest",
-            "uploader": "pepsi",
+            "uploader": "sampleclip",
             "formats": [h264],
         },
     ]
@@ -182,19 +182,19 @@ def main() -> int:
 
     def fake_playlist(handle, playlistend=None):
         assert playlistend == 8  # the handle is already fully backfilled
-        assert handle == "pepsi"
-        return (entries, {"uploader_id": "pepsi-id", "uploader": "pepsi"})
+        assert handle == "sampleclip"
+        return (entries, {"uploader_id": "sampleclip-id", "uploader": "sampleclip"})
 
     real_refresh = sync_module.refresh_one
     sync_module.refresh_one = lambda handle, prev: {"handle": handle, "live": False, "viewers": 0, "title": "", "roomId": "", "lastLiveAt": "", "checkedAt": "2026-10-23T00:00:00Z", "detail": "offline"}
     try:
         sync_module.fetch_playlist = fake_playlist
-        fresh_doc = sync_module.build_doc(["pepsi"], backward, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+        fresh_doc = sync_module.build_doc(["sampleclip"], backward, posts_ok=True, config={}, accounts={"added": [], "removed": []})
     finally:
         sync_module.fetch_playlist = fetch_playlist
         sync_module.refresh_one = real_refresh
 
-    assert fresh_doc["backfills"]["pepsi"]["done"] is True
+    assert fresh_doc["backfills"]["sampleclip"]["done"] is True
     ids = [row["statusId"] for row in fresh_doc["posts"]]
     assert "14" in ids and "13" in ids
     assert "12" in ids  # older stored posts survive every sync
@@ -212,16 +212,16 @@ def main() -> int:
     sync_module.time.sleep = lambda seconds: None
     try:
         # Stage 1 of the ladder: a partial walk is banked but not done.
-        first = sync_module.build_doc(["pepsi"], {"posts": [], "feeds": []}, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+        first = sync_module.build_doc(["sampleclip"], {"posts": [], "feeds": []}, posts_ok=True, config={}, accounts={"added": [], "removed": []})
         assert stages[-1] == sync_module.BACKFILL_LADDER[0]
-        assert first["backfills"]["pepsi"]["done"] is False
-        assert first["backfills"]["pepsi"]["stage"] == 1
+        assert first["backfills"]["sampleclip"]["done"] is False
+        assert first["backfills"]["sampleclip"]["stage"] == 1
         # Climbing the ladder ends in a full walk marked done.
         doc = first
         for step in range(len(sync_module.BACKFILL_LADDER) - 1):
-            doc = sync_module.build_doc(["pepsi"], doc, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+            doc = sync_module.build_doc(["sampleclip"], doc, posts_ok=True, config={}, accounts={"added": [], "removed": []})
         assert stages[-1] is None
-        assert doc["backfills"]["pepsi"]["done"] is True
+        assert doc["backfills"]["sampleclip"]["done"] is True
     finally:
         sync_module.time.sleep = real_sleep
         sync_module.fetch_playlist = fetch_playlist
@@ -237,14 +237,14 @@ def main() -> int:
 
     def fake_lane(handle):
         lanes.append(handle)
-        return [{"id": "15", "timestamp": 1791832719, "description": "mirror lane post", "uploader": "pepsi", "formats": []}]
+        return [{"id": "15", "timestamp": 1791832719, "description": "mirror lane post", "uploader": "sampleclip", "formats": []}]
 
     sync_module.fetch_playlist = blocked
     sync_module.lane_entries = fake_lane
     try:
         mirrored = sync_module.build_doc(
-            ["pepsi"],
-            dict(backward, backfills={"pepsi": {"done": False, "stage": 2, "at": "2026-10-20T00:00:00Z", "posts": 40}}),
+            ["sampleclip"],
+            dict(backward, backfills={"sampleclip": {"done": False, "stage": 2, "at": "2026-10-20T00:00:00Z", "posts": 40}}),
             posts_ok=True,
             config={},
             accounts={"added": [], "removed": []},
@@ -253,10 +253,10 @@ def main() -> int:
         sync_module.lane_entries = real_lane
         sync_module.fetch_playlist = fetch_playlist
         sync_module.refresh_one = real_refresh
-    assert lanes == ["pepsi"]
+    assert lanes == ["sampleclip"]
     ids = [row["statusId"] for row in mirrored["posts"]]
     assert "15" in ids and "12" in ids
-    assert mirrored["backfills"]["pepsi"]["stage"] == 2  # unchanged by the lane
+    assert mirrored["backfills"]["sampleclip"]["stage"] == 2  # unchanged by the lane
 
     import types
 
@@ -269,7 +269,7 @@ def main() -> int:
     sync_module.extract_info_limited = timed_out
     try:
         started = time.monotonic()
-        entries, info = sync_module.fetch_playlist("pepsi", 8)
+        entries, info = sync_module.fetch_playlist("sampleclip", 8)
         elapsed = time.monotonic() - started
     finally:
         sync_module.extract_info_limited = real_limited

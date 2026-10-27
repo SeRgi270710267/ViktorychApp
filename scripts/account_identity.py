@@ -1085,23 +1085,23 @@ def selftest() -> int:
             raise SystemExit("FAIL: " + message)
         print("ok", message)
 
-    feed = {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "permanentId": "44196397", "source_urls": ["{fxtwitterBase}/2/profile/redacted_handle/statuses"], "profile": {"url": "https://x.com/redacted_handle"}}
-    other = {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "permanentId": "20749410"}
-    renamed = apply_observation(feed, {"handle": "elonmusknew", "permanentId": "44196397", "authoritative": True}, [other])
-    check(renamed["action"] == "rename" and feed["handle"] == "elonmusknew" and feed["id"] == "x:redacted_handle" and feed["previousHandles"] == ["redacted_handle"] and feed["permanentId"] == "44196397", "the same X id renames the handle and keeps the feed id")
-    check(renamed["logs"] == ["[rename] x redacted_handle -> elonmusknew"], "a rename is logged with the platform and both handles")
+    feed = {"id": "x:copperlane", "platform": "x", "handle": "copperlane", "permanentId": "10000000", "source_urls": ["{fxtwitterBase}/2/profile/copperlane/statuses"], "profile": {"url": "https://x.com/copperlane"}}
+    other = {"id": "x:mosspoint", "platform": "x", "handle": "mosspoint", "permanentId": "10000000"}
+    renamed = apply_observation(feed, {"handle": "elonmusknew", "permanentId": "10000000", "authoritative": True}, [other])
+    check(renamed["action"] == "rename" and feed["handle"] == "elonmusknew" and feed["id"] == "x:copperlane" and feed["previousHandles"] == ["copperlane"] and feed["permanentId"] == "10000000", "the same X id renames the handle and keeps the feed id")
+    check(renamed["logs"] == ["[rename] x copperlane -> elonmusknew"], "a rename is logged with the platform and both handles")
     check(feed["source_urls"] == ["{fxtwitterBase}/2/profile/elonmusknew/statuses"] and feed["profile"]["url"] == "https://x.com/elonmusknew", "source URLs follow the new handle")
     blocked = apply_observation(dict(other), {"handle": "elonmusknew", "permanentId": "999", "authoritative": True}, [feed])
-    check(blocked["action"] == "reject" and other["handle"] == "redacted_handle", "a different permanent id does not rename the account")
+    check(blocked["action"] == "reject" and other["handle"] == "mosspoint", "a different permanent id does not rename the account")
     fresh = {"id": "x:new", "platform": "x", "handle": "newname"}
     skipped = apply_observation(fresh, {"handle": "othername", "permanentId": "12345", "authoritative": True}, [])
     check(skipped["action"] == "skip" and fresh["handle"] == "newname" and "permanentId" not in fresh, "a different handle is not stored before the permanent id matches")
     filled = apply_observation(fresh, {"handle": "newname", "permanentId": "12345", "authoritative": True}, [])
     check(filled["action"] == "backfill" and fresh["permanentId"] == "12345" and fresh["handle"] == "newname", "the first matching handle stores the permanent id")
     clash = {"id": "x:elonmusknew", "platform": "x", "handle": "taken", "permanentId": "1"}
-    victim = {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "permanentId": "44196397"}
-    refused = apply_observation(victim, {"handle": "taken", "permanentId": "44196397", "authoritative": True}, [clash])
-    check(refused["action"] == "reject" and victim["handle"] == "redacted_handle", "a handle that already belongs to another added account is left alone")
+    victim = {"id": "x:copperlane", "platform": "x", "handle": "copperlane", "permanentId": "10000000"}
+    refused = apply_observation(victim, {"handle": "taken", "permanentId": "10000000", "authoritative": True}, [clash])
+    check(refused["action"] == "reject" and victim["handle"] == "copperlane", "a handle that already belongs to another added account is left alone")
     token = replace_handle_token("https://vk.com/vk", "vk", "team")
     check(token == "https://vk.com/team", "a short handle changes the path and not the host")
 
@@ -1109,51 +1109,51 @@ def selftest() -> int:
     from adapters.vk import parse as parse_vk
 
     fx_payload = json.loads((ROOT / "scripts" / "fixtures" / "rename" / "x_new_handle.json").read_text(encoding="utf-8"))
-    parsed = parse_fx(fx_payload, {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "permanentId": "44196397"})
+    parsed = parse_fx(fx_payload, {"id": "x:copperlane", "platform": "x", "handle": "copperlane", "permanentId": "10000000"})
     check(parsed["posts"] and parsed["posts"][0]["handle"] == "elonmusknew", "posts stay on the account when the X handle in the payload changes")
-    observed = x_observation(fx_payload, {"platform": "x", "handle": "redacted_handle", "permanentId": "44196397"})
-    check(observed and observed["handle"] == "elonmusknew" and observed["permanentId"] == "44196397", "the X timeline observation uses the stored id")
+    observed = x_observation(fx_payload, {"platform": "x", "handle": "copperlane", "permanentId": "10000000"})
+    check(observed and observed["handle"] == "elonmusknew" and observed["permanentId"] == "10000000", "the X timeline observation uses the stored id")
     stranger = json.loads((ROOT / "scripts" / "fixtures" / "rename" / "x_other_id.json").read_text(encoding="utf-8"))
-    check(x_observation(stranger, {"platform": "x", "handle": "redacted_handle", "permanentId": "44196397"}) is None, "a quote or another id is not this account")
-    check(parse_fx(stranger, {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "permanentId": "44196397"})["posts"] == [], "another account's posts are not kept")
+    check(x_observation(stranger, {"platform": "x", "handle": "copperlane", "permanentId": "10000000"}) is None, "a quote or another id is not this account")
+    check(parse_fx(stranger, {"id": "x:copperlane", "platform": "x", "handle": "copperlane", "permanentId": "10000000"})["posts"] == [], "another account's posts are not kept")
 
     vk_payload = json.loads((ROOT / "scripts" / "fixtures" / "rename" / "vk_new_screen.json").read_text(encoding="utf-8"))
-    vk_parsed = parse_vk(vk_payload, {"id": "vk:vk", "platform": "vk", "handle": "vk", "permanentId": "-22822305"})
+    vk_parsed = parse_vk(vk_payload, {"id": "vk:vk", "platform": "vk", "handle": "vk", "permanentId": "-10000041"})
     vk_obs = observation_from_profiles(vk_parsed)
-    check(vk_obs and vk_obs["permanentId"] == "-22822305" and vk_obs["handle"] == "vkteam", "the VK owner id stays with the new screen name")
+    check(vk_obs and vk_obs["permanentId"] == "-10000041" and vk_obs["handle"] == "vkteam", "the VK owner id stays with the new screen name")
 
     html = (ROOT / "scripts" / "fixtures" / "rename" / "youtube_canonical.html").read_text(encoding="utf-8")
-    check(youtube_handle_from_html(html, "UCfgtuaUadGgOA-91geQ8Qog") == "NewPrepper", "a YouTube channel page shows the current handle")
-    check(youtube_handle_from_html(html, "UCxxxxxxxxxxxxxxxxxxxxxx") == "", "a different channel id does not supply the handle")
-    channel = {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle", "channelId": "UCfgtuaUadGgOA-91geQ8Qog"}
-    moved = apply_observation(channel, {"handle": "NewPrepper", "permanentId": "UCfgtuaUadGgOA-91geQ8Qog", "authoritative": True}, [])
-    check(moved["action"] == "rename" and channel["channelId"] == "UCfgtuaUadGgOA-91geQ8Qog" and channel["permanentId"] == "UCfgtuaUadGgOA-91geQ8Qog" and channel["id"] == "youtube:redacted_handle", "YouTube renames the handle and keeps the channel id")
+    check(youtube_handle_from_html(html, "UCsyntheticmaple00001000") == "NewPrepper", "a YouTube channel page shows the current handle")
+    check(youtube_handle_from_html(html, "UCsyntheticmaple00007000") == "", "a different channel id does not supply the handle")
+    channel = {"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "channelId": "UCsyntheticmaple00001000"}
+    moved = apply_observation(channel, {"handle": "NewPrepper", "permanentId": "UCsyntheticmaple00001000", "authoritative": True}, [])
+    check(moved["action"] == "rename" and channel["channelId"] == "UCsyntheticmaple00001000" and channel["permanentId"] == "UCsyntheticmaple00001000" and channel["id"] == "youtube:northlamp", "YouTube renames the handle and keeps the channel id")
 
     with_id = (ROOT / "scripts" / "fixtures" / "rename" / "telegram_with_id.html").read_text(encoding="utf-8")
     without = (ROOT / "scripts" / "fixtures" / "rename" / "telegram_without_id.html").read_text(encoding="utf-8")
     check(telegram_channel_id(with_id) == "-1001234567890", "a public Telegram channel id is stored")
     check(telegram_channel_id(without) == "", "a Telegram preview without a channel id does not invent one")
-    tele = {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram", "permanentId": "-1001234567890"}
+    tele = {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor", "permanentId": "-1001234567890"}
     tele_move = apply_observation(tele, {"handle": "newstelegram", "permanentId": "-1001234567890", "authoritative": True}, [])
-    check(tele_move["action"] == "rename" and tele["previousHandles"] == ["telegram"], "the same Telegram channel id renames the handle")
-    plain = {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram"}
+    check(tele_move["action"] == "rename" and tele["previousHandles"] == ["laneharbor"], "the same Telegram channel id renames the handle")
+    plain = {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor"}
     check(apply_observation(plain, {"handle": "newstelegram", "authoritative": True}, [])["action"] == "skip", "Telegram does not rename without a channel id")
 
-    sample = '{\n  "cap": 300,\n  "feeds": [\n    {\n      "id": "x:redacted_handle",\n      "platform": "x",\n      "handle": "redacted_handle",\n      "source_urls": ["{fxtwitterBase}/2/profile/redacted_handle/statuses"],\n      "profile": {"url": "https://x.com/redacted_handle"}\n    }\n  ]\n}\n'
+    sample = '{\n  "cap": 300,\n  "feeds": [\n    {\n      "id": "x:copperlane",\n      "platform": "x",\n      "handle": "copperlane",\n      "source_urls": ["{fxtwitterBase}/2/profile/copperlane/statuses"],\n      "profile": {"url": "https://x.com/copperlane"}\n    }\n  ]\n}\n'
     desired = json.loads(sample)
     desired["feeds"][0]["handle"] = "elonmusknew"
-    desired["feeds"][0]["permanentId"] = "44196397"
-    desired["feeds"][0]["previousHandles"] = ["redacted_handle"]
+    desired["feeds"][0]["permanentId"] = "10000000"
+    desired["feeds"][0]["previousHandles"] = ["copperlane"]
     desired["feeds"][0]["source_urls"] = ["{fxtwitterBase}/2/profile/elonmusknew/statuses"]
     desired["feeds"][0]["profile"]["url"] = "https://x.com/elonmusknew"
     patched, notes = patch_identity_text(sample, json.loads(sample), desired)
     again = json.loads(patched)
-    check(again["cap"] == 300 and again["feeds"][0]["handle"] == "elonmusknew" and again["feeds"][0]["permanentId"] == "44196397" and again["feeds"][0]["previousHandles"] == ["redacted_handle"], "the config gains the id and the new handle without a new feed id")
+    check(again["cap"] == 300 and again["feeds"][0]["handle"] == "elonmusknew" and again["feeds"][0]["permanentId"] == "10000000" and again["feeds"][0]["previousHandles"] == ["copperlane"], "the config gains the id and the new handle without a new feed id")
     check('["{fxtwitterBase}/2/profile/elonmusknew/statuses"]' in patched and "https://x.com/elonmusknew" in patched, "the saved source line keeps its shape")
     check(any(line.startswith("[rename] x ") for line in notes), "the config patch reports the rename")
 
-    accounts = tiktok_accounts({"tiktok": [{"handle": "gabii_g5", "permanentId": "99", "previousHandles": ["old_gabii"]}]}, ["gabii_g5", "old_gabii"])
-    check(len(accounts) == 1 and accounts[0]["permanentId"] == "99" and accounts[0]["previousHandles"] == ["old_gabii"], "a renamed TikTok account is not added twice")
+    accounts = tiktok_accounts({"tiktok": [{"handle": "lockclip", "permanentId": "99", "previousHandles": ["oldlock"]}]}, ["lockclip", "oldlock"])
+    check(len(accounts) == 1 and accounts[0]["permanentId"] == "99" and accounts[0]["previousHandles"] == ["oldlock"], "a renamed TikTok account is not added twice")
     print("account identity selftest ok")
     return 0
 

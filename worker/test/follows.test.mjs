@@ -17,6 +17,7 @@ function workerOptions() {
     bindings: {
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
       PBKDF2_ITERATIONS: "1000"
     }
@@ -121,10 +122,10 @@ test("follows persist for the signed-in account and stay private", async () => {
     ip: "203.0.113.217",
     token: ada.token,
     body: {
-      id: "x:redacted_handle",
+      id: "x:copperlane",
       profile: {
         name: "Elon Musk",
-        handle: "redacted_handle",
+        handle: "copperlane",
         platform: "x",
         bio: "Mars",
         avatar: "https://cdn.example/elon.jpg",
@@ -153,7 +154,7 @@ test("follows persist for the signed-in account and stay private", async () => {
   const mine = await call("/v1/follows", { ip: "203.0.113.221", token: otherDevice.body.token });
   assert.equal(mine.status, 200);
   assert.equal(mine.body.followingCount, 2);
-  assert.deepEqual(mine.body.ids.sort(), ["app:" + bea.account.publicId, "x:redacted_handle"].sort());
+  assert.deepEqual(mine.body.ids.sort(), ["app:" + bea.account.publicId, "x:copperlane"].sort());
 
   const following = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=following", {
     ip: "203.0.113.222",
@@ -162,12 +163,12 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(following.status, 200);
   assert.equal(following.body.accounts.length, 2);
   const beaRow = following.body.accounts.find((row) => row.id === "app:" + bea.account.publicId);
-  const elon = following.body.accounts.find((row) => row.id === "x:redacted_handle");
+  const elon = following.body.accounts.find((row) => row.id === "x:copperlane");
   assert.equal(beaRow.kind, "account");
   assert.equal(beaRow.handle, "bea_fl");
   assert.equal(beaRow.name, "Bea Follow");
   assert.equal(elon.kind, "feed");
-  assert.equal(elon.handle, "redacted_handle");
+  assert.equal(elon.handle, "copperlane");
   assert.equal(elon.bio, "Mars");
   assert.equal(elon.name, "Elon Musk");
   const dumped = JSON.stringify(following.body);
@@ -178,7 +179,7 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(dumped.includes("\"salt\""), false);
   assert.equal(dumped.includes("email"), false);
 
-  const followers = await call("/v1/follows?id=" + encodeURIComponent("x:redacted_handle") + "&tab=followers", {
+  const followers = await call("/v1/follows?id=" + encodeURIComponent("x:copperlane") + "&tab=followers", {
     ip: "203.0.113.223",
     token: bea.token
   });
@@ -187,7 +188,7 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(followers.body.accounts[0].bio, "Ada builds engines");
   assert.equal(JSON.stringify(followers.body).includes(ada.accountNumber), false);
 
-  const guest = await call("/v1/follows?id=x:redacted_handle&tab=followers", { ip: "203.0.113.224" });
+  const guest = await call("/v1/follows?id=x:copperlane&tab=followers", { ip: "203.0.113.224" });
   assert.equal(guest.status, 401);
 
   const gone = await call("/v1/follows", {
@@ -207,7 +208,7 @@ test("follows persist for the signed-in account and stay private", async () => {
     method: "POST",
     ip: "203.0.113.227",
     token: bea.token,
-    body: { ids: ["x:redacted_handle", "x:redacted_handle", "not an id", "youtube:news"] }
+    body: { ids: ["x:copperlane", "x:copperlane", "not an id", "youtube:news"] }
   });
   assert.equal(imported.status, 200);
   assert.equal(imported.body.followingCount, 2);
@@ -215,10 +216,10 @@ test("follows persist for the signed-in account and stay private", async () => {
     method: "POST",
     ip: "203.0.113.228",
     token: bea.token,
-    body: { ids: ["x:redacted_handle", "youtube:news"] }
+    body: { ids: ["x:copperlane", "youtube:news"] }
   });
   assert.equal(again.body.followingCount, 2);
-  const elonFollowers = await call("/v1/follows?id=x:redacted_handle", { ip: "203.0.113.229", token: ada.token });
+  const elonFollowers = await call("/v1/follows?id=x:copperlane", { ip: "203.0.113.229", token: ada.token });
   assert.equal(elonFollowers.body.followersCount, 2);
   assert.equal(elonFollowers.body.viewerFollows, true);
 
@@ -226,7 +227,7 @@ test("follows persist for the signed-in account and stay private", async () => {
     method: "POST",
     ip: "203.0.113.230",
     token: bea.token,
-    body: { ids: ["app:" + ada.account.publicId, "app:" + bea.account.publicId, "app:000000000000", "x:redacted_handle"] }
+    body: { ids: ["app:" + ada.account.publicId, "app:" + bea.account.publicId, "app:000000000000", "x:copperlane"] }
   });
   assert.equal(withApp.status, 200, withApp.text);
   assert.equal(withApp.body.followingCount, 3);

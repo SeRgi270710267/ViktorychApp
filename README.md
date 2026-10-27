@@ -12,7 +12,7 @@ Stories are a separate `stories.json`. Every platform that has items shares one 
 | Platform | 24-hour stories |
 | --- | --- |
 | Instagram | RSSHub `/instagram/stories/:user` needs `INSTAGRAM_COOKIE` (`sessionid` and `ds_user_id`). Public viewers (Picuki and the rest) are unofficial scrapers and are not used. The sync calls Instagram's own story query only when `IG_SESSION` is set. A session from GitHub Actions can be checkpointed or disabled. Leave the secret unset to keep stories off. |
-| Telegram | Does not work without a user session. Public `t.me/telegram`, `t.me/durov`, `t.me/s/…`, and `t.me/<user>/s/1` return the channel preview or a profile card. The image is the avatar. There is no story file. Listing stories is `stories.getPeerStories`, and Telegram only allows a logged-in user to call it. |
+| Telegram | Does not work without a user session. Public `t.me/laneharbor`, `t.me/durov`, `t.me/s/…`, and `t.me/<user>/s/1` return the channel preview or a profile card. The image is the avatar. There is no story file. Listing stories is `stories.getPeerStories`, and Telegram only allows a logged-in user to call it. |
 | VK | Off unless a spare-account secret is set. The sync signs in at vk.com with `VK_LOGIN`, `VK_PASSWORD`, and optional `VK_TOTP_SECRET`, then reads the feed once. If that page is only the site shell, Chromium opens the feed once in the same run. Cookies are reused from an encrypted Actions cache, so it signs in again only when that session is dead. A captcha, SMS or call code, suspicious-login check, block, or 401/403 stops immediately and updates the Sync problem issue. `VK_SESSION` (a Cookie-Editor export) is the fallback. `VK_USER_TOKEN` is the API alternative (`stories.get` and `stories.getById` only). Nothing is marked seen. Photo and video stories use the 24-hour expiry and the VK badge. Steps: [docs/vk-session.md](docs/vk-session.md). |
 | X | No stories. Fleets ended in 2021. |
 | YouTube | Stories ended on 26 June 2023. Shorts are permanent videos and stay in the feed. |
@@ -83,7 +83,7 @@ The composer is visual only. This reader does not publish.
 
 | Field | Meaning |
 | --- | --- |
-| `id` | `platform:handle`, for example `x:redacted_handle` |
+| `id` | `platform:handle`, for example `x:copperlane` |
 | `platform` | `x`, `threads`, `instagram`, or `rss` |
 | `handle`, `name` | Public identity |
 | `avatar`, `banner` | Image URLs, or paths under `media/` |
@@ -131,7 +131,7 @@ Counts under 10,000 use commas. Larger counts use `1.2K`, `24K`, `6.1M`. Times u
 python3 scripts/update_feeds.py              # live sources
 python3 scripts/update_feeds.py --fixtures   # rebuild the preview from scripts/fixtures
 python3 scripts/selftest.py
-python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_handle --handle redacted_handle
+python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:copperlane --handle copperlane
 ```
 
 `update_feeds.py` dedupes on platform + id, sorts newest first, and keeps about 300 posts. If a source fails, that feed’s previous posts stay. A post that drops out of the latest RSS page stays in the file until the cap, so its media URL can be refreshed later. Adapters live in `scripts/adapters/`:
@@ -144,7 +144,7 @@ python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_
 | `rsshub_threads` | RSSHub `/threads/<user>` |
 | `rsshub_instagram` | RSSHub `/instagram/user/<user>` |
 | `generic_rss` | RSS or Atom: title, description, `content:encoded`, enclosures |
-| `youtube_rss` | YouTube’s official channel feed, `https://www.youtube.com/feeds/videos.xml?channel_id=<UC…>`. No API key. That feed has no CORS header, so the build fetches it. `channelId` is copied onto the profile so the browser can ask for subscribers. Durations and subscriber counts are not fetched during the build. Thumbnails stay on `i.ytimg.com`. The live feed is Canadian Prepper (`UCfgtuaUadGgOA-91geQ8Qog`). Marques Brownlee and Tesla exist only as files under `scripts/fixtures/` |
+| `youtube_rss` | YouTube’s official channel feed, `https://www.youtube.com/feeds/videos.xml?channel_id=<UC…>`. No API key. That feed has no CORS header, so the build fetches it. `channelId` is copied onto the profile so the browser can ask for subscribers. Durations and subscriber counts are not fetched during the build. Thumbnails stay on `i.ytimg.com`. The live feed is Canadian Prepper (`UCsyntheticmaple00001000`). Marques Brownlee and Goldthistle exist only as files under `scripts/fixtures/` |
 | `youtube_community` | Community posts for a YouTube channel (text, images, polls, shared videos). There is no official feed. The build tries Invidious `/api/v1/channels/<id>/community`, then RSSHub `/youtube/community/<handle>` on the sync container, then Piped if that channel payload has posts, then the public `/posts` page. When that page has fewer than 20 posts, or names the posts tab but the HTML has none, the build sends that tab’s browse id and params to `youtubei/v1/browse` and follows one continuation if it adds posts. Posts already read from the HTML stay. Images stay on `yt3.ggpht.com` / `googleusercontent`. Comments load in the browser from Invidious `/api/v1/post/<id>/comments?ucid=<channelId>`, then `fallback/ytpost_<id>.json` written at sync from the public post page. A failed fetch keeps the previous community posts |
 
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
@@ -272,9 +272,9 @@ Edit `feeds.config.json` and add an object under `feeds`. A push to `main` runs 
 
 The new account is followed in a fresh browser. An existing browser keeps its saved follow list until you follow the account from the Feeds page.
 
-Follow on a profile that is not in this file, or Add account on the Feeds page, opens a prefilled GitHub issue (`Follow request` or `Unfollow request`). The workflow applies it only when `github.actor` is the user `owner-account`. The repository belongs to an organization, so `github.repository_owner` is not that user. It checks the source, updates this file, closes the issue, and starts a sync. Issues from anyone else are ignored.
+Follow on a profile that is not in the private catalog, or Add account on the Feeds page, opens a prefilled GitHub issue (`Follow request` or `Unfollow request`). The workflow applies it only when the actor hash matches the `OWNER_ACTOR_SHA256` secret. The repository belongs to an organization, so the organization login is not that check. It checks the source, writes the private catalog, closes the issue, and starts a sync. Issues from anyone else are ignored.
 
-Subscription groups are saved on this device immediately. **Save groups to the site** opens a prefilled issue titled `Subscription groups`. The same owner-only workflow writes the `groups` field in this file and starts a sync, so the groups show up on every device. Edits on this device win until the published list matches. Issues from anyone else are ignored.
+Subscription groups are saved on this device immediately. **Save groups to the site** opens a prefilled issue titled `Subscription groups`. The same owner-only workflow writes the `groups` field in the private catalog and starts a sync, so the groups show up on every device. Edits on this device win until the published list matches. Issues from anyone else are ignored.
 
 ## Discord
 

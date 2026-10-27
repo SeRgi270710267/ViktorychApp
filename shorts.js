@@ -72,7 +72,7 @@
       lockedMode = storedLock === "1";
     }
   } catch (err) { /* private browsing */ }
-  var unlockedAccounts = ["pepsi"];
+  var unlockedAccounts = [];
 
   function isLocked() {
     return !!lockedMode;
@@ -98,6 +98,20 @@
     } else if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) {
       try { window.ViktorychAccounts.requestRender(); } catch (err) {}
     }
+  }
+  function foldList(list) {
+    var next = [];
+    (list || []).forEach(function (item) {
+      var name = foldHandle(typeof item === "string" ? item : (item && item.handle));
+      if (name && next.indexOf(name) < 0) next.push(name);
+    });
+    return next;
+  }
+  function setUnlocked(list) {
+    unlockedAccounts = foldList(list);
+  }
+  function setAdded(list) {
+    addedAccounts = (list || []).filter(function (row) { return row && row.handle; });
   }
   function isUnlocked(handle) {
     return unlockedAccounts.indexOf(foldHandle(handle)) >= 0;
@@ -282,64 +296,11 @@
     }).catch(function () { return null; });
   }
 
-  function pepsiDefaultPosts() {
-    return [
-      {
-        id: "tiktok:pepsi:pinned",
-        platform: "tiktok",
-        handle: "pepsi",
-        author: "Pepsi",
-        text: "That's What I Like #Pepsi",
-        url: "https://www.tiktok.com/@pepsi",
-        avatar: PEPSI_AVATAR,
-        date: "2026-10-25T12:00:00Z",
-        stats: { likes: 125000, replies: 3420 },
-        media: [
-          {
-            type: "video",
-            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            poster: PEPSI_POSTER
-          }
-        ]
-      }
-    ];
-  }
-
-  function gabiiDefaultPosts() {
-    return [
-      {
-        id: "tiktok:gabii_g5:7695476356548660503",
-        statusId: "7695476356548660503",
-        platform: "tiktok",
-        handle: "gabii_g5",
-        author: "gabii",
-        text: "Dance & vibes ✨ #dance #viral",
-        url: "https://www.tiktok.com/@gabii_g5/video/7695476356548660503",
-        avatar: "",
-        date: "2026-10-24T18:00:00Z",
-        stats: { likes: 4320, replies: 128 },
-        media: [
-          {
-            type: "video",
-            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            poster: ""
-          }
-        ]
-      }
-    ];
-  }
-
   function forYou() {
     var list = (hooks.posts() || []).slice();
     ((cached && cached.posts) || []).forEach(function (post) {
       if (post && post.id && !list.some(function (row) { return row && row.id === post.id; })) list.push(post);
     });
-    if (!list.some(function (p) { return p && foldHandle(p.handle) === "pepsi"; })) {
-      pepsiDefaultPosts().forEach(function (p) { list.push(p); });
-    }
-    if (!list.some(function (p) { return p && foldHandle(p.handle) === "gabii_g5"; })) {
-      gabiiDefaultPosts().forEach(function (p) { list.push(p); });
-    }
     return list.filter(function (post) {
       if (!post) return false;
       var url = String(post.url || "");
@@ -517,23 +478,18 @@
         lastLiveAt: status.lastLiveAt || "",
         detail: status.detail || "",
         avatar: (extra && extra.avatar) || status.avatar || avatarFor(handle, extra),
-        name: (extra && extra.name) || (key === "pepsi" ? "Pepsi" : ""),
+        name: (extra && extra.name) || "",
         record: recordOf(handle)
       });
     }
     if (isLocked()) {
-      unlockedAccounts.forEach(function (h) {
-        push(h, h === "pepsi" ? { handle: "pepsi", name: "Pepsi", avatar: PEPSI_AVATAR } : {});
-      });
+      unlockedAccounts.forEach(function (h) { push(h, {}); });
     } else {
-      push("gabii_g5", { handle: "gabii_g5", name: "gabii" });
       if (addedAccounts.length) {
         addedAccounts.forEach(function (item) { if (item && item.handle) push(item.handle, item); });
       }
       Object.keys(liveMap()).forEach(function (name) { push(name, liveMap()[name]); });
-      unlockedAccounts.forEach(function (h) {
-        push(h, h === "pepsi" ? { handle: "pepsi", name: "Pepsi", avatar: PEPSI_AVATAR } : {});
-      });
+      unlockedAccounts.forEach(function (h) { push(h, {}); });
     }
     rows.sort(function (a, b) {
       if (!!a.live !== !!b.live) return a.live ? -1 : 1;
@@ -637,7 +593,6 @@
   function avatarFor(handle, row) {
     if (row && row.avatar) return row.avatar;
     var want = foldHandle(handle);
-    if (want === "pepsi") return PEPSI_AVATAR;
     var feeds = (cached && cached.feeds) || [];
     for (var i = 0; i < feeds.length; i++) {
       if (feeds[i] && foldHandle(feeds[i].handle) === want && feeds[i].avatar) return feeds[i].avatar;
@@ -739,7 +694,7 @@
   }
 
   function liveSlide(row) {
-    var handle = String((row && row.handle) || "gabii_g5");
+    var handle = String((row && row.handle) || "");
     var profile = "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live";
     var appProfile = "#/tiktok/" + encodeURIComponent(handle);
     var on = !!(row && row.live);
@@ -788,24 +743,19 @@
   }
 
   function renderUnlocked() {
-    return '<li class="shorts-account">' +
-      '<span class="shorts-account-face"><img alt="" src="' + PEPSI_AVATAR + '"></span>' +
-      '<span><b>Pepsi</b><small>@pepsi</small><span class="shorts-pill unlocked">' + hooks.esc(tr("Unlocked")) + "</span></span>" +
-      '<span class="shorts-fixed-badge">' + hooks.esc(tr("Default")) + "</span>" +
-      "</li>";
+    return unlockedAccounts.map(function (handle) {
+      return '<li class="shorts-account">' +
+        '<span class="shorts-account-face">' + hooks.avatar("", handle) + "</span>" +
+        '<span><b>' + hooks.esc(handle) + '</b><small>@' + hooks.esc(handle) + '</small><span class="shorts-pill unlocked">' + hooks.esc(tr("Unlocked")) + "</span></span>" +
+        "</li>";
+    }).join("");
   }
 
   function renderAddedHtml() {
     if (isLocked()) return "";
     var allLocked = [];
-    allLocked.push({
-      handle: "gabii_g5",
-      name: "gabii",
-      avatar: avatarFor("gabii_g5", {}),
-      builtIn: true
-    });
     addedAccounts.forEach(function (row) {
-      if (row && row.handle && foldHandle(row.handle) !== "gabii_g5" && !isUnlocked(row.handle)) {
+      if (row && row.handle && !isUnlocked(row.handle)) {
         allLocked.push(row);
       }
     });
@@ -836,7 +786,7 @@
       '<button type="submit">' + hooks.esc(tr("Add account")) + "</button></form>" +
       '<p class="shorts-accounts-note" id="shorts-accounts-note"></p>' +
       '<div class="shorts-lock-panel">' +
-      '<div class="shorts-lock-info"><b>' + hooks.esc(tr("Locked mode")) + "</b><small>" + hooks.esc(tr("When locked, only unlocked accounts (@pepsi) are visible.")) + "</small></div>" +
+      '<div class="shorts-lock-info"><b>' + hooks.esc(tr("Locked mode")) + "</b><small>" + hooks.esc(tr("When locked, only unlocked accounts are visible.")) + "</small></div>" +
       '<button type="button" class="shorts-lock-toggle' + (locked ? " on" : "") + '" data-shorts="toggle-lock">' + lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Unlocked")) + "</span></button>" +
       "</div>" +
       "<h3>" + hooks.esc(tr("Unlocked accounts")) + "</h3>" +
@@ -3209,6 +3159,13 @@
     }).then(function (body) {
       addedAccounts = (body && body.added) || [];
       accountsLoaded = true;
+      return fetch(base + "/v1/owner/tiktok/unlocked", { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+        if (!res.ok) return null;
+        return res.json();
+      }).then(function (unlocked) {
+        if (unlocked && Array.isArray(unlocked.handles)) setUnlocked(unlocked.handles);
+      }).catch(function () {});
+    }).then(function () {
       renderAdded();
       if (onLiveRoute()) schedulePaint();
     }).catch(function () {
@@ -3554,6 +3511,8 @@
     absorb: absorb,
     isLocked: isLocked,
     isUnlocked: isUnlocked,
+    setUnlocked: setUnlocked,
+    setAdded: setAdded,
     setLocked: setLocked,
     toggleLock: toggleLock,
     showCaptcha: openCaptchaModal,
