@@ -388,38 +388,36 @@ test("mentions notify, catch up, and respect privacy", async () => {
   const stillSilent = await one("SELECT COUNT(*) AS n FROM push_log WHERE public_id = ? AND note_id = ?", bravo.account.publicId, stored.note_id);
   assert.equal(Number(stillSilent.n), 0);
 
-  await call("/v1/follows", {
-    method: "DELETE",
-    ip: "203.0.113.110",
-    token: charlie.token,
-    body: { id: "app:" + alpha.account.publicId }
-  });
   await call("/v1/notifications", {
     method: "POST",
     ip: "203.0.113.126",
-    token: charlie.token,
+    token: bravo.token,
     body: { prefs: { mentionsFrom: "following" } }
   });
   const filtered = await call("/v1/content", {
     method: "POST",
     ip: "203.0.113.111",
     token: alpha.token,
-    body: { id: "ct_4444444444444444", kind: "post", text: "filter @charliethree" }
+    body: { id: "ct_4444444444444444", kind: "post", text: "filter @bravotwo" }
   });
   assert.equal(filtered.status, 200);
-  const filteredId = "mention:ct_4444444444444444:" + charlie.account.publicId;
-  const filteredRow = await one("SELECT note_id FROM notifications WHERE public_id = ? AND note_id = ?", charlie.account.publicId, filteredId);
+  const filteredId = "mention:ct_4444444444444444:" + bravo.account.publicId;
+  const filteredRow = await one("SELECT note_id FROM notifications WHERE public_id = ? AND note_id = ?", bravo.account.publicId, filteredId);
   assert.ok(filteredRow);
-  const filteredView = await call("/v1/notifications", { ip: "203.0.113.112", token: charlie.token });
+  const filteredView = await call("/v1/notifications", { ip: "203.0.113.112", token: bravo.token });
   assert.equal((filteredView.body.items || []).some((item) => item.id === filteredId), false);
+  const filteredPush = await one("SELECT COUNT(*) AS n FROM push_log WHERE public_id = ? AND note_id = ?", bravo.account.publicId, filteredId);
+  assert.equal(Number(filteredPush.n), 0);
   await call("/v1/follows", {
     method: "PUT",
     ip: "203.0.113.113",
-    token: charlie.token,
+    token: bravo.token,
     body: { id: "app:" + alpha.account.publicId }
   });
-  const followedView = await call("/v1/notifications", { ip: "203.0.113.114", token: charlie.token });
+  const followedView = await call("/v1/notifications", { ip: "203.0.113.114", token: bravo.token });
   assert.equal((followedView.body.items || []).some((item) => item.id === filteredId), true);
+  const stillNoRetro = await one("SELECT COUNT(*) AS n FROM push_log WHERE public_id = ? AND note_id = ?", bravo.account.publicId, filteredId);
+  assert.equal(Number(stillNoRetro.n), 0);
 
   const marked = await call("/v1/notifications", {
     method: "POST",
