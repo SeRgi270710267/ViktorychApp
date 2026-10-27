@@ -150,8 +150,13 @@ async function main() {
     await page.click("#dock-root .xdock-launcher");
     await page.waitForSelector("#dock-root .xdock-panel.is-open", { timeout: 5000 });
     await page.setViewportSize({ width: 390, height: 800 });
-    await sleep(120);
-    const sheet = await page.evaluate(MEASURE);
+    let sheet = null;
+    const sheetStart = Date.now();
+    while (Date.now() - sheetStart < 2000) {
+      sheet = await page.evaluate(MEASURE);
+      if (sheet.open && sheet.open.w >= 360 && sheet.open.h >= 700) break;
+      await sleep(40);
+    }
     if (!sheet.open || sheet.open.w < 360 || sheet.open.h < 700) fail("open drawer did not fill the phone " + JSON.stringify(sheet));
     if (sheet.y > 40) fail("opening check moved the page " + sheet.y);
     await page.setViewportSize({ width: 1280, height: 800 });

@@ -392,6 +392,7 @@ html[data-theme="default"] .xdock-menu {
     margin: 0;
     border-radius: 0;
     z-index: 40;
+    transition: none;
   }
   .xdock-resize { display: none; }
 }
