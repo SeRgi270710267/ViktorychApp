@@ -2020,10 +2020,20 @@ function twimgVideoHost(hostname) {
   return /(^|\.)video\.twimg\.com$/i.test(String(hostname || ""));
 }
 
+function publicMediaIsVideo(parsed, type) {
+  const path = (parsed && parsed.pathname) || "";
+  const host = (parsed && parsed.hostname) || "";
+  if (twimgVideoHost(host)) return true;
+  if (/\.(?:mp4|m4s|webm|m3u8|m4v|mov|ts)(?:$|\?)/i.test(path)) return true;
+  if (/^video\//i.test(String(type || ""))) return true;
+  return false;
+}
+
 // X video bytes stay on the original file. The relay may fetch them, but
 // Cloudflare must not cache that response, and the bytes are not re-encoded.
 // X-Frame-Options from the upstream response is copied unchanged. The tweet
-// embed itself is never requested through this route.
+// embed itself is never requested through this route. Other public images
+// keep the short cache. Any other video file is also left out of the cache.
 export function publicMediaPolicy(hostname) {
   if (twimgVideoHost(hostname)) {
     return {
@@ -2035,9 +2045,9 @@ export function publicMediaPolicy(hostname) {
   }
   return {
     video: false,
-    cf: { cacheTtl: 604800, cacheEverything: true },
-    cacheControl: "public, max-age=86400, s-maxage=604800",
-    cdnCacheControl: "public, max-age=604800"
+    cf: { cacheTtl: 120, cacheEverything: true },
+    cacheControl: "public, max-age=120, s-maxage=120",
+    cdnCacheControl: "public, max-age=120"
   };
 }
 
@@ -2055,13 +2065,14 @@ async function handlePublicMediaProxy(request, env, url) {
   if (!policy.video) headers.set("referer", parsed.origin + "/");
   const range = request.headers.get("range") || "";
   if (/^bytes=\d*-\d*$/.test(range)) headers.set("range", range);
+  const videoRequest = publicMediaIsVideo(parsed, "");
   let upstream = null;
   try {
     upstream = await fetch(parsed.toString(), {
       headers,
       redirect: "follow",
       signal: AbortSignal.timeout(10000),
-      cf: policy.cf
+      cf: (policy.video || videoRequest) ? { cacheTtl: 0, cacheEverything: false } : policy.cf
     });
   } catch (err) {
     return json(502, { error: "upstream" });
@@ -2081,8 +2092,14 @@ async function handlePublicMediaProxy(request, env, url) {
   if (contentRange) respHeaders.set("content-range", contentRange);
   const acceptRanges = upstream.headers.get("accept-ranges");
   if (acceptRanges) respHeaders.set("accept-ranges", acceptRanges);
-  respHeaders.set("cache-control", policy.cacheControl);
-  respHeaders.set("cdn-cache-control", policy.cdnCacheControl);
+  const videoBody = policy.video || videoRequest || publicMediaIsVideo(parsed, respHeaders.get("content-type") || "");
+  if (videoBody) {
+    respHeaders.set("cache-control", "private, no-store");
+    respHeaders.set("cdn-cache-control", "no-store");
+  } else {
+    respHeaders.set("cache-control", policy.cacheControl);
+    respHeaders.set("cdn-cache-control", policy.cdnCacheControl);
+  }
   const frameOptions = upstream.headers.get("x-frame-options");
   if (frameOptions) respHeaders.set("x-frame-options", frameOptions);
   respHeaders.set("x-content-type-options", "nosniff");

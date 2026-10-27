@@ -165,7 +165,11 @@ function tinyMp4() {
     "-y", "-f", "lavfi", "-i", "color=c=black:s=64x64:d=1",
     "-pix_fmt", "yuv420p", "-movflags", "+faststart", file
   ], { encoding: "utf8" });
-  if (made.status !== 0) throw new Error("ffmpeg could not build a synthetic file");
+  if (made.error || made.status !== 0) {
+    const detail = (made.error && made.error.message) || made.stderr || made.stdout || ("exit " + made.status);
+    rmSync(dir, { recursive: true, force: true });
+    throw new Error("ffmpeg could not build a synthetic file: " + String(detail).trim().slice(0, 500));
+  }
   const bytes = readFileSync(file);
   rmSync(dir, { recursive: true, force: true });
   return bytes;

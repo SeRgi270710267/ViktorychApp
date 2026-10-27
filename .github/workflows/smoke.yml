@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - ".github/workflows/actions-cleanup.once"
+      - ".github/workflows/actions-cleanup.yml"
+      - "scripts/actions_cleanup.py"
 
 permissions:
   contents: read
@@ -52,5 +56,9 @@ jobs:
 
       - name: X video falls back to the official embed
         run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
           npm install --no-save --prefix "${RUNNER_TEMP:-/tmp}/pw" playwright-core@1.49.1
           PLAYWRIGHT_CORE="${RUNNER_TEMP:-/tmp}/pw/node_modules/playwright-core/index.mjs" node scripts/x_video_play.mjs --root _site

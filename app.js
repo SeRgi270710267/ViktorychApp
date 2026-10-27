@@ -1820,7 +1820,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (post.replyingTo) row.replyingTo = { handle: post.replyingTo.handle || "", id: post.replyingTo.id || "" };
       return row;
     }).filter(Boolean);
-    const copy = { updated: doc.updated || "", feeds: doc.feeds || [], posts: posts };
+    const copy = { updated: doc.updated || "", savedAt: doc.savedAt || Date.now(), feeds: doc.feeds || [], posts: posts };
     try {
       let text = JSON.stringify(copy);
       if (text.length > 400000) {
@@ -4833,14 +4833,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return pending;
   }
 
-  function fetchJsonNow(url) {
+  function fetchJsonNow(url, opts) {
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
         signal = AbortSignal.timeout(8000);
       }
     } catch (e) {}
-    const run = (target) => fetch(target, { cache: "no-cache", signal: signal }).then((res) => {
+    const fresh = !!(opts && opts.fresh);
+    const run = (target) => fetch(target, fresh ? { cache: "no-store", credentials: "omit", signal: signal, headers: { "X-Feed-Refresh": "1" } } : { cache: "no-cache", signal: signal }).then((res) => {
       if (!res.ok) {
         const err = new Error(String(res.status));
         err.status = res.status;
@@ -4870,9 +4871,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function fetchJson(url, opts) {
     const direct = window.ViktorychDirect;
     if (direct && direct.fetchSource && direct.allows && direct.allows(url)) {
-      return direct.fetchSource(url, function () { return fetchJsonNow(url); }, opts && opts.fresh ? { fresh: true } : null);
+      return direct.fetchSource(url, function () { return fetchJsonNow(url, opts); }, opts && opts.fresh ? { fresh: true } : null);
     }
-    return fetchJsonNow(url);
+    return fetchJsonNow(url, opts);
   }
 
   function ivBases() {
@@ -7914,7 +7915,8 @@ const here = parseRoute();
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     );
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
-    return homeHeader(tab) + spaceCard + body + timelineSentinel(list.length, sorted.length);
+    const bar = STATE.homeFreshBar ? `<div class="home-fresh" role="progressbar" aria-label="${esc(tr("Loading"))}"><span></span></div>` : "";
+    return homeHeader(tab) + bar + spaceCard + body + timelineSentinel(list.length, sorted.length);
   }
 
   function pageHead(title, extra, back, action) {
@@ -14557,6 +14559,8 @@ if (STATE.histClear) {
       const selected = route.name === "home" && (route.tab || "foryou") === tab;
       if (!selected) {
         STATE.tabMenu = null;
+        homeRead = (SCROLLS["home:" + tab] || 0) >= 40;
+        refreshHomeTabs([tab]);
         goHash(homeHash(tab));
         return;
       }
@@ -16323,6 +16327,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   let scrollFreeze = false;
   window.addEventListener("scroll", () => {
     if (pageY() <= 4) STATE.snapTop = false;
+    if (parseRoute().name === "home" && pageY() >= 40) homeRead = true;
     if (routing || scrollFreeze || !STATE.scrollKey) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
     if (window.ViktorychLocal) window.ViktorychLocal.noteScroll(STATE.scrollKey, window.scrollY, SCROLLS);
@@ -16364,6 +16369,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (route.name === "home" && (route.tab || "foryou") === id) return;
       if (id) next = homeHash(id);
     }
+    if (next && parseRoute().name === "home" && /\/status\/|#\/watch\//.test(next)) homeRead = true;
     if (!next || next === (location.hash || "#/") || next === location.hash) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
     scrollFreeze = true;
@@ -16380,6 +16386,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       scrollFreeze = false;
       window.FeedsDiscord.syncFromHash();
       return;
+    }
+    const nextRoute = parseRoute();
+    if (nextRoute.name === "home") {
+      const nextTab = nextRoute.tab || "foryou";
+      const prevTab = window.HomeFresh && window.HomeFresh.activeTab ? window.HomeFresh.activeTab(prevHash) : "";
+      if (prevTab && prevTab !== nextTab) {
+        homeRead = (SCROLLS["home:" + nextTab] || 0) >= 40;
+        refreshHomeTabs([nextTab]);
+      }
     }
     routing = true;
     scrollFreeze = true;
@@ -16522,7 +16537,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     Promise.resolve(op).catch(() => {});
   }
 
-  const LIVE_REFRESH_MS = 2 * 60 * 1000;
+  const LIVE_REFRESH_MS = 60 * 1000;
 
   function pendingPillPosts() {
     const live = (STATE.pendingLive || []).filter(Boolean);
@@ -16740,7 +16755,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function loadCatalog() {
     if (STATE.catalog) return Promise.resolve(STATE.catalog);
     if (STATE.catalogP) return STATE.catalogP;
-    STATE.catalogP = fetch("feeds.config.json", { cache: "no-cache" }).then((res) => (res.ok ? res.json() : null)).then((doc) => {
+    const bootConfig = window.__homeFreshBoot && window.__homeFreshBoot.config;
+    if (bootConfig) window.__homeFreshBoot.config = null;
+    const configRes = bootConfig || fetch(catalogRequestUrl("feeds.config.json"), catalogRequestInit());
+    STATE.catalogP = Promise.resolve(configRes).then((res) => {
+      if (!res || !res.ok || catalogMissing(res)) return null;
+      return res.json();
+    }).then((doc) => {
       STATE.catalog = doc;
       return doc;
     }).catch(() => null);
@@ -16933,7 +16954,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const urls = httpsSources(config, entry);
     if (!urls.length) return Promise.resolve([]);
     const url = urls[0];
-    return fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(8000) }).then((res) => {
+    return fetch(url, { cache: "no-store", credentials: "omit", headers: { "X-Feed-Refresh": "1" }, signal: AbortSignal.timeout(8000) }).then((res) => {
       if (!res.ok) throw new Error(String(res.status));
       return res.text();
     }).then((xml) => {
@@ -17032,50 +17053,284 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return out;
   }
 
-  function applyLive(items, scroll) {
-    if (!items.length) return;
-    rememberTimeline(items);
-    if (STATE.data) STATE.data = withMemory(STATE.data);
-    STATE.pendingLive = [];
-    showPill([]);
-    render(scroll ? { y: 0 } : undefined);
-    ensureVideoOwners();
-      }
+  let homeRead = false;
+  let homeWakeAt = 0;
+  const feedFlights = {};
+
+  function markHome(name) {
+    const row = { name: name, t: (window.performance && performance.now) ? performance.now() : 0 };
+    if (!window.__homeFreshMarks) window.__homeFreshMarks = [];
+    window.__homeFreshMarks.push(row);
+    try { if (window.performance && performance.mark) performance.mark(name); } catch (err) { /* marks are optional */ }
+  }
+
+  function arrivalMode() {
+    const api = window.HomeFresh;
+    if (api && api.arrival) return api.arrival({ scrollY: window.scrollY, read: homeRead });
+    return window.scrollY >= 40 || homeRead ? "pill" : "insert";
+  }
+
+  function currentHomeTab() {
+    const route = parseRoute();
+    if (!route || route.name !== "home") return (window.HomeFresh && window.HomeFresh.activeTab) ? window.HomeFresh.activeTab(location.hash) : "foryou";
+    return route.tab || "foryou";
+  }
+
+  function visibleHomeTabs() {
+    const ids = ["foryou", "following"];
+    const seen = { foryou: true, following: true };
+    ((STATE.settings && STATE.settings.lists) || []).forEach((list) => {
+      if (!list || !list.id || !list.pinned) return;
+      const id = "list:" + list.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    feedTabs().forEach((item) => {
+      if (!item || !item.id || item.showHome === false || !tabAlive(item)) return;
+      const id = "cat:" + item.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  function feedsForTab(tab) {
+    if (tab === "following") return followedFeeds();
+    if (tab && tab.indexOf("list:") === 0) {
+      const found = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
+      const out = [];
+      const seen = {};
+      ((found && found.members) || []).forEach((member) => {
+        const feed = memberFeed(member);
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+      return out;
+    }
+    if (tab && tab.indexOf("cat:") === 0) {
+      const found = feedTabById(tab.slice(4));
+      const out = [];
+      const seen = {};
+      ((found && found.members) || []).forEach((member) => {
+        const feed = memberFeed(member);
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+      return out;
+    }
+    return timelineFeeds();
+  }
+
+  function feedsForTabs(tabs) {
+    const out = [];
+    const seen = {};
+    (tabs || []).forEach((tab) => {
+      feedsForTab(tab).forEach((feed) => {
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+    });
+    return out;
+  }
+
+  function visibleOnHome(post) {
+    const route = parseRoute();
+    if (!route || route.name !== "home") return false;
+    return homeShows(post, route);
+  }
+
+  function clearFreshBar() {
+    if (!STATE.homeFreshBar) return;
+    STATE.homeFreshBar = false;
+    if (parseRoute().name === "home") render({ y: window.scrollY });
+  }
+
+  function saveHomeSnapshot() {
+    if (!STATE.data || !Array.isArray(STATE.data.posts)) return;
+    const pending = (STATE.pendingLive || []).filter(Boolean);
+    const posts = (STATE.data.posts || []).concat(pending);
+    if (window.FeedOrder && window.FeedOrder.compare) posts.sort((a, b) => window.FeedOrder.compare(a, b));
+    else posts.sort(byStamp);
+    const doc = Object.assign({}, STATE.data, { posts: posts, savedAt: Date.now() });
+    saveTimelineSnap(doc);
+    const local = window.ViktorychLocal;
+    if (local && local.saveDoc && window.HomeFresh && window.HomeFresh.slimDoc) {
+      local.saveDoc("feeds", "timeline", window.HomeFresh.slimDoc(doc, Date.now()));
+    }
+  }
+
+  function adoptSavedFeed(doc) {
+    if (!doc || !Array.isArray(doc.posts) || !doc.posts.length) return;
+    const current = STATE.data;
+    if (current && window.HomeFresh && !window.HomeFresh.newer(doc, current)) return;
+    const mode = arrivalMode();
+    if (!current || !Array.isArray(current.posts)) {
+      STATE.data = doc;
+      STATE.loading = false;
+      if (mode === "insert") markHome("home-newest-paint");
+      render(mode === "insert" && window.scrollY < 40 ? { y: 0 } : { y: window.scrollY });
+      return;
+    }
+    const merged = mergeCatalog(current, doc, mode === "insert");
+    if (doc.savedAt) merged.doc.savedAt = doc.savedAt;
+    STATE.data = withMemory(merged.doc);
+    if (mode === "insert") {
+      if (merged.added.length) markHome("home-newest-paint");
+      render(window.scrollY < 40 ? { y: 0 } : { y: window.scrollY });
+      return;
+    }
+    if (!merged.added.length) return;
+    const known = {};
+    (STATE.pendingLive || []).forEach((post) => { known[postCatalogKey(post)] = true; });
+    merged.added.forEach((post) => {
+      const id = postCatalogKey(post);
+      if (!id || known[id]) return;
+      known[id] = true;
+      STATE.pendingLive = (STATE.pendingLive || []).concat([post]);
+    });
+    showPill(STATE.pendingLive);
+  }
+
+  function deliverSource(feed, rows) {
+    const list = rows || [];
+    if (window.FeedOrder && window.FeedOrder.prepareActivity) window.FeedOrder.prepareActivity(list);
+    stampActivity(list);
+    settlePublishTimes(feed, list);
+    const incoming = takeFresh(feed, list);
+    if (liveDateScrubbed && parseRoute().name === "home") render({ y: window.scrollY });
+    if (!incoming.length) return;
+    const mode = arrivalMode();
+    const visible = [];
+    const hidden = [];
+    incoming.forEach((post) => {
+      if (visibleOnHome(post)) visible.push(post);
+      else hidden.push(post);
+    });
+    if (hidden.length) {
+      rememberTimeline(hidden);
+      if (STATE.data) STATE.data = withMemory(STATE.data);
+    }
+    if (visible.length && mode === "insert") {
+      rememberTimeline(visible);
+      if (STATE.data) STATE.data = withMemory(STATE.data);
+      if (!(STATE.pendingLive || []).length) showPill([]);
+      markHome("home-newest-paint");
+      render(window.scrollY < 40 ? { y: 0 } : { y: window.scrollY });
+      ensureVideoOwners();
+      return;
+    }
+    if (visible.length) {
+      STATE.pendingLive = (STATE.pendingLive || []).concat(visible);
+      showPill(STATE.pendingLive);
+      if (document.hidden) updateBadge(STATE.pendingLive.length);
+    }
+  }
+
+  function loadFeedFresh(feed, config) {
+    const id = String(feed && feed.id || "").toLowerCase();
+    if (!id) return Promise.resolve([]);
+    if (feedFlights[id]) return feedFlights[id];
+    const job = livePostsForFeed(feed, config).then((rows) => {
+      deliverSource(feed, rows || []);
+      return rows || [];
+    }).catch(() => []).finally(() => { delete feedFlights[id]; });
+    feedFlights[id] = job;
+    return job;
+  }
 
   let liveRefreshFlight = null;
-  function refreshLiveTimeline(apply) {
-    if (liveRefreshFlight) return liveRefreshFlight;
-    const job = loadCatalog().then((config) => {
-      const selected = timelineFeeds();
+  const homeTabJobs = {};
+  function refreshHomeTabs(tabs) {
+    const wanted = (window.HomeFresh && window.HomeFresh.tabsToRefresh)
+      ? window.HomeFresh.tabsToRefresh(tabs && tabs[0], (tabs || []).slice(1))
+      : (tabs || []);
+    const key = (wanted.length ? wanted : [currentHomeTab()]).join("|");
+    if (homeTabJobs[key]) return homeTabJobs[key];
+    const selected = feedsForTabs(wanted.length ? wanted : [currentHomeTab()]);
+    if (!selected.length) return Promise.resolve();
+    const run = (config) => {
       liveDateScrubbed = false;
-      const pending = mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => []));
+      const pending = mapLimit(selected, 4, (feed) => loadFeedFresh(feed, config));
       timelineUsesDevice = true;
       releaseDeviceFeeds();
-      return pending.then((lists) => {
-        let incoming = [];
-        lists.forEach((list, index) => {
-          const feed = selected[index];
-          const rows = list || [];
-          if (window.FeedOrder && window.FeedOrder.prepareActivity) window.FeedOrder.prepareActivity(rows);
-          stampActivity(rows);
-          settlePublishTimes(feed, rows);
-          incoming = incoming.concat(takeFresh(feed, rows));
-        });
-        if (liveDateScrubbed) render();
-        if (!incoming.length) return;
-        return attachParents(incoming).then(() => {
-          const atTop = window.scrollY < 40;
-          if (atTop) applyLive(incoming, true);
-          else {
-            STATE.pendingLive = (STATE.pendingLive || []).concat(incoming);
-            showPill(STATE.pendingLive);
-            if (document.hidden) updateBadge(STATE.pendingLive.length);
-          }
-        });
-      });
-    }).catch(() => {});
+      return pending.then(() => attachParents((STATE.pendingLive || []).slice(0, 4)).then(() => saveHomeSnapshot()));
+    };
+    const job = STATE.catalog ? run(STATE.catalog) : loadCatalog().then(run);
+    homeTabJobs[key] = Promise.resolve(job).catch(() => {}).finally(() => { delete homeTabJobs[key]; });
+    return homeTabJobs[key];
+  }
+
+  function refreshLiveTimeline() {
+    const active = currentHomeTab();
+    const pinned = visibleHomeTabs();
+    const tabs = (window.HomeFresh && window.HomeFresh.tabsToRefresh) ? window.HomeFresh.tabsToRefresh(active, pinned) : [active];
+    if (liveRefreshFlight) return liveRefreshFlight;
+    const job = refreshHomeTabs(tabs).finally(() => { clearFreshBar(); });
     liveRefreshFlight = job.finally(() => { liveRefreshFlight = null; });
     return liveRefreshFlight;
+  }
+
+  function prefetchHomeTabs() {
+    const run = () => {
+      const active = currentHomeTab();
+      const rest = visibleHomeTabs().filter((id) => id !== active);
+      if (rest.length) refreshHomeTabs(rest);
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 1500 });
+    else setTimeout(run, 800);
+  }
+
+  function wakeHome() {
+    const now = Date.now();
+    if (now - homeWakeAt < 2000) return;
+    if (document.visibilityState === "hidden") return;
+    homeWakeAt = now;
+    refreshFeeds(true);
+    refreshLiveTimeline();
+  }
+
+  function emptyCatalog() {
+    return { posts: [], feeds: [] };
+  }
+
+  function missingCatalog() {
+    return { posts: [], feeds: [], missing: true };
+  }
+
+  function catalogMissing(res) {
+    if (!res || !res.ok) return true;
+    try {
+      return !!(res.headers && typeof res.headers.get === "function" && res.headers.get("X-Catalog-Missing") === "1");
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function catalogRequestUrl(key) {
+    const cfg = window.VIKTORYCH_ACCOUNTS || {};
+    const api = String(cfg.api || "").replace(/\/$/, "");
+    if (cfg.gate && api) return api + "/v1/data/" + String(key || "").split("/").map(encodeURIComponent).join("/");
+    return key;
+  }
+
+  function catalogRequestInit() {
+    const headers = { "X-Feed-Refresh": "1" };
+    const cfg = window.VIKTORYCH_ACCOUNTS || {};
+    if (cfg.gate && cfg.api) {
+      try {
+        const saved = JSON.parse(readStored(localStorage, "account-v1") || "null");
+        if (saved && saved.token) headers.Authorization = "Bearer " + saved.token;
+      } catch (err) { /* a missing session still settles empty */ }
+    }
+    return { cache: "no-store", credentials: "omit", headers: headers };
   }
 
   let feedWorker = null;
@@ -17105,25 +17360,36 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
 
-  async function fetchFeeds(fresh) {
-    if (!fresh && window.__VIKTORYCH_FEED) {
-      try {
-        const early = await window.__VIKTORYCH_FEED;
-        if (early) {
-          const parsed = await parseFeedOffThread(early);
-          if (parsed && Array.isArray(parsed.posts)) return parsed;
-          return JSON.parse(early);
-        }
-      } catch (err) { /* a live fetch still loads the timeline */ }
-    }
-    const headers = fresh ? { "X-Feed-Refresh": "1" } : {};
-    const init = fresh ? { cache: "no-store", headers: headers } : { credentials: "omit" };
-    const res = await fetch("feeds.json", init);
-    if (!res.ok) throw new Error(String(res.status));
-    const text = await res.text();
+  async function readCatalogBody(text) {
+    if (!text || !String(text).trim()) return missingCatalog();
     const parsed = await parseFeedOffThread(text);
     if (parsed && Array.isArray(parsed.posts)) return parsed;
-    return JSON.parse(text);
+    try {
+      const doc = JSON.parse(text);
+      if (doc && Array.isArray(doc.posts)) return doc;
+    } catch (err) { /* a missing catalog settles empty */ }
+    return missingCatalog();
+  }
+
+  async function fetchFeeds(fresh) {
+    const boot = fresh && window.__homeFreshBoot && window.__homeFreshBoot.feeds;
+    if (boot) window.__homeFreshBoot.feeds = null;
+    try {
+      if (boot) {
+        const res = await boot;
+        if (catalogMissing(res)) return missingCatalog();
+        return await readCatalogBody(await res.text());
+      }
+      if (!fresh && window.__VIKTORYCH_FEED) {
+        const early = await window.__VIKTORYCH_FEED;
+        if (early) return await readCatalogBody(early);
+      }
+      const res = await fetch(catalogRequestUrl("feeds.json"), catalogRequestInit());
+      if (catalogMissing(res)) return missingCatalog();
+      return await readCatalogBody(await res.text());
+    } catch (err) {
+      return missingCatalog();
+    }
   }
 
   function catalogSignature(doc) {
@@ -17193,8 +17459,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   async function refreshFeeds(apply) {
     try {
       const doc = lockDocDates(await fetchFeeds(true));
-      if (!doc || !Array.isArray(doc.posts)) return;
-      const atTop = window.scrollY < 40;
+      if (!doc || !Array.isArray(doc.posts) || doc.missing) return;
+      const includeNew = arrivalMode() === "insert";
+      const atTop = includeNew;
       const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(doc);
       if (!STATE.data) {
         notePublished(doc);
@@ -17207,10 +17474,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (feedsChanged) adoptFeeds(doc);
         render(atTop ? { y: 0 } : undefined);
         scanBellPosts(doc.posts);
+        saveHomeSnapshot();
         ensureVideoOwners();
         return;
       }
-      const includeNew = atTop;
       const merged = mergeCatalog(STATE.data, doc, includeNew);
       STATE.data = withMemory(merged.doc);
       if (feedsChanged) adoptFeeds(doc);
@@ -17221,11 +17488,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!(STATE.pendingLive || []).length) showPill([]);
         STATE.error = null;
         if (apply || merged.added.length || merged.changed || feedsChanged) render({ y: 0 });
+        saveHomeSnapshot();
         ensureVideoOwners();
         return;
       }
       if (merged.changed || feedsChanged) render({ y: window.scrollY });
-      if (!merged.added.length) return;
+      if (!merged.added.length) {
+        if (merged.changed || feedsChanged) saveHomeSnapshot();
+        return;
+      }
       STATE.pendingFeed = doc;
       showPill(merged.added.concat(STATE.pendingLive || []));
       const since = Number(readStored(localStorage, "seen-at") || 0);
@@ -17241,6 +17512,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           : Promise.reject();
         Promise.resolve(viaWorker).catch(() => { try { new Notification(title, { body: body, icon: payload.icon, tag: "feeds" }); } catch (err) { /* permission can change */ } });
       }
+      saveHomeSnapshot();
       ensureVideoOwners();
     } catch (err) { /* keep the posts already on screen */ }
   }
@@ -18530,17 +18802,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function registerPeriodic() {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.ready.then((reg) => {
+    const ready = swReg ? Promise.resolve(swReg) : navigator.serviceWorker.ready;
+    ready.then((reg) => {
+      if (!reg) return;
+      swReg = reg;
       const dev = window.ViktorychDevice;
-      if (dev && !dev.featureOn(dev.read(), "sync", dev.signals())) return;
-      const jobs = [];
+      const tags = ["feeds", "notifications", "weather"];
+      if (dev && dev.featureOn && !dev.featureOn(dev.read(), "sync", dev.signals())) {
+        if (reg.periodicSync && reg.periodicSync.unregister) tags.forEach((tag) => { reg.periodicSync.unregister(tag).catch(() => {}); });
+        return;
+      }
       if (reg.periodicSync) {
-        ["feeds", "notifications", "weather"].forEach((tag) => {
-          jobs.push(reg.periodicSync.register(tag, { minInterval: 30 * 60 * 1000 }).catch(() => {}));
+        reg.periodicSync.register("feeds", { minInterval: 15 * 60 * 1000 }).catch(() => {});
+        ["notifications", "weather"].forEach((tag) => {
+          reg.periodicSync.register(tag, { minInterval: 30 * 60 * 1000 }).catch(() => {});
         });
       }
-      if (reg.sync && reg.sync.register) jobs.push(reg.sync.register("feeds").catch(() => {}));
-      return Promise.all(jobs);
+      if (reg.sync && reg.sync.register) reg.sync.register("feeds").catch(() => {});
     }).catch(() => {});
   }
 
@@ -18578,23 +18856,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   let swStarted = false;
+  let swReg = null;
   function registerSW() {
     if (!("serviceWorker" in navigator) || swStarted) return;
     swStarted = true;
     navigator.serviceWorker.register("sw.js", { scope: "./", updateViaCache: "none" }).then((reg) => {
+      swReg = reg || swReg;
       if (reg && reg.update) reg.update().catch(() => {});
       syncWorkerState();
       if (window.ViktorychUpdate && window.ViktorychUpdate.watch) window.ViktorychUpdate.watch(reg);
-      if (STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted") registerPeriodic();
+      registerPeriodic();
     }).catch(() => {});
     navigator.serviceWorker.addEventListener("message", (event) => {
       const data = event.data || {};
       if (data.type === "storage-offline") setOffline(true);
       if (data.type === "storage-online" && navigator.onLine) setOffline(false);
-      if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
-      if (data.type === "feeds-updated") refreshFeeds(false);
+      if (data.type === "data" && /feeds\.json$/.test(data.url || "")) wakeHome();
+      if (data.type === "feeds-updated") wakeHome();
       if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
-      if (data.type === "push-note") pullNotes();
+      if (data.type === "push-note") { pullNotes(); wakeHome(); }
       if (data.type === "note-open") {
         if (data.hash) location.hash = data.hash;
         if (data.id) queueReadIds([data.id]);
@@ -18613,7 +18893,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.addEventListener("online", () => {
       setOffline(false);
       if (window.ViktorychLocal) window.ViktorychLocal.flush(syncOffline);
+      wakeHome();
     });
+    window.addEventListener("pageshow", () => wakeHome());
     window.addEventListener("offline", () => setOffline(true));
     setOffline(!navigator.onLine);
     const updateGo = document.getElementById("update-go");
@@ -18729,6 +19011,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (document.visibilityState !== "visible") return;
       pullNotes();
       ensureHub();
+      wakeHome();
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") {
@@ -18744,8 +19027,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
         pullBellQueue();
         if (window.ViktorychUpdate && window.ViktorychUpdate.poke) window.ViktorychUpdate.poke();
-        refreshFeeds(false);
-        refreshLiveTimeline(false);
+        wakeHome();
         const route = parseRoute();
         if (route.name === "status" || route.name === "watch") {
           const id = String(route.id || "");
@@ -19127,7 +19409,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     clearTimeout(rememberTimer);
     rememberTimer = setTimeout(() => rememberLocal(route), 350);
   }
-  window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
+  window.addEventListener("pagehide", () => {
+    try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ }
+    try { saveHomeSnapshot(); } catch (err) { /* the previous snapshot stays */ }
+    try {
+      if (swReg && swReg.sync && swReg.sync.register) swReg.sync.register("feeds");
+    } catch (err) { /* periodic sync still covers installed Chrome and Edge */ }
+  });
 
   async function boot() {
     holdDeviceFeeds();
@@ -19171,6 +19459,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const pill = window.ViktorychLocal ? window.ViktorychLocal.readPill() : [];
     if (pill && pill.length) STATE.pendingFeed = { posts: pill, feeds: (snap && snap.feeds) || [] };
     const painted = window.ViktorychLocal && window.ViktorychLocal.wasRestored();
+    const bootTab = window.HomeFresh && window.HomeFresh.activeTab ? window.HomeFresh.activeTab(location.hash) : "foryou";
+    if ((SCROLLS["home:" + bootTab] || 0) >= 40) homeRead = true;
+    if (snap && window.HomeFresh && window.HomeFresh.stale(snap)) STATE.homeFreshBar = true;
     if (snap) {
       notePublished(snap);
       STATE.data = snap;
@@ -19178,6 +19469,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      markHome("home-snapshot-paint");
       scheduleDeviceIndex();
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
@@ -19199,11 +19491,42 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const params = new URLSearchParams(location.search);
     try {
       if (params.get("error") === "1") throw new Error("forced");
-      const loaded = lockDocDates(await fetchFeeds(false));
-      notePublished(loaded);
-      STATE.data = loaded;
+      const catalogPromise = fetchFeeds(true).then((doc) => lockDocDates(doc));
+      homeWakeAt = Date.now();
+      if (STATE.data && Array.isArray(STATE.data.posts) && STATE.data.posts.length) {
+        refreshLiveTimeline();
+        prefetchHomeTabs();
+      }
+      let catalogApplied = false;
+      const newerSnap = window.ViktorychLocal && window.ViktorychLocal.readDoc
+        ? window.ViktorychLocal.readDoc("feeds", "timeline").catch(() => null)
+        : Promise.resolve(null);
+      newerSnap.then((doc) => { if (!catalogApplied && doc) adoptSavedFeed(doc); });
+      const loaded = await catalogPromise;
+      catalogApplied = true;
+      const idbDoc = await newerSnap;
+      if (idbDoc) adoptSavedFeed(idbDoc);
+      const keepSaved = !!(loaded && loaded.missing && STATE.data && Array.isArray(STATE.data.posts) && STATE.data.posts.length);
+      if (!keepSaved) {
+        const incoming = loaded && loaded.missing ? emptyCatalog() : loaded;
+        notePublished(incoming);
+        const includeNew = arrivalMode() === "insert";
+        if (!STATE.data || !Array.isArray(STATE.data.posts)) {
+          STATE.data = withMemory(incoming);
+        } else {
+          const merged = mergeCatalog(STATE.data, incoming, includeNew);
+          STATE.data = withMemory(merged.doc);
+          if (!includeNew && merged.added.length) {
+            STATE.pendingFeed = incoming;
+            showPill(merged.added.concat(STATE.pendingLive || []));
+          } else if (includeNew) {
+            STATE.pendingFeed = null;
+            if (!(STATE.pendingLive || []).length) showPill([]);
+          }
+        }
+        saveHomeSnapshot();
+      }
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
-      saveTimelineSnap(STATE.data);
       if (window.ViktorychShorts && window.ViktorychShorts.visible()) await window.ViktorychShorts.pull();
       ensureVideoOwners();
       applyIaPreview(STATE.data);
@@ -19218,10 +19541,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           history.replaceState(null, "", location.pathname + shared);
         }
       }
-      render({ reset: true });
+      const keepY = window.scrollY >= 40 || homeRead;
+      render(keepY ? { y: window.scrollY } : { reset: true });
       scheduleDeviceIndex();
       loadNewestShard().then(() => {
-        if (applyIaPreview(STATE.data)) render({ reset: true });
+        if (applyIaPreview(STATE.data)) render(keepY ? { y: window.scrollY } : { reset: true });
         revealArchive();
       });
       const since = Number(readStored(localStorage, "seen-at") || 0);
@@ -19247,10 +19571,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         ensureHub();
       }
       if ("serviceWorker" in navigator) navigator.serviceWorker.ready.then(() => pullBellQueue()).catch(() => {});
-      hydrateTabSnapshots().then(() => refreshLiveTimeline(false));
+      hydrateTabSnapshots();
+      if (!snap || !(snap.posts || []).length) {
+        refreshLiveTimeline();
+        prefetchHomeTabs();
+      }
       if (!STATE.liveTimer) {
         STATE.liveTimer = setInterval(() => {
-          if (document.visibilityState === "visible") refreshLiveTimeline(false);
+          if (document.visibilityState === "visible") wakeHome();
         }, LIVE_REFRESH_MS);
       }
     } catch (err) {
