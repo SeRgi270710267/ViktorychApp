@@ -235,6 +235,12 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO owner_key_pace (owner_id, slot, reason, until_at, updated_at) VALUES (?, 'tiktok', 'slow', ?, ?)", a, now + 1000, now);
   await sql("INSERT INTO owner_key_pace (owner_id, slot, reason, until_at, updated_at) VALUES (?, 'youtube', 'slow', ?, ?)", o, now + 1000, now);
   await sql("INSERT INTO account_reauths (token_hash, public_id, expires_at) VALUES ('reauth-ada', ?, ?)", a, now + 1000);
+  await sql("INSERT INTO account_presence (public_id, preference, activity, seen_privacy, last_seen, last_beat, updated_at) VALUES (?, 'online', 'active', 'everyone', ?, ?, ?)", a, now, now, now);
+  await sql("INSERT INTO account_presence (public_id, preference, activity, seen_privacy, last_seen, last_beat, updated_at) VALUES (?, 'online', 'active', 'everyone', ?, ?, ?)", b, now, now, now);
+  await sql("INSERT INTO account_status (public_id, emoji, text, clear_at, updated_at) VALUES (?, '✨', 'here', 0, ?)", a, now);
+  await sql("INSERT INTO account_status (public_id, emoji, text, clear_at, updated_at) VALUES (?, '✨', 'here', 0, ?)", b, now);
+  await sql("INSERT INTO channel_tickets (token_hash, public_id, expires_at) VALUES ('ticket-ada', ?, ?)", a, now + 1000);
+  await sql("INSERT INTO channel_tickets (token_hash, public_id, expires_at) VALUES ('ticket-bee', ?, ?)", b, now + 1000);
   await sql("INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, 'note-ada', 'post', ?, 0, '', 'ada', 'note-ada', '{}', ?, 0)", a, now, now);
   await sql("INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, 'note-bee', 'post', ?, 0, '', 'bee', 'note-bee', '{}', ?, 0)", b, now, now);
   await sql("INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at) VALUES (?, 0, '', 0, ?)", a, now);
@@ -243,8 +249,6 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO notification_bells (public_id, feed_key, mode, since, handle, name, ids, handles, updated_at, deleted_at) VALUES (?, 'x:bee', 'all', ?, 'bee', 'Bee', '[]', '[]', ?, 0)", b, now, now);
   await sql("INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at) VALUES (?, 'push-ada', 'https://push.example/ada', 'p', 'a', '', ?, ?, 0)", a, now, now);
   await sql("INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at) VALUES (?, 'push-bee', 'https://push.example/bee', 'p', 'a', '', ?, ?, 0)", b, now, now);
-  await sql("INSERT INTO hub_tickets (token_hash, public_id, expires_at) VALUES ('ticket-ada', ?, ?)", a, now + 1000);
-  await sql("INSERT INTO hub_tickets (token_hash, public_id, expires_at) VALUES ('ticket-bee', ?, ?)", b, now + 1000);
   await sql("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, 'note-ada', ?)", a, now);
   await sql("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, 'note-bee', ?)", b, now);
   await sql("INSERT INTO push_vapid (id, public_key, private_jwk, created_at) VALUES (1, 'pub', 'priv', ?)", now);
@@ -326,6 +330,15 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(dumped.includes(ada.accountNumber), false);
 
   assert.deepEqual(await leftovers(a, "ada_wipe"), []);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_presence WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_status WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM channel_tickets WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM notifications WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM push_subscriptions WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM notifications WHERE public_id = ?", b), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM push_vapid WHERE id = 1"), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_presence WHERE public_id = ?", b), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_status WHERE public_id = ?", b), 1);
   assert.ok(await one("SELECT public_id FROM accounts WHERE public_id = ?", b));
   assert.ok(await one("SELECT public_id FROM accounts WHERE public_id = ?", o));
   const beeSession = await call("/v1/session", { ip: "198.51.100.32", token: bee.token });

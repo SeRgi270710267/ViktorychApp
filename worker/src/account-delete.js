@@ -3,7 +3,7 @@
    resumes anything left behind. After the job is done, the only lasting
    public record is a salted hash of the account id.
 
-   Tables audited against migrations 0001–0018 and the runtime schema:
+   Tables audited against migrations 0001–0019 and the runtime schema:
    accounts, sessions, sync_state (feed settings, groups, drafts, likes,
    bookmarks, resume and history), rate_limits, account_reposts,
    account_follows (both directions), drive_vault, drive_items, drive_chunks,
@@ -11,12 +11,15 @@
    account_friend_requests, account_friends, account_federation, ap_followers,
    account_identities, identity_challenges, vault_configs, vault_items,
    vault_shares, owner_keys, owner_key_items, owner_key_pace, account_reauths,
-   notifications, notification_state, notification_bells, push_subscriptions,
-   hub_tickets, push_log. push_vapid is the one global key and has no account
-   column. telegram_files is a shared media index with no account column, so
-   it is left alone. There is no invites table. */
+   account_presence, account_status, channel_tickets, notifications,
+   notification_state, notification_bells, push_subscriptions, push_log.
+   push_vapid is the one global key and has no account column. The account
+   channel object is wiped in the same database step. telegram_files is a
+   shared media index with no account column, so it is left alone. There is
+   no invites table. */
 
 import { OWNER_HANDLE, inspectHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
+import { wipeAccountChannel } from "./channel.js";
 
 const OWNER_GITHUB = "SeRgi270710267";
 const encoder = new TextEncoder();
@@ -459,6 +462,8 @@ async function runJob(env, job, opts) {
     await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId).run();
     steps.sessions = true;
     await wipeDatabase(env, job);
+    try { await wipeAccountChannel(env, publicId); }
+    catch (err) { /* the rows are already gone; the next run closes the object */ }
     steps.database = true;
     await saveJob(env, job, steps, "running", "");
   }

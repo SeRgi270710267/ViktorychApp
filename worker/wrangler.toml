@@ -38,19 +38,20 @@ migrations_dir = "migrations"
 binding = "DATA"
 bucket_name = "viktorych-data"
 
-# One SQLite Durable Object per account. Topics share this class.
-# notifications is this worker. presence is reserved. Do not add a second class.
-[[durable_objects.bindings]]
-name = "ACCOUNT_HUB"
-class_name = "AccountHub"
-
-[[migrations]]
-tag = "v1-account-hub"
-new_sqlite_classes = ["AccountHub"]
-
 # Free cron. Every minute it watches the owner's TikTok handles and dispatches
 # tiktok-record.yml the moment a live starts. GitHub's own `*/5` schedule is
 # only a fallback: it often runs every two to six hours.
 # The Discord mirror still runs on the quarter hour.
 [triggers]
 crons = ["* * * * *"]
+
+# One hibernating object per account. Presence and notifications publish
+# into it by topic. Sockets stay open only while a tab is visible.
+# Do not add a second class or binding.
+[[durable_objects.bindings]]
+name = "ACCOUNT_CHANNEL"
+class_name = "AccountChannel"
+
+[[migrations]]
+tag = "v1-account-channel"
+new_sqlite_classes = ["AccountChannel"]

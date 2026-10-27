@@ -139,6 +139,7 @@
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="presence.css">
   <link rel="stylesheet" href="translate.css">
   <link rel="stylesheet" href="people.css">
   <link rel="stylesheet" href="tv.css">
@@ -193,6 +194,11 @@
         if (mode === "auto") mode = matchMedia("(prefers-color-scheme: light)").matches ? "default" : "lightsout";
         if (mode !== "default" && mode !== "dim" && mode !== "lightsout") mode = "lightsout";
         document.documentElement.setAttribute("data-theme", mode);
+        var savedNav = raw ? JSON.parse(raw) : {};
+        var navLayout = savedNav.navLayout === "bar" ? "bar" : "auto";
+        document.documentElement.setAttribute("data-nav-layout", navLayout);
+        if (navLayout === "bar" && savedNav.navLayoutLand === true) document.documentElement.setAttribute("data-nav-bar-land", "1");
+        else document.documentElement.removeAttribute("data-nav-bar-land");
         var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
         var metas = document.querySelectorAll('meta[name="theme-color"]');
         for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
@@ -211,7 +217,7 @@
   <div id="hover"></div>
   <div id="x-tooltip" class="x-tooltip" role="tooltip" aria-hidden="true"></div>
   <div id="pull" aria-hidden="true"><span class="spin"></span></div>
-  <button id="new-posts" type="button" hidden data-i18n="New posts">New posts</button>
+  <button id="new-posts" type="button" hidden></button>
   <div id="offline" hidden role="status" data-i18n="Offline - showing saved">Offline - showing saved</div>
   <div id="viewer" hidden></div>
   <div id="stories" hidden role="dialog" aria-modal="true" data-i18n-aria="Stories" aria-label="Stories"></div>
@@ -226,6 +232,7 @@
   <script src="i18n/es.js" defer></script>
   <script src="marks.js" defer></script>
   <script src="translate.js" defer></script>
+  <script src="shared/feed-order.js" type="module"></script>
   <script src="people.js" defer></script>
   <script src="tv.js" defer></script>
   <script src="split.js" defer></script>
@@ -239,6 +246,7 @@
   <script src="shared/handle-skeleton.js" type="module"></script>
   <script src="shared/reposts.js" type="module"></script>
   <script src="shared/lazy-modules.js" defer></script>
+  <script src="presence.js" type="module"></script>
   <script src="accounts.js" defer></script>
   <script src="owner-keys.js" defer></script>
   <script src="yt-player.js" defer></script>

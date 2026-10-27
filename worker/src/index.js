@@ -18,11 +18,10 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
-import { AccountHub } from "./account-hub.js";
-import { NOTIFICATION_SCHEMA, handleNotificationRoutes, handleHubSocket, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
+import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
-
-export { AccountHub };
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -61,7 +60,7 @@ function json(status, body, extra) {
 function withCors(request, env, response) {
   // A WebSocket acceptance is status 101. Rebuilding that response is illegal,
   // and the handshake does not use CORS. A foreign Origin is refused above.
-  if (response.status === 101 || response.webSocket) return response;
+  if (response && (response.status === 101 || response.webSocket)) return response;
   const url = new URL(request.url);
   if (isPublicFederationRoute(url.pathname)) return response;
   const origin = request.headers.get("Origin");
@@ -178,7 +177,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -684,7 +683,7 @@ async function handleLogout(request, env, all) {
   if (all) {
     await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(row.public_id).run();
     await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ?").bind(row.public_id).run();
-    await env.DB.prepare("DELETE FROM hub_tickets WHERE public_id = ?").bind(row.public_id).run();
+    await env.DB.prepare("DELETE FROM channel_tickets WHERE public_id = ?").bind(row.public_id).run();
   } else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
   return json(200, { ok: true });
 }
@@ -827,6 +826,33 @@ async function handleProfilePatch(request, env) {
   return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
+const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
+
+function cleanBottomNavSync(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const order = [];
+  const seen = new Set();
+  (Array.isArray(raw.order) ? raw.order : []).forEach((id) => {
+    if (typeof id !== "string" || BOTTOM_NAV_SYNC_IDS.indexOf(id) < 0 || seen.has(id)) return;
+    seen.add(id);
+    order.push(id);
+  });
+  BOTTOM_NAV_SYNC_IDS.forEach((id) => { if (!seen.has(id)) order.push(id); });
+  const hiddenSet = new Set();
+  (Array.isArray(raw.hidden) ? raw.hidden : []).forEach((id) => {
+    if (id !== "home" && BOTTOM_NAV_SYNC_IDS.indexOf(id) >= 0) hiddenSet.add(id);
+  });
+  let visible = order.filter((id) => !hiddenSet.has(id));
+  if (visible.length > 6) visible.slice(6).forEach((id) => { if (id !== "home") hiddenSet.add(id); });
+  visible = order.filter((id) => !hiddenSet.has(id));
+  for (let i = 0; i < order.length && visible.length < 2; i++) {
+    if (!hiddenSet.has(order[i])) continue;
+    hiddenSet.delete(order[i]);
+    visible.push(order[i]);
+  }
+  return { order, hidden: order.filter((id) => hiddenSet.has(id)) };
+}
+
 async function handleSyncGet(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
@@ -868,6 +894,29 @@ async function handleSyncPut(request, env) {
   payload.history = cleanHistoryList(rows, payload.historyCut);
   payload.showPictures = cleanFaceChoice(payload.showPictures, previous && previous.showPictures);
   payload.showBanners = cleanFaceChoice(payload.showBanners, previous && previous.showBanners);
+  if (payload.bottomNav != null) {
+    const cleanedNav = cleanBottomNavSync(payload.bottomNav);
+    if (cleanedNav) payload.bottomNav = cleanedNav;
+    else delete payload.bottomNav;
+  }
+  if (payload.bottomNavCustom != null) payload.bottomNavCustom = payload.bottomNavCustom === true;
+  if (payload.navLayoutSync === true) {
+    payload.navLayout = payload.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = payload.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else if (payload.navLayoutSync === false) {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  } else if (previous && previous.navLayoutSync === true) {
+    payload.navLayout = previous.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = previous.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  }
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);
@@ -4056,12 +4105,12 @@ async function handleFollowImport(request, env) {
   if (gate.error) return gate.error;
   const paced = await rateHit(env, "follow-import:" + gate.row.public_id, 8, 60 * 60 * 1000);
   if (!paced.ok) return limited(paced);
-  const body = await readJson(request, 40000);
+  const body = await readJson(request, 500000);
   if (body.error) return json(400, { error: body.error });
   const incoming = Array.isArray(body.ids) ? body.ids : null;
   if (!incoming) return json(400, { error: "bad_follow" });
   const ids = [];
-  for (let i = 0; i < incoming.length && ids.length < 400; i++) {
+  for (let i = 0; i < incoming.length && ids.length < 5000; i++) {
     const id = cleanFollowId(incoming[i]);
     if (!id || id === "app:" + gate.row.public_id || ids.indexOf(id) >= 0) continue;
     if (id.indexOf("app:") === 0) {
@@ -4078,6 +4127,21 @@ async function handleFollowImport(request, env) {
   }
   const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", gate.row.public_id);
   return json(200, { ok: true, followingCount });
+}
+
+async function listFollowIds(env, followerId) {
+  const ids = [];
+  const page = 500;
+  const cap = 5000;
+  for (let offset = 0; ids.length < cap; offset += page) {
+    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC, target_id ASC LIMIT ? OFFSET ?").bind(followerId, page, offset).all();
+    const rows = (listed && listed.results) || [];
+    for (let i = 0; i < rows.length && ids.length < cap; i++) {
+      if (rows[i] && rows[i].target_id) ids.push(rows[i].target_id);
+    }
+    if (rows.length < page) break;
+  }
+  return ids;
 }
 
 async function handleFollowGet(request, env, url) {
@@ -4109,8 +4173,7 @@ async function handleFollowGet(request, env, url) {
     body.isPrivate = isPrivate;
   }
   if (!tab && subject === "app:" + gate.row.public_id) {
-    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC LIMIT 500").bind(gate.row.public_id).all();
-    body.ids = ((listed && listed.results) || []).map((row) => row.target_id);
+    body.ids = await listFollowIds(env, gate.row.public_id);
     return json(200, body);
   }
   if (!tab) return json(200, body);
@@ -4448,20 +4511,25 @@ async function route(request, env, ctx) {
     return handleIdentitiesRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
   }
 
+  if (path === "/v1/presence") {
+    return handlePresence(request, env, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+  if (path === "/v1/channel" || path === "/v1/channel/ticket") {
+    return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
+  }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
     return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
 
   }
-  if (path === "/v1/hub" && String(request.headers.get("Upgrade") || "").toLowerCase() === "websocket") {
-    return handleHubSocket(request, env, { json, rateHit, limited });
-  }
-  if (path === "/v1/notifications" || path === "/v1/notifications/read" || path === "/v1/push/vapid" || path === "/v1/push/subscribe" || path === "/v1/hub/ticket") {
+  if (path === "/v1/notifications" || path === "/v1/notifications/read" || path === "/v1/push/vapid" || path === "/v1/push/subscribe") {
     const handled = await handleNotificationRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
     if (handled) return handled;
   }
   return json(404, { error: "not_found" });
 }
+
+export { AccountChannel };
 
 export default {
   async fetch(request, env, ctx) {
@@ -4478,7 +4546,7 @@ export default {
   },
   async scheduled(event, env, ctx) {
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));

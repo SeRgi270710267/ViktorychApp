@@ -16,7 +16,7 @@ function workerOptions() {
     d1Databases: ["DB"],
     r2Buckets: ["DATA"],
     durableObjects: {
-      ACCOUNT_HUB: { className: "AccountHub", useSQLite: true }
+      ACCOUNT_CHANNEL: { className: "AccountChannel", useSQLite: true }
     },
     bindings: {
       ACCOUNT_PEPPER: "pepper-test",
@@ -168,10 +168,10 @@ test("two devices share notes, read state, and the account channel", async () =>
   assert.equal(seen.body.items[0].id, "post:cross-device");
   assert.equal(seen.body.unread, 1);
 
-  const ticket = await call("/v1/hub/ticket", { method: "POST", ip: "203.0.113.50", token: ada.token });
+  const ticket = await call("/v1/channel/ticket", { method: "POST", ip: "203.0.113.50", token: ada.token });
   if (ticket.status !== 200 || !ticket.body || !ticket.body.ticket) throw new Error("ticket failed");
-  const opened = await mf.dispatchFetch("https://accounts.test/v1/hub?ticket=" + encodeURIComponent(ticket.body.ticket), {
-    headers: { Upgrade: "websocket" }
+  const opened = await mf.dispatchFetch("https://accounts.test/v1/channel?ticket=" + encodeURIComponent(ticket.body.ticket), {
+    headers: { Upgrade: "websocket", Connection: "Upgrade" }
   });
   assert.equal(opened.status, 101);
   const ws = opened.webSocket;
@@ -184,7 +184,8 @@ test("two devices share notes, read state, and the account channel", async () =>
   });
   ws.send(JSON.stringify({ op: "subscribe", topics: ["notifications", "presence"] }));
   ws.send(JSON.stringify({ op: "event", topic: "notifications", data: { type: "forged", unread: 9 } }));
-  await waitFor(() => messages.some((msg) => msg.op === "ready" && (msg.topics || []).indexOf("notifications") >= 0 && (msg.topics || []).indexOf("presence") >= 0));
+  await waitFor(() => messages.some((msg) => msg.op === "ready" && msg.publicId === ada.account.publicId));
+  await waitFor(() => messages.some((msg) => msg.op === "ok" && msg.for === "subscribe" && (msg.topics || []).indexOf("notifications") >= 0 && (msg.topics || []).indexOf("presence") >= 0));
 
   const read = await call("/v1/notifications/read", {
     method: "POST",
@@ -225,23 +226,23 @@ test("two devices share notes, read state, and the account channel", async () =>
   const lives = await one("SELECT COUNT(*) AS n FROM notifications WHERE public_id = ? AND kind = 'live'", ada.account.publicId);
   assert.equal(Number(lives.n), 1);
 
-  const once = await call("/v1/hub/ticket", { method: "POST", ip: "203.0.113.55", token: bea.token });
+  const once = await call("/v1/channel/ticket", { method: "POST", ip: "203.0.113.55", token: bea.token });
   if (once.status !== 200 || !once.body || !once.body.ticket) throw new Error("ticket failed");
-  const used = await mf.dispatchFetch("https://accounts.test/v1/hub?ticket=" + encodeURIComponent(once.body.ticket), {
-    headers: { Upgrade: "websocket" }
+  const used = await mf.dispatchFetch("https://accounts.test/v1/channel?ticket=" + encodeURIComponent(once.body.ticket), {
+    headers: { Upgrade: "websocket", Connection: "Upgrade" }
   });
   assert.equal(used.status, 101);
   if (used.webSocket) used.webSocket.accept();
-  const reused = await mf.dispatchFetch("https://accounts.test/v1/hub?ticket=" + encodeURIComponent(once.body.ticket), {
-    headers: { Upgrade: "websocket" }
+  const reused = await mf.dispatchFetch("https://accounts.test/v1/channel?ticket=" + encodeURIComponent(once.body.ticket), {
+    headers: { Upgrade: "websocket", Connection: "Upgrade" }
   });
   assert.equal(reused.status, 401);
 
-  const expiring = await call("/v1/hub/ticket", { method: "POST", ip: "203.0.113.56", token: bea.token });
+  const expiring = await call("/v1/channel/ticket", { method: "POST", ip: "203.0.113.56", token: bea.token });
   if (expiring.status !== 200 || !expiring.body || !expiring.body.ticket) throw new Error("ticket failed");
-  await one("UPDATE hub_tickets SET expires_at = 1 WHERE public_id = ?", bea.account.publicId);
-  const expired = await mf.dispatchFetch("https://accounts.test/v1/hub?ticket=" + encodeURIComponent(expiring.body.ticket), {
-    headers: { Upgrade: "websocket" }
+  await one("UPDATE channel_tickets SET expires_at = 1 WHERE public_id = ?", bea.account.publicId);
+  const expired = await mf.dispatchFetch("https://accounts.test/v1/channel?ticket=" + encodeURIComponent(expiring.body.ticket), {
+    headers: { Upgrade: "websocket", Connection: "Upgrade" }
   });
   assert.equal(expired.status, 401);
 

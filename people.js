@@ -193,12 +193,14 @@
     const out = [];
     rows.forEach((post) => {
       if (!post) return;
-      const key = (post.platform || "") + ":" + (post.kind === "repost" ? post.id : (post.statusId || post.id));
+      const order = typeof window !== "undefined" ? window.FeedOrder : null;
+      const key = order ? order.key(post) : (post.platform || "") + ":" + (post.kind === "repost" ? post.id : (post.statusId || post.id));
       if (seen.has(key)) return;
       seen.add(key);
       out.push(post);
     });
-    out.sort((a, b) => stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0);
+    const order = typeof window !== "undefined" ? window.FeedOrder : null;
+    out.sort((a, b) => order ? order.compare(a, b) : (stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0));
     return out;
   }
 

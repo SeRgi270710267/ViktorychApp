@@ -1,0 +1,45 @@
+name: Navigation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "app.js"
+      - "styles.css"
+      - "accounts.js"
+      - "i18n/**"
+      - "scripts/bottom_nav_test.mjs"
+      - "scripts/nav_custom_test.js"
+      - "worker/**"
+      - ".github/workflows/nav-custom.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "app.js"
+      - "styles.css"
+      - "accounts.js"
+      - "i18n/**"
+      - "scripts/bottom_nav_test.mjs"
+      - "scripts/nav_custom_test.js"
+      - "worker/**"
+      - ".github/workflows/nav-custom.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  nav:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+      - name: Sidebar customization
+        run: node scripts/nav_custom_test.js
+      - name: Bottom navigation and phone landscape
+        run: node scripts/bottom_nav_test.mjs
