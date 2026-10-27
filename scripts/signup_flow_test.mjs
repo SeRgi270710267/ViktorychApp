@@ -125,11 +125,27 @@ async function openFresh(browser, viewport) {
 
 async function gotoFresh(page) {
   const started = Date.now();
-  await page.goto(pageOrigin + "/", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/");
   await page.getByRole("button", { name: "Create account" }).first().waitFor({ timeout: 8000 });
   const firstScreen = Date.now() - started;
   await page.waitForFunction(() => window.ViktorychAccounts && window.ViktorychAccounts.blocking, null, { timeout: 20000 });
   return firstScreen;
+}
+
+async function openPage(page, path) {
+  const url = pageOrigin + path;
+  let last = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded" });
+      return;
+    } catch (err) {
+      last = err;
+      const text = String(err && err.message || err);
+      if (attempt === 2 || text.indexOf("interrupted by another navigation") < 0) throw err;
+    }
+  }
+  throw last;
 }
 
 async function layoutPass(page, viewport) {
@@ -189,6 +205,17 @@ async function layoutPass(page, viewport) {
   await page.waitForFunction(() => !document.querySelector(".acct-modal"));
   await page.getByRole("button", { name: "Sign in" }).first().click();
   await page.getByRole("heading", { name: "Sign in to ViktorychApp" }).waitFor();
+  const loginFields = await page.evaluate(() => {
+    const form = document.getElementById("acct-login-form");
+    const user = document.getElementById("acct-login-user");
+    const pass = document.getElementById("acct-accountNumber");
+    return {
+      form: !!(form && form.tagName === "FORM"),
+      user: !!(user && user.getAttribute("autocomplete") === "username" && getComputedStyle(user).display !== "none"),
+      pass: !!(pass && pass.getAttribute("autocomplete") === "current-password" && pass.type === "password" && getComputedStyle(pass).display !== "none")
+    };
+  });
+  if (!loginFields.form || !loginFields.user || !loginFields.pass) notes.push(viewport.name + ": sign-in is not a password-manager form");
   const resetCopy = await page.locator(".acct-modal").innerText();
   if (!/no password to reset/.test(resetCopy)) notes.push(viewport.name + ": password-reset explanation missing");
   await page.locator("#acct-accountNumber").fill("1234");
@@ -245,6 +272,12 @@ async function firstRun(page) {
   await page.locator("#acct-displayName").fill("Example Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
+  const honeypot = await page.evaluate(() => {
+    const el = document.querySelector('#account-layer input[name="fax"]');
+    if (!el) return "missing";
+    return getComputedStyle(el).display;
+  });
+  if (honeypot === "none" || honeypot === "missing") notes.push("honeypot is missing or hidden with display none");
   if (!(await typeHandle(page))) notes.push("signup handle was not filled");
   const next = page.locator(".acct-modal [data-acct='next']");
   await next.click();
@@ -255,6 +288,20 @@ async function firstRun(page) {
     return notes;
   }
   await page.unroute("**/v1/signup");
+  const manager = await page.evaluate(() => {
+    const form = document.getElementById("acct-save-form");
+    const user = document.getElementById("acct-username");
+    const pass = document.getElementById("acct-new-password");
+    const codes = document.querySelectorAll("[data-recovery-code]");
+    return {
+      form: !!(form && form.tagName === "FORM"),
+      user: !!(user && user.getAttribute("autocomplete") === "username" && user.name === "username" && user.value),
+      pass: !!(pass && pass.getAttribute("autocomplete") === "new-password" && pass.name === "password" && pass.type === "password"),
+      shown: !!user && !!pass && getComputedStyle(user).display !== "none" && getComputedStyle(pass).display !== "none",
+      codes: codes.length
+    };
+  });
+  if (!manager.form || !manager.user || !manager.pass || !manager.shown || manager.codes !== 10) notes.push("password manager fields or recovery codes are missing");
   if (!(await page.locator(".acct-modal [data-acct='saved']").isDisabled())) notes.push("next is enabled before the number is saved");
   const copied = await page.evaluate(async () => {
     document.querySelector("[data-acct='copy']").click();
@@ -278,6 +325,8 @@ async function firstRun(page) {
   await page.locator(".acct-modal input[name='saved']").check();
   await page.locator(".acct-modal [data-acct='saved']").click();
   await page.waitForFunction(() => document.documentElement.getAttribute("data-wall") !== "1", null, { timeout: 20000 });
+  const welcome = page.locator("[data-act='welcome-skip']");
+  if (await welcome.count()) await welcome.click();
   const timeline = await page.getByText("No posts yet").first().waitFor({ timeout: 20000 }).then(() => true, () => false);
   if (!timeline) {
     const state = await page.evaluate(() => {
@@ -303,11 +352,11 @@ async function firstRun(page) {
     return /Add a photo and bio/.test(html);
   }, null, { timeout: 15000 }).then(() => true, () => false);
   if (!profile) notes.push("own profile empty state is misleading");
-  await page.goto(pageOrigin + "/#/settings/device", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/device");
   const balanced = page.getByRole("radio", { name: "Balanced" });
   await balanced.waitFor({ timeout: 15000 });
   if ((await balanced.getAttribute("aria-checked")) !== "true") notes.push("device performance is not Balanced");
-  await page.goto(pageOrigin + "/#/settings/privacy", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/privacy");
   await page.getByRole("heading", { name: "Privacy and safety" }).waitFor();
   const privacy = await page.evaluate(() => {
     const on = (key) => {
@@ -321,30 +370,32 @@ async function firstRun(page) {
   });
   const expected = { embed: "false", webrtc: "true", referrer: "true", trackers: "true", zero: "false", fingerprint: "true" };
   if (JSON.stringify(privacy) !== JSON.stringify(expected)) notes.push("privacy defaults differ");
-  await page.goto(pageOrigin + "/#/settings/notifications", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/notifications");
   await page.getByRole("button", { name: "Notify me about new posts" }).click();
   await page.getByRole("button", { name: "Notifications on" }).waitFor({ timeout: 10000 });
   await page.locator("[data-act='compose']:visible").first().click();
   await page.locator("#compose-text").waitFor();
   if ((await page.locator("#compose-text").getAttribute("aria-describedby")) !== "compose-note") notes.push("composer does not explain that it stays on device");
   await page.locator("#compose-text").fill("A local note from the first run.");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.getElementById("compose-text"));
+  await page.locator("[data-act='compose']:visible").first().click();
+  await page.waitForFunction(() => (document.querySelector("#compose-text") && document.querySelector("#compose-text").value || "").indexOf("local note") >= 0);
   await page.locator("#compose-post").click();
-  await page.getByText("Saved on this device.").first().waitFor({ timeout: 10000 });
+  await page.getByText("Your post was sent.").first().waitFor({ timeout: 15000 });
   await page.waitForFunction(() => {
     const local = window.ViktorychLocal;
     if (!local || !local.readDoc) return false;
-    return local.readDoc("drafts", "compose").then((saved) => !!(saved && String(saved.text || "").indexOf("local note") >= 0));
+    return local.readDoc("drafts", "compose").then((saved) => !saved || String(saved.text || "").indexOf("local note") < 0);
   });
-  await page.locator("[data-act='compose']:visible").first().click();
-  await page.waitForFunction(() => (document.querySelector("#compose-text") && document.querySelector("#compose-text").value || "").indexOf("local note") >= 0);
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.getElementById("compose-text"));
-  await page.goto(pageOrigin + "/#/settings/resources", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/resources");
   await page.getByRole("button", { name: "Install app" }).click();
   await page.getByRole("heading", { name: "Install app" }).waitFor();
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".modal"));
-  await page.goto(pageOrigin + "/#/settings", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings");
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Sign in" }).first().click();
@@ -376,7 +427,7 @@ async function firstRun(page) {
     notes.push("sign-in did not open the app (" + loginStatus + ")");
     return notes;
   }
-  await page.goto(pageOrigin + "/#/settings", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings");
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Create account" }).first().click();
@@ -415,6 +466,7 @@ worker = new Miniflare({
   modulesRules: [{ type: "ESModule", include: ["**/*.js"], fallthrough: true }],
   bindings: {
     ACCOUNT_PEPPER: "local-test-pepper",
+    SIGNUP_GUARD: "on",
     OWNER_CLAIM_CODE: "local-test-claim",
     OWNER_HANDLE: "fixtureowner",
     ALLOWED_ORIGINS: pageOrigin,

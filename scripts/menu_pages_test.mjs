@@ -301,7 +301,20 @@ async function go(page, hash, view) {
   await sleep(40);
 }
 
+async function dismissWelcome(page) {
+  const skip = page.locator(".welcome-sheet [data-act='welcome-skip']").locator("visible=true");
+  if (!(await skip.count())) return;
+  try {
+    await skip.first().click({ trial: true, timeout: 4000 });
+    await skip.first().click({ timeout: 4000 });
+  } catch (err) {
+    fail("welcome sheet is not tappable " + reasonOf(err));
+  }
+  await page.waitForFunction(() => !document.querySelector(".welcome-sheet"), null, { timeout: 4000 });
+}
+
 async function checkView(page, size, view) {
+  await dismissWelcome(page);
   await page.evaluate(() => {
     window.focus();
     if (window.ViktorychPrivacy) {

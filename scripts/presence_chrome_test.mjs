@@ -62,6 +62,50 @@ function chromeBin() {
   return process.env.CHROME || which("google-chrome") || which("google-chrome-stable") || which("chromium") || which("chromium-browser");
 }
 
+async function launchChrome(bin) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const profile = mkdtempSync(join(tmpdir(), "presence-chrome-"));
+    const debugPort = 9400 + Math.floor(Math.random() * 500);
+    const child = spawn(bin, [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--remote-allow-origins=*",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--remote-debugging-port=" + debugPort,
+      "--user-data-dir=" + profile,
+      "about:blank"
+    ], { stdio: "ignore" });
+    const started = Date.now();
+    let version = null;
+    while (Date.now() - started < 20000) {
+      if (child.exitCode != null) break;
+      const ports = [String(debugPort)];
+      try {
+        const active = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0].trim();
+        if (active && ports.indexOf(active) < 0) ports.push(active);
+      } catch (err) { /* port file not written yet */ }
+      for (const port of ports) {
+        try {
+          const res = await fetch("http://127.0.0.1:" + port + "/json/version");
+          if (res.ok) {
+            const body = await res.json();
+            if (body && body.webSocketDebuggerUrl) { version = body; break; }
+          }
+        } catch (err) { /* debugger not up yet */ }
+      }
+      if (version) return { child, profile, version };
+      await new Promise((done) => setTimeout(done, 200));
+    }
+    try { child.kill("SIGKILL"); } catch (err) { /* already gone */ }
+    await new Promise((done) => setTimeout(done, 200));
+    try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch (err) { /* the profile can still be busy */ }
+  }
+  throw new Error("chrome");
+}
+
 const pageHtml = `<!doctype html>
 <html>
 <head>
@@ -163,27 +207,11 @@ async function main() {
   if (!bin) throw new Error("chrome");
   const live = await startServer();
   const port = live.address().port;
-  const profile = mkdtempSync(join(tmpdir(), "presence-chrome-"));
-  const debugPort = 9400 + Math.floor(Math.random() * 200);
-  const child = spawn(bin, [
-    "--headless=new",
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--remote-debugging-port=" + debugPort,
-    "--user-data-dir=" + profile,
-    "about:blank"
-  ], { stdio: "ignore" });
+  const launched = await launchChrome(bin);
+  const child = launched.child;
+  const profile = launched.profile;
+  const version = launched.version;
   try {
-    let version = null;
-    const started = Date.now();
-    while (Date.now() - started < 15000) {
-      try {
-        const res = await fetch("http://127.0.0.1:" + debugPort + "/json/version");
-        if (res.ok) { version = await res.json(); break; }
-      } catch (err) { /* chrome is still starting */ }
-      await new Promise((done) => setTimeout(done, 200));
-    }
-    if (!version) throw new Error("chrome");
     const browser = new WebSocket(version.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       browser.addEventListener("open", resolve);

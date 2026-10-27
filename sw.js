@@ -395,7 +395,7 @@ function isOwnedTelegram(url) {
 }
 
 function isAccountMedia(url) {
-  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname);
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname) || /\/v1\/media\/view\/[a-f0-9]{32}$/.test(url.pathname);
 }
 
 function privateData(url) {
@@ -509,7 +509,7 @@ function mirrorBases() {
   return api.bases(here, MIRROR_GITHUB, MIRROR_PAGES).filter((base) => base !== here);
 }
 
-async function mirrorAlternate(url) {
+async function mirrorAlternate(url, signal) {
   const api = mirrorApi();
   const rel = mirrorRelative(url);
   if (!api || !rel) return null;
@@ -517,10 +517,24 @@ async function mirrorAlternate(url) {
   for (let i = 0; i < bases.length; i++) {
     const next = api.rewrite(bases[i], rel);
     if (!next) continue;
+    // A dead mirror must not pin the shell download. The caller's signal
+    // (the per-file timer) aborts this too.
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), 5000);
+    const onAbort = () => timeout.abort();
+    if (signal) {
+      if (signal.aborted) timeout.abort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+    }
     try {
-      const res = await fetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", redirect: "follow" });
+      if (timeout.signal.aborted) continue;
+      const res = await fetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", redirect: "follow", signal: timeout.signal });
       if (res && res.ok && res.type !== "opaque") return res;
     } catch (err) { /* the next origin can still have the file */ }
+    finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+    }
   }
   return null;
 }
@@ -539,7 +553,7 @@ async function mirrorFetch(request, init) {
   if (api && request && request.method === "GET" && api.failoverStatus(status)) {
     let url = null;
     try { url = new URL(request.url); } catch (err) { url = null; }
-    const alt = url ? await mirrorAlternate(url) : null;
+    const alt = url ? await mirrorAlternate(url, request && request.signal) : null;
     if (alt) return alt;
   }
   if (failed) throw new Error("mirror");
@@ -941,7 +955,7 @@ async function networkFirstTimeout(request, cacheName, timeoutMs) {
       await putPacked(cache, request, res);
       return res;
     }
-    const alt = await mirrorAlternate(new URL(request.url));
+    const alt = await mirrorAlternate(new URL(request.url), controller.signal);
     if (alt && alt.ok) {
       try { await putPacked(cache, request, alt); } catch (putErr) { /* the response is still usable */ }
       return alt;
@@ -1202,6 +1216,21 @@ async function runApply() {
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "drop-profile-media") {
+    event.waitUntil((async () => {
+      const names = await caches.keys();
+      await Promise.all(names.map(async (name) => {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        await Promise.all(keys.map((req) => {
+          const path = new URL(req.url).pathname;
+          if (/\/v1\/media\/(?:view\/[a-f0-9]{32}|(?:avatars|banners)\/\d{12}\/)/.test(path)) return cache.delete(req);
+          return Promise.resolve(false);
+        }));
+      }));
+    })());
+    return;
+  }
   if (data.type === "peer-flag") {
     peerOn = !!data.on;
     return;
@@ -1312,7 +1341,12 @@ self.addEventListener("message", (event) => {
   }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
   if (data.type === "cache-bookmark" || data.type === "cache-media") event.waitUntil(cacheBookmark(data.urls));
+  if (data.type === "shorts-lock") {
+    rememberShortsLock(data);
+    return;
+  }
   if (data.type === "seen" || data.type === "state") {
+    rememberShortsLock(data);
     event.waitUntil(idb().then(async (db) => {
       await idbSet(db, "seen-at", data.type === "seen" ? Date.now() : Number(data.seen || 0));
       if (Array.isArray(data.follows)) await idbSet(db, "follows", data.follows);
@@ -1428,7 +1462,7 @@ self.addEventListener("fetch", (event) => {
       else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
       const origin = request.headers.get("origin");
       if (origin) headers.set("origin", origin);
-      if (isOwnerPlay(url) || self.ViktorychStorage.categoryOf(url.href) === "") {
+      if (isAccountMedia(url) || isOwnerPlay(url) || self.ViktorychStorage.categoryOf(url.href) === "") {
         const range = request.headers.get("Range");
         if (range) headers.set("Range", range);
         return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
@@ -1727,6 +1761,28 @@ async function swNoteHidden(note) {
 }
 
 let bellChain = Promise.resolve();
+let shortsLocked = true;
+const shortsUnlocked = new Set();
+
+function shortsHidden(note) {
+  if (!note || note.platform !== "tiktok") return false;
+  if (!shortsLocked) return false;
+  const handle = String(note.handle || (note.titleVars && note.titleVars.handle) || "").replace(/^@/, "").toLowerCase();
+  return !shortsUnlocked.has(handle);
+}
+
+function rememberShortsLock(data) {
+  if (!data || typeof data !== "object") return;
+  if (typeof data.shortsLocked === "boolean") shortsLocked = data.shortsLocked;
+  else if (data.type === "shorts-lock") shortsLocked = data.locked !== false;
+  const list = Array.isArray(data.shortsUnlocked) ? data.shortsUnlocked : (data.type === "shorts-lock" && Array.isArray(data.unlocked) ? data.unlocked : null);
+  if (!list) return;
+  shortsUnlocked.clear();
+  list.forEach((name) => {
+    const handle = String(name || "").replace(/^@/, "").toLowerCase();
+    if (handle) shortsUnlocked.add(handle);
+  });
+}
 
 async function pushIsDnd(flag) {
   if (flag) return true;
@@ -2065,6 +2121,9 @@ self.addEventListener("push", (event) => {
     try { data = event.data ? event.data.json() : {}; }
     catch (err) { data = {}; }
     if (await pushIsDnd(!!(data && data.dnd))) return;
+    if (data && data.silent) return;
+    const hasCopy = !!(data && (data.titleKey || data.body));
+    if (!hasCopy) return;
     if (await swNoteHidden(data)) return;
     const noteId = String((data && data.id) || "");
     if (noteId) {

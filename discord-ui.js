@@ -161,7 +161,8 @@
     olderLoading: {},
     olderGot: {},
     net: {},
-    warmed: false
+    warmed: false,
+    paceUntil: 0
   };
 
   function copyChannel(ch, serverId) {
@@ -218,6 +219,58 @@
   function noteShared() {
     const dock = root.ViktorychDock;
     if (dock && dock.noteMessages) dock.noteMessages();
+    noteAlerts();
+  }
+
+  function paced() {
+    return !!(state.paceUntil && Date.now() < state.paceUntil);
+  }
+
+  function noteRate(res) {
+    if (res && res.status === 429) state.paceUntil = Date.now() + 60000;
+    return res;
+  }
+
+  function alertSnapshot() {
+    if (state.fixture) return { messages: [], mutedChannels: [], mutedServers: [] };
+    const stored = prefs();
+    const mutedChannels = [];
+    const mutedServers = (stored.mutedServers || []).slice(0, 50);
+    (state.channels || []).forEach(function (ch) {
+      if (!ch || ch.mode !== "messages" || !channelMuted(ch)) return;
+      if (mutedChannels.indexOf(ch.id) < 0) mutedChannels.push(ch.id);
+    });
+    (stored.mutedChannels || []).forEach(function (id) {
+      if (id && mutedChannels.indexOf(id) < 0) mutedChannels.push(id);
+    });
+    const messages = [];
+    const seen = {};
+    (state.channels || []).forEach(function (ch) {
+      if (!ch || ch.mode !== "messages" || channelMuted(ch)) return;
+      messagesFor(ch.id).slice(0, 8).forEach(function (row) {
+        if (!row || !row.id || seen[row.id] || messages.length >= 40) return;
+        seen[row.id] = true;
+        messages.push({
+          id: String(row.id),
+          content: String(row.body || "").slice(0, 500),
+          authorId: String(row.authorId || ""),
+          channelId: String(ch.id),
+          serverId: String(ch.serverId || ""),
+          authorName: String(row.name || "").slice(0, 80)
+        });
+      });
+    });
+    return { messages: messages, mutedChannels: mutedChannels.slice(0, 200), mutedServers: mutedServers };
+  }
+
+  function noteAlerts() {
+    if (state.fixture) return;
+    const hook = hooks().onDiscordMessages;
+    if (typeof hook !== "function") return;
+    const snap = alertSnapshot();
+    if (!snap.messages.length) return;
+    try { hook(snap); }
+    catch (err) { /* the next loaded batch tries again */ }
   }
 
   function esc(value) {
@@ -1764,12 +1817,13 @@
       });
     };
     return same().then(function (res) {
+      if (res && res.status === 429) return noteRate(res);
       if (res && (res.status === 200 || res.status === 304)) return res;
       if (!workerUrl) return res;
       if (res && res.status && res.status < 500 && res.status !== 404) return res;
-      return worker();
+      return worker().then(noteRate);
     }, function () {
-      return workerUrl ? worker() : Promise.reject(new Error("network"));
+      return workerUrl ? worker().then(noteRate) : Promise.reject(new Error("network"));
     });
   }
 
@@ -1895,7 +1949,7 @@
 
   function loadOlder(id) {
     const pageNo = state.olderNext[id] || 0;
-    if (!pageNo || state.olderLoading[id] || state.fixture || typeof fetch !== "function") return;
+    if (!pageNo || state.olderLoading[id] || state.fixture || paced() || typeof fetch !== "function") return;
     const path = "discord/messages/" + id + "/p/" + pageNo + ".json";
     if (!docPathOk(path)) return;
     state.olderLoading[id] = true;
@@ -1934,7 +1988,7 @@
 
   function ensurePins(id) {
     const ch = channelById(id);
-    if (!ch || ch.mode !== "messages" || state.fixture || state.pinFiles[id] || state.pinLoading[id]) return;
+    if (!ch || ch.mode !== "messages" || state.fixture || paced() || state.pinFiles[id] || state.pinLoading[id]) return;
     if (typeof fetch !== "function") return;
     state.pinLoading[id] = true;
     loadDoc("discord/pins/" + id + ".json", function (doc, fresh) {
@@ -1952,7 +2006,7 @@
 
   function ensureChannel(id) {
     const ch = channelById(id);
-    if (!ch || ch.mode !== "messages" || state.fixture || state.net[id]) return;
+    if (!ch || ch.mode !== "messages" || state.fixture || paced() || state.net[id]) return;
     if (typeof fetch !== "function") return;
     const path = ch.file && docPathOk(ch.file) ? ch.file : ("discord/messages/" + id + ".json");
     if (!docPathOk(path)) return;
@@ -2054,6 +2108,10 @@
     if (!wantLive()) return;
     ensureSince();
     fetch("https://ntfy.sh/" + liveTopic() + "/json?poll=1&since=" + encodeURIComponent(state.since), { cache: "no-store" }).then(function (res) {
+      if (res && res.status === 429) {
+        state.backoff = Math.max(60000, state.backoff);
+        throw new Error("429");
+      }
       if (!res.ok) throw new Error(String(res.status));
       return res.text();
     }).then(function (text) {
@@ -2413,6 +2471,7 @@
     _openPins: function (id) { state.pinsOpen = String(id || ""); state.menu = null; },
     syncFromHash: syncFromHash,
     _deliver: deliver,
-    snapshot: rememberMessages
+    snapshot: rememberMessages,
+    alertSnapshot: alertSnapshot
   };
 })(typeof window !== "undefined" ? window : globalThis);

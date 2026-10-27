@@ -2,7 +2,10 @@
 
 import { invalidate, readThrough } from "./edge-cache.js";
 import { logError } from "./log.js";
-import { notifyCommunity, notifyMentions } from "./notifications.js";
+import { notifyCommunity, planNotification } from "./notifications.js";
+import { commitBundled, planMentions } from "./mention-store.js";
+import { redactPublicIds } from "../../shared/profile-privacy.js";
+import { visibleAvatarUrl } from "./profile-media.js";
 
 export const COMMUNITY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY, community_id TEXT NOT NULL, author_id TEXT NOT NULL, parent_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at INTEGER NOT NULL, deleted_at INTEGER NOT NULL DEFAULT 0)",
@@ -73,7 +76,7 @@ async function writeOwner(env, doc) {
 
 async function authorOf(env, request, publicId, presentAccount) {
   const row = await env.DB.prepare("SELECT public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty, profile_less FROM accounts WHERE public_id = ?").bind(publicId).first();
-  if (!row) return { publicId: publicId || "", handle: "", displayName: "", avatar: "", owner: false, profileLess: false };
+  if (!row) return { publicId: "", handle: "", displayName: "", avatar: "", owner: false, profileLess: false };
   if (row.profile_less === 1) {
     return {
       publicId: "",
@@ -84,15 +87,22 @@ async function authorOf(env, request, publicId, presentAccount) {
       profileLess: true
     };
   }
-  const pub = await presentAccount(env, request, row, false);
+  const pub = await presentAccount(env, request, row, false, { skipMedia: true });
   return {
-    publicId: pub.publicId || row.public_id || publicId || "",
+    publicId: "",
     handle: pub.handle || "",
     displayName: pub.displayName || "",
-    avatar: pub.avatar || "",
+    avatar: "",
     owner: pub.owner === true,
     profileLess: false
   };
+}
+
+async function fillAuthor(env, request, viewer, author) {
+  if (!author || author.profileLess) return author;
+  author.publicId = "";
+  if (author.handle) author.avatar = await visibleAvatarUrl(env, request, viewer, author.handle);
+  return author;
 }
 
 async function requireUser(request, env, sessionAccount, json) {
@@ -109,7 +119,7 @@ export async function handleCommunityRoute(request, env, path, url, deps) {
   const gate = await requireUser(request, env, sessionAccount, json);
   if (gate.error) return gate.error;
   const row = gate.row;
-  if (path === "/v1/communities/notes" && request.method === "GET") return listNotes(env, row, json, rateHit, limited);
+  if (path === "/v1/communities/notes" && request.method === "GET") return listNotes(request, env, row, json, rateHit, limited);
   if (path === "/v1/communities/notes/seen" && request.method === "POST") return seeNotes(request, env, row, json, readJson, rateHit, limited);
   const parts = path.split("/").filter(Boolean);
   // v1 communities :name ...
@@ -118,6 +128,7 @@ export async function handleCommunityRoute(request, env, path, url, deps) {
   if (!name) return json(400, { error: "bad_community" });
   if (parts.length === 3 && request.method === "GET") return readFeed(request, env, name, row, json, rateHit, limited, presentAccount);
   if (parts.length === 4 && parts[3] === "posts" && request.method === "POST") return createPost(request, env, name, row, json, readJson, rateHit, limited, presentAccount);
+  if (parts.length === 5 && parts[3] === "posts" && request.method === "PATCH") return editPost(request, env, name, parts[4], row, json, readJson, rateHit, limited);
   if (parts.length === 5 && parts[3] === "posts" && request.method === "DELETE") return deletePost(env, name, parts[4], row, json, rateHit, limited);
   if (parts.length === 4 && parts[3] === "likes" && (request.method === "POST" || request.method === "DELETE")) return setLike(request, env, row, json, readJson, rateHit, limited);
   if (parts.length === 4 && parts[3] === "join" && (request.method === "POST" || request.method === "DELETE")) return setJoin(env, name, row, request.method === "POST", json, rateHit, limited);
@@ -181,11 +192,12 @@ async function publicFeed(env, request, name, presentAccount) {
     if (!authors[item.author_id]) authors[item.author_id] = await authorOf(env, request, item.author_id, presentAccount);
     out.push({
       id: item.id,
-      authorId: item.author_id,
+      authorId: "",
       parentId: item.parent_id || "",
       body: item.body,
       createdAt: item.created_at,
-      author: authors[item.author_id]
+      author: authors[item.author_id],
+      _author: item.author_id
     });
   }
   return JSON.stringify({ posts: out });
@@ -213,21 +225,25 @@ async function readFeed(request, env, name, row, json, rateHit, limited, present
   const mine = await env.DB.prepare("SELECT item_id FROM community_likes WHERE public_id = ?").bind(row.public_id).all();
   const out = [];
   for (const item of parsed.posts || []) {
-    const authorId = String(item && item.authorId || "");
+    const authorId = String((item && (item._author || item.authorId)) || "");
     const profileLess = !!(item && item.author && item.author.profileLess);
+    const author = item.author ? Object.assign({}, item.author) : {};
+    if (!profileLess) await fillAuthor(env, request, row, author);
+    else author.avatar = "";
+    author.publicId = "";
     out.push({
       id: item.id,
-      authorId: profileLess ? "" : authorId,
+      authorId: "",
       parentId: item.parentId || "",
       body: item.body,
       createdAt: item.createdAt,
-      author: item.author,
-      mine: authorId === row.public_id
+      author,
+      mine: !profileLess && authorId === row.public_id
     });
   }
   const counts = {};
   for (const item of likes.results || []) counts[item.item_id] = Number(item.n) || 0;
-  const notes = await unread(env, row.public_id);
+  const notes = await unread(env, request, row);
   return json(200, {
     community: name,
     joined: !!joined,
@@ -256,9 +272,12 @@ async function createPost(request, env, name, row, json, readJson, rateHit, limi
   }
   const id = newId();
   const now = Date.now();
-  await env.DB.prepare("INSERT INTO community_posts (id, community_id, author_id, parent_id, body, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, 0)").bind(id, name, row.public_id, parent, text, now).run();
+  const author = await authorOf(env, request, row.public_id, presentAccount);
+  const statements = [
+    env.DB.prepare("INSERT INTO community_posts (id, community_id, author_id, parent_id, body, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, 0)").bind(id, name, row.public_id, parent, text, now)
+  ];
+  const deliveries = [];
   if (parentAuthor && parentAuthor !== row.public_id) {
-    const author = await authorOf(env, request, row.public_id, presentAccount);
     const noteId = "cm_" + id;
     const payload = {
       id: noteId,
@@ -266,17 +285,13 @@ async function createPost(request, env, name, row, json, readJson, rateHit, limi
       handle: author.handle,
       name: author.displayName,
       text: Array.from(text).slice(0, 180).join(""),
-      avatar: author.avatar || "",
+      avatar: "",
       hash: "#/communities/" + name + "/" + encodeURIComponent(parent),
       platform: "app",
       feedId: "community:" + name
     };
-    await env.DB.prepare("INSERT INTO community_notes (id, public_id, payload, created_at, seen) VALUES (?, ?, ?, ?, 0)").bind(noteId, parentAuthor, JSON.stringify(payload), now).run();
-  }
-  const author = await authorOf(env, request, row.public_id, presentAccount);
-  await dropFeed(env, name);
-  if (parentAuthor && parentAuthor !== row.public_id) {
-    await notifyCommunity(env, {
+    statements.push(env.DB.prepare("INSERT INTO community_notes (id, public_id, payload, created_at, seen) VALUES (?, ?, ?, ?, 0)").bind(noteId, parentAuthor, JSON.stringify(payload), now));
+    const reply = await planNotification(env, {
       publicId: parentAuthor,
       kind: "reply",
       at: now,
@@ -285,14 +300,63 @@ async function createPost(request, env, name, row, json, readJson, rateHit, limi
       handle: author.handle,
       name: author.displayName,
       text: Array.from(text).slice(0, 180).join(""),
-      avatar: author.avatar || "",
+      avatar: "",
       hash: "#/communities/" + name + "/" + encodeURIComponent(parent),
       platform: "app",
       feedId: "community:" + name
     });
+    if (reply && reply.statements) reply.statements.forEach((statement) => statements.push(statement));
+    if (reply && reply.deliveries) reply.deliveries.forEach((delivery) => deliveries.push(delivery));
   }
-  await notifyMentions(env, { public_id: row.public_id, handle: author.handle, display_name: author.displayName }, text, [parentAuthor, row.public_id], "mention:" + id, "#/communities/" + name + "/" + encodeURIComponent(parent || id));
-  return json(200, { post: { id, authorId: (author && author.profileLess) ? "" : row.public_id, parentId: parent, body: text, createdAt: now, author, mine: true } });
+  const planned = await planMentions(env, {
+    actor: { public_id: row.public_id, handle: author.handle, display_name: author.displayName },
+    sourceId: id,
+    kind: parent ? "reply" : "post",
+    text,
+    at: now,
+    exceptIds: [parentAuthor, row.public_id],
+    hash: "#/communities/" + name + "/" + encodeURIComponent(parent || id)
+  });
+  await commitBundled(env, statements.concat(planned.statements), deliveries.concat(planned.deliveries), request);
+  await dropFeed(env, name);
+  await fillAuthor(env, request, row, author);
+  return json(200, { post: { id, authorId: "", parentId: parent, body: text, createdAt: now, author: redactPublicIds(author), mine: true } });
+}
+
+async function editPost(request, env, name, rawId, row, json, readJson, rateHit, limited) {
+  const hit = await rateHit(env, "community-post:" + row.public_id, 20, 60 * 60 * 1000);
+  if (!hit.ok) return limited(hit);
+  const id = String(rawId || "");
+  if (!/^va_[a-f0-9]{16}$/.test(id)) return json(400, { error: "bad_post" });
+  const body = await readJson(request, 8000);
+  if (body.error) return json(400, { error: body.error });
+  const text = cleanBody(body.text || body.body || "");
+  if (!text) return json(400, { error: "bad_post" });
+  const existing = await env.DB.prepare(
+    "SELECT author_id, parent_id FROM community_posts WHERE id = ? AND community_id = ? AND deleted_at = 0"
+  ).bind(id, name).first();
+  if (!existing) return json(404, { error: "not_found" });
+  if (existing.author_id !== row.public_id && row.owner !== 1) return json(403, { error: "forbidden" });
+  const now = Date.now();
+  const planned = await planMentions(env, {
+    actor: { public_id: row.public_id, handle: row.handle, display_name: row.display_name },
+    sourceId: id,
+    kind: existing.parent_id ? "reply" : "post",
+    text,
+    at: now,
+    exceptIds: [existing.author_id === row.public_id ? "" : existing.author_id],
+    hash: "#/communities/" + name + "/" + encodeURIComponent(existing.parent_id || id)
+  });
+  const drop = planned.targets.length
+    ? "DELETE FROM mentions WHERE source_id = ? AND target_id NOT IN (" + planned.targets.map(() => "?").join(",") + ")"
+    : "DELETE FROM mentions WHERE source_id = ?";
+  const statements = [
+    env.DB.prepare("UPDATE community_posts SET body = ? WHERE id = ?").bind(text, id),
+    env.DB.prepare(drop).bind(...(planned.targets.length ? [id].concat(planned.targets) : [id]))
+  ].concat(planned.statements);
+  await commitBundled(env, statements, planned.deliveries, request);
+  await dropFeed(env, name);
+  return json(200, { post: { id, body: text } });
 }
 
 async function deletePost(env, name, rawId, row, json, rateHit, limited) {
@@ -332,13 +396,14 @@ async function setLike(request, env, row, json, readJson, rateHit, limited) {
         kind: "like",
         at: Date.now(),
         actorId: row.public_id,
+        groupKey: "like:" + item,
         idempotencyKey: "like:" + row.public_id + ":" + item,
         handle: me && me.handle,
         name: me && me.display_name,
         text: "",
         hash: "#/communities",
         platform: "app",
-        feedId: "app:" + row.public_id
+        feedId: "app:@" + ((me && me.handle) || "")
       });
     }
   }
@@ -358,20 +423,24 @@ async function setJoin(env, name, row, join, json, rateHit, limited) {
   return json(200, { joined: join, members: Number(member && member.n) || 0 });
 }
 
-async function unread(env, publicId) {
-  const rows = await env.DB.prepare("SELECT id, payload FROM community_notes WHERE public_id = ? AND seen = 0 ORDER BY created_at DESC LIMIT 40").bind(publicId).all();
+async function unread(env, request, viewer) {
+  const rows = await env.DB.prepare("SELECT id, payload FROM community_notes WHERE public_id = ? AND seen = 0 ORDER BY created_at DESC LIMIT 40").bind(viewer.public_id).all();
   const notes = [];
   for (const item of rows.results || []) {
-    try { notes.push(JSON.parse(item.payload)); }
+    try {
+      const note = JSON.parse(item.payload);
+      if (note && note.handle) note.avatar = await visibleAvatarUrl(env, request, viewer, note.handle);
+      notes.push(redactPublicIds(note));
+    }
     catch (err) { /* skip a broken note */ }
   }
   return notes;
 }
 
-async function listNotes(env, row, json, rateHit, limited) {
+async function listNotes(request, env, row, json, rateHit, limited) {
   const hit = await rateHit(env, "community-read:" + row.public_id, 60, 10 * 60 * 1000);
   if (!hit.ok) return limited(hit);
-  return json(200, { notes: await unread(env, row.public_id) });
+  return json(200, { notes: await unread(env, request, row) });
 }
 
 async function seeNotes(request, env, row, json, readJson, rateHit, limited) {
