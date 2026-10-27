@@ -233,7 +233,10 @@ test("health, signup, login, session, and sync", async () => {
           pauseBattery: false,
           autoLight: false,
           webllm: true,
-          webllmAccepted: false
+          webllmAccepted: false,
+          peerMedia: "off",
+          peerUploadCap: 1,
+          peerShareWhileWatching: false
         }
       },
       baseUpdatedAt: layoutGone.body.updatedAt
@@ -249,6 +252,10 @@ test("health, signup, login, session, and sync", async () => {
   assert.equal(perfPut.body.payload.devicePerf.pauseBattery, false);
   assert.equal(perfPut.body.payload.devicePerf.autoLight, false);
   assert.equal(perfPut.body.payload.devicePerf.webllm, false);
+  assert.equal(perfPut.body.payload.devicePerf.profile, "max");
+  assert.equal(perfPut.body.payload.devicePerf.peerMedia, "off");
+  assert.equal(perfPut.body.payload.devicePerf.peerUploadCap, 65536);
+  assert.equal(perfPut.body.payload.devicePerf.peerShareWhileWatching, false);
 
   const clash = await call("/v1/sync", {
     method: "PUT",

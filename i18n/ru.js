@@ -1598,5 +1598,16 @@ SI18n.addPack("ru", {
   "{name}: {local} on this device, {server} on the server": "{name}: {local} на этом устройстве, {server} на сервере",
   "{name} averages {localMs} here and {serverMs} on the server": "{name} в среднем {localMs} здесь и {serverMs} на сервере",
   "Kept off the server {size}": "Не отправлено на сервер {size}",
-  "Faster by {time}": "Быстрее на {time}"
+  "Faster by {time}": "Быстрее на {time}",
+  "Peer-assisted media": "Медиа с помощью пиров",
+  "Peers can see each other's IP address while sharing.": "Пока вы делитесь, пиры видят IP-адрес друг друга.",
+  "Upload cap": "Предел отдачи",
+  "Share only while watching": "Делиться только во время просмотра",
+  "From peers {size}": "От пиров {size}",
+  "From origin {size}": "С источника {size}",
+  "32 KB/s": "32 КБ/с",
+  "64 KB/s": "64 КБ/с",
+  "128 KB/s": "128 КБ/с",
+  "256 KB/s": "256 КБ/с",
+  "Peer sharing follows the level on this device.": "Обмен с пирами следует уровню этого устройства."
 });

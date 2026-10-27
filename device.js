@@ -29,6 +29,7 @@
     media: "device-media.js",
     record: "device-record.js"
   };
+  var STORE_KEY = "viktorychapp-device-performance-v1";
   var STATS_KEY = "viktorychapp-device-stats-v1";
   var MEMORY_KEY = "viktorychapp-device-memory-v1";
   var memory = { feature: {}, source: {} };
@@ -136,35 +137,73 @@
     return PRESETS[level] || PRESETS.balanced;
   }
 
+  function levelFor(raw) {
+    var src = raw && typeof raw === "object" ? raw : { level: raw };
+    var text = String(src.level || src.profile || src.performance || src.mode || "balanced").toLowerCase();
+    if (text === "max" || text === "high" || text === "full") return "max";
+    if (text === "light" || text === "lite" || text === "low" || text === "saver" || text === "battery") return "light";
+    return "balanced";
+  }
+
+  function profileFor(level) {
+    return level === "light" ? "lite" : (level === "max" ? "max" : "balanced");
+  }
+
+  function peerFields(raw) {
+    raw = raw && typeof raw === "object" ? raw : {};
+    var mode = raw.peerMedia === "on" || raw.peerMedia === true ? "on" : (raw.peerMedia === "off" || raw.peerMedia === false ? "off" : "auto");
+    var cap = Number(raw.peerUploadCap) || 0;
+    var caps = [32768, 65536, 131072, 262144];
+    return {
+      peerMedia: mode,
+      peerUploadCap: caps.indexOf(cap) >= 0 ? cap : 65536,
+      peerShareWhileWatching: raw.peerShareWhileWatching !== false
+    };
+  }
+
   function normalize(raw) {
     raw = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-    var level = PRESETS[raw.level] ? raw.level : "balanced";
+    var level = levelFor(raw);
     var base = preset(level);
     var toggles = {};
     var src = raw.toggles && typeof raw.toggles === "object" ? raw.toggles : null;
+    var peer = peerFields(raw);
     FEATURES.forEach(function (id) {
       toggles[id] = src && typeof src[id] === "boolean" ? src[id] : !!base[id];
     });
     return {
       level: level,
+      profile: profileFor(level),
       toggles: toggles,
       wifiOnly: typeof raw.wifiOnly === "boolean" ? raw.wifiOnly : !!base.wifiOnly,
       pauseBattery: typeof raw.pauseBattery === "boolean" ? raw.pauseBattery : !!base.pauseBattery,
       autoLight: raw.autoLight !== false,
       webllm: raw.webllm === true,
-      webllmAccepted: raw.webllmAccepted === true
+      webllmAccepted: raw.webllmAccepted === true,
+      peerMedia: peer.peerMedia,
+      peerUploadCap: peer.peerUploadCap,
+      peerShareWhileWatching: peer.peerShareWhileWatching
     };
   }
 
-  function applyLevel(level) {
-    var next = normalize({ level: PRESETS[level] ? level : "balanced" });
+  function mergedRaw(settings) {
+    return Object.assign({}, read(), settings || {});
+  }
+
+  function applyLevel(level, previous) {
+    var prev = normalize(mergedRaw(previous));
+    var next = normalize({ level: levelFor({ level: level }) });
     next.webllm = false;
     next.webllmAccepted = false;
+    next.peerMedia = prev.peerMedia;
+    next.peerUploadCap = prev.peerUploadCap;
+    next.peerShareWhileWatching = prev.peerShareWhileWatching;
+    next.profile = profileFor(next.level);
     return next;
   }
 
   function toggle(settings, key) {
-    var next = normalize(settings);
+    var next = normalize(mergedRaw(settings));
     if (key === "wifiOnly" || key === "pauseBattery" || key === "autoLight") {
       next[key] = !next[key];
       return next;
@@ -174,7 +213,7 @@
   }
 
   function confirmWebllm(settings, accept) {
-    var next = normalize(settings);
+    var next = normalize(mergedRaw(settings));
     if (next.level !== "max" || !accept) {
       next.webllm = false;
       next.webllmAccepted = false;
@@ -186,16 +225,49 @@
   }
 
   function syncShape(raw) {
-    var next = normalize(raw);
+    var next = normalize(mergedRaw(raw));
     return {
       level: next.level,
+      profile: next.profile,
       toggles: next.toggles,
       wifiOnly: next.wifiOnly,
       pauseBattery: next.pauseBattery,
       autoLight: next.autoLight,
       webllm: next.webllm === true && next.webllmAccepted === true,
-      webllmAccepted: next.webllmAccepted === true
+      webllmAccepted: next.webllmAccepted === true,
+      peerMedia: next.peerMedia,
+      peerUploadCap: next.peerUploadCap,
+      peerShareWhileWatching: next.peerShareWhileWatching
     };
+  }
+
+  function patch(raw, update) {
+    var base = normalize(raw);
+    var next = update && typeof update === "object" ? update : {};
+    if (next.level != null || next.profile != null || next.performance != null || next.mode != null) {
+      base.level = levelFor({ level: next.level, profile: next.profile, performance: next.performance, mode: next.mode });
+      base.profile = profileFor(base.level);
+    }
+    if (next.peerMedia != null || next.peerUploadCap != null || typeof next.peerShareWhileWatching === "boolean") {
+      var peer = peerFields({
+        peerMedia: next.peerMedia != null ? next.peerMedia : base.peerMedia,
+        peerUploadCap: next.peerUploadCap != null ? next.peerUploadCap : base.peerUploadCap,
+        peerShareWhileWatching: typeof next.peerShareWhileWatching === "boolean" ? next.peerShareWhileWatching : base.peerShareWhileWatching
+      });
+      base.peerMedia = peer.peerMedia;
+      base.peerUploadCap = peer.peerUploadCap;
+      base.peerShareWhileWatching = peer.peerShareWhileWatching;
+    }
+    if (next.toggles && typeof next.toggles === "object") {
+      FEATURES.forEach(function (id) {
+        if (typeof next.toggles[id] === "boolean") base.toggles[id] = next.toggles[id];
+      });
+    }
+    ["wifiOnly", "pauseBattery", "autoLight", "webllm", "webllmAccepted"].forEach(function (key) {
+      if (typeof next[key] === "boolean") base[key] = next[key];
+    });
+    base.profile = profileFor(base.level);
+    return base;
   }
 
   function signalsFrom(nav) {
@@ -255,16 +327,32 @@
   }
 
   function read() {
+    var fromKey = {};
+    var fromSettings = {};
     try {
-      if (typeof window !== "undefined" && window.STATE && window.STATE.settings && window.STATE.settings.devicePerf) {
-        return normalize(window.STATE.settings.devicePerf);
+      var stored = storageGet(STORE_KEY);
+      if (stored) fromKey = JSON.parse(stored);
+    } catch (err) { fromKey = {}; }
+    if (!fromKey || typeof fromKey !== "object" || Array.isArray(fromKey)) fromKey = {};
+    try {
+      if (typeof window !== "undefined" && window.STATE && window.STATE.settings && window.STATE.settings.devicePerf && typeof window.STATE.settings.devicePerf === "object") {
+        fromSettings = window.STATE.settings.devicePerf;
+      } else {
+        var raw = storageGet("viktorychapp-settings-v1");
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.devicePerf && typeof parsed.devicePerf === "object") fromSettings = parsed.devicePerf;
+        }
       }
-    } catch (err) { /* fall through to storage */ }
-    try {
-      var raw = storageGet("viktorychapp-settings-v1");
-      if (!raw) return normalize(null);
-      return normalize(JSON.parse(raw).devicePerf);
-    } catch (err) { return normalize(null); }
+    } catch (err) { fromSettings = {}; }
+    if (!fromSettings || typeof fromSettings !== "object" || Array.isArray(fromSettings)) fromSettings = {};
+    return normalize(Object.assign({}, fromSettings, fromKey));
+  }
+
+  function persist(settings) {
+    var shape = syncShape(settings);
+    storageSet(STORE_KEY, JSON.stringify(shape));
+    return normalize(shape);
   }
 
   function batteryAllowed() {
@@ -591,6 +679,7 @@
       flagRow("pauseBattery", next.pauseBattery, tr("Pause heavy work on low battery"), tr("Heavy work waits while the battery is low, when the browser can tell.")) +
       flagRow("autoLight", next.autoLight, tr("Use Light on a weak device"), tr("A device with little memory, few cores, or data saver drops to Light.")) +
       '<p class="phandle">' + esc(tr("Saved media stays under {size} at this level.", { size: cap })) + "</p>" +
+      '<a class="set-row" href="#/settings/data"><span class="set-copy"><b>' + esc(tr("Peer-assisted media")) + '</b><span class="set-sub">' + esc(tr("Peer sharing follows the level on this device.")) + "</span></span></a>" +
       webllm +
       '<h2>' + esc(tr("Saved by your device")) + "</h2>" +
       '<p class="phandle">' + esc(tr("These numbers are measured on this device only. They are not saved to your account.")) + "</p>" +
@@ -702,6 +791,8 @@
     featureOn: featureOn,
     webllmAllowed: webllmAllowed,
     read: read,
+    patch: patch,
+    persist: persist,
     signals: signals,
     rememberFail: rememberFail,
     rememberOk: rememberOk,
