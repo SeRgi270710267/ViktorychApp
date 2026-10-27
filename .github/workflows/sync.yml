@@ -799,7 +799,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/sync_health.py
 
-  # wrangler pages deploy publishes the same shell to viktorych-app.
+  # wrangler pages deploy publishes the same shell to viktorychapp.
   # A missing Pages permission skips this job's upload and leaves GitHub Pages up.
   pages-mirror:
     needs: [gate, build]

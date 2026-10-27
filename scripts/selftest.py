@@ -4845,7 +4845,7 @@ def gdrive_checks() -> None:
     check(cf_kv_bind.selftest() == 0, "a KV permission failure removes only the cache binding")
     check(cf_web_analytics.selftest() == 0, "the analytics beacon is added only with a public token")
     sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
-    check("wrangler pages deploy" in sync and "viktorych-app" in sync and "cf_pages_deploy.py" in sync and "shared/mirror.js" in sync, "the site workflow also uploads the Cloudflare Pages mirror")
+    check("wrangler pages deploy" in sync and "viktorychapp" in sync and "cf_pages_deploy.py" in sync and "shared/mirror.js" in sync, "the site workflow also uploads the Cloudflare Pages mirror")
     check("ViktorychMirror" in (ROOT / "sw.js").read_text(encoding="utf-8") and 'scope: "./"' in (ROOT / "app.js").read_text(encoding="utf-8"), "the service worker can fail over to the other origin")
     wrangler_text = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
     check("head_sampling_rate = 1" in wrangler_text and 'binding = "CACHE"' in wrangler_text and 'crons = ["* * * * *"]' in wrangler_text, "workers logs and the KV cache are configured beside the existing cron")

@@ -59,7 +59,7 @@ function pagesMirrorOrigin(origin) {
   } catch (err) {
     return false;
   }
-  const pagesHost = "viktorych-app.pages.dev";
+  const pagesHost = "viktorychapp.pages.dev";
   if (host === pagesHost) return true;
   const mark = "." + pagesHost;
   return host.length > mark.length && host.slice(-mark.length) === mark;

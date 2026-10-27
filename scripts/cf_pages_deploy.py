@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-PROJECT = "viktorych-app"
+PROJECT = "viktorychapp"
 API = "https://api.cloudflare.com/client/v4"
 
 
@@ -50,7 +50,7 @@ def pages_permission_notice() -> str:
         "[pages] 5. Continue to summary, then update the token.",
         "[pages] 6. If Cloudflare shows a new token value, replace the existing GitHub secret CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions). Do not add a second secret. If the value did not change, leave the secret as it is.",
         "[pages] 7. Re-run Actions → Sync feeds.",
-        "[pages] The project name is viktorych-app. The public URL is https://viktorych-app.pages.dev/",
+        "[pages] The project name is viktorychapp. The public URL is https://viktorychapp.pages.dev/",
     ])
 
 
@@ -73,6 +73,14 @@ def request(method: str, url: str, token: str, body: dict | None = None):
         return exc.code, payload
 
 
+def create_result(status: int, payload: dict) -> str:
+    if status in (200, 409) or (isinstance(payload, dict) and payload.get("success")):
+        return "ready"
+    if permission_denied(status, payload):
+        return "denied"
+    return "rejected"
+
+
 def ensure_project(account: str, token: str) -> str:
     status, payload = request("GET", f"{API}/accounts/{account}/pages/projects/{PROJECT}", token)
     if status == 200 and payload.get("success"):
@@ -87,13 +95,16 @@ def ensure_project(account: str, token: str) -> str:
         "name": PROJECT,
         "production_branch": "main",
     })
-    if created in (200, 409) or created_body.get("success"):
+    outcome = create_result(created, created_body)
+    if outcome == "ready":
         print("[pages] project ready: " + PROJECT)
         return "ready"
-    if permission_denied(created, created_body):
+    if outcome == "denied":
         return "denied"
-    print("[pages] project create failed " + scrub(json.dumps(created_body.get("errors") or created_body)[:300]))
-    return "error"
+    print("[pages] Cloudflare rejected the Pages project name " + PROJECT + ".")
+    print("[pages] The mirror must be https://" + PROJECT + ".pages.dev/. This workflow will not choose another name.")
+    print("[pages] " + scrub(json.dumps((created_body or {}).get("errors") or created_body)[:300]))
+    return "rejected"
 
 
 def deploy(directory: Path) -> int:
@@ -109,9 +120,8 @@ def deploy(directory: Path) -> int:
     if state == "denied":
         print(pages_permission_notice())
         return 0
-    if state == "error":
-        print(pages_permission_notice())
-        return 0
+    if state == "rejected":
+        return 1
     wrangler = shutil.which("npx") or "npx"
     cmd = [
         wrangler, "wrangler", "pages", "deploy", str(directory),
@@ -125,7 +135,7 @@ def deploy(directory: Path) -> int:
     print("[pages] uploading " + PROJECT)
     proc = subprocess.run(cmd, cwd=str(Path(__file__).resolve().parents[1] / "worker"), env=os.environ.copy(), text=True)
     if proc.returncode == 0:
-        print("[pages] mirror URL https://viktorych-app.pages.dev/")
+        print("[pages] mirror URL https://viktorychapp.pages.dev/")
         return 0
     print("[pages] wrangler exited " + str(proc.returncode))
     print(pages_permission_notice())
@@ -144,6 +154,13 @@ def selftest() -> int:
         return 1
     notice = pages_permission_notice()
     if "CLOUDFLARE_API_TOKEN" not in notice or "Cloudflare Pages" not in notice or "new secret" not in notice:
+        return 1
+    old_name = "viktorych" + "-app"
+    if PROJECT != "viktorychapp" or "https://viktorychapp.pages.dev/" not in notice or old_name in Path(__file__).read_text(encoding="utf-8"):
+        return 1
+    if create_result(400, {"success": False, "errors": [{"code": 8000013, "message": "name is reserved"}]}) != "rejected":
+        return 1
+    if create_result(403, {}) != "denied" or create_result(200, {"success": True}) != "ready":
         return 1
     print("pages deploy selftest ok")
     return 0

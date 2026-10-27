@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from site_paths import pages_base  # noqa: E402
 
-PAGES = "https://viktorych-app.pages.dev/"
+PAGES = "https://viktorychapp.pages.dev/"
 
 
 def stamp(site: Path, github: str) -> None:

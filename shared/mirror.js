@@ -2,7 +2,7 @@
    The service worker and the page both load this file. A classic script
    assigns ViktorychMirror; Node can require() the same file. */
 (function (root) {
-  var PAGES_HOST = "viktorych-app.pages.dev";
+  var PAGES_HOST = "viktorychapp.pages.dev";
   var PAGES = "https://" + PAGES_HOST + "/";
   var GITHUB = "https://viktorychgroup.github.io/ViktorychApp/";
 

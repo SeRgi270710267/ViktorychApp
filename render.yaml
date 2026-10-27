@@ -11,7 +11,7 @@ services:
       - key: PORT
         value: "10000"
       - key: ALLOWED_ORIGINS
-        value: "https://viktorychgroup.github.io,https://viktorych-app.pages.dev"
+        value: "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
       # Shared Cloudflare account. The backup reads and writes the SAME D1
       # database and R2 bucket as the primary Worker, so logins and sessions
       # always agree even while the Worker is out of free daily requests.

@@ -55,10 +55,10 @@ async function gunzip(bytes) {
 
 test("mirror paths stay on the app and ignore other hosts", () => {
   assert.equal(mirror.appRoot("https://viktorychgroup.github.io", "/ViktorychApp/index.html", "viktorychgroup.github.io"), "https://viktorychgroup.github.io/ViktorychApp/");
-  assert.equal(mirror.appRoot("https://viktorych-app.pages.dev", "/index.html", "viktorych-app.pages.dev"), "https://viktorych-app.pages.dev/");
+  assert.equal(mirror.appRoot("https://viktorychapp.pages.dev", "/index.html", "viktorychapp.pages.dev"), "https://viktorychapp.pages.dev/");
   assert.equal(mirror.relativeTo("https://viktorychgroup.github.io/ViktorychApp/", "https://viktorychgroup.github.io/ViktorychApp/app.js?v=1"), "app.js?v=1");
-  assert.equal(mirror.rewrite("https://viktorych-app.pages.dev/", "shared/mirror.js"), "https://viktorych-app.pages.dev/shared/mirror.js");
-  assert.equal(mirror.rewrite("https://viktorych-app.pages.dev/", "../app.js"), "");
+  assert.equal(mirror.rewrite("https://viktorychapp.pages.dev/", "shared/mirror.js"), "https://viktorychapp.pages.dev/shared/mirror.js");
+  assert.equal(mirror.rewrite("https://viktorychapp.pages.dev/", "../app.js"), "");
   assert.equal(mirror.failoverStatus(0), true);
   assert.equal(mirror.failoverStatus(404), true);
   assert.equal(mirror.failoverStatus(429), true);
@@ -67,9 +67,9 @@ test("mirror paths stay on the app and ignore other hosts", () => {
   assert.equal(mirror.failoverStatus(403), false);
   assert.equal(mirror.mirrorHost("localhost"), false);
   assert.equal(mirror.mirrorHost("evil.pages.dev"), false);
-  assert.equal(mirror.mirrorHost("viktorych-app.pages.dev.evil.example"), false);
-  assert.equal(mirror.mirrorHost("viktorych-app.pages.dev"), true);
-  assert.equal(mirror.mirrorHost("abc.viktorych-app.pages.dev"), true);
+  assert.equal(mirror.mirrorHost("viktorychapp.pages.dev.evil.example"), false);
+  assert.equal(mirror.mirrorHost("viktorychapp.pages.dev"), true);
+  assert.equal(mirror.mirrorHost("abc.viktorychapp.pages.dev"), true);
   assert.equal(mirror.mirrorHost("viktorychgroup.github.io"), true);
   assert.equal(mirror.normalizeBase("__MIRROR_PAGES__"), "");
 });
@@ -98,15 +98,15 @@ test.after(async () => {
 });
 
 test("pages.dev origins can call the same worker and other pages hosts cannot", async () => {
-  const pages = await call("/v1/health", { origin: "https://viktorych-app.pages.dev" });
+  const pages = await call("/v1/health", { origin: "https://viktorychapp.pages.dev" });
   assert.equal(pages.status, 200);
-  assert.equal(pages.headers.get("access-control-allow-origin"), "https://viktorych-app.pages.dev");
-  const preview = await call("/v1/health", { origin: "https://abc.viktorych-app.pages.dev" });
+  assert.equal(pages.headers.get("access-control-allow-origin"), "https://viktorychapp.pages.dev");
+  const preview = await call("/v1/health", { origin: "https://abc.viktorychapp.pages.dev" });
   assert.equal(preview.status, 200);
-  assert.equal(preview.headers.get("access-control-allow-origin"), "https://abc.viktorych-app.pages.dev");
+  assert.equal(preview.headers.get("access-control-allow-origin"), "https://abc.viktorychapp.pages.dev");
   const evil = await call("/v1/health", { origin: "https://evil.pages.dev" });
   assert.equal(evil.status, 403);
-  const nested = await call("/v1/health", { origin: "https://viktorych-app.pages.dev.evil.example" });
+  const nested = await call("/v1/health", { origin: "https://viktorychapp.pages.dev.evil.example" });
   assert.equal(nested.status, 403);
 });
 
