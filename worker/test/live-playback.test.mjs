@@ -2,19 +2,68 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { pickStreams } from "../../shared/tiktok-live.js";
 import {
+  bestPlayableLevel,
   hlsFatalPlan,
   mediaMime,
   playbackSteps,
   shouldSniffMedia,
   stitchPlaylists,
-  streamFresh
+  streamFresh,
+  videoCodecOk
 } from "../../shared/live-playback.js";
+import { b2Configured, formatBytes, lowestPreview, previewsAllowed, thumbObjectKey } from "../../shared/live-preview.js";
+
+test("previews use the lowest variant and stay off on Save-Data unless asked", () => {
+  const step = lowestPreview({
+    variants: [
+      { quality: "origin", hls: "https://cdn.example/o.m3u8" },
+      { quality: "ld", hls: "https://cdn.example/l.m3u8", flv: "https://cdn.example/l.flv" }
+    ]
+  });
+  assert.equal(step.url, "https://cdn.example/l.m3u8");
+  assert.equal(previewsAllowed("auto", true, "all", "wifi"), false);
+  assert.equal(previewsAllowed("on", true, "never", "cellular"), true);
+  assert.equal(previewsAllowed("auto", false, "wifi", "cellular"), false);
+  assert.equal(formatBytes(2 * 1024 * 1024), "2 MB");
+  assert.equal(thumbObjectKey("Pepsi", "7699647509498710805"), "owner/live-thumbs/pepsi/7699647509498710805.mp4");
+  assert.equal(thumbObjectKey("../x", "1"), "");
+  assert.equal(b2Configured({}), false);
+  assert.equal(b2Configured({ B2_KEY_ID: "id", B2_APP_KEY: "key", B2_BUCKET: "bucket" }), true);
+});
 
 test("fresh stream urls skip ones that expire within 20 seconds", () => {
   const now = 1_700_000_000_000;
   assert.equal(streamFresh("https://cdn.example/a.m3u8", now), true);
   assert.equal(streamFresh("https://cdn.example/a.m3u8?expire=" + Math.floor(now / 1000 + 30), now), true);
   assert.equal(streamFresh("https://cdn.example/a.m3u8?expire=" + Math.floor(now / 1000 + 5), now), false);
+});
+
+test("audio-only and unsupported video codecs are not the first picture", () => {
+  const steps = playbackSteps({
+    variants: [
+      { quality: "ao", hls: "https://cdn.example/a.m3u8", flv: "https://cdn.example/a.flv" },
+      { quality: "hd", hls: "https://cdn.example/h.m3u8", flv: "https://cdn.example/h.flv" }
+    ]
+  }, Date.now());
+  assert.deepEqual(steps.map((row) => row.quality), ["hd", "hd"]);
+  assert.equal(lowestPreview({
+    variants: [
+      { quality: "hd", hls: "https://cdn.example/h.m3u8" },
+      { quality: "ao", flv: "https://cdn.example/a.flv" }
+    ]
+  }).url, "https://cdn.example/h.m3u8");
+  const support = (mime) => mime.indexOf("avc1") >= 0;
+  assert.equal(videoCodecOk("hvc1.1.6.L120.90", support), false);
+  assert.equal(videoCodecOk("avc1.42E01E", support), true);
+  assert.equal(videoCodecOk("mp4a.40.2", support), false);
+  assert.equal(bestPlayableLevel([
+    { bitrate: 5000000, height: 720, videoCodec: "hvc1.1.6.L120.90" },
+    { bitrate: 800000, height: 360, videoCodec: "avc1.42E01E" }
+  ], support), 1);
+  assert.equal(bestPlayableLevel([
+    { bitrate: 800000, height: 360, attrs: { CODECS: "avc1.4d401f,mp4a.40.2" } },
+    { bitrate: 200000, height: 144, videoCodec: "avc1.42E01E" }
+  ], support), 0);
 });
 
 test("playback tries the best fresh source before a lower one", () => {
