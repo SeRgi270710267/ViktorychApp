@@ -61,6 +61,8 @@ test("privacy cover decisions", () => {
   assert.equal(privacy.splitView({ screenWidth: 412, screenHeight: 915, windowWidth: 390, windowHeight: 700 }), false);
   assert.equal(privacy.splitView({ screenWidth: 360, screenHeight: 800, windowWidth: 360, windowHeight: 640 }), false);
   assert.equal(privacy.splitView({ screenWidth: 100, screenHeight: 100, windowWidth: 40, windowHeight: 40 }), false);
+  assert.equal(privacy.splitView({ screenWidth: 390, screenHeight: 844, windowWidth: 390, windowHeight: 80 }), false);
+  assert.equal(privacy.splitView({ screenWidth: 1080, screenHeight: 2400, windowWidth: 1080, windowHeight: 120 }), false);
 
   assert.deepEqual(privacy.decide({ mode: "off", hidden: true, sensitive: true }), { cover: false, scope: "off", reason: "" });
   assert.deepEqual(privacy.decide({ mode: "dms", hidden: true, sensitive: true }), { cover: true, scope: "dms", reason: "hidden" });
@@ -71,4 +73,8 @@ test("privacy cover decisions", () => {
   assert.deepEqual(privacy.decide({ mode: "app", frozen: true }), { cover: true, scope: "app", reason: "freeze" });
   assert.deepEqual(privacy.decide({ mode: "app", split: true }), { cover: true, scope: "app", reason: "split" });
   assert.deepEqual(privacy.decide({ mode: "app" }), { cover: false, scope: "app", reason: "" });
+  assert.deepEqual(privacy.decide({ mode: "dms", blurred: true, sensitive: true }), { cover: true, scope: "dms", reason: "blur" });
+  assert.deepEqual(privacy.decide({ mode: "dms", blurred: true, sensitive: true, coarse: true }), { cover: false, scope: "dms", reason: "" });
+  assert.deepEqual(privacy.decide({ mode: "dms", hidden: true, sensitive: true, coarse: true }), { cover: true, scope: "dms", reason: "hidden" });
+  assert.deepEqual(privacy.decide({ mode: "app", blurred: true, coarse: true }), { cover: false, scope: "app", reason: "" });
 });
