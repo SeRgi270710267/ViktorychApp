@@ -205,6 +205,23 @@
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("viktorychapp-lock-sealed") === "1") {
+          document.documentElement.setAttribute("data-lock", "1");
+        }
+      } catch (err) {}
+      var cover = document.createElement("div");
+      cover.id = "privacy-cover";
+      cover.setAttribute("hidden", "");
+      cover.setAttribute("aria-hidden", "true");
+      document.documentElement.appendChild(cover);
+    })();
+  </script>
+  <script src="privacy-screen.js"></script>
+  <script type="module" src="passkeys.js"></script>
+  <script type="module" src="app-lock.js"></script>
   <link rel="stylesheet" href="dock.css" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="dock.css"></noscript>
   <script>
