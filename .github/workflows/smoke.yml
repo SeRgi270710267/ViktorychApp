@@ -79,3 +79,8 @@ jobs:
           node scripts/translate_test.js
           node scripts/ondevice_ai_test.js
           node scripts/dock_test.js
+
+      - name: Composer writing tools
+        run: |
+          npm install --prefix /tmp/pw-compose --no-fund --no-audit playwright-core
+          PLAYWRIGHT_CORE=/tmp/pw-compose/node_modules/playwright-core/index.js node scripts/compose_ai_test.mjs
