@@ -18535,7 +18535,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
         dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
       });
-      if (!blocked) window.Stories.start();
     }
     if (window.Spaces && !window.Spaces.__shell) {
       window.Spaces.__shell = true;
