@@ -159,12 +159,13 @@
     var tone = id === "reply-draft" ? "warm" : "clear";
     return '<div class="odai-chips">' + suggest + '<button type="button" data-act="odai-grammar" data-field="' + id + '" data-scope="post">' + esc(tr("Fix grammar")) + '</button><button type="button" data-act="odai-tone" data-tone="' + tone + '" data-field="' + id + '" data-scope="post">' + esc(tr("Tone")) + "</button></div>";
   }
-  function postLink(slotName, index, label) {
+  function postLink(slotName, index, label, id) {
     var slot = slots[slotName];
     var info = measure(slot, index);
     var href = info.ok ? ' href="' + esc(intentFor(slot, index)) + '"' : "";
     var disabled = info.ok ? "" : ' aria-disabled="true"';
-    return '<a class="save xc-post" target="_blank" rel="noopener noreferrer" data-slot="' + esc(slotName) + '" data-index="' + index + '"' + href + disabled + ">" + esc(label) + "</a>";
+    var named = id ? ' id="' + esc(id) + '"' : "";
+    return '<a class="save xc-post" target="_blank" rel="noopener noreferrer"' + named + ' data-slot="' + esc(slotName) + '" data-index="' + index + '"' + href + disabled + ">" + esc(label) + "</a>";
   }
   function tools(slotName) {
     return '<div class="xc-tools">'
@@ -244,8 +245,10 @@
       ? '<p class="xc-context">' + esc(tr("Quoting")) + "</p>"
       : (slot.replyTo && slot.context ? '<p class="xc-context">' + esc(tr("Replying to @{handle}", { handle: slot.context })) + "</p>" : "");
     var placeholder = slotName === "post" ? tr("What is happening?!") : tr("Post your reply");
-    return '<div class="xc' + (wide ? " xc-wide" : "") + '" data-slot="' + esc(slotName) + '">' + face + '<div class="xc-main">' + context
-      + '<div class="xc-field"><textarea class="xc-text" data-xc="text" data-slot="' + esc(slotName) + '" data-index="0" id="' + esc(id) + '" placeholder="' + esc(placeholder) + '" maxlength="2000">' + esc(slot.posts[0].text || "") + '</textarea><div class="xc-suggest" data-xc="suggest" hidden></div></div>'
+    var note = id === "compose-text" ? '<p class="phandle" id="compose-note">' + esc(tr("The draft stays on this device. You press Post on X.")) + "</p>" : "";
+    var described = id === "compose-text" ? ' aria-describedby="compose-note"' : "";
+    return '<div class="xc' + (wide ? " xc-wide" : "") + '" data-slot="' + esc(slotName) + '">' + face + '<div class="xc-main">' + context + note
+      + '<div class="xc-field"><textarea class="xc-text" data-xc="text" data-slot="' + esc(slotName) + '" data-index="0" id="' + esc(id) + '"' + described + ' placeholder="' + esc(placeholder) + '" maxlength="2000">' + esc(slot.posts[0].text || "") + '</textarea><div class="xc-suggest" data-xc="suggest" hidden></div></div>'
       + chips(id, slot.targetKey)
       + mediaHtml(slotName)
       + emojiHtml(slotName)
@@ -392,7 +395,7 @@
 
   function preparePost(text) {
     modalSlot = "post";
-    if (!slots.post.posts[0].text && text) slots.post.posts[0].text = String(text);
+    if (text) slots.post.posts[0].text = String(text);
     if (host && host.setSeed) host.setSeed(slots.post.posts[0].text || "");
   }
   function openReply(post) {
@@ -605,7 +608,19 @@
       toast(info.left < 0 ? tr("Over the limit") : tr("Post to X"));
       return;
     }
-    toast(tr("X opened in a new tab"));
+    var slotName = link.getAttribute("data-slot") || "post";
+    var index = Number(link.getAttribute("data-index") || 0);
+    var slot = slots[slotName];
+    var text = slot && slot.posts[index] ? slot.posts[index].text : "";
+    if (index === 0 && slotName === "post" && host && host.saveLocal) host.saveLocal(text);
+    toast(tr("Saved on this device. X opened in a new tab"));
+    if (index === 0 && slotName === "post") {
+      setTimeout(function () {
+        if (slot && slot.posts[0]) slot.posts[0].text = "";
+        if (host && host.setSeed) host.setSeed("");
+        if (host && host.closeModal) host.closeModal();
+      }, 0);
+    }
   }
   function bindUi() {
     if (bound) return;
@@ -676,7 +691,7 @@
     bindUi();
     var slotName = slots[modalSlot] ? modalSlot : "post";
     return '<div class="modal-back" data-act="close-modal"><div class="modal xc-modal" role="dialog" aria-modal="true" aria-label="' + esc(tr("Post")) + '" data-act="stop">'
-      + '<div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="' + esc(tr("Close")) + '">×</button><div class="grow"></div>' + postLink(slotName, 0, tr("Post to X")) + "</div>"
+      + '<div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="' + esc(tr("Close")) + '">×</button><div class="grow"></div>' + postLink(slotName, 0, tr("Post to X"), slotName === "post" ? "compose-post" : "") + "</div>"
       + '<div class="modal-body">' + box(slotName, true) + "</div></div></div>";
   }
   function settingsHtml() {

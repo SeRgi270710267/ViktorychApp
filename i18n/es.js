@@ -1833,5 +1833,7 @@ SI18n.addPack("es", {
   "Linking stays off. There is no free allowance for posting or for the mention inbox, so this app does not connect an X login.": "La vinculación sigue apagada. No hay cupo gratis para publicar ni para la bandeja de menciones, así que esta app no conecta un inicio de sesión de X.",
   "The last check did not finish. The next one waits longer.": "La última revisión no terminó. La siguiente espera más.",
   "Quote on X": "Citar en X",
-  "Partial. Replies on recent public posts, not X's mention inbox.": "Parcial. Respuestas en publicaciones públicas recientes, no la bandeja de menciones de X."
+  "Partial. Replies on recent public posts, not X's mention inbox.": "Parcial. Respuestas en publicaciones públicas recientes, no la bandeja de menciones de X.",
+  "Saved on this device. X opened in a new tab": "Guardado en este dispositivo. X se abrió en una pestaña nueva",
+  "The draft stays on this device. You press Post on X.": "El borrador se queda en este dispositivo. Tú pulsas Publicar en X."
 });
