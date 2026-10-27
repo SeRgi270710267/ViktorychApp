@@ -509,7 +509,7 @@ function mirrorBases() {
   return api.bases(here, MIRROR_GITHUB, MIRROR_PAGES).filter((base) => base !== here);
 }
 
-async function mirrorAlternate(url) {
+async function mirrorAlternate(url, signal) {
   const api = mirrorApi();
   const rel = mirrorRelative(url);
   if (!api || !rel) return null;
@@ -517,10 +517,24 @@ async function mirrorAlternate(url) {
   for (let i = 0; i < bases.length; i++) {
     const next = api.rewrite(bases[i], rel);
     if (!next) continue;
+    // A dead mirror must not pin the shell download. The caller's signal
+    // (the per-file timer) aborts this too.
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), 5000);
+    const onAbort = () => timeout.abort();
+    if (signal) {
+      if (signal.aborted) timeout.abort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+    }
     try {
-      const res = await fetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", redirect: "follow" });
+      if (timeout.signal.aborted) continue;
+      const res = await fetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", redirect: "follow", signal: timeout.signal });
       if (res && res.ok && res.type !== "opaque") return res;
     } catch (err) { /* the next origin can still have the file */ }
+    finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+    }
   }
   return null;
 }
@@ -539,7 +553,7 @@ async function mirrorFetch(request, init) {
   if (api && request && request.method === "GET" && api.failoverStatus(status)) {
     let url = null;
     try { url = new URL(request.url); } catch (err) { url = null; }
-    const alt = url ? await mirrorAlternate(url) : null;
+    const alt = url ? await mirrorAlternate(url, request && request.signal) : null;
     if (alt) return alt;
   }
   if (failed) throw new Error("mirror");
@@ -941,7 +955,7 @@ async function networkFirstTimeout(request, cacheName, timeoutMs) {
       await putPacked(cache, request, res);
       return res;
     }
-    const alt = await mirrorAlternate(new URL(request.url));
+    const alt = await mirrorAlternate(new URL(request.url), controller.signal);
     if (alt && alt.ok) {
       try { await putPacked(cache, request, alt); } catch (putErr) { /* the response is still usable */ }
       return alt;

@@ -185,6 +185,7 @@
     waiting: null
   };
   var applying = null;
+  var updateFlight = null;
   var started = false;
   var checking = false;
   var reloadTimer = 0;
@@ -454,14 +455,32 @@
     }, 45000);
   }
 
+  function requestUpdate(reg) {
+    if (!reg || !reg.update) return Promise.resolve(reg || null);
+    if (reg.installing || reg.waiting) return Promise.resolve(reg);
+    // One check at a time. A second update() while the first script is still
+    // downloading drops that worker, and the page stays on the old build.
+    if (updateFlight) return updateFlight.then(function () { return reg; });
+    var flight = reg.update().catch(function () { return null; }).then(function () {
+      if (updateFlight === flight) updateFlight = null;
+      return reg;
+    });
+    updateFlight = flight;
+    return flight;
+  }
+
   function waitForWorker(reg) {
     return new Promise(function (resolve) {
       var startedAt = Date.now();
       var timer = setInterval(function () {
         if (!reg) { clearInterval(timer); resolve(null); return; }
         if (reg.waiting) { clearInterval(timer); resolve(reg.waiting); return; }
-        var idle = !reg.installing && Date.now() - startedAt > 60000;
-        var cap = Date.now() - startedAt > 90000;
+        var worker = reg.installing;
+        if (worker && worker.state === "redundant") { clearInterval(timer); resolve(null); return; }
+        var idleFor = Date.now() - startedAt;
+        var stillChecking = !!updateFlight;
+        var idle = !worker && !stillChecking && idleFor > 5000;
+        var cap = idleFor > 90000;
         if (idle || cap) { clearInterval(timer); resolve(reg.waiting || null); }
       }, 200);
     });
@@ -544,9 +563,7 @@
     var ready = state.reg ? Promise.resolve(state.reg) : navigator.serviceWorker.getRegistration();
     ready.then(function (reg) {
       state.reg = reg || null;
-      if (reg && (reg.installing || reg.waiting)) return reg;
-      if (reg && reg.update) return reg.update().catch(function () { return null; }).then(function () { return reg; });
-      return reg;
+      return requestUpdate(reg);
     }).then(function (reg) {
       return waitForWorker(reg);
     }).then(function (worker) {
@@ -728,8 +745,7 @@
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
       if (applying) return;
-      if (state.reg && (state.reg.installing || state.reg.waiting)) return;
-      if (state.reg && state.reg.update) state.reg.update().catch(function () {});
+      requestUpdate(state.reg);
     });
   }
 
