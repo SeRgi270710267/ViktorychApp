@@ -928,6 +928,23 @@
     } else if (act === "tv-share") {
       e.preventDefault();
       var url = location.origin + location.pathname + "#/tv";
+      var nativeShare = window.ViktorychNative && window.ViktorychNative.shareOut;
+      if (nativeShare) {
+        nativeShare({ title: document.title || "", url: url }).then(function (ok) {
+          if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(function () {
+              showHudNotice("📋 " + tr("Link copied to clipboard"), 2500);
+            });
+          }
+        });
+        return;
+      }
+      if (typeof navigator.share === "function") {
+        navigator.share({ title: document.title || "", url: url }).catch(function () {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url);
+        });
+        return;
+      }
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(function () {
           showHudNotice("📋 " + tr("Link copied to clipboard"), 2500);

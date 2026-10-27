@@ -546,8 +546,24 @@
     });
   }
 
+  function tryDeviceRelay(img) {
+    if (!img || img.dataset.deviceRelay === "1") return false;
+    const dev = window.ViktorychDevice;
+    if (!dev || !dev.featureOn(dev.read(), "media", dev.signals())) return false;
+    const src = img.dataset.source || img.getAttribute("src") || "";
+    if (!src || !/^https:\/\//i.test(src)) return false;
+    const api = accountsApi();
+    if (!api) return false;
+    dev.rememberFail("media", src, Date.now(), "source");
+    img.dataset.deviceRelay = "1";
+    img.removeAttribute("srcset");
+    img.src = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(src);
+    return true;
+  }
+
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
+    if (tryDeviceRelay(img)) return;
     if (tryRuProxyFallback(img)) return;
     if (img.dataset.fallback === "avatar") {
       const span = document.createElement("span");
@@ -1127,6 +1143,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         removeStored(localStorage, "settings-v1");
         return fresh();
       }
+      parsed.devicePerf = window.ViktorychDevice ? window.ViktorychDevice.normalize(parsed.devicePerf) : (parsed.devicePerf || null);
       return parsed;
     } catch (err) {
       removeStored(localStorage, "settings-v1");
@@ -1135,6 +1152,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function saveSettings() {
+    if (STATE.settings && STATE.settings.devicePerf && window.ViktorychDevice && window.ViktorychDevice.persist) {
+      STATE.settings.devicePerf = window.ViktorychDevice.persist(STATE.settings.devicePerf);
+    }
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     syncWorkerState();
     applyPrivacyProtections();
@@ -2607,7 +2627,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${altAttr}${lead ? ' data-tg-first="1" data-fallback-src="' + esc(rawSrc) + '"' : ""}` : "";
       const sourceAttr = sourceUrl ? ` data-source="${esc(sourceUrl)}"` : "";
       const loading = first ? "eager" : "lazy";
-      const priority = first ? ` fetchpriority="high"` : "";
+      const priority = first ? ` fetchpriority="high"` : ` fetchpriority="low"`;
       const srcAttr = lead ? "" : ` src="${esc(src)}"${src === rawSrc ? imageSrcset(src) : ""}`;
       const framed = n === 1 ? frameAttrs(post, m) : { attr: "", cls: "" };
       return `<div class="tile${framed.cls || ""}" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
@@ -2764,18 +2784,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function ruSafeImageUrl(url) {
-    if (!isRuVisitor()) return url;
     const raw = String(url || "");
-    if (!raw || !/^https:\/\//i.test(raw)) return url;
+    const dev = window.ViktorychDevice;
+    const failed = !!(dev && dev.sourceState && raw && dev.sourceState(raw) === "fail");
+    if (!isRuVisitor() && !failed) return url;
     const api = accountsApi();
-    if (!api) return url;
+    if (!raw || !/^https:\/\//i.test(raw) || !api) return url;
+    let relay = "";
+    let preferRelay = false;
     try {
       const parsed = new URL(raw);
-      if (BLOCKED_IN_RU.test(parsed.hostname)) {
-        return api + "/v1/media?url=" + encodeURIComponent(raw);
+      if (isRuVisitor() && BLOCKED_IN_RU.test(parsed.hostname)) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
+        preferRelay = true;
+      } else if (failed) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
       }
-    } catch (err) {}
-    return url;
+    } catch (err) { return url; }
+    if (dev && dev.playbackUrl) return dev.playbackUrl(raw, relay, { preferRelay: preferRelay, settings: dev.read(), signals: dev.signals() }) || url;
+    return preferRelay ? relay : url;
   }
 
   function tryRuProxyFallback(img) {
@@ -3188,18 +3215,37 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   const DEVICE_PERF_KEY = "viktorychapp-device-performance-v1";
+  function alignDevicePerf(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const text = String(src.level || src.profile || "balanced").toLowerCase();
+    const level = text === "light" || text === "lite" || text === "low" || text === "saver" || text === "battery" ? "light" : (text === "max" || text === "high" || text === "full" ? "max" : "balanced");
+    const caps = [32768, 65536, 131072, 262144];
+    const next = Object.assign({}, src);
+    next.level = level;
+    next.profile = level === "light" ? "lite" : level;
+    next.peerMedia = src.peerMedia === "on" || src.peerMedia === "off" ? src.peerMedia : "auto";
+    next.peerUploadCap = caps.indexOf(Number(src.peerUploadCap)) >= 0 ? Number(src.peerUploadCap) : 65536;
+    next.peerShareWhileWatching = src.peerShareWhileWatching !== false;
+    return next;
+  }
   function readDevicePerf() {
+    let fromKey = {};
     try {
       const raw = JSON.parse(localStorage.getItem(DEVICE_PERF_KEY) || "{}");
-      return raw && typeof raw === "object" ? raw : {};
-    } catch (err) { return {}; }
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) fromKey = raw;
+    } catch (err) { fromKey = {}; }
+    const fromSettings = STATE.settings && STATE.settings.devicePerf && typeof STATE.settings.devicePerf === "object" ? STATE.settings.devicePerf : {};
+    return Object.assign({}, fromSettings, fromKey);
   }
   function writeDevicePerf(patch) {
-    const raw = readDevicePerf();
-    Object.keys(patch || {}).forEach((key) => { raw[key] = patch[key]; });
-    try { localStorage.setItem(DEVICE_PERF_KEY, JSON.stringify(raw)); } catch (err) { /* the toggle still updates this view */ }
+    const current = readDevicePerf();
+    const dev = window.ViktorychDevice;
+    const next = dev && dev.patch ? dev.patch(current, patch || {}) : alignDevicePerf(Object.assign({}, current, patch || {}));
+    try { localStorage.setItem(DEVICE_PERF_KEY, JSON.stringify(next)); } catch (err) { /* the toggle still updates this view */ }
+    if (STATE.settings) STATE.settings.devicePerf = next;
+    saveSettings();
     if (window.ViktorychPeerMedia && window.ViktorychPeerMedia.configure) window.ViktorychPeerMedia.configure();
-    return raw;
+    return next;
   }
   function ensurePeerMedia() {
     if (window.ViktorychPeerMedia) return Promise.resolve(window.ViktorychPeerMedia);
@@ -3234,7 +3280,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const share = perf.peerShareWhileWatching !== false;
     const caps = [[32768, tr("32 KB/s")], [65536, tr("64 KB/s")], [131072, tr("128 KB/s")], [262144, tr("256 KB/s")]];
     const above = window.ViktorychDevicePerformance && window.ViktorychDevicePerformance.settingsHtml ? window.ViktorychDevicePerformance.settingsHtml() : "";
-    return above + `<h2>${esc(tr("Peer-assisted media"))}</h2>
+    return above + `<p class="phandle">${esc(tr("Peer sharing follows the level on this device."))} <a href="#/settings/device">${esc(tr("Device performance"))}</a></p>
+      <h2>${esc(tr("Peer-assisted media"))}</h2>
       <p class="phandle">${esc(tr("Peers can see each other's IP address while sharing."))}</p>
       <div class="theme-row" role="group" aria-label="${esc(tr("Peer-assisted media"))}">
         ${["auto", "on", "off"].map((id) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="peer-media" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
@@ -4642,11 +4689,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return pending;
   }
 
-  function fetchJson(url, opts) {
-    const fresh = !!(opts && opts.fresh);
-    if (window.ViktorychDirect && window.ViktorychDirect.allows(url)) {
-      return window.ViktorychDirect.json(url, null, fresh ? { fresh: true } : null);
-    }
+  function fetchJsonNow(url) {
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -4678,6 +4721,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (!next) throw err;
       return run(next);
     });
+  }
+
+  function fetchJson(url, opts) {
+    const direct = window.ViktorychDirect;
+    if (direct && direct.fetchSource && direct.allows && direct.allows(url)) {
+      return direct.fetchSource(url, function () { return fetchJsonNow(url); }, opts && opts.fresh ? { fresh: true } : null);
+    }
+    return fetchJsonNow(url);
   }
 
   function ivBases() {
@@ -8486,8 +8537,6 @@ const here = parseRoute();
   }
 
   function publicJson(url) {
-    const direct = window.ViktorychDirect;
-    if (direct && direct.allows(url)) return direct.json(url);
     return fetchJson(url);
   }
 
@@ -9196,10 +9245,32 @@ const here = parseRoute();
   }
 
   function exploreHits(q) {
+    const dev = window.ViktorychDevice;
+    const idx = window.ViktorychDeviceSearch;
+    if (dev && idx && dev.featureOn(dev.read(), "search", dev.signals()) && !dev.cooling("search")) {
+      try {
+        const found = idx.query(q, {
+          posts: posts(),
+          feeds: shownFeeds(feeds()),
+          hidden: hiddenPost,
+          mute: (feed) => matchesMute(STATE.settings.mutedAccounts, feed.handle, feed.platform, feed.id),
+          byStamp: byStamp,
+          heat: exploreHeat
+        });
+        if (found && found.complete && found.hits) {
+          dev.noteStat("local", "search", dev.measureBytes(found.hits), found.ms || 0);
+          return found.hits;
+        }
+      } catch (err) {
+        dev.rememberFail("search", "index", Date.now(), "feature");
+      }
+    }
     const lq = String(q || "").trim().toLowerCase();
+    const started = Date.now();
     const accounts = lq ? shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && ((f.name || "") + " " + (f.handle || "") + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq)) : [];
     const found = lq ? posts().filter((p) => !hiddenPost(p) && postHay(p).toLowerCase().includes(lq)).sort(byStamp) : [];
     const top = found.slice().sort((a, b) => exploreHeat(b) - exploreHeat(a) || byStamp(a, b));
+    if (dev && dev.featureOn(dev.read(), "search", dev.signals())) dev.noteStat("local", "search", dev.measureBytes({ accounts: accounts, posts: found }), Math.max(0, Date.now() - started));
     return { accounts: accounts, posts: found, top: top };
   }
 
@@ -11013,6 +11084,7 @@ const here = parseRoute();
       if (sub === "display-language" || section === "display-language") key = tr("Display language");
       else if (section === "accessibility") key = tr("Accessibility, display and languages");
       else if (section === "display") key = tr("Display");
+      else if (section === "device") key = tr("Device performance");
       else if (section === "languages") key = tr("Languages");
       else if (section === "data") key = tr("Data usage");
       else if (section === "notifications") key = tr("Notifications");
@@ -11104,9 +11176,21 @@ const here = parseRoute();
       </div>`;
     }
     if (section === "display" && sub === "navigation") return bottomNavSettings();
+    if (section === "device") {
+      if (!window.ViktorychDevice) {
+        loadDeviceCore().then(() => {
+          if (parseRoute().section === "device") render();
+        });
+      }
+      const body = window.ViktorychDevice
+        ? window.ViktorychDevice.settingsHtml(STATE.settings && STATE.settings.devicePerf)
+        : `<div class="device-screen"><div class="set-block"><p class="phandle">${esc(tr("Choose how much this device does itself."))}</p></div></div>`;
+      return settingsHead(tr("Device performance"), "#/settings/display") + body;
+    }
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
         ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
+        ${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
           ${themeBtn("auto", tr("Auto"))}
@@ -11265,10 +11349,12 @@ const here = parseRoute();
   function drawer() {
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
-    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
+    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().filter((def) => def.id !== "games" && def.id !== "music").map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
+    const menuLinks = `<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
+      ${menuLinks}
       ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${tr("Install app")}</button>`}
     </div></div>`;
   }
@@ -13019,6 +13105,11 @@ if (STATE.histClear) {
       return pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     }
     if (route.name === "drive") {
+      loadDeviceCore().then((dev) => {
+        if (!dev) return;
+        dev.ensure("media");
+        dev.ensure("record");
+      });
       if (window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
       if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
       return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
@@ -13678,6 +13769,37 @@ if (STATE.histClear) {
     window.FeedsSplit.bind(split, window.FeedsSplit.sidebar, navEl);
   }
 
+  function replayQueuedPlay() {
+    const pending = window.__VIKTORYCH_PLAY;
+    if (!pending) return;
+    let tile = null;
+    const nodes = document.querySelectorAll(".vplay");
+    if (pending.pid) {
+      for (let i = 0; i < nodes.length; i++) {
+        const pid = nodes[i].getAttribute("data-pid") || "";
+        const mi = nodes[i].getAttribute("data-mi") || "";
+        if (pid === pending.pid && mi === String(pending.mi || "")) { tile = nodes[i]; break; }
+      }
+      if (!tile) {
+        for (let i = 0; i < nodes.length; i++) {
+          if ((nodes[i].getAttribute("data-pid") || "") === pending.pid) { tile = nodes[i]; break; }
+        }
+      }
+    }
+    if (!tile && pending.id) {
+      for (let i = 0; i < nodes.length; i++) {
+        const img = nodes[i].querySelector("img");
+        const src = img ? (img.currentSrc || img.getAttribute("src") || "") : "";
+        if (src.indexOf("/vi/" + pending.id + "/") >= 0) { tile = nodes[i]; break; }
+      }
+    }
+    if (!tile) return;
+    window.__VIKTORYCH_PLAY = null;
+    if (tile.querySelector("iframe")) return;
+    if (tile.dataset.preview && !tile.classList.contains("player")) openFullVideo(tile);
+    else startPlayback(tile, {});
+  }
+
   function render(opts) {
     if (document.documentElement.classList.contains("is-split-drag")) {
       STATE.splitRender = opts || STATE.splitRender || {};
@@ -13863,6 +13985,7 @@ if (STATE.histClear) {
       if (STATE.holdY === y) STATE.holdY = null;
       routing = false;
       scrollFreeze = false;
+      replayQueuedPlay();
       if (opts && opts.done) opts.done();
     };
     if (transition) {
@@ -13933,6 +14056,70 @@ if (STATE.histClear) {
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act && act.indexOf("keys-") === 0 && window.OwnerKeys && window.OwnerKeys.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
+    if (act && act.indexOf("device-") === 0 && !window.ViktorychDevice) {
+      const level = el.dataset.level || "";
+      const key = el.dataset.key || "";
+      loadDeviceCore().then((dev) => {
+        if (!dev) return;
+        el.dataset.level = level;
+        el.dataset.key = key;
+        onAct(el);
+      });
+      return;
+    }
+    if (act === "device-level" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.applyLevel(el.dataset.level || "balanced");
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-toggle" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.toggle(STATE.settings.devicePerf, el.dataset.key || "");
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm" && window.ViktorychDevice) {
+      const perf = window.ViktorychDevice.normalize(STATE.settings.devicePerf);
+      if (perf.webllmAccepted) {
+        STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(perf, false);
+        window.ViktorychDevice.setWarn(false);
+      } else {
+        window.ViktorychDevice.setWarn(true);
+      }
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm-yes" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(STATE.settings.devicePerf, true);
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      else window.ViktorychDevice.ensure("ai").then(function () {
+        if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      });
+      return;
+    }
+    if (act === "device-webllm-no" && window.ViktorychDevice) {
+      window.ViktorychDevice.setWarn(false);
+      render();
+      return;
+    }
+    if (act === "device-ai" && window.ViktorychDevice) {
+      window.ViktorychDevice.openAssistant();
+      return;
+    }
+    if (act === "device-ai-close" && window.ViktorychDevice) {
+      window.ViktorychDevice.closeAssistant();
+      return;
+    }
+    if (act === "device-ai-ask" && window.ViktorychDevice) {
+      window.ViktorychDevice.askAssistant();
+      return;
+    }
     if (act === "set-network-mode") {
       const mode = el.dataset.mode || "auto";
       STATE.settings.networkMode = mode;
@@ -15230,6 +15417,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     refocusBottom(grip.dataset.dragBottom, "grip");
   });
 
+  window.__VIKTORYCH_CLICK = true;
   document.addEventListener("click", (event) => {
     if (swallowTabDrag || swallowNotePress || swallowBottomNavDrag) {
       swallowTabDrag = false;
@@ -15846,6 +16034,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   });
   window.addEventListener("scroll", () => {
     if (!routing && Math.abs(window.scrollY - previewAnchor) >= 24) STATE.scrolled = true;
+    const native = window.ViktorychNative;
+    if (native && native.yieldThread) {
+      native.yieldThread().then(() => schedulePreview());
+      return;
+    }
     schedulePreview();
   }, { passive: true });
   window.addEventListener("resize", () => schedulePreview(), { passive: true });
@@ -16011,6 +16204,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }, true);
   window.addEventListener("hashchange", () => {
     if (window.ViktorychAccounts?.blocking?.()) return;
+    showPill(pendingPillPosts());
     const nextHash = location.hash || "#/";
     const prevHash = lastKey || "";
     if (/^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
@@ -16035,7 +16229,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
     hscrollNav = true;
-    showPill(pendingPillPosts());
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
     render({
@@ -16689,7 +16882,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const job = loadCatalog().then((config) => {
       const selected = timelineFeeds();
       liveDateScrubbed = false;
-      return mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => [])).then((lists) => {
+      const pending = mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => []));
+      timelineUsesDevice = true;
+      releaseDeviceFeeds();
+      return pending.then((lists) => {
         let incoming = [];
         lists.forEach((list, index) => {
           const feed = selected[index];
@@ -16716,12 +16912,52 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return liveRefreshFlight;
   }
 
+  let feedWorker = null;
+  function parseFeedOffThread(text) {
+    if (typeof Worker === "undefined") return Promise.resolve(null);
+    if (feedWorker === false) return Promise.resolve(null);
+    if (!feedWorker) {
+      try { feedWorker = new Worker("feed-worker.js", { type: "module" }); }
+      catch (err) { feedWorker = false; return Promise.resolve(null); }
+    }
+    return new Promise((resolve) => {
+      const id = "f" + Date.now() + Math.random();
+      const timer = setTimeout(() => {
+        feedWorker.removeEventListener("message", onMsg);
+        resolve(null);
+      }, 2500);
+      const onMsg = (event) => {
+        const data = event.data || {};
+        if (data.id !== id) return;
+        clearTimeout(timer);
+        feedWorker.removeEventListener("message", onMsg);
+        resolve(data.doc || null);
+      };
+      feedWorker.addEventListener("message", onMsg);
+      try { feedWorker.postMessage({ id: id, text: text }); }
+      catch (err) { clearTimeout(timer); resolve(null); }
+    });
+  }
+
   async function fetchFeeds(fresh) {
+    if (!fresh && window.__VIKTORYCH_FEED) {
+      try {
+        const early = await window.__VIKTORYCH_FEED;
+        if (early) {
+          const parsed = await parseFeedOffThread(early);
+          if (parsed && Array.isArray(parsed.posts)) return parsed;
+          return JSON.parse(early);
+        }
+      } catch (err) { /* a live fetch still loads the timeline */ }
+    }
     const headers = fresh ? { "X-Feed-Refresh": "1" } : {};
     const init = fresh ? { cache: "no-store", headers: headers } : { credentials: "omit" };
     const res = await fetch("feeds.json", init);
     if (!res.ok) throw new Error(String(res.status));
-    return res.json();
+    const text = await res.text();
+    const parsed = await parseFeedOffThread(text);
+    if (parsed && Array.isArray(parsed.posts)) return parsed;
+    return JSON.parse(text);
   }
 
   function catalogSignature(doc) {
@@ -16831,7 +17067,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
-        try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
+        const title = tr("New posts");
+        const body = trn("newPosts", fresh.length);
+        const payload = { body: body, icon: "icons/icon-192.png", tag: "feeds", data: { hash: "#/" } };
+        const viaWorker = ("serviceWorker" in navigator)
+          ? navigator.serviceWorker.ready.then((reg) => (reg && reg.showNotification ? reg.showNotification(title, payload) : Promise.reject()))
+          : Promise.reject();
+        Promise.resolve(viaWorker).catch(() => { try { new Notification(title, { body: body, icon: payload.icon, tag: "feeds" }); } catch (err) { /* permission can change */ } });
       }
       ensureVideoOwners();
     } catch (err) { /* keep the posts already on screen */ }
@@ -17251,10 +17493,29 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return "";
   }
 
+  function applyNativeLaunch(detail) {
+    if (!detail) return;
+    if (detail.hash) {
+      try { location.hash = detail.hash; } catch (err) { /* the current screen stays */ }
+    }
+    if (detail.compose) {
+      STATE.modal = "compose";
+      if (detail.text) STATE.composeSeed = detail.text;
+    }
+  }
+
   function consumeShareTarget() {
     const params = new URLSearchParams(location.search);
-    if (!params.has("url") && !params.has("text") && !params.has("title")) return;
-    STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "" };
+    const media = params.get("media") || "";
+    const posting = params.get("post") === "1";
+    if (!params.has("url") && !params.has("text") && !params.has("title") && !media && !posting) return;
+    if ((posting || media) && !params.has("url")) {
+      STATE.modal = "compose";
+      STATE.composeSeed = [params.get("title") || "", params.get("text") || ""].filter(Boolean).join("\n");
+      history.replaceState(null, "", location.pathname + "#/home");
+      return;
+    }
+    STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "", media: media };
     const shared = parseSharedLink([params.get("url"), params.get("text"), params.get("title")].filter(Boolean).join(" "));
     const hash = shared || (location.hash && location.hash !== "#/" && location.hash !== "#/home" ? location.hash : "#/incoming");
     history.replaceState(null, "", location.pathname + hash);
@@ -17745,6 +18006,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (!("serviceWorker" in navigator)) return;
+    const iosPush = /iphone|ipad|ipod/i.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (iosPush && !isStandalone()) return;
     try {
       const reg = await navigator.serviceWorker.ready;
       if (!reg.pushManager) return;
@@ -17831,7 +18094,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const item = new Notification(note.name || ("@" + (note.handle || "post")), {
         body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
-        tag: "bell-" + note.id
+        tag: "note-" + note.id
       });
       item.onclick = () => {
         window.focus();
@@ -17852,7 +18115,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       body: note.text || tr("New post"),
       icon: note.avatar || "icons/icon-192.png",
       image: note.image || undefined,
-      tag: "bell-" + note.id,
+      tag: "note-" + note.id,
       data: { hash: note.hash || "#/" }
     };
     const title = note.name || ("@" + (note.handle || "post"));
@@ -18016,12 +18279,99 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     toast(STATE.settings.notify ? tr("Notifications on") : tr("Notifications stay off"));
   }
 
+  let deviceCoreTask = null;
+  let deviceScriptReady = false;
+  let timelineUsesDevice = false;
+
+  function holdDeviceFeeds() {
+    timelineUsesDevice = false;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(true);
+  }
+
+  function releaseDeviceFeeds() {
+    if (!deviceScriptReady || !timelineUsesDevice) return;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(false);
+  }
+
+  function loadDeviceCore() {
+    if (window.ViktorychDevice) return Promise.resolve(window.ViktorychDevice);
+    if (deviceCoreTask) return deviceCoreTask;
+    deviceCoreTask = new Promise((resolve) => {
+      const tag = document.createElement("script");
+      tag.src = "device.js";
+      tag.async = true;
+      tag.onload = () => {
+        const dev = window.ViktorychDevice || null;
+        if (dev) deviceScriptReady = true;
+        if (dev && window.ViktorychStorage && window.ViktorychStorage.applyDeviceCap) window.ViktorychStorage.applyDeviceCap();
+        releaseDeviceFeeds();
+        resolve(dev);
+      };
+      tag.onerror = () => resolve(null);
+      (document.body || document.documentElement).appendChild(tag);
+    });
+    return deviceCoreTask;
+  }
+
+  function scheduleDeviceCore() {
+    let started = false;
+    let idleId = 0;
+    let fallbackId = 0;
+    const names = ["pointerdown", "keydown", "scroll"];
+    const stop = () => {
+      names.forEach((name) => window.removeEventListener(name, onInteract, true));
+      window.removeEventListener("hashchange", onInteract);
+      window.removeEventListener("popstate", onInteract);
+      if (idleId && typeof cancelIdleCallback === "function") cancelIdleCallback(idleId);
+      if (fallbackId) clearTimeout(fallbackId);
+    };
+    const fire = () => {
+      if (started) return;
+      started = true;
+      stop();
+      loadDeviceCore().then(() => registerPeriodic());
+    };
+    function onInteract() { fire(); }
+    names.forEach((name) => window.addEventListener(name, onInteract, { capture: true, passive: true }));
+    window.addEventListener("hashchange", onInteract);
+    window.addEventListener("popstate", onInteract);
+    const armIdle = () => {
+      if (started) return;
+      if (typeof requestIdleCallback === "function") idleId = requestIdleCallback(fire, { timeout: 1200 });
+      else fallbackId = setTimeout(fire, 1200);
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(armIdle));
+    else armIdle();
+  }
+
   function registerPeriodic() {
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.ready.then((reg) => {
-      if (!reg.periodicSync) return;
-      return reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 });
+      const dev = window.ViktorychDevice;
+      if (dev && !dev.featureOn(dev.read(), "sync", dev.signals())) return;
+      const jobs = [];
+      if (reg.periodicSync) {
+        ["feeds", "notifications", "weather"].forEach((tag) => {
+          jobs.push(reg.periodicSync.register(tag, { minInterval: 30 * 60 * 1000 }).catch(() => {}));
+        });
+      }
+      if (reg.sync && reg.sync.register) jobs.push(reg.sync.register("feeds").catch(() => {}));
+      return Promise.all(jobs);
     }).catch(() => {});
+  }
+
+  function scheduleDeviceIndex() {
+    if (parseRoute().name !== "explore" && parseRoute().name !== "settings") return;
+    const run = () => {
+      loadDeviceCore().then((dev) => {
+        if (!dev || !dev.featureOn(dev.read(), "search", dev.signals())) return;
+        dev.ensure("search").then(() => {
+          if (window.ViktorychDeviceSearch) window.ViktorychDeviceSearch.indexPosts(posts(), feeds());
+        });
+      });
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 5000 });
+    else setTimeout(run, 4000);
   }
 
   function syncWorkerState() {
@@ -18107,9 +18457,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       STATE.installPrompt = event;
+      window.__VIKTORYCH_INSTALL = event;
+      try { document.dispatchEvent(new CustomEvent("viktorych-install-ready")); } catch (err) { /* the menu install button still works */ }
       render();
     });
-    window.addEventListener("appinstalled", () => { STATE.installPrompt = null; render(); });
+    window.addEventListener("appinstalled", () => {
+      STATE.installPrompt = null;
+      window.__VIKTORYCH_INSTALL = null;
+      if (window.ViktorychStorage && window.ViktorychStorage.askPersist) window.ViktorychStorage.askPersist();
+      render();
+    });
     matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
       if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
     });
@@ -18589,6 +18946,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
 
   async function boot() {
+    holdDeviceFeeds();
     syncRuVisitorGeo();
     if (window.ViktorychLocal) {
       const savedScrolls = window.ViktorychLocal.readScrolls();
@@ -18608,8 +18966,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     consumeShareTarget();
+    document.addEventListener("viktorych-launch", (event) => {
+      applyNativeLaunch(event.detail);
+      render();
+    });
+    if (window.ViktorychNative && window.ViktorychNative.takeLaunch) applyNativeLaunch(window.ViktorychNative.takeLaunch());
     bindShell();
     registerSW();
+    scheduleDeviceCore();
     STATE.error = null;
     loadStatus();
     STATE.settings = loadSettings();
@@ -18618,7 +18982,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
-    loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
+    setTimeout(() => { loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {}); }, 8000);
     const snap = loadTimelineSnap();
     const pill = window.ViktorychLocal ? window.ViktorychLocal.readPill() : [];
     if (pill && pill.length) STATE.pendingFeed = { posts: pill, feeds: (snap && snap.feeds) || [] };
@@ -18630,9 +18994,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      scheduleDeviceIndex();
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
-    } else if (painted) {
+    } else if (painted || document.querySelector("#app [data-boot-card]")) {
       STATE.loading = false;
     } else {
       STATE.loading = true;
@@ -18670,6 +19035,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
       }
       render({ reset: true });
+      scheduleDeviceIndex();
       loadNewestShard().then(() => {
         if (applyIaPreview(STATE.data)) render({ reset: true });
         revealArchive();
@@ -18738,58 +19104,75 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render();
     syncWorkerState();
   });
-  if (window.FeedsTV && window.FeedsTV.attach) window.FeedsTV.attach();
-  if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
-  if (window.FeedsPeople) {
-    window.FeedsPeople.bind({
-      esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
-      followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
-      sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
-      statusHash: statusHash, watchHash: watchHash, render: render,
-      connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
-      extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
-      ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsPeople.start();
+  function bindShellModules(andRender) {
+    const blocked = window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking();
+    if (window.FeedsTV && window.FeedsTV.attach && !window.FeedsTV.__shell) {
+      window.FeedsTV.__shell = true;
+      window.FeedsTV.attach();
+    }
+    if (window.FeedsTranslate && !window.FeedsTranslate.__shell) {
+      window.FeedsTranslate.__shell = true;
+      window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
+    }
+    if (window.FeedsPeople && !window.FeedsPeople.__shell) {
+      window.FeedsPeople.__shell = true;
+      window.FeedsPeople.bind({
+        esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
+        followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
+        sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
+        statusHash: statusHash, watchHash: watchHash, render: render,
+        connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
+        extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
+        ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
+      });
+      if (!blocked) window.FeedsPeople.start();
+    }
+    if (window.FeedsDiscord && !window.FeedsDiscord.__shell) {
+      window.FeedsDiscord.__shell = true;
+      window.FeedsDiscord.bind({
+        esc: esc,
+        render: render,
+        stay: () => { scrollFreeze = false; routing = false; },
+        noteHash: (hash) => {
+          lastKey = hash || (location.hash || "#/");
+          STATE.scrollKey = "#/messages";
+        }
+      });
+      if (!blocked) window.FeedsDiscord.start();
+    }
+    if (window.Stories && !window.Stories.__shell) {
+      window.Stories.__shell = true;
+      window.Stories.bind({
+        icon: icon,
+        render: render,
+        follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
+        dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
+      });
+    }
+    if (window.Spaces && !window.Spaces.__shell) {
+      window.Spaces.__shell = true;
+      window.Spaces.bind({
+        isFollowed: isFollowed,
+        render: render,
+        findFeed: findFeed,
+        shareRoot: shareRoot,
+        toast: toast
+      });
+      if (!blocked) window.Spaces.start();
+    }
+    if (window.SIntelMusic && window.SIntelMusic.bind && !window.SIntelMusic.__shell && !blocked) {
+      window.SIntelMusic.__shell = true;
+      window.SIntelMusic.bind({
+        render: function () { render(); },
+        toast: toast,
+        go: goHash,
+        repo: function () { return GITHUB_REPO; }
+      });
+    }
+    if (andRender && !blocked) render();
   }
-  if (window.FeedsDiscord) {
-    window.FeedsDiscord.bind({
-      esc: esc,
-      render: render,
-      stay: () => { scrollFreeze = false; routing = false; },
-      noteHash: (hash) => {
-        lastKey = hash || (location.hash || "#/");
-        STATE.scrollKey = "#/messages";
-      }
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsDiscord.start();
-  }
-  if (window.Stories) {
-    window.Stories.bind({
-      icon: icon,
-      render: render,
-      follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
-      dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
-    });
-  }
-  if (window.Spaces) {
-    window.Spaces.bind({
-      isFollowed: isFollowed,
-      render: render,
-      findFeed: findFeed,
-      shareRoot: shareRoot,
-      toast: toast
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.Spaces.start();
-  }
-  if (window.SIntelMusic && window.SIntelMusic.bind && !(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) {
-    window.SIntelMusic.bind({
-      render: function () { render(); },
-      toast: toast,
-      go: goHash,
-      repo: function () { return GITHUB_REPO; }
-    });
-  }
+  bindShellModules(false);
+  window.addEventListener("viktorych-late", () => bindShellModules(true));
   function bindCommunitiesModule() {
     if (!window.ViktorychCommunities) return;
     window.ViktorychCommunities.requestRender = function () { render(); };
@@ -18827,9 +19210,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (info.name === "communities") bindCommunitiesModule();
     if (!info.silent) render();
   });
-  if (window.ViktorychLazy && window.ViktorychLazy.preload) {
-    window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
-  }
+  setTimeout(() => {
+    if (window.ViktorychLazy && window.ViktorychLazy.preload) {
+      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
+    }
+  }, 8000);
   window.addEventListener("viktorych-key-alert", function (event) {
     const detail = event.detail || {};
     if (!detail.id || !detail.text) return;
