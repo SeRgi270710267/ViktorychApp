@@ -19933,6 +19933,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (dev && window.ViktorychStorage && window.ViktorychStorage.applyDeviceCap) window.ViktorychStorage.applyDeviceCap();
         releaseDeviceFeeds();
         resolve(dev);
+        if (dev) render();
       };
       tag.onerror = () => resolve(null);
       (document.body || document.documentElement).appendChild(tag);
