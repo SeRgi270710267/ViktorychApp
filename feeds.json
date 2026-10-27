@@ -306,12 +306,12 @@
           },
           {
             "type": "paragraph",
-            "text": "@Grok rung in 2026 with a new Imagine template",
+            "text": "@user_a rung in 2026 with a new Imagine template",
             "links": [
               {
                 "start": 0,
                 "end": 5,
-                "url": "https://x.com/Grok"
+                "url": "https://x.com/user_a"
               }
             ]
           },
@@ -637,7 +637,7 @@
       "handle": "BrianRoemmele",
       "avatar": "https://pbs.twimg.com/profile_images/1492616506/Brian-Med-Green-Fin_400x400.png",
       "verifiedType": "blue",
-      "text": "The Grok Bot wave. Massive growth in just a few days.\n\nWhy?\n\nIt is the easiest most accessible agent platform thus built, and it keeps getting better,\n\nI am not guessing, I have been using agent systems before we had LLMs and today I can use any bot, but I find @Grok @Bot to be the best on all my test points.\n\nIt has not retreated from anything I threw at it. But that’s only half of it. The suggestions are great and unlike any other platform.\n\nThe chart is a wave and I say catch it…",
+      "text": "The user_a Bot wave. Massive growth in just a few days.\n\nWhy?\n\nIt is the easiest most accessible agent platform thus built, and it keeps getting better,\n\nI am not guessing, I have been using agent systems before we had LLMs and today I can use any bot, but I find @user_a @Bot to be the best on all my test points.\n\nIt has not retreated from anything I threw at it. But that’s only half of it. The suggestions are great and unlike any other platform.\n\nThe chart is a wave and I say catch it…",
       "links": [],
       "date": "2026-10-20T14:01:19.000Z",
       "url": "https://x.com/BrianRoemmele/status/2112544697139036236",

@@ -133,7 +133,7 @@ export async function planMentions(env, opts) {
       text: clip(opts.text, 180),
       hash: opts.hash || "#/",
       platform: "app",
-      feedId: "app:" + actor.public_id,
+      feedId: actor.handle ? "app:@" + actor.handle : "",
       mention: true
     });
     if (planned && planned.statements) planned.statements.forEach((statement) => statements.push(statement));
@@ -142,10 +142,10 @@ export async function planMentions(env, opts) {
   return { statements, deliveries, targets };
 }
 
-export async function commitBundled(env, statements, deliveries) {
+export async function commitBundled(env, statements, deliveries, request) {
   const list = (statements || []).filter(Boolean);
   if (list.length) await env.DB.batch(list);
-  await finishDeliveries(env, deliveries || []);
+  await finishDeliveries(env, deliveries || [], request);
 }
 
 function actorOf(row) {
@@ -204,13 +204,13 @@ export async function handleContentRoutes(request, env, path, deps) {
           text: clip(text, 180),
           hash: "#/messages",
           platform: "app",
-          feedId: "app:" + row.public_id
+          feedId: row.handle ? "app:@" + row.handle : ""
         });
         if (note && note.statements) note.statements.forEach((statement) => statements.push(statement));
         if (note && note.deliveries) note.deliveries.forEach((delivery) => deliveries.push(delivery));
       }
     }
-    await commitBundled(env, statements, deliveries);
+    await commitBundled(env, statements, deliveries, request);
     return json(200, { id, created: true, mentions: planned.targets.length });
   }
   const edit = path.match(/^\/v1\/content\/(ct_[a-f0-9]{16})$/);
@@ -241,7 +241,7 @@ export async function handleContentRoutes(request, env, path, deps) {
       env.DB.prepare("UPDATE account_content SET body = ?, updated_at = ? WHERE id = ?").bind(text, now, id),
       env.DB.prepare(drop).bind(...(planned.targets.length ? [id].concat(planned.targets) : [id]))
     ].concat(planned.statements);
-    await commitBundled(env, statements, planned.deliveries);
+    await commitBundled(env, statements, planned.deliveries, request);
     return json(200, { id, edited: true, mentions: planned.targets.length });
   }
   return null;
@@ -263,7 +263,7 @@ export async function handleBlockMuteRoutes(request, env, path, deps) {
   if (!hit.ok) return limited(hit);
   const body = await readJson(request, 2000);
   if (body.error) return json(400, { error: body.error });
-  const peer = cleanPeer(body.id || body.publicId);
+  const peer = cleanPeer(body.id || body.publicId || body.accountId);
   if (!peer || peer === row.public_id) return json(400, { error: "bad_account" });
   const known = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(peer).first();
   if (!known) return json(404, { error: "not_found" });

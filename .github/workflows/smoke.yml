@@ -55,6 +55,9 @@ jobs:
           npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
           PLAYWRIGHT_MJS=/tmp/pw/node_modules/playwright-core/index.js node scripts/sw_update_test.mjs
 
+      - name: Notifications list is never blank
+        run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/notifications_page_test.mjs
+
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
 
@@ -79,3 +82,8 @@ jobs:
           node scripts/translate_test.js
           node scripts/ondevice_ai_test.js
           node scripts/dock_test.js
+
+      - name: Composer writing tools
+        run: |
+          npm install --prefix /tmp/pw-compose --no-fund --no-audit playwright-core
+          PLAYWRIGHT_CORE=/tmp/pw-compose/node_modules/playwright-core/index.js node scripts/compose_ai_test.mjs

@@ -4,7 +4,7 @@ const VERSION = "viktorych-a20-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-27T22:40:00Z-actions
+// cache-bust: 2026-10-27T22:45:00Z-actions
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -395,7 +395,7 @@ function isOwnedTelegram(url) {
 }
 
 function isAccountMedia(url) {
-  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname);
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname) || /\/v1\/media\/view\/[a-f0-9]{32}$/.test(url.pathname);
 }
 
 function privateData(url) {
@@ -1193,12 +1193,14 @@ async function doPrecache(report, generation, signal) {
   }
 }
 
-async function runApply() {
+async function runApply(fresh) {
   updateReporting = true;
-  const task = precacheShell(true, true);
+  // A nudge with fresh:false must not abort a download that is already
+  // running. Retry omits the flag and replaces a download that is stuck.
+  const task = precacheShell(true, fresh !== false);
   const generation = task.generation;
   try {
-    broadcastProgress({ step: "download", files: 0, totalFiles: SHELL_FILES.length, bytes: 0, totalBytes: 0 }, true);
+    if (fresh !== false) broadcastProgress({ step: "download", files: 0, totalFiles: SHELL_FILES.length, bytes: 0, totalBytes: 0 }, true);
     const state = await task;
     if (generation !== precacheGeneration) return;
     broadcastProgress({ step: "install", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
@@ -1216,6 +1218,21 @@ async function runApply() {
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "drop-profile-media") {
+    event.waitUntil((async () => {
+      const names = await caches.keys();
+      await Promise.all(names.map(async (name) => {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        await Promise.all(keys.map((req) => {
+          const path = new URL(req.url).pathname;
+          if (/\/v1\/media\/(?:view\/[a-f0-9]{32}|(?:avatars|banners)\/\d{12}\/)/.test(path)) return cache.delete(req);
+          return Promise.resolve(false);
+        }));
+      }));
+    })());
+    return;
+  }
   if (data.type === "peer-flag") {
     peerOn = !!data.on;
     return;
@@ -1251,7 +1268,7 @@ self.addEventListener("message", (event) => {
     return;
   }
   if (data.type === "apply-update" || data.type === "skip-waiting") {
-    event.waitUntil(runApply());
+    event.waitUntil(runApply(data.type === "skip-waiting" || data.fresh !== false));
     return;
   }
   if (data.type === "ru_mode") {
@@ -1447,7 +1464,7 @@ self.addEventListener("fetch", (event) => {
       else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
       const origin = request.headers.get("origin");
       if (origin) headers.set("origin", origin);
-      if (isOwnerPlay(url) || self.ViktorychStorage.categoryOf(url.href) === "") {
+      if (isAccountMedia(url) || isOwnerPlay(url) || self.ViktorychStorage.categoryOf(url.href) === "") {
         const range = request.headers.get("Range");
         if (range) headers.set("Range", range);
         return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });

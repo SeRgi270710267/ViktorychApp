@@ -154,7 +154,7 @@ test("follows persist for the signed-in account and stay private", async () => {
   const mine = await call("/v1/follows", { ip: "203.0.113.221", token: otherDevice.body.token });
   assert.equal(mine.status, 200);
   assert.equal(mine.body.followingCount, 2);
-  assert.deepEqual(mine.body.ids.sort(), ["app:" + bea.account.publicId, "x:copperlane"].sort());
+  assert.deepEqual(mine.body.ids.sort(), ["app:@bea_fl", "x:copperlane"].sort());
 
   const following = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=following", {
     ip: "203.0.113.222",
@@ -162,7 +162,7 @@ test("follows persist for the signed-in account and stay private", async () => {
   });
   assert.equal(following.status, 200);
   assert.equal(following.body.accounts.length, 2);
-  const beaRow = following.body.accounts.find((row) => row.id === "app:" + bea.account.publicId);
+  const beaRow = following.body.accounts.find((row) => row.id === "app:@bea_fl");
   const elon = following.body.accounts.find((row) => row.id === "x:copperlane");
   assert.equal(beaRow.kind, "account");
   assert.equal(beaRow.handle, "bea_fl");
@@ -232,8 +232,9 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(withApp.status, 200, withApp.text);
   assert.equal(withApp.body.followingCount, 3);
   const beaList = await call("/v1/follows", { ip: "203.0.113.231", token: bea.token });
-  assert.equal(beaList.body.ids.includes("app:" + ada.account.publicId), true);
+  assert.equal(beaList.body.ids.includes("app:@ada_fl"), true);
   assert.equal(beaList.body.ids.includes("app:" + bea.account.publicId), false);
+  assert.equal(beaList.body.ids.includes("app:@bea_fl"), false);
   assert.equal(beaList.body.ids.includes("app:000000000000"), false);
 
   // Private follows test

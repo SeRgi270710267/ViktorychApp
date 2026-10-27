@@ -12,10 +12,12 @@
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { tiktokNoteHidden, visibleNotes } from "../../shared/tiktok-lock.js";
 import { publishToAccount } from "./channel.js";
+import { visibleAvatarUrl } from "./profile-media.js";
 import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
+import { actorHidden, canMention } from "./social.js";
 
 const encoder = new TextEncoder();
-const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, dm: 1, discord: 1, live: 1 };
+const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, dm: 1, discord: 1, live: 1 };
 const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms"];
 const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
 const BACKOFF_MS = [2000, 10000, 60000, 300000, 1800000];
@@ -274,6 +276,34 @@ async function writeReadUntil(env, publicId, until) {
   ).bind(publicId, next, now).run();
 }
 
+function legacyMedia(value) {
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(String(value || "")) || /^media\/(?:avatars|banners)\/\d{12}\//.test(String(value || ""));
+}
+
+async function presentNote(env, request, viewer, item) {
+  const next = Object.assign({}, item);
+  next.actorId = "";
+  if (legacyMedia(next.avatar)) next.avatar = "";
+  if (legacyMedia(next.image)) next.image = "";
+  const feed = String(next.feedId || "");
+  const match = /^app:(\d{12})$/.exec(feed);
+  if (match) {
+    const row = await env.DB.prepare("SELECT handle FROM accounts WHERE public_id = ?").bind(match[1]).first();
+    next.feedId = row && row.handle ? "app:@" + row.handle : "";
+  }
+  if (legacyMedia(next.hash) || /\d{12}/.test(String(next.hash || ""))) {
+    next.hash = String(next.hash || "").replace(/([A-Za-z0-9_\u0400-\u04FF]{1,32})\d{12}\b/g, "$1");
+  }
+  if (next.handle && request && viewer) {
+    const shown = await visibleAvatarUrl(env, request, viewer, next.handle);
+    if (shown === null) {
+      if (legacyMedia(next.avatar)) next.avatar = "";
+    } else next.avatar = shown || "";
+  }
+  if (legacyMedia(next.avatar)) next.avatar = "";
+  return next;
+}
+
 function itemFromRow(row, readUntil) {
   let extra = {};
   try { extra = JSON.parse(row.payload || "{}"); }
@@ -349,7 +379,9 @@ async function unreadCount(env, publicId, readUntil, viewer) {
   const prefs = await readPrefs(env, publicId);
   const follows = await followedActorSet(env, publicId);
   const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, readUntil));
-  return items.filter((item) => !item.read && prefVisible(prefs, item, !!follows[item.actorId]) && !tiktokNoteHidden(item, view)).length;
+  const visible = items.filter((item) => !item.read && prefVisible(prefs, item, !!follows[item.actorId]) && !tiktokNoteHidden(item, view));
+  const kept = await dropHiddenNotes(env, publicId, visible);
+  return kept.length;
 }
 
 async function listBells(env, publicId) {
@@ -388,11 +420,12 @@ async function followedActorSet(env, publicId) {
   return set;
 }
 
-async function viewFor(env, publicId, since, lockedOverride) {
+async function viewFor(env, publicId, since, lockedOverride, request) {
   const state = await readState(env, publicId);
   const prefs = await readPrefs(env, publicId);
   const follows = await followedActorSet(env, publicId);
   const viewer = await lockViewer(env, publicId, lockedOverride);
+  const mediaViewer = { public_id: publicId };
   const sinceN = Number(since) || 0;
   const listed = sinceN
     ? await env.DB.prepare(
@@ -404,14 +437,16 @@ async function viewFor(env, publicId, since, lockedOverride) {
   const raw = (listed && listed.results) || [];
   const items = [];
   let cursor = sinceN;
-  raw.forEach((row) => {
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i];
     const at = Number(row.updated_at) || Number(row.at) || 0;
     if (at > cursor) cursor = at;
     const item = itemFromRow(row, state.readUntil);
-    if (!prefVisible(prefs, item, !!follows[item.actorId])) return;
-    if (tiktokNoteHidden(item, viewer)) return;
-    items.push(item);
-  });
+    if (!prefVisible(prefs, item, !!follows[item.actorId])) continue;
+    if (tiktokNoteHidden(item, viewer)) continue;
+    if (await actorHidden(env, publicId, item.actorId)) continue;
+    items.push(await presentNote(env, request, mediaViewer, item));
+  }
   if (!sinceN) {
     const maxRow = await env.DB.prepare(
       "SELECT MAX(updated_at) AS n FROM notifications WHERE public_id = ?"
@@ -640,11 +675,11 @@ async function sendPush(env, publicId, item, viewer) {
     body: item.text || "",
     hash: item.hash || "#/",
     id: item.id,
-    icon: item.avatar || "",
+    icon: legacyMedia(item.avatar) ? "" : (item.avatar || ""),
     tag: "note-" + item.id,
     platform: item.platform || "",
     handle: item.handle || "",
-    feedId: item.feedId || ""
+    feedId: /^app:\d{12}$/.test(String(item.feedId || "")) ? "" : (item.feedId || "")
   }));
   let failed = false;
   for (let i = 0; i < rows.length; i++) {
@@ -694,6 +729,8 @@ function titleKeyFor(item) {
   if (kind === "dm") return "{name} sent you a message";
   if (kind === "discord") return "Discord alert";
   if (kind === "follow") return "{name} followed you";
+  if (kind === "follow_request") return "{name} requested to follow you";
+  if (kind === "follow_accept") return "{name} accepted your follow request";
   if (kind === "live") return "{name} is live";
   return "New post notifications for @{handle}";
 }
@@ -709,7 +746,7 @@ function prefKind(kind) {
   if (kind === "quote") return "quotes";
   if (kind === "like") return "likes";
   if (kind === "repost") return "reposts";
-  if (kind === "follow") return "follows";
+  if (kind === "follow" || kind === "follow_request" || kind === "follow_accept") return "follows";
   if (kind === "dm") return "dms";
   return "";
 }
@@ -795,6 +832,12 @@ async function planPlain(env, input) {
   const kind = cleanKind(input && input.kind);
   const key = clip(input && input.idempotencyKey, 160);
   if (!/^\d{12}$/.test(publicId) || !kind || !key) return null;
+  const actorId = String(input.actorId || "");
+  if (/^\d{12}$/.test(actorId)) {
+    try {
+      if (await actorHidden(env, publicId, actorId)) return null;
+    } catch (err) { /* a schema miss must not drop the note */ }
+  }
   const now = Date.now();
   const at = Number(input.at) > 0 ? Number(input.at) : now;
   const subject = clip(input.subject || input.handle || "", 80).replace(/^@/, "").toLowerCase();
@@ -843,6 +886,12 @@ async function planGrouped(env, input) {
   const groupKey = clip(input && input.groupKey, 160);
   const eventKey = clip(input && input.idempotencyKey, 160);
   if (!/^\d{12}$/.test(publicId) || !kind || !groupKey || !eventKey) return null;
+  const actorId = String(input.actorId || "");
+  if (/^\d{12}$/.test(actorId)) {
+    try {
+      if (await actorHidden(env, publicId, actorId)) return null;
+    } catch (err) { /* a schema miss must not drop the note */ }
+  }
   const have = await env.DB.prepare(
     "SELECT note_id FROM notification_events WHERE public_id = ? AND event_key = ?"
   ).bind(publicId, eventKey).first();
@@ -920,7 +969,7 @@ async function failOutbox(env, delivery, kind) {
   ).bind(attempts, nextAt, delivery.deliveryId).run();
 }
 
-export async function finishDeliveries(env, deliveries) {
+export async function finishDeliveries(env, deliveries, request) {
   const list = Array.isArray(deliveries) ? deliveries : [];
   for (let i = 0; i < list.length; i++) {
     const delivery = list[i];
@@ -928,18 +977,19 @@ export async function finishDeliveries(env, deliveries) {
     await trimNotes(env, delivery.publicId);
     const state = await readState(env, delivery.publicId);
     const viewer = await lockViewer(env, delivery.publicId);
-    const hidden = tiktokNoteHidden(delivery.item, viewer);
+    const item = await presentNote(env, request, { public_id: delivery.publicId }, delivery.item);
+    const hidden = tiktokNoteHidden(item, viewer);
     const unread = await unreadCount(env, delivery.publicId, state.readUntil, viewer);
     try {
       await publishNotes(env, delivery.publicId, {
         type: "upsert",
-        items: hidden ? [] : [delivery.item],
+        items: hidden ? [] : [item],
         unread,
         readUntil: state.readUntil
       });
     } catch (err) { logSafe("channel_failed"); }
     if (delivery.mode !== "push") continue;
-    const result = await sendPush(env, delivery.publicId, delivery.item, viewer);
+    const result = await sendPush(env, delivery.publicId, item, viewer);
     if (result && result.ok) {
       await env.DB.prepare(
         "UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?"
@@ -960,7 +1010,7 @@ export async function emitNotification(env, input) {
     if (/UNIQUE/i.test(String(err && err.message || err))) return { created: false, id: planned.id };
     throw err;
   }
-  await finishDeliveries(env, planned.deliveries);
+  await finishDeliveries(env, planned.deliveries, input && input.request);
   const unread = await unreadCount(env, String(input.publicId || ""), (await readState(env, String(input.publicId || ""))).readUntil);
   return { created: !!planned.created, id: planned.id, unread };
 }
@@ -1196,7 +1246,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     const since = Number(url.searchParams.get("since")) || 0;
     const flag = url.searchParams.get("locked");
     if (flag === "0" || flag === "1") await writeShortsLocked(env, row.public_id, flag === "1");
-    return json(200, await viewFor(env, row.public_id, since, flag));
+    return json(200, await viewFor(env, row.public_id, since, flag, request));
   }
   if (path === "/v1/notifications" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -1220,7 +1270,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     }
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
     if (body.bells && typeof body.bells === "object") await saveBells(env, row.public_id, body.bells, body.bellsAt);
-    return json(200, await viewFor(env, row.public_id, 0, body.shortsLocked));
+    return json(200, await viewFor(env, row.public_id, 0, body.shortsLocked, request));
   }
   if (path === "/v1/notifications/read" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -1229,7 +1279,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     if (body.error) return json(400, { error: body.error });
     await markRead(env, row.public_id, body.all === true ? Date.now() : body.until, body.ids, body.all === true ? "all" : body.tab);
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
-    return json(200, await viewFor(env, row.public_id));
+    return json(200, await viewFor(env, row.public_id, 0, null, request));
   }
   if (path === "/v1/push/vapid" && request.method === "GET") {
     const keys = await vapidPublic(env);
@@ -1267,17 +1317,72 @@ export async function handleNotificationRoutes(request, env, path, deps) {
   return null;
 }
 
-export async function notifyFollow(env, actor, targetId) {
+async function dropHiddenNotes(env, publicId, items) {
+  const out = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const actorId = String(item && item.actorId || "");
+    if (/^\d{12}$/.test(actorId)) {
+      try {
+        if (await actorHidden(env, publicId, actorId)) continue;
+      } catch (err) { /* keep the note */ }
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+export async function notifyFollow(env, actor, targetId, request) {
   if (!targetId || String(targetId).indexOf("app:") !== 0) return;
   const publicId = String(targetId).slice(4);
   if (!/^\d{12}$/.test(publicId) || publicId === actor.public_id) return;
   const now = Date.now();
+  let avatar = "";
+  if (request) avatar = await visibleAvatarUrl(env, request, { public_id: publicId }, actor.handle) || "";
   await emitNotification(env, {
     publicId,
     kind: "follow",
     at: now,
     actorId: actor.public_id,
     idempotencyKey: "follow:" + actor.public_id + ":" + now,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: "",
+    avatar,
+    hash: "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: actor.handle ? "app:@" + actor.handle : "",
+    request
+  });
+}
+
+export async function notifyFollowRequest(env, actor, targetPublicId) {
+  if (!/^\d{12}$/.test(String(targetPublicId || "")) || targetPublicId === actor.public_id) return;
+  const now = Date.now();
+  await emitNotification(env, {
+    publicId: targetPublicId,
+    kind: "follow_request",
+    at: now,
+    actorId: actor.public_id,
+    idempotencyKey: "followreq:" + actor.public_id + ":" + now,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: "",
+    hash: "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: "app:" + actor.public_id
+  });
+}
+
+export async function notifyFollowAccept(env, actor, requesterPublicId) {
+  if (!/^\d{12}$/.test(String(requesterPublicId || "")) || requesterPublicId === actor.public_id) return;
+  const now = Date.now();
+  await emitNotification(env, {
+    publicId: requesterPublicId,
+    kind: "follow_accept",
+    at: now,
+    actorId: actor.public_id,
+    idempotencyKey: "followok:" + actor.public_id + ":" + now,
     handle: actor.handle,
     name: actor.display_name,
     text: "",
@@ -1309,7 +1414,7 @@ export async function notifyRepost(env, actor, cleaned) {
     text: clip(cleaned.comment || post.text || "", 180),
     hash: "#/" + encodeURIComponent(actor.handle || ""),
     platform: "app",
-    feedId: "app:" + actor.public_id
+    feedId: actor.handle ? "app:@" + actor.handle : ""
   });
 }
 
@@ -1335,7 +1440,7 @@ export async function planRepostNotification(env, actor, cleaned) {
     text: clip(cleaned.comment || post.text || "", 180),
     hash: "#/" + encodeURIComponent(actor.handle || ""),
     platform: "app",
-    feedId: "app:" + actor.public_id
+    feedId: actor.handle ? "app:@" + actor.handle : ""
   });
 }
 
@@ -1357,6 +1462,9 @@ export async function notifyMentions(env, actor, text, except, idempotencyPrefix
     const author = await env.DB.prepare("SELECT public_id, handle FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
     if (!author || seen[author.public_id]) continue;
     seen[author.public_id] = true;
+    try {
+      if (!(await canMention(env, actor.public_id, author.public_id))) continue;
+    } catch (err) { /* mention checks must not drop every note */ }
     await emitNotification(env, {
       publicId: author.public_id,
       kind: "mention",
@@ -1368,7 +1476,7 @@ export async function notifyMentions(env, actor, text, except, idempotencyPrefix
       text: clip(text, 180),
       hash: hash || "#/",
       platform: "app",
-      feedId: "app:" + actor.public_id,
+      feedId: actor.handle ? "app:@" + actor.handle : "",
       mention: true
     });
   }

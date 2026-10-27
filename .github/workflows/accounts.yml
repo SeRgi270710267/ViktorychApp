@@ -14,6 +14,9 @@ on:
       - "scripts/presence_chrome_test.mjs"
       - "scripts/webauthn_lock_test.mjs"
       - "scripts/app_lock_crypto_test.mjs"
+      - "scripts/social_ui_test.js"
+      - "accounts.js"
+      - "app.js"
       - ".github/workflows/accounts.yml"
   push:
     branches:
@@ -29,6 +32,9 @@ on:
       - "scripts/presence_chrome_test.mjs"
       - "scripts/webauthn_lock_test.mjs"
       - "scripts/app_lock_crypto_test.mjs"
+      - "scripts/social_ui_test.js"
+      - "accounts.js"
+      - "app.js"
       - ".github/workflows/accounts.yml"
 
 permissions:
@@ -50,14 +56,25 @@ jobs:
         working-directory: worker
         run: npm ci && npm test
 
+      - name: Privacy cover rules
+        run: node scripts/app_lock_crypto_test.mjs
+
       - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
         with:
           chrome-version: stable
 
+      - name: Social graph page check
+        run: node scripts/social_ui_test.js
+
       - name: Presence page check
+        env:
+          CHROME: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: node scripts/presence_chrome_test.mjs
 
       - name: WebAuthn virtual authenticator, app lock, and privacy screen
+        env:
+          CHROME: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: |
           npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
           PLAYWRIGHT_MJS=/tmp/pw/node_modules/playwright-core/index.js node scripts/webauthn_lock_test.mjs

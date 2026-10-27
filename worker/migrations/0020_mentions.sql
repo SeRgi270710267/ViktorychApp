@@ -1,4 +1,7 @@
-ALTER TABLE accounts ADD COLUMN protected_account INTEGER NOT NULL DEFAULT 0;
+-- The protected_account column is already added by the worker when it is
+-- missing. A bare ALTER TABLE aborts this whole file once the column exists,
+-- which would leave the migration unrecorded. Every statement below is safe
+-- to run again.
 
 CREATE TABLE IF NOT EXISTS account_content (
   id TEXT PRIMARY KEY,

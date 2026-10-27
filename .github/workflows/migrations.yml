@@ -1,0 +1,30 @@
+name: Migration numbers
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - ".github/workflows/actions-cleanup.once"
+      - ".github/workflows/actions-cleanup.yml"
+      - "scripts/actions_cleanup.py"
+
+permissions:
+  contents: read
+
+jobs:
+  migration-numbers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Reject duplicate migration numbers
+        run: |
+          python3 scripts/migration_numbers.py --selftest
+          python3 scripts/migration_numbers.py
