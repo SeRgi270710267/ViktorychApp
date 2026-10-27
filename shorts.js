@@ -25,6 +25,7 @@
   var addingAccount = false;
   var accountsLoaded = false;
   var livePaintKey = "";
+  var pastPaintKey = "";
   var paintTimer = 0;
   var liveInflight = {};
   var liveToken = 0;
@@ -34,7 +35,7 @@
   var liveFatal = null;
   var onLiveLevel = null;
   var climbTimer = 0;
-  var recordings = { cap: 12, active: 0, items: {} };
+  var recordings = { cap: 12, active: 0, items: {}, past: [] };
   var mpeg = null;
   var liveZoom = null;
   var prefetchCtrl = null;
@@ -60,6 +61,7 @@
       localStorage.setItem(LOCKED_KEY, lockedMode ? "1" : "0");
     } catch (err) { /* private mode */ }
     livePaintKey = "";
+    pastPaintKey = "";
     if (onLiveRoute()) {
       paintLive();
       liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
@@ -436,7 +438,7 @@
       return res.json();
     }).then(function (body) {
       if (!body || !body.items) return body;
-      recordings = { cap: body.cap || 12, active: body.active || 0, items: body.items };
+      recordings = { cap: body.cap || 12, active: body.active || 0, items: body.items, past: body.past || [] };
       schedulePaint();
       return body;
     }).catch(function () { return null; });
@@ -657,14 +659,88 @@
       '<a class="m-icon" href="#/settings" aria-label="' + hooks.esc(tr("Settings")) + '">' + hooks.icon("spark") + "</a></div>";
   }
 
+  function clock(seconds) {
+    var n = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (!n) return "";
+    var h = Math.floor(n / 3600);
+    var m = Math.floor((n % 3600) / 60);
+    var s = n % 60;
+    function pad(v) { return v < 10 ? "0" + v : String(v); }
+    if (h) return h + ":" + pad(m) + ":" + pad(s);
+    return m + ":" + pad(s);
+  }
+
+  function pastRows() {
+    if (!ownerHere()) return [];
+    var list = (recordings && recordings.past) || [];
+    return list.filter(function (row) {
+      if (!row || !row.handle) return false;
+      if (isLocked() && !isUnlocked(row.handle)) return false;
+      return row.state === "saved" || row.state === "recording" || row.state === "queued";
+    }).slice().sort(function (a, b) {
+      return String(b.startedAt || "").localeCompare(String(a.startedAt || ""));
+    });
+  }
+
+  function pastCard(row, index) {
+    var handle = String(row.handle || "");
+    var recording = row.state === "recording" || row.state === "queued";
+    var tag = recording ? tr("Recording") : tr("Saved");
+    var when = row.startedAt && hooks.fullTime ? hooks.fullTime(row.startedAt) : "";
+    var dur = clock(row.duration);
+    var cover = row.cover || avatarFor(handle, row);
+    var face = cover ? '<img alt="" src="' + hooks.esc(cover) + '" referrerpolicy="no-referrer">' : "";
+    var bits = [];
+    var label = qualityLabel(row.quality);
+    if (label) bits.push(label);
+    if (row.qualityNote) bits.push(tr("Best available"));
+    if (row.viewers) bits.push(tr("Peak {count}", { count: hooks.formatCount(row.viewers, 1000) }));
+    var action = row.key
+      ? '<button type="button" class="shorts-past-play" data-shorts="past" data-past="' + index + '">' + hooks.esc(tag) + "</button>"
+      : '<span class="shorts-past-play">' + hooks.esc(tag) + "</span>";
+    return '<li class="shorts-past-row">' +
+      '<span class="shorts-past-face">' + face + "</span>" +
+      '<span class="shorts-past-copy"><b>@' + hooks.esc(handle) + "</b>" +
+      (row.title ? "<small>" + hooks.esc(row.title) + "</small>" : "") +
+      (when || dur ? "<small>" + hooks.esc([when, dur].filter(Boolean).join(" · ")) + "</small>" : "") +
+      (bits.length ? "<small>" + hooks.esc(bits.join(" · ")) + "</small>" : "") +
+      "</span>" + action + "</li>";
+  }
+
+  function pastSection() {
+    if (!ownerHere()) return "";
+    var rows = pastRows();
+    var body = rows.length
+      ? '<ul class="shorts-past-list">' + rows.map(pastCard).join("") + "</ul>"
+      : '<p class="shorts-past-empty">' + hooks.esc(tr("No past lives yet.")) + "</p>";
+    return '<section class="shorts-slide shorts-past" data-kind="past"><div class="shorts-past-card"><h2>' + hooks.esc(tr("Past lives")) + "</h2>" + body + "</div></section>";
+  }
+
+  function liveFeedHtml() {
+    var slides = liveRows().map(liveSlide).join("");
+    if (!slides) slides = '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>';
+    return slides + pastSection();
+  }
+
+  function liveRowsSignature() {
+    return liveRows().map(function (row) {
+      var rec = row.record || {};
+      return [row.handle, row.live ? 1 : 0, row.viewers || 0, row.lastLiveAt || "", row.title || "", rec.state || "", rec.key || "", rec.quality || "", rec.parts || 0].join("\n");
+    }).join("\n");
+  }
+
+  function pastSignature() {
+    return pastRows().map(function (row) {
+      return [row.handle, row.state || "", row.roomId || "", row.startedAt || "", row.key || "", row.duration || 0, row.parts || 0, row.viewers || 0, row.title || ""].join("\n");
+    }).join("\n");
+  }
+
   function page(route) {
     if (!visible()) return '<div class="shorts-page"></div>';
     var live = !!(route && route.live);
-    var slides = live ? liveRows().map(liveSlide).join("") : forYou().map(slide).join("");
+    var slides = live ? liveFeedHtml() : forYou().map(slide).join("");
     if (!slides) {
-      slides = live
-        ? '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>'
-        : '<article class="shorts-slide"><div class="shorts-stage"><div class="shorts-offline"><h2>' + hooks.esc(tr("No posts yet")) + "</h2></div></div></article>";
+      slides = '<article class="shorts-slide"><div class="shorts-stage"><div class="shorts-offline"><h2>' + hooks.esc(tr("No posts yet")) + "</h2></div></div></article>";
     }
     return '<div class="shorts-page"><div class="shorts-top">' + mhead() + tabs(live) + "</div>" +
       '<div class="shorts-feed" id="shorts-feed">' + slides + "</div>" + accountSheet() + captchaModalHtml() + "</div>";
@@ -1079,9 +1155,7 @@
       }
       if (slot) slot.textContent = text;
     }
-    livePaintKey = liveRows().map(function (item) {
-      return [item.handle, item.live ? 1 : 0, item.viewers || 0, item.lastLiveAt || "", item.title || ""].join("\n");
-    }).join("\n");
+    livePaintKey = liveRowsSignature();
   }
 
   function refreshLive(handle) {
@@ -1191,15 +1265,21 @@
   function paintLive() {
     var feed = document.getElementById("shorts-feed");
     if (!feed || !onLiveRoute()) return;
-    var rows = liveRows();
-    var key = rows.map(function (row) {
-      var rec = row.record || {};
-      return [row.handle, row.live ? 1 : 0, row.viewers || 0, row.lastLiveAt || "", row.title || "", rec.state || "", rec.key || "", rec.quality || "", rec.parts || 0].join("\n");
-    }).join("\n");
-    if (key === livePaintKey && feed.querySelector(".shorts-slide")) return;
-    livePaintKey = key;
-    var slides = rows.map(liveSlide).join("");
-    feed.innerHTML = slides || '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>';
+    var liveKey = liveRowsSignature();
+    var pastKey = pastSignature();
+    var liveSame = liveKey === livePaintKey && !!feed.querySelector('.shorts-slide[data-kind="live"]');
+    var pastSame = pastKey === pastPaintKey && !!feed.querySelector(".shorts-past");
+    if (liveSame && pastSame) return;
+    livePaintKey = liveKey;
+    pastPaintKey = pastKey;
+    if (!liveSame) {
+      var slides = liveRows().map(liveSlide).join("");
+      if (!slides) slides = '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>';
+      feed.innerHTML = slides;
+    }
+    var old = feed.querySelector(".shorts-past");
+    if (old) old.remove();
+    if (ownerHere()) feed.insertAdjacentHTML("beforeend", pastSection());
   }
 
   function liveRoot() {
@@ -1507,23 +1587,25 @@
     return next();
   }
 
-  function openSaved(handle) {
-    handle = String(handle || "");
-    var rec = recordOf(handle);
-    if (!handle || !rec || rec.state !== "saved" || !rec.key) return;
+  function openSaved(handle, row) {
+    var rec = row || recordOf(handle);
+    handle = String(handle || (rec && rec.handle) || "");
+    if (!handle || !rec || !rec.key) return;
+    if (rec.state !== "saved" && rec.state !== "recording" && rec.state !== "queued") return;
     closeLive();
     var token = liveToken;
     var parts = Math.max(1, Number(rec.parts) || 1);
     var part = 1;
+    var recording = rec.state === "recording" || rec.state === "queued";
     var profile = "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live";
-    var avatar = avatarFor(handle, liveStatus(handle) || {});
+    var avatar = rec.cover || avatarFor(handle, liveStatus(handle) || {});
     var root = document.createElement("div");
     root.id = "shorts-live-player";
     root.className = "shorts-live-player";
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-modal", "true");
     root.setAttribute("data-handle", handle);
-    root.setAttribute("data-mode", "saved");
+    root.setAttribute("data-mode", recording ? "recording" : "saved");
     root.innerHTML = '<div class="shorts-live-stage">' +
       '<video playsinline webkit-playsinline autoplay muted></video>' +
       '<div class="shorts-live-cover">' +
@@ -1532,10 +1614,12 @@
       '<a hidden target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a>" +
       "</div></div>" +
       '<div class="shorts-live-hud"><button type="button" data-shorts="close-live" aria-label="' + hooks.esc(tr("Close")) + '">×</button>' +
-      '<span class="shorts-live-tag">' + hooks.esc(tr("Saved")) + "</span>" +
+      '<span class="shorts-live-tag">' + hooks.esc(recording ? tr("Recording") : tr("Saved")) + "</span>" +
       '<span class="shorts-live-q"></span>' +
       '<button type="button" data-shorts="mute" aria-label="' + hooks.esc(sound ? tr("Mute") : tr("Unmute")) + '">' + hooks.icon(sound ? "vol" : "volOff") + "</button></div>" +
-      '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b></div>";
+      '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b>" +
+      (rec.title ? "<span>" + hooks.esc(rec.title) + "</span>" : "") +
+      '<input class="shorts-live-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + hooks.esc(tr("Seek")) + '"></div>';
     document.body.appendChild(root);
     document.documentElement.classList.add("shorts-live-open");
     liveZoom = bindVideoZoom(root.querySelector(".shorts-live-stage"));
@@ -1549,6 +1633,28 @@
       if (token !== liveToken) return;
       if (part < parts) playPart(part + 1);
     });
+    var seek = root.querySelector(".shorts-live-seek");
+    var seeking = false;
+    function syncSeek() {
+      if (!seek || seeking || !video.duration || !isFinite(video.duration)) return;
+      seek.max = String(video.duration);
+      seek.value = String(video.currentTime || 0);
+    }
+    video.addEventListener("timeupdate", syncSeek);
+    video.addEventListener("durationchange", syncSeek);
+    if (seek) {
+      seek.addEventListener("pointerdown", function () { seeking = true; });
+      seek.addEventListener("input", function () {
+        seeking = true;
+        var at = Number(seek.value);
+        if (isFinite(at)) {
+          try { video.currentTime = at; } catch (err) { /* the playlist is still loading */ }
+        }
+      });
+      seek.addEventListener("change", function () { seeking = false; });
+      seek.addEventListener("pointerup", function () { seeking = false; });
+      seek.addEventListener("pointercancel", function () { seeking = false; });
+    }
     root.addEventListener("click", function (event) {
       var button = event.target.closest ? event.target.closest("[data-shorts]") : null;
       if (!button) return;
@@ -1925,6 +2031,12 @@
     if (kind === "saved") {
       event.preventDefault();
       openSaved((slideEl && slideEl.getAttribute("data-handle")) || "");
+      return;
+    }
+    if (kind === "past") {
+      event.preventDefault();
+      var picked = pastRows()[Number(button.getAttribute("data-past"))];
+      if (picked && picked.key) openSaved(picked.handle, picked);
       return;
     }
     if (kind === "mute") {
