@@ -278,12 +278,45 @@ def stamp_worker(dest: Path, sha: str) -> None:
     worker.write_text(text.replace("__SW_VERSION__", sha), encoding="utf-8")
 
 
+def copy_sidecar(root: Path, dest: Path) -> None:
+    """Data the workflow used to copy after the shell. These files are
+    produced during the job and are not referenced by index.html."""
+    status = root / "status.json"
+    if status.is_file():
+        shutil.copy2(status, dest / "status.json")
+    for name in ("fallback", "comments"):
+        folder = root / name
+        if not folder.is_dir():
+            continue
+        target = dest / name
+        target.mkdir(parents=True, exist_ok=True)
+        for path in folder.rglob("*.json"):
+            if path.is_file() and not path.is_symlink():
+                shutil.copy2(path, target / path.name)
+    archive = root / "archive"
+    if archive.is_dir():
+        target = dest / "archive"
+        target.mkdir(parents=True, exist_ok=True)
+        for path in archive.rglob("*.json"):
+            if path.is_file() and not path.is_symlink() and path.name != "ia-state.json":
+                shutil.copy2(path, target / path.name)
+    discord = root / "discord"
+    if discord.is_dir():
+        for path in discord.rglob("*.json"):
+            if not path.is_file() or path.is_symlink():
+                continue
+            out = dest / path.relative_to(root)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, out)
+
+
 def build(root: Path, dest: Path, sha: str = "") -> list[str]:
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
     files = copy_shell(root, dest)
     copy_payload(root, dest)
+    copy_sidecar(root, dest)
     stamp_worker(dest, sha)
     verify_site(dest, files)
     return files

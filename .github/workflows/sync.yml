@@ -241,6 +241,23 @@ jobs:
         run: |
           rm -rf _site
           python3 scripts/assemble_site.py --site _site
+          if [ -f status.json ]; then cp status.json _site/status.json; fi
+          if [ -d fallback ]; then
+            mkdir -p _site/fallback
+            find fallback -name '*.json' -type f -exec cp {} _site/fallback/ \;
+          fi
+          if [ -d comments ]; then
+            mkdir -p _site/comments
+            find comments -name '*.json' -type f -exec cp {} _site/comments/ \;
+          fi
+          if [ -d archive ]; then
+            mkdir -p _site/archive
+            find archive -name '*.json' ! -name 'ia-state.json' -type f -exec cp {} _site/archive/ \;
+          fi
+          if [ -d discord ]; then
+            mkdir -p _site/discord
+            find discord -name '*.json' -type f -exec cp --parents {} _site/ \;
+          fi
           if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
           python3 scripts/write_version.py --out _site/version.json
           python3 scripts/share_pages.py --site _site
