@@ -529,9 +529,9 @@ def _dispatch(repo: str) -> None:
 
 
 def _load_private_config() -> dict | None:
-    from tiktok_sync import r2_get
+    from r2_catalog import read_catalog
 
-    blob = r2_get("feeds.config.json")
+    blob = read_catalog("feeds.config.json")
     if not blob:
         return None
     try:
@@ -545,13 +545,13 @@ def _load_private_config() -> dict | None:
 
 def _store_private_config(doc: dict) -> bool:
     from log_redact import collect, install
-    from tiktok_sync import r2_put
+    from r2_catalog import store_usable
 
     handles: set[str] = set()
     collect(doc, handles)
     install(handles)
     payload = (json.dumps(doc, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    return bool(r2_put("feeds.config.json", payload))
+    return store_usable("feeds.config.json", payload) == "ok"
 
 
 def main() -> int:

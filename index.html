@@ -139,6 +139,8 @@
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="dock.css">
+  <link rel="stylesheet" href="presence.css">
   <link rel="stylesheet" href="translate.css">
   <link rel="stylesheet" href="people.css">
   <link rel="stylesheet" href="tv.css">
@@ -178,7 +180,6 @@
       }
     })();
   </script>
-  <link rel="preload" href="feeds.json" as="fetch" crossorigin="anonymous">
   <script>
     (function () {
       try {
@@ -193,6 +194,11 @@
         if (mode === "auto") mode = matchMedia("(prefers-color-scheme: light)").matches ? "default" : "lightsout";
         if (mode !== "default" && mode !== "dim" && mode !== "lightsout") mode = "lightsout";
         document.documentElement.setAttribute("data-theme", mode);
+        var savedNav = raw ? JSON.parse(raw) : {};
+        var navLayout = savedNav.navLayout === "bar" ? "bar" : "auto";
+        document.documentElement.setAttribute("data-nav-layout", navLayout);
+        if (navLayout === "bar" && savedNav.navLayoutLand === true) document.documentElement.setAttribute("data-nav-bar-land", "1");
+        else document.documentElement.removeAttribute("data-nav-bar-land");
         var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
         var metas = document.querySelectorAll('meta[name="theme-color"]');
         for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
@@ -205,6 +211,106 @@
   </script>
 </head>
 <body>
+  <script>
+    (function () {
+      var RETRY = "viktorychapp-boot-retry";
+      var shown = false;
+      function tried() {
+        try { return sessionStorage.getItem(RETRY) === "1"; } catch (err) { return false; }
+      }
+      function markTried() {
+        try { sessionStorage.setItem(RETRY, "1"); } catch (err) { /* a private window still shows the screen */ }
+      }
+      function clearTried() {
+        try { sessionStorage.removeItem(RETRY); } catch (err) { /* already clear */ }
+      }
+      function dropWorkers() {
+        var jobs = [];
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+          jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+          }));
+        }
+        if (window.caches && caches.keys) {
+          jobs.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+          }));
+        }
+        return Promise.all(jobs).catch(function () {});
+      }
+      function resetData() {
+        try { localStorage.clear(); } catch (err) { /* private mode */ }
+        try { sessionStorage.clear(); } catch (err) { /* private mode */ }
+        var jobs = [dropWorkers()];
+        if (window.indexedDB && indexedDB.databases) {
+          jobs.push(indexedDB.databases().then(function (dbs) {
+            return Promise.all((dbs || []).map(function (db) {
+              return new Promise(function (resolve) {
+                if (!db || !db.name) { resolve(); return; }
+                var req = indexedDB.deleteDatabase(db.name);
+                req.onsuccess = req.onerror = req.onblocked = function () { resolve(); };
+              });
+            }));
+          }).catch(function () {}));
+        }
+        Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+      }
+      function showScreen() {
+        if (shown) return;
+        shown = true;
+        var root = document.getElementById("boot-guard");
+        if (!root) {
+          root = document.createElement("div");
+          root.id = "boot-guard";
+          root.setAttribute("role", "alert");
+          document.documentElement.appendChild(root);
+        }
+        root.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:16px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";
+        root.textContent = "";
+        var box = document.createElement("div");
+        var title = document.createElement("p");
+        title.textContent = "Something went wrong";
+        var row = document.createElement("p");
+        var reload = document.createElement("button");
+        reload.type = "button";
+        reload.id = "boot-reload";
+        reload.textContent = "Reload";
+        reload.style.cssText = "margin:0 8px;padding:10px 16px;border-radius:999px;border:0;background:#fff;color:#000;font:inherit";
+        var reset = document.createElement("button");
+        reset.type = "button";
+        reset.id = "boot-reset";
+        reset.textContent = "Reset app data";
+        reset.style.cssText = reload.style.cssText;
+        reload.addEventListener("click", function () { location.reload(); });
+        reset.addEventListener("click", resetData);
+        row.appendChild(reload);
+        row.appendChild(reset);
+        box.appendChild(title);
+        box.appendChild(row);
+        root.appendChild(box);
+      }
+      function recover() {
+        if (shown) return;
+        if (tried()) { showScreen(); return; }
+        markTried();
+        dropWorkers().then(function () { location.reload(); });
+      }
+      window.addEventListener("error", function (event) {
+        var target = event && event.target;
+        if (target && target !== window && target.nodeType === 1) return;
+        recover();
+      });
+      window.addEventListener("unhandledrejection", function () { recover(); });
+      window.addEventListener("load", function () {
+        setTimeout(function () {
+          if (shown) return;
+          var text = (document.body && document.body.innerText || "").replace(/\s+/g, " ").trim();
+          if (text.length > 8) clearTried();
+          else recover();
+        }, 12000);
+      });
+    })();
+  </script>
   <div class="wco" aria-hidden="true"></div>
   <div id="app"></div>
   <div id="account-layer"></div>
@@ -231,20 +337,26 @@
   <script src="tv.js" defer></script>
   <script src="split.js" defer></script>
   <script src="discord-ui.js" defer></script>
+  <script src="shared/pill-data.js" type="module"></script>
   <script src="scores.js" defer></script>
   <script src="weather.js" defer></script>
   <script src="spaces.js" defer></script>
   <script src="stories.js" defer></script>
   <script src="music.js" defer></script>
+  <script src="shared/mirror.js" defer></script>
   <script src="accounts.config.js" defer></script>
   <script src="shared/handle-skeleton.js" type="module"></script>
   <script src="shared/reposts.js" type="module"></script>
   <script src="shared/lazy-modules.js" defer></script>
+  <script src="presence.js" type="module"></script>
   <script src="accounts.js" defer></script>
   <script src="owner-keys.js" defer></script>
   <script src="yt-player.js" defer></script>
   <script src="update.js" defer></script>
   <script src="storage.js" defer></script>
+  <script src="localfirst.js" defer></script>
+  <script src="direct.js" defer></script>
+  <script src="dock.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

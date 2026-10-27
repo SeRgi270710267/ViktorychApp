@@ -25,7 +25,7 @@ workers_dev = true
 # TIKTOK_TRACKED lists accounts the sync follows. TIKTOK_UNLOCKED lists
 # which of those stay visible while Shorts is locked. Both are secrets.
 [vars]
-ALLOWED_ORIGINS = "https://viktorychgroup.github.io"
+ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
 PBKDF2_ITERATIONS = "8000"
 # One flag. "owner" hides TikTok and Shorts except for the owner account.
 # "all" shows them to everyone. Keep this in step with accounts.config.js.
@@ -48,3 +48,30 @@ bucket_name = "viktorych-data"
 # The Discord mirror still runs on the quarter hour.
 [triggers]
 crons = ["* * * * *"]
+
+# Hot public profile and community reads. The deploy fills this id when the
+# token can edit Workers KV. A missing permission removes the binding and
+# the Worker reads D1 directly.
+[[kv_namespaces]]
+binding = "CACHE"
+id = "00000000000000000000000000000002"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+
+# One hibernating object per account. Presence and notifications publish
+# into it by topic. Sockets stay open only while a tab is visible.
+# Do not add a second class or binding.
+[[durable_objects.bindings]]
+name = "ACCOUNT_CHANNEL"
+class_name = "AccountChannel"
+
+[[migrations]]
+tag = "v1-account-channel"
+new_sqlite_classes = ["AccountChannel"]

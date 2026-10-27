@@ -1543,6 +1543,17 @@ def main() -> None:
         except Exception as exc:
             print(f"[auto-add] config: {exc}", file=sys.stderr)
     out = ROOT / config.get("output", "feeds.json")
+    if not args.fixtures and out.is_file():
+        try:
+            from r2_catalog import blocks_empty_catalog
+
+            previous = json.loads(out.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError, ImportError):
+            previous = None
+        else:
+            if blocks_empty_catalog(doc, previous):
+                print("[catalog] refusing an empty catalog; keeping the last good copy")
+                return
     media_dir = ROOT / "media"
     removed = prune_media(media_dir, doc)
     if not args.fixtures:

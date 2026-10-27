@@ -1,0 +1,15 @@
+{
+  "leagues": [{"name": "Spanish LALIGA"}],
+  "events": [{
+    "id": "403",
+    "date": "2026-10-30T20:00:00Z",
+    "competitions": [{
+      "status": {"displayClock": "0'", "type": {"name": "STATUS_SCHEDULED", "state": "pre"}},
+      "competitors": [
+        {"homeAway": "home", "score": "0", "team": {"displayName": "Villarreal"}},
+        {"homeAway": "away", "score": "0", "team": {"displayName": "Espanyol"}}
+      ],
+      "venue": {"fullName": "Estadio de la Ceramica"}
+    }]
+  }]
+}

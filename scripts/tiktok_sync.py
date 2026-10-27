@@ -892,7 +892,9 @@ def r2_put(key: str, payload: bytes) -> bool:
 def load_added_accounts(path: Path | None = None) -> dict:
     """Owner list from R2 when the Actions token is set, else a local file."""
     path = path or accounts_path()
-    blob = r2_get("owner/tiktok-accounts.json")
+    from r2_catalog import read_catalog
+
+    blob = read_catalog("owner/tiktok-accounts.json")
     if blob is not None:
         return parse_accounts(blob.decode("utf-8", "replace"))
     if path.is_file():
@@ -908,7 +910,9 @@ def save_added_accounts(doc: dict, path: Path | None = None) -> None:
         "removed": doc.get("removed") or [],
     }, ensure_ascii=False) + "\n").encode("utf-8")
     path.write_bytes(payload)
-    r2_put("owner/tiktok-accounts.json", payload)
+    from r2_catalog import store_usable
+
+    store_usable("owner/tiktok-accounts.json", payload)
 
 
 def removed_handles(doc: dict | None) -> set[str]:
@@ -1278,9 +1282,12 @@ def load_owner(path: Path) -> dict:
 def upload_owner(path: Path) -> None:
     if not path.is_file():
         return
-    if r2_put("owner/tiktok.json", path.read_bytes()):
+    from r2_catalog import store_usable
+
+    state = store_usable("owner/tiktok.json", path.read_bytes())
+    if state == "ok":
         print("[tiktok] live status updated")
-    elif cloudflare_env()[0] and cloudflare_env()[1]:
+    elif state == "fail" and cloudflare_env()[0] and cloudflare_env()[1]:
         print("[tiktok] live status upload failed")
 
 
@@ -1289,11 +1296,17 @@ def publish_live_catalogs(feeds: Path, owner: Path) -> None:
     token, account = cloudflare_env()
     if not token or not account:
         return
+    from r2_catalog import store_usable
+
     ok = True
     if feeds.is_file():
-        ok = r2_put("feeds.json", feeds.read_bytes()) and ok
+        state = store_usable("feeds.json", feeds.read_bytes())
+        if state == "fail":
+            ok = False
     if owner.is_file():
-        ok = r2_put("owner/tiktok.json", owner.read_bytes()) and ok
+        state = store_usable("owner/tiktok.json", owner.read_bytes())
+        if state == "fail":
+            ok = False
     print("[tiktok] catalogs stored" if ok else "[tiktok] catalog upload failed")
 
 
@@ -1344,7 +1357,9 @@ def main(argv: list[str] | None = None) -> int:
         pass
     seeded = isinstance(config, dict) and config.get("catalogSeed") is True
     owner_path = ROOT / "owner" / "tiktok.json"
-    downloaded = r2_get("owner/tiktok.json")
+    from r2_catalog import read_catalog
+
+    downloaded = read_catalog("owner/tiktok.json")
     if downloaded is not None:
         owner_path.parent.mkdir(parents=True, exist_ok=True)
         owner_path.write_bytes(downloaded)

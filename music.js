@@ -485,6 +485,7 @@
     }).then(function (data) {
       if (!data) return;
       remote = { songs: Array.isArray(data.songs) ? data.songs : [], playlists: Array.isArray(data.playlists) ? data.playlists : [] };
+      rememberMusic();
       if (active) hooks.render();
     }).catch(function () {});
   }
@@ -886,7 +887,9 @@
   }
 
   function resolveArchive(ident) {
-    return fetch("https://archive.org/metadata/" + encodeURIComponent(ident)).then(function (res) {
+    var archiveUrl = "https://archive.org/metadata/" + encodeURIComponent(ident);
+    var load = (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.fetch) ? window.ViktorychDirect.fetch(archiveUrl) : fetch(archiveUrl);
+    return load.then(function (res) {
       if (!res.ok) throw new Error("archive");
       return res.json();
     }).then(function (meta) {
@@ -1988,6 +1991,24 @@
 
   logic.releaseHtml = releaseHtml;
   root.MusicLogic = logic;
+  function rememberMusic() {
+    var localApi = root.ViktorychLocal;
+    if (!localApi || !localApi.saveDoc) return;
+    var rows = songs().slice(0, 80).map(function (song) {
+      return {
+        id: song.id,
+        title: song.title || "",
+        artist: song.artist || "",
+        album: song.album || "",
+        cover: song.cover && String(song.cover).indexOf("https://") === 0 ? song.cover : "",
+        duration: song.duration || 0
+      };
+    });
+    var art = rows.map(function (song) { return song.cover; }).filter(Boolean).slice(0, 40);
+    localApi.saveDoc("music", "library", { songs: rows, art: art });
+    localApi.saveDoc("music", "radio", { songs: rows, art: art });
+  }
+
   root.SIntelMusic = {
     install: install,
     bind: bind,
@@ -2001,6 +2022,7 @@
     bottomHtml: bottomHtml,
     links: links,
     brand: brand,
-    drawerLinks: drawerLinks
+    drawerLinks: drawerLinks,
+    snapshot: rememberMusic
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);
