@@ -440,7 +440,7 @@ export async function handleSocialRoutes(request, env, path, url, deps) {
   if (!viewer) return deps.json(401, { error: "unauthorized" });
   if (followAction && method === "POST") return followActionRoute(request, env, path, viewer, deps);
   if ((isBlock || isMute) && method === "GET") return relationList(env, request, viewer, isBlock ? "blocks" : "mutes", deps);
-  if ((isBlock || isMute) && (method === "PUT" || method === "DELETE")) return relationWrite(request, env, viewer, isBlock ? "block" : "mute", method === "DELETE", deps);
+  if ((isBlock || isMute) && (method === "PUT" || method === "POST" || method === "DELETE")) return relationWrite(request, env, viewer, isBlock ? "block" : "mute", method === "DELETE", deps);
   if (isPeople && method === "GET") return peopleSearch(env, request, url, viewer, deps);
   if (isPosts && method === "GET") return readPosts(env, url, viewer, deps);
   if (isPosts && method === "POST") return writePost(request, env, viewer, deps);
@@ -489,7 +489,7 @@ async function relationWrite(request, env, viewer, kind, remove, deps) {
   if (!paced.ok) return deps.json(429, { error: "rate_limited", message: "Too many requests. Wait a few minutes and try again." }, { "retry-after": String(paced.retry || 60) });
   const body = await deps.readJson(request, 2000);
   if (body.error) return deps.json(400, { error: body.error });
-  const targetId = cleanPublicId(body.id);
+  const targetId = cleanPublicId(body.id || body.publicId || body.accountId);
   if (!targetId || targetId === viewer.public_id) return deps.json(400, { error: "bad_target", message: "That account isn’t here." });
   const account = await one(env, "SELECT public_id FROM accounts WHERE public_id = ?", targetId);
   if (!account) return deps.json(404, { error: "not_found", message: "That account isn’t here." });
