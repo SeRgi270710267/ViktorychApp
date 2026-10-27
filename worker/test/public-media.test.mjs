@@ -75,7 +75,14 @@ test("an X video relay is not cached and keeps the original bytes", async () => 
 
     const photo = await mf.dispatchFetch("https://accounts.test/v1/media?url=" + encodeURIComponent("https://pbs.twimg.com/media/a.jpg"));
     assert.equal(photo.status, 200);
-    assert.equal(photo.headers.get("cdn-cache-control"), "public, max-age=604800");
+    assert.equal(photo.headers.get("cache-control"), "public, max-age=120, s-maxage=120");
+    assert.equal(photo.headers.get("cdn-cache-control"), "public, max-age=120");
+    assert.equal(seen.referer, "https://pbs.twimg.com/");
+
+    const other = await mf.dispatchFetch("https://accounts.test/v1/media?url=" + encodeURIComponent("https://cdninstagram.com/clip.mp4"));
+    assert.equal(other.status, 404);
+    assert.equal(other.headers.get("cache-control"), "private, no-store");
+    assert.equal(other.headers.get("cdn-cache-control"), "no-store");
 
     const embed = await mf.dispatchFetch("https://accounts.test/v1/media?url=" + encodeURIComponent("https://platform.twitter.com/embed/Tweet.html?id=" + STATUS));
     assert.equal(embed.status, 400);
