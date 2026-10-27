@@ -66,29 +66,29 @@ function pickStreams(info) {
   } else if (raw && typeof raw === "object") parsed = raw;
   const rows = parsed.data && typeof parsed.data === "object" ? parsed.data : {};
   const keys = Object.keys(rows).sort((a, b) => qualityRank(a) - qualityRank(b));
-  let hls = "";
-  let flv = "";
-  let quality = "";
+  const variants = [];
   for (let i = 0; i < keys.length; i++) {
     const main = rows[keys[i]] && rows[keys[i]].main;
     if (!main) continue;
     const nextHls = main.hls ? String(main.hls) : "";
     const nextFlv = main.flv ? String(main.flv) : "";
     if (!nextHls && !nextFlv) continue;
-    hls = nextHls;
-    flv = nextFlv;
-    quality = keys[i];
-    break;
+    variants.push({ quality: keys[i], hls: nextHls, flv: nextFlv });
   }
+  let hls = variants[0] ? variants[0].hls : "";
+  let flv = variants[0] ? variants[0].flv : "";
+  let quality = variants[0] ? variants[0].quality : "";
   if (!hls && !flv && room.stream_url && room.stream_url.hls_pull_url) {
     hls = String(room.stream_url.hls_pull_url);
     quality = quality || "origin";
+    variants.push({ quality: quality, hls: hls, flv: "" });
   }
   if (!hls && !flv && room.stream_url && room.stream_url.flv_pull_url && typeof room.stream_url.flv_pull_url === "object") {
     const names = Object.keys(room.stream_url.flv_pull_url).sort((a, b) => qualityRank(a) - qualityRank(b));
     if (names.length) {
       flv = String(room.stream_url.flv_pull_url[names[0]] || "");
       quality = quality || names[0] || "origin";
+      variants.push({ quality: quality, hls: "", flv: flv });
     }
   }
   const chosen = live ? quality : "";
@@ -98,6 +98,7 @@ function pickStreams(info) {
     title: title,
     hls: live ? hls : "",
     flv: live ? flv : "",
+    variants: live ? variants : [],
     quality: chosen,
     qualityNote: chosen && !isTopQuality(chosen) ? "best available" : ""
   };

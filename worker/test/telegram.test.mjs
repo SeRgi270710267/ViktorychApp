@@ -66,6 +66,9 @@ test("playlist, range, and telegram paths", () => {
   assert.deepEqual(parseRange("", 4), null);
   assert.deepEqual(parseRange("bytes=1-2", 4), { start: 1, end: 2 });
   assert.equal(parseRange("bytes=9-10", 4), false);
+  assert.deepEqual(parseRange("bytes=-2", 4), { start: 2, end: 3 });
+  assert.deepEqual(parseRange("bytes=2-", 4), { start: 2, end: 3 });
+  assert.equal(parseRange("bytes=-", 4), false);
   assert.equal(safeTelegramPath("documents/file_0.jpg"), "documents/file_0.jpg");
   assert.equal(safeTelegramPath("../secret"), "");
   assert.equal(safeTelegramPath("https://evil.example/x"), "");
@@ -476,6 +479,55 @@ test("segments stay in the cache, one in-flight download is shared, and a kept o
     assert.equal(hidden.status, 404);
     const anon = await call(mf, "/tg/" + key, { ip: "203.0.113.53" });
     assert.equal(anon.status, 401);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("past lives stitch parts and stream held segments", async () => {
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
+  try {
+    const ownerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.60", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Owner", handle: "owner_live" })
+    });
+    const owner = await ownerSignup.json();
+    const readerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.61", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_live" })
+    });
+    const reader = await readerSignup.json();
+    const db = await mf.getBindings();
+    await db.DB.prepare("UPDATE accounts SET owner = 1 WHERE handle = ?").bind("owner_live").run();
+    const insert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', ?, 'viktorych-data', ?, 9, ?, ?, 'video/iso.segment', 2, 1, 1, 0, 1)";
+    const room = "tiktok/some_name/7699647509498710804/live";
+    await db.DB.prepare(insert).bind(room + "/1", 1, "PART1", 4, "sha-part-1").run();
+    await db.DB.prepare(insert).bind(room + "/2", 1, "PART2", 4, "sha-part-2").run();
+    await db.DB.prepare(insert).bind(room + "/1", 3, "TOOBIG", 20 * 1024 * 1024, "sha-big").run();
+    const objectKey = room + "/1";
+    await db.DATA.put("live-buf/0/some_name/7699647509498710804/1/seg00003.m4s", new Uint8Array([1, 2, 3, 4, 5]));
+    await db.DATA.put("live-buf/0/some_name/7699647509498710804/1/seg00003.m4s.json", JSON.stringify({
+      objectKey,
+      index: 3,
+      role: "segment",
+      size: 5,
+      duration: 2,
+      oversize: true,
+      channelSlot: 0
+    }));
+    const parent = await call(mf, "/tg/" + room + "/index.m3u8", { ip: "203.0.113.62", token: owner.token });
+    assert.equal(parent.status, 200);
+    assert.match(new TextDecoder().decode(parent.bytes), /#EXT-X-DISCONTINUITY/);
+    assert.match(new TextDecoder().decode(parent.bytes), /\/live\/1\/1/);
+    assert.match(new TextDecoder().decode(parent.bytes), /\/live\/2\/1/);
+    const denied = await call(mf, "/tg/" + room + "/index.m3u8", { ip: "203.0.113.63", token: reader.token });
+    assert.equal(denied.status, 403);
+    const tail = await call(mf, "/tg/" + room + "/1/3", { ip: "203.0.113.62", token: owner.token, range: "bytes=-2" });
+    assert.equal(tail.status, 206);
+    assert.deepEqual(Array.from(tail.bytes), [4, 5]);
+    assert.match(tail.headers.get("content-type") || "", /video\/mp4/);
   } finally {
     await mf.dispose();
   }

@@ -74,6 +74,12 @@ function workerOptions() {
             headers: { "content-type": "application/vnd.apple.mpegurl" }
           });
         }
+        if (url.pathname.endsWith("/plain.m3u8")) {
+          return new Response("#EXTM3U\n#EXTINF:1,\nseg.ts\n", {
+            status: 200,
+            headers: { "content-type": "text/plain" }
+          });
+        }
         if (url.pathname.endsWith(".m3u8")) {
           return new Response("#EXTM3U\n#EXTINF:2,\nhttps://v16.tiktokcdn.com/seg.ts\n", {
             status: 200,
@@ -101,6 +107,7 @@ async function call(path, opts) {
   const headers = new Headers(opts.headers || {});
   headers.set("CF-Connecting-IP", opts.ip || "203.0.113.10");
   if (opts.token) headers.set("Authorization", "Bearer " + opts.token);
+  if (opts.headers) Object.keys(opts.headers).forEach((name) => headers.set(name, opts.headers[name]));
   if (opts.body) headers.set("content-type", "application/json");
   const res = await mf.dispatchFetch("https://accounts.test" + path, {
     method: opts.method || "GET",
@@ -282,6 +289,13 @@ test("owner adds and removes a TikTok account in private storage", async () => {
   assert.match(relative.text, /seg-1\.m4s/);
   assert.match(relative.text, /pull-hls-f16-tt04\.tiktokcdn\.com/);
   assert.match(relative.text, /\/v1\/owner\/media\?url=/);
+  const plain = await call("/v1/owner/media?url=" + encodeURIComponent("https://v16.tiktokcdn.com/plain.m3u8"), {
+    ip: "203.0.113.88",
+    token: owner.body.token
+  });
+  assert.equal(plain.status, 200);
+  assert.match(plain.headers.get("content-type") || "", /mpegurl/);
+  assert.match(plain.text, /\/v1\/owner\/media\?url=/);
 });
 
 test("live stats use user_count and keep the origin url", async () => {
@@ -302,6 +316,9 @@ test("live stats use user_count and keep the origin url", async () => {
   assert.equal(opened.body.viewers, 9);
   assert.match(opened.body.hls, /\/hd\/index\.m3u8/);
   assert.equal(opened.body.qualityNote, "best available");
+  assert.equal(Array.isArray(opened.body.variants), true);
+  assert.match(opened.body.variants[0].hls, /\/hd\/index\.m3u8/);
+  assert.match(opened.body.variants[0].flv, /\/hd\/index\.flv/);
   assert.equal(liveHits.page, 1);
   assert.equal(liveHits.room, 1);
   roomMode = "origin";
@@ -316,6 +333,12 @@ test("live stats use user_count and keep the origin url", async () => {
   assert.equal(kept.body.quality, "origin");
   assert.match(kept.body.hls, /\/origin\/index\.m3u8/);
   assert.equal(liveHits.room, 2);
+  roomMode = "origin";
+  const fresh = await call("/v1/owner/live/canddeserrano_?fresh=1", { ip: "203.0.113.99", token: ownerToken });
+  assert.equal(fresh.body.quality, "origin");
+  assert.match(fresh.body.hls, /\/origin\/index\.m3u8/);
+  assert.equal(liveHits.room, 3);
+  roomMode = "hd";
   const stats = await call("/v1/owner/live/canddeserrano_?stats=1&room=7699647509498710804", { ip: "203.0.113.96", token: ownerToken });
   assert.equal(stats.status, 200);
   assert.equal(stats.body.viewers, 9);
@@ -403,4 +426,30 @@ test("recordings stay owner-only and hide backup channel ids", async () => {
   assert.equal(String(added.body.masks[0]).endsWith("42"), true);
   const stored = JSON.parse(await (await bindings.DATA.get("owner/tiktok-backup-channels.json")).text());
   assert.deepEqual(stored.channels, ["-1004242"]);
+});
+
+test("the live board is owner-only, etagged, and has no stream urls", async () => {
+  const anon = await call("/v1/owner/tiktok/board", { ip: "203.0.113.120" });
+  assert.equal(anon.status, 401);
+  const bindings = await mf.getBindings();
+  await bindings.DATA.put("owner/tiktok.json", JSON.stringify({
+    live: {
+      more_viewers: { handle: "more_viewers", live: true, viewers: 80, title: "busy", roomId: "7699647509498710804", hls: "https://v16.tiktokcdn.com/secret.m3u8" },
+      few_viewers: { handle: "few_viewers", live: true, viewers: 2, title: "quiet", roomId: "7699647509498710805" }
+    }
+  }));
+  const listed = await call("/v1/owner/tiktok/board", { ip: "203.0.113.121", token: ownerToken });
+  assert.equal(listed.status, 200);
+  assert.match(listed.headers.get("etag") || "", /"/);
+  assert.match(listed.headers.get("cache-control") || "", /max-age=30/);
+  assert.equal(listed.text.indexOf("m3u8"), -1);
+  assert.equal(listed.text.indexOf("hls"), -1);
+  assert.deepEqual(listed.body.items.map((row) => row.handle), ["few_viewers", "more_viewers"]);
+  assert.equal(listed.body.items[0].viewers, 2);
+  const again = await call("/v1/owner/tiktok/board", {
+    ip: "203.0.113.122",
+    token: ownerToken,
+    headers: { "If-None-Match": listed.headers.get("etag") }
+  });
+  assert.equal(again.status, 304);
 });
