@@ -4839,6 +4839,9 @@ def feed_order_checks() -> None:
     order_js = (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8")
     check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in order_js, "new posts merge in place and the Following tab uses the signed-in accounts")
     check("function customTabFeeds(" in app and "function timelineFeeds(" in app and "timelineFeeds()" in app and "function hydrateTabSnapshots(" in app and "refreshTab" in order_js, "custom tabs use the same UTC refresh as Following")
+    lock_notes = subprocess.run(["node", str(ROOT / "scripts" / "tiktok_lock_test.mjs")], check=False)
+    check(lock_notes.returncode == 0, "locked account notifications stay hidden")
+    check("shared/tiktok-lock.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/tiktok-lock.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "shared/tiktok-lock.js" in deployed_paths(), "the tiktok lock helper is published with the shell")
 
 
 def gdrive_checks() -> None:
