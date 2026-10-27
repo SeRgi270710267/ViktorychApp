@@ -64,6 +64,12 @@ jobs:
           npm install --no-save --prefix "${RUNNER_TEMP:-/tmp}/pw" playwright-core@1.49.1
           PLAYWRIGHT_CORE="${RUNNER_TEMP:-/tmp}/pw/node_modules/playwright-core/index.mjs" node scripts/x_video_play.mjs --root _site
 
+      - name: Sign-up and first-run
+        run: |
+          npm ci --prefix worker --no-fund --no-audit
+          npm install --prefix /tmp/pw-signup --no-fund --no-audit playwright-core
+          PLAYWRIGHT_CORE=/tmp/pw-signup/node_modules/playwright-core/index.js node scripts/signup_flow_test.mjs
+
       - name: On-device AI
         run: |
           node scripts/device_test.js
