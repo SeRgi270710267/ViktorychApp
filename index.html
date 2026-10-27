@@ -166,7 +166,7 @@
         var bg = theme === "default" ? "#fff" : theme === "dim" ? "#15202b" : "#000";
         var fg = theme === "default" ? "#0f1419" : "#e7e9ea";
         var style = document.createElement("style");
-        style.textContent = 'html[data-wall="1"] #app,html[data-wall="1"] #hover,html[data-wall="1"] #pull,html[data-wall="1"] #new-posts,html[data-wall="1"] #offline,html[data-wall="1"] #update,html[data-wall="1"] #viewer,html[data-wall="1"] #stories,html[data-wall="1"] #toast{display:none!important}html[data-wall="1"] body{background:' + bg + ";color:" + fg + "}";
+        style.textContent = 'html[data-wall="1"] #app,html[data-wall="1"] #hover,html[data-wall="1"] #pull,html[data-wall="1"] #new-posts,html[data-wall="1"] #offline,html[data-wall="1"] #update,html[data-wall="1"] #viewer,html[data-wall="1"] #stories,html[data-wall="1"] #toast,html[data-wall="1"] #dock-root{display:none!important}html[data-wall="1"] body{background:' + bg + ";color:" + fg + "}";
         document.head.appendChild(style);
         var link = document.createElement("link");
         link.rel = "stylesheet";

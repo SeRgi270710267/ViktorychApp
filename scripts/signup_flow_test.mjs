@@ -199,6 +199,7 @@ async function layoutPass(page, viewport) {
   if (!trap) notes.push(viewport.name + ": keyboard focus left the dialog");
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".acct-modal"));
+  await page.locator("#dock-root").waitFor({ state: "attached", timeout: 4000 }).catch(() => {});
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("heading", { name: "Settings" }).waitFor();
   const prefs = await page.locator(".acct-modal").innerText();
