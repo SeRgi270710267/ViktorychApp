@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -323,6 +324,83 @@ def remember_private_x(doc: dict, feed: dict) -> bool:
     return False
 
 
+class NotModified(Exception):
+    """The server still has the body we stored for this URL."""
+
+
+HTTP_CACHE_PATH = ROOT / ".feed-http-cache.json"
+_HTTP_CACHE: dict = {}
+_HTTP_LOCK = threading.Lock()
+_DEADLINE = 0.0
+
+
+def feed_deadline() -> float:
+    global _DEADLINE
+    if _DEADLINE:
+        return _DEADLINE
+    raw = (os.environ.get("FEED_DEADLINE_SECONDS") or "").strip()
+    if not raw:
+        return 0.0
+    try:
+        _DEADLINE = time.monotonic() + float(raw)
+    except ValueError:
+        _DEADLINE = 0.0
+    return _DEADLINE
+
+
+def over_deadline() -> bool:
+    limit = feed_deadline()
+    return bool(limit) and time.monotonic() > limit
+
+
+def load_http_cache() -> None:
+    """Restore ETags from disk, then from R2. Bodies are not stored."""
+    global _HTTP_CACHE
+    if not HTTP_CACHE_PATH.is_file():
+        try:
+            from tiktok_sync import r2_get
+
+            blob = r2_get("sync/source-cache.json")
+            if blob:
+                HTTP_CACHE_PATH.write_bytes(blob)
+        except Exception:
+            pass
+    if not HTTP_CACHE_PATH.is_file():
+        return
+    try:
+        parsed = json.loads(HTTP_CACHE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if isinstance(parsed, dict):
+        _HTTP_CACHE = {str(key): value for key, value in parsed.items() if isinstance(value, dict)}
+
+
+def save_http_cache() -> None:
+    if not _HTTP_CACHE:
+        return
+    stored = {}
+    for url, row in _HTTP_CACHE.items():
+        if not isinstance(row, dict):
+            continue
+        etag = str(row.get("etag") or "")
+        modified = str(row.get("modified") or "")
+        if etag or modified:
+            stored[url] = {"etag": etag, "modified": modified}
+    if not stored:
+        return
+    try:
+        HTTP_CACHE_PATH.write_text(json.dumps(stored, ensure_ascii=True, sort_keys=True), encoding="utf-8")
+    except OSError as exc:
+        print(f"[cache] {exc}", file=sys.stderr)
+        return
+    try:
+        from tiktok_sync import r2_put
+
+        r2_put("sync/source-cache.json", HTTP_CACHE_PATH.read_bytes())
+    except Exception as exc:
+        print(f"[cache] {exc}", file=sys.stderr)
+
+
 def read_source(url: str) -> str:
     if url.startswith("file://"):
         return Path(url[7:]).read_text(encoding="utf-8")
@@ -333,9 +411,33 @@ def read_source(url: str) -> str:
     headers = {"User-Agent": UA, "Accept": "*/*"}
     headers.update(auth_cookie_header(url))
     headers.update(proxy_token_header(url))
+    with _HTTP_LOCK:
+        cached = dict(_HTTP_CACHE.get(url) or {})
+    if cached.get("etag"):
+        headers["If-None-Match"] = str(cached["etag"])
+    if cached.get("modified"):
+        headers["If-Modified-Since"] = str(cached["modified"])
     request = urllib.request.Request(url, headers=headers)
-    with open_url(request, timeout=25) as response:
-        return response.read().decode("utf-8", "replace")
+    try:
+        response = open_url(request, timeout=25)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304 and (cached.get("etag") or cached.get("modified")):
+            raise NotModified() from exc
+        raise
+    with response:
+        body = response.read().decode("utf-8", "replace")
+        etag = ""
+        modified = ""
+        try:
+            etag = str(response.headers.get("ETag") or "")
+            modified = str(response.headers.get("Last-Modified") or "")
+        except AttributeError:
+            etag = ""
+            modified = ""
+    if etag or modified:
+        with _HTTP_LOCK:
+            _HTTP_CACHE[url] = {"etag": etag, "modified": modified}
+    return body
 
 
 def apply_override(profile: dict, feed: dict) -> dict:
@@ -394,6 +496,8 @@ def _fetch_one(url: str, adapter_name: str, feed: dict, errors: list, attempts: 
         try:
             payload = read_source(url)
             return payload, accept_feed(adapter_name, payload, feed)
+        except NotModified:
+            return "", {"_not_modified": True}
         except BridgeError as exc:
             errors.append(f"{url}: {exc}")
             print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
@@ -476,7 +580,7 @@ def prefetch_x(feed_rows, config: dict) -> dict:
         workers = int(config.get("xWorkers") or 4)
     except (TypeError, ValueError):
         workers = 4
-    done = prefetch({feed_id: (lambda row=feed: run(row)) for feed_id, feed in jobs.items()}, workers)
+    done = prefetch({feed_id: (lambda row=feed: run(row)) for feed_id, feed in jobs.items()}, workers, timeout=45)
     ready = {}
     for feed_id, value in done.items():
         if isinstance(value, BaseException):
@@ -485,6 +589,60 @@ def prefetch_x(feed_rows, config: dict) -> dict:
         ready[feed_id] = value
     if ready:
         print(f"[x] prefetched {len(ready)} of {len(jobs)} timelines")
+    return ready
+
+
+def prefetch_http(feed_rows, config: dict) -> dict:
+    """Fetch non-X HTTP feeds together. VK, Telegram, and reposts stay serial."""
+    jobs = {}
+    for feed in feed_rows or []:
+        if not isinstance(feed, dict):
+            continue
+        if feed.get("origin") == "repost":
+            continue
+        adapter = feed.get("adapter") or ""
+        if feed.get("platform") == "x" or adapter in ("vk", "telegram", "x_api_v2", "fxtwitter"):
+            continue
+        feed_id = str(feed.get("id") or "")
+        if not feed_id or feed_id in jobs:
+            continue
+        jobs[feed_id] = feed
+    if len(jobs) < 2:
+        return {}
+
+    def run(feed: dict):
+        errors: list = []
+        payload, url, adapter, result = _fetch_sources(
+            feed.get("source_urls") or [], feed.get("adapter"), feed, config, errors
+        )
+        if result is None and payload is None:
+            for fallback in feed.get("fallbacks") or []:
+                if fallback.get("adapter") == "x_api_v2":
+                    continue
+                payload, url, adapter, result = _fetch_sources(
+                    fallback.get("source_urls") or [],
+                    fallback.get("adapter") or feed.get("adapter"),
+                    feed,
+                    config,
+                    errors,
+                )
+                if result is not None:
+                    break
+        return payload, url, adapter, result, errors
+
+    try:
+        workers = int(config.get("httpWorkers") or 6)
+    except (TypeError, ValueError):
+        workers = 6
+    done = prefetch({feed_id: (lambda row=feed: run(row)) for feed_id, feed in jobs.items()}, workers, timeout=45)
+    ready = {}
+    for feed_id, value in done.items():
+        if isinstance(value, BaseException):
+            print(f"[keep] {feed_id}: prefetch: {value}", file=sys.stderr)
+            continue
+        ready[feed_id] = value
+    if ready:
+        print(f"[http] prefetched {len(ready)} of {len(jobs)} feeds")
     return ready
 
 
@@ -836,7 +994,24 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         for row in feed_rows:
             if isinstance(row, dict):
                 ensure_x_lanes(row, config)
-    prefetched = prefetch_x(feed_rows, config) if not use_fixtures else {}
+        for row in feed_rows:
+            if isinstance(row, dict) and row.get("platform") == "youtube" and not row.get("channelId"):
+                try:
+                    from yt_remote import resolve_channel_id
+
+                    channel_id = resolve_channel_id(row.get("handle") or "")
+                    if channel_id:
+                        row["channelId"] = channel_id
+                        config["_channelIdsUpdated"] = True
+                        print(f"[youtube] {row['id']}: channel {channel_id}")
+                except Exception as exc:
+                    print(f"[keep] {row.get('id')}: channel id: {exc}", file=sys.stderr)
+        load_http_cache()
+        feed_deadline()
+    prefetched = {}
+    if not use_fixtures:
+        prefetched.update(prefetch_x(feed_rows, config))
+        prefetched.update(prefetch_http(feed_rows, config))
 
     def note_private(feed: dict) -> None:
         nonlocal private_changed
@@ -849,6 +1024,12 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             print(f"[added] {feed.get('id')}: {exc}", file=sys.stderr)
     for feed in feed_rows:
         configured_ids.add(feed["id"])
+        if not use_fixtures and over_deadline():
+            print(f"[keep] {feed['id']}: refresh budget spent", file=sys.stderr)
+            record_source(health, feed["id"], False, stamp, "refresh budget spent")
+            note_private(feed)
+            collected.extend(old_by_feed.get(feed["id"], []))
+            continue
         if not use_fixtures and feed.get("origin") == "repost":
             time.sleep(pace)
         payload = None
@@ -946,6 +1127,12 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     resolve_failed(config, feed, profiles)
                 except Exception:
                     print(f"[keep] {feed.get('id')}: id lookup failed", file=sys.stderr)
+            note_private(feed)
+            collected.extend(old_by_feed.get(feed["id"], []))
+            continue
+        if isinstance(result, dict) and result.get("_not_modified"):
+            print(f"[skip] {feed['id']}: unchanged")
+            record_source(health, feed["id"], True, stamp)
             note_private(feed)
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
@@ -1275,10 +1462,15 @@ def main() -> None:
     try:
         from replies import refresh
 
-        refresh(doc["posts"], args.fixtures, fresh_comment_ids)
-        save_document(out, doc)
+        if not args.fixtures and over_deadline():
+            print("[replies] skipped; refresh budget spent", file=sys.stderr)
+        else:
+            refresh(doc["posts"], args.fixtures, fresh_comment_ids)
+            save_document(out, doc)
     except Exception as exc:  # a reply source failing must not wipe the feed
         print(f"[replies] {exc}", file=sys.stderr)
+    if not args.fixtures:
+        save_http_cache()
     prune_comments(doc)
     indexed = write_comment_lookup()
     print(f"[comments] lookup {indexed} replies")

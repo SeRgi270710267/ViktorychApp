@@ -9,5 +9,6 @@ status.json
 sync-report.json
 discord/
 .vk-session/
+.feed-http-cache.json
 owner/
 .wrangler/

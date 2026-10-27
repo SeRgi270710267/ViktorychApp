@@ -97,6 +97,17 @@ def accounts_wall_checks() -> None:
         "the Accounts wait is ordered before the login wall publish",
     )
     check(
+        "--preserve-remote" in workflow
+        and "\n  refresh:\n" in workflow
+        and "timeout-minutes: 15" in workflow
+        and "timeout-minutes: 55" not in workflow
+        and "FEED_DEADLINE_SECONDS" in workflow
+        and "TIKTOK_BUDGET" in workflow
+        and "cancel-in-progress: true" in workflow,
+        "Pages deploy does not wait on the feed refresh",
+    )
+    check("paths-ignore:" in workflow and "data/communities/**" in workflow, "data-only commits do not start a deploy")
+    check(
         accounts_publish.DEFAULT_HEALTH_ATTEMPTS >= 24 and accounts_publish.DEFAULT_HEALTH_INTERVAL >= 15,
         "health is retried for longer than a worker deploy",
     )
@@ -137,6 +148,7 @@ def accounts_wall_checks() -> None:
     previous = os.getcwd()
     original_health = accounts_publish.fetch_health
     original_upload = accounts_publish.upload
+    original_remote = accounts_publish.remote_exists
     try:
         with tempfile.TemporaryDirectory() as tmp:
             os.chdir(tmp)
@@ -209,6 +221,66 @@ def accounts_wall_checks() -> None:
                 "a ready API locks the shell with the workers API and the service worker wall",
             )
 
+            shell(site)
+            uploaded.clear()
+            accounts_publish.fetch_health = up
+            accounts_publish.upload = fake_upload
+            accounts_publish.remote_exists = lambda _key: True
+            try:
+                code = accounts_publish.publish(site, source, preserve_remote=True)
+            finally:
+                accounts_publish.fetch_health = original_health
+                accounts_publish.upload = original_upload
+                accounts_publish.remote_exists = original_remote
+            check(
+                code == 0
+                and accounts_publish.read_gate(site)["gate"] is True
+                and uploaded == []
+                and (site / "feeds.json").is_file() is False,
+                "a shell deploy keeps the remote catalog and still locks the wall",
+            )
+
+            probed = []
+
+            class _Byte:
+                status = 206
+
+                def read(self, _n=-1):
+                    return b"{"
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return False
+
+            def probe_open(req, timeout=20):
+                method = req.get_method()
+                probed.append(method)
+                if method == "HEAD":
+                    raise urllib.error.HTTPError(req.full_url, 405, "method", None, None)
+                return _Byte()
+
+            original_open = urllib.request.urlopen
+            urllib.request.urlopen = probe_open
+            try:
+                found = accounts_publish.remote_exists("feeds.json")
+            finally:
+                urllib.request.urlopen = original_open
+            check(found is True and probed == ["HEAD", "GET"], "a refused HEAD still sees the remote catalog")
+            probed.clear()
+
+            def missing_open(req, timeout=20):
+                probed.append(req.get_method())
+                raise urllib.error.HTTPError(req.full_url, 404, "missing", None, None)
+
+            urllib.request.urlopen = missing_open
+            try:
+                missing = accounts_publish.remote_exists("feeds.json")
+            finally:
+                urllib.request.urlopen = original_open
+            check(missing is False and probed == ["HEAD"], "a missing catalog is not treated as present")
+
             legacy = Path(tmp) / "legacy"
             legacy.mkdir()
             (legacy / "accounts.config.js").write_text(
@@ -235,6 +307,7 @@ def accounts_wall_checks() -> None:
         os.chdir(previous)
         accounts_publish.fetch_health = original_health
         accounts_publish.upload = original_upload
+        accounts_publish.remote_exists = original_remote
         for key, value in saved_env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -1510,7 +1583,7 @@ def main() -> None:
     check(discord_alert.attention({"feeds": [{"id": "discord", "ok": "2026-10-21T00:00:00Z", "detail": "Discord rejected the bot token. Discord sync stopped for this run and will not retry."}]})[0] == "unknown", "a rejected bot token is not the user account issue")
     check("issues: write" in (ROOT / ".github" / "workflows" / "discord-live.yml").read_text(encoding="utf-8"), "the live workflow can update the account issue")
     workflow_text = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
-    check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy, wait-accounts]" in workflow_text, "the sync uploads a report and keeps one problem issue")
+    check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy, wait-accounts, refresh]" in workflow_text, "the sync uploads a report and keeps one problem issue")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "prefers-reduced-data" in app and "saveData" in app and "is not Never" in app and 'threshold: [0, 0.5, 1]' in app and 'rootMargin: "0px"' in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
     check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "reload-when-idle" in worker and "client.navigate" in worker and "includeUncontrolled" in worker and "prev.version" in worker and "translate.js" in worker and "translate.css" in worker, "a new service worker activates, reloads an open page, and loads translate.js from the network")
     check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
