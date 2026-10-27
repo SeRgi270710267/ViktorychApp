@@ -27,6 +27,7 @@ UI_FILES = (
     "index.html",
     "404.html",
     "accounts.js",
+    "presence.js",
     "owner-keys.js",
     "shorts.js",
     "drive.js",
@@ -35,6 +36,8 @@ UI_FILES = (
     "yt-player.js",
     "update.js",
     "storage.js",
+    "localfirst.js",
+    "direct.js",
     "scores.js",
     "weather.js",
 )

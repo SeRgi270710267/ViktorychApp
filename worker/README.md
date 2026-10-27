@@ -57,9 +57,19 @@ The public account id is 12 random digits. It is not derived from the secret num
 
 ## Sync
 
-The first sign-in unions follows, bookmarks, likes, reposts, saved posts, lists, custom tabs, and mute lists, then uploads that union. A follow removed on one device stays removed there, and a follow added on the other device stays too: the union does not replay an unfollow. `seenDefaults` includes the unioned follows so the default-follow pass does not add them again. Later saves are last-write-wins, with one union retry on 409. Language stays in `superintelapp-lang`. Bell notes stay on the device. Display choices `showPictures` and `showBanners` travel with the other appearance settings (`show`, `default`, or `none`).
+The first sign-in unions follows, bookmarks, likes, reposts, saved posts, lists, custom tabs, and mute lists, then uploads that union. A follow removed on one device stays removed there, and a follow added on the other device stays too: the union does not replay an unfollow. `seenDefaults` includes the unioned follows so the default-follow pass does not add them again. Later saves are last-write-wins, with one union retry on 409. Language stays in `superintelapp-lang`. The notification list, the unread badge, notification tabs, and per-account bells live on the account. The sync blob does not carry them. Display choices `showPictures` and `showBanners` travel with the other appearance settings (`show`, `default`, or `none`).
 
 Watch and read history syncs as `history`: at most 300 of the newest video and article rows, each just `id`, `kind`, `platform`, `at`, and `progress` when it is not zero. The same id keeps the newer time. While videos or articles are paused, that device does not upload new rows for that kind and does not replace the saved rows for that kind. Clear all on Videos or Articles sets `historyCut` and removes that kind on the account too. The whole sync body stays under 350 KB. Three hundred slim rows are about 25–40 KB.
+
+## Account channel
+
+One SQLite Durable Object, `AccountChannel`, is bound as `ACCOUNT_CHANNEL`. Its name is the 12-digit account id. Presence and notifications share it. Do not add a second class or binding.
+
+The page opens one socket, only while it is visible, with `POST /v1/channel/ticket` and `GET /v1/channel?ticket=`. The ticket is single-use and lasts two minutes. The socket subscribes to `presence` and `notifications`. Clients cannot publish. The Worker publishes a notification with `publishToAccount(env, publicId, "notifications", data)` after D1 is written. The object hibernates between messages. There is no alarm and no server ping. A hidden page does not spend a request.
+
+D1 stays the source of truth. The channel does not keep a replay log. A page that reconnects, or that gains focus, reads `GET /v1/notifications` once. While the socket is open the page does not poll. If the socket is down and the page is visible, the page polls about every 20 seconds. A hidden page is neither connected nor polled, which keeps the account inside the free 100,000 requests a day.
+
+Web Push uses a VAPID key generated once into D1 `push_vapid`. The private key is never returned and never logged. `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_JWK`, when set, override that row. Sign-out drops that device's push subscription. Sign-out everywhere drops every subscription for the account. Account deletion removes the notification rows, bells, push subscriptions, the push log, channel tickets, and that account's channel object. `push_vapid` stays, because it is one key for the whole worker. Do not disturb (`account_presence.preference = dnd`) skips the operating-system buzz. The in-app list and the other open pages still update.
 
 ## Profile photos
 
@@ -76,6 +86,16 @@ On the free plan that is at most 210 KB of R2 per account (60 KB + 150 KB). The 
 Drive is a private file store for the owner account only. The Photos section uses the same vault, the same trash, and the same storage total. Albums are drive rows with no plaintext name. The browser encrypts each file with AES-256-GCM. A random file key is wrapped by a master key from the owner’s passphrase (PBKDF2-SHA256, 600000 iterations). The passphrase and the master key stay on the device. The Worker stores wrapped keys and ciphertext in D1 and sends each chunk to the backup channel with `sendDocument`. Those rows are not `telegram_files`, and `GET /tg/…` does not serve them.
 
 A missing session gets 404. Any other session gets 403. Chunks stay under 19 MB. A file can be up to 2 GiB. The browser waits about 1.1 seconds between Telegram calls.
+
+## Presence
+
+`GET /v1/presence` is your own status. `GET /v1/presence?ids=` reads up to 40 accounts. Exact last-seen times follow Telegram: if either person would hide that time, both see a recent placeholder and `lastSeen` is 0. Custom status text is at most 80 characters and is not hidden by that setting. `POST /v1/presence` is the heartbeat (`active`, `idle`, or `hidden`). The same preference, activity, and privacy inside 55 seconds does not write again. `PATCH /v1/presence` sets the preference (`online`, `idle`, `dnd`, `invisible`), who can see last seen (`everyone`, `follows`, `nobody`), and a custom status.
+
+Reads are cached at the edge for about 20 seconds as raw rows. The response is `private, max-age=15` so a shared cache cannot reuse one viewer's answer. The page does not keep those responses in the local feed cache.
+
+`POST /v1/channel/ticket` returns a single-use ticket. `GET /v1/channel?ticket=` upgrades to a hibernating WebSocket on that account's Durable Object. The socket subscribes to topics (`presence`, `notifications`) and can watch other account ids. A change is pushed only when the visible state, privacy, or custom status changes. The one-minute heartbeat stays the fallback when the socket is down. The page connects only while it is visible.
+
+Deleting an account removes `account_presence`, `account_status`, `channel_tickets`, the notification rows, push subscriptions, and that account's channel object. `push_vapid` stays.
 
 ## Local checks
 

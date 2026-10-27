@@ -119,6 +119,7 @@
     return !!(config().gate && !readSession());
   }
   function tellSW(on, wipe) {
+    if (wipe === "signout" && window.ViktorychLocal) window.ViktorychLocal.wipe();
     if (!navigator.serviceWorker) return;
     var session = on ? readSession() : null;
     var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "", wipe: wipe || "" };
@@ -399,6 +400,10 @@
     if (accountFace === "none" || accountFace === "default") return accountFace;
     return src ? "photo" : "default";
   }
+  function presenceWrap(id, html, opener) {
+    if (!window.ViktorychPresence || !/^\d{12}$/.test(String(id || ""))) return html;
+    return window.ViktorychPresence.wrap(id, html, opener ? ' data-acct="presence-open"' : "");
+  }
   function publicAvatar(src, accountFace, cls) {
     var mode = faceOf("picture", src, accountFace);
     if (mode === "none") return '<span class="ava-none"></span>';
@@ -629,6 +634,15 @@
       bottomNavCustom: settings.bottomNavCustom === true
     };
     if (settings.bottomNav && typeof settings.bottomNav === "object") snap.bottomNav = settings.bottomNav;
+    if (settings.navLayoutSync === true) {
+      navLayoutUnsync = false;
+      snap.navLayoutSync = true;
+      snap.navLayout = settings.navLayout === "bar" ? "bar" : "auto";
+      snap.navLayoutLand = settings.navLayoutLand === true;
+    } else if (navLayoutUnsync) {
+      navLayoutUnsync = false;
+      snap.navLayoutSync = false;
+    }
     if (settings.noteTabsSame === true || settings.noteTabsSame === false) snap.noteTabsSame = settings.noteTabsSame !== false;
     var live = window.ViktorychAccounts && window.ViktorychAccounts.readHistory && window.ViktorychAccounts.readHistory();
     if (live) {
@@ -702,6 +716,23 @@
     if (remote === "show" || remote === "default" || remote === "none") return remote;
     return "show";
   }
+  function mergeNoteTabs(local, remote) {
+    var map = {};
+    function take(tab) {
+      if (!tab || !tab.id) return;
+      var prev = map[tab.id];
+      if (!prev) { map[tab.id] = tab; return; }
+      var newer = (Number(tab.updatedAt) || 0) >= (Number(prev.updatedAt) || 0);
+      var next = newer ? Object.assign({}, prev, tab) : Object.assign({}, tab, prev);
+      next.readAt = Math.max(Number(tab.readAt) || 0, Number(prev.readAt) || 0);
+      next.deletedAt = Math.max(Number(tab.deletedAt) || 0, Number(prev.deletedAt) || 0);
+      next.updatedAt = Math.max(Number(tab.updatedAt) || 0, Number(prev.updatedAt) || 0);
+      map[tab.id] = next;
+    }
+    (remote || []).forEach(take);
+    (local || []).forEach(take);
+    return Object.keys(map).map(function (key) { return map[key]; });
+  }
   function pickBottomNav(local, remote) {
     local = local || {};
     remote = remote || {};
@@ -715,6 +746,22 @@
       return { bottomNav: local.bottomNav, bottomNavCustom: false };
     }
     return { bottomNavCustom: false };
+  }
+  var navLayoutUnsync = false;
+  function releaseNavLayout() {
+    navLayoutUnsync = true;
+  }
+  function pickNavLayout(local, remote) {
+    if (local && local.navLayoutSync === false) return { clear: true };
+    function choice(src) {
+      if (!src || src.navLayoutSync !== true) return null;
+      return {
+        navLayoutSync: true,
+        navLayout: src.navLayout === "bar" ? "bar" : "auto",
+        navLayoutLand: src.navLayoutLand === true
+      };
+    }
+    return choice(local) || choice(remote);
   }
   function mergePayload(local, remote) {
     remote = remote || {};
@@ -731,6 +778,7 @@
     }
     var history = mergeHistory(localHistory, remote.history, cut);
     var pickedNav = pickBottomNav(local, remote);
+    var pickedLayout = pickNavLayout(local, remote);
     var merged = {
       follows: follows,
       seenFeeds: uniq([].concat(local.seenFeeds || [], remote.seenFeeds || [], follows)),
@@ -741,7 +789,7 @@
       reposts: unionObjects(local.reposts, remote.reposts),
       savedPosts: unionObjects(local.savedPosts, remote.savedPosts),
       feedTabs: unionById(local.feedTabs, remote.feedTabs),
-      noteTabs: unionById(local.noteTabs, remote.noteTabs),
+      noteTabs: mergeNoteTabs(local.noteTabs, remote.noteTabs),
       noteTabsSame: local.noteTabsSame === true || local.noteTabsSame === false ? local.noteTabsSame !== false : remote.noteTabsSame !== false,
       lastNoteTab: local.lastNoteTab || remote.lastNoteTab || "all",
       mutedWords: uniq([].concat(local.mutedWords || [], remote.mutedWords || [])),
@@ -767,6 +815,12 @@
       bottomNavCustom: pickedNav.bottomNavCustom
     };
     if (pickedNav.bottomNav) merged.bottomNav = pickedNav.bottomNav;
+    if (pickedLayout && pickedLayout.clear) merged.navLayoutSync = false;
+    else if (pickedLayout) {
+      merged.navLayoutSync = true;
+      merged.navLayout = pickedLayout.navLayout;
+      merged.navLayoutLand = pickedLayout.navLayoutLand;
+    }
     return merged;
   }
   function applySnapshot(payload) {
@@ -775,6 +829,7 @@
     try { settings = raw ? JSON.parse(raw) : {}; } catch (err) { settings = {}; }
     Object.keys(payload || {}).forEach(function (key) {
       if (key === "lang" || key === "history") return;
+      if ((key === "navLayout" || key === "navLayoutLand" || key === "navLayoutSync") && settings.navLayoutSync !== true) return;
       settings[key] = payload[key];
     });
     writeStored("settings-v1", JSON.stringify(settings));
@@ -1064,11 +1119,19 @@
   function logout(all) {
     var session = readSession();
     var token = session && session.token;
-    removeStored("account-v1");
-    tellSW(false, "signout");
-    var done = function () { location.replace(location.pathname + location.search); location.reload(); };
-    if (!token || !hasApi()) { done(); return; }
-    api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
+    var prep = window.ViktorychNotes && window.ViktorychNotes.beforeSignOut ? window.ViktorychNotes.beforeSignOut(!!all, token) : null;
+    Promise.resolve(prep).then(function () {
+      removeStored("account-v1");
+      tellSW(false, "signout");
+      var done = function () { location.replace(location.pathname + location.search); location.reload(); };
+      if (!token || !hasApi()) { done(); return; }
+      api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
+    }, function () {
+      removeStored("account-v1");
+      tellSW(false, "signout");
+      location.replace(location.pathname + location.search);
+      location.reload();
+    });
   }
   function fitImage(file, edge, maxChars) {
     return new Promise(function (resolve) {
@@ -1687,7 +1750,7 @@
       } else {
         cardsHtml = '<div class="friends-grid">' + incoming.map(function (req) {
           var rpid = req.id ? req.id.replace(/^app:/, "") : "";
-          var photo = publicAvatar(req.avatar, req.avatarFace, "friend-avatar");
+          var photo = presenceWrap(rpid, publicAvatar(req.avatar, req.avatarFace, "friend-avatar"), false);
           var mutual = req.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: req.mutualFriendsCount })) + '</div>' : '';
           return '<div class="friend-card" data-friend-card="app:' + esc(rpid) + '">' +
             '<a class="friend-card-media" href="#/@' + encodeURIComponent(req.handle) + '">' + photo + '</a>' +
@@ -1721,7 +1784,7 @@
       } else {
         cardsHtml = '<div class="friends-grid">' + filtered.map(function (fr) {
           var fpid = fr.id ? fr.id.replace(/^app:/, "") : fr.publicId;
-          var photo = publicAvatar(fr.avatar, fr.avatarFace, "friend-avatar");
+          var photo = presenceWrap(fpid, publicAvatar(fr.avatar, fr.avatarFace, "friend-avatar"), false);
           var mutual = fr.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: fr.mutualFriendsCount })) + '</div>' : '';
           var btn = "";
           if (mine) {
@@ -1859,7 +1922,7 @@
   function accountPage(account, route) {
     var session = readSession();
     var mine = session && session.account && session.account.publicId === account.publicId;
-    var photo = publicAvatar(account.avatar, account.avatarFace, "pava");
+    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, "pava"), mine);
     var banner = publicBanner(account.banner, account.bannerFace);
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
     var followBtn = !mine && account.publicId && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton("app:" + account.publicId, true) || "") : "";
@@ -1886,7 +1949,8 @@
       '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
     '</div>';
 
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + '<div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body;
+    var seenLine = window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + seenLine + mutualLine + '<div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body;
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -1923,7 +1987,7 @@
       return '<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>' + esc(tr("Sign in")) + '</b><span>' + esc(tr("Not signed in")) + '</span></span>';
     }
     var account = session.account;
-    var photo = publicAvatar(account.avatar, account.avatarFace, "");
+    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, ""), true);
     var isAnon = !!account.profileLess;
     var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
     var sub = isAnon ? tr("Profile-less") : "@" + (account.handle || "");
@@ -1939,11 +2003,12 @@
         '</div>';
     }
     var account = session.account;
-    var photo = publicAvatar(account.avatar, account.avatarFace, "");
+    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, ""), true);
     var isAnon = !!account.profileLess;
     var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
     var sub = isAnon ? tr("Profile-less account") : "@" + (account.handle || "");
     return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(name) + '</b><div class="phandle">' + esc(sub) + "</div></div></a>" +
+      '<div style="padding:0 20px 8px"><button class="outline presence-set" type="button" data-acct="presence-open">' + esc(tr("Set a status")) + '</button></div>' +
       '<div style="padding:0 20px 12px"><button class="outline" type="button" data-acct="logout" style="width:100%;font-size:13px;padding:6px 12px;border-color:rgba(244,33,46,0.4);color:#f4212e">' + esc(tr("Log out")) + '</button></div>';
   }
   var tiktokHealth = null;
@@ -2280,6 +2345,10 @@
     event.preventDefault();
     event.stopPropagation();
     var act = acct.dataset.acct;
+    if (act === "presence-open") {
+      if (window.ViktorychPresence) window.ViktorychPresence.open(acct);
+      return;
+    }
     if (act === "signup") openAuth("signup");
     else if (act === "login") openAuth("login");
     else if (act === "open-restore") openAuth("restore");
@@ -2820,6 +2889,7 @@
     },
     snapshotFrom: snapshotFrom,
     mergePayload: mergePayload,
+    releaseNavLayout: releaseNavLayout,
     applySnapshot: applySnapshot,
     refreshToken: function () {
       var session = readSession();
