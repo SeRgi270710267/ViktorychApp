@@ -22,7 +22,10 @@ permissions:
   contents: read
   actions: write
 
-# One live, one job. A second dispatch for the same handle waits.
+# One live, one job. The next part is dispatched when this job exits, so
+# the same group chains the handoff instead of overlapping it. A second
+# dispatch for this handle waits and is not cancelled. Other handles run
+# at the same time.
 concurrency:
   group: tiktok-record-${{ inputs.handle }}
   cancel-in-progress: false
@@ -33,6 +36,20 @@ jobs:
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
+
+      - name: Free disk for the capture
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          df -h /
+          python3 - <<'PY'
+          import shutil, sys
+          free = shutil.disk_usage("/").free
+          print("disk free bytes", free)
+          if free < 4 * 1024 * 1024 * 1024:
+              sys.exit("runner disk is below 4 GiB after cleanup")
+          PY
 
       - uses: actions/setup-python@v5
         with:
@@ -73,6 +90,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.run_id }}

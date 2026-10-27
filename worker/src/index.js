@@ -12,7 +12,7 @@ import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from ".
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
-import { fresh, needsUpload, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
+import { admitRecord, fresh, needsUpload, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -2392,8 +2392,33 @@ async function maybeDispatchDiscord(env) {
 const WATCH_JOB_PREFIX = "owner/live-jobs/";
 const WATCH_MARK_PREFIX = "owner/live-watch/";
 const WATCH_UPLOAD_PREFIX = "owner/live-upload/";
+const WATCH_ACTIVE_PREFIX = "owner/live-active/";
+const WATCH_PUBLIC_PREFIX = "owner/recording-public/";
 const WATCH_CHANNELS_KEY = "owner/tiktok-backup-channels.json";
 const WATCH_CHANNEL = /^-100\d{4,16}$/;
+
+async function listPrefixNames(env, prefix) {
+  const names = [];
+  if (!env.DATA || typeof env.DATA.list !== "function") return names;
+  let cursor;
+  try {
+    for (let page = 0; page < 20; page++) {
+      const listed = await env.DATA.list({ prefix, cursor, limit: 200 });
+      const objects = listed && Array.isArray(listed.objects) ? listed.objects : [];
+      for (let i = 0; i < objects.length; i++) {
+        const key = String(objects[i] && objects[i].key || "");
+        if (!key.startsWith(prefix)) continue;
+        const name = key.slice(prefix.length).replace(/\.json$/, "");
+        if (name && names.indexOf(name) < 0) names.push(name);
+      }
+      if (!listed || !listed.truncated || !listed.cursor) break;
+      cursor = listed.cursor;
+    }
+  } catch (err) {
+    return names;
+  }
+  return names;
+}
 
 async function readJsonObject(env, key) {
   if (!env.DATA) return null;
@@ -2593,6 +2618,7 @@ async function watchTikTokLive(env, nowMs) {
     : 0;
   const channels = Math.max(1, Math.min(1 + extras, 12));
   const live = doc.live && typeof doc.live === "object" ? doc.live : {};
+  const activeNames = await listPrefixNames(env, WATCH_ACTIVE_PREFIX);
   let uploader = false;
 
   for (let i = 0; i < handles.length; i++) {
@@ -2637,7 +2663,7 @@ async function watchTikTokLive(env, nowMs) {
     if (!info.live) continue;
 
     const choice = watchDecision(job, mark, seen.roomId, nowMs);
-    if (choice.action !== "record" && choice.action !== "part") continue;
+    if (!admitRecord(choice, handle, activeNames)) continue;
     const ok = await dispatchWorkflow(env, "tiktok-record.yml", {
       handle,
       part: String(choice.part || 1),
@@ -2645,6 +2671,8 @@ async function watchTikTokLive(env, nowMs) {
     });
     if (ok) {
       await writeJsonObject(env, markKey, { handle, roomId: seen.roomId, part: choice.part || 1, at: stamp() });
+      const held = String(handle || "").toLowerCase();
+      if (activeNames.map((name) => String(name || "").toLowerCase()).indexOf(held) < 0) activeNames.push(held);
     } else {
       await writeJsonObject(env, markKey, Object.assign({}, mark || {}, { handle, failedAt: stamp() }));
     }
@@ -2659,6 +2687,7 @@ async function watchTikTokLive(env, nowMs) {
     const beat = await readJsonObject(env, WATCH_UPLOAD_PREFIX + slot + ".json");
     if (!uploaderStale(beat, nowMs)) continue;
     await dispatchWorkflow(env, "tiktok-live-upload.yml", { slot: String(slot) });
+    break;
   }
 }
 
@@ -2806,6 +2835,10 @@ async function handleRecordings(request, env) {
   const past = [];
   let active = 0;
   const names = Object.keys(listed);
+  const extra = await listPrefixNames(env, WATCH_PUBLIC_PREFIX);
+  extra.forEach((name) => {
+    if (names.indexOf(name) < 0) names.push(name);
+  });
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
     if (!TIKTOK_HANDLE.test(name)) continue;
@@ -2817,7 +2850,7 @@ async function handleRecordings(request, env) {
     pastFromJob(name, job, row).forEach((item) => past.push(item));
   }
   past.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
-  const cap = Math.max(1, Math.min(12, Number(index.cap) || 12));
+  const cap = Math.max(1, Math.min(16, Number(index.cap) || 16));
   return json(200, { cap, active, items, past });
 }
 

@@ -12,9 +12,9 @@ on:
 permissions:
   contents: read
 
-# One uploader per channel. A second run waits, so the pace stays one sender.
+# One uploader for every channel. A second run waits, so recorders keep the runners.
 concurrency:
-  group: tiktok-upload-${{ inputs.slot }}
+  group: tiktok-live-upload
   cancel-in-progress: false
 
 jobs:
