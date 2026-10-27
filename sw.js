@@ -107,6 +107,7 @@ const SHELL_FILES = [
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
   "./shared/mirror.js",
+  "./video-embed.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/feed-order.js",

@@ -279,7 +279,7 @@
       { id: "sports", where: "unchanged", why: "The sports pills are being reworked separately, so their requests stay where they are." },
       { id: "geo", where: "server", why: "Country and Tor flags come from Cloudflare on the Worker. No keyless browser API replaces the Tor flag." },
       { id: "media-proxy", where: "server", why: "Image CDNs do not allow browser reads. The Worker proxy remains the fallback when a network blocks them." },
-      { id: "youtube-media", where: "server", why: "YouTube media does not allow browser reads, so manifests stay on the Worker." },
+      { id: "youtube-media", where: "server", why: "YouTube plays in the official player. Direct files are not read through the Worker, and this entry stays on the server list so the client does not treat YouTube media as a public device read." },
       { id: "telegram", where: "server", why: "Telegram file reads use the bot token, which stays on the Worker." },
       { id: "owner-and-session", where: "server", why: "Sign-in, owner keys, and account routes are never fetched as public reads." }
     ];
