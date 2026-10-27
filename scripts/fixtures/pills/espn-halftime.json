@@ -1,0 +1,15 @@
+{
+  "leagues": [{"name": "Russian Football National League"}],
+  "events": [{
+    "id": "405",
+    "date": "2026-10-27T17:00:00Z",
+    "competitions": [{
+      "status": {"displayClock": "45'+2'", "type": {"name": "STATUS_HALFTIME", "state": "in"}},
+      "competitors": [
+        {"homeAway": "home", "score": "1", "team": {"displayName": "Arsenal Tula"}},
+        {"homeAway": "away", "score": "1", "team": {"displayName": "Shinnik Yaroslavl"}}
+      ],
+      "venue": {"fullName": "Arsenal Stadium"}
+    }]
+  }]
+}

@@ -22,6 +22,7 @@ import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
 import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
+import { handlePills } from "./pills.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -4414,6 +4415,9 @@ async function route(request, env, ctx) {
   // The X mirror only reads R2, so it answers before the schema check.
   if (path === "/v1/x" || path.startsWith("/v1/x/")) {
     return handleXProxy(request, env, url);
+  }
+  if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
+    return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
   }
   await ensureSchema(env);
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {

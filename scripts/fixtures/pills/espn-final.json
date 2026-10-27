@@ -1,0 +1,15 @@
+{
+  "leagues": [{"name": "Russian Premier League"}],
+  "events": [{
+    "id": "402",
+    "date": "2026-10-27T16:00:00Z",
+    "competitions": [{
+      "status": {"displayClock": "90'+4'", "type": {"name": "STATUS_FULL_TIME", "state": "post"}},
+      "competitors": [
+        {"homeAway": "home", "score": "2", "team": {"displayName": "CSKA Moscow"}},
+        {"homeAway": "away", "score": "0", "team": {"displayName": "Spartak Moscow"}}
+      ],
+      "venue": {"fullName": "VEB Arena"}
+    }]
+  }]
+}

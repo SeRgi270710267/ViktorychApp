@@ -1,4 +1,4 @@
-/* Soccer Scores test suite */
+/* Soccer pills render only a fresh, relevant match. */
 const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
@@ -24,6 +24,12 @@ const doc = {
 const context = {
   console,
   URL,
+  Date,
+  Math,
+  JSON,
+  Promise,
+  setTimeout,
+  clearTimeout,
   document: doc,
   localStorage: {
     _data: {},
@@ -36,114 +42,98 @@ context.globalThis = context;
 context.window = context;
 context.self = context;
 vm.createContext(context);
-vm.runInContext(fs.readFileSync("scores.js", "utf8"), context);
+
+function loadScript(file) {
+  let src = fs.readFileSync(file, "utf8");
+  src = src.replace(/export\s*\{[\s\S]*?\};/, "");
+  vm.runInContext(src, context);
+}
+
+loadScript("shared/pill-data.js");
+loadScript("scores.js");
 
 const L = context.SoccerScoresLogic;
 const S = context.SoccerScores;
+const P = context.PillData;
+assert.ok(L && S && P, "scores and pill data loaded");
 
-assert.ok(L, "scores.js exports SoccerScoresLogic");
-assert.ok(S, "scores.js exports SoccerScores");
+const ids = L.catalog().map(function (team) { return team.id; });
+assert.strictEqual(ids.join(","), "arsenal-tula,cska-moscow,fc-barcelona,sabadell-ce", "the followed clubs stay in the catalog");
+assert.strictEqual(L.loadTeams().length, 0, "no match is shown before a fetch");
+assert.strictEqual(S.pillsHtml(), "", "an empty board paints nothing");
+assert.strictEqual(S.rowExtra(), 0, "an empty board does not reserve a row");
+assert.strictEqual(typeof S.toggleLive, "undefined", "scores are not simulated");
+assert.strictEqual(typeof S.simulateGoal, "undefined", "goals are not simulated");
+assert.ok(!fs.readFileSync("scores.js", "utf8").includes("getDefaultData"), "the October fiction helper is gone");
+
+const now = Date.now();
+function match(extra) {
+  return Object.assign({
+    id: extra.id,
+    league: extra.league,
+    status: extra.status,
+    kickoff: extra.kickoff,
+    minute: extra.minute || "",
+    home: extra.home,
+    away: extra.away,
+    homeScore: extra.homeScore,
+    awayScore: extra.awayScore,
+    venue: extra.venue || "",
+    source: "espn"
+  }, {});
+}
+
+L.applyBundle(P.bundleSports([
+  match({ id: "live", league: "Spanish LALIGA", status: "live", kickoff: now - 40 * 60 * 1000, minute: "41'", home: "FC Barcelona", away: "Villarreal", homeScore: 2, awayScore: 1 }),
+  match({ id: "old", league: "Russian Premier League", status: "final", kickoff: now - 48 * 60 * 60 * 1000, home: "CSKA Moscow", away: "Spartak Moscow", homeScore: 2, awayScore: 0 }),
+  match({ id: "soon", league: "Spanish LALIGA", status: "scheduled", kickoff: now + 2 * 24 * 60 * 60 * 1000, home: "Villarreal", away: "Espanyol", homeScore: 0, awayScore: 0 })
+], now));
 
 const teams = L.loadTeams();
-assert.strictEqual(teams.length, 4, "Should have 4 featured teams");
+assert.strictEqual(teams.length, 1, "only the live relevant match is a pill");
+assert.strictEqual(teams[0].id, "fc-barcelona");
+const barca = L.renderPill(teams[0]);
+assert.ok(barca.includes("is-live"), "a live match is marked live");
+assert.ok(barca.includes("2 - 1"), "the live score is the fetched score");
+assert.ok(!barca.includes("0 - 4"), "the old Clasico fiction is gone");
+assert.ok(barca.includes("pill-age"), "the pill says when it was updated");
+assert.strictEqual(L.getTeam("cska-moscow"), null, "a final from two days ago is dropped");
+assert.strictEqual(S.rowExtra(), 65, "one visible match reserves the row");
 
-const teamIds = teams.map((t) => t.id);
-assert.ok(teamIds.includes("arsenal-tula"), "Includes Arsenal Tula");
-assert.ok(teamIds.includes("cska-moscow"), "Includes CSKA Moscow");
-assert.ok(teamIds.includes("fc-barcelona"), "Includes FC Barcelona");
-assert.ok(teamIds.includes("sabadell-ce"), "Includes CE Sabadell");
+const halfNow = now;
+L.applyBundle(P.bundleSports([
+  match({ id: "ht", league: "Russian First League", status: "halftime", kickoff: halfNow - 50 * 60 * 1000, minute: "HT", home: "Arsenal Tula", away: "Shinnik", homeScore: 1, awayScore: 1 })
+], halfNow));
+const tula = L.renderPill(L.getTeam("arsenal-tula"));
+assert.ok(tula.includes("Halftime"), "halftime is its own status");
+assert.ok(tula.includes("1 - 1"), "the halftime score is the fetched score");
 
-// Test pill rendering with updated October 2026 data
-const tula = L.getTeam("arsenal-tula");
-assert.ok(tula, "Arsenal Tula found");
-assert.strictEqual(tula.isLive, true, "Arsenal Tula is playing live");
-const tulaHtml = L.renderPill(tula);
-assert.ok(tulaHtml.includes("sc-pill-arsenal-tula"), "Has Arsenal Tula pill color class");
-assert.ok(tulaHtml.includes("is-live"), "Arsenal Tula has Live badge");
-assert.ok(tulaHtml.includes("1 - 1"), "Displays live score 1 - 1 against Shinnik");
+L.applyBundle(P.bundleSports([
+  match({ id: "sched", league: "Spanish LALIGA", status: "scheduled", kickoff: now + 3 * 60 * 60 * 1000, home: "FC Barcelona", away: "Getafe", homeScore: 0, awayScore: 0 })
+], now));
+const scheduled = L.renderPill(L.getTeam("fc-barcelona"));
+assert.ok(scheduled.includes("is-sched"), "a future kickoff is scheduled");
+assert.ok(!scheduled.includes("0 - 0"), "a scheduled match does not show 0-0");
 
-const cska = L.getTeam("cska-moscow");
-assert.ok(cska, "CSKA found");
-assert.strictEqual(cska.isLive, false, "CSKA shows Full Time latest result");
-const cskaHtml = L.renderPill(cska);
-assert.ok(cskaHtml.includes("sc-pill-cska-moscow"), "Has CSKA pill color class");
-assert.ok(cskaHtml.includes("is-ft"), "CSKA has Full Time badge");
-assert.ok(cskaHtml.includes("0 - 0"), "Displays result 0 - 0 against Fakel");
+L.applyBundle(P.bundleSports([
+  match({ id: "final", league: "Spanish LALIGA", status: "final", kickoff: now - 3 * 60 * 60 * 1000, home: "FC Barcelona", away: "Sevilla", homeScore: 3, awayScore: 1 })
+], now - 2 * 60 * 60 * 1000));
+assert.strictEqual(L.loadTeams().length, 0, "a fresh result still hides once the fetch itself is old");
 
-const barca = L.getTeam("fc-barcelona");
-assert.ok(barca, "FC Barcelona found");
-assert.strictEqual(barca.isLive, false, "Barca shows Full Time latest result");
-const barcaHtml = L.renderPill(barca);
-assert.ok(barcaHtml.includes("sc-pill-fc-barcelona"), "Has FC Barcelona blaugrana pill class");
-assert.ok(barcaHtml.includes("is-ft"), "Barca has Full Time badge");
-assert.ok(barcaHtml.includes("0 - 4"), "Displays Barca 0 - 4 El Clasico victory");
+L.applyBundle(P.bundleSports([
+  match({ id: "final", league: "Spanish LALIGA", status: "final", kickoff: now - 3 * 60 * 60 * 1000, home: "FC Barcelona", away: "Sevilla", homeScore: 3, awayScore: 1 })
+], now));
+const finalHtml = L.renderPill(L.getTeam("fc-barcelona"));
+assert.ok(finalHtml.includes("is-ft"), "a recent final stays up");
+assert.ok(finalHtml.includes("3 - 1"), "the recent final shows its score");
 
-const sabadell = L.getTeam("sabadell-ce");
-assert.ok(sabadell, "CE Sabadell found");
-assert.strictEqual(sabadell.isLive, false, "Sabadell shows Full Time latest result");
-const sabadellHtml = L.renderPill(sabadell);
-assert.ok(sabadellHtml.includes("sc-pill-sabadell-ce"), "Has Sabadell royal blue/white pill class");
-assert.ok(sabadellHtml.includes("is-ft"), "Sabadell has Full Time badge");
-assert.ok(sabadellHtml.includes("3 - 2"), "Displays Sabadell 3 - 2 victory over Atletico Baleares");
-
-// Test pillsHtml for unified row
-const pills = S.pillsHtml();
-assert.ok(pills.includes("sc-pill-arsenal-tula"), "Pills HTML has Arsenal Tula");
-assert.ok(pills.includes("sc-pill-cska-moscow"), "Pills HTML has CSKA Moscow");
-assert.ok(pills.includes("sc-pill-fc-barcelona"), "Pills HTML has FC Barcelona");
-assert.ok(pills.includes("sc-pill-sabadell-ce"), "Pills HTML has CE Sabadell");
-
-// Test homeRow
-const rowHtml = S.homeRow();
-assert.ok(rowHtml.includes("sp-row-wrap"), "Row has sp-row-wrap");
-assert.ok(rowHtml.includes("sc-pill-arsenal-tula"), "Row contains Arsenal Tula pill");
-assert.ok(rowHtml.includes("sc-pill-cska-moscow"), "Row contains CSKA Moscow pill");
-assert.ok(rowHtml.includes("sc-pill-fc-barcelona"), "Row contains FC Barcelona pill");
-assert.ok(rowHtml.includes("sc-pill-sabadell-ce"), "Row contains CE Sabadell pill");
-assert.strictEqual(S.rowExtra(), 65, "rowExtra offset is 65px");
-
-// Test unified Spaces + Soccer row
-vm.runInContext(fs.readFileSync("spaces.js", "utf8"), context);
-assert.ok(context.Spaces, "spaces.js exports Spaces");
-const spacesRowHtml = context.Spaces.homeRow();
-assert.ok(spacesRowHtml.includes("sp-row-wrap"), "Unified row has sp-row-wrap");
-assert.ok(spacesRowHtml.includes("sc-pill-arsenal-tula"), "Unified row has Arsenal Tula");
-assert.ok(spacesRowHtml.includes("sc-pill-cska-moscow"), "Unified row has CSKA Moscow");
-assert.strictEqual(context.Spaces.rowExtra(), 65, "Spaces.rowExtra returns 65px for single unified row");
-
-// Test Live toggle
-S.toggleLive("cska-moscow");
-assert.strictEqual(L.getTeam("cska-moscow").isLive, true, "CSKA can toggle to Live");
-S.toggleLive("cska-moscow");
-assert.strictEqual(L.getTeam("cska-moscow").isLive, false, "CSKA can toggle back to FT");
-
-// Test Score updates
-const activeData = tula.isLive ? tula.liveMatch : tula.latestResult;
-const initialHome = activeData.homeScore;
-S.updateScore("arsenal-tula", 1, 0);
-assert.strictEqual((L.getTeam("arsenal-tula").isLive ? L.getTeam("arsenal-tula").liveMatch : L.getTeam("arsenal-tula").latestResult).homeScore, initialHome + 1, "Home score incremented");
-
-// Test Goal Simulation
-const initialEventsCount = ((L.getTeam("arsenal-tula").isLive ? L.getTeam("arsenal-tula").liveMatch : L.getTeam("arsenal-tula").latestResult).events || []).length;
-S.simulateGoal("arsenal-tula");
-assert.strictEqual(((L.getTeam("arsenal-tula").isLive ? L.getTeam("arsenal-tula").liveMatch : L.getTeam("arsenal-tula").latestResult).events || []).length, initialEventsCount + 1, "Event added to timeline");
-
-// Test Reset Team
-S.resetTeam("arsenal-tula");
-const resetData = L.getTeam("arsenal-tula").isLive ? L.getTeam("arsenal-tula").liveMatch : L.getTeam("arsenal-tula").latestResult;
-assert.strictEqual(resetData.homeScore, 1, "Arsenal Tula home score reset to updated default");
-assert.strictEqual(resetData.awayScore, 1, "Arsenal Tula away score reset to updated default");
-
-// Test single unified row guarantee: Spaces pill + Soccer pills inside ONE .sp-row
-context.Spaces.homePillsHtml = function() {
+loadScript("spaces.js");
+context.Spaces.homePillsHtml = function () {
   return '<div class="sp-row-item" role="listitem"><a class="sp-pill" href="#/spaces/live"><span class="sp-pill-title">Live Radio</span></a></div>';
 };
-const unifiedHtml = context.Spaces.homeRow();
-assert.strictEqual((unifiedHtml.match(/<div class="sp-row-wrap/g) || []).length, 1, "Must have exactly ONE sp-row-wrap container");
-assert.strictEqual((unifiedHtml.match(/<div class="sp-row"/g) || []).length, 1, "Must have exactly ONE sp-row list");
-assert.ok(unifiedHtml.indexOf("Live Radio") < unifiedHtml.indexOf("sc-pill-arsenal-tula"), "Purple Spaces pill is followed by Arsenal Tula in the same row");
-assert.ok(unifiedHtml.indexOf("sc-pill-arsenal-tula") < unifiedHtml.indexOf("sc-pill-cska-moscow"), "Arsenal Tula is followed by CSKA");
-assert.ok(unifiedHtml.indexOf("sc-pill-cska-moscow") < unifiedHtml.indexOf("sc-pill-fc-barcelona"), "CSKA is followed by Barca");
-assert.ok(unifiedHtml.indexOf("sc-pill-fc-barcelona") < unifiedHtml.indexOf("sc-pill-sabadell-ce"), "Barca is followed by Sabadell");
+const row = context.Spaces.homeRow();
+assert.strictEqual((row.match(/<div class="sp-row-wrap/g) || []).length, 1, "radio and scores share one row");
+assert.ok(row.indexOf("Live Radio") < row.indexOf("sc-pill-fc-barcelona"), "the radio pill sits with the match");
+assert.strictEqual(context.Spaces.rowExtra(), 65, "the shared row keeps its offset");
 
 console.log("soccer scores tests ok");
