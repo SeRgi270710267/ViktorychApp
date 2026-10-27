@@ -107,6 +107,7 @@ def accounts_wall_checks() -> None:
         "Pages deploy does not wait on the feed refresh",
     )
     check("paths-ignore:" in workflow and "data/communities/**" in workflow, "data-only commits do not start a deploy")
+    check("cp shared/lazy-modules.js _site/shared/" in workflow, "the deploy publishes the lazy route loader")
     check(
         accounts_publish.DEFAULT_HEALTH_ATTEMPTS >= 24 and accounts_publish.DEFAULT_HEALTH_INTERVAL >= 15,
         "health is retried for longer than a worker deploy",
