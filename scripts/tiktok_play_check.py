@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKER = ROOT / "worker"
 API = "https://viktorych-accounts.viktorych-accounts.workers.dev"
 VIDEO = "7695476356548660503"
-HANDLE = "gabii_g5"
+HANDLE = os.environ.get("TIKTOK_PLAY_HANDLE") or "sampleclip"
 
 
 def d1(sql: str) -> list:

@@ -12,4 +12,6 @@ discord/
 .feed-http-cache.json
 .communities-r2
 owner/
+/data/communities/*
+!/data/communities/index.json
 .wrangler/

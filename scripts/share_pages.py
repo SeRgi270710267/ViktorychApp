@@ -590,7 +590,7 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
 
     doc = load_json(site / "feeds.json")
     if not isinstance(doc, dict):
-        doc = load_json(ROOT / "feeds.json") or {}
+        doc = {}
     feeds = [feed for feed in (doc.get("feeds") or []) if isinstance(feed, dict)]
     credit_carried(doc.get("posts") or [], feeds)
     posts = collect_posts(doc)

@@ -29,7 +29,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import telegram_backup as tb  # noqa: E402
-from tiktok_sync import TRACKED  # noqa: E402
 
 EXTRACT = ("tiktok", "instagram", "x", "youtube", "vk", "facebook", "threads")
 ARCHIVE_KEY = "backup/media-archive.txt"
@@ -810,9 +809,21 @@ def extract() -> int:
         config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
     except json.JSONDecodeError:
         config = {}
-    from tiktok_sync import load_added_accounts
+    from r2_catalog import read_catalog
+    from tiktok_sync import env_tracked, load_added_accounts
     from update_feeds import load_added_x
 
+    if isinstance(config, dict) and config.get("catalogSeed") is True:
+        blob = read_catalog("feeds.config.json")
+        restored = None
+        if blob:
+            try:
+                parsed = json.loads(blob.decode("utf-8"))
+            except (UnicodeError, json.JSONDecodeError):
+                parsed = None
+            if isinstance(parsed, dict) and not parsed.get("catalogSeed"):
+                restored = parsed
+        config = restored or {"feeds": []}
     try:
         accounts_doc = load_added_accounts()
     except Exception:
@@ -821,7 +832,14 @@ def extract() -> int:
         x_doc = load_added_x()
     except Exception:
         x_doc = {"added": [], "removed": [], "removedIds": []}
-    accounts = accounts_from(config if isinstance(config, dict) else {}, list(TRACKED), accounts_doc, x_doc)
+    tracked = env_tracked()
+    accounts = accounts_from(config if isinstance(config, dict) else {}, tracked, accounts_doc, x_doc)
+    try:
+        from log_redact import install
+
+        install(tracked + [row.get("handle") for row in accounts if isinstance(row, dict)])
+    except Exception:
+        pass
     if not accounts:
         log("[media-extract] no added accounts")
         return backup_communities_standalone()
@@ -990,16 +1008,16 @@ def selftest() -> int:
 
     rows = accounts_from({
         "feeds": [
-            {"platform": "youtube", "handle": "CanadianPrepper", "channelId": "UCfgtuaUadGgOA-91geQ8Qog"},
-            {"platform": "telegram", "handle": "telegram"},
-            {"platform": "x", "handle": "elonmusk"},
-            {"platform": "instagram", "handle": "zuck"},
+            {"platform": "youtube", "handle": "northlamp", "channelId": "UCsyntheticmaple00001000"},
+            {"platform": "telegram", "handle": "laneharbor"},
+            {"platform": "x", "handle": "copperlane"},
+            {"platform": "instagram", "handle": "birchlane"},
         ]
-    }, ["gabii_g5"])
+    }, ["lockclip"])
     urls = {row["url"] for row in rows}
-    check("https://www.tiktok.com/@gabii_g5" in urls, "TikTok is included with the added accounts")
-    check("https://www.youtube.com/channel/UCfgtuaUadGgOA-91geQ8Qog/videos" in urls, "YouTube uses the public channel videos page")
-    check("https://x.com/elonmusk" in urls and "https://www.instagram.com/zuck/" in urls, "X and Instagram use the public profile")
+    check("https://www.tiktok.com/@lockclip" in urls, "TikTok is included with the added accounts")
+    check("https://www.youtube.com/channel/UCsyntheticmaple00001000/videos" in urls, "YouTube uses the public channel videos page")
+    check("https://x.com/copperlane" in urls and "https://www.instagram.com/birchlane/" in urls, "X and Instagram use the public profile")
     check(all("t.me" not in row["url"] for row in rows), "a Telegram channel is not extracted")
     turned = rotate([{"handle": "a"}, {"handle": "b"}, {"handle": "c"}], 1)
     check([row["handle"] for row in turned] == ["b", "c", "a"], "added accounts rotate so a later run reaches the rest")
@@ -1015,16 +1033,16 @@ def selftest() -> int:
     ]
     picked = tiktok_download_selector(formats)
     check(picked.startswith("bytevc1-720+") and "h264" not in picked.split("/")[0], "TikTok takes the top original bytevc1, not the h264 fallback")
-    check("--recode-video" not in video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), picked, 1), "TikTok is remuxed and not re-encoded")
+    check("--recode-video" not in video_args("https://www.tiktok.com/@lockclip/video/1", Path("out"), Path("archive.txt"), picked, 1), "TikTok is remuxed and not re-encoded")
     passes = tb.hls_attempts(True)
     check(passes == [(False, 6, False), (False, 4, False), (False, 2, False), (False, 1, False), (False, 1, True)] and all(not row[0] for row in passes), "a social video retries -c copy at 2s, 1s, then keyframe splits and never re-encodes")
-    check(tb.social_copy_key("tiktok/gabii_g5/7695476356548660503/video") and tb.social_copy_key("social/x/1/video/0") and not tb.social_copy_key("music/a.mp3"), "only synced social video is copy-only")
-    private = accounts_from({}, ["gabii_g5"], {"added": [{"handle": "new_name", "permanentId": "123456"}], "removed": ["gabii_g5"]})
+    check(tb.social_copy_key("tiktok/lockclip/7695476356548660503/video") and tb.social_copy_key("social/x/1/video/0") and not tb.social_copy_key("music/a.mp3"), "only synced social video is copy-only")
+    private = accounts_from({}, ["lockclip"], {"added": [{"handle": "new_name", "permanentId": "123456"}], "removed": ["lockclip"]})
     private_urls = {row["url"] for row in private}
-    check("https://www.tiktok.com/@new_name" in private_urls and "https://www.tiktok.com/@gabii_g5" not in private_urls, "a removed account stays out and a private added account is included")
-    photos = photo_args("https://www.instagram.com/zuck/", Path("photos"), Path("gallery.txt"), 2)
+    check("https://www.tiktok.com/@new_name" in private_urls and "https://www.tiktok.com/@lockclip" not in private_urls, "a removed account stays out and a private added account is included")
+    photos = photo_args("https://www.instagram.com/birchlane/", Path("photos"), Path("gallery.txt"), 2)
     check("--write-metadata" in photos and "--download-archive" in photos and "--cookies" not in photos and "--config-ignore" in photos, "gallery-dl writes metadata and records the archive")
-    catalog = remember_tiktok({}, {"uploader_id": "99", "channel_id": "MS4wLjABAAAA12345678", "uploader": "gabii_g5"})
+    catalog = remember_tiktok({}, {"uploader_id": "99", "channel_id": "MS4wLjABAAAA12345678", "uploader": "lockclip"})
     check(catalog["by_user_id"]["99"]["sec_uid"] == "MS4wLjABAAAA12345678" and catalog["by_sec_uid"]["MS4wLjABAAAA12345678"]["user_id"] == "99", "the TikTok catalog is keyed by user_id and sec_uid")
     check(ident_of("instagram", {"id": "123", "webpage_url": "https://www.instagram.com/reel/DeZgzTEggQe/"}) == "DeZgzTEggQe", "an Instagram shortcode is the object id")
     check(cap_of() >= 1 and per_account() >= 1 and pace_seconds() >= 3, "the run has a cap and a pause")
@@ -1033,8 +1051,8 @@ def selftest() -> int:
         check(cap_of() == 80, "one extract run stores at most 80 new files")
     finally:
         os.environ.pop("MEDIA_EXTRACT_CAP", None)
-    check("--concurrent-fragments" in video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1), "a TikTok download uses one connection")
-    check(video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1)[video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1).index("--concurrent-fragments") + 1] == "1", "TikTok does not split a file across connections")
+    check("--concurrent-fragments" in video_args("https://www.tiktok.com/@lockclip/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1), "a TikTok download uses one connection")
+    check(video_args("https://www.tiktok.com/@lockclip/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1)[video_args("https://www.tiktok.com/@lockclip/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1).index("--concurrent-fragments") + 1] == "1", "TikTok does not split a file across connections")
     check(tb.runner_blocked("HTTP Error 403: Forbidden") and tb.runner_blocked("captcha") and not tb.runner_blocked("private account"), "a 403 or captcha is a skip")
     workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
     check('cron: "17 */3 * * *"' in workflow and 'cron: "*/30 * * * *"' not in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")
@@ -1054,17 +1072,17 @@ def selftest() -> int:
     source = Path(__file__).read_text(encoding="utf-8")
     check(("photos" + ".read_text(") not in source and "gallery-archive.sqlite" in source and "load_added_accounts" in source and "load_added_x" in source, "the gallery-dl archive is a sqlite file, and TikTok and X read the owner list")
     x_rows = accounts_from(
-        {"feeds": [{"platform": "x", "handle": "elonmusk", "permanentId": "44196397"}]},
+        {"feeds": [{"platform": "x", "handle": "copperlane", "permanentId": "10000000"}]},
         [],
         None,
         {"added": [
             {"handle": "NASA", "permanentId": "11348282"},
-            {"handle": "elonmusk", "permanentId": "44196397"},
+            {"handle": "copperlane", "permanentId": "10000000"},
             {"handle": "gone", "permanentId": "77"},
         ], "removed": ["oldname"], "removedIds": ["77"]},
     )
     x_urls = [row["url"] for row in x_rows if row["platform"] == "x"]
-    check(x_urls.count("https://x.com/NASA") == 1 and x_urls.count("https://x.com/elonmusk") == 1 and "https://x.com/gone" not in x_urls, "a private X account is extracted once and a removed id stays out")
+    check(x_urls.count("https://x.com/NASA") == 1 and x_urls.count("https://x.com/copperlane") == 1 and "https://x.com/gone" not in x_urls, "a private X account is extracted once and a removed id stays out")
     x_formats = [
         {"format_id": "hls-high", "ext": "mp4", "protocol": "m3u8_native", "vcodec": "avc1", "acodec": "none", "tbr": 8000},
         {"format_id": "low", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "tbr": 500, "height": 360},
@@ -1076,15 +1094,15 @@ def selftest() -> int:
     check(twimg_orig("https://pbs.twimg.com/media/abc.jpg?name=small") == "https://pbs.twimg.com/media/abc.jpg?name=orig", "an X photo asks for name=orig")
     check(twimg_orig("https://pbs.twimg.com/media/abc.jpg").endswith("name=orig") and twimg_orig("https://example.com/a.jpg") == "", "only a Twitter photo is rewritten to the original")
     from update_feeds import added_x_feeds, remember_private_x
-    config = {"feeds": [{"id": "x:elonmusk", "platform": "x", "handle": "elonmusk", "permanentId": "44196397"}]}
+    config = {"feeds": [{"id": "x:copperlane", "platform": "x", "handle": "copperlane", "permanentId": "10000000"}]}
     private_doc = {"added": [
         {"id": "x:NASA", "handle": "NASA", "permanentId": "11348282", "name": "NASA"},
-        {"id": "x:elonmusk", "handle": "elonmusk", "permanentId": "44196397"},
+        {"id": "x:copperlane", "handle": "copperlane", "permanentId": "10000000"},
         {"id": "x:old", "handle": "renamed", "permanentId": "77"},
     ], "removed": [], "removedIds": ["77"]}
     built = added_x_feeds(config, private_doc)
     check(len(built) == 1 and built[0]["handle"] == "NASA" and built[0]["adapter"] == "fxtwitter" and built[0]["source_urls"] == ["{fxtwitterBase}/2/profile/{handle}/statuses"] and built[0]["fallbacks"][0]["adapter"] == "nitter_rss" and "nitter.meowing.monster" in built[0]["fallbacks"][0]["source_urls"][0], "added X accounts use fxtwitter and the nitter fallbacks")
-    check(config["feeds"][0]["handle"] == "elonmusk" and "_privateAdded" not in config["feeds"][0], "private X rows are not written into the public config")
+    check(config["feeds"][0]["handle"] == "copperlane" and "_privateAdded" not in config["feeds"][0], "private X rows are not written into the public config")
     renamed = {"_privateAdded": True, "id": "x:NASA", "platform": "x", "handle": "NASANew", "permanentId": "11348282", "previousHandles": ["NASA"]}
     check(remember_private_x(private_doc, renamed) and private_doc["added"][0]["handle"] == "NASANew" and private_doc["added"][0]["previousHandles"] == ["NASA"] and private_doc["added"][0]["id"] == "x:NASA", "a handle change stays on the private row and keeps the feed id")
     sample = Path("gallery-sample.sqlite")

@@ -107,19 +107,19 @@ assert.ok(T, "Internal subs test hook should be exposed");
 
 // Test Setup
 const ytFeed = {
-  id: "youtube:CanadianPrepper",
+  id: "youtube:northlamp",
   platform: "youtube",
-  handle: "CanadianPrepper",
-  channelId: "UCfgtuaUadGgOA-91geQ8Qog",
+  handle: "northlamp",
+  channelId: "UCsyntheticmaple00001000",
   name: "Canadian Prepper",
   avatar: "https://example.com/canadian.jpg",
   configured: true
 };
 
 const xFeed = {
-  id: "x:elonmusk",
+  id: "x:copperlane",
   platform: "x",
-  handle: "elonmusk",
+  handle: "copperlane",
   name: "Elon Musk",
   avatar: "https://example.com/elon.jpg",
   configured: true
@@ -141,9 +141,9 @@ T.STATE.data = {
       id: "yt_vid1",
       statusId: "vid12345678",
       platform: "youtube",
-      feedId: "youtube:CanadianPrepper",
-      handle: "canadianprepper",
-      channelId: "UCfgtuaUadGgOA-91geQ8Qog",
+      feedId: "youtube:northlamp",
+      handle: "northlamp",
+      channelId: "UCsyntheticmaple00001000",
       author: "Canadian Prepper",
       title: "Prepping for the Unknown",
       date: new Date().toISOString(),
@@ -153,9 +153,9 @@ T.STATE.data = {
       id: "yt_short1",
       statusId: "short987654",
       platform: "youtube",
-      feedId: "youtube:CanadianPrepper",
-      handle: "CanadianPrepper",
-      channelId: "UCfgtuaUadGgOA-91geQ8Qog",
+      feedId: "youtube:northlamp",
+      handle: "northlamp",
+      channelId: "UCsyntheticmaple00001000",
       author: "Canadian Prepper",
       title: "Quick Survival Tip #Shorts",
       short: true,
@@ -166,8 +166,8 @@ T.STATE.data = {
       id: "x_post_video",
       statusId: "12345",
       platform: "x",
-      feedId: "x:elonmusk",
-      handle: "elonmusk",
+      feedId: "x:copperlane",
+      handle: "copperlane",
       author: "Elon Musk",
       text: "Starship Flight Test",
       date: new Date().toISOString(),
@@ -188,8 +188,8 @@ T.STATE.data = {
       id: "x_post_text",
       statusId: "12346",
       platform: "x",
-      feedId: "x:elonmusk",
-      handle: "elonmusk",
+      feedId: "x:copperlane",
+      handle: "copperlane",
       author: "Elon Musk",
       text: "Just text here",
       date: new Date().toISOString(),
@@ -199,7 +199,7 @@ T.STATE.data = {
 };
 
 T.STATE.settings = {
-  follows: ["youtube:CanadianPrepper", "x:elonmusk", "tiktok:somecreator"],
+  follows: ["youtube:northlamp", "x:copperlane", "tiktok:somecreator"],
   groups: [],
   groupsOwn: false,
   subsGroup: "",
@@ -219,7 +219,7 @@ console.log("  Testing countsAsUpload...");
 const ytPost = T.STATE.data.posts[0];
 assert.strictEqual(T.countsAsUpload(ytPost, ytFeed), true, "Matches exact feedId");
 
-const altYtPost = Object.assign({}, ytPost, { feedId: "youtube:UCfgtuaUadGgOA-91geQ8Qog" });
+const altYtPost = Object.assign({}, ytPost, { feedId: "youtube:UCsyntheticmaple00001000" });
 assert.strictEqual(T.countsAsUpload(altYtPost, ytFeed), true, "Matches via channelId");
 
 assert.strictEqual(T.countsAsUpload(ytPost, xFeed), false, "Does not match unrelated feed");
@@ -228,27 +228,27 @@ assert.strictEqual(T.countsAsUpload(ytPost, xFeed), false, "Does not match unrel
 console.log("  Testing followedPost...");
 assert.strictEqual(T.followedPost(ytPost), true, "Matches direct feedId in follows");
 
-T.STATE.settings.follows = ["youtube:UCfgtuaUadGgOA-91geQ8Qog"];
+T.STATE.settings.follows = ["youtube:UCsyntheticmaple00001000"];
 assert.strictEqual(T.followedPost(ytPost), true, "Matches channelId in follows");
 
-T.STATE.settings.follows = ["youtube:canadianprepper"];
+T.STATE.settings.follows = ["youtube:northlamp"];
 assert.strictEqual(T.followedPost(ytPost), true, "Matches lowercase handle in follows");
 
 // Reset follows
-T.STATE.settings.follows = ["youtube:CanadianPrepper", "x:elonmusk", "tiktok:somecreator"];
+T.STATE.settings.follows = ["youtube:northlamp", "x:copperlane", "tiktok:somecreator"];
 
 // 4. videoFeeds test
 console.log("  Testing videoFeeds...");
 const vf = T.videoFeeds();
-assert.ok(vf.some((f) => f.id === "youtube:CanadianPrepper"), "videoFeeds includes YouTube channel");
-assert.ok(vf.some((f) => f.id === "x:elonmusk"), "videoFeeds includes X feed with video upload");
+assert.ok(vf.some((f) => f.id === "youtube:northlamp"), "videoFeeds includes YouTube channel");
+assert.ok(vf.some((f) => f.id === "x:copperlane"), "videoFeeds includes X feed with video upload");
 assert.ok(vf.some((f) => f.id === "tiktok:somecreator"), "videoFeeds includes TikTok video channel");
 
 // 5. onChannel test
 console.log("  Testing onChannel filter...");
-assert.strictEqual(T.onChannel(ytPost, "youtube:CanadianPrepper"), true, "onChannel matches feedId");
-assert.strictEqual(T.onChannel(ytPost, "youtube:UCfgtuaUadGgOA-91geQ8Qog"), true, "onChannel matches channelId");
-assert.strictEqual(T.onChannel(ytPost, "x:elonmusk"), false, "onChannel rejects other channels");
+assert.strictEqual(T.onChannel(ytPost, "youtube:northlamp"), true, "onChannel matches feedId");
+assert.strictEqual(T.onChannel(ytPost, "youtube:UCsyntheticmaple00001000"), true, "onChannel matches channelId");
+assert.strictEqual(T.onChannel(ytPost, "x:copperlane"), false, "onChannel rejects other channels");
 
 // 6. subsView render test
 console.log("  Testing subsView rendering...");
@@ -261,7 +261,7 @@ assert.ok(allHtml.includes("Starship Flight Test"), "X video rendered in feed");
 assert.ok(!allHtml.includes("Just text here"), "Non-video text post excluded");
 
 // Filter by channel
-const chanHtml = T.subsView({ name: "subscriptions", channel: "youtube:CanadianPrepper", query: new URLSearchParams() });
+const chanHtml = T.subsView({ name: "subscriptions", channel: "youtube:northlamp", query: new URLSearchParams() });
 assert.ok(chanHtml.includes("Prepping for the Unknown"), "Filtered view has channel video");
 assert.ok(!chanHtml.includes("Starship Flight Test"), "Filtered view excludes other channels");
 
