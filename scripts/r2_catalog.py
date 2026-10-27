@@ -59,9 +59,13 @@ def push(root: Path) -> int:
             failed += 1
             print(f"[r2] upload failed {key}")
     cache = root / ".feed-http-cache.json"
+    cache_failed = False
     if cache.is_file() and not r2_put(CACHE_KEY, cache.read_bytes()):
+        cache_failed = True
         print("[r2] source cache upload failed")
     print(f"[r2] stored {stored} catalog files" + (f", {failed} failed" if failed else ""))
+    if failed or cache_failed or stored == 0:
+        return 1
     return 0
 
 
