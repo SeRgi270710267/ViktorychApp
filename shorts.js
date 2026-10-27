@@ -100,6 +100,9 @@
     } else if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) {
       try { window.ViktorychAccounts.requestRender(); } catch (err) {}
     }
+    if (window.ViktorychNotes && window.ViktorychNotes.lockChanged) {
+      try { window.ViktorychNotes.lockChanged(); } catch (err) {}
+    }
   }
   function foldList(list) {
     var next = [];
@@ -110,7 +113,16 @@
     return next;
   }
   function setUnlocked(list) {
-    unlockedAccounts = foldList(list);
+    var next = foldList(list);
+    var same = next.length === unlockedAccounts.length && next.every(function (name, i) { return name === unlockedAccounts[i]; });
+    unlockedAccounts = next;
+    if (same) return;
+    if (window.ViktorychNotes && window.ViktorychNotes.lockChanged) {
+      try { window.ViktorychNotes.lockChanged(); } catch (err) {}
+    }
+  }
+  function unlockedList() {
+    return unlockedAccounts.slice();
   }
   function setAdded(list) {
     addedAccounts = (list || []).filter(function (row) { return row && row.handle; });
@@ -3593,6 +3605,7 @@
     absorb: absorb,
     isLocked: isLocked,
     isUnlocked: isUnlocked,
+    unlockedList: unlockedList,
     setUnlocked: setUnlocked,
     setAdded: setAdded,
     setLocked: setLocked,

@@ -22,6 +22,7 @@ import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
+import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { logError } from "./log.js";
@@ -929,6 +930,17 @@ function cleanBottomNavSync(raw) {
 }
 
 const DEVICE_FEATURES = ["direct", "search", "translate", "ai", "media", "record", "storage", "sync"];
+const AI_FEATURE_KEYS = ["detect", "spam", "summarize", "compose", "semantic", "translateLocal", "semanticLocal", "dmServer", "dmAuto"];
+
+function cleanAiFeatures(raw) {
+  const src = raw && raw.aiFeatures && typeof raw.aiFeatures === "object" ? raw.aiFeatures : null;
+  if (!src) return undefined;
+  const out = {};
+  AI_FEATURE_KEYS.forEach((id) => {
+    if (typeof src[id] === "boolean") out[id] = src[id];
+  });
+  return Object.keys(out).length ? out : undefined;
+}
 const PEER_UPLOAD_CAPS = [32768, 65536, 131072, 262144];
 
 function cleanDevicePerf(raw) {
@@ -953,6 +965,7 @@ function cleanDevicePerf(raw) {
     autoLight: raw.autoLight !== false,
     webllm: raw.webllm === true && raw.webllmAccepted === true,
     webllmAccepted: raw.webllmAccepted === true,
+    aiFeatures: cleanAiFeatures(raw),
     peerMedia: raw.peerMedia === "on" || raw.peerMedia === "off" ? raw.peerMedia : "auto",
     peerUploadCap: cap,
     peerShareWhileWatching: raw.peerShareWhileWatching !== false
@@ -3397,27 +3410,6 @@ async function requireOwner(request, env) {
   if (!row) return { error: json(401, { error: "unauthorized" }) };
   if (row.owner !== 1) return { error: json(403, { error: "forbidden" }) };
   return { row };
-}
-
-function rememberHandle(found, seen, name) {
-  const clean = String(name || "").trim().replace(/^@/, "");
-  if (!/^[A-Za-z0-9._]{2,24}$/.test(clean)) return;
-  const key = clean.toLowerCase();
-  if (seen.has(key)) return;
-  seen.add(key);
-  found.push(clean);
-}
-
-async function unlockedHandles(env) {
-  const found = [];
-  const seen = new Set();
-  String((env && env.TIKTOK_UNLOCKED) || "").split(/[\s,]+/).forEach((part) => rememberHandle(found, seen, part));
-  const doc = await readJsonObject(env, "owner/tiktok-unlocked.json");
-  const list = doc && (doc.handles || doc.unlocked || []);
-  if (Array.isArray(list)) {
-    list.forEach((item) => rememberHandle(found, seen, typeof item === "string" ? item : item && item.handle));
-  }
-  return found;
 }
 
 async function handleTikTokUnlocked(request, env) {

@@ -356,6 +356,13 @@
     return isShortsLocked() && !isTiktokUnlocked(entity.handle || entity.account);
   }
 
+  function withUnreadTitle(text) {
+    const base = String(text || "").replace(/^\((?:\d+|\d+\+|20\+)\)\s+/, "");
+    const count = bellUnread();
+    if (!count) return base;
+    return "(" + (count > 20 ? "20+" : String(count)) + ") " + base;
+  }
+
   function feeds() {
     let list = (STATE.data && STATE.data.feeds) || [];
     if (isShortsLocked()) {
@@ -2139,11 +2146,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     STATE.translateFull[key] = !!full;
     if (window.FeedsTranslate) window.FeedsTranslate.prepare(key);
     const inner = withDiscordEmoji(post, textHtml(post, key, full));
-    if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner);
+    const sum = sample.length > 480
+      ? `<button class="show-more odai-btn" type="button" data-act="odai-summarize" data-key="${esc(key)}" data-scope="post">${tr("Summarize")}</button>`
+      : "";
+    if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner) + sum;
     const offer = offerTranslate(key, sample)
       ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">${tr("Translate post")}</button>`
       : "";
-    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}`;
+    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}${sum}`;
   }
 
   function bioBlock(entity) {
@@ -5482,7 +5492,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       group.sort((a, b) => fxEngagement(b) - fxEngagement(a));
       group.slice(1).forEach((loser) => { loser.spam = true; });
     });
-    posts.forEach((post) => { if (fxSpamReason(post, author)) post.spam = true; });
+    posts.forEach((post) => {
+      if (fxSpamReason(post, author)) { post.spam = true; return; }
+      const self = author && String(post.handle || "").toLowerCase() === author;
+      const ai = window.ViktorychOnDeviceAi;
+      if (!self && ai && ai.likelySpam && ai.likelySpam(post.text || "", "reply")) post.spam = true;
+    });
     const clean = posts.filter((post) => !post.spam);
     const flagged = posts.filter((post) => post.spam);
     const selfPosts = clean.filter((post) => author && String(post.handle || "").toLowerCase() === author);
@@ -6744,7 +6759,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function replyTools(post) {
     const bucket = STATE.replies[postKey(post)] || {};
     const label = freshLabel(bucket.fetchedAt);
-    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}`;
+    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}<button class="show-more odai-btn" type="button" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button></div>${replySortTabs()}`;
   }
 
   function replyList(post) {
@@ -6782,11 +6797,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return tools + html + more + spam;
   }
 
-  function composer(bridge) {
+  function composer(bridge, post) {
+    const key = post ? postKey(post) : "";
     return `<div class="composer${bridge ? " bridge" : ""}">
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
+        <div class="odai-chips"><button type="button" data-act="odai-suggest" data-key="${esc(key)}" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="reply-draft" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="warm" data-field="reply-draft" data-scope="post">${tr("Tone")}</button></div>
         <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
@@ -7052,13 +7069,48 @@ const here = parseRoute();
     return { name: "profile", platform, handle, query };
   }
 
-  function bellUnread() {
-    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
-      const server = notesServer();
-      return Number(server.unread) > 0 ? Number(server.unread) : 0;
+  function noteViewer() {
+    const cfg = (typeof window !== "undefined" && window.VIKTORYCH_ACCOUNTS) || {};
+    return {
+      owner: typeof signedOwner === "function" ? signedOwner() : false,
+      audienceAll: cfg.tiktokAudience === "all",
+      locked: typeof isShortsLocked === "function" ? isShortsLocked() : true,
+      unlocked: function (handle) {
+        return typeof isTiktokUnlocked === "function" ? isTiktokUnlocked(handle) : false;
+      }
+    };
+  }
+
+  function noteHidden(note) {
+    if (!note) return false;
+    const view = noteViewer();
+    if (window.TiktokLock && typeof window.TiktokLock.tiktokNoteHidden === "function") {
+      return window.TiktokLock.tiktokNoteHidden(note, view);
     }
+    const platform = note.platform || (note.feedId && String(note.feedId).indexOf("tiktok:") === 0 ? "tiktok" : "") || (note.hash && String(note.hash).indexOf("#/tiktok/") === 0 ? "tiktok" : "");
+    if (platform !== "tiktok") return false;
+    if (!view.owner && !view.audienceAll) return true;
+    if (view.locked === false) return false;
+    return typeof isTiktokUnlocked === "function" ? !isTiktokUnlocked(note.handle || note.account) : true;
+  }
+
+  function visibleNotes(list) {
+    if (window.TiktokLock && typeof window.TiktokLock.visibleNotes === "function") {
+      return window.TiktokLock.visibleNotes(list || [], noteViewer());
+    }
+    return (list || []).filter((note) => !noteHidden(note));
+  }
+
+  function bellUnread() {
     const read = Number(STATE.settings && STATE.settings.bellRead) || 0;
-    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
+    const notes = (STATE.settings && STATE.settings.bellNotes) || [];
+    const visibleUnread = visibleNotes(notes).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
+      const server = Number(notesServer().unread) || 0;
+      const hiddenUnread = notes.filter((note) => noteHidden(note) && !note.read && (Number(note.at) || 0) > read).length;
+      return Math.max(visibleUnread, Math.max(0, server - hiddenUnread));
+    }
+    return visibleUnread;
   }
 
   function bellBadgeHtml() {
@@ -7832,6 +7884,7 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
+      <div class="odai-bar"><button type="button" class="show-more" data-act="odai-catch" data-scope="post">${tr("Catch me up")}</button></div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${homeLivePillsRow()}
     </div>`;
@@ -9397,7 +9450,7 @@ const here = parseRoute();
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
       ${article}
-      ${talk == null ? composer(threaded) + replyList(post) : talk}`;
+      ${talk == null ? composer(threaded, post) + replyList(post) : talk}`;
   }
 
   function telegramTalk(post) {
@@ -10825,12 +10878,32 @@ const here = parseRoute();
     const plat = STATE.histPlat || "";
     const present = {};
     (histEnsure()[tab] || []).forEach((row) => { if (row && row.platform) present[row.platform] = true; });
-    return (histEnsure()[tab] || []).filter((row) => {
+    const rows = (histEnsure()[tab] || []).filter((row) => {
       if (!row || !histPost(row)) return false;
       if (plat && present[plat] && row.platform !== plat) return false;
       if (q && histHay(row).indexOf(q) < 0) return false;
       return true;
-    }).slice(0, HIST_CAP);
+    });
+    const ai = window.ViktorychOnDeviceAi;
+    const dev = window.ViktorychDevice;
+    if (tab === "bookmarks" && q && ai && ai.searchSaved && dev && dev.aiFeatureOn && dev.aiFeatureOn(STATE.settings && STATE.settings.devicePerf, "semantic", dev.signals())) {
+      const pool = (histEnsure()[tab] || []).filter((row) => row && histPost(row) && (!plat || !present[plat] || row.platform === plat));
+      const ranked = ai.searchSaved(q, pool.map((row) => histPost(row) || { text: "" }), {
+        settings: STATE.settings && STATE.settings.devicePerf,
+        signals: dev.signals(),
+        onRank: () => {
+          const route = parseRoute();
+          if (route && route.name === "history") render();
+        }
+      });
+      const wanted = {};
+      (ranked.hits || []).forEach((hit) => { if (hit.post && hit.post.id) wanted[hit.post.id] = true; });
+      pool.forEach((row) => {
+        const post = histPost(row);
+        if (post && wanted[post.id] && rows.indexOf(row) < 0) rows.push(row);
+      });
+    }
+    return rows.slice(0, HIST_CAP);
   }
 
   function histDay(at) {
@@ -10979,7 +11052,7 @@ const here = parseRoute();
   }
 
   function notesForTab(tab) {
-    const notes = (STATE.settings && STATE.settings.bellNotes) || [];
+    const notes = visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     if (!tab) return notes;
     if (tab.kind === "verified") return notes.filter(noteIsVerified);
     if (tab.kind === "mentions") return notes.filter(noteIsMention);
@@ -11043,7 +11116,7 @@ const here = parseRoute();
   function markNoteTabRead(active) {
     if (!STATE.settings) return;
     if (active === "all") {
-      const notes = STATE.settings.bellNotes || [];
+      const notes = visibleNotes(STATE.settings.bellNotes || []);
       const newest = notes.reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
       const until = Math.max(newest, Number(notesServer().readUntil) || 0);
       if (!until || (Number(STATE.settings.bellRead) || 0) >= until && !(notes.some((note) => !note.read))) return;
@@ -11101,11 +11174,25 @@ const here = parseRoute();
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
+  function noteBody(note) {
+    const text = note && note.text ? String(note.text) : "";
+    if (!text) return "";
+    const ai = window.ViktorychOnDeviceAi;
+    if (ai && ai.hiddenSpam && ai.hiddenSpam(text, "notification")) {
+      const key = ai.remember(text);
+      return `<p class="odai-hidden">${esc(tr("Likely spam"))} <button type="button" class="show-more" data-act="odai-show" data-key="${esc(key)}" data-scope="notification">${esc(tr("Show"))}</button></p>`;
+    }
+    const extra = ai && ai.foreign && ai.foreign(text, translateTarget())
+      ? ` <button type="button" class="show-more" data-act="odai-translate" data-key="${esc(ai.remember(text))}" data-scope="notification">${esc(tr("Translate"))}</button>`
+      : "";
+    return `<p>${esc(text)}</p>${extra}`;
+  }
+
   function noteRow(note) {
     const who = note.handle || note.name || "account";
     const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
     const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${image}</div></div></a></article>`;
   }
 
   function notificationsView(route) {
@@ -11113,10 +11200,10 @@ const here = parseRoute();
     markNoteTabRead(active);
     const tabs = visibleNoteTabs();
     const current = active === "all" ? null : noteTabById(active);
-    const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
+    const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
+    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button><button type="button" class="show-more odai-btn" data-act="odai-catch" data-scope="notification">${tr("Catch me up")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
     if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
@@ -11725,6 +11812,7 @@ if (STATE.histClear) {
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
           <div style="flex:1"><textarea id="compose-text" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
           <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div>
           <p class="phandle">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p></div>
         </div></div></div>`;
@@ -14135,8 +14223,8 @@ if (STATE.histClear) {
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
-      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
-      else document.title = routeTitle(route, liveName, personName, discordTitle);
+      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = withUnreadTitle(window.SIntelMusic.titleFor(route));
+      else document.title = withUnreadTitle(routeTitle(route, liveName, personName, discordTitle));
       window.scrollTo(0, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
@@ -14264,6 +14352,50 @@ if (STATE.histClear) {
     try { navigator.vibrate(10); } catch (err) { /* haptics are optional */ }
   }
 
+  function odaiCtx() {
+    return {
+      render: render,
+      target: translateTarget,
+      textFor: (key) => (STATE.translateText && STATE.translateText[key]) || "",
+      field: (id) => (id ? document.getElementById(id) : null),
+      seed: (node) => {
+        const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+        if (id && window.FeedsDiscord && window.FeedsDiscord.thread) {
+          const thread = window.FeedsDiscord.thread(id);
+          const rows = (thread && thread.messages) || [];
+          const last = rows.length ? rows[rows.length - 1] : null;
+          if (last && (last.body || last.text)) return last.body || last.text;
+        }
+        const key = node && node.getAttribute ? node.getAttribute("data-key") : "";
+        return (STATE.translateText && STATE.translateText[key]) || (STATE.composeSeed || "");
+      },
+      texts: (act, node) => {
+        if (act === "odai-thread") {
+          const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+          const post = id && findAnyPost ? findAnyPost(id) : null;
+          const rows = post ? replySlice(post).shown || [] : [];
+          return [post && post.text].concat(rows.map((row) => row && row.text)).filter(Boolean);
+        }
+        if (act === "odai-catch") {
+          const route = parseRoute();
+          if (route && route.name === "notifications") {
+            const active = route.tab && route.tab !== "all" ? noteTabById(route.tab) : null;
+            const notes = active ? notesForTab(active) : ((STATE.settings && STATE.settings.bellNotes) || []);
+            return notes.map((note) => note && note.text).filter(Boolean).slice(0, 20);
+          }
+          const sorted = homeSorted(route || { tab: "foryou" });
+          return (sorted || []).slice(0, 12).map((post) => post && post.text).filter(Boolean);
+        }
+        if (act === "odai-unread") {
+          const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+          if (window.FeedsDiscord && window.FeedsDiscord.unreadText) return window.FeedsDiscord.unreadText(id);
+          return [];
+        }
+        return [];
+      }
+    };
+  }
+
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
@@ -14297,6 +14429,21 @@ if (STATE.histClear) {
       STATE.settings.devicePerf = window.ViktorychDevice.toggle(STATE.settings.devicePerf, el.dataset.key || "");
       saveSettings();
       render();
+      return;
+    }
+    if (act === "device-ai-toggle" && window.ViktorychDevice && window.ViktorychDevice.toggleAi) {
+      STATE.settings.devicePerf = window.ViktorychDevice.toggleAi(STATE.settings.devicePerf, el.dataset.key || "");
+      saveSettings();
+      render();
+      return;
+    }
+    if (act && act.indexOf("odai-") === 0) {
+      const runAi = () => {
+        if (!window.ViktorychOnDeviceAi) return;
+        window.ViktorychOnDeviceAi.onAct(act, el, odaiCtx());
+      };
+      if (window.ViktorychOnDeviceAi) runAi();
+      else if (window.ViktorychDevice && window.ViktorychDevice.ensure) window.ViktorychDevice.ensure("ondevice").then(runAi);
       return;
     }
     if (act === "device-webllm" && window.ViktorychDevice) {
@@ -16627,7 +16774,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const route = parseRoute();
     let list = Array.isArray(posts) ? posts.filter(Boolean) : [];
     if (route.name !== "home") { el.hidden = true; return; }
-    list = list.filter((post) => homeShows(post, route));
+    list = list.filter((post) => homeShows(post, route) && !noteHidden(post));
     if (!list.length) {
       el.hidden = true;
       if (window.ViktorychLocal) window.ViktorychLocal.savePill([]);
@@ -17567,7 +17714,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       STATE.pendingFeed = doc;
       showPill(merged.added.concat(STATE.pendingLive || []));
       const since = Number(readStored(localStorage, "seen-at") || 0);
-      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post));
+      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post) && !noteHidden(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
@@ -18192,6 +18339,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function paintBellBadge() {
     const count = bellUnread();
     updateBadge(count);
+    document.title = withUnreadTitle(document.title);
     document.querySelectorAll(".nav-badge").forEach((el) => el.remove());
     if (!count || parseRoute().name === "notifications") return;
     const label = count > 20 ? "20+" : String(count);
@@ -18356,7 +18504,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function applyServerNotes(view) {
     if (!view || !STATE.settings) return;
     const until = Number(view.readUntil) || 0;
-    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], view.items || [], until));
+    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], visibleNotes(view.items || []), until));
     STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
     if (Array.isArray(view.tabs)) {
       STATE.settings.noteTabs = cleanFeedTabs(mergeLocalTabs(STATE.settings.noteTabs || [], view.tabs));
@@ -18398,7 +18546,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (data.type === "upsert" && Array.isArray(data.items)) {
       const until = Number(data.readUntil) || Number(notesServer().readUntil) || 0;
-      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], data.items, until));
+      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], visibleNotes(data.items), until));
       const server = notesServer();
       server.unread = Number(data.unread) || 0;
       if (data.readUntil) server.readUntil = Number(data.readUntil);
@@ -18440,8 +18588,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         body.bells = cleanBells(STATE.settings.bells);
         body.bellsAt = Number(STATE.settings.bellsAt) || Date.now();
       }
+      const lockedFlag = isShortsLocked() ? "1" : "0";
       const posting = Object.keys(body).length > 0;
-      const res = await accountCall("/v1/notifications", posting ? { method: "POST", body: body } : { method: "GET" });
+      if (posting) body.shortsLocked = lockedFlag === "1" ? 1 : 0;
+      const res = await accountCall("/v1/notifications?locked=" + lockedFlag, posting ? { method: "POST", body: body } : { method: "GET" });
       if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
       applyServerNotes(res);
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
@@ -18549,7 +18699,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!json.endpoint || !json.keys) return;
       await accountCall("/v1/push/subscribe", {
         method: "PUT",
-        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0 }
+        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0 }
       });
     } catch (err) { /* in-app notes still sync */ }
   }
@@ -18579,7 +18729,28 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     updateBadge(0);
   }
 
-  window.ViktorychNotes = { beforeSignOut: beforeSignOut };
+  function onTiktokLockChanged() {
+    if (STATE.settings && STATE.data) {
+      const seen = {};
+      (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+      (STATE.data.posts || []).forEach((post) => {
+        if (!post) return;
+        const platform = post.platform || (String(post.id || "").indexOf("tiktok:") === 0 ? "tiktok" : "");
+        if (platform !== "tiktok") return;
+        const id = String(canonicalPostId(post) || post.id || "");
+        if (id) seen[id] = true;
+        if (post.id) seen[String(post.id)] = true;
+      });
+      STATE.settings.bellSeen = Object.keys(seen).slice(-500);
+      saveSettings();
+    }
+    syncWorkerState();
+    paintBellBadge();
+    if (parseRoute().name === "notifications") render();
+    pullNotes();
+  }
+
+  window.ViktorychNotes = { beforeSignOut: beforeSignOut, lockChanged: onTiktokLockChanged };
   /* presence.js owns ViktorychPresence. A partial stand-in threw on .wrap and left a black page. */
 
   function commitBellNotes(list) {
@@ -18606,6 +18777,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showLocalNotification(note) {
+    if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
     if (document.visibilityState === "visible") {
@@ -18628,6 +18800,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showPageNotification(note) {
+    if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (document.visibilityState === "visible") {
       showLocalNotification(note);
@@ -18654,7 +18827,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function deliverBellNotes(notes) {
-    const list = (notes || []).filter((note) => note && note.id);
+    const list = visibleNotes((notes || []).filter((note) => note && note.id));
     if (!list.length) return;
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
     const quiet = presenceDnd();
@@ -18680,6 +18853,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
     const cursor = Math.max(Number(STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
     const fresh = [];
+    const parked = [];
     let markedOld = false;
     (list || posts()).forEach((post) => {
       if (!post || hiddenPost(post)) return;
@@ -18700,6 +18874,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!hit) return;
       const note = bellNoteFrom(post, hit);
       if (!note.id) return;
+      if (noteHidden(note)) {
+        parked.push(note);
+        return;
+      }
       if (!note.at || note.at <= cursor) {
         seen[note.id] = true;
         markedOld = true;
@@ -18709,7 +18887,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       fresh.push(note);
     });
     if (markedOld) STATE.settings.bellSeen = Object.keys(seen).slice(-500);
-    if (markedOld && !fresh.length) saveSettings();
+    if (markedOld && !fresh.length && !parked.length) saveSettings();
+    if (parked.length) commitBellNotes(parked);
     if (fresh.length) deliverBellNotes(fresh);
   }
 
@@ -18918,7 +19097,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       repostOff: STATE.settings.repostOff || [],
       notifyAll: !!STATE.settings.notify,
       uiLang: window.SI18n ? window.SI18n.getLang() : "en",
-      ruMode: isRuVisitor()
+      ruMode: isRuVisitor(),
+      tiktokLock: {
+        owner: signedOwner(),
+        audienceAll: (window.VIKTORYCH_ACCOUNTS || {}).tiktokAudience === "all",
+        locked: isShortsLocked(),
+        unlocked: (window.ViktorychShorts && typeof window.ViktorychShorts.unlockedList === "function") ? window.ViktorychShorts.unlockedList() : []
+      }
     });
   }
 
@@ -19453,7 +19638,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (route.name === "notifications" && STATE.settings) {
       local.saveDoc("notifications", "all", {
-        notes: (STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
+        notes: visibleNotes(STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
         readThrough: Number(STATE.settings.bellRead) || 0,
         seen: STATE.settings.bellSeen || []
       });
@@ -19621,7 +19806,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         seenIds[canonicalPostId(post)] = true;
         if (post && post.id) seenIds[String(post.id)] = true;
       });
-      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post));
+      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post) && !noteHidden(post));
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
       if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted" && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
