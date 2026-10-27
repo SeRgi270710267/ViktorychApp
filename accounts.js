@@ -118,10 +118,10 @@
   function blocking() {
     return !!(config().gate && !readSession());
   }
-  function tellSW(on) {
+  function tellSW(on, wipe) {
     if (!navigator.serviceWorker) return;
     var session = on ? readSession() : null;
-    var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "" };
+    var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "", wipe: wipe || "" };
     try {
       if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg);
     } catch (err) { /* the worker may still be installing */ }
@@ -1044,7 +1044,7 @@
     var session = readSession();
     var token = session && session.token;
     removeStored("account-v1");
-    tellSW(false);
+    tellSW(false, "signout");
     var done = function () { location.replace(location.pathname + location.search); location.reload(); };
     if (!token || !hasApi()) { done(); return; }
     api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
@@ -2099,6 +2099,7 @@
         try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
       });
     }
+    try { window.dispatchEvent(new Event("viktorych-account-deleted")); } catch (err) { /* storage.js clears the same caches */ }
     var msg = { type: "account-deleted" };
     try {
       if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg);
@@ -2108,7 +2109,7 @@
         if (reg.active) reg.active.postMessage(msg);
       }).catch(function () {});
     }
-    tellSW(false);
+    tellSW(false, "signout");
   }
   function deletePause(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
