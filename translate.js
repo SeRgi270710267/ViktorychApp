@@ -721,7 +721,25 @@
   }
 
   function scheduleDetect() {
-    if (typeof document === "undefined" || typeof LanguageDetector === "undefined") return;
+    if (typeof document === "undefined") return;
+    if (typeof LanguageDetector === "undefined") {
+      const api = (typeof window !== "undefined" && window.ViktorychOnDeviceAi) ? window.ViktorychOnDeviceAi : null;
+      if (!api || !api.detectSync) return;
+      const box = state();
+      let changed = false;
+      document.querySelectorAll("[data-tr]").forEach((node) => {
+        const key = node.getAttribute("data-tr");
+        if (!key || (box.lang && box.lang[key])) return;
+        const text = sampleOf(key) || (node.innerText || "").trim();
+        const found = api.detectSync(text);
+        if (!found || !found.code) return;
+        box.lang = box.lang || {};
+        box.lang[key] = found.code;
+        changed = true;
+      });
+      if (changed && bound && bound.render) bound.render();
+      return;
+    }
     const box = state();
     const rows = [];
     document.querySelectorAll("[data-tr]").forEach((node) => {
@@ -806,6 +824,17 @@
         applyResult(key, chrome.text, chrome.source, "Chrome");
         patch(key);
         return;
+      }
+      const onDevice = (typeof window !== "undefined" && window.ViktorychOnDeviceAi) ? window.ViktorychOnDeviceAi : null;
+      if (onDevice && onDevice.localTranslate) {
+        try {
+          const local = await onDevice.localTranslate(sample, { target: target, scope: "post" });
+          if (local && local.text) {
+            applyResult(key, local.text, local.source, "Device");
+            patch(key);
+            return;
+          }
+        } catch (err) { /* the optional model stays quiet */ }
       }
       const source = (box.lang && box.lang[key] && box.lang[key] !== "yes" && box.lang[key] !== "no") ? box.lang[key] : (guess(sample) || "");
       const hosts = rotateLive(LINGVA, "lingva:", lingvaCursor);
@@ -1093,6 +1122,43 @@
     return rotated.filter((base) => !sick(prefix + base));
   }
 
+  async function translatePlain(sample, target) {
+    sample = String(sample || "").trim();
+    if (!sample) return null;
+    const goal = normalize(target || targetLang());
+    const source = guess(sample) || "";
+    if (source && source === goal) return { text: "", same: true, source: source };
+    const hosts = rotateLive(LINGVA, "lingva:", lingvaCursor);
+    for (let i = 0; i < hosts.length; i++) {
+      const base = hosts[i];
+      try {
+        const result = await runEngine("lingva:" + base, sample, source, goal, (line) => lingvaLine(base, source || "auto", goal, line));
+        lingvaCursor = (LINGVA.indexOf(base) + 1) % LINGVA.length;
+        return { text: result.text, source: result.source, engine: "Lingva" };
+      } catch (err) {
+        if (String(err && err.message) !== "sick") markSick("lingva:" + base);
+      }
+    }
+    try {
+      const result = await runEngine("mymemory", sample, source, goal, (line) => memoryLine(source || "autodetect", goal, line));
+      return { text: result.text, source: result.source || source, engine: "MyMemory" };
+    } catch (err) {
+      if (String(err && err.message) !== "sick") markSick("mymemory");
+    }
+    const mirrors = rotateLive(MOZHI, "mozhi:", mozhiCursor);
+    for (let i = 0; i < mirrors.length; i++) {
+      const base = mirrors[i];
+      try {
+        const result = await runEngine("mozhi:" + base, sample, source, goal, (line) => mozhiLine(base, source || "auto", goal, line));
+        mozhiCursor = (MOZHI.indexOf(base) + 1) % MOZHI.length;
+        return { text: result.text, source: result.source || source, engine: "Mozhi" };
+      } catch (err) {
+        if (String(err && err.message) !== "sick") markSick("mozhi:" + base);
+      }
+    }
+    return null;
+  }
+
   function bind(hooks) {
     bound = hooks || null;
     if (bound && bound.state && bound.state.settings && !bound.state.settings.translateTo) bound.state.settings.translateTo = "en";
@@ -1112,6 +1178,7 @@
     prepare: prepare,
     block: block,
     translate: translate,
+    translatePlain: translatePlain,
     showOriginal: showOriginal,
     setTarget: setTarget,
     settingsHtml: settingsHtml,

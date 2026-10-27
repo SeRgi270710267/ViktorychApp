@@ -63,3 +63,10 @@ jobs:
           fi
           npm install --no-save --prefix "${RUNNER_TEMP:-/tmp}/pw" playwright-core@1.49.1
           PLAYWRIGHT_CORE="${RUNNER_TEMP:-/tmp}/pw/node_modules/playwright-core/index.mjs" node scripts/x_video_play.mjs --root _site
+
+      - name: On-device AI
+        run: |
+          node scripts/device_test.js
+          node scripts/translate_test.js
+          node scripts/ondevice_ai_test.js
+          node scripts/dock_test.js
