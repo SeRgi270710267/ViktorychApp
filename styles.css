@@ -1212,6 +1212,16 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 }
 .vplay video, .media .vplay video { max-height: none; object-fit: cover; object-position: center; }
 .vplay iframe { object-fit: contain; }
+.vplay .vshield {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
 .vplay.is-shown .vposter,
 .vplay.is-playing.is-shown .vposter,
 .vplay.is-shown > .play,
