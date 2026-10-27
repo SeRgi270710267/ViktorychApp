@@ -240,29 +240,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           rm -rf _site
-          mkdir -p _site
-          cp index.html 404.html robots.txt app.js update.js storage.js storage.css localfirst.js direct.js native.js codec.js media-opfs.js feed-worker.js offline.html styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js owner-keys.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css vault.js vault.css games.js games.css communities.js communities.css yt-player.js yt-player.css scores.js scores.css weather.js weather.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
-          if [ -f presence.js ]; then cp presence.js presence.css _site/; fi
-          if [ -d logo ]; then mkdir -p _site/logo; cp logo/* _site/logo/; fi
-          mkdir -p _site/shared
-          cp shared/handle-skeleton.js shared/reposts.js _site/shared/
-          cp shared/feed-order.js _site/shared/
-          cp shared/pill-data.js _site/shared/
-          cp shared/lazy-modules.js _site/shared/
-          if [ -f shared/presence.js ]; then cp shared/presence.js _site/shared/; fi
-          cp shared/drive-crypto.js shared/drive-photos.js _site/shared/
-          if [ -f tv-page.js ]; then cp tv-page.js tv-page.css _site/; fi
-          mkdir -p _site/i18n
-          cp i18n/*.js _site/i18n/
-          if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi
-          if [ -d data/communities ]; then mkdir -p _site/data/communities; cp data/communities/*.json _site/data/communities/; find data/communities -mindepth 2 -name '*.json' -exec cp --parents {} _site/ \; ; fi
-          if [ -d live ]; then mkdir -p _site/live; cp live/*.json _site/live/; fi
-          mkdir -p _site/icons _site/splash _site/screenshots
-          cp icons/* _site/icons/
-          cp splash/* _site/splash/
-          cp screenshots/* _site/screenshots/
-          if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
-          python3 scripts/write_version.py --out _site/version.json
+          python3 scripts/assemble_site.py --site _site
           if [ -f status.json ]; then cp status.json _site/status.json; fi
           if [ -d fallback ]; then
             mkdir -p _site/fallback
@@ -280,6 +258,8 @@ jobs:
             mkdir -p _site/discord
             find discord -name '*.json' -type f -exec cp --parents {} _site/ \;
           fi
+          if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
+          python3 scripts/write_version.py --out _site/version.json
           python3 scripts/share_pages.py --site _site
           python3 - <<'PY'
           import os
@@ -791,6 +771,8 @@ jobs:
       group: pages
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deploy.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
@@ -801,6 +783,31 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
+
+  verify-live:
+    needs: [gate, deploy]
+    if: needs.gate.outputs.go == 'true' && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Chrome
+        run: |
+          if ! command -v google-chrome >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y google-chrome-stable
+          fi
+          google-chrome --version
+
+      - name: Fail if the live page is black or a script is missing
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: node scripts/smoke_page.mjs --url "${PAGE_URL:-https://viktorychgroup.github.io/ViktorychApp/}" --retry 18
 
   # Start the Telegram upload from this run. workflow_run can miss a chained
   # start, so the backup is started here with workflow_dispatch.

@@ -513,7 +513,10 @@
       var raw = localStorage.getItem(POLICY_KEY);
       if (!raw) return null;
       return normalizePolicy(JSON.parse(raw));
-    } catch (err) { return null; }
+    } catch (err) {
+      try { localStorage.removeItem(POLICY_KEY); } catch (ignore) { /* the next open uses the default policy */ }
+      return null;
+    }
   }
 
   function saveLocal(next) {

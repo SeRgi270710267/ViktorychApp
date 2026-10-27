@@ -696,7 +696,12 @@ async function precacheShell(report) {
 }
 
 async function doPrecache(report) {
-  const cache = await caches.open(SHELL);
+  // Download the whole shell into a staging cache. The live cache is
+  // replaced only after every required file succeeds, so a client never
+  // runs one version's HTML with another version's scripts.
+  const stagingName = SHELL + "-staging";
+  await caches.delete(stagingName);
+  const cache = await caches.open(stagingName);
   const files = SHELL_FILES.slice();
   const state = { files: 0, totalFiles: files.length, bytes: 0, totalBytes: 0 };
   let failed = null;
@@ -748,7 +753,17 @@ async function doPrecache(report) {
   const width = Math.min(4, SHELL_FILES.length);
   for (let i = 0; i < width; i++) workers.push(pull());
   await Promise.all(workers);
-  if (failed) throw failed;
+  if (failed) {
+    await caches.delete(stagingName);
+    throw failed;
+  }
+  const live = await caches.open(SHELL);
+  const ready = await cache.keys();
+  await Promise.all(ready.map(async (req) => {
+    const res = await cache.match(req);
+    if (res) await live.put(req, res);
+  }));
+  await caches.delete(stagingName);
   progressState = state;
   return state;
 }
@@ -985,17 +1000,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(new Request(request, { cache: "no-store" })));
     return;
   }
-  if (url.origin === self.location.origin && /\/accounts\.config\.js$/.test(url.pathname)) {
-    event.respondWith(
-      fetch(new Request(request, { cache: "no-store" }))
-        .then((res) => {
-          if (res && res.ok) {
-            caches.open(SHELL).then((c) => c.put(request, res.clone())).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => caches.match(request))
-    );
+  if (url.origin === self.location.origin && /\/accounts\.config\.js$/.test(url.pathname) && url.search) {
+    // A cache-busted read asks for the latest gate. It must not be written
+    // into the versioned shell, or one new file would sit next to old assets.
+    event.respondWith(fetch(new Request(request, { cache: "no-store" })).catch(async () => {
+      const cache = await caches.open(SHELL);
+      return (await cache.match("./accounts.config.js")) || Response.error();
+    }));
     return;
   }
   if (request.headers.has("range")) {
@@ -1008,18 +1019,23 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith((async () => {
       const home = shellDocument(url);
+      if (home) {
+        const cache = await caches.open(SHELL);
+        const cached = (await cache.match("./index.html")) || (await cache.match("./"));
+        if (cached) return cached;
+      }
       try {
+        // Navigation preload is only used when this version has no shell
+        // document yet. A newer index.html is never written beside the
+        // assets already in the versioned shell.
         let res = null;
         try { res = await event.preloadResponse; } catch (err) { res = null; }
         if (!res) res = await fetch(request);
-        if (home && res && res.ok) {
-          const cache = await caches.open(SHELL);
-          cache.put("./index.html", res.clone());
-        }
         return res;
       } catch (err) {
         if (!home) return Response.error();
-        return (await caches.match("./index.html")) || (await caches.match("./")) || (await caches.match("./offline.html")) || Response.error();
+        const cache = await caches.open(SHELL);
+        return (await cache.match("./index.html")) || (await cache.match("./")) || (await cache.match("./offline.html")) || Response.error();
       }
     })());
     return;
@@ -1064,23 +1080,26 @@ self.addEventListener("fetch", (event) => {
   }
   if (isShell(url)) {
     event.respondWith((async () => {
+      const cache = await caches.open(SHELL);
+      const cached = await cache.match(request);
+      if (cached) return url.pathname.endsWith("manifest.webmanifest") ? brandManifestResponse(cached) : cached;
       try {
         const res = await fetch(request);
-        if (res && res.ok) {
-          const cache = await caches.open(SHELL);
-          cache.put(request, res.clone());
-        }
         if (res && url.pathname.endsWith("manifest.webmanifest")) return brandManifestResponse(res);
-        if (res) return res;
-      } catch (err) { /* offline falls back to the shell copied at install */ }
-      const cachedShell = await caches.match(request);
-      if (cachedShell && url.pathname.endsWith("manifest.webmanifest")) return brandManifestResponse(cachedShell);
-      return cachedShell || Response.error();
+        return res;
+      } catch (err) {
+        return Response.error();
+      }
     })());
     return;
   }
   if (url.origin === self.location.origin) {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
+    event.respondWith((async () => {
+      const cache = await caches.open(SHELL);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      return fetch(request);
+    })());
   }
 });
 
