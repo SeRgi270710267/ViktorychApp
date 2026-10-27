@@ -280,9 +280,13 @@
     if (!thread.messages.length) {
       return '<div class="xdock-empty"><p>' + esc(tr("No messages yet")) + "</p><p>" + esc(tr("The next sync reads the latest 50. This view keeps a rolling window of 300.")) + "</p></div>";
     }
-    return thread.messages.map(function (msg) {
+    var tools = '<div class="odai-chips"><button type="button" class="show-more" data-act="odai-unread" data-id="' + esc(read().chatThread || "") + '" data-scope="dm">' + esc(tr("Summarize unread")) + '</button><button type="button" class="show-more" data-act="odai-suggest" data-id="' + esc(read().chatThread || "") + '" data-scope="dm">' + esc(tr("Suggest replies")) + "</button></div>";
+    return tools + thread.messages.map(function (msg) {
       var name = msg.name || tr("Someone");
-      return '<div class="xdock-bubble in"><b>' + esc(name) + "</b>" + esc(msg.body || "") + "</div>";
+      var ai = root.ViktorychOnDeviceAi;
+      var deco = ai && ai.decorate ? ai.decorate(msg.body || "", "dm") : null;
+      if (deco && deco.hidden) return '<div class="xdock-bubble in"><b>' + esc(name) + "</b>" + deco.html + "</div>";
+      return '<div class="xdock-bubble in"><b>' + esc(name) + "</b>" + esc(msg.body || "") + (deco && deco.tools ? deco.tools : "") + "</div>";
     }).join("");
   }
   function aiLog() {

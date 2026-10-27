@@ -69,3 +69,10 @@ jobs:
           npm ci --prefix worker --no-fund --no-audit
           npm install --prefix /tmp/pw-signup --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw-signup/node_modules/playwright-core/index.js node scripts/signup_flow_test.mjs
+
+      - name: On-device AI
+        run: |
+          node scripts/device_test.js
+          node scripts/translate_test.js
+          node scripts/ondevice_ai_test.js
+          node scripts/dock_test.js

@@ -5057,6 +5057,11 @@ header.nav.nav-land { display: none; }
 .device-stat .set-sub { color: var(--muted); font-size: 13px; line-height: 18px; }
 .device-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .device-ai textarea { width: 100%; min-height: 96px; box-sizing: border-box; resize: vertical; }
+.odai-bar, .odai-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 16px; }
+.odai-chips { margin: 8px 0; }
+.odai-btn, .odai-chips button, .odai-bar button { font: inherit; }
+.odai-hidden, .odai-note { color: var(--muted); font-size: 14px; line-height: 18px; }
+.odai-out { white-space: pre-wrap; }
 
 /* Below the desktop shell, the page itself fills the screen. Safe-area
    padding is the only inset, and it stays inside the border box so the
