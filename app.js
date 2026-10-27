@@ -2118,11 +2118,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     STATE.translateFull[key] = !!full;
     if (window.FeedsTranslate) window.FeedsTranslate.prepare(key);
     const inner = withDiscordEmoji(post, textHtml(post, key, full));
-    if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner);
+    const sum = sample.length > 480
+      ? `<button class="show-more odai-btn" type="button" data-act="odai-summarize" data-key="${esc(key)}" data-scope="post">${tr("Summarize")}</button>`
+      : "";
+    if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner) + sum;
     const offer = offerTranslate(key, sample)
       ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">${tr("Translate post")}</button>`
       : "";
-    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}`;
+    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}${sum}`;
   }
 
   function bioBlock(entity) {
@@ -5280,7 +5283,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       group.sort((a, b) => fxEngagement(b) - fxEngagement(a));
       group.slice(1).forEach((loser) => { loser.spam = true; });
     });
-    posts.forEach((post) => { if (fxSpamReason(post, author)) post.spam = true; });
+    posts.forEach((post) => {
+      if (fxSpamReason(post, author)) { post.spam = true; return; }
+      const self = author && String(post.handle || "").toLowerCase() === author;
+      const ai = window.ViktorychOnDeviceAi;
+      if (!self && ai && ai.likelySpam && ai.likelySpam(post.text || "", "reply")) post.spam = true;
+    });
     const clean = posts.filter((post) => !post.spam);
     const flagged = posts.filter((post) => post.spam);
     const selfPosts = clean.filter((post) => author && String(post.handle || "").toLowerCase() === author);
@@ -6542,7 +6550,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function replyTools(post) {
     const bucket = STATE.replies[postKey(post)] || {};
     const label = freshLabel(bucket.fetchedAt);
-    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}`;
+    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}<button class="show-more odai-btn" type="button" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button></div>${replySortTabs()}`;
   }
 
   function replyList(post) {
@@ -6580,11 +6588,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return tools + html + more + spam;
   }
 
-  function composer(bridge) {
+  function composer(bridge, post) {
+    const key = post ? postKey(post) : "";
     return `<div class="composer${bridge ? " bridge" : ""}">
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
+        <div class="odai-chips"><button type="button" data-act="odai-suggest" data-key="${esc(key)}" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="reply-draft" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="warm" data-field="reply-draft" data-scope="post">${tr("Tone")}</button></div>
         <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
@@ -7630,6 +7640,7 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
+      <div class="odai-bar"><button type="button" class="show-more" data-act="odai-catch" data-scope="post">${tr("Catch me up")}</button></div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${homeLivePillsRow()}
     </div>`;
@@ -9194,7 +9205,7 @@ const here = parseRoute();
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
       ${article}
-      ${talk == null ? composer(threaded) + replyList(post) : talk}`;
+      ${talk == null ? composer(threaded, post) + replyList(post) : talk}`;
   }
 
   function telegramTalk(post) {
@@ -10617,12 +10628,32 @@ const here = parseRoute();
     const plat = STATE.histPlat || "";
     const present = {};
     (histEnsure()[tab] || []).forEach((row) => { if (row && row.platform) present[row.platform] = true; });
-    return (histEnsure()[tab] || []).filter((row) => {
+    const rows = (histEnsure()[tab] || []).filter((row) => {
       if (!row || !histPost(row)) return false;
       if (plat && present[plat] && row.platform !== plat) return false;
       if (q && histHay(row).indexOf(q) < 0) return false;
       return true;
-    }).slice(0, HIST_CAP);
+    });
+    const ai = window.ViktorychOnDeviceAi;
+    const dev = window.ViktorychDevice;
+    if (tab === "bookmarks" && q && ai && ai.searchSaved && dev && dev.aiFeatureOn && dev.aiFeatureOn(STATE.settings && STATE.settings.devicePerf, "semantic", dev.signals())) {
+      const pool = (histEnsure()[tab] || []).filter((row) => row && histPost(row) && (!plat || !present[plat] || row.platform === plat));
+      const ranked = ai.searchSaved(q, pool.map((row) => histPost(row) || { text: "" }), {
+        settings: STATE.settings && STATE.settings.devicePerf,
+        signals: dev.signals(),
+        onRank: () => {
+          const route = parseRoute();
+          if (route && route.name === "history") render();
+        }
+      });
+      const wanted = {};
+      (ranked.hits || []).forEach((hit) => { if (hit.post && hit.post.id) wanted[hit.post.id] = true; });
+      pool.forEach((row) => {
+        const post = histPost(row);
+        if (post && wanted[post.id] && rows.indexOf(row) < 0) rows.push(row);
+      });
+    }
+    return rows.slice(0, HIST_CAP);
   }
 
   function histDay(at) {
@@ -10893,11 +10924,25 @@ const here = parseRoute();
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
+  function noteBody(note) {
+    const text = note && note.text ? String(note.text) : "";
+    if (!text) return "";
+    const ai = window.ViktorychOnDeviceAi;
+    if (ai && ai.hiddenSpam && ai.hiddenSpam(text, "notification")) {
+      const key = ai.remember(text);
+      return `<p class="odai-hidden">${esc(tr("Likely spam"))} <button type="button" class="show-more" data-act="odai-show" data-key="${esc(key)}" data-scope="notification">${esc(tr("Show"))}</button></p>`;
+    }
+    const extra = ai && ai.foreign && ai.foreign(text, translateTarget())
+      ? ` <button type="button" class="show-more" data-act="odai-translate" data-key="${esc(ai.remember(text))}" data-scope="notification">${esc(tr("Translate"))}</button>`
+      : "";
+    return `<p>${esc(text)}</p>${extra}`;
+  }
+
   function noteRow(note) {
     const who = note.handle || note.name || "account";
     const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
     const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${image}</div></div></a></article>`;
   }
 
   function notificationsView(route) {
@@ -10908,7 +10953,7 @@ const here = parseRoute();
     const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
+    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button><button type="button" class="show-more odai-btn" data-act="odai-catch" data-scope="notification">${tr("Catch me up")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
     if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
@@ -11517,6 +11562,7 @@ if (STATE.histClear) {
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
           <div style="flex:1"><textarea id="compose-text" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
           <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div>
           <p class="phandle">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p></div>
         </div></div></div>`;
@@ -14056,6 +14102,50 @@ if (STATE.histClear) {
     try { navigator.vibrate(10); } catch (err) { /* haptics are optional */ }
   }
 
+  function odaiCtx() {
+    return {
+      render: render,
+      target: translateTarget,
+      textFor: (key) => (STATE.translateText && STATE.translateText[key]) || "",
+      field: (id) => (id ? document.getElementById(id) : null),
+      seed: (node) => {
+        const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+        if (id && window.FeedsDiscord && window.FeedsDiscord.thread) {
+          const thread = window.FeedsDiscord.thread(id);
+          const rows = (thread && thread.messages) || [];
+          const last = rows.length ? rows[rows.length - 1] : null;
+          if (last && (last.body || last.text)) return last.body || last.text;
+        }
+        const key = node && node.getAttribute ? node.getAttribute("data-key") : "";
+        return (STATE.translateText && STATE.translateText[key]) || (STATE.composeSeed || "");
+      },
+      texts: (act, node) => {
+        if (act === "odai-thread") {
+          const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+          const post = id && findAnyPost ? findAnyPost(id) : null;
+          const rows = post ? replySlice(post).shown || [] : [];
+          return [post && post.text].concat(rows.map((row) => row && row.text)).filter(Boolean);
+        }
+        if (act === "odai-catch") {
+          const route = parseRoute();
+          if (route && route.name === "notifications") {
+            const active = route.tab && route.tab !== "all" ? noteTabById(route.tab) : null;
+            const notes = active ? notesForTab(active) : ((STATE.settings && STATE.settings.bellNotes) || []);
+            return notes.map((note) => note && note.text).filter(Boolean).slice(0, 20);
+          }
+          const sorted = homeSorted(route || { tab: "foryou" });
+          return (sorted || []).slice(0, 12).map((post) => post && post.text).filter(Boolean);
+        }
+        if (act === "odai-unread") {
+          const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+          if (window.FeedsDiscord && window.FeedsDiscord.unreadText) return window.FeedsDiscord.unreadText(id);
+          return [];
+        }
+        return [];
+      }
+    };
+  }
+
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
@@ -14089,6 +14179,21 @@ if (STATE.histClear) {
       STATE.settings.devicePerf = window.ViktorychDevice.toggle(STATE.settings.devicePerf, el.dataset.key || "");
       saveSettings();
       render();
+      return;
+    }
+    if (act === "device-ai-toggle" && window.ViktorychDevice && window.ViktorychDevice.toggleAi) {
+      STATE.settings.devicePerf = window.ViktorychDevice.toggleAi(STATE.settings.devicePerf, el.dataset.key || "");
+      saveSettings();
+      render();
+      return;
+    }
+    if (act && act.indexOf("odai-") === 0) {
+      const runAi = () => {
+        if (!window.ViktorychOnDeviceAi) return;
+        window.ViktorychOnDeviceAi.onAct(act, el, odaiCtx());
+      };
+      if (window.ViktorychOnDeviceAi) runAi();
+      else if (window.ViktorychDevice && window.ViktorychDevice.ensure) window.ViktorychDevice.ensure("ondevice").then(runAi);
       return;
     }
     if (act === "device-webllm" && window.ViktorychDevice) {
