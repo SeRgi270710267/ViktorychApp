@@ -113,6 +113,7 @@ try {
       D1_DATABASE_NAME: "viktorych-accounts",
       R2_BUCKET: "viktorych-data",
       ACCOUNT_PEPPER: "integration-pepper",
+      SIGNUP_GUARD: "off",
       PBKDF2_ITERATIONS: "1000",
       ALLOWED_ORIGINS: ORIGIN
     },

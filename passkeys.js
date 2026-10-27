@@ -50,7 +50,11 @@ async function ceremony(kind, publicKey, mediation) {
   const options = kind === "create" ? hydrateCreation(publicKey) : hydrateRequest(publicKey);
   const run = function (withHints) {
     if (!withHints) delete options.hints;
-    if (kind === "create") return navigator.credentials.create({ publicKey: options });
+    if (kind === "create") {
+      const created = { publicKey: options };
+      if (mediation) created.mediation = mediation;
+      return navigator.credentials.create(created);
+    }
     const request = { publicKey: options };
     if (mediation) request.mediation = mediation;
     if (conditional && mediation !== "conditional") stopConditional();
@@ -64,8 +68,29 @@ async function ceremony(kind, publicKey, mediation) {
   }
 }
 
-async function createPasskey(publicKey) {
-  return credentialToJSON(await ceremony("create", publicKey));
+async function createPasskey(publicKey, mediation) {
+  return credentialToJSON(await ceremony("create", publicKey, mediation));
+}
+
+let conditionalCreateToken = "";
+
+function armConditionalCreate(token) {
+  if (!token || !supported() || !window.PublicKeyCredential.getClientCapabilities) return;
+  if (conditionalCreateToken === token) return;
+  conditionalCreateToken = token;
+  window.PublicKeyCredential.getClientCapabilities().then(function (caps) {
+    if (!caps || !caps.conditionalCreate) return null;
+    return call("/v1/webauthn/register/options", { method: "POST", token: token, body: {} });
+  }).then(function (res) {
+    if (!res || res.status !== 200 || !res.publicKey) return null;
+    return createPasskey(res.publicKey, "conditional").then(function (credential) {
+      return call("/v1/webauthn/register/verify", {
+        method: "POST",
+        token: token,
+        body: { challengeId: res.challengeId, credential: credential, label: tr("This device") }
+      });
+    });
+  }).catch(function () { conditionalCreateToken = ""; });
 }
 
 async function getPasskey(publicKey, mediation) {
@@ -200,6 +225,7 @@ window.ViktorychPasskeys = {
   create: createPasskey,
   get: getPasskey,
   armConditional: armConditional,
+  armConditionalCreate: armConditionalCreate,
   stopConditional: stopConditional,
   settingsHtml: settingsHtml,
   reload: function () { listed = null; render(); }
