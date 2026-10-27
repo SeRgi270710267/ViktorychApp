@@ -1833,5 +1833,7 @@ SI18n.addPack("en", {
   "Linking stays off. There is no free allowance for posting or for the mention inbox, so this app does not connect an X login.": "Linking stays off. There is no free allowance for posting or for the mention inbox, so this app does not connect an X login.",
   "The last check did not finish. The next one waits longer.": "The last check did not finish. The next one waits longer.",
   "Quote on X": "Quote on X",
-  "Partial. Replies on recent public posts, not X's mention inbox.": "Partial. Replies on recent public posts, not X's mention inbox."
+  "Partial. Replies on recent public posts, not X's mention inbox.": "Partial. Replies on recent public posts, not X's mention inbox.",
+  "Saved on this device. X opened in a new tab": "Saved on this device. X opened in a new tab",
+  "The draft stays on this device. You press Post on X.": "The draft stays on this device. You press Post on X."
 });

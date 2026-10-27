@@ -1833,5 +1833,7 @@ SI18n.addPack("ru", {
   "Linking stays off. There is no free allowance for posting or for the mention inbox, so this app does not connect an X login.": "Привязка выключена. Бесплатного лимита на публикацию и на входящие упоминания нет, поэтому приложение не подключает вход в X.",
   "The last check did not finish. The next one waits longer.": "Последняя проверка не завершилась. Следующая подождёт дольше.",
   "Quote on X": "Цитировать в X",
-  "Partial. Replies on recent public posts, not X's mention inbox.": "Частично. Ответы на недавние публичные посты, не входящие упоминания X."
+  "Partial. Replies on recent public posts, not X's mention inbox.": "Частично. Ответы на недавние публичные посты, не входящие упоминания X.",
+  "Saved on this device. X opened in a new tab": "Сохранено на этом устройстве. X открылся в новой вкладке",
+  "The draft stays on this device. You press Post on X.": "Черновик остаётся на этом устройстве. Кнопку публикации вы нажимаете в X."
 });

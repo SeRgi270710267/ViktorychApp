@@ -14586,6 +14586,7 @@ if (STATE.histClear) {
           const text = saved && saved.text ? String(saved.text) : "";
           if (STATE.modal === "compose" && text && !STATE.composeSeed) {
             STATE.composeSeed = text;
+            if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(text);
             render();
           }
         }).catch(() => {});
@@ -20072,6 +20073,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       },
       modalOpen: function () { return STATE.modal === "compose"; },
       openModal: function () { STATE.modal = "compose"; render(); },
+      closeModal: function () {
+        if (STATE.modal === "compose") STATE.modal = null;
+        render();
+      },
+      saveLocal: function (text) {
+        const value = String(text || "");
+        if (value.trim() && window.ViktorychLocal && window.ViktorychLocal.saveDoc) window.ViktorychLocal.saveDoc("drafts", "compose", { text: value });
+      },
       post: function (id) { return findAnyPost(id); },
       suggest: function (kind) {
         if (kind === "mention") {
