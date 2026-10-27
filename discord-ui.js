@@ -142,6 +142,7 @@
     source: null,
     timer: 0,
     loadStarted: false,
+    catalogReady: false,
     started: false,
     bound: null,
     pinFiles: {},
@@ -213,6 +214,11 @@
   }
 
   function hooks() { return state.bound || {}; }
+
+  function noteShared() {
+    const dock = root.ViktorychDock;
+    if (dock && dock.noteMessages) dock.noteMessages();
+  }
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
@@ -584,6 +590,7 @@
     else if (!quiet) updateDots();
     if (!quiet) paintNavBadge();
     restoreList();
+    noteShared();
   }
 
   function quote(text) {
@@ -1490,6 +1497,7 @@
     restoreList();
     restoreWindow();
     state.holding = false;
+    noteShared();
   }
 
   function releaseHold() {
@@ -1629,6 +1637,7 @@
     if (!adoptServers(servers)) return;
     state.channels.forEach(function (ch) { if (kept[ch.id]) ch.inaccessible = true; });
     rememberMessages();
+    noteShared();
   }
 
   function applyIndex(index) {
@@ -1655,6 +1664,7 @@
         channel.pinsForbidden = !!ch.pinsForbidden;
       });
     });
+    noteShared();
   }
 
   function docPathOk(path) {
@@ -1866,6 +1876,7 @@
     state.olderGot[id] = state.olderGot[id] || {};
     state.olderGot[id][pageNo] = true;
     state.olderNext[id] = doc.older ? pageNo + 1 : 0;
+    noteShared();
     if (state.open !== id || !log) return;
     repaintLog("keep");
     const next = document.querySelector(".dmsgs-log");
@@ -1945,16 +1956,23 @@
       else if (fresh && !state.files[id]) state.files[id] = { messages: [], authors: {} };
       if (doc || fresh) state.loading[id] = false;
       if (state.open === id && (doc || fresh)) paintChannel(id);
+      if (doc || fresh) noteShared();
     });
   }
 
   function ensureLoad() {
     if (state.fixture || state.loadStarted) return;
     state.loadStarted = true;
-    if (typeof fetch !== "function") return;
+    if (typeof fetch !== "function") {
+      state.catalogReady = true;
+      return;
+    }
     let pending;
     try { pending = fetch("feeds.config.json", { cache: "no-cache" }); }
-    catch (err) { return; }
+    catch (err) {
+      state.catalogReady = true;
+      return;
+    }
     pending.then(function (res) { return res && res.ok ? res.json() : null; }).then(function (doc) {
       if (doc && Array.isArray(doc.discord)) applyConfig(doc.discord);
       return loadDoc("discord/index.json", function (index, fresh) {
@@ -1962,9 +1980,14 @@
           applyIndex(index);
           rememberIndex(index);
         }
+        state.catalogReady = true;
         if ((index || fresh) && onMessages()) refreshInbox();
+        noteShared();
       });
-    }).catch(function () {});
+    }).catch(function () {
+      state.catalogReady = true;
+      noteShared();
+    });
   }
 
   function onMessages() {
@@ -2319,11 +2342,48 @@
     });
   }
 
+  function inbox() {
+    warmCache();
+    ensureLoad();
+    const channels = (state.channels || []).filter(function (ch) {
+      return ch && ch.mode === "messages" && !ch.inaccessible;
+    }).map(function (ch) {
+      const last = messagesFor(ch.id)[0] || null;
+      return {
+        id: ch.id,
+        name: ch.name || "",
+        category: ch.category || "",
+        preview: last ? String(last.body || "") : "",
+        author: last ? String(last.name || "") : ""
+      };
+    });
+    return { ready: !!(state.catalogReady || channels.length), channels: channels };
+  }
+
+  function sharedThread(id) {
+    const key = snowflake(id);
+    warmCache();
+    ensureLoad();
+    if (key) ensureChannel(key);
+    const ch = key ? channelById(key) : null;
+    const found = !!(ch && ch.mode === "messages" && !ch.inaccessible);
+    return {
+      id: key || "",
+      name: ch ? ch.name : "",
+      place: ch ? (ch.category || "") : "",
+      found: found,
+      loading: !!(key && state.loading[key]),
+      messages: found ? messagesFor(key).slice().reverse() : []
+    };
+  }
+
   root.FeedsDiscord = {
     bind: bind,
     start: start,
     page: page,
     titleFor: titleFor,
+    inbox: inbox,
+    thread: sharedThread,
     mount: mount,
     _validate: validate,
     _format: format,

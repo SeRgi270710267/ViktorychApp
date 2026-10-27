@@ -10955,6 +10955,7 @@ const here = parseRoute();
           ${faceBtn("banners", "none", tr("None"))}
         </div>
         ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
+        ${window.ViktorychDock && window.ViktorychDock.settingsHtml ? window.ViktorychDock.settingsHtml() : ""}
         <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">${esc(tr("Collapse sidebar"))}</button></div>
       </div>`;
     }
@@ -13750,6 +13751,11 @@ if (STATE.histClear) {
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
+    if (act === "dock-pref") {
+      if (window.ViktorychDock && window.ViktorychDock.setPref) window.ViktorychDock.setPref(el.dataset.key, el.dataset.value);
+      render();
+      return;
+    }
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act && act.indexOf("keys-") === 0 && window.OwnerKeys && window.OwnerKeys.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
