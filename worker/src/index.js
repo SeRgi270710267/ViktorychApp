@@ -958,6 +958,17 @@ function cleanBottomNavSync(raw) {
 }
 
 const DEVICE_FEATURES = ["direct", "search", "translate", "ai", "media", "record", "storage", "sync"];
+const AI_FEATURE_KEYS = ["detect", "spam", "summarize", "compose", "semantic", "translateLocal", "semanticLocal", "dmServer", "dmAuto"];
+
+function cleanAiFeatures(raw) {
+  const src = raw && raw.aiFeatures && typeof raw.aiFeatures === "object" ? raw.aiFeatures : null;
+  if (!src) return undefined;
+  const out = {};
+  AI_FEATURE_KEYS.forEach((id) => {
+    if (typeof src[id] === "boolean") out[id] = src[id];
+  });
+  return Object.keys(out).length ? out : undefined;
+}
 const PEER_UPLOAD_CAPS = [32768, 65536, 131072, 262144];
 
 function cleanDevicePerf(raw) {
@@ -982,6 +993,7 @@ function cleanDevicePerf(raw) {
     autoLight: raw.autoLight !== false,
     webllm: raw.webllm === true && raw.webllmAccepted === true,
     webllmAccepted: raw.webllmAccepted === true,
+    aiFeatures: cleanAiFeatures(raw),
     peerMedia: raw.peerMedia === "on" || raw.peerMedia === "off" ? raw.peerMedia : "auto",
     peerUploadCap: cap,
     peerShareWhileWatching: raw.peerShareWhileWatching !== false
