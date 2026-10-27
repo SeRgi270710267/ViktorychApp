@@ -47,6 +47,7 @@ UI_FILES = (
     "native.js",
     "offline.html",
     "dock.js",
+    "feeds-page.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay
 # in English because they are product names or technical tokens.
