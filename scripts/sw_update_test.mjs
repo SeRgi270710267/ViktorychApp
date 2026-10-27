@@ -144,6 +144,10 @@ async function waitControlled(page) {
 async function openApp(browser, url) {
   const context = await browser.newContext({ serviceWorkers: "allow" });
   const page = await context.newPage();
+  page.on("console", (msg) => {
+    const text = msg.text();
+    if (/shell update|failed|http-|missing/i.test(text)) console.log("page:", text.slice(0, 240));
+  });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await waitControlled(page);
   const sha = await shaOf(page);
@@ -165,7 +169,20 @@ async function waitSha(page, expected) {
     if (last === expected) return;
     await page.waitForTimeout(300);
   }
-  throw new Error("worker stayed " + (last || "empty") + " instead of " + expected.slice(0, 7));
+  const info = await page.evaluate(() => {
+    const text = (id) => {
+      const el = document.getElementById(id);
+      return el ? String(el.textContent || "").replace(/\s+/g, " ").trim() : "";
+    };
+    const root = document.getElementById("upd-root");
+    return {
+      title: text("upd-title"),
+      detail: text("upd-detail"),
+      error: text("upd-error"),
+      phase: root ? root.getAttribute("data-phase") || "" : ""
+    };
+  }).catch(() => ({}));
+  throw new Error("worker stayed " + (last || "empty") + " instead of " + expected.slice(0, 7) + " " + JSON.stringify(info));
 }
 
 async function testCleanUpdate(browser) {
