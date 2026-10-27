@@ -508,6 +508,12 @@ async function videoFrame(file) {
   });
 }
 async function thumbOf(file) {
+  if (window.ViktorychDeviceMedia && window.ViktorychDeviceMedia.thumbOf) {
+    try {
+      var made = await window.ViktorychDeviceMedia.thumbOf(file);
+      if (made) return made;
+    } catch (err) { /* the built-in preview is the fallback */ }
+  }
   if (file.type && file.type.indexOf("video/") === 0) return videoFrame(file);
   if (!file.type || file.type.indexOf("image/") !== 0 || !window.createImageBitmap) return null;
   try {
@@ -545,6 +551,10 @@ function findResume(file, parentId) {
 }
 async function uploadOne(file, spec) {
   spec = spec || {};
+  if (window.ViktorychDeviceRecord && window.ViktorychDeviceRecord.originalFile) {
+    var kept = window.ViktorychDeviceRecord.originalFile(file);
+    if (kept) file = kept;
+  }
   if (file.size > DRIVE_MAX_FILE) {
     state.error = tr("That file is too large.");
     return;
@@ -559,12 +569,17 @@ async function uploadOne(file, spec) {
   if (!existing) {
     var made = await newItemKey(master);
     key = made.key;
-    var meta = await encryptJson(key, spec.meta || {
+    var metaObj = spec.meta || {
       name: file.name || tr("File"),
       mime: file.type || "application/octet-stream",
       size: file.size,
       created: Date.now()
-    });
+    };
+    if (window.ViktorychDeviceRecord && window.ViktorychDeviceRecord.noteUpload) {
+      try { await window.ViktorychDeviceRecord.noteUpload(file, metaObj); }
+      catch (err) { /* the original file still uploads */ }
+    }
+    var meta = await encryptJson(key, metaObj);
     var thumb = await thumbOf(file);
     var body = {
       kind: "file",
