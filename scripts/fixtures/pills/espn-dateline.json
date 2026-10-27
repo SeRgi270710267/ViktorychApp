@@ -1,0 +1,15 @@
+{
+  "leagues": [{"name": "Spanish LALIGA"}],
+  "events": [{
+    "id": "404",
+    "date": "2026-10-27T23:30:00Z",
+    "competitions": [{
+      "status": {"type": {"name": "STATUS_SCHEDULED", "state": "pre"}},
+      "competitors": [
+        {"homeAway": "home", "score": "0", "team": {"displayName": "FC Barcelona"}},
+        {"homeAway": "away", "score": "0", "team": {"displayName": "Getafe"}}
+      ],
+      "venue": {"fullName": "Spotify Camp Nou"}
+    }]
+  }]
+}

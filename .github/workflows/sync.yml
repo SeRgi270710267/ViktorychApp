@@ -245,6 +245,7 @@ jobs:
           mkdir -p _site/shared
           cp shared/handle-skeleton.js shared/reposts.js _site/shared/
           cp shared/feed-order.js _site/shared/
+          cp shared/pill-data.js _site/shared/
           cp shared/lazy-modules.js _site/shared/
           cp shared/drive-crypto.js shared/drive-photos.js _site/shared/
           cp shared/mirror.js _site/shared/
