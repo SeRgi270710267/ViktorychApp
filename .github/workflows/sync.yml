@@ -236,10 +236,12 @@ jobs:
         run: python3 scripts/check_i18n.py
 
       - name: Assemble the site and check its size
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html robots.txt app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js owner-keys.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css vault.js vault.css games.js games.css communities.js communities.css yt-player.js yt-player.css scores.js scores.css weather.js weather.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html robots.txt app.js update.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js owner-keys.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css vault.js vault.css games.js games.css communities.js communities.css yt-player.js yt-player.css scores.js scores.css weather.js weather.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
           mkdir -p _site/shared
           cp shared/handle-skeleton.js shared/reposts.js _site/shared/
           cp shared/lazy-modules.js _site/shared/
@@ -255,6 +257,7 @@ jobs:
           cp splash/* _site/splash/
           cp screenshots/* _site/screenshots/
           if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
+          python3 scripts/write_version.py --out _site/version.json
           if [ -f status.json ]; then cp status.json _site/status.json; fi
           if [ -d fallback ]; then
             mkdir -p _site/fallback

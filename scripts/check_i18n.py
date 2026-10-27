@@ -33,6 +33,7 @@ UI_FILES = (
     "games.js",
     "communities.js",
     "yt-player.js",
+    "update.js",
     "scores.js",
     "weather.js",
 )
