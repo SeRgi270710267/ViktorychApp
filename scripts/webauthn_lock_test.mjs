@@ -174,6 +174,8 @@ async function privacyAndPasskeys(browser, origin) {
 
   const blur = await page.evaluate(() => {
     window.ViktorychPrivacy.setMode("app");
+    // A real blur drops document focus. Dispatching the event alone does not.
+    document.hasFocus = () => false;
     window.dispatchEvent(new Event("blur"));
     const cover = document.getElementById("privacy-cover");
     return {
@@ -185,8 +187,10 @@ async function privacyAndPasskeys(browser, origin) {
   assert.equal(blur.open, true);
 
   const dms = await page.evaluate(() => {
+    document.hasFocus = () => true;
     window.dispatchEvent(new Event("focus"));
     window.ViktorychPrivacy.setMode("dms");
+    document.hasFocus = () => false;
     window.dispatchEvent(new Event("blur"));
     return document.documentElement.getAttribute("data-privacy-cover");
   });
@@ -197,6 +201,7 @@ async function privacyAndPasskeys(browser, origin) {
     window.ViktorychPrivacy.paint();
     const covered = document.documentElement.getAttribute("data-privacy-cover");
     document.querySelector("main").setAttribute("data-privacy", "sensitive");
+    document.hasFocus = () => true;
     window.dispatchEvent(new Event("focus"));
     return covered;
   });
