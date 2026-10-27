@@ -104,8 +104,13 @@
         id: id,
         text: (note && note.text) || extra.text || "",
         at: at,
+        platform: (note && note.platform) || extra.platform || "",
         unread: at > readThrough && !seen[id]
       };
+    }).filter(function (note) {
+      if (!note || note.platform !== "tiktok") return true;
+      try { return localStorage.getItem("viktorych_shorts_locked") === "0"; }
+      catch (err) { return false; }
     });
     return { notes: notes, readThrough: readThrough, seen: Object.keys(seen) };
   }

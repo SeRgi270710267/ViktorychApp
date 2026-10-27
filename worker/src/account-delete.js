@@ -3,7 +3,7 @@
    resumes anything left behind. After the job is done, the only lasting
    public record is a salted hash of the account id.
 
-   Tables audited against migrations 0001–0019 and the runtime schema:
+   Tables audited against migrations 0001–0021 and the runtime schema:
    accounts, sessions, sync_state (feed settings, groups, drafts, likes,
    bookmarks, resume and history), rate_limits, account_reposts,
    account_follows (both directions), drive_vault, drive_items, drive_chunks,
@@ -13,7 +13,11 @@
    vault_shares, owner_keys, owner_key_items, owner_key_pace, account_reauths,
    account_presence, account_status, channel_tickets, notifications,
    notification_state, notification_bells, push_subscriptions, push_log,
-   webauthn_credentials, webauthn_challenges.
+   webauthn_credentials, webauthn_challenges, account_blocks,
+   account_mutes, account_follow_requests, account_content,
+   account_messages, mentions, notification_prefs, notification_events,
+   notification_outbox, notification_tab_reads, discord_alert_prefs,
+   discord_alert_hits. notification_dead stores a salted hash only.
    push_vapid is the one global key and has no account column. The account
    channel object is wiped in the same database step. telegram_files is a
    shared media index with no account column, so it is left alone. There is

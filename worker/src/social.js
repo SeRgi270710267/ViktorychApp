@@ -29,7 +29,7 @@ export const SOCIAL_SCHEMA = [
     author_id TEXT NOT NULL,
     kind TEXT NOT NULL,
     parent_id TEXT NOT NULL DEFAULT '',
-    body TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     deleted_at INTEGER NOT NULL DEFAULT 0

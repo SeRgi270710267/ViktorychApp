@@ -21,7 +21,9 @@ import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountR
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
-import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
+import { NOTIFICATION_SCHEMA, drainOutbox, handleNotificationRoutes, notifyFollow, planRepostNotification, notifyLiveStarted } from "./notifications.js";
+import { MENTION_SCHEMA, commitBundled, handleBlockMuteRoutes, handleContentRoutes, planMentions } from "./mention-store.js";
+import { DISCORD_ALERT_SCHEMA, handleDiscordAlertRoutes } from "./discord-alerts.js";
 import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
@@ -218,7 +220,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -509,7 +511,7 @@ async function sessionAccount(env, request) {
   try {
     row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty, a.private_follows, a.profile_less, a.protected_account FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
   } catch (err) {
-    row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty, a.private_follows, a.profile_less FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
+    row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty, a.private_follows, a.profile_less, a.protected_account FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
   }
   return row || null;
 }
@@ -861,13 +863,34 @@ async function handleRepostPut(request, env) {
   const now = Date.now();
   const existing = await env.DB.prepare("SELECT created_at FROM account_reposts WHERE public_id = ? AND post_key = ?").bind(row.public_id, cleaned.postKey).first();
   const created = existing ? Number(existing.created_at) : now;
-  await env.DB.prepare("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, post_key) DO UPDATE SET kind = excluded.kind, comment = excluded.comment, snapshot = excluded.snapshot").bind(row.public_id, cleaned.postKey, cleaned.kind, cleaned.comment, JSON.stringify(cleaned.post), created).run();
+  const statements = [
+    env.DB.prepare("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, post_key) DO UPDATE SET kind = excluded.kind, comment = excluded.comment, snapshot = excluded.snapshot").bind(row.public_id, cleaned.postKey, cleaned.kind, cleaned.comment, JSON.stringify(cleaned.post), created)
+  ];
+  const deliveries = [];
+  if (!existing) {
+    try {
+      const planned = await planRepostNotification(env, row, cleaned);
+      if (planned && planned.statements) planned.statements.forEach((statement) => statements.push(statement));
+      if (planned && planned.deliveries) planned.deliveries.forEach((delivery) => deliveries.push(delivery));
+    } catch (err) { /* the repost is saved; the note can be rebuilt from it */ }
+  }
+  if (cleaned.kind === "quote" && cleaned.comment) {
+    try {
+      const mentions = await planMentions(env, {
+        actor: { public_id: row.public_id, handle: row.handle, display_name: row.display_name },
+        sourceId: "q:" + row.public_id + ":" + cleaned.postKey,
+        kind: "quote",
+        text: cleaned.comment,
+        at: now,
+        hash: "#/" + encodeURIComponent(row.handle || "")
+      });
+      mentions.statements.forEach((statement) => statements.push(statement));
+      mentions.deliveries.forEach((delivery) => deliveries.push(delivery));
+    } catch (err) { /* the quote text is still stored */ }
+  }
+  await commitBundled(env, statements, deliveries);
   await trimReposts(env, row.public_id);
   await invalidate(env, "p:" + row.public_id);
-  if (!existing) {
-    try { await notifyRepost(env, row, cleaned); }
-    catch (err) { /* the repost is saved; the note can be rebuilt from it */ }
-  }
   return json(200, { ok: true, repost: { postKey: cleaned.postKey, kind: cleaned.kind, comment: cleaned.comment, createdAt: created, post: cleaned.post } });
 }
 
@@ -4875,6 +4898,18 @@ async function route(request, env, ctx) {
     return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
 
   }
+  if (path === "/v1/content" || path.startsWith("/v1/content/")) {
+    const handled = await handleContentRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    if (handled) return handled;
+  }
+  if (path === "/v1/blocks" || path === "/v1/mutes") {
+    const handled = await handleBlockMuteRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    if (handled) return handled;
+  }
+  if (path === "/v1/discord/alerts" || path.startsWith("/v1/discord/alerts/")) {
+    const handled = await handleDiscordAlertRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    if (handled) return handled;
+  }
   if (path === "/v1/notifications" || path === "/v1/notifications/read" || path === "/v1/push/vapid" || path === "/v1/push/subscribe") {
     const handled = await handleNotificationRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
     if (handled) return handled;
@@ -4907,7 +4942,7 @@ export default {
   async scheduled(event, env, ctx) {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), sweepOwnerFeeds(env, at)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
