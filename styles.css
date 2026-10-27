@@ -2827,6 +2827,26 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   .topbar::before { height: calc(env(safe-area-inset-top, 0px) + 1px); }
 }
 
+.home-fresh {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 6;
+  overflow: visible;
+  pointer-events: none;
+}
+.home-fresh > span {
+  display: block;
+  height: 3px;
+  width: 35%;
+  background: var(--blue);
+  animation: home-fresh 0.9s ease-in-out infinite;
+}
+@keyframes home-fresh {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
 #pull {
   position: fixed;
   left: 50%;
