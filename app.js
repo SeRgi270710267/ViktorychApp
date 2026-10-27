@@ -10309,6 +10309,11 @@ const here = parseRoute();
           ${autoBtn("wifi", tr("Wi-Fi only"))}
           ${autoBtn("never", tr("Never"))}
         </div>
+        <h2>${esc(tr("Live previews"))}</h2>
+        <p class="phandle">${esc(tr("Previews follow Save-Data."))}</p>
+        <div class="theme-row" role="group" aria-label="${esc(tr("Live previews"))}">
+          ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
+        </div>
       </div>`;
     }
     if (section === "notifications") {
@@ -13199,6 +13204,13 @@ if (STATE.histClear) {
     if (act === "autoplay") {
       const mode = el.dataset.mode;
       STATE.settings.autoplay = mode === "wifi" || mode === "never" ? mode : "all";
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "live-preview") {
+      const mode = el.dataset.mode;
+      STATE.settings.livePreview = mode === "on" || mode === "off" ? mode : "auto";
       saveSettings();
       render();
       return;

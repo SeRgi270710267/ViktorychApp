@@ -14,6 +14,8 @@ import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
 import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
 import { mediaMime, streamFresh, shouldSniffMedia, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
+import { thumbObjectKey } from "../../shared/live-preview.js";
+import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -1684,6 +1686,20 @@ async function handleOwnerMedia(request, env, url) {
   }
   const paced = await rateHit(env, "live-media:" + gate.row.public_id, 1200, 10 * 60 * 1000);
   if (!paced.ok) return limited(paced);
+  const playlistCache = /\.m3u8$/i.test(parsed.pathname) ? new Request("https://live-media.internal/" + await sha256Hex(parsed.toString())) : null;
+  if (playlistCache) {
+    try {
+      const hit = await caches.default.match(playlistCache);
+      const at = hit ? Number(hit.headers.get("x-fetched-at") || 0) : 0;
+      if (hit && at && Date.now() - at < 10000) {
+        const headers = new Headers(hit.headers);
+        headers.set("cache-control", "private, no-store");
+        headers.set("cdn-cache-control", "no-store");
+        headers.delete("x-fetched-at");
+        return new Response(await hit.arrayBuffer(), { status: 200, headers });
+      }
+    } catch (err) { /* fetch the playlist */ }
+  }
   const headers = new Headers();
   headers.set("user-agent", PLAY_UA);
   headers.set("accept", "*/*");
@@ -1730,10 +1746,16 @@ async function handleOwnerMedia(request, env, url) {
   };
   if (head.indexOf("#EXTM3U") === 0) {
     const text = new TextDecoder("utf-8").decode(bytes);
-    return new Response(rewritePlaylist(text, upstream.url || parsed.toString(), request), {
-      status: upstream.status,
-      headers: Object.assign({ "content-type": "application/vnd.apple.mpegurl" }, sharedHeaders)
-    });
+    const rewritten = rewritePlaylist(text, upstream.url || parsed.toString(), request);
+    const playlistHeaders = Object.assign({ "content-type": "application/vnd.apple.mpegurl" }, sharedHeaders);
+    if (playlistCache) {
+      try {
+        await caches.default.put(playlistCache, new Response(rewritten, {
+          headers: Object.assign({ "x-fetched-at": String(Date.now()) }, playlistHeaders)
+        }));
+      } catch (err) { /* this playlist is still returned */ }
+    }
+    return new Response(rewritten, { status: upstream.status, headers: playlistHeaders });
   }
   const sniffed = mediaMime(parsed.pathname, type, head) || type || "application/octet-stream";
   return new Response(bytes, {
@@ -3133,6 +3155,84 @@ async function handleTikTokAccountDelete(request, env, rawHandle) {
 }
 
 const RECORDINGS_KEY = "owner/tiktok-recordings.json";
+const RESUME_KEY = "owner/playback-resume.json";
+
+function cleanResumeMap(doc) {
+  const out = {};
+  const rows = doc && typeof doc === "object" && !Array.isArray(doc) ? doc : {};
+  const names = Object.keys(rows).slice(0, 80);
+  for (let i = 0; i < names.length; i++) {
+    const key = names[i];
+    if (!/^[A-Za-z0-9._-]{4,80}$/.test(key)) continue;
+    const row = rows[key];
+    const t = Number(row && row.t);
+    const at = Number(row && row.at);
+    if (!Number.isFinite(t) || t < 0 || t > 172800) continue;
+    if (!Number.isFinite(at) || at < 0 || at > 10000000000000) continue;
+    out[key] = { t: Math.round(t * 10) / 10, at: Math.round(at) };
+  }
+  return out;
+}
+
+async function handlePlaybackResume(request, env) {
+  const gate = await requireOwner(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const paced = await rateHit(env, "live-resume:" + gate.row.public_id, 120, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  const current = cleanResumeMap(await readJsonKey(env, RESUME_KEY));
+  if (request.method === "GET") return json(200, { items: current });
+  if (request.method !== "PUT") return json(405, { error: "method" });
+  const body = await readJson(request, 20000);
+  if (body.error) return json(400, { error: body.error });
+  const incoming = cleanResumeMap(body.items || body);
+  const names = Object.keys(incoming);
+  for (let i = 0; i < names.length; i++) {
+    const key = names[i];
+    const prev = current[key];
+    if (!prev || incoming[key].at >= prev.at) current[key] = incoming[key];
+  }
+  const trimmed = {};
+  Object.keys(current).sort((a, b) => current[b].at - current[a].at).slice(0, 80).forEach((key) => { trimmed[key] = current[key]; });
+  await env.DATA.put(RESUME_KEY, JSON.stringify(trimmed));
+  return json(200, { items: trimmed });
+}
+
+async function handleLiveThumb(request, env, handle, room) {
+  const gate = await requireTiktok(request, env);
+  if (gate.error) return gate.error;
+  const key = thumbObjectKey(handle, room);
+  if (!key || !env.DATA) return json(404, { error: "not_found" });
+  const cacheKey = new Request("https://live-thumb.internal/" + key);
+  try {
+    const hit = await caches.default.match(cacheKey);
+    if (hit) {
+      const headers = new Headers(hit.headers);
+      headers.set("cache-control", "private, max-age=86400");
+      headers.set("cdn-cache-control", "no-store");
+      headers.delete("x-fetched-at");
+      return new Response(await hit.arrayBuffer(), { status: 200, headers });
+    }
+  } catch (err) { /* read the stored frame */ }
+  let bytes = null;
+  const object = await env.DATA.get(key);
+  if (object) bytes = await object.arrayBuffer();
+  if (!bytes && b2Configured(env)) bytes = await b2GetThumb(env, key);
+  if (!bytes || !bytes.byteLength) return json(404, { error: "not_found" });
+  const headers = {
+    "content-type": "video/mp4",
+    "cache-control": "private, max-age=86400",
+    "cdn-cache-control": "no-store",
+    vary: "Authorization",
+    "x-content-type-options": "nosniff"
+  };
+  try {
+    await caches.default.put(cacheKey, new Response(bytes, {
+      headers: Object.assign({ "x-fetched-at": String(Date.now()) }, headers)
+    }));
+  } catch (err) { /* this frame is still returned */ }
+  return new Response(bytes, { status: 200, headers });
+}
 const LIVE_JOB_PREFIX = "owner/live-jobs/";
 const BACKUP_CHANNELS_KEY = "owner/tiktok-backup-channels.json";
 const CHANNEL_ID = /^-100\d{4,16}$/;
@@ -3150,12 +3250,20 @@ async function readJsonKey(env, key) {
   }
 }
 
+function ownedThumb(value) {
+  const text = String(value || "");
+  const match = /^owner\/live-thumbs\/([A-Za-z0-9._]{2,24})\/([1-9][0-9]{5,24})\.mp4$/.exec(text);
+  if (!match) return "";
+  const key = thumbObjectKey(match[1], match[2]);
+  return key && key === text.toLowerCase() ? key : "";
+}
+
 function scrubRecording(row) {
   if (!row || typeof row !== "object") return null;
   const state = ["recording", "queued", "saved", "blocked"].indexOf(row.state) >= 0 ? row.state : "";
   if (!state) return null;
   const key = state === "saved" && LIVE_PLAY_KEY.test(String(row.key || "")) ? String(row.key) : "";
-  return {
+  const body = {
     state,
     quality: String(row.quality || ""),
     qualityNote: String(row.qualityNote || ""),
@@ -3169,6 +3277,11 @@ function scrubRecording(row) {
     key,
     blocked: state === "blocked"
   };
+  const bytes = Math.max(0, Number(row.bytes) || 0);
+  const thumb = ownedThumb(row.thumb);
+  if (bytes) body.bytes = bytes;
+  if (thumb) body.thumb = thumb;
+  return body;
 }
 
 async function handleRecordings(request, env) {
@@ -4085,6 +4198,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/tiktok/recordings" && request.method === "GET") return handleRecordings(request, env);
   if (path === "/v1/owner/tiktok/channels" && (request.method === "GET" || request.method === "POST")) return handleBackupChannels(request, env);
   if (path === "/v1/owner/tiktok/board" && request.method === "GET") return handleLiveBoard(request, env);
+  if (path === "/v1/owner/live-resume" && (request.method === "GET" || request.method === "PUT")) return handlePlaybackResume(request, env);
+  const thumbPath = path.match(/^\/v1\/owner\/tiktok\/thumb\/([A-Za-z0-9._]{2,24})\/([1-9][0-9]{5,24})$/);
+  if (thumbPath && request.method === "GET") return handleLiveThumb(request, env, thumbPath[1], thumbPath[2]);
   if (path === "/v1/owner/tiktok" && request.method === "GET") return handleOwnerTiktok(request, env);
   if (path === "/v1/owner/play" && request.method === "GET") return handleOwnerPlay(request, env, url);
   if (path === "/v1/owner/media" && request.method === "GET") return handleOwnerMedia(request, env, url);

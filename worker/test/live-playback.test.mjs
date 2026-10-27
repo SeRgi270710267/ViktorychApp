@@ -9,6 +9,25 @@ import {
   stitchPlaylists,
   streamFresh
 } from "../../shared/live-playback.js";
+import { b2Configured, formatBytes, lowestPreview, previewsAllowed, thumbObjectKey } from "../../shared/live-preview.js";
+
+test("previews use the lowest variant and stay off on Save-Data unless asked", () => {
+  const step = lowestPreview({
+    variants: [
+      { quality: "origin", hls: "https://cdn.example/o.m3u8" },
+      { quality: "ld", hls: "https://cdn.example/l.m3u8", flv: "https://cdn.example/l.flv" }
+    ]
+  });
+  assert.equal(step.url, "https://cdn.example/l.m3u8");
+  assert.equal(previewsAllowed("auto", true, "all", "wifi"), false);
+  assert.equal(previewsAllowed("on", true, "never", "cellular"), true);
+  assert.equal(previewsAllowed("auto", false, "wifi", "cellular"), false);
+  assert.equal(formatBytes(2 * 1024 * 1024), "2 MB");
+  assert.equal(thumbObjectKey("Pepsi", "7699647509498710805"), "owner/live-thumbs/pepsi/7699647509498710805.mp4");
+  assert.equal(thumbObjectKey("../x", "1"), "");
+  assert.equal(b2Configured({}), false);
+  assert.equal(b2Configured({ B2_KEY_ID: "id", B2_APP_KEY: "key", B2_BUCKET: "bucket" }), true);
+});
 
 test("fresh stream urls skip ones that expire within 20 seconds", () => {
   const now = 1_700_000_000_000;

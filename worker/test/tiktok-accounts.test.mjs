@@ -452,4 +452,31 @@ test("the live board is owner-only, etagged, and has no stream urls", async () =
     headers: { "If-None-Match": listed.headers.get("etag") }
   });
   assert.equal(again.status, 304);
+
+  const thumbAnon = await call("/v1/owner/tiktok/thumb/few_viewers/7699647509498710805", { ip: "203.0.113.123" });
+  assert.equal(thumbAnon.status, 401);
+  await bindings.DATA.put("owner/live-thumbs/few_viewers/7699647509498710805.mp4", "keyframe");
+  const thumb = await call("/v1/owner/tiktok/thumb/few_viewers/7699647509498710805", { ip: "203.0.113.124", token: ownerToken });
+  assert.equal(thumb.status, 200);
+  assert.match(thumb.headers.get("content-type") || "", /mp4/);
+  assert.match(thumb.headers.get("cache-control") || "", /max-age=86400/);
+  assert.equal(thumb.text, "keyframe");
+  const resumeAnon = await call("/v1/owner/live-resume", { ip: "203.0.113.125" });
+  assert.equal(resumeAnon.status, 401);
+  const savedResume = await call("/v1/owner/live-resume", {
+    ip: "203.0.113.126",
+    token: ownerToken,
+    method: "PUT",
+    body: { items: { "few_viewers-7699647509498710805": { t: 12.2, at: 100 }, "https://secret": { t: 1, at: 1 } } }
+  });
+  assert.equal(savedResume.status, 200);
+  assert.equal(savedResume.body.items["few_viewers-7699647509498710805"].t, 12.2);
+  assert.equal(savedResume.body.items["https://secret"], undefined);
+  const older = await call("/v1/owner/live-resume", {
+    ip: "203.0.113.127",
+    token: ownerToken,
+    method: "PUT",
+    body: { items: { "few_viewers-7699647509498710805": { t: 4, at: 50 } } }
+  });
+  assert.equal(older.body.items["few_viewers-7699647509498710805"].t, 12.2);
 });
