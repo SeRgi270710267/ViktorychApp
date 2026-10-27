@@ -456,6 +456,7 @@ SI18n.addPack("en", {
   "This video isn’t in the current snapshot.": "This video isn’t in the current snapshot.",
   "Open original": "Open original",
   "Watch on X": "Watch on X",
+  "Open on X": "Open on X",
   "Watch on YouTube": "Watch on YouTube",
   "Watch on Instagram": "Watch on Instagram",
   "Watch on Threads": "Watch on Threads",

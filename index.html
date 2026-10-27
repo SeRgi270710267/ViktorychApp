@@ -3,6 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    (function () {
+      try {
+        var perf = window.performance;
+        if (perf && perf.mark) perf.mark("home-refresh-start");
+        var tab = "foryou";
+        var path = String(location.hash || "").split("?")[0];
+        if (path === "#/following" || path.indexOf("#/following/") === 0) tab = "following";
+        else if (path.indexOf("#/tab/") === 0) tab = "list:" + decodeURIComponent(path.slice(6));
+        else if (path.indexOf("#/cat/") === 0) tab = "cat:" + decodeURIComponent(path.slice(6));
+        window.__homeFreshBoot = { started: perf && perf.now ? perf.now() : 0, tab: tab, feeds: null, config: null };
+      } catch (err) { /* the deferred boot still fetches */ }
+    })();
+  </script>
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
   <meta name="theme-color" content="#000000">
@@ -141,24 +155,53 @@
   <script src="accounts.config.js"></script>
   <script>
     (function () {
-      var cfg = window.VIKTORYCH_ACCOUNTS;
-      if (!cfg || cfg.gate !== true) return;
+      var cfg = window.VIKTORYCH_ACCOUNTS || {};
       var signed = false;
       try {
         signed = !!(localStorage.getItem("viktorychapp-account-v1") || localStorage.getItem("superintelapp-account-v1") || localStorage.getItem("rss-feeds-account-v1"));
       } catch (err) { signed = false; }
-      if (signed) return;
-      document.documentElement.setAttribute("data-wall", "1");
-      var theme = document.documentElement.getAttribute("data-theme");
-      var bg = theme === "default" ? "#fff" : theme === "dim" ? "#15202b" : "#000";
-      var fg = theme === "default" ? "#0f1419" : "#e7e9ea";
-      var style = document.createElement("style");
-      style.textContent = 'html[data-wall="1"] #app,html[data-wall="1"] #hover,html[data-wall="1"] #pull,html[data-wall="1"] #new-posts,html[data-wall="1"] #offline,html[data-wall="1"] #update,html[data-wall="1"] #viewer,html[data-wall="1"] #stories,html[data-wall="1"] #toast{display:none!important}html[data-wall="1"] body{background:' + bg + ";color:" + fg + "}";
-      document.head.appendChild(style);
-      var link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = "accounts.css";
-      document.head.appendChild(link);
+      if (cfg.gate === true && !signed) {
+        document.documentElement.setAttribute("data-wall", "1");
+        var theme = document.documentElement.getAttribute("data-theme");
+        var bg = theme === "default" ? "#fff" : theme === "dim" ? "#15202b" : "#000";
+        var fg = theme === "default" ? "#0f1419" : "#e7e9ea";
+        var style = document.createElement("style");
+        style.textContent = 'html[data-wall="1"] #app,html[data-wall="1"] #hover,html[data-wall="1"] #pull,html[data-wall="1"] #new-posts,html[data-wall="1"] #offline,html[data-wall="1"] #update,html[data-wall="1"] #viewer,html[data-wall="1"] #stories,html[data-wall="1"] #toast{display:none!important}html[data-wall="1"] body{background:' + bg + ";color:" + fg + "}";
+        document.head.appendChild(style);
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "accounts.css";
+        document.head.appendChild(link);
+        return;
+      }
+      function emptyBody(key) {
+        var body = key === "feeds.config.json" ? "{}" : '{"posts":[],"feeds":[]}';
+        return new Response(body, { status: 200, headers: { "Content-Type": "application/json", "X-Catalog-Missing": "1" } });
+      }
+      function sessionToken() {
+        try {
+          var raw = localStorage.getItem("viktorychapp-account-v1");
+          var saved = raw ? JSON.parse(raw) : null;
+          return saved && saved.token ? String(saved.token) : "";
+        } catch (err) { return ""; }
+      }
+      function loadCatalog(key) {
+        var api = String(cfg.api || "").replace(/\/$/, "");
+        var gated = !!(cfg.gate && api);
+        var url = gated ? api + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/") : key;
+        var headers = { "X-Feed-Refresh": "1" };
+        var auth = gated ? sessionToken() : "";
+        if (auth) headers.Authorization = "Bearer " + auth;
+        return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
+          if (!res || !res.ok) return emptyBody(key);
+          return res;
+        }).catch(function () { return emptyBody(key); });
+      }
+      var boot = window.__homeFreshBoot || {};
+      if (boot.feeds) return;
+      boot.feeds = loadCatalog("feeds.json");
+      boot.config = loadCatalog("feeds.config.json");
+      window.__homeFreshBoot = boot;
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
@@ -441,6 +484,7 @@
     <script src="marks.js" defer></script>
     <script src="translate.js" defer></script>
     <script src="shared/feed-order.js" type="module"></script>
+    <script src="shared/home-fresh.js" defer></script>
     <script src="people.js" defer></script>
     <script src="tv.js" defer></script>
     <script src="split.js" defer></script>
