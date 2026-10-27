@@ -29,6 +29,7 @@ import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
+import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -76,7 +77,7 @@ function originAllowed(env, origin) {
 
 function areaFor(path, method) {
   const text = String(path || "");
-  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/")) return "auth";
+  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/") || text.startsWith("/v1/webauthn/")) return "auth";
   if (text === "/v1/sync" || text.startsWith("/v1/sync/")) return "sync";
   if (text === "/v1/owner/keys" || text.startsWith("/v1/owner/keys/")) return "owner-keys";
   if (text.startsWith("/v1/media/") || (text === "/v1/profile" && method === "PATCH")) return "upload";
@@ -216,7 +217,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -551,11 +552,18 @@ async function createAccount(env, request, fields) {
   const lookup = await hmacHex(env.ACCOUNT_PEPPER, number);
   const hash = await slowHash(number, salt, rounds);
   let publicId = "";
-  for (let attempt = 0; attempt < 6; attempt++) {
-    publicId = randomDigits(12);
-    const taken = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(publicId).first();
-    if (!taken) break;
-    publicId = "";
+  if (fields && /^\d{12}$/.test(String(fields.publicId || ""))) {
+    const reserved = String(fields.publicId);
+    const taken = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(reserved).first();
+    if (taken) return { error: "unavailable" };
+    publicId = reserved;
+  } else {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      publicId = randomDigits(12);
+      const taken = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(publicId).first();
+      if (!taken) break;
+      publicId = "";
+    }
   }
   if (!publicId) return { error: "unavailable" };
   const now = Date.now();
@@ -4695,6 +4703,20 @@ async function route(request, env, ctx) {
   if (ownerLive && request.method === "GET") return handleOwnerLive(request, env, ownerLive[1]);
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
+  if (path.startsWith("/v1/webauthn/")) {
+    return handleWebAuthn(request, env, path, {
+      json,
+      readJson,
+      rateHit,
+      limited,
+      sessionAccount,
+      presentAccount,
+      createAccount,
+      verifyTurnstile,
+      mintSession,
+      originAllowed
+    });
+  }
   if (path === "/v1/account/delete" && request.method === "POST") {
     return handleAccountDelete(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
   }

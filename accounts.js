@@ -309,6 +309,7 @@
     if (code === "handle_held") return tr("That handle is not available yet.");
     if (code === "all_endpoints_failed" || code === "not_configured" || code === "unavailable") return tr("Sign-in is temporarily unavailable. Try again in a few minutes.");
     if (code === "invalid_name") return tr("What should we call you?");
+    if (code === "passkey_failed" || code === "passkey_exists" || code === "passkey_limit" || code === "challenge") return tr("Could not verify that passkey.");
     if (code === "invalid_location") return tr("That location is too long.");
     if (code === "invalid_website") return tr("That website is too long.");
     if (code === "too_large") return tr("Could not save that photo.");
@@ -384,16 +385,22 @@
     if (step === 2) {
       var pending = readPending();
       var number = pending ? grouped(pending.accountNumber) : "";
-      return '<p class="acct-sub">' + esc(tr("This number is shown once. Save it now. It is the only way back into this account.")) + '</p><div class="acct-number" role="status">' + esc(number) + '</div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button></div><label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + "</span></label>" + errorHtml() + nextButton("saved", tr("Next"), !form.saved);
+var numberNote = form.passkey
+        ? tr("Save this account number. You can sign in with a passkey later. The number is an optional backup.")
+        : tr("This number is shown once. Save it now. It is the only way back into this account.");
+      return '<p class="acct-sub">' + esc(numberNote) + '</p><div class="acct-number" role="status">' + esc(number) + '</div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button></div><label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + "</span></label>" + errorHtml() + nextButton("saved", tr("Next"), !form.saved);
     }
     if (step === 1) {
       var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
       var handleSub = form.profileLess
         ? esc(tr("Choose a handle or leave blank to assign an anonymous identifier."))
         : esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters."));
+      var passkeyStep = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
+        ? '<button class="acct-next" type="button" data-acct="passkey-signup"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Create a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + '</p><button class="acct-quiet" type="button" data-acct="next"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(tr("Continue without a passkey")) + "</button>"
+        : nextButton("next", tr("Next"));
       return '<p class="acct-sub">' + handleSub + "</p>" +
         field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) +
-        claim + turnstileHtml() + errorHtml() + nextButton("next", tr("Next"));
+        claim + turnstileHtml() + errorHtml() + passkeyStep;
     }
     var subText = form.profileLess
       ? esc(tr("Your account will have no public profile. Interactions will be anonymous."))
@@ -405,7 +412,13 @@
       errorHtml() + nextButton("next", tr("Next"));
   }
   function loginBody() {
-    return field("accountNumber", tr("Account number")) + '<p class="acct-sub">' + esc(tr("There is no password to reset. The account number from sign-up is the only way back in.")) + "</p>" + turnstileHtml() + errorHtml() + nextButton("do-login", tr("Log in")) + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
+var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
+      ? '<div class="acct-field"><input id="acct-passkey-user" name="passkeyUser" type="text" placeholder=" " autocomplete="username webauthn" value=""><label for="acct-passkey-user">' + esc(tr("Sign in with a passkey")) + '</label></div><button class="acct-next" type="button" data-acct="passkey-login"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Sign in with a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + "</p>"
+      : "";
+    var numberHint = passkey
+      ? tr("There is no password to reset. A passkey can sign in, and the account number from sign-up still works.")
+      : tr("There is no password to reset. The account number from sign-up is the only way back in.");
+    return passkey + field("accountNumber", tr("Account number")) + '<p class="acct-sub">' + esc(numberHint) + "</p>" + turnstileHtml() + errorHtml() + nextButton("do-login", tr("Log in")) + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
       '<p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + '</button></p>';
   }
   function emergencyBody() {
@@ -615,6 +628,12 @@
       }
     }
     if (view === "crop" && !layoutCrop()) requestAnimationFrame(layoutCrop);
+    if (view === "login" && window.ViktorychPasskeys) {
+      window.ViktorychPasskeys.stopConditional();
+      window.ViktorychPasskeys.armConditional(function (json, id) { doPasskeyLogin(json, id); });
+    } else if (window.ViktorychPasskeys && view !== "login") {
+      window.ViktorychPasskeys.stopConditional();
+    }
     if (config().turnstileSiteKey && !document.getElementById("turnstile-js")) {
       var script = document.createElement("script");
       script.id = "turnstile-js";
@@ -1025,6 +1044,34 @@
     } catch (err) { /* the widget is optional */ }
     return "";
   }
+function signupPayload() {
+    errorText = "";
+    var handle = String(form.handle || "").trim().replace(/^@/, "");
+    if (!handle && form.profileLess) {
+      handle = "anon_" + Math.random().toString(36).slice(2, 10);
+    }
+    form.handle = handle;
+    var checked = window.HandleSkeleton ? window.HandleSkeleton.inspectHandle(handle) : { ok: true, owner: false };
+    if (!checked.ok) {
+      if (!handle) errorText = tr("Choose a handle.");
+      else errorText = errorMessage(checked.error === "reserved" ? "handle_reserved" : "invalid_handle");
+      paint();
+      return null;
+    }
+    if (checked.owner && !String(form.claimCode || "").trim()) {
+      form.claimOpen = true;
+      errorText = tr("Enter the claim code for this handle.");
+      paint();
+      return null;
+    }
+    return {
+      displayName: String(form.displayName || "").trim() || tr("Anonymous"),
+      handle: handle,
+      claimCode: String(form.claimCode || "").trim(),
+      profileLess: !!form.profileLess,
+      turnstileToken: turnstileToken()
+    };
+  }
   function offlineMessage() {
     return tr("Can't reach the server. Check your connection and try again.");
   }
@@ -1053,31 +1100,8 @@
       paint();
       return;
     }
-    var handle = String(form.handle || "").trim().replace(/^@/, "");
-    if (!handle && form.profileLess) {
-      handle = "anon_" + Math.random().toString(36).slice(2, 10);
-    }
-    form.handle = handle;
-    var checked = window.HandleSkeleton ? window.HandleSkeleton.inspectHandle(handle) : { ok: true, owner: false };
-    if (!checked.ok) {
-      if (!handle) errorText = tr("Choose a handle.");
-      else errorText = errorMessage(checked.error === "reserved" ? "handle_reserved" : "invalid_handle");
-      paint();
-      return;
-    }
-    if (checked.owner && !String(form.claimCode || "").trim()) {
-      form.claimOpen = true;
-      errorText = tr("Enter the claim code for this handle.");
-      paint();
-      return;
-    }
-    var body = {
-      displayName: String(form.displayName || "").trim() || tr("Anonymous"),
-      handle: handle,
-      claimCode: String(form.claimCode || "").trim(),
-      profileLess: !!form.profileLess,
-      turnstileToken: turnstileToken()
-    };
+var body = signupPayload();
+    if (!body) return;
     authBusy = true;
     paint();
     api("/v1/signup", { method: "POST", body: body }).then(function (res) {
@@ -1131,6 +1155,82 @@
       authBusy = false;
       if (view !== "login") return;
       errorText = offlineMessage();
+      paint();
+    });
+  }
+  function finishPasskeyLogin(credential, challengeId) {
+    return api("/v1/webauthn/login/verify", { method: "POST", body: { challengeId: challengeId, credential: credential } }).then(function (res) {
+      if (!res || res.status !== 200 || !res.token) {
+        errorText = errorMessage((res && res.error) || "passkey_failed");
+        paint();
+        return;
+      }
+      commitSession(res.token, res.account);
+    }).catch(function () {
+      errorText = tr("Could not verify that passkey.");
+      paint();
+    });
+  }
+  function doPasskeyLogin(credential, challengeId) {
+    errorText = "";
+    if (!window.ViktorychPasskeys) return;
+    if (credential && challengeId) return finishPasskeyLogin(credential, challengeId);
+    window.ViktorychPasskeys.stopConditional();
+    api("/v1/webauthn/login/options", { method: "POST", body: {} }).then(function (res) {
+      if (!res || res.status !== 200 || !res.publicKey) {
+        errorText = errorMessage((res && res.error) || "passkey_failed");
+        paint();
+        return;
+      }
+      return window.ViktorychPasskeys.get(res.publicKey).then(function (json) {
+        return finishPasskeyLogin(json, res.challengeId);
+      });
+    }).catch(function () {
+      errorText = tr("Could not verify that passkey.");
+      paint();
+    });
+  }
+  function doPasskeySignup() {
+    if (authBusy) return;
+    if (!window.ViktorychPasskeys || !window.ViktorychPasskeys.supported()) {
+      nextSignup();
+      return;
+    }
+    var body = signupPayload();
+    if (!body) return;
+    authBusy = true;
+    paint();
+    api("/v1/webauthn/signup/options", { method: "POST", body: body }).then(function (res) {
+      if (!res || res.status !== 200 || !res.publicKey) {
+        authBusy = false;
+        if (res && res.error === "claim_required") form.claimOpen = true;
+        errorText = errorMessage((res && res.error) || "passkey_failed");
+        paint();
+        return null;
+      }
+      return window.ViktorychPasskeys.create(res.publicKey).then(function (credential) {
+        return api("/v1/webauthn/signup/verify", {
+          method: "POST",
+          body: { challengeId: res.challengeId, credential: credential, turnstileToken: turnstileToken(), label: tr("This device") }
+        });
+      });
+    }).then(function (res) {
+      if (!res) return;
+      authBusy = false;
+      if (res.status !== 201 || !res.token || !res.accountNumber) {
+        errorText = errorMessage(res.error || "passkey_failed");
+        paint();
+        return;
+      }
+      form.passkey = true;
+      writePending({ token: res.token, accountNumber: res.accountNumber, account: res.account });
+      step = 2;
+      form.saved = false;
+      errorText = "";
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      errorText = tr("Could not create a passkey.");
       paint();
     });
   }
@@ -2620,6 +2720,8 @@
     }
     else if (act === "stay") { view = "signup"; step = 2; paint(); }
     else if (act === "next") nextSignup();
+    else if (act === "passkey-signup") doPasskeySignup();
+    else if (act === "passkey-login") doPasskeyLogin();
     else if (act === "do-login") doLogin();
     else if (act === "do-emergency") doEmergency();
     else if (act === "do-restore") doRestoreSession();
