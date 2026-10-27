@@ -1437,5 +1437,20 @@ SI18n.addPack("ru", {
   "1 GB": "1 ГБ",
   "5 GB": "5 ГБ",
   "10 GB": "10 ГБ",
-  "20 GB": "20 ГБ"
+  "20 GB": "20 ГБ",
+  "Profiles": "Профили",
+  "Post threads": "Обсуждения постов",
+  "Recent searches": "Недавние запросы",
+  "Trends and explore": "Тренды и обзор",
+  "Past lives": "Прошедшие эфиры",
+  "Drafts": "Черновики",
+  "Prefetch media": "Предзагрузка медиа",
+  "Prefetch the next posts when the connection is fast.": "Следующие посты загружаются заранее на быстром соединении.",
+  "Hit rate {percent}": "Доля попаданий {percent}",
+  "Saved {size}": "Сэкономлено {size}",
+  "Saved requests {count}": "Сэкономлено запросов {count}",
+  "Pending": "Ожидает",
+  "Waiting to sync": "Ждёт отправки",
+  "Direct {count}": "На устройстве {count}",
+  "Server {count}": "На сервере {count}"
 });

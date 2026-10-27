@@ -1721,19 +1721,30 @@
   function fetchDoc(path, etag) {
     const headers = { Accept: "application/json" };
     if (etag) headers["If-None-Match"] = etag;
-    const same = function () {
-      return fetch(path, { cache: "no-cache", headers: headers });
-    };
     const api = accountsBase();
     const token = accountsToken();
-    if (!api || !token) return same();
-    return fetch(api + "/v1/data/" + path, {
-      cache: "no-store",
-      headers: Object.assign({ Authorization: "Bearer " + token }, headers)
-    }).then(function (res) {
+    const workerUrl = api && token ? api + "/v1/data/" + path : "";
+    const same = function () {
+      if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.fetch) {
+        return window.ViktorychDirect.fetch(path, "", { headers: headers });
+      }
+      return fetch(path, { cache: "no-cache", headers: headers });
+    };
+    const worker = function () {
+      if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.noteServer) window.ViktorychDirect.noteServer();
+      return fetch(workerUrl, {
+        cache: "no-store",
+        headers: Object.assign({ Authorization: "Bearer " + token }, headers)
+      });
+    };
+    return same().then(function (res) {
       if (res && (res.status === 200 || res.status === 304)) return res;
-      return same();
-    }, function () { return same(); });
+      if (!workerUrl) return res;
+      if (res && res.status && res.status < 500 && res.status !== 404) return res;
+      return worker();
+    }, function () {
+      return workerUrl ? worker() : Promise.reject(new Error("network"));
+    });
   }
 
   function loadDoc(path, onBody) {

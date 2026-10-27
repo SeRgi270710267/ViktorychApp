@@ -886,7 +886,9 @@
   }
 
   function resolveArchive(ident) {
-    return fetch("https://archive.org/metadata/" + encodeURIComponent(ident)).then(function (res) {
+    var archiveUrl = "https://archive.org/metadata/" + encodeURIComponent(ident);
+    var load = (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.fetch) ? window.ViktorychDirect.fetch(archiveUrl) : fetch(archiveUrl);
+    return load.then(function (res) {
       if (!res.ok) throw new Error("archive");
       return res.json();
     }).then(function (meta) {

@@ -119,6 +119,7 @@
     return !!(config().gate && !readSession());
   }
   function tellSW(on, wipe) {
+    if (wipe === "signout" && window.ViktorychLocal) window.ViktorychLocal.wipe();
     if (!navigator.serviceWorker) return;
     var session = on ? readSession() : null;
     var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "", wipe: wipe || "" };
