@@ -854,6 +854,27 @@ function cleanBottomNavSync(raw) {
   return { order, hidden: order.filter((id) => hiddenSet.has(id)) };
 }
 
+const DEVICE_FEATURES = ["direct", "search", "translate", "ai", "media", "record", "storage", "sync"];
+
+function cleanDevicePerf(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const level = raw.level === "light" || raw.level === "max" ? raw.level : "balanced";
+  const toggles = {};
+  const src = raw.toggles && typeof raw.toggles === "object" ? raw.toggles : {};
+  DEVICE_FEATURES.forEach((id) => {
+    if (typeof src[id] === "boolean") toggles[id] = src[id];
+  });
+  return {
+    level,
+    toggles,
+    wifiOnly: raw.wifiOnly === true,
+    pauseBattery: raw.pauseBattery !== false,
+    autoLight: raw.autoLight !== false,
+    webllm: raw.webllm === true && raw.webllmAccepted === true,
+    webllmAccepted: raw.webllmAccepted === true
+  };
+}
+
 async function handleSyncGet(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
@@ -917,6 +938,12 @@ async function handleSyncPut(request, env) {
     delete payload.navLayout;
     delete payload.navLayoutLand;
     delete payload.navLayoutSync;
+  }
+  delete payload.deviceStats;
+  if (payload.devicePerf != null) {
+    const cleanedPerf = cleanDevicePerf(payload.devicePerf);
+    if (cleanedPerf) payload.devicePerf = cleanedPerf;
+    else delete payload.devicePerf;
   }
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });

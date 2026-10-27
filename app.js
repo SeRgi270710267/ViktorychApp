@@ -541,8 +541,24 @@
     });
   }
 
+  function tryDeviceRelay(img) {
+    if (!img || img.dataset.deviceRelay === "1") return false;
+    const dev = window.ViktorychDevice;
+    if (!dev || !dev.featureOn(dev.read(), "media", dev.signals())) return false;
+    const src = img.dataset.source || img.getAttribute("src") || "";
+    if (!src || !/^https:\/\//i.test(src)) return false;
+    const api = accountsApi();
+    if (!api) return false;
+    dev.rememberFail("media", src, Date.now(), "source");
+    img.dataset.deviceRelay = "1";
+    img.removeAttribute("srcset");
+    img.src = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(src);
+    return true;
+  }
+
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
+    if (tryDeviceRelay(img)) return;
     if (tryRuProxyFallback(img)) return;
     if (img.dataset.fallback === "avatar") {
       const span = document.createElement("span");
@@ -1110,6 +1126,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       parsed.navLayout = parsed.navLayout === "bar" ? "bar" : "auto";
       parsed.navLayoutLand = parsed.navLayoutLand === true;
       parsed.navLayoutSync = parsed.navLayoutSync === true;
+      parsed.devicePerf = window.ViktorychDevice ? window.ViktorychDevice.normalize(parsed.devicePerf) : (parsed.devicePerf || null);
       return parsed;
     } catch (err) {
       return fresh();
@@ -2740,18 +2757,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function ruSafeImageUrl(url) {
-    if (!isRuVisitor()) return url;
     const raw = String(url || "");
-    if (!raw || !/^https:\/\//i.test(raw)) return url;
+    const dev = window.ViktorychDevice;
+    const failed = !!(dev && dev.sourceState && raw && dev.sourceState(raw) === "fail");
+    if (!isRuVisitor() && !failed) return url;
     const api = accountsApi();
-    if (!api) return url;
+    if (!raw || !/^https:\/\//i.test(raw) || !api) return url;
+    let relay = "";
+    let preferRelay = false;
     try {
       const parsed = new URL(raw);
-      if (BLOCKED_IN_RU.test(parsed.hostname)) {
-        return api + "/v1/media?url=" + encodeURIComponent(raw);
+      if (isRuVisitor() && BLOCKED_IN_RU.test(parsed.hostname)) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
+        preferRelay = true;
+      } else if (failed) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
       }
-    } catch (err) {}
-    return url;
+    } catch (err) { return url; }
+    if (dev && dev.playbackUrl) return dev.playbackUrl(raw, relay, { preferRelay: preferRelay, settings: dev.read(), signals: dev.signals() }) || url;
+    return preferRelay ? relay : url;
   }
 
   function tryRuProxyFallback(img) {
@@ -4467,10 +4491,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return pending;
   }
 
-  function fetchJson(url) {
-    if (window.ViktorychDirect && window.ViktorychDirect.allows(url)) {
-      return window.ViktorychDirect.json(url);
-    }
+  function fetchJsonNow(url) {
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -4485,6 +4506,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       }
       return res.json();
     });
+  }
+
+  function fetchJson(url) {
+    const direct = window.ViktorychDirect;
+    if (direct && direct.fetchSource && direct.allows && direct.allows(url)) {
+      return direct.fetchSource(url, function () { return fetchJsonNow(url); });
+    }
+    return fetchJsonNow(url);
   }
 
   function ivBases() {
@@ -8286,8 +8315,6 @@ const here = parseRoute();
   }
 
   function publicJson(url) {
-    const direct = window.ViktorychDirect;
-    if (direct && direct.allows(url)) return direct.json(url);
     return fetchJson(url);
   }
 
@@ -8996,10 +9023,32 @@ const here = parseRoute();
   }
 
   function exploreHits(q) {
+    const dev = window.ViktorychDevice;
+    const idx = window.ViktorychDeviceSearch;
+    if (dev && idx && dev.featureOn(dev.read(), "search", dev.signals()) && !dev.cooling("search")) {
+      try {
+        const found = idx.query(q, {
+          posts: posts(),
+          feeds: shownFeeds(feeds()),
+          hidden: hiddenPost,
+          mute: (feed) => matchesMute(STATE.settings.mutedAccounts, feed.handle, feed.platform, feed.id),
+          byStamp: byStamp,
+          heat: exploreHeat
+        });
+        if (found && found.complete && found.hits) {
+          dev.noteStat("local", "search", dev.measureBytes(found.hits), found.ms || 0);
+          return found.hits;
+        }
+      } catch (err) {
+        dev.rememberFail("search", "index", Date.now(), "feature");
+      }
+    }
     const lq = String(q || "").trim().toLowerCase();
+    const started = Date.now();
     const accounts = lq ? shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && ((f.name || "") + " " + (f.handle || "") + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq)) : [];
     const found = lq ? posts().filter((p) => !hiddenPost(p) && postHay(p).toLowerCase().includes(lq)).sort(byStamp) : [];
     const top = found.slice().sort((a, b) => exploreHeat(b) - exploreHeat(a) || byStamp(a, b));
+    if (dev && dev.featureOn(dev.read(), "search", dev.signals())) dev.noteStat("local", "search", dev.measureBytes({ accounts: accounts, posts: found }), Math.max(0, Date.now() - started));
     return { accounts: accounts, posts: found, top: top };
   }
 
@@ -10813,6 +10862,7 @@ const here = parseRoute();
       if (sub === "display-language" || section === "display-language") key = tr("Display language");
       else if (section === "accessibility") key = tr("Accessibility, display and languages");
       else if (section === "display") key = tr("Display");
+      else if (section === "device") key = tr("Device performance");
       else if (section === "languages") key = tr("Languages");
       else if (section === "data") key = tr("Data usage");
       else if (section === "notifications") key = tr("Notifications");
@@ -10904,9 +10954,14 @@ const here = parseRoute();
       </div>`;
     }
     if (section === "display" && sub === "navigation") return bottomNavSettings();
+    if (section === "device") {
+      const body = window.ViktorychDevice ? window.ViktorychDevice.settingsHtml(STATE.settings && STATE.settings.devicePerf) : "";
+      return settingsHead(tr("Device performance"), "#/settings/display") + body;
+    }
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
         ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
+        ${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
           ${themeBtn("auto", tr("Auto"))}
@@ -12816,6 +12871,10 @@ if (STATE.histClear) {
       return pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     }
     if (route.name === "drive") {
+      if (window.ViktorychDevice) {
+        window.ViktorychDevice.ensure("media");
+        window.ViktorychDevice.ensure("record");
+      }
       if (window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
       if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
       return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
@@ -13725,6 +13784,59 @@ if (STATE.histClear) {
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act && act.indexOf("keys-") === 0 && window.OwnerKeys && window.OwnerKeys.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
+    if (act === "device-level" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.applyLevel(el.dataset.level || "balanced");
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-toggle" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.toggle(STATE.settings.devicePerf, el.dataset.key || "");
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm" && window.ViktorychDevice) {
+      const perf = window.ViktorychDevice.normalize(STATE.settings.devicePerf);
+      if (perf.webllmAccepted) {
+        STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(perf, false);
+        window.ViktorychDevice.setWarn(false);
+      } else {
+        window.ViktorychDevice.setWarn(true);
+      }
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm-yes" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(STATE.settings.devicePerf, true);
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      else window.ViktorychDevice.ensure("ai").then(function () {
+        if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      });
+      return;
+    }
+    if (act === "device-webllm-no" && window.ViktorychDevice) {
+      window.ViktorychDevice.setWarn(false);
+      render();
+      return;
+    }
+    if (act === "device-ai" && window.ViktorychDevice) {
+      window.ViktorychDevice.openAssistant();
+      return;
+    }
+    if (act === "device-ai-close" && window.ViktorychDevice) {
+      window.ViktorychDevice.closeAssistant();
+      return;
+    }
+    if (act === "device-ai-ask" && window.ViktorychDevice) {
+      window.ViktorychDevice.askAssistant();
+      return;
+    }
     if (act === "set-network-mode") {
       const mode = el.dataset.mode || "auto";
       STATE.settings.networkMode = mode;
@@ -17696,9 +17808,26 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function registerPeriodic() {
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.ready.then((reg) => {
-      if (!reg.periodicSync) return;
-      return reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 });
+      const dev = window.ViktorychDevice;
+      if (dev && !dev.featureOn(dev.read(), "sync", dev.signals())) return;
+      const jobs = [];
+      if (reg.periodicSync) jobs.push(reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 }));
+      if (reg.sync && reg.sync.register) jobs.push(reg.sync.register("feeds"));
+      return Promise.all(jobs);
     }).catch(() => {});
+  }
+
+  function scheduleDeviceIndex() {
+    if (parseRoute().name !== "explore" && parseRoute().name !== "settings") return;
+    const run = () => {
+      const dev = window.ViktorychDevice;
+      if (!dev || !dev.featureOn(dev.read(), "search", dev.signals())) return;
+      dev.ensure("search").then(() => {
+        if (window.ViktorychDeviceSearch) window.ViktorychDeviceSearch.indexPosts(posts(), feeds());
+      });
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 5000 });
+    else setTimeout(run, 4000);
   }
 
   function syncWorkerState() {
@@ -18288,6 +18417,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      scheduleDeviceIndex();
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
     } else if (painted) {
@@ -18328,6 +18458,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
       }
       render({ reset: true });
+      scheduleDeviceIndex();
       loadNewestShard().then(() => {
         if (applyIaPreview(STATE.data)) render({ reset: true });
         revealArchive();

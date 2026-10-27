@@ -218,6 +218,38 @@ test("health, signup, login, session, and sync", async () => {
   assert.equal(layoutGone.body.payload.navLayout, undefined);
   assert.equal(layoutGone.body.payload.navLayoutSync, undefined);
 
+  const perfPut = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.35",
+    token: good.body.token,
+    body: {
+      payload: {
+        follows: ["x:ada"],
+        deviceStats: { savedBytes: 10 },
+        devicePerf: {
+          level: "max",
+          toggles: { direct: false, nope: true, search: "yes" },
+          wifiOnly: true,
+          pauseBattery: false,
+          autoLight: false,
+          webllm: true,
+          webllmAccepted: false
+        }
+      },
+      baseUpdatedAt: layoutGone.body.updatedAt
+    }
+  });
+  assert.equal(perfPut.status, 200);
+  assert.equal(perfPut.body.payload.deviceStats, undefined);
+  assert.equal(perfPut.body.payload.devicePerf.level, "max");
+  assert.equal(perfPut.body.payload.devicePerf.toggles.direct, false);
+  assert.equal(perfPut.body.payload.devicePerf.toggles.nope, undefined);
+  assert.equal(perfPut.body.payload.devicePerf.toggles.search, undefined);
+  assert.equal(perfPut.body.payload.devicePerf.wifiOnly, true);
+  assert.equal(perfPut.body.payload.devicePerf.pauseBattery, false);
+  assert.equal(perfPut.body.payload.devicePerf.autoLight, false);
+  assert.equal(perfPut.body.payload.devicePerf.webllm, false);
+
   const clash = await call("/v1/sync", {
     method: "PUT",
     ip: "203.0.113.26",
