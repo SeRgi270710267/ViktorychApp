@@ -44,8 +44,13 @@
     if (sw < 200 || sh < 200 || ww < 80 || wh < 80) return false;
     var widthRatio = ww / sw;
     var heightRatio = wh / sh;
-    var vertical = widthRatio < 0.85 && heightRatio > 0.88;
-    var horizontal = heightRatio < 0.85 && widthRatio > 0.88;
+    var missingW = sw - ww;
+    var missingH = sh - wh;
+    /* Browser chrome, a taskbar, and a normal resized window leave a strip.
+       Split-screen leaves another pane: at least 30% of that axis and 240px.
+       A phone that is simply shorter than the screen is not split. */
+    var vertical = widthRatio < 0.7 && heightRatio > 0.85 && missingW >= 240;
+    var horizontal = heightRatio < 0.7 && widthRatio > 0.85 && missingH >= 240;
     return !!(vertical || horizontal);
   }
 
