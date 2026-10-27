@@ -1,0 +1,36 @@
+name: actions-cleanup
+
+# One-shot deletion of completed Actions runs and artifacts.
+# Push a change to actions-cleanup.once on main to run it.
+# workflow_dispatch is also accepted when the caller may start workflows.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/actions-cleanup.once
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: actions-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Delete completed runs and artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/actions_cleanup.py

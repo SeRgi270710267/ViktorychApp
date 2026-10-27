@@ -7,7 +7,7 @@ printed, not written into stories.json, and not committed.
 Checked live on 21 Oct 2026, and not called again from the sync, because they
 do not return story media without a login this sync is not allowed to bypass:
 
-- Telegram. t.me/telegram, t.me/durov, t.me/s/<channel>, and t.me/<user>/s/1
+- Telegram. t.me/laneharbor, t.me/durov, t.me/s/<channel>, and t.me/<user>/s/1
   are a channel preview or a profile card. The image is the avatar.
   stories.getPeerStories is limited to a logged-in user.
 - VK stories from the spare account's web session. VK_LOGIN and

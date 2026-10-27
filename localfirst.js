@@ -533,6 +533,9 @@
       document.documentElement.classList.add("is-restored");
       state.restored = true;
       state.screen = saved;
+    } else if (saved && saved.html && app && app.childElementCount && document.documentElement.classList.contains("is-restored")) {
+      state.restored = true;
+      state.screen = saved;
     }
     if (saved && saved.hash && typeof location !== "undefined" && defaultRoute(location.hash)) {
       if (saved.hash !== location.hash) {

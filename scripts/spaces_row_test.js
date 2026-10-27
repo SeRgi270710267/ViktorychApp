@@ -12,8 +12,8 @@ assert.ok(L, "spaces.js exports SpacesLogic without a document");
 
 const host = {
   platform: "telegram",
-  handle: "redacted_handle",
-  followId: "telegram:redacted_handle"
+  handle: "quietharbor",
+  followId: "telegram:quietharbor"
 };
 const live = { id: "superintelmusic", live: true, followId: host.followId, host, kind: "space" };
 const video = { id: "clip", live: true, followId: "youtube:news", kind: "video", host: {} };
@@ -22,7 +22,7 @@ assert.strictEqual(L.homePills([live], [host.followId]).length, 1);
 assert.strictEqual(L.homePills([live], []).length, 0);
 assert.strictEqual(L.homePills([live], [host.followId]).length, 1);
 assert.strictEqual(L.homePills([{ ...live, live: false }], [host.followId]).length, 0);
-assert.strictEqual(L.profileLive(live, "telegram", "@redacted_handle"), true);
+assert.strictEqual(L.profileLive(live, "telegram", "@quietharbor"), true);
 assert.strictEqual(L.homePills([live], []).length, 0);
 assert.strictEqual(L.profileLive({ ...live, live: false }, "telegram", host.handle), false);
 assert.strictEqual(L.profileLive(live, "x", host.handle), false);
@@ -185,12 +185,12 @@ assert.strictEqual(status.hls.audio, "");
 assert.ok(!/trycloudflare|http:\/\//i.test(JSON.stringify(status)));
 
 const config = JSON.parse(fs.readFileSync("feeds.config.json", "utf8"));
-const feed = config.feeds.find((item) => item.id === "telegram:redacted_handle");
+const feed = config.feeds.find((item) => item.id === "telegram:quietharbor");
 assert.ok(feed, "telegram host feed");
-assert.deepStrictEqual([...feed.profile.name].map((ch) => ch.codePointAt(0)), [0x53, 0x435, 0x420, 0x67, 0x418, 0x33, 0x37, 0x37, 0x35, 0x39, 0x39, 0x36, 0x38, 0x33, 0x34]);
+assert.strictEqual(feed.profile.name, "Harbor");
 const space = config.spaces.find((item) => item.id === "superintelmusic");
 assert.strictEqual(space.title, "ViktorychMusic");
-assert.strictEqual(space.host.followId, "telegram:redacted_handle");
+assert.strictEqual(space.host.followId, "telegram:quietharbor");
 assert.strictEqual(space.source.type, "loop");
 assert.strictEqual(space.source.loopUrl, "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/current.json");
 assert.ok(!space.source.statusUrl);

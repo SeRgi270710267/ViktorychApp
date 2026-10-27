@@ -9,7 +9,7 @@ const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -58,6 +58,11 @@ const SHELL_FILES = [
   "./storage.css",
   "./localfirst.js",
   "./direct.js",
+  "./device.js",
+  "./device-search.js",
+  "./device-ai.js",
+  "./device-media.js",
+  "./device-record.js",
   "./logo/v.svg",
   "./logo/v-music.svg",
   "./logo/viktorychapp.svg",
@@ -108,6 +113,7 @@ const SHELL_FILES = [
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
   "./shared/mirror.js",
+  "./video-embed.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/feed-order.js",
@@ -116,6 +122,11 @@ const SHELL_FILES = [
   "./favicon.svg",
   "./favicon.ico",
   "./manifest.webmanifest",
+  "./offline.html",
+  "./native.js",
+  "./codec.js",
+  "./media-opfs.js",
+  "./feed-worker.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
@@ -233,6 +244,9 @@ self.addEventListener("activate", (event) => {
       if (updateReporting) broadcastProgress({ step: "clean" }, true);
     } catch (err) { /* a full disk must not leave the worker stuck activating */ }
     try { await self.clients.claim(); } catch (err) { /* the page reloads once the worker is active */ }
+    try {
+      if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
+    } catch (err) { /* navigation preload is optional */ }
     const info = versionInfo();
     if (reloadClients) broadcast({ type: "update-ready", version: info.version, sha: info.sha, built: info.built });
     else broadcast({ type: "sw-version", version: info.version, sha: info.sha, built: info.built });
@@ -424,10 +438,12 @@ async function rememberMedia(url, bytes, category, cacheName) {
   });
 }
 
-async function trimMedia() {
+async function trimMedia(unusedCache, capBytes) {
   const db = await idb();
   const saved = await self.ViktorychStorage.readPolicy(db);
-  const max = saved.unlimited ? Infinity : (saved.maxBytes || MEDIA_LIMIT);
+  const policyMax = saved.unlimited ? Infinity : (saved.maxBytes || MEDIA_LIMIT);
+  const cap = Number(capBytes);
+  const max = cap > 0 ? Math.min(policyMax, cap) : policyMax;
   let rows = await self.ViktorychStorage.listFiles(db);
   if (!rows.length) {
     const old = (await idbGet(db, "media-index")) || [];
@@ -445,6 +461,10 @@ async function trimMedia() {
     try {
       if ((row.cacheName || "") === "idb-docs") {
         await self.ViktorychStorage.deleteDoc(db, row.url);
+        return;
+      }
+      if (row.cacheName === "opfs" && self.ViktorychOpfs) {
+        await self.ViktorychOpfs.remove(row.url);
         return;
       }
       const cache = await caches.open(row.cacheName || MEDIA);
@@ -516,6 +536,7 @@ async function wipeUserCaches(full) {
   await caches.delete(DATA);
   await caches.delete(MEDIA);
   await caches.delete(LIVE);
+  try { if (self.ViktorychOpfs) await self.ViktorychOpfs.clear(); } catch (err) { /* Cache Storage was already cleared */ }
   if (full) {
     try { await caches.delete(OFFLINE_MUSIC); } catch (err) { /* music downloads are already gone */ }
   }
@@ -525,6 +546,47 @@ async function wipeUserCaches(full) {
     await self.ViktorychStorage.clearDocs(db, "all");
     await idbSet(db, "media-index", []);
   } catch (err) { /* the page clears the same stores */ }
+}
+
+async function putPacked(cache, request, response) {
+  const codec = self.ViktorychCodec;
+  if (!codec || !codec.supported()) {
+    await cache.put(request, response.clone());
+    return;
+  }
+  const type = (response.headers.get("content-type") || "").toLowerCase();
+  if (type.indexOf("json") < 0 && type.indexOf("text") < 0 && type.indexOf("javascript") < 0) {
+    await cache.put(request, response.clone());
+    return;
+  }
+  const bytes = new Uint8Array(await response.clone().arrayBuffer());
+  if (bytes.byteLength < 4096) {
+    await cache.put(request, new Response(bytes, { status: response.status, headers: response.headers }));
+    return;
+  }
+  const packed = await codec.gzip(bytes);
+  if (!packed || packed.byteLength >= bytes.byteLength) {
+    await cache.put(request, new Response(bytes, { status: response.status, headers: response.headers }));
+    return;
+  }
+  const headers = new Headers(response.headers);
+  headers.set("x-vapp-gzip", "1");
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  await cache.put(request, new Response(packed, { status: response.status, headers: headers }));
+}
+
+async function readPacked(response) {
+  if (!response || response.headers.get("x-vapp-gzip") !== "1") return response;
+  const codec = self.ViktorychCodec;
+  if (!codec || !codec.supported()) return response;
+  const packed = new Uint8Array(await response.arrayBuffer());
+  const plain = await codec.gunzip(packed);
+  if (!plain) return response;
+  const headers = new Headers(response.headers);
+  headers.delete("x-vapp-gzip");
+  headers.delete("content-length");
+  return new Response(plain, { status: response.status, statusText: response.statusText, headers: headers });
 }
 
 async function staleWhileRevalidate(request, extraHeaders) {
@@ -547,11 +609,11 @@ async function staleWhileRevalidate(request, extraHeaders) {
       if (action === "keep" && cached) {
         await self.ViktorychStorage.touch(db, request.url);
         broadcast({ type: "storage-online" });
-        return cached;
+        return readPacked(cached);
       }
       if (action === "store") await self.ViktorychStorage.bump(db, "network");
       if (action === "store" && self.ViktorychStorage.shouldCacheFeed(request.url)) {
-        await cache.put(cacheReq, res.clone());
+        await putPacked(cache, cacheReq, res);
         await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), DATA);
         await trimMedia();
         broadcast({ type: "storage-online" });
@@ -574,7 +636,7 @@ async function staleWhileRevalidate(request, extraHeaders) {
         clients.forEach((client) => client.postMessage({ type: "data", url: request.url }));
       });
     });
-    return cached;
+    return readPacked(cached);
   }
   const res = await update;
   return res || new Response("{}", { status: 503, headers: { "Content-Type": "application/json" } });
@@ -727,6 +789,19 @@ async function serveMedia(request, extraHeaders) {
     if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
     return fetch(request);
   }
+  const opfs = self.ViktorychOpfs;
+  if (opfs && opfs.supported()) {
+    try {
+      const hit = await opfs.open(request.url, rangeHeader);
+      if (hit) {
+        const dbHit = await idb();
+        await self.ViktorychStorage.bump(dbHit, "hits");
+        await self.ViktorychStorage.bump(dbHit, "savedRequests");
+        await self.ViktorychStorage.touch(dbHit, request.url);
+        return hit;
+      }
+    } catch (err) { /* Cache Storage is the fallback */ }
+  }
   const asked = await askPeer(request);
   if (asked && asked.bytes && !asked.skip) {
     const peerHit = peerResponseFrom(asked, request);
@@ -786,9 +861,14 @@ async function serveMedia(request, extraHeaders) {
     const res = await fetchMediaOrigin(request, headers, authed);
     const store = res && (res.type === "opaque" || self.ViktorychStorage.revalidateAction(res.status) === "store");
     if (store && !rangeHeader) {
-      await cache.put(fullReq, res.clone());
+      let inOpfs = false;
       const length = self.ViktorychStorage.byteLengthOf(res);
-      await rememberMedia(request.url, length, self.ViktorychStorage.categoryOf(request.url), MEDIA);
+      if (opfs && opfs.supported() && res.type !== "opaque" && length >= opfs.LARGE) {
+        try { inOpfs = await opfs.put(request.url, await res.clone().blob()); }
+        catch (err) { inOpfs = false; }
+      }
+      if (!inOpfs) await cache.put(fullReq, res.clone());
+      await rememberMedia(request.url, length, self.ViktorychStorage.categoryOf(request.url), inOpfs ? "opfs" : MEDIA);
       await trimMedia();
     }
     if (res && res.status === 206 && rangeHeader && self.ViktorychStorage.cacheableRange(rangeHeader, res.headers.get("content-length"))) {
@@ -822,14 +902,15 @@ async function networkFirst(request, cacheName) {
   try {
     const res = await mirrorFetch(request);
     if (res && res.ok) {
-      cache.put(request, res.clone());
+      if (cacheName === DATA) await putPacked(cache, request, res);
+      else cache.put(request, res.clone());
       if (cacheName === DATA) {
         try { await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), DATA); } catch (err) { /* the response still returns */ }
       }
     }
     return res;
   } catch (err) {
-    const cached = await cache.match(request);
+    const cached = await readPacked(await cache.match(request));
     if (cached) return cached;
     throw err;
   }
@@ -843,24 +924,24 @@ async function networkFirstTimeout(request, cacheName, timeoutMs) {
     const res = await fetch(new Request(request, { cache: "no-store", signal: controller.signal }));
     clearTimeout(timer);
     if (res && res.ok) {
-      await cache.put(request, res.clone());
+      await putPacked(cache, request, res);
       return res;
     }
     const alt = await mirrorAlternate(new URL(request.url));
     if (alt && alt.ok) {
-      await cache.put(request, alt.clone());
+      try { await putPacked(cache, request, alt); } catch (putErr) { /* the response is still usable */ }
       return alt;
     }
-    const cached = await cache.match(request);
+    const cached = await readPacked(await cache.match(request));
     return cached || res;
   } catch (err) {
     clearTimeout(timer);
     const alt = await mirrorAlternate(new URL(request.url));
     if (alt && alt.ok) {
-      try { await cache.put(request, alt.clone()); } catch (putErr) { /* the response is still usable */ }
+      try { await putPacked(cache, request, alt); } catch (putErr) { /* the response is still usable */ }
       return alt;
     }
-    const cached = await cache.match(request);
+    const cached = await readPacked(await cache.match(request));
     if (cached) return cached;
     return new Response("", { status: 504 });
   }
@@ -1004,6 +1085,21 @@ async function pullOne(path, report, state, signal, cache) {
       const headers = new Headers(res.headers);
       headers.delete("content-encoding");
       headers.delete("content-length");
+      try {
+        if (crypto.subtle && counted.chunks && counted.chunks.length) {
+          let size = 0;
+          counted.chunks.forEach((chunk) => { size += chunk.byteLength || 0; });
+          const all = new Uint8Array(size);
+          let offset = 0;
+          counted.chunks.forEach((chunk) => {
+            all.set(chunk, offset);
+            offset += chunk.byteLength || 0;
+          });
+          const digest = await crypto.subtle.digest("SHA-256", all);
+          const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+          if (hash) headers.set("x-shell-sha256", hash);
+        }
+      } catch (err) { /* the versioned cache name still busts a changed shell */ }
       try {
         await cache.put(path, new Response(new Blob(counted.chunks), { status: 200, headers: headers }));
       } catch (err) {
@@ -1224,6 +1320,35 @@ self.addEventListener("message", (event) => {
       if (event.source) event.source.postMessage({ type: "bell-delivered", notes: delivered });
     }));
   }
+  if (data.type === "outbox" && Array.isArray(data.queue)) {
+    event.waitUntil(idb().then((db) => idbSet(db, "outbox", data.queue.slice(-200))));
+    return;
+  }
+  if (data.type === "api-base" && data.api) {
+    event.waitUntil(idb().then((db) => idbSet(db, "api-base", String(data.api))));
+    return;
+  }
+  if (data.type === "weather-url" && data.url) {
+    event.waitUntil(idb().then((db) => idbSet(db, "weather-url", String(data.url))));
+    return;
+  }
+  if (data.type === "storage-pressure") {
+    event.waitUntil((async () => {
+      let cap = 0;
+      try {
+        if (navigator.storage && navigator.storage.estimate) {
+          const est = await navigator.storage.estimate();
+          if (est && est.quota) cap = Math.floor(est.quota * 0.5);
+        }
+      } catch (err) { cap = 0; }
+      await trimMedia(null, cap || undefined);
+      const clients = await self.clients.matchAll({ type: "window" });
+      clients.forEach((client) => {
+        try { client.postMessage({ type: "storage-pressure" }); } catch (err) { /* the storage screen still explains it */ }
+      });
+    })());
+    return;
+  }
   if (data.type === "bell-pull") {
     event.waitUntil(idb().then(async (db) => {
       const notes = (await idbGet(db, "bell-queue")) || [];
@@ -1242,6 +1367,10 @@ self.addEventListener("fetch", (event) => {
       if (res && res.ok) await wipeUserCaches(true);
       return res;
     })());
+    return;
+  }
+  if (request.method === "POST" && url.origin === self.location.origin && (url.searchParams.get("share") === "1" || (shellDocument(url) && /multipart\/form-data/i.test(request.headers.get("content-type") || "")))) {
+    event.respondWith(receiveShare(request));
     return;
   }
   if (request.method !== "GET") return;
@@ -1331,11 +1460,35 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
       }
       try {
-        return await mirrorFetch(request);
+        // Navigation preload is only used when this version has no shell
+        // document yet. A newer index.html is never written beside the
+        // assets already in the versioned shell.
+        let res = null;
+        try { res = await event.preloadResponse; } catch (err) { res = null; }
+        if (!res) res = await mirrorFetch(request);
+        return res;
       } catch (err) {
         if (!home) return Response.error();
         const cache = await caches.open(SHELL);
-        return (await cache.match("./index.html")) || (await cache.match("./")) || Response.error();
+        return (await cache.match("./index.html")) || (await cache.match("./")) || (await cache.match("./offline.html")) || Response.error();
+      }
+    })());
+    return;
+  }
+  if (url.hostname === "api.open-meteo.com" && url.pathname.indexOf("/v1/forecast") === 0) {
+    event.respondWith((async () => {
+      try {
+        const res = await fetch(request);
+        if (res && res.ok) {
+          const cache = await caches.open(DATA);
+          cache.put(request, res.clone());
+          try { await idbSet(await idb(), "weather-url", request.url); } catch (err) { /* the forecast still returns */ }
+        }
+        return res;
+      } catch (err) {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        return Response.error();
       }
     })());
     return;
@@ -1395,7 +1548,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|peer-media\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -1552,7 +1705,7 @@ async function deliverBellNotesNow(notes, dnd) {
         body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
         image: note.image || undefined,
-        tag: "bell-" + id,
+        tag: "note-" + id,
         data: { hash: note.hash || "#/", id: id }
       });
     } catch (err) { /* the page still keeps the in-app row */ }
@@ -1640,7 +1793,116 @@ async function refreshAndNotify() {
   }
 }
 
+async function refreshWeather() {
+  const db = await idb();
+  const saved = await idbGet(db, "weather-url");
+  if (!saved || !/^https:\/\/api\.open-meteo\.com\/v1\/forecast/.test(String(saved))) return;
+  const res = await fetch(saved, { cache: "no-store" });
+  if (!res || !res.ok) return;
+  const cache = await caches.open(DATA);
+  await cache.put(saved, res.clone());
+  const clients = await self.clients.matchAll({ type: "window" });
+  clients.forEach((client) => {
+    try { client.postMessage({ type: "weather-updated", url: saved }); } catch (err) { /* the next open reads the cache */ }
+  });
+}
+
+async function refreshAccountNotes() {
+  const db = await idb();
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  if (!auth || !auth.token || !api) return;
+  const root = String(api).replace(/\/$/, "");
+  const res = await fetch(root + "/v1/notifications", {
+    headers: { Authorization: "Bearer " + auth.token },
+    cache: "no-store"
+  });
+  if (!res || !res.ok) return;
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  clients.forEach((client) => {
+    try { client.postMessage({ type: "push-note", note: {} }); } catch (err) { /* a visible page polls */ }
+  });
+}
+
+async function replayOutboxAction(api, token, action) {
+  const root = String(api).replace(/\/$/, "");
+  const headers = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+  if (action.type === "repost") {
+    const res = action.on
+      ? await fetch(root + "/v1/reposts", { method: "PUT", headers: headers, body: JSON.stringify({ kind: "repost", post: action.snapshot || {} }) })
+      : await fetch(root + "/v1/reposts", { method: "POST", headers: headers, body: JSON.stringify({ postKey: action.postKey || "" }) });
+    return !!(res && res.ok);
+  }
+  return false;
+}
+
+async function flushOutbox() {
+  const db = await idb();
+  const queue = (await idbGet(db, "outbox")) || [];
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (clients.length) {
+    clients.forEach((client) => {
+      try { client.postMessage({ type: "flush-outbox" }); } catch (err) { /* the page flushes on the next online event */ }
+    });
+    return;
+  }
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  const left = [];
+  for (const action of queue) {
+    if (!action) continue;
+    const kind = action.type;
+    if (kind === "repost" && auth && auth.token && api) {
+      try {
+        const ok = await replayOutboxAction(api, auth.token, action);
+        if (!ok) left.push(action);
+      } catch (err) { left.push(action); }
+      continue;
+    }
+    left.push(action);
+  }
+  await idbSet(db, "outbox", left);
+}
+
+async function receiveShare(request) {
+  let form = null;
+  try { form = await request.formData(); }
+  catch (err) { form = null; }
+  const title = form ? String(form.get("title") || "") : "";
+  const text = form ? String(form.get("text") || "") : "";
+  const sharedUrl = form ? String(form.get("url") || "") : "";
+  const files = form ? form.getAll("media") : [];
+  const names = [];
+  const cache = await caches.open(MEDIA);
+  const stamp = String(Date.now());
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (!file || !file.name) continue;
+    names.push(file.name);
+    try {
+      await cache.put("./share-inbox/" + stamp + "-" + i, new Response(file, { headers: { "content-type": file.type || "application/octet-stream", "x-name": file.name } }));
+    } catch (err) { /* the name still lands in the composer */ }
+  }
+  const params = new URLSearchParams();
+  if (title) params.set("title", title);
+  if (text || names.length) params.set("text", [text].concat(names).filter(Boolean).join("\n"));
+  if (sharedUrl) params.set("url", sharedUrl);
+  if (names.length) params.set("media", "1");
+  return Response.redirect(new URL("./?" + params.toString() + "#/home", self.registration.scope), 303);
+}
+
 self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
+  if (event.tag === "notifications") event.waitUntil(Promise.all([refreshAndNotify(), refreshAccountNotes()]));
+  if (event.tag === "weather") event.waitUntil(refreshWeather());
+});
+
+self.addEventListener("sync", (event) => {
+  if (event.tag === "outbox") event.waitUntil(flushOutbox());
+});
+
+// Background Sync uses the same feed refresh as periodic sync.
+self.addEventListener("sync", (event) => {
   if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
 });
 
@@ -1650,6 +1912,16 @@ self.addEventListener("push", (event) => {
     try { data = event.data ? event.data.json() : {}; }
     catch (err) { data = {}; }
     if (await pushIsDnd(!!(data && data.dnd))) return;
+    const noteId = String((data && data.id) || "");
+    if (noteId) {
+      try {
+        const db = await idb();
+        const seen = new Set((await idbGet(db, "bell-seen")) || []);
+        if (seen.has(noteId)) return;
+        seen.add(noteId);
+        await idbSet(db, "bell-seen", Array.from(seen).slice(-500));
+      } catch (err) { /* a repeated push still uses the same notification tag */ }
+    }
     const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const visible = open.some((client) => client.visibilityState === "visible");
     if (visible) {

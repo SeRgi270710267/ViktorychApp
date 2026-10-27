@@ -38,8 +38,11 @@ UI_FILES = (
     "storage.js",
     "localfirst.js",
     "direct.js",
+    "device.js",
     "scores.js",
     "weather.js",
+    "native.js",
+    "offline.html",
     "dock.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay

@@ -31,6 +31,8 @@ jobs:
       - name: Build the shell and fail if a referenced file is missing
         run: |
           python3 scripts/assemble_site.py --selftest
+          python3 scripts/r2_catalog.py --selftest
+          python3 scripts/catalog_migrate.py --selftest
           python3 scripts/assemble_site.py --site _site
           python3 scripts/cf_pages_prepare.py --site _site --out _mirror
 
@@ -44,3 +46,6 @@ jobs:
         run: |
           npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
           PLAYWRIGHT_MJS=/tmp/pw/node_modules/playwright-core/index.js node scripts/sw_update_test.mjs
+
+      - name: YouTube embed plays muted on desktop and mobile
+        run: node scripts/yt_embed_smoke.mjs --root _site

@@ -23,15 +23,15 @@
                                         "clickTrackingParams": "CLoBEPS8AiITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
                                         "commandMetadata": {
                                           "webCommandMetadata": {
-                                            "url": "/@redacted_handle",
+                                            "url": "/@northlamp",
                                             "webPageType": "WEB_PAGE_TYPE_CHANNEL",
                                             "rootVe": 3611,
                                             "apiUrl": "/youtubei/v1/browse"
                                           }
                                         },
                                         "browseEndpoint": {
-                                          "browseId": "UCfgtuaUadGgOA-91geQ8Qog",
-                                          "canonicalBaseUrl": "/@redacted_handle"
+                                          "browseId": "UCsyntheticmaple00001000",
+                                          "canonicalBaseUrl": "/@northlamp"
                                         }
                                       }
                                     }
@@ -65,15 +65,15 @@
                                   "clickTrackingParams": "CLoBEPS8AiITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
                                   "commandMetadata": {
                                     "webCommandMetadata": {
-                                      "url": "/@redacted_handle",
+                                      "url": "/@northlamp",
                                       "webPageType": "WEB_PAGE_TYPE_CHANNEL",
                                       "rootVe": 3611,
                                       "apiUrl": "/youtubei/v1/browse"
                                     }
                                   },
                                   "browseEndpoint": {
-                                    "browseId": "UCfgtuaUadGgOA-91geQ8Qog",
-                                    "canonicalBaseUrl": "/@redacted_handle"
+                                    "browseId": "UCsyntheticmaple00001000",
+                                    "canonicalBaseUrl": "/@northlamp"
                                   }
                                 },
                                 "contentText": {

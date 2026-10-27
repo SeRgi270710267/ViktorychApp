@@ -14,12 +14,21 @@ workers_dev = true
 # GitHub rejects a secret name that starts with GITHUB_.
 # .github/workflows/worker-dispatch-secret.yml copies it:
 # npx wrangler secret put GITHUB_DISPATCH_TOKEN
+# Web Push VAPID. Set both, or leave both unset and the worker keeps the D1 key.
+# VAPID_PUBLIC_KEY is the base64url uncompressed P-256 public key.
+# VAPID_PRIVATE_JWK is the private key as a JSON JWK string.
+# npx wrangler secret put VAPID_PUBLIC_KEY
+# npx wrangler secret put VAPID_PRIVATE_JWK
 # When it is unset, an added TikTok account waits for the next scheduled sync.
 # HANDLE_HOLD_DAYS keeps a deleted handle from being registered again.
 # The default is 30. Set it to 0 to free the handle immediately.
 # DELETION_SALT, when set as a secret, salts deletion hashes. Otherwise
 # ACCOUNT_PEPPER is used. OWNER_PUBLIC_ID, when set, cannot be deleted.
-# The owner handle and owner-account are refused by the delete route.
+# OWNER_HANDLE is the owner account handle. OWNER_ID_SHA256 is one or more
+# sha256 hex digests of owner ids. The delete route compares hashes and
+# never keeps those ids in this file.
+# TIKTOK_TRACKED lists accounts the sync follows. TIKTOK_UNLOCKED lists
+# which of those stay visible while Shorts is locked. Both are secrets.
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
 PBKDF2_ITERATIONS = "8000"

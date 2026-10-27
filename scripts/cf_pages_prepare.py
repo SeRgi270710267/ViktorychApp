@@ -79,7 +79,7 @@ def collect(site: Path) -> list[tuple[str, int]]:
 
 def bundle_required(site: Path) -> set[str]:
     """Shell files named by assemble_site, plus the extras that build copies."""
-    needed = set(assemble_site.shell_files(site))
+    needed = {path for path in assemble_site.shell_files(site) if path not in assemble_site.PRIVATE_PUBLICATION}
     for name in assemble_site.REQUIRED_EXTRAS:
         if (site / name).is_file():
             needed.add(name)
