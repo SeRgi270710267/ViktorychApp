@@ -10337,6 +10337,9 @@ const here = parseRoute();
       else if (section === "content") key = tr("Custom tabs");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
+      else if (section === "storage" && sub === "usage") key = tr("Storage usage");
+      else if (section === "storage") key = tr("Data and storage");
+      else if (section === "delete-account") key = tr("Delete account");
       else key = tr("Settings");
     } else {
       const map = {
@@ -10534,6 +10537,20 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
       </div>`;
     }
+    if (section === "storage" && sub === "usage") {
+      const body = window.ViktorychStorage ? window.ViktorychStorage.usageHtml() : "";
+      return settingsHead(tr("Storage usage"), "#/settings/storage") + body;
+    }
+    if (section === "storage") {
+      const body = window.ViktorychStorage ? window.ViktorychStorage.dataHtml() : "";
+      return settingsHead(tr("Data and storage"), "#/settings") + body;
+    }
+    if (section === "delete-account") {
+      const body = window.ViktorychAccounts && window.ViktorychAccounts.deleteAccountHtml
+        ? window.ViktorychAccounts.deleteAccountHtml()
+        : "";
+      return settingsHead(tr("Delete account"), "#/settings") + body;
+    }
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
@@ -10547,6 +10564,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
+      ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
@@ -15396,7 +15414,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!el) return;
     const was = !el.hidden;
     el.hidden = !offline;
-    el.textContent = tr("You're offline. Showing saved posts.");
+    el.textContent = tr("Offline - showing saved");
     if (was && !offline) {
       toast(tr("You're back online"));
       flushBookmarkQueue();
@@ -16156,6 +16174,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }).catch(() => {});
     navigator.serviceWorker.addEventListener("message", (event) => {
       const data = event.data || {};
+      if (data.type === "storage-offline") setOffline(true);
+      if (data.type === "storage-online" && navigator.onLine) setOffline(false);
       if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
       if (data.type === "feeds-updated") refreshFeeds(false);
       if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
@@ -16382,6 +16402,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   async function boot() {
     syncRuVisitorGeo();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
+      registerSW();
+      applyTheme();
+      return;
+    }
     if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) {
       registerSW();
       STATE.settings = loadSettings();

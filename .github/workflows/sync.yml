@@ -241,7 +241,7 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html robots.txt app.js update.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js owner-keys.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css vault.js vault.css games.js games.css communities.js communities.css yt-player.js yt-player.css scores.js scores.css weather.js weather.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html robots.txt app.js update.js storage.js storage.css styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js owner-keys.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css vault.js vault.css games.js games.css communities.js communities.css yt-player.js yt-player.css scores.js scores.css weather.js weather.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
           mkdir -p _site/shared
           cp shared/handle-skeleton.js shared/reposts.js _site/shared/
           cp shared/lazy-modules.js _site/shared/
@@ -299,6 +299,8 @@ jobs:
           ACCOUNTS_BACKUP_API: ${{ vars.ACCOUNTS_BACKUP_API || secrets.ACCOUNTS_BACKUP_API || 'https://viktorych-backup.onrender.com' }}
           TURNSTILE_SITEKEY: ${{ secrets.TURNSTILE_SITEKEY }}
           OWNER_CLAIM_CODE: ${{ secrets.OWNER_CLAIM_CODE }}
+          ACCOUNT_PEPPER: ${{ secrets.ACCOUNT_PEPPER }}
+          ACCOUNT_DELETION_SALT: ${{ secrets.ACCOUNT_DELETION_SALT }}
         run: python3 scripts/accounts_publish.py --site _site --source . --preserve-remote
 
       - name: Record whether the login wall is on
