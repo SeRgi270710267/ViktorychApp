@@ -7,8 +7,8 @@ const zero = parseRoomId("<script id=\"__UNIVERSAL_DATA_FOR_REHYDRATION__\">{\"_
 assert.equal(zero, "");
 const room = parseRoomId("<script id=\"__UNIVERSAL_DATA_FOR_REHYDRATION__\">{\"__DEFAULT_SCOPE__\":{\"webapp.user-detail\":{\"userInfo\":{\"user\":{\"roomId\":\"123456789\"}}}}}</script>");
 assert.equal(room, "123456789");
-const sigi = parseRoomId("<script id=\"SIGI_STATE\">{\"LiveRoom\":{\"liveRoomUserInfo\":{\"user\":{\"uniqueId\":\"noranaslundddd\",\"roomId\":\"7699629500912487190\"}}},\"CurrentRoom\":{\"roomId\":\"\"}}</script>");
-assert.equal(sigi, "7699629500912487190");
+const sigi = parseRoomId("<script id=\"SIGI_STATE\">{\"LiveRoom\":{\"liveRoomUserInfo\":{\"user\":{\"uniqueId\":\"zzsamplelive01\",\"roomId\":\"7100000000000000001\"}}},\"CurrentRoom\":{\"roomId\":\"\"}}</script>");
+assert.equal(sigi, "7100000000000000001");
 
 const live = pickStreams({
   data: {

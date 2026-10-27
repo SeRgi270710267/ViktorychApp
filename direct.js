@@ -17,7 +17,7 @@
     "cdn.jsdelivr.net": { gap: 80, name: "jsDelivr" },
     "mastodon.social": { gap: 1100, name: "Mastodon" }
   };
-  var CACHE_MS = 5 * 60 * 1000;
+  var CACHE_MS = 60 * 1000;
   var counts = { direct: 0, server: 0 };
   var lastAt = {};
   var memory = {};
