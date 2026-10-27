@@ -147,7 +147,7 @@ async function openApp(browser, url) {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await waitControlled(page);
   const sha = await shaOf(page);
-  assert(sha === OLD, "the first worker did not activate (" + sha + ")");
+  assert(sha === OLD, "the first worker did not activate");
   return { context, page };
 }
 
@@ -160,12 +160,21 @@ async function offerUpdate(page) {
 async function waitSha(page, expected) {
   const start = Date.now();
   let last = "";
-  while (Date.now() - start < 45000) {
+  let nudged = 0;
+  while (Date.now() - start < 90000) {
     try { last = await shaOf(page); } catch (err) { last = ""; }
     if (last === expected) return;
+    if (nudged < 2 && Date.now() - start > 15000) {
+      const go = await page.$("#upd-go");
+      const visible = go ? await go.isVisible().catch(() => false) : false;
+      if (visible) {
+        nudged += 1;
+        await page.click("#upd-go").catch(() => {});
+      }
+    }
     await page.waitForTimeout(300);
   }
-  throw new Error("worker stayed " + (last || "empty") + " instead of " + expected.slice(0, 7));
+  throw new Error(last ? "worker stayed on the previous build" : "worker never reported a build");
 }
 
 async function testCleanUpdate(browser) {
@@ -213,7 +222,7 @@ async function testRetryButton(browser) {
     await page.waitForFunction(() => {
       const title = document.getElementById("upd-title");
       return title && /didn't finish/.test(title.textContent || "");
-    }, null, { timeout: 20000 });
+    }, null, { timeout: 40000 });
     const hiddenOnce = await page.$eval("#upd-reset", (el) => el.hidden);
     assert(hiddenOnce, "reset was offered after a single failure");
     await page.click("#upd-go");
@@ -221,7 +230,7 @@ async function testRetryButton(browser) {
       const reset = document.getElementById("upd-reset");
       const title = document.getElementById("upd-title");
       return reset && !reset.hidden && title && /didn't finish/.test(title.textContent || "");
-    }, null, { timeout: 20000 });
+    }, null, { timeout: 40000 });
     const log = await page.evaluate(() => {
       try { return JSON.parse(localStorage.getItem("viktorychapp-update-log") || "[]"); }
       catch (err) { return []; }

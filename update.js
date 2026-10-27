@@ -451,16 +451,22 @@
       noteFailure("", "timeout");
       state.phase = "error";
       paint();
-    }, 25000);
+    }, 45000);
   }
 
   function waitForWorker(reg) {
     return new Promise(function (resolve) {
       var startedAt = Date.now();
+      var lastUpdate = startedAt;
       var timer = setInterval(function () {
         if (!reg) { clearInterval(timer); resolve(null); return; }
         if (reg.waiting) { clearInterval(timer); resolve(reg.waiting); return; }
-        if (Date.now() - startedAt > 8000) { clearInterval(timer); resolve(reg.waiting || null); }
+        var now = Date.now();
+        if (now - startedAt > 20000) { clearInterval(timer); resolve(reg.waiting || null); return; }
+        if (!reg.installing && reg.update && now - lastUpdate > 4000) {
+          lastUpdate = now;
+          reg.update().catch(function () {});
+        }
       }, 200);
     });
   }
@@ -551,6 +557,7 @@
       if (applying !== attempt) return;
       if (worker) {
         state.waiting = worker;
+        armStall();
         worker.postMessage({ type: "apply-update" });
         return;
       }
