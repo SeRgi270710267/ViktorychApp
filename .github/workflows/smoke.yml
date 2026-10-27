@@ -42,5 +42,10 @@ jobs:
       - name: Load the Pages upload fresh and with old saved data
         run: node scripts/smoke_page.mjs --site _mirror
 
+      - name: Service worker update
+        run: |
+          npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
+          PLAYWRIGHT_MJS=/tmp/pw/node_modules/playwright-core/index.js node scripts/sw_update_test.mjs
+
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
