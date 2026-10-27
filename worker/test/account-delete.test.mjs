@@ -213,6 +213,14 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?)", b, a, now);
   await sql("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?)", b, o, now);
   await sql("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?)", o, b, now);
+  const dmLow = a < b ? a : b;
+  const dmHigh = a < b ? b : a;
+  await sql("INSERT INTO dm_conversations (id, sender_id, recipient_id, created_at, updated_at) VALUES ('c-ab', ?, ?, ?, ?)", dmLow, dmHigh, now, now);
+  await sql("INSERT INTO dm_messages (id, conversation_id, sender_id, recipient_id, body, created_at) VALUES ('m-ab', 'c-ab', ?, ?, 'hello', ?)", a, b, now);
+  const boLow = b < o ? b : o;
+  const boHigh = b < o ? o : b;
+  await sql("INSERT INTO dm_conversations (id, sender_id, recipient_id, created_at, updated_at) VALUES ('c-bo', ?, ?, ?, ?)", boLow, boHigh, now, now);
+  await sql("INSERT INTO dm_messages (id, conversation_id, sender_id, recipient_id, body, created_at) VALUES ('m-bo', 'c-bo', ?, ?, 'stay', ?)", b, o, now);
   await sql("INSERT INTO account_federation (public_id, enabled_ap, enabled_nostr, nostr_pubkey, ap_public_key_pem, ap_private_key_pem, created_at, updated_at) VALUES (?, 1, 0, '', 'pub', 'priv', ?, ?)", a, now, now);
   await sql("INSERT INTO account_federation (public_id, enabled_ap, enabled_nostr, nostr_pubkey, ap_public_key_pem, ap_private_key_pem, created_at, updated_at) VALUES (?, 0, 0, '', '', '', ?, ?)", b, now, now);
   await sql("INSERT INTO ap_followers (actor_handle, follower_actor_url, follower_inbox_url, created_at) VALUES (?, 'https://ada.example/u', 'https://ada.example/in', ?)", adaRow.handle, now);
@@ -337,6 +345,10 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_pace WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM rate_limits WHERE bucket = ?", "follow:" + b), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files"), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM dm_conversations WHERE id = 'c-ab'"), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM dm_messages WHERE id = 'm-ab'"), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM dm_conversations WHERE id = 'c-bo'"), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM dm_messages WHERE id = 'm-bo'"), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ap_followers WHERE actor_handle = 'bee_wipe'"), 1);
   const beeSync = await one("SELECT payload FROM sync_state WHERE public_id = ?", b);
   assert.equal(JSON.parse(beeSync.payload).bookmarks.keep, 1);
