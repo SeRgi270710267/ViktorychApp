@@ -34,6 +34,9 @@ import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
+import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
+import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
+import { POST_SCHEMA, handlePosts } from "./posts.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -221,7 +224,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -646,6 +649,8 @@ async function handleSignup(request, env) {
     return json(400, { error: "invalid_handle" });
   }
   if (!(await verifyTurnstile(request, env, body.turnstileToken))) return json(403, { error: "turnstile" });
+  const guard = await verifySignupGuard(env, body);
+  if (!guard.ok) return json(guard.status || 400, { error: guard.error || "guard_required" });
   if (checked.owner) {
     const code = String(body.claimCode || "");
     const secret = String(env.OWNER_CLAIM_CODE || "");
@@ -670,11 +675,37 @@ async function handleSignup(request, env) {
   });
   if (created.error) return json(created.error === "handle_taken" ? 409 : 503, { error: created.error });
   await rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
+  const recoveryCodes = await issueRecoveryCodes(env, created.account.publicId, recoveryDeps());
   return json(201, {
     token: created.token,
     accountNumber: created.accountNumber,
+    recoveryCodes: recoveryCodes,
     account: created.account
   });
+}
+
+function recoveryDeps() {
+  return {
+    json: json,
+    readJson: readJson,
+    rateHit: rateHit,
+    limited: limited,
+    sessionAccount: sessionAccount,
+    requireOwner: requireOwner,
+    hmacHex: hmacHex,
+    slowHash: slowHash,
+    randomDigits: randomDigits,
+    mintSession: mintSession,
+    presentAccount: presentAccount,
+    bytesToB64: bytesToB64,
+    b64ToBytes: b64ToBytes,
+    timingEqual: timingEqual,
+    iterationsOf: iterationsOf,
+    clientIp: clientIp,
+    originAllowed: originAllowed,
+    blockDeletedLogin: blockDeletedLogin,
+    accountCols: ACCOUNT_COLS
+  };
 }
 
 async function handleLogin(request, env) {
@@ -4894,8 +4925,11 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/media" && request.method === "GET") return handleOwnerMedia(request, env, url);
   const ownerLive = path.match(/^\/v1\/owner\/live\/([^/]+)$/);
   if (ownerLive && request.method === "GET") return handleOwnerLive(request, env, ownerLive[1]);
+  if (path === "/v1/signup/challenge" && request.method === "GET") return json(200, await issueChallenge(env));
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
+  if (path === "/v1/recovery/restore" && request.method === "POST") return handleRecoveryRestore(request, env, recoveryDeps());
+  if (path === "/v1/recovery/codes" && request.method === "POST") return handleRecoveryRegenerate(request, env, recoveryDeps());
   if (path.startsWith("/v1/webauthn/")) {
     return handleWebAuthn(request, env, path, {
       json,
@@ -4907,8 +4941,14 @@ async function route(request, env, ctx) {
       createAccount,
       verifyTurnstile,
       mintSession,
-      originAllowed
+      originAllowed,
+      issueRecoveryCodes: (id) => issueRecoveryCodes(env, id, recoveryDeps())
     });
+  }
+  const relationPost = (path === "/v1/blocks" || path === "/v1/mutes") && request.method === "POST";
+  if (path === "/v1/posts" || path.startsWith("/v1/posts/") || path.startsWith("/v1/moderation/") || relationPost) {
+    const posted = await handlePosts(request, env, path, recoveryDeps());
+    if (posted) return posted;
   }
   if (path === "/v1/account/delete" && request.method === "POST") {
     return handleAccountDelete(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });

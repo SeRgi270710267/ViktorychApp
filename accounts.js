@@ -33,6 +33,7 @@
   var friendsSearchQuery = "";
   var friendsSubTab = "all";
   var unfriendTarget = null;
+  var reportState = { items: [], loading: false };
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -316,6 +317,9 @@
     if (code === "invalid_location") return tr("That location is too long.");
     if (code === "invalid_website") return tr("That website is too long.");
     if (code === "too_large") return tr("Could not save that photo.");
+    if (code === "too_fast") return tr("Wait a moment and try again.");
+    if (code === "guard_required" || code === "rejected") return tr("Sign-up could not be checked. Try again.");
+    if (code === "recovery_invalid") return tr("That recovery code did not work.");
     return tr("Something went wrong. Try again.");
   }
   function layer() {
@@ -334,7 +338,7 @@
     if (name === "accountNumber") maxAttr = ' data-max="16" inputmode="numeric"';
     else if (limit) maxAttr = ' maxlength="' + limit + '" data-max="' + limit + '"';
     var count = limit ? '<span class="acct-count">' + fieldCount(name, value, limit) + "</span>" : "";
-    var autocomplete = name === "accountNumber" || name === "claimCode" ? "off" : name === "website" ? "url" : name === "location" ? "address-level2" : name === "displayName" ? "name" : name === "handle" ? "username" : "nickname";
+    var autocomplete = name === "accountNumber" ? (type === "password" ? "current-password" : "new-password") : name === "claimCode" ? "off" : name === "website" ? "url" : name === "location" ? "address-level2" : name === "displayName" ? "name" : name === "handle" ? "username" : "nickname";
     var quiet = name === "accountNumber" || name === "handle" || name === "claimCode" ? ' spellcheck="false" autocapitalize="none" autocorrect="off"' : "";
     var invalid = errorText ? ' aria-invalid="true" aria-describedby="acct-error"' : "";
     return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + quiet + invalid + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
@@ -384,6 +388,75 @@
     var legal = '<p class="acct-legal">' + esc(tr("By signing up, you agree to the")) + ' <button type="button" data-acct="legal" data-legal="terms" data-title="' + esc(tr("Terms of Service")) + '">' + esc(tr("Terms of Service")) + "</button> " + esc(tr("and the")) + ' <button type="button" data-acct="legal" data-legal="privacy" data-title="' + esc(tr("Privacy Policy")) + '">' + esc(tr("Privacy Policy")) + "</button>.</p>";
     return '<div class="x-shell"><div class="x-land"><div class="x-land-logo">' + mark("x-mark") + '</div><div class="x-land-copy"><h1>' + esc(tr("Happening now")) + "</h1><h2>" + esc(tr("Join today.")) + '</h2><button class="acct-fill" type="button" data-acct="signup">' + esc(tr("Create account")) + "</button>" + legal + '<h3>' + esc(tr("Already have an account?")) + '</h3><button class="acct-line" type="button" data-acct="login">' + esc(tr("Sign in")) + '</button></div></div><footer class="x-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
   }
+  function honeypotHtml() {
+    return '<div class="acct-hp" aria-hidden="true"><label>Fax<input name="fax" tabindex="-1" autocomplete="off" value=""></label></div>';
+  }
+  function recoveryBlock(codes) {
+    if (!codes || !codes.length) return "";
+    var items = codes.map(function (code) { return "<li data-recovery-code>" + esc(code) + "</li>"; }).join("");
+    return '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="acct-sub">' + esc(tr("These recovery codes are shown once. Each code works one time.")) + '</p><ul class="acct-codes">' + items + '</ul><div class="acct-row"><button type="button" data-acct="copy-codes">' + esc(tr("Copy recovery codes")) + '</button><button type="button" data-acct="download-codes">' + esc(tr("Download recovery codes")) + "</button></div>";
+  }
+  function lostBody() {
+    return '<form id="acct-recover-form" method="post" action="" autocomplete="off"><p class="acct-sub">' + esc(tr("Enter one recovery code. It works once, then new codes replace it.")) + '</p><div class="acct-field"><input id="acct-recovery" name="recovery" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder=" " value="' + esc(form.recovery || "") + '"><label for="acct-recovery">' + esc(tr("Recovery code")) + "</label></div>" + errorHtml() + '<button class="acct-next" type="submit" data-acct="do-recover"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Continue")) + "</button></form>";
+  }
+  function recoveryShownBody() {
+    return recoveryBlock(form.recoveryCodes || []) + errorHtml() + '<button class="acct-next" type="button" data-acct="close">' + esc(tr("Done")) + "</button>";
+  }
+  function leadingZeroBits(bytes) {
+    var count = 0;
+    for (var i = 0; i < bytes.length; i++) {
+      var byte = bytes[i];
+      if (byte === 0) { count += 8; continue; }
+      for (var bit = 7; bit >= 0; bit--) {
+        if ((byte >> bit) & 1) return count;
+        count += 1;
+      }
+    }
+    return count;
+  }
+  function solvePow(ch) {
+    var enc = new TextEncoder();
+    var bits = Number(ch.bits) || 12;
+    var i = 0;
+    function next() {
+      if (i > 3000000) return Promise.reject(new Error("pow"));
+      var n = i++;
+      return crypto.subtle.digest("SHA-256", enc.encode(ch.id + ":" + ch.nonce + ":" + n)).then(function (buf) {
+        if (leadingZeroBits(new Uint8Array(buf)) >= bits) return n;
+        return next();
+      });
+    }
+    return next();
+  }
+  function ensureGuard() {
+    return api("/v1/signup/challenge").then(function (ch) {
+      if (!ch || !ch.id) return null;
+      var started = Date.now();
+      return solvePow(ch).then(function (counter) {
+        var left = (Number(ch.waitMs) || 800) + 200 - (Date.now() - started);
+        var done = function () { return { id: ch.id, counter: counter }; };
+        if (left <= 0) return done();
+        return new Promise(function (resolve) { setTimeout(function () { resolve(done()); }, left); });
+      });
+    });
+  }
+  function faxValue() {
+    var el = document.querySelector('#account-layer input[name="fax"]');
+    return el ? String(el.value || "") : "";
+  }
+  function storeCredential(formEl) {
+    try {
+      if (!formEl || typeof window.PasswordCredential !== "function" || !navigator.credentials || !navigator.credentials.store) return;
+      var pass = formEl.querySelector('input[autocomplete="current-password"], input[autocomplete="new-password"]');
+      var user = formEl.querySelector('input[name="username"]');
+      if (pass) {
+        var digits = String(pass.value || "").replace(/\D/g, "");
+        if (digits) pass.value = digits;
+        if (user && !String(user.value || "").trim()) user.value = digits;
+      }
+      navigator.credentials.store(new window.PasswordCredential(formEl)).catch(function () {});
+    } catch (err) { /* the browser may not offer a password manager */ }
+  }
   function signupBody() {
     if (step === 2) {
       var pending = readPending();
@@ -391,7 +464,9 @@
 var numberNote = form.passkey
         ? tr("Save this account number. You can sign in with a passkey later. The number is an optional backup.")
         : tr("This number is shown once. Save it now. It is the only way back into this account.");
-      return '<p class="acct-sub">' + esc(numberNote) + '</p><div class="acct-number" role="status">' + esc(number) + '</div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button></div><label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + "</span></label>" + errorHtml() + nextButton("saved", tr("Next"), !form.saved);
+      var digits = pending ? String(pending.accountNumber || "").replace(/\D/g, "") : "";
+      var userName = pending && pending.account && pending.account.handle ? pending.account.handle : digits;
+      return '<form id="acct-save-form" method="post" action="" autocomplete="on"><p class="acct-sub">' + esc(numberNote) + '</p><div class="acct-field"><input id="acct-username" name="username" type="text" autocomplete="username" spellcheck="false" autocapitalize="none" value="' + esc(userName) + '" readonly><label for="acct-username">' + esc(tr("Username")) + '</label></div><div class="acct-number" role="status">' + esc(number) + '</div><div class="acct-field"><input id="acct-new-password" name="password" type="password" autocomplete="new-password" inputmode="numeric" spellcheck="false" value="' + esc(digits) + '"><label for="acct-new-password">' + esc(tr("Account number")) + '</label></div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button><button type="button" data-acct="show-number">' + esc(tr("Show")) + '</button></div>' + recoveryBlock(pending && pending.recoveryCodes) + '<label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + "</span></label>" + errorHtml() + '<button class="acct-next" type="submit" data-acct="saved"' + (!form.saved || authBusy ? " disabled" : "") + (authBusy ? ' aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Next")) + "</button>" + (window.ViktorychPasskeys && window.ViktorychPasskeys.supported() ? '<button class="acct-line" type="button" data-acct="save-passkey" style="width:100%;margin-top:12px">' + esc(tr("Save a passkey on this device")) + "</button>" : "") + "</form>";
     }
     if (step === 1) {
       var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
@@ -403,7 +478,7 @@ var numberNote = form.passkey
         : nextButton("next", tr("Next"));
       return '<p class="acct-sub">' + handleSub + "</p>" +
         field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) +
-        claim + turnstileHtml() + errorHtml() + passkeyStep;
+        claim + turnstileHtml() + honeypotHtml() + errorHtml() + passkeyStep;
     }
     var subText = form.profileLess
       ? esc(tr("Your account will have no public profile. Interactions will be anonymous."))
@@ -415,13 +490,15 @@ var numberNote = form.passkey
       errorHtml() + nextButton("next", tr("Next"));
   }
   function loginBody() {
-var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
+    var digits = String(form.accountNumber || "").replace(/\D/g, "");
+    var userField = '<div class="acct-field"><input id="acct-login-user" name="username" type="text" autocomplete="username" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder=" " value="' + esc(digits) + '"><label for="acct-login-user">' + esc(tr("Username")) + "</label></div>";
+    var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
       ? '<div class="acct-field"><input id="acct-passkey-user" name="passkeyUser" type="text" placeholder=" " autocomplete="username webauthn" value=""><label for="acct-passkey-user">' + esc(tr("Sign in with a passkey")) + '</label></div><button class="acct-next" type="button" data-acct="passkey-login"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Sign in with a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + "</p>"
       : "";
     var numberHint = passkey
       ? tr("There is no password to reset. A passkey can sign in, and the account number from sign-up still works.")
       : tr("There is no password to reset. The account number from sign-up is the only way back in.");
-    return passkey + field("accountNumber", tr("Account number")) + '<p class="acct-sub">' + esc(numberHint) + "</p>" + turnstileHtml() + errorHtml() + nextButton("do-login", tr("Log in")) + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
+    return '<form id="acct-login-form" method="post" action="" autocomplete="on">' + userField + passkey + field("accountNumber", tr("Account number"), "password") + '<p class="acct-sub">' + esc(numberHint) + "</p>" + turnstileHtml() + errorHtml() + '<button class="acct-next" type="submit" data-acct="do-login"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Log in")) + "</button></form>" + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="lost">' + esc(tr("Lost your account number?")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
       '<p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + '</button></p>';
   }
   function emergencyBody() {
@@ -600,6 +677,9 @@ var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
     else if (view === "prefs") html += modal(tr("Settings"), prefsBody());
     else if (view === "emergency") html += modal(tr("Emergency Offline Access"), emergencyBody());
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
+    else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
+    else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
+    else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
     else if (view === "edit") html += editModal(editBody());
     else if (view === "crop") html += cropModal();
     else if (view === "legal") html += modal(legalTitle || tr("About"), legalBody());
@@ -629,6 +709,10 @@ var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
       if (caret != null && focusName && focusEl.setSelectionRange) {
         try { focusEl.setSelectionRange(caret, caret); } catch (err) { /* a button has no caret */ }
       }
+    }
+    if (view === "signup" && step === 2 && window.ViktorychPasskeys && window.ViktorychPasskeys.armConditionalCreate) {
+      var pendingPass = readPending();
+      if (pendingPass && pendingPass.token) window.ViktorychPasskeys.armConditionalCreate(pendingPass.token);
     }
     if (view === "crop" && !layoutCrop()) requestAnimationFrame(layoutCrop);
     if (view === "login" && window.ViktorychPasskeys) {
@@ -721,6 +805,7 @@ var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
     } catch (err) { back = ""; }
     if (!back || back.charAt(0) !== "#") back = "#/";
     document.documentElement.removeAttribute("data-wall");
+    try { history.pushState({ signed: 1 }, "", location.pathname + location.search); } catch (err) { /* the reload still navigates */ }
     location.replace(location.pathname + location.search + back);
     location.reload();
   }
@@ -1082,6 +1167,7 @@ function signupPayload() {
     if (authBusy || !form.saved) return;
     var pending = readPending();
     if (!pending) return;
+    storeCredential(document.getElementById("acct-save-form"));
     authBusy = true;
     paint();
     commitSession(pending.token, pending.account);
@@ -1103,14 +1189,18 @@ function signupPayload() {
       paint();
       return;
     }
-var body = signupPayload();
+    var body = signupPayload();
     if (!body) return;
     authBusy = true;
     paint();
-    api("/v1/signup", { method: "POST", body: body }).then(function (res) {
+    ensureGuard().then(function (pow) {
+      body.pow = pow;
+      body.fax = faxValue();
+      return api("/v1/signup", { method: "POST", body: body });
+    }).then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.accountNumber) {
-        writePending({ token: res.token, accountNumber: res.accountNumber, account: res.account });
+        writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
         view = "signup";
         step = 2;
         form.saved = false;
@@ -1153,11 +1243,63 @@ var body = signupPayload();
         paint();
         return;
       }
+      storeCredential(document.getElementById("acct-login-form"));
       commitSession(res.token, res.account);
     }).catch(function () {
       authBusy = false;
       if (view !== "login") return;
       errorText = offlineMessage();
+      paint();
+    });
+  }
+  function doRecover() {
+    if (authBusy) return;
+    var code = String(form.recovery || "").trim();
+    errorText = "";
+    if (!code) {
+      errorText = tr("Enter one recovery code. It works once, then new codes replace it.");
+      paint();
+      return;
+    }
+    authBusy = true;
+    paint();
+    api("/v1/recovery/restore", { method: "POST", body: { code: code } }).then(function (res) {
+      authBusy = false;
+      if (!res || res.status !== 200 || !res.token || !res.accountNumber) {
+        errorText = errorMessage((res && res.error) || "recovery_invalid");
+        paint();
+        return;
+      }
+      writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
+      view = "signup";
+      step = 2;
+      form.saved = false;
+      form.passkey = false;
+      errorText = "";
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      errorText = offlineMessage();
+      paint();
+    });
+  }
+  function savePasskeyNow() {
+    var pending = readPending();
+    if (!pending || !pending.token || !window.ViktorychPasskeys) return;
+    authBusy = true;
+    paint();
+    api("/v1/webauthn/register/options", { method: "POST", token: pending.token, body: {} }).then(function (res) {
+      if (!res || res.status !== 200 || !res.publicKey) throw new Error("passkey");
+      return window.ViktorychPasskeys.create(res.publicKey).then(function (credential) {
+        return api("/v1/webauthn/register/verify", { method: "POST", token: pending.token, body: { challengeId: res.challengeId, credential: credential, label: tr("This device") } });
+      });
+    }).then(function (res) {
+      authBusy = false;
+      errorText = res && res.status === 200 ? tr("Passkey saved") : tr("Could not create a passkey.");
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      errorText = tr("Could not create a passkey.");
       paint();
     });
   }
@@ -1203,7 +1345,11 @@ var body = signupPayload();
     if (!body) return;
     authBusy = true;
     paint();
-    api("/v1/webauthn/signup/options", { method: "POST", body: body }).then(function (res) {
+    ensureGuard().then(function (pow) {
+      body.pow = pow;
+      body.fax = faxValue();
+      return api("/v1/webauthn/signup/options", { method: "POST", body: body });
+    }).then(function (res) {
       if (!res || res.status !== 200 || !res.publicKey) {
         authBusy = false;
         if (res && res.error === "claim_required") form.claimOpen = true;
@@ -1226,7 +1372,7 @@ var body = signupPayload();
         return;
       }
       form.passkey = true;
-      writePending({ token: res.token, accountNumber: res.accountNumber, account: res.account });
+      writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
       step = 2;
       form.saved = false;
       errorText = "";
@@ -1350,6 +1496,93 @@ var body = signupPayload();
       return;
     }
     downloadNumber();
+  }
+  function listedCodes() {
+    var nodes = document.querySelectorAll("#account-layer [data-recovery-code]");
+    var codes = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var text = String(nodes[i].textContent || "").trim();
+      if (text) codes.push(text);
+    }
+    return codes;
+  }
+  function saveTextFile(name, text) {
+    var blob = new Blob([text], { type: "text/plain" });
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+  }
+  function copyCodes() {
+    var text = listedCodes().join("\n");
+    if (!text) return;
+    var done = function () {
+      errorText = tr("Copied");
+      paint();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { saveTextFile("recovery-codes.txt", text + "\n"); });
+      return;
+    }
+    saveTextFile("recovery-codes.txt", text + "\n");
+  }
+  function downloadCodes() {
+    var text = listedCodes().join("\n");
+    if (!text) return;
+    saveTextFile("recovery-codes.txt", text + "\n");
+  }
+  function regenerateCodes() {
+    var session = readSession();
+    if (!session || authBusy) return;
+    authBusy = true;
+    errorText = "";
+    api("/v1/recovery/codes", { method: "POST", token: session.token, body: {} }).then(function (res) {
+      authBusy = false;
+      if (!res || res.status !== 200 || !res.recoveryCodes || !res.recoveryCodes.length) {
+        errorText = errorMessage((res && res.error) || "");
+        paint();
+        return;
+      }
+      form.recoveryCodes = res.recoveryCodes;
+      view = "recovery";
+      errorText = "";
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      errorText = offlineMessage();
+      paint();
+    });
+  }
+  function reportsBody() {
+    if (reportState.loading && !reportState.items.length) return '<p class="acct-sub">' + esc(tr("Loading…")) + "</p>";
+    if (!reportState.items.length) return '<p class="acct-sub">' + esc(tr("No open reports")) + "</p>" + errorHtml();
+    return reportState.items.map(function (item) {
+      return '<article class="acct-codes"><p>' + esc(item.body || "") + '</p><p class="acct-sub">' + esc(item.reason || "") + '</p><div class="acct-row"><button type="button" data-acct="report-hide" data-id="' + esc(item.id) + '">' + esc(tr("Hide")) + '</button><button type="button" data-acct="report-dismiss" data-id="' + esc(item.id) + '">' + esc(tr("Dismiss report")) + "</button></div></article>";
+    }).join("") + errorHtml();
+  }
+  function loadReports() {
+    var session = readSession();
+    if (!session) return;
+    reportState.loading = true;
+    api("/v1/moderation/reports", { token: session.token }).then(function (res) {
+      reportState.loading = false;
+      reportState.items = res && Array.isArray(res.reports) ? res.reports : [];
+      if (view === "reports") paint();
+    }).catch(function () {
+      reportState.loading = false;
+      errorText = tr("Something went wrong. Try again.");
+      if (view === "reports") paint();
+    });
+  }
+  function resolveReport(id, action) {
+    var session = readSession();
+    if (!session || !id) return;
+    api("/v1/moderation/reports", { method: "POST", token: session.token, body: { id: id, action: action } }).then(function () {
+      loadReports();
+    }).catch(function () {});
   }
   function downloadNumber() {
     var pending = readPending();
@@ -2756,8 +2989,7 @@ var body = signupPayload();
       health = healthHtml() + channelsHtml();
     }
     return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + "</button><h2>" + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
-  }
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
     var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
     if (friendSub) {
@@ -2795,9 +3027,10 @@ var body = signupPayload();
     }
     var acct = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
     if (!acct) return;
+    var act = acct.dataset.acct;
+    if (act === "saved" || act === "do-login" || act === "do-recover") return;
     event.preventDefault();
     event.stopPropagation();
-    var act = acct.dataset.acct;
     if (act === "presence-open") {
       if (window.ViktorychPresence) window.ViktorychPresence.open(acct);
       return;
@@ -2922,6 +3155,19 @@ var body = signupPayload();
     else if (act === "passkey-signup") doPasskeySignup();
     else if (act === "passkey-login") doPasskeyLogin();
     else if (act === "do-login") doLogin();
+    else if (act === "lost") { view = "lost"; errorText = ""; form.recovery = ""; paint(); }
+    else if (act === "do-recover") doRecover();
+    else if (act === "save-passkey") savePasskeyNow();
+    else if (act === "show-number") {
+      var secret = document.getElementById("acct-new-password");
+      if (secret) secret.type = secret.type === "password" ? "text" : "password";
+    }
+    else if (act === "copy-codes") copyCodes();
+    else if (act === "download-codes") downloadCodes();
+    else if (act === "recovery-new") regenerateCodes();
+    else if (act === "open-reports") { view = "reports"; errorText = ""; reportState.items = []; paint(); loadReports(); }
+    else if (act === "report-hide") resolveReport(acct.dataset.id, "hide");
+    else if (act === "report-dismiss") resolveReport(acct.dataset.id, "dismiss");
     else if (act === "do-emergency") doEmergency();
     else if (act === "do-restore") doRestoreSession();
     else if (act === "copy-session") copySession();
@@ -3186,6 +3432,14 @@ else if (act === "copy-id") copyAccountId();
     if (!el || el.getAttribute("data-acct") !== "media-vis") return;
     saveMedia({ id: el.getAttribute("data-id"), visibility: el.value });
   }, true);
+  document.addEventListener("submit", function (event) {
+    var formEl = event.target;
+    if (!formEl || !formEl.closest || !formEl.closest("#account-layer")) return;
+    event.preventDefault();
+    if (formEl.id === "acct-login-form") doLogin();
+    else if (formEl.id === "acct-save-form") finishPending();
+    else if (formEl.id === "acct-recover-form") doRecover();
+  }, true);
   document.addEventListener("input", function (event) {
     var el = event.target;
     if (el && el.closest && el.closest("[data-delete-form]")) {
@@ -3209,10 +3463,19 @@ else if (act === "copy-id") copyAccountId();
       return;
     }
     if (!el || !el.closest || !el.closest("#account-layer") || !el.name) return;
+    if (el.id === "acct-login-user") {
+      var typed = String(el.value || "").replace(/\D/g, "").slice(0, 16);
+      form.accountNumber = typed;
+      var passEl = document.getElementById("acct-accountNumber");
+      if (passEl) passEl.value = grouped(typed);
+      return;
+    }
     if (el.name === "accountNumber") {
       var digits = String(el.value || "").replace(/\D/g, "").slice(0, 16);
       el.value = grouped(digits);
       form.accountNumber = digits;
+      var loginUser = document.getElementById("acct-login-user");
+      if (loginUser) loginUser.value = digits;
       var numberCount = el.parentNode && el.parentNode.querySelector(".acct-count");
       if (numberCount) numberCount.textContent = fieldCount("accountNumber", digits, 16);
       return;
@@ -3265,6 +3528,7 @@ else if (act === "copy-id") copyAccountId();
     var el = event.target;
     if (!el || !el.closest || !el.closest("#account-layer")) return;
     if (el.tagName === "TEXTAREA") return;
+    if (el.form && (el.form.id === "acct-login-form" || el.form.id === "acct-save-form" || el.form.id === "acct-recover-form")) return;
     event.preventDefault();
     if (view === "login") {
       doLogin();
