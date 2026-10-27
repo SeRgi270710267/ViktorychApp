@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "../src/live-watch.js";
+import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "../src/live-watch.js";
 
 const NOW = Date.parse("2026-10-26T12:00:00Z");
 const ISO = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -67,6 +67,18 @@ test("a dispatch that never opened its capture waits, then retries", () => {
   assert.equal(choice.part, 1);
 });
 
+test("a blocked empty capture retries after backoff, and a partial save can resume", () => {
+  const stuck = { active: { state: "blocked", roomId: "7699647509498710801", captureDone: true, segments: 0, capturing: false } };
+  assert.equal(watchDecision(stuck, {}, "7699647509498710801", NOW).why, "unblocked");
+  const waiting = { backoffUntil: ISO(NOW + 60 * 1000), active: { state: "blocked", roomId: "7699647509498710801", captureDone: false, segments: 0 } };
+  assert.equal(watchDecision(waiting, {}, "7699647509498710801", NOW).why, "backoff");
+  const partial = { saved: [{ roomId: "7699647509498710801", partial: true, parts: 2 }] };
+  assert.equal(watchDecision(partial, {}, "7699647509498710801", NOW).why, "partial");
+  assert.equal(watchDecision(partial, {}, "7699647509498710801", NOW).part, 3);
+  const done = { saved: [{ roomId: "7699647509498710801", parts: 2 }] };
+  assert.equal(watchDecision(done, {}, "7699647509498710801", NOW).why, "saved");
+});
+
 test("a blocked pick that left the row unlabeled still retries", () => {
   const job = { active: { state: "recording", roomId: "7699647509498710801", capturing: false, captureDone: false } };
   const choice = watchDecision(job, {}, "7699647509498710801", NOW);
@@ -103,4 +115,21 @@ test("the uploader heartbeat is stale after five quiet minutes", () => {
   assert.equal(uploaderStale({ at: ISO(NOW - 60 * 1000) }, NOW), false);
   assert.equal(uploaderStale({ at: ISO(NOW - 10 * 60 * 1000) }, NOW), true);
   assert.equal(uploaderStale(null, NOW), true);
+});
+
+test("sixteen recorders leave a new live queued and keep a live that already started", () => {
+  const full = Array.from({ length: 16 }, (_, index) => "h" + String(index).padStart(2, "0"));
+  const fresh = { action: "record", why: "new", part: 1 };
+  const queued = { action: "record", why: "queued", part: 1 };
+  const again = { action: "record", why: "stale", part: 2 };
+  const part = { action: "part", why: "part", part: 2 };
+  assert.equal(admitRecord(fresh, "new_name", full, 16), false);
+  assert.equal(admitRecord(queued, "new_name", full, 16), false);
+  assert.equal(admitRecord(fresh, "h00", full, 16), true);
+  assert.equal(admitRecord(again, "h00", full, 16), true);
+  assert.equal(admitRecord(part, "h00", full, 16), true);
+  assert.equal(admitRecord(fresh, "new_name", full.slice(0, 15), 16), true);
+  const waiting = { active: { state: "queued", roomId: "7699647509498710801", part: 1, capturing: false } };
+  assert.equal(watchDecision(waiting, {}, "7699647509498710801", NOW).why, "queued");
+  assert.equal(watchDecision(waiting, {}, "7699647509498710801", NOW).action, "record");
 });

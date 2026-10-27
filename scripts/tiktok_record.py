@@ -2,11 +2,11 @@
 """Record a public TikTok live and copy it to Telegram.
 
 One Actions job captures one live. The capture is a stream copy of the origin
-variant (ffmpeg -c copy). It is never re-encoded. Segments land in R2 first,
-so a slow Telegram channel cannot drop them. One uploader job per backup
-channel sends those segments, about 20 messages a minute, and honors
-retry_after. Extra channels are an owner-only list; the same bot posts to
-each of them.
+variant (ffmpeg -c copy). It is never re-encoded. Segments land in R2 first
+and the local file is removed, so a slow Telegram channel cannot drop them
+or fill the runner disk. The same job offers each segment to Telegram and
+checks its sha256. One uploader job drains anything that offer left behind.
+Extra channels are an owner-only list; the same bot posts to each of them.
 
 No cookies, no proxy, and no captcha bypass. A 403, 429, 503, or captcha
 page skips that live and the Live tab keeps Open on TikTok.
@@ -17,18 +17,20 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import re
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,17 +52,26 @@ from tiktok_sync import (  # noqa: E402
 BUCKET = "viktorych-data"
 INDEX_KEY = "owner/tiktok-recordings.json"
 JOB_PREFIX = "owner/live-jobs/"
+PUBLIC_PREFIX = "owner/recording-public/"
+ACTIVE_PREFIX = "owner/live-active/"
 BUF_PREFIX = "live-buf/"
 CHANNELS_KEY = "owner/tiktok-backup-channels.json"
 UPLOAD_PREFIX = "owner/live-upload/"
 SMALL_BYTES = 19 * 1024 * 1024
 TARGET_BYTES = 18 * 1024 * 1024
-CAP_LIMIT = 12
+CAP_LIMIT = 16
 MESSAGES_PER_MINUTE = 20
 HIGH_SEGMENTS_PER_MINUTE = 3
 PART_SECONDS = 5 * 60 * 60 + 30 * 60
+# Stop this job before the Actions six-hour cap. The next part starts after
+# this job exits, because the per-handle queue will not run two at once.
+HANDOFF_LEAD = 15 * 60
+DISK_FLOOR = 2 * 1024 * 1024 * 1024
 HEARTBEAT_SECONDS = 8 * 60
 DISPATCH_SECONDS = 3 * 60
+BACKOFF_SECONDS = 15 * 60
+TRANSIENT_LIMIT = 5
+URL_RE = re.compile(r"https?://\S+")
 CHANNEL_RE = re.compile(r"^-100\d{4,16}$")
 KEY_RE = re.compile(r"^tiktok/[A-Za-z0-9._]{2,24}/[1-9][0-9]{5,24}/live$")
 RANK = ["origin", "origion", "uhd", "full_hd1", "hd", "hd1", "sd", "sd2", "ld", "sd1"]
@@ -95,7 +106,7 @@ def fresh_iso(value: str, now: str, seconds: int) -> bool:
 
 
 def cap_of() -> int:
-    raw = (os.environ.get("TIKTOK_RECORD_CAP") or "12").strip()
+    raw = (os.environ.get("TIKTOK_RECORD_CAP") or str(CAP_LIMIT)).strip()
     try:
         value = int(raw)
     except ValueError:
@@ -134,24 +145,28 @@ def segment_seconds(bitrate: int) -> int:
 
 
 def record_source(picked: dict | None) -> dict:
-    """The picker's chosen rung, HLS first. Never a lower rung than that."""
+    """The top rung TikTok offered. FLV stays open until the live ends.
+
+    A live HLS window ends, or the CDN answers 504, and the copy stops.
+    HLS is the fallback when that room has no FLV pull.
+    """
     row = picked if isinstance(picked, dict) else {}
     hls = str(row.get("hls") or "")
     flv = str(row.get("flv") or "")
     quality = str(row.get("quality") or "")
     note = str(row.get("qualityNote") or "")
-    if hls:
-        url, kind = hls, "hls"
-    elif flv:
-        url, kind = flv, "flv"
+    if flv:
+        url, kind, alt = flv, "flv", hls
+    elif hls:
+        url, kind, alt = hls, "hls", ""
     else:
-        url, kind = "", ""
+        url, kind, alt = "", "", ""
     top = quality.lower() in {"origin", "origion"}
     if top:
         note = ""
     elif quality and not note:
         note = "best available"
-    return {"url": url, "kind": kind, "quality": quality, "qualityNote": note}
+    return {"url": url, "kind": kind, "alt": alt, "quality": quality, "qualityNote": note}
 
 
 def prefer_cached(cached: dict | None, fresh: dict | None) -> dict:
@@ -174,16 +189,26 @@ def prefer_cached(cached: dict | None, fresh: dict | None) -> dict:
 
 
 def ffmpeg_args(url: str, dest: Path, seconds: int, start: int = 0) -> list:
+    """Stream-copy video and audio. TikTok FLV leads with a text stream the HLS muxer rejects."""
     args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     if str(url).startswith(("http://", "https://")):
         args += [
             "-user_agent", UA,
+            "-referer", "https://www.tiktok.com/",
             "-reconnect", "1",
             "-reconnect_streamed", "1",
             "-reconnect_delay_max", "4",
+            "-rw_timeout", "15000000",
         ]
     args += [
+        "-probesize", "5000000",
+        "-analyzeduration", "3000000",
+        "-fflags", "+genpts+discardcorrupt",
         "-i", url,
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-sn",
+        "-dn",
         "-c", "copy",
         "-f", "hls",
         "-hls_time", str(int(seconds)),
@@ -227,13 +252,10 @@ def channel_ok(value: str) -> bool:
 
 
 def sort_key(handle: str, added: list, started: str) -> tuple:
-    order = [str(item or "").lower() for item in added]
+    """Earliest start takes a free slot. The handle is only a tie break."""
+    del added
     name = str(handle or "").lower()
-    try:
-        index = order.index(name)
-    except ValueError:
-        index = len(order)
-    return (index, started or "9999-12-31T00:00:00Z", name)
+    return (started or "9999-12-31T00:00:00Z", name)
 
 
 def blank_job(handle: str) -> dict:
@@ -306,11 +328,11 @@ def occupies(active: dict, now: str) -> bool:
     return fresh_iso(str(active.get("heartbeat") or ""), now, HEARTBEAT_SECONDS) or fresh_iso(str(active.get("dispatchedAt") or ""), now, DISPATCH_SECONDS)
 
 
-def plan(lives: list, added: list, jobs: dict, now: str, cap: int = 12, channels: int = 1) -> dict:
+def plan(lives: list, added: list, jobs: dict, now: str, cap: int = CAP_LIMIT, channels: int = 1) -> dict:
     """Choose which lives capture now and which wait.
 
-    Added-account order is the priority. Start time breaks ties for handles
-    that are not in that list. A live already being captured is not started twice.
+    The earliest start time gets a slot. A live already being captured is not
+    started twice. Anything past the cap stays queued.
     """
     cap = max(1, min(int(cap or CAP_LIMIT), CAP_LIMIT))
     channels = max(1, int(channels or 1))
@@ -370,7 +392,12 @@ def plan(lives: list, added: list, jobs: dict, now: str, cap: int = 12, channels
         job = state.setdefault(handle, blank_job(handle))
         active = job.get("active") if isinstance(job.get("active"), dict) else {}
         saved = [row for row in (job.get("saved") or []) if isinstance(row, dict) and str(row.get("roomId") or "") == room]
-        if saved and not active.get("needsPart"):
+        finished = [row for row in saved if not row.get("partial")]
+        if finished and not active.get("needsPart"):
+            continue
+        backoff_until = parse_stamp(str(job.get("backoffUntil") or ""))
+        now_dt = parse_stamp(now)
+        if backoff_until and now_dt and backoff_until > now_dt and not active.get("needsPart"):
             continue
         if str(active.get("roomId") or "") == room and active.get("captureDone") and not active.get("needsPart"):
             # The recorder finished. The uploader has not marked the room saved
@@ -388,7 +415,15 @@ def plan(lives: list, added: list, jobs: dict, now: str, cap: int = 12, channels
         job = state[handle]
         room = str(item.get("roomId") or "")
         active = job.get("active") if isinstance(job.get("active"), dict) else {}
+        saved = [row for row in (job.get("saved") or []) if isinstance(row, dict) and str(row.get("roomId") or "") == room]
+        finished = [row for row in saved if not row.get("partial")]
         cover = str(item.get("cover") or active.get("cover") or "")
+        resume = 1
+        for row in saved:
+            resume = max(resume, int(row.get("parts") or 0) + 1)
+        part_no = int(active.get("part") or 0) or resume
+        if saved and not finished:
+            part_no = max(part_no, resume)
         fields = {
             "roomId": room,
             "title": str(item.get("title") or ""),
@@ -398,7 +433,7 @@ def plan(lives: list, added: list, jobs: dict, now: str, cap: int = 12, channels
             "key": key_base(handle, room),
             "startedAt": started or now,
             "channelSlot": channel_slot(room, channels),
-            "part": int(active.get("part") or 1) or 1,
+            "part": part_no or 1,
         }
         if slots > 0:
             fields.update({
@@ -476,12 +511,33 @@ def load_job(handle: str) -> dict:
     return job
 
 
+def slot_held(active: dict | None) -> bool:
+    row = active if isinstance(active, dict) else {}
+    if row.get("state") != "recording":
+        return False
+    if row.get("captureDone") and not row.get("needsPart"):
+        return False
+    return True
+
+
 def save_job(job: dict) -> None:
+    """Write this live only. Parallel recorders never share a file."""
     handle = str(job.get("handle") or "").lower()
     job["handle"] = handle
-    job["public"] = public_view(job)
+    view = public_view(job)
+    job["public"] = view
     job["updatedAt"] = now_iso()
     r2_put(job_key(handle), json.dumps(job, ensure_ascii=False).encode("utf-8"))
+    if view.get("state"):
+        r2_put(PUBLIC_PREFIX + handle + ".json", json.dumps(view, ensure_ascii=False).encode("utf-8"))
+    else:
+        r2_delete(PUBLIC_PREFIX + handle + ".json")
+    active = job.get("active") if isinstance(job.get("active"), dict) else {}
+    if slot_held(active):
+        marker = {"handle": handle, "roomId": str(active.get("roomId") or ""), "at": job["updatedAt"]}
+        r2_put(ACTIVE_PREFIX + handle + ".json", json.dumps(marker).encode("utf-8"))
+    else:
+        r2_delete(ACTIVE_PREFIX + handle + ".json")
 
 
 def write_index(jobs: dict, cap: int) -> None:
@@ -498,6 +554,13 @@ def write_index(jobs: dict, cap: int) -> None:
     r2_put(INDEX_KEY, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
 
+def dispatch_ref() -> str:
+    name = (os.environ.get("GITHUB_REF_NAME") or "main").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._/-]{1,120}", name):
+        return "main"
+    return name
+
+
 def github_dispatch(workflow: str, inputs: dict) -> bool:
     repo = (os.environ.get("GITHUB_REPOSITORY") or "").strip()
     token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
@@ -505,7 +568,7 @@ def github_dispatch(workflow: str, inputs: dict) -> bool:
         log("dispatch skipped")
         return False
     url = "https://api.github.com/repos/%s/actions/workflows/%s/dispatches" % (repo, workflow)
-    body = json.dumps({"ref": "main", "inputs": {key: str(value) for key, value in inputs.items()}}).encode("utf-8")
+    body = json.dumps({"ref": dispatch_ref(), "inputs": {key: str(value) for key, value in inputs.items()}}).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST", headers={
         "Authorization": "Bearer " + token,
         "Accept": "application/vnd.github+json",
@@ -609,7 +672,7 @@ def cmd_plan(dispatch: bool) -> int:
             save_job(job)
     write_index(decided["jobs"], cap)
     beats = upload_heartbeats(channels)
-    uploads = plan_uploads(decided["jobs"], beats, channels, moment)
+    uploads = plan_uploads(decided["jobs"], beats, channels, moment)[:1]
     numbers = capacity(channels, cap)
     log("cap %s active %s queued %s channels %s kept-up %s" % (
         cap, decided["active"], len(decided["queued"]), channels, numbers["highLivesKeptUp"]))
@@ -662,8 +725,9 @@ def probe_bitrate(url: str) -> int:
         return 0
     try:
         proc = subprocess.run(
-            ["ffprobe", "-v", "error", "-user_agent", UA, "-show_entries", "format=bit_rate", "-of", "default=nw=1:nk=1", url],
-            capture_output=True, timeout=20, check=False,
+            ["ffprobe", "-v", "error", "-user_agent", UA, "-probesize", "1000000", "-analyzeduration", "1000000",
+             "-show_entries", "format=bit_rate", "-of", "default=nw=1:nk=1", url],
+            capture_output=True, timeout=8, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         return 0
@@ -754,13 +818,91 @@ def durations_from_playlist(path: Path) -> dict:
     return found
 
 
+_OFFERS = None
+_OFFER_LOCK = threading.Lock()
+
+
+def queue_offer(buf_key: str, meta: dict) -> None:
+    """Hand a stored segment to Telegram without stopping the copy."""
+    bot = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    channel = (os.environ.get("TELEGRAM_CHANNEL_ID") or "").strip()
+    if not bot or not channel:
+        return
+    global _OFFERS
+    with _OFFER_LOCK:
+        if _OFFERS is None:
+            _OFFERS = queue.Queue()
+            threading.Thread(target=_offer_loop, name="tiktok-offer", daemon=True).start()
+    _OFFERS.put((buf_key, dict(meta)))
+
+
+def _offer_loop() -> None:
+    while True:
+        buf_key, meta = _OFFERS.get()
+        try:
+            offer_segment(buf_key, meta)
+        except Exception:
+            log("telegram offer failed")
+
+
+def offer_segment(buf_key: str, meta: dict) -> None:
+    """Upload one buffered piece and check its sha256. Leave R2 in place on failure."""
+    bot = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    channel = (os.environ.get("TELEGRAM_CHANNEL_ID") or "").strip()
+    token, account = cloudflare_env()
+    if not bot or not channel or not token or not account:
+        return
+    if meta.get("oversize") or int(meta.get("size") or 0) >= SMALL_BYTES:
+        return
+    blob = r2_get(buf_key)
+    if not blob or not piece_matches(blob, meta):
+        return
+    from telegram_backup import d1_id, d1_rows, remember_d1, send_document
+
+    database = d1_id(token, account)
+    object_key = str(meta.get("objectKey") or "")
+    role = "init" if meta.get("role") == "init" else "segment"
+    part_index = int(meta.get("index") or 0)
+    kind = "init" if role == "init" else "segment"
+    digest = hashlib.sha256(blob).hexdigest()
+    local = Path(tempfile.mkdtemp(prefix="tiktok-offer-")) / Path(buf_key).name
+    try:
+        local.write_bytes(blob)
+        existing = d1_rows(token, account, database, "SELECT file_id FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? LIMIT 1", [object_key, kind, part_index])
+        if not existing:
+            sent = send_document("https://api.telegram.org", bot, channel, local, object_key, {"last": 0.0})
+            remember_d1(token, account, database, {
+                "serve": True,
+                "bucket": BUCKET,
+                "key": object_key,
+                "encrypted": False,
+            }, {
+                "role": role,
+                "index": part_index,
+                "file_id": sent["file_id"],
+                "message_id": sent["message_id"],
+                "size": int(sent.get("file_size") or local.stat().st_size),
+                "sha256": digest,
+                "mime": "video/mp4",
+                "duration": float(meta.get("duration") or 0),
+            }, True, object_key)
+        r2_delete(buf_key)
+        r2_delete(buf_key + ".json")
+        log("offered %s #%s %s" % (object_key, part_index, digest[:12]))
+    finally:
+        shutil.rmtree(local.parent, ignore_errors=True)
+
+
 def store_piece(local: Path, buf_key: str, meta: dict) -> bool:
     sidecar = dict(meta)
     sidecar["size"] = local.stat().st_size
     sidecar["sha256"] = hashlib.sha256(local.read_bytes()).hexdigest()
     if not r2_put_file(buf_key, local, "video/mp4"):
         return False
-    return r2_put(buf_key + ".json", json.dumps(sidecar).encode("utf-8"))
+    if not r2_put(buf_key + ".json", json.dumps(sidecar).encode("utf-8")):
+        return False
+    queue_offer(buf_key, sidecar)
+    return True
 
 
 def split_oversize(local: Path, dest: Path) -> list:
@@ -786,7 +928,12 @@ def split_oversize(local: Path, dest: Path) -> list:
     return pieces
 
 
-def publish_local(dest: Path, sent: set, meta: dict) -> int:
+def publish_local(dest: Path, sent: set, meta: dict, closed: bool = False) -> int:
+    """Store finished segments and drop the local files.
+
+    The newest segment stays on disk while ffmpeg still has it open.
+    A segment is removed only after R2 has accepted every piece.
+    """
     stored = 0
     playlist = durations_from_playlist(dest / "index.m3u8")
     init = dest / "init.mp4"
@@ -802,7 +949,10 @@ def publish_local(dest: Path, sent: set, meta: dict) -> int:
         if store_piece(init, meta["buf"] + "/init.mp4", piece):
             sent.add("init.mp4")
             stored += 1
-    for path in sorted(dest.glob("seg*.m4s")):
+    paths = sorted(dest.glob("seg*.m4s"))
+    if not closed and paths:
+        paths = paths[:-1]
+    for path in paths:
         if path.name in sent:
             continue
         index = int(path.stem.replace("seg", "") or "0")
@@ -815,6 +965,7 @@ def publish_local(dest: Path, sent: set, meta: dict) -> int:
             else:
                 oversize = True
                 log("oversize %s" % path.name)
+        wrote = 0
         for offset, piece_path in enumerate(pieces):
             piece = {
                 "objectKey": meta["objectKey"],
@@ -826,17 +977,109 @@ def publish_local(dest: Path, sent: set, meta: dict) -> int:
             }
             buf_name = piece_path.name if len(pieces) == 1 else ("seg%05d.m4s" % piece["index"])
             if store_piece(piece_path, meta["buf"] + "/" + buf_name, piece):
-                stored += 1
+                wrote += 1
+        if wrote != len(pieces):
+            continue
+        stored += wrote
         sent.add(path.name)
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        shutil.rmtree(dest / ("split-" + path.stem), ignore_errors=True)
     return stored
 
 
-def run_ffmpeg(url: str, dest: Path, seconds: int, start: int, deadline: float, on_tick) -> str:
+def redact(text: str) -> str:
+    return URL_RE.sub("<url>", str(text or ""))
+
+
+def iso_after(seconds: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=max(0, int(seconds)))).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def pull_failure(tail: str) -> str:
+    text = redact(tail).lower()
+    if any(word in text for word in ("403", "401", "forbidden", "captcha")):
+        return "blocked"
+    return "transient"
+
+
+def record_decision(still_live: bool, gained: int, reason: str, failure: str) -> str:
+    """What one ffmpeg attempt should do next. Pure, so the pipeline can be tested."""
+    if not still_live:
+        return "save" if int(gained or 0) > 0 else "drop"
+    if reason in {"deadline", "chain", "handoff"}:
+        return "chain"
+    if failure == "blocked" and int(gained or 0) <= 0:
+        return "backoff"
+    return "retry"
+
+
+def piece_matches(blob: bytes, meta: dict | None) -> bool:
+    if not blob or len(blob) >= SMALL_BYTES:
+        return False
+    row = meta if isinstance(meta, dict) else {}
+    expected = str(row.get("sha256") or "")
+    digest = hashlib.sha256(blob).hexdigest()
+    if expected and expected != digest:
+        return False
+    size = int(row.get("size") or 0)
+    if size and size != len(blob):
+        return False
+    return True
+
+
+def past_entries(job: dict | None) -> list:
+    row = job if isinstance(job, dict) else {}
+    found = []
+    active = row.get("active") if isinstance(row.get("active"), dict) else {}
+    if active.get("state") in {"recording", "queued"} and not active.get("captureDone"):
+        found.append({
+            "state": str(active.get("state")),
+            "handle": str(row.get("handle") or ""),
+            "title": str(active.get("title") or ""),
+            "startedAt": str(active.get("startedAt") or ""),
+            "endedAt": "",
+            "duration": int(active.get("duration") or 0),
+            "viewers": int(active.get("viewers") or 0),
+            "cover": str(active.get("cover") or ""),
+            "quality": str(active.get("quality") or ""),
+            "qualityNote": str(active.get("qualityNote") or ""),
+            "roomId": str(active.get("roomId") or ""),
+            "parts": int(active.get("part") or 1),
+            "key": str(active.get("key") or "") if int(active.get("segments") or 0) > 0 else "",
+        })
+    for item in row.get("saved") or []:
+        if not isinstance(item, dict):
+            continue
+        found.append({
+            "state": "saved",
+            "handle": str(row.get("handle") or ""),
+            "title": str(item.get("title") or ""),
+            "startedAt": str(item.get("startedAt") or ""),
+            "endedAt": str(item.get("endedAt") or ""),
+            "duration": int(item.get("duration") or 0),
+            "viewers": int(item.get("viewers") or 0),
+            "cover": str(item.get("cover") or ""),
+            "quality": str(item.get("quality") or ""),
+            "qualityNote": str(item.get("qualityNote") or ""),
+            "roomId": str(item.get("roomId") or ""),
+            "parts": int(item.get("parts") or 1),
+            "key": str(item.get("key") or ""),
+        })
+    found.sort(key=lambda item: str(item.get("startedAt") or ""), reverse=True)
+    return found
+
+
+def run_ffmpeg(url: str, dest: Path, seconds: int, start: int, deadline: float, on_tick) -> tuple:
     if shutil.which("ffmpeg") is None:
         log("ffmpeg is not installed")
-        return "error"
+        return "error", ""
     dest.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.Popen(ffmpeg_args(url, dest, seconds, start), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    err_path = dest / "ffmpeg.err"
+    err_fh = err_path.open("wb")
+    proc = subprocess.Popen(ffmpeg_args(url, dest, seconds, start), stdout=subprocess.DEVNULL, stderr=err_fh)
     reason = "ended"
     try:
         while proc.poll() is None:
@@ -857,7 +1100,13 @@ def run_ffmpeg(url: str, dest: Path, seconds: int, start: int, deadline: float, 
     finally:
         if proc.poll() is None:
             proc.kill()
-    return reason
+        err_fh.close()
+    tail = ""
+    try:
+        tail = redact(err_path.read_text(encoding="utf-8", errors="replace")[-1500:])
+    except OSError:
+        tail = ""
+    return reason, tail
 
 
 def mark_saved_room(job: dict) -> None:
@@ -880,14 +1129,40 @@ def mark_saved_room(job: dict) -> None:
         "parts": max(int(current.get("parts") or 0), int(active.get("part") or 1)),
         "quality": active.get("quality") or current.get("quality") or "",
         "qualityNote": active.get("qualityNote") or "",
-        "title": active.get("title") or "",
-        "cover": active.get("cover") or "",
-        "startedAt": active.get("startedAt") or "",
+        "title": active.get("title") or current.get("title") or "",
+        "cover": active.get("cover") or current.get("cover") or "",
+        "startedAt": active.get("startedAt") or current.get("startedAt") or "",
         "endedAt": active.get("endedAt") or now_iso(),
-        "duration": int(active.get("duration") or 0),
+        "duration": int(active.get("duration") or current.get("duration") or 0),
+        "viewers": max(int(active.get("viewers") or 0), int(current.get("viewers") or 0)),
+        "partial": bool(active.get("partial")),
     })
     job["saved"] = saved
     job["active"] = {}
+    write_manifest(job, current)
+
+
+def write_manifest(job: dict, row: dict) -> None:
+    handle = str(job.get("handle") or "").lower()
+    room = str(row.get("roomId") or "")
+    if not HANDLE_RE.fullmatch(handle) or not re.fullmatch(r"[1-9][0-9]{5,24}", room):
+        return
+    payload = {
+        "handle": handle,
+        "roomId": room,
+        "title": str(row.get("title") or ""),
+        "startedAt": str(row.get("startedAt") or ""),
+        "endedAt": str(row.get("endedAt") or ""),
+        "duration": int(row.get("duration") or 0),
+        "viewers": int(row.get("viewers") or 0),
+        "cover": str(row.get("cover") or ""),
+        "quality": str(row.get("quality") or ""),
+        "qualityNote": str(row.get("qualityNote") or ""),
+        "parts": int(row.get("parts") or 0),
+        "key": str(row.get("key") or ""),
+        "partial": bool(row.get("partial")),
+    }
+    r2_put("owner/live-manifests/%s/%s.json" % (handle, room), json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
 
 def cmd_record(handle: str, part: str, room: str) -> int:
@@ -909,6 +1184,8 @@ def cmd_record(handle: str, part: str, room: str) -> int:
         part_n = max(part_n, int(active.get("part") or 1))
     run_id = str(os.environ.get("GITHUB_RUN_ID") or "")
     if active.get("capturing") and str(active.get("runId") or "") not in {"", run_id} and fresh_iso(str(active.get("heartbeat") or ""), now_iso(), HEARTBEAT_SECONDS):
+        # The per-handle queue starts the next part only after this job
+        # exits. A second runner must not copy the same live.
         log("already recording %s" % name)
         return 0
     if not room_id:
@@ -919,34 +1196,99 @@ def cmd_record(handle: str, part: str, room: str) -> int:
         log("no room %s" % name)
         return 0
     picked, kind, outcome = pick_retry(room_id)
-    if outcome == "hard":
-        active.update({"state": "blocked", "roomId": room_id, "blocked": True, "capturing": False, "captureDone": True, "needsPart": False})
+    started = str(active.get("startedAt") or now_iso())
+
+    def finish_blocked(why: str) -> int:
+        until = iso_after(BACKOFF_SECONDS)
+        job["backoffUntil"] = until
+        active["blockedUntil"] = until
+        active["capturing"] = False
+        active["needsPart"] = False
+        active["heartbeat"] = ""
+        active["roomId"] = room_id
+        if int(active.get("segments") or 0) > 0:
+            # needsUpload ignores a blocked row. Bytes already copied stay a
+            # finished partial so the uploader can send them once.
+            active["state"] = "recording"
+            active["blocked"] = False
+            active["captureDone"] = True
+            active["partial"] = True
+            active["endedAt"] = now_iso()
+            log("blocked %s after %s segments (%s)" % (name, active.get("segments"), why))
+        else:
+            active["state"] = "blocked"
+            active["blocked"] = True
+            active["captureDone"] = False
+            active["partial"] = False
+            log("blocked %s (%s)" % (name, why))
         job["active"] = active
         save_job(job)
-        log("blocked %s" % name)
         return 0
+
+    def finish_save(partial: bool = False) -> int:
+        ended = now_iso()
+        try:
+            duration = int((parse_stamp(ended) - parse_stamp(started)).total_seconds())
+        except (TypeError, AttributeError):
+            duration = 0
+        active.update({
+            "state": "recording",
+            "captureDone": True,
+            "needsPart": False,
+            "capturing": False,
+            "blocked": False,
+            "partial": bool(partial),
+            "heartbeat": "",
+            "endedAt": ended,
+            "duration": max(0, int(active.get("duration") or 0), duration),
+            "part": part_n,
+            "parts": part_n,
+        })
+        job["active"] = active
+        save_job(job)
+        log("capture done %s" % name)
+        return 0
+
+    def chain_part() -> int:
+        active.update({
+            "needsPart": True,
+            "part": part_n + 1,
+            "captureDone": False,
+            "capturing": False,
+            "blocked": False,
+            "partial": False,
+            "dispatchedAt": now_iso(),
+            "heartbeat": "",
+            "segmentPart": 0,
+            "segmentSeq": 0,
+        })
+        job["active"] = active
+        save_job(job)
+        github_dispatch("tiktok-record.yml", {"handle": name, "part": part_n + 1, "room": room_id})
+        log("part %s %s" % (name, part_n + 1))
+        return 0
+
+    if outcome == "hard":
+        return finish_blocked(kind or "room")
     if outcome != "ok":
-        # A dropped or throttled call says nothing about the live. Leave the
-        # job state alone so the next dispatch retries instead of showing
-        # blocked while the pages answer again.
+        # A dropped call says nothing about the live. Leave the job alone.
         log("pick %s did not answer %s" % (name, kind or "empty"))
         return 0
     source = record_source(picked)
     if not picked.get("live") or not source["url"]:
         if int(active.get("segments") or 0) > 0:
-            active["captureDone"] = True
-            active["capturing"] = False
-            active["needsPart"] = False
-            active["endedAt"] = now_iso()
-            job["active"] = active
-            save_job(job)
+            return finish_save()
         log("ended %s" % name)
         return 0
     base = key_base(name, room_id)
     if not base:
         log("bad room %s" % name)
         return 0
-    started = str(active.get("startedAt") or now_iso())
+    try:
+        accounts = load_added_accounts()
+    except Exception:
+        accounts = {"added": []}
+    seq = 0 if int(active.get("segmentPart") or 0) != part_n else int(active.get("segmentSeq") or 0)
     active.update({
         "state": "recording",
         "roomId": room_id,
@@ -956,97 +1298,159 @@ def cmd_record(handle: str, part: str, room: str) -> int:
         "quality": source["quality"],
         "qualityNote": source["qualityNote"],
         "title": str(picked.get("title") or active.get("title") or ""),
+        "cover": str(active.get("cover") or "") or cover_for(name, accounts),
+        "viewers": max(int(active.get("viewers") or 0), int(picked.get("viewers") or 0)),
         "startedAt": started,
         "capturing": True,
         "captureDone": False,
         "needsPart": False,
         "blocked": False,
+        "partial": False,
         "runId": run_id,
         "heartbeat": now_iso(),
         "channelSlot": int(active.get("channelSlot") or channel_slot(room_id, 1 + extra_channel_count())),
         "segments": int(active.get("segments") or 0),
+        "segmentPart": part_n,
+        "segmentSeq": seq,
     })
     job["active"] = active
     save_job(job)
-    log("record %s quality %s%s" % (name, source["quality"] or "unknown", (" note=" + source["qualityNote"]) if source["qualityNote"] else ""))
+    note = (" note=" + source["qualityNote"]) if source["qualityNote"] else ""
+    log("record %s quality %s via %s%s" % (name, source["quality"] or "unknown", source["kind"] or "?", note))
     seconds = segment_seconds(probe_bitrate(source["url"]))
-    dest = Path(tempfile.mkdtemp(prefix="tiktok-live-"))
-    sent = set()
-    meta = {
-        "objectKey": base + "/" + str(part_n),
-        "buf": "%s%s/%s/%s/%s" % (BUF_PREFIX, active["channelSlot"], name, room_id, part_n),
-        "channelSlot": active["channelSlot"],
-        "seconds": seconds,
-    }
     deadline = time.time() + PART_SECONDS
-    last_live = 0.0
-    still = {"live": True}
-    before = int(active.get("segments") or 0)
+    chain_at = deadline - HANDOFF_LEAD
+    fails = 0
+    tried_alt = False
 
-    def on_tick():
-        nonlocal last_live
-        now = time.time()
-        stored = publish_local(dest, sent, meta)
-        if stored:
-            active["segments"] = int(active.get("segments") or 0) + stored
-        if now - last_live > 20:
-            active["heartbeat"] = now_iso()
-            job["active"] = active
+    while True:
+        dest = Path(tempfile.mkdtemp(prefix="tiktok-live-"))
+        sent = set()
+        meta = {
+            "objectKey": base + "/" + str(part_n),
+            "buf": "%s%s/%s/%s/%s" % (BUF_PREFIX, active["channelSlot"], name, room_id, part_n),
+            "channelSlot": active["channelSlot"],
+            "seconds": seconds,
+        }
+        before = int(active.get("segments") or 0)
+        last_live = 0.0
+        last_beat = 0.0
+        still = {"live": True}
+
+        def on_tick(dest=dest, sent=sent, meta=meta):
+            nonlocal last_live, last_beat, seq
+            now = time.time()
+            stored = publish_local(dest, sent, meta, closed=False)
+            if stored:
+                active["segments"] = int(active.get("segments") or 0) + stored
+            try:
+                free = shutil.disk_usage(str(dest)).free
+            except OSError:
+                free = DISK_FLOOR
+            if free < DISK_FLOOR:
+                log("disk low")
+                return "chain"
+            if now >= chain_at:
+                return "chain"
+            if now - last_beat > 20:
+                last_beat = now
+                active["heartbeat"] = now_iso()
+                active["segmentSeq"] = seq
+                active["segmentPart"] = part_n
+                job["active"] = active
+                save_job(job)
+            if now - last_live < 30:
+                return ""
+            last_live = now
+            check, blocked = room_pick(room_id)
+            if blocked:
+                return ""
+            viewers = int(check.get("viewers") or 0)
+            if viewers > int(active.get("viewers") or 0):
+                active["viewers"] = viewers
+            if check.get("title") and not active.get("title"):
+                active["title"] = str(check.get("title") or "")
+            if not check.get("live"):
+                still["live"] = False
+                return "ended"
+            return ""
+
+        tail = ""
+        try:
+            reason, tail = run_ffmpeg(source["url"], dest, seconds, seq, deadline, on_tick)
+            stored = publish_local(dest, sent, meta, closed=True)
+            if stored:
+                active["segments"] = int(active.get("segments") or 0) + stored
+            for path in dest.glob("seg*.m4s"):
+                try:
+                    seq = max(seq, int(path.stem.replace("seg", "")) + 1)
+                except ValueError:
+                    continue
+            active["segmentSeq"] = seq
+        finally:
+            shutil.rmtree(dest, ignore_errors=True)
+        gained = int(active.get("segments") or 0) - before
+        failure = ""
+        if gained <= 0 and reason not in {"deadline", "ended", "handoff", "chain"}:
+            failure = pull_failure(tail)
+            if tail.strip():
+                log("ffmpeg %s %s" % (name, tail.strip().splitlines()[-1][:180]))
+        decision = record_decision(still["live"], gained, reason, failure)
+        if decision == "save":
+            return finish_save()
+        if decision == "drop":
+            if int(active.get("segments") or 0) > 0:
+                return finish_save()
+            job["active"] = {}
             save_job(job)
-        if now - last_live < 30:
-            return ""
-        last_live = now
-        check, blocked = room_pick(room_id)
-        if blocked:
-            return ""
-        if not check.get("live"):
-            still["live"] = False
-            return "ended"
-        return ""
-
-    try:
-        reason = run_ffmpeg(source["url"], dest, seconds, 0, deadline, on_tick)
-        stored = publish_local(dest, sent, meta)
-        if stored:
-            active["segments"] = int(active.get("segments") or 0) + stored
-    finally:
-        shutil.rmtree(dest, ignore_errors=True)
-    active["capturing"] = False
-    active["heartbeat"] = ""
-    gained = int(active.get("segments") or 0) - before
-    if still["live"] and (reason == "deadline" or gained > 0):
-        active["needsPart"] = True
-        active["part"] = part_n + 1
-        active["captureDone"] = False
-        active["dispatchedAt"] = ""
+            log("ended %s" % name)
+            return 0
+        if decision == "chain":
+            return chain_part()
+        if decision == "backoff":
+            alt = str(source.get("alt") or "")
+            if not tried_alt and alt:
+                tried_alt = True
+                source = {"url": alt, "kind": "hls" if source.get("kind") == "flv" else "flv", "alt": "", "quality": source.get("quality") or "", "qualityNote": source.get("qualityNote") or ""}
+                log("retry %s via %s" % (name, source["kind"]))
+                continue
+            return finish_blocked(failure or "stream")
+        if gained > 0:
+            fails = 0
+        else:
+            fails += 1
+            if fails >= TRANSIENT_LIMIT:
+                log("stream unavailable %s" % name)
+                if int(active.get("segments") or 0) > 0:
+                    return finish_save(partial=True)
+                active.update({"capturing": False, "captureDone": False, "needsPart": False, "heartbeat": "", "state": "recording"})
+                job["active"] = active
+                save_job(job)
+                return 0
+            time.sleep(min(60, 5 * fails))
+        picked, kind, outcome = pick_retry(room_id, attempts=2, pause=2)
+        if outcome == "hard":
+            return finish_blocked(kind or "room")
+        if outcome == "ok":
+            if not picked.get("live"):
+                if int(active.get("segments") or 0) > 0:
+                    return finish_save()
+                job["active"] = {}
+                save_job(job)
+                log("ended %s" % name)
+                return 0
+            fresh = record_source(picked)
+            if fresh.get("url"):
+                source = fresh
+                tried_alt = False
+            viewers = int(picked.get("viewers") or 0)
+            if viewers > int(active.get("viewers") or 0):
+                active["viewers"] = viewers
+        active["capturing"] = True
+        active["heartbeat"] = now_iso()
         job["active"] = active
         save_job(job)
-        github_dispatch("tiktok-record.yml", {"handle": name, "part": part_n + 1, "room": room_id})
-        log("part %s %s" % (name, part_n + 1))
-        return 0
-    if still["live"]:
-        active.update({"state": "blocked", "blocked": True, "captureDone": True, "needsPart": False})
-        job["active"] = active
-        save_job(job)
-        log("blocked %s" % name)
-        return 0
-    ended = now_iso()
-    try:
-        duration = int((parse_stamp(ended) - parse_stamp(started)).total_seconds())
-    except (TypeError, AttributeError):
-        duration = 0
-    active.update({
-        "captureDone": True,
-        "needsPart": False,
-        "endedAt": ended,
-        "duration": max(0, duration),
-        "part": part_n,
-        "parts": part_n,
-    })
-    job["active"] = active
-    save_job(job)
-    log("capture done %s" % name)
-    return 0
+        log("retry %s via %s" % (name, source.get("kind") or ""))
 
 
 def channel_list() -> list:
@@ -1121,11 +1525,8 @@ def cmd_upload(slot: str) -> int:
             names_known = list((index_doc.get("items") or {}).keys())
             jobs.update(load_jobs(names_known))
             changed = False
-            busy = False
             for handle, job in jobs.items():
                 active = job.get("active") if isinstance(job.get("active"), dict) else {}
-                if active.get("capturing") or active.get("needsPart"):
-                    busy = True
                 prefixes = handle_prefixes(handle)
                 left = [key for key in names if any(key.startswith(prefix) for prefix in prefixes) and key not in dead]
                 if ready_to_save(active, len(left)):
@@ -1138,15 +1539,12 @@ def cmd_upload(slot: str) -> int:
                     changed = True
             if changed:
                 write_index(jobs, cap_of())
-            if busy:
-                idle_since = 0.0
-                time.sleep(5)
-                continue
             if not idle_since:
                 idle_since = time.time()
-            if time.time() - idle_since > 90:
+            if time.time() - idle_since > 30:
+                log("upload idle")
                 break
-            time.sleep(10)
+            time.sleep(5)
             continue
         idle_since = 0.0
         key, meta = pending[0]
@@ -1162,6 +1560,19 @@ def cmd_upload(slot: str) -> int:
             blob = r2_get(media_key)
             if not blob:
                 continue
+            digest = hashlib.sha256(blob).hexdigest()
+            if not piece_matches(blob, meta):
+                attempts = int(meta.get("attempts") or 0) + 1
+                meta["attempts"] = attempts
+                if attempts >= 3:
+                    meta["held"] = True
+                    dead.add(key)
+                    log("sha256 mismatch held")
+                else:
+                    log("sha256 mismatch")
+                r2_put(key, json.dumps(meta).encode("utf-8"))
+                continue
+            meta["sha256"] = digest
             local.write_bytes(blob)
             object_key = str(meta.get("objectKey") or "")
             role = "init" if meta.get("role") == "init" else "segment"
@@ -1181,12 +1592,13 @@ def cmd_upload(slot: str) -> int:
                     "file_id": sent["file_id"],
                     "message_id": sent["message_id"],
                     "size": int(sent.get("file_size") or local.stat().st_size),
-                    "sha256": str(meta.get("sha256") or hashlib.sha256(blob).hexdigest()),
+                    "sha256": digest,
                     "mime": "video/mp4",
                     "duration": float(meta.get("duration") or 0),
-                }, False, object_key)
+                }, True, object_key)
             r2_delete(media_key)
             r2_delete(key)
+            log("uploaded %s #%s %s %s" % (object_key, part_index, digest[:12], len(blob)))
         except RuntimeError:
             attempts = int(meta.get("attempts") or 0) + 1
             meta["attempts"] = attempts
@@ -1205,6 +1617,84 @@ def cmd_upload(slot: str) -> int:
     return 0
 
 
+def rehearse_parallel(count: int = 16) -> bool:
+    """Dry run. No streams. Parallel recorders must not share a key."""
+    store = {}
+    locks = {}
+    guard = threading.Lock()
+    errors = []
+
+    def lock_for(key: str) -> threading.Lock:
+        with guard:
+            found = locks.get(key)
+            if found is None:
+                found = threading.Lock()
+                locks[key] = found
+            return found
+
+    def put(key: str, blob: bytes) -> None:
+        with lock_for(key):
+            store[key] = blob
+
+    def merge(handle: str, view: dict) -> None:
+        with lock_for(INDEX_KEY):
+            current = json.loads(store.get(INDEX_KEY, b'{"items":{}}').decode("utf-8"))
+            current.setdefault("items", {})[handle] = view
+            store[INDEX_KEY] = json.dumps(current).encode("utf-8")
+
+    def work(index: int) -> None:
+        handle = "h%02d" % index
+        room = "7699647509498711%03d" % index
+        base = key_base(handle, room)
+        if not base:
+            errors.append("key " + handle)
+            return
+        body = ("bytes-" + handle).encode("utf-8")
+        seg = "%s0/%s/%s/1/seg00000.m4s" % (BUF_PREFIX, handle, room)
+        own = (
+            job_key(handle),
+            ACTIVE_PREFIX + handle + ".json",
+            PUBLIC_PREFIX + handle + ".json",
+            seg,
+        )
+        for key in own:
+            put(key, body)
+        merge(handle, {"state": "recording", "roomId": room, "key": base})
+        for key in own:
+            if store.get(key) != body or handle.encode("utf-8") not in store.get(key, b""):
+                errors.append(key)
+
+    threads = [threading.Thread(target=work, args=(index,)) for index in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if errors:
+        return False
+    items = json.loads(store.get(INDEX_KEY, b"{}").decode("utf-8")).get("items") or {}
+    owned = [key for key in store if key != INDEX_KEY]
+    if len(items) != count or len(owned) != count * 4:
+        return False
+    for index in range(count):
+        handle = "h%02d" % index
+        body = ("bytes-" + handle).encode("utf-8")
+        room = "7699647509498711%03d" % index
+        seg = "%s0/%s/%s/1/seg00000.m4s" % (BUF_PREFIX, handle, room)
+        for key in (job_key(handle), ACTIVE_PREFIX + handle + ".json", PUBLIC_PREFIX + handle + ".json", seg):
+            if store.get(key) != body:
+                return False
+        view = items.get(handle) or {}
+        if view.get("roomId") != room or view.get("key") != key_base(handle, room):
+            return False
+        for other in range(count):
+            if other == index:
+                continue
+            foreign = ("h%02d" % other).encode("utf-8")
+            if foreign in body:
+                return False
+    return True
+
+
 def selftest() -> int:
     failed = 0
 
@@ -1217,11 +1707,17 @@ def selftest() -> int:
             print("ok " + message)
 
     numbers = capacity(1)
-    check(numbers["recordingJobs"] == 12, "twelve recording jobs is the cap")
+    check(numbers["recordingJobs"] == 16, "sixteen recording jobs is the cap")
     check(numbers["livesPerChannel"] == 6, "one channel keeps up with six high-bitrate lives")
     check(numbers["messagesPerMinute"] == 20 and numbers["highSegmentsPerMinute"] == 3, "the pace is twenty messages and three segments a minute")
     check(capacity(2)["highLivesKeptUp"] == 12, "two channels keep up with twelve high-bitrate lives")
-    check(cap_of() == 12 or cap_of() <= 12, "the cap cannot exceed twelve")
+    saved_cap = os.environ.get("TIKTOK_RECORD_CAP")
+    os.environ["TIKTOK_RECORD_CAP"] = "99"
+    check(cap_of() == 16, "the cap cannot exceed sixteen")
+    if saved_cap is None:
+        os.environ.pop("TIKTOK_RECORD_CAP", None)
+    else:
+        os.environ["TIKTOK_RECORD_CAP"] = saved_cap
 
     check(segment_seconds(0) == 6, "an unknown bitrate uses a short safe segment")
     check(segment_seconds(8_000_000) == 18, "eight megabits a second is an eighteen second copy")
@@ -1229,9 +1725,12 @@ def selftest() -> int:
     check(segment_seconds(1_000_000) == 30, "a low bitrate does not make a segment longer than thirty seconds")
 
     origin = record_source({"hls": "https://cdn.example/origin.m3u8", "flv": "https://cdn.example/origin.flv", "quality": "origin", "qualityNote": ""})
-    check(origin["url"].endswith("origin.m3u8") and origin["qualityNote"] == "" and origin["kind"] == "hls", "origin HLS is the recording source")
+    check(origin["url"].endswith("origin.flv") and origin["qualityNote"] == "" and origin["kind"] == "flv", "origin FLV is the recording source")
+    check(origin["alt"].endswith("origin.m3u8"), "HLS stays as the fallback when FLV is blocked")
     flv = record_source({"hls": "", "flv": "https://cdn.example/origin.flv", "quality": "origion", "qualityNote": ""})
     check(flv["kind"] == "flv" and flv["qualityNote"] == "", "origin FLV is used when HLS is missing")
+    hls_only = record_source({"hls": "https://cdn.example/origin.m3u8", "flv": "", "quality": "origin", "qualityNote": ""})
+    check(hls_only["kind"] == "hls" and hls_only["url"].endswith("origin.m3u8"), "HLS is used when the room has no FLV")
     hd = record_source({"hls": "https://cdn.example/hd.m3u8", "quality": "hd", "qualityNote": "best available"})
     check(hd["url"].endswith("hd.m3u8") and hd["qualityNote"] == "best available", "a missing origin keeps the best available URL and notes it")
     check("libx264" not in hd["url"], "the recording URL is the one TikTok offered")
@@ -1262,6 +1761,7 @@ def selftest() -> int:
     dest = Path("out")
     args = ffmpeg_args("https://cdn.example/origin.m3u8", dest, 6, 0)
     check(copy_only(args), "ffmpeg stream-copies with one input")
+    check(args[args.index("-map") + 1] == "0:v:0" and "0:a:0?" in args and "-sn" in args, "ffmpeg copies video and audio and drops the text stream")
     check(UA in args and "-user_agent" in args, "ffmpeg uses the Chrome user agent")
     check("concurrent" not in " ".join(args) and args.count("-i") == 1, "ffmpeg opens one connection and does not split ranges")
     check(copy_only(split_args(Path("big.m4s"), dest, 2)), "an oversize segment is split with stream copy")
@@ -1279,32 +1779,39 @@ def selftest() -> int:
             "qualityNote": "",
             "title": handle,
         })
-    # a started earlier, but b is first in the added list.
+    # a started a minute before b. The earlier start takes the only slot.
     first = plan(lives[:2], added, {}, now, cap=1, channels=1)
-    check(first["dispatch"][0]["handle"] == "b_name", "the added-account order starts before an earlier live")
-    check(first["queued"] == ["a_name"], "the next live waits")
+    check(first["dispatch"][0]["handle"] == "a_name", "the earlier live starts first")
+    check(first["queued"] == ["b_name"], "a later live waits")
     many = []
     order = []
-    for index in range(13):
+    for index in range(17):
         handle = "h%02d" % index
         order.append(handle)
         many.append({
             "handle": handle,
             "live": True,
             "roomId": "7699647509498711%03d" % index,
-            "startedAt": "2026-10-23T00:10:00Z",
+            "startedAt": "2026-10-23T00:10:%02dZ" % index,
             "quality": "origin",
         })
-    wide = plan(many, order, {}, now, cap=12, channels=2)
-    check(len(wide["dispatch"]) == 12 and wide["queued"] == ["h12"], "the thirteenth live queues and twelve capture")
+    wide = plan(many, order, {}, now, cap=16, channels=2)
+    check(len(wide["dispatch"]) == 16 and wide["queued"] == ["h16"], "the seventeenth live queues and sixteen capture")
     check(all(0 <= job["active"].get("channelSlot", 0) <= 1 for job in wide["jobs"].values() if job.get("active")), "recordings spread across the channels")
-    again = plan(many, order, wide["jobs"], "2026-10-23T01:01:00Z", cap=12, channels=2)
+    again = plan(many, order, wide["jobs"], "2026-10-23T01:01:00Z", cap=16, channels=2)
     check(not any(item["handle"] == "h00" and item["part"] == 1 for item in again["dispatch"]), "a fresh dispatch is not started twice")
 
     saved_job = blank_job("b_name")
     saved_job["saved"] = [{"roomId": "7699647509498710801", "key": key_base("b_name", "7699647509498710801"), "parts": 1, "quality": "origin"}]
     skipped = plan([lives[1]], added, {"b_name": saved_job}, now, cap=12, channels=1)
     check(skipped["dispatch"] == [], "a room that is already saved is not recorded again")
+    partial_saved = blank_job("b_name")
+    partial_saved["saved"] = [{"roomId": "7699647509498710801", "key": key_base("b_name", "7699647509498710801"), "parts": 1, "partial": True, "quality": "hd"}]
+    partial_saved["backoffUntil"] = "2026-10-23T02:00:00Z"
+    held = plan([lives[1]], added, {"b_name": partial_saved}, now, cap=12, channels=1)
+    check(held["dispatch"] == [], "a partial save waits out the backoff")
+    resumed = plan([lives[1]], added, {"b_name": partial_saved}, "2026-10-23T02:01:00Z", cap=12, channels=1)
+    check(resumed["dispatch"] and resumed["dispatch"][0]["part"] == 2, "a partial save resumes at the next part")
     waiting_job = blank_job("b_name")
     waiting_job["active"] = {
         "state": "recording",
@@ -1357,6 +1864,30 @@ def selftest() -> int:
     check(plan_uploads(stuck, {}, 1, moment) == [], "a dead row with a segment count does not start an uploader")
     blocked_count = {"a_name": {"active": {"state": "blocked", "segments": 4, "captureDone": True, "capturing": False}}}
     check(plan_uploads(blocked_count, {}, 1, moment) == [], "a blocked row does not start an uploader")
+    check(record_decision(True, 0, "error", "blocked") == "backoff", "a blocked pull with no bytes backs off")
+    check(record_decision(True, 0, "error", "transient") == "retry", "a transient pull stays in the same job")
+    check(record_decision(True, 4, "ended", "transient") == "retry", "a dropped copy that already wrote segments reconnects")
+    check(record_decision(True, 4, "deadline", "") == "chain", "the time cap chains the next part")
+    check(record_decision(False, 4, "ended", "") == "save", "the end of the live saves what was copied")
+    check(record_decision(False, 0, "ended", "") == "drop", "an empty ended live is not saved")
+    check(record_decision(True, 1, "handoff", "") == "chain", "a handoff chains the next part after this job stops")
+    check(record_decision(True, 1, "chain", "") == "chain", "the next part waits until this job exits")
+    check(rehearse_parallel(16), "sixteen recorders keep separate files, state, and the capture index")
+    record_yml = (ROOT / ".github/workflows/tiktok-record.yml").read_text(encoding="utf-8")
+    upload_yml = (ROOT / ".github/workflows/tiktok-live-upload.yml").read_text(encoding="utf-8")
+    check("tiktok-record-${{ inputs.handle }}" in record_yml and "cancel-in-progress: false" in record_yml, "one recorder waits per handle and is not cancelled")
+    check("group: tiktok-live-upload\n" in upload_yml and "tiktok-upload-${{" not in upload_yml, "one uploader runs at a time")
+    blob = b"segment-bytes"
+    matched = {"sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)}
+    check(piece_matches(blob, matched), "a segment matches its sha256")
+    check(not piece_matches(b"other-bytes", matched), "a different segment is rejected")
+    listed = past_entries({
+        "handle": "a_name",
+        "active": {"state": "recording", "captureDone": False, "roomId": "7699647509498710809", "startedAt": "2026-10-27T04:00:00Z", "title": "now", "part": 1, "segments": 2, "key": key_base("a_name", "7699647509498710809"), "viewers": 3},
+        "saved": [{"roomId": "7699647509498710800", "key": key_base("a_name", "7699647509498710800"), "parts": 1, "startedAt": "2026-10-27T01:00:00Z", "title": "earlier", "quality": "origin", "viewers": 9}],
+    })
+    check(len(listed) == 2 and listed[0]["state"] == "recording" and listed[1]["state"] == "saved", "past lives list the open recording before the saved one")
+    check(listed[0]["viewers"] == 3 and listed[1]["key"].endswith("/live"), "a past live keeps its peak and playback key")
 
     check(channel_slot("7699647509498710804", 2) == channel_slot("7699647509498710804", 2), "a room stays on the same channel")
     check(channel_ok("-1004242") and not channel_ok("4242"), "a backup channel id is a private -100 id")
@@ -1391,10 +1922,73 @@ def selftest() -> int:
     return 0
 
 
+def cmd_status() -> int:
+    """Counts only. No stream URLs, tokens, or channel ids."""
+    token, account = cloudflare_env()
+    if not token or not account:
+        log("Cloudflare credentials are not set; skipping")
+        return 0
+    doc = load_json_bytes(r2_get("owner/tiktok.json"))
+    live = doc.get("live") if isinstance(doc.get("live"), dict) else {}
+    live_now = 0
+    detected = set()
+    for name, item in live.items():
+        if not isinstance(item, dict):
+            continue
+        room = str(item.get("roomId") or "")
+        if item.get("live") and room:
+            live_now += 1
+            detected.add((str(item.get("handle") or name).lower(), room))
+    accounts = load_added_accounts()
+    recorded = set()
+    saved_n = 0
+    recording = 0
+    blocked = 0
+    for key in list_prefix(JOB_PREFIX):
+        if not key.endswith(".json"):
+            continue
+        job = load_json_bytes(r2_get(key))
+        handle = str(job.get("handle") or "")
+        active = job.get("active") if isinstance(job.get("active"), dict) else {}
+        if active.get("roomId"):
+            detected.add((handle, str(active.get("roomId"))))
+        if str(active.get("state") or "") == "blocked":
+            blocked += 1
+        if str(active.get("state") or "") == "recording" and not active.get("captureDone"):
+            recording += 1
+        if int(active.get("segments") or 0) > 0 and active.get("roomId"):
+            recorded.add((handle, str(active.get("roomId"))))
+        for item in job.get("saved") or []:
+            if not isinstance(item, dict) or not item.get("roomId"):
+                continue
+            pair = (handle, str(item.get("roomId")))
+            detected.add(pair)
+            recorded.add(pair)
+            saved_n += 1
+    segments = 0
+    inits = 0
+    try:
+        from telegram_backup import d1_id, d1_rows
+        database = d1_id(token, account)
+        rows = d1_rows(token, account, database, "SELECT kind, COUNT(*) AS n FROM telegram_files WHERE object_key LIKE ? GROUP BY kind", ["tiktok/%/live/%"])
+        for row in rows:
+            if row.get("kind") == "segment":
+                segments = int(row.get("n") or 0)
+            elif row.get("kind") == "init":
+                inits = int(row.get("n") or 0)
+    except Exception as err:
+        log("d1 status unavailable %s" % type(err).__name__)
+    log("status accounts %s live_now %s detected %s recorded %s saved %s recording %s blocked %s uploaded_segments %s uploaded_inits %s" % (
+        len(accounts.get("added") or []), live_now, len(detected), len(recorded), saved_n, recording, blocked, segments, inits))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     if "--selftest" in args:
         return selftest()
+    if "--status" in args:
+        return cmd_status()
     if "--plan" in args:
         return cmd_plan("--dispatch" in args)
     if "--record" in args:
@@ -1415,7 +2009,7 @@ def main(argv: list[str] | None = None) -> int:
             if item == "--slot" and index + 1 < len(args):
                 slot = args[index + 1]
         return cmd_upload(slot)
-    print("usage: tiktok_record.py --selftest | --plan [--dispatch] | --record | --upload")
+    print("usage: tiktok_record.py --selftest | --status | --plan [--dispatch] | --record | --upload")
     return 2
 
 

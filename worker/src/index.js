@@ -12,7 +12,7 @@ import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from ".
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
-import { fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
+import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
 import { mediaMime, streamFresh, shouldSniffMedia, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 
 const encoder = new TextEncoder();
@@ -1248,7 +1248,25 @@ async function handleTikTokHealth(request, env) {
   if (!row) return json(401, { error: "unauthorized" });
   if (row.owner !== 1) return json(403, { error: "forbidden" });
   const doc = await readOwnerDoc(env);
-  return json(200, tiktokHealthView(doc || {}));
+  const view = tiktokHealthView(doc || {});
+  const watch = await readJsonKey(env, "owner/tiktok-watch.json") || {};
+  const raw = watch.accounts && typeof watch.accounts === "object" ? watch.accounts : {};
+  const accounts = [];
+  Object.keys(raw).sort().forEach((name) => {
+    if (!TIKTOK_HANDLE.test(name)) return;
+    const item = raw[name] && typeof raw[name] === "object" ? raw[name] : {};
+    const status = ["live", "offline", "blocked"].indexOf(item.status) >= 0 ? item.status : "";
+    accounts.push({
+      handle: name,
+      checkedAt: String(item.checkedAt || ""),
+      status,
+      lastRecordingAt: String(item.lastRecordingAt || ""),
+      recording: !!item.recording
+    });
+  });
+  view.checkedAt = String(watch.checkedAt || "");
+  view.accounts = accounts;
+  return json(200, view);
 }
 
 async function fetchRoom(roomId) {
@@ -2723,8 +2741,33 @@ async function maybeDispatchDiscord(env) {
 const WATCH_JOB_PREFIX = "owner/live-jobs/";
 const WATCH_MARK_PREFIX = "owner/live-watch/";
 const WATCH_UPLOAD_PREFIX = "owner/live-upload/";
+const WATCH_ACTIVE_PREFIX = "owner/live-active/";
+const WATCH_PUBLIC_PREFIX = "owner/recording-public/";
 const WATCH_CHANNELS_KEY = "owner/tiktok-backup-channels.json";
 const WATCH_CHANNEL = /^-100\d{4,16}$/;
+
+async function listPrefixNames(env, prefix) {
+  const names = [];
+  if (!env.DATA || typeof env.DATA.list !== "function") return names;
+  let cursor;
+  try {
+    for (let page = 0; page < 20; page++) {
+      const listed = await env.DATA.list({ prefix, cursor, limit: 200 });
+      const objects = listed && Array.isArray(listed.objects) ? listed.objects : [];
+      for (let i = 0; i < objects.length; i++) {
+        const key = String(objects[i] && objects[i].key || "");
+        if (!key.startsWith(prefix)) continue;
+        const name = key.slice(prefix.length).replace(/\.json$/, "");
+        if (name && names.indexOf(name) < 0) names.push(name);
+      }
+      if (!listed || !listed.truncated || !listed.cursor) break;
+      cursor = listed.cursor;
+    }
+  } catch (err) {
+    return names;
+  }
+  return names;
+}
 
 async function readJsonObject(env, key) {
   if (!env.DATA) return null;
@@ -2888,19 +2931,43 @@ async function watchLiveOne(env, handle, prev) {
   return { live: !!picked.live, roomId, picked, prev };
 }
 
+function watchAccountNote(handle, status, job, prev) {
+  const active = job && job.active && typeof job.active === "object" ? job.active : {};
+  const saved = job && Array.isArray(job.saved) ? job.saved : [];
+  let last = String((prev && prev.lastRecordingAt) || "");
+  saved.forEach((row) => {
+    const at = String((row && (row.endedAt || row.startedAt)) || "");
+    if (at > last) last = at;
+  });
+  if (active.startedAt && String(active.startedAt) > last && active.state === "recording") last = String(active.startedAt);
+  return {
+    checkedAt: stamp(),
+    status,
+    lastRecordingAt: last,
+    recording: active.state === "recording" && !active.captureDone && !active.blocked
+  };
+}
+
 async function watchTikTokLive(env, nowMs) {
   if (!env.DATA || !String(env.GITHUB_DISPATCH_TOKEN || "").trim()) return;
   const doc = await readOwnerDoc(env);
   if (!doc) return;
   const minute = new Date(Number(nowMs) || Date.now()).getUTCMinutes();
   const handles = watchHandles(doc, 4, minute);
-  if (!handles.length) return;
+  const prevWatch = await readJsonObject(env, "owner/tiktok-watch.json") || {};
+  const prevAccounts = prevWatch.accounts && typeof prevWatch.accounts === "object" ? prevWatch.accounts : {};
+  const report = {};
+  if (!handles.length) {
+    await writeJsonObject(env, "owner/tiktok-watch.json", { checkedAt: stamp(), accounts: prevAccounts });
+    return;
+  }
   const channelDoc = await readJsonObject(env, WATCH_CHANNELS_KEY);
   const extras = Array.isArray(channelDoc && channelDoc.channels)
     ? channelDoc.channels.filter((value) => WATCH_CHANNEL.test(String(value || "").trim())).length
     : 0;
   const channels = Math.max(1, Math.min(1 + extras, 12));
   const live = doc.live && typeof doc.live === "object" ? doc.live : {};
+  const activeNames = await listPrefixNames(env, WATCH_ACTIVE_PREFIX);
   let uploader = false;
 
   for (let i = 0; i < handles.length; i++) {
@@ -2910,7 +2977,10 @@ async function watchTikTokLive(env, nowMs) {
     const mark = await readJsonObject(env, markKey);
     const blocks = Math.max(0, Number(mark && mark.blocks) || 0);
     const pause = Math.min(30, 2 * Math.pow(2, Math.min(blocks, 4))) * 60 * 1000;
-    if (mark && mark.blockedAt && fresh(mark.blockedAt, nowMs, pause)) continue;
+    if (mark && mark.blockedAt && fresh(mark.blockedAt, nowMs, pause)) {
+      report[handle] = watchAccountNote(handle, "blocked", null, prevAccounts[handle]);
+      continue;
+    }
 
     const seen = await watchLiveOne(env, handle, prev);
     if (!seen) continue;
@@ -2923,6 +2993,7 @@ async function watchTikTokLive(env, nowMs) {
         roomId: seen.roomId || (mark && mark.roomId) || ""
       });
       await writeJsonObject(env, markKey, next);
+      report[handle] = watchAccountNote(handle, "blocked", null, prevAccounts[handle]);
       continue;
     }
     if (blocks) await writeJsonObject(env, markKey, Object.assign({}, mark, { blocks: 0, blockedAt: "" }));
@@ -2932,12 +3003,13 @@ async function watchTikTokLive(env, nowMs) {
 
     const job = await readJsonObject(env, WATCH_JOB_PREFIX + handle + ".json");
     const active = job && job.active && typeof job.active === "object" ? job.active : {};
+    report[handle] = watchAccountNote(handle, info.live ? "live" : "offline", job, prevAccounts[handle]);
 
     if (needsUpload(active, nowMs)) uploader = true;
     if (!info.live) continue;
 
     const choice = watchDecision(job, mark, seen.roomId, nowMs);
-    if (choice.action !== "record" && choice.action !== "part") continue;
+    if (!admitRecord(choice, handle, activeNames)) continue;
     const ok = await dispatchWorkflow(env, "tiktok-record.yml", {
       handle,
       part: String(choice.part || 1),
@@ -2945,16 +3017,23 @@ async function watchTikTokLive(env, nowMs) {
     });
     if (ok) {
       await writeJsonObject(env, markKey, { handle, roomId: seen.roomId, part: choice.part || 1, at: stamp() });
+      const held = String(handle || "").toLowerCase();
+      if (activeNames.map((name) => String(name || "").toLowerCase()).indexOf(held) < 0) activeNames.push(held);
     } else {
       await writeJsonObject(env, markKey, Object.assign({}, mark || {}, { handle, failedAt: stamp() }));
     }
   }
 
+  await writeJsonObject(env, "owner/tiktok-watch.json", {
+    checkedAt: stamp(),
+    accounts: Object.assign({}, prevAccounts, report)
+  });
   if (!uploader) return;
   for (let slot = 0; slot < channels; slot++) {
     const beat = await readJsonObject(env, WATCH_UPLOAD_PREFIX + slot + ".json");
     if (!uploaderStale(beat, nowMs)) continue;
     await dispatchWorkflow(env, "tiktok-live-upload.yml", { slot: String(slot) });
+    break;
   }
 }
 
@@ -3099,8 +3178,13 @@ async function handleRecordings(request, env) {
   const index = await readJsonKey(env, RECORDINGS_KEY) || {};
   const listed = index.items && typeof index.items === "object" ? index.items : {};
   const items = {};
+  const past = [];
   let active = 0;
   const names = Object.keys(listed);
+  const extra = await listPrefixNames(env, WATCH_PUBLIC_PREFIX);
+  extra.forEach((name) => {
+    if (names.indexOf(name) < 0) names.push(name);
+  });
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
     if (!TIKTOK_HANDLE.test(name)) continue;
@@ -3109,9 +3193,40 @@ async function handleRecordings(request, env) {
     if (!row) continue;
     items[name] = row;
     if (row.state === "recording") active += 1;
+    pastFromJob(name, job, row).forEach((item) => past.push(item));
   }
-  const cap = Math.max(1, Math.min(12, Number(index.cap) || 12));
-  return json(200, { cap, active, items });
+  past.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
+  const cap = Math.max(1, Math.min(16, Number(index.cap) || 16));
+  return json(200, { cap, active, items, past });
+}
+
+function pastFromJob(handle, job, fallback) {
+  const rows = [];
+  const active = job && job.active && typeof job.active === "object" ? job.active : null;
+  if (active && (active.state === "recording" || active.state === "queued") && !active.captureDone) {
+    const row = scrubRecording(Object.assign({}, active, { state: active.state }));
+    if (row) {
+      row.handle = handle;
+      row.viewers = Math.max(0, Number(active.viewers) || 0);
+      if (active.state === "recording" && Number(active.segments || 0) > 0 && LIVE_PLAY_KEY.test(String(active.key || ""))) {
+        row.key = String(active.key);
+      }
+      rows.push(row);
+    }
+  }
+  const saved = job && Array.isArray(job.saved) ? job.saved : [];
+  saved.forEach((item) => {
+    const row = scrubRecording(Object.assign({}, item, { state: "saved" }));
+    if (!row) return;
+    row.handle = handle;
+    row.viewers = Math.max(0, Number(item && item.viewers) || 0);
+    rows.push(row);
+  });
+  if (!rows.length && fallback && (fallback.state === "saved" || fallback.state === "recording")) {
+    const row = Object.assign({ handle, viewers: Math.max(0, Number(fallback.viewers) || 0) }, fallback);
+    rows.push(row);
+  }
+  return rows;
 }
 
 function maskChannel(id) {
