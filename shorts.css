@@ -484,6 +484,24 @@ html.shorts-live-open body { overflow: hidden; }
   touch-action: none;
   background: #000;
 }
+.shorts-live-player.is-saved {
+  touch-action: manipulation;
+}
+.shorts-live-player.is-saved .shorts-live-stage {
+  touch-action: manipulation;
+}
+.shorts-live-player .html5-video-player {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.shorts-live-player.is-saved .shorts-live-hud {
+  z-index: 8;
+}
+.shorts-live-player.is-saved .shorts-live-cover {
+  z-index: 7;
+}
 .shorts-live-stage video {
   width: 100%;
   height: 100%;
