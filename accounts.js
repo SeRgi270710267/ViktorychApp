@@ -300,6 +300,8 @@
         activeApiRoot = root;
         return res.json().catch(function () { return {}; }).then(function (body) {
           body = body || {};
+          // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
+          if (typeof body.status === "string") body.bodyStatus = body.status;
           body.status = res.status;
           return body;
         });
@@ -2291,6 +2293,10 @@ function signupPayload() {
     }
     return null;
   }
+  function friendWord(res) {
+    var word = res && (res.friendStatus || res.bodyStatus);
+    return word === "none" || word === "sent" || word === "received" || word === "friends" ? word : "";
+  }
   function friendButtonHtml(account) {
     var session = readSession();
     var ref = accountRef(account);
@@ -2327,7 +2333,7 @@ function signupPayload() {
       var id = key;
       graphCounts[id] = graphCounts[id] || {};
       if (res.friendsCount != null) graphCounts[id].friends = res.friendsCount;
-      if (res.status != null) graphCounts[id].friendStatus = res.status;
+      if (friendWord(res)) graphCounts[id].friendStatus = friendWord(res);
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { friendsLoads[key] = false; });
@@ -2423,7 +2429,7 @@ function signupPayload() {
         if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
         return;
       }
-      if (res.status != null) graphCounts[idKey].friendStatus = res.status;
+      if (friendWord(res)) graphCounts[idKey].friendStatus = friendWord(res);
       if (res.friendsCount != null && graphCounts[meKey]) graphCounts[meKey].friends = res.friendsCount;
       refreshFriends();
       refreshProfileMedia();
