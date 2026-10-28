@@ -888,7 +888,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, dm: 1, discord: 1, live: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -7321,6 +7321,13 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
+  function requestsCountHtml() {
+    const api = window.ViktorychAccounts;
+    const count = api && api.pendingFriendRequests ? api.pendingFriendRequests() : 0;
+    if (!count) return "";
+    return `<span class="online-count" data-requests-count>${count > 20 ? "20+" : String(count)}</span>`;
+  }
+
   function onlineCountHtml() {
     const count = window.ViktorychPresence && window.ViktorychPresence.onlineCount ? window.ViktorychPresence.onlineCount() : 0;
     if (!count) return "";
@@ -12160,6 +12167,8 @@ const here = parseRoute();
     if (kind === "follow") return tr("{name} followed you", { name: who });
     if (kind === "follow_request") return tr("{name} requested to follow you", { name: who });
     if (kind === "follow_accept") return tr("{name} accepted your follow request", { name: who });
+    if (kind === "friend_request") return tr("{name} sent you a friend request", { name: who });
+    if (kind === "friend_accept") return tr("{name} accepted your friend request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
     if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
     if (kind === "gift") return tr("{name} sent you a gift", { name: who });
@@ -12230,7 +12239,7 @@ const here = parseRoute();
     if (kind === "like") return "heart";
     if (kind === "repost" || kind === "quote") return "repost";
     if (kind === "reply" || kind === "mention" || (note && note.mention)) return "reply";
-    if (kind === "follow" || kind === "follow_request" || kind === "follow_accept") return "user";
+    if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "user";
     if (kind === "live") return "mic";
     return "bellOn";
   }
@@ -13095,7 +13104,7 @@ const here = parseRoute();
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
     if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
-    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests") };
+    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests"), extra: requestsCountHtml() };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
@@ -21100,6 +21109,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       saveSettings();
       paintBellBadge();
       if (parseRoute().name === "notifications") render();
+      return;
+    }
+    if (data.type === "friends") {
+      if (window.ViktorychAccounts && window.ViktorychAccounts.refreshFriends) window.ViktorychAccounts.refreshFriends();
       return;
     }
     if (data.type === "upsert" && Array.isArray(data.items)) {

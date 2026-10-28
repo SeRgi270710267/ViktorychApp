@@ -4999,6 +4999,27 @@ async function handleFriendsGet(request, env, url) {
 }
 
 async function handleFriendAction(request, env, action) {
+  const res = await friendAction(request, env, action);
+  const done = res && res.__friend;
+  if (done) {
+    try {
+      const notes = await import("./notifications.js");
+      if (done.note) {
+        const target = await env.DB.prepare("SELECT handle FROM accounts WHERE public_id = ?").bind(done.target).first();
+        await notes.notifyFriend(env, done.viewer, done.target, done.note, target && target.handle);
+      }
+      await notes.signalFriends(env, [done.viewer.public_id, done.target]);
+    } catch (err) { /* the friend change is saved */ }
+  }
+  return res;
+}
+
+function friendDone(res, viewer, target, note) {
+  res.__friend = { viewer: viewer, target: target, note: note || "" };
+  return res;
+}
+
+async function friendAction(request, env, action) {
   const viewer = await sessionAccount(env, request);
   if (!viewer) return json(401, { error: "unauthorized" });
 
@@ -5030,13 +5051,14 @@ async function handleFriendAction(request, env, action) {
         env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now),
         env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
       ]);
-      return json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) });
+      return friendDone(json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "friend_accept");
     }
     const paced = await rateHit(env, "freq:" + viewer.public_id, 40, 10 * 60 * 1000);
     if (!paced.ok) return limited(paced);
 
-    await env.DB.prepare("INSERT INTO account_friend_requests (sender_id, receiver_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now).run();
-    return json(200, { ok: true, status: "sent", friendsCount: await friendCount(env, viewer.public_id) });
+    const wrote = await env.DB.prepare("INSERT INTO account_friend_requests (sender_id, receiver_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now).run();
+    const fresh = !!(wrote && wrote.meta && wrote.meta.changes);
+    return friendDone(json(200, { ok: true, status: "sent", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, fresh ? "friend_request" : "");
   }
 
   if (action === "accept") {
@@ -5047,22 +5069,22 @@ async function handleFriendAction(request, env, action) {
       env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now),
       env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
     ]);
-    return json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "friend_accept");
   }
 
   if (action === "decline") {
     await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewer.public_id).run();
-    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "");
   }
 
   if (action === "cancel") {
     await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(viewer.public_id, targetId).run();
-    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "");
   }
 
   if (action === "remove") {
     await env.DB.prepare("DELETE FROM account_friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)").bind(viewer.public_id, targetId, targetId, viewer.public_id).run();
-    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "");
   }
 
   return json(400, { error: "bad_action" });
