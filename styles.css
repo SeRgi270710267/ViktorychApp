@@ -5129,6 +5129,7 @@ header.nav.nav-land { display: none; }
   .tabs-bar { position: relative; z-index: 4; }
 }
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
+  .topbar { position: relative; }
   header.nav.nav-land,
   html[data-nav="icons"] header.nav.nav-land {
     width: 68px;
