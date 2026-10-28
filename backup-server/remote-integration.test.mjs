@@ -19,6 +19,7 @@ const APP_PORT = 8993;
 const ORIGIN = "https://viktorychgroup.github.io";
 const database = new DatabaseSync(":memory:");
 const objects = new Map();
+database.exec(fs.readFileSync(path.resolve(__dirname, "../worker/migrations/0075_job_runner.sql"), "utf8"));
 
 function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" });
@@ -115,7 +116,8 @@ try {
       ACCOUNT_PEPPER: "integration-pepper",
       SIGNUP_GUARD: "off",
       PBKDF2_ITERATIONS: "1000",
-      ALLOWED_ORIGINS: ORIGIN
+      ALLOWED_ORIGINS: ORIGIN,
+      RENDER_JOBS_FIRST_MS: "1500"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -189,6 +191,20 @@ try {
   });
   assert.equal(dataRes.status, 200, "R2 data fetch failed with " + dataRes.status);
   assert.deepEqual(await dataRes.json(), sharedCatalog);
+
+  console.log("[test] 6. Render claims the heavy cron jobs and runs them");
+  let claim = null;
+  let jobs = null;
+  for (let i = 0; i < 40 && !(claim && jobs && jobs.runs >= 1); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    claim = database.prepare("SELECT jobs, seen_at FROM job_runner WHERE id = 'render'").get();
+    jobs = (await (await fetch(`http://127.0.0.1:${APP_PORT}/backup/status`)).json()).jobs;
+  }
+  assert.ok(claim, "Render wrote its job claim to the shared D1");
+  assert.ok(claim.jobs.split(",").includes("ownerFeeds"));
+  assert.ok(!claim.jobs.split(",").includes("tiktokLive"), "no dispatch token: live watching stays on the Worker");
+  assert.ok(Date.now() - Number(claim.seen_at) < 60000);
+  assert.ok(jobs && jobs.runs >= 1, JSON.stringify(jobs));
 
   console.log("[test] ALL REMOTE BACKUP INTEGRATION TESTS PASSED!");
 } finally {

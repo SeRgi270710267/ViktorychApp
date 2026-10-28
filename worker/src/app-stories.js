@@ -3,6 +3,7 @@
    Cloudflare cache does not keep them. Rows expire after 24 hours. */
 
 import { eachLimit } from "./limit.js";
+import { poolWidth } from "./job-runner.js";
 import { blocksEither } from "./social.js";
 import { canSeeAudience, normalizeAudience, setListGrants } from "./audience.js";
 
@@ -454,7 +455,7 @@ export async function sweepExpiredStories(env, now) {
         "SELECT id, public_id, kind, vine, r2_key, mime, bytes FROM app_stories WHERE expires_at <= ? LIMIT 40"
       ).bind(at).all();
       // Expired stories are archived four at a time.
-      await eachLimit(rowsOf(expired), 4, async (row) => {
+      await eachLimit(rowsOf(expired), poolWidth(env, 4), async (row) => {
         const archived = "stories/library/" + row.public_id + "/" + row.id;
         if (env.DATA && row.r2_key) {
           try {
@@ -499,7 +500,7 @@ export async function sweepExpiredStories(env, now) {
       else keep.push(item);
     }
     // Expired Telegram media is deleted six at a time; a failed delete stays listed.
-    await eachLimit(gone, 6, async (item) => {
+    await eachLimit(gone, poolWidth(env, 6), async (item) => {
       try { await env.DATA.delete(item.key); }
       catch (err) { keep.push(item); }
     });
