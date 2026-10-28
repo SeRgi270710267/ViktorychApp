@@ -196,7 +196,12 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+main().then(async () => {
+  if (process.exitCode) return;
+  const { spawnSync } = await import("node:child_process");
+  const boot = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "boot_speed_test.mjs")], { stdio: "inherit", env: process.env });
+  if (boot.status !== 0) process.exitCode = 1;
+}).catch((err) => {
   console.error(err && err.message ? err.message : err);
   process.exitCode = 1;
 });
