@@ -93,14 +93,31 @@ export async function ensurePostColumns(env) {
   }
 }
 
+/* Scheduled posts go out here. Each one is flipped on its own and, only
+   when this run flipped it, its reply, quote and mention notes are sent,
+   the same as when a post goes out at once. */
 export async function publishDuePosts(env, at) {
   if (!env || !env.DB) return;
   const now = Number(at) || Date.now();
+  let due;
   try {
-    await env.DB.prepare("UPDATE public_posts SET scheduled_at = 0 WHERE scheduled_at > 0 AND scheduled_at <= ?").bind(now).run();
+    due = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, a.handle, a.display_name FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.scheduled_at > 0 AND p.scheduled_at <= ? AND p.hidden = 0 ORDER BY p.scheduled_at ASC LIMIT 100").bind(now).all();
   } catch (err) {
     const message = String(err && err.message || err);
     if (!/no such column/i.test(message)) throw err;
+    return;
+  }
+  const rows = (due && due.results) || [];
+  for (const row of rows) {
+    const flip = await env.DB.prepare("UPDATE public_posts SET scheduled_at = 0 WHERE id = ? AND scheduled_at > 0").bind(row.id).run();
+    if (!flip || !flip.meta || !flip.meta.changes) continue;
+    try {
+      const pick = (id) => id ? env.DB.prepare("SELECT id, author_id FROM public_posts WHERE id = ? AND hidden = 0").bind(id).first() : null;
+      const parentRow = await pick(row.parent_id);
+      const quoteRow = await pick(row.quote_id);
+      const author = { public_id: row.author_id, handle: row.handle, display_name: row.display_name };
+      await notifyPost(env, author, { id: row.id, body: row.body }, parentRow, quoteRow, null);
+    } catch (err) { /* the post is out */ }
   }
 }
 
