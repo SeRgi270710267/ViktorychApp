@@ -2305,6 +2305,8 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   bottom: 76px;
   z-index: 41;
   width: min(260px, calc(100vw - 24px));
+  max-height: min(320px, 70vh);
+  overflow-y: auto;
   background: var(--sheet);
   color: var(--text);
   border: 1px solid var(--line);
@@ -2459,7 +2461,8 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 }
 .drawer-eye, .drawer-lock { width: 36px; height: 36px; flex: none; }
 .drawer-move { max-width: 108px; height: 32px; background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
-.drawer-section { border-top: 1px solid var(--line); margin-top: 4px; }
+.drawer-place-title { margin: 14px 16px 4px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.drawer-edit-list[data-place="popup"] { min-height: 48px; }
 .drawer-section-emoji { width: 44px; flex: none; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); text-align: center; font-size: 16px; }
 .drawer-section-name { flex: 1; min-width: 0; }
 .drawer-folder { margin: 4px 0; }
