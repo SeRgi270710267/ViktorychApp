@@ -1,5 +1,7 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("en", {
+  "Delete post?": "Delete post?",
+  "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.": "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.",
   "{count} votes": "{count} votes",
   "Edit post": "Edit post",
   "Delete post": "Delete post",

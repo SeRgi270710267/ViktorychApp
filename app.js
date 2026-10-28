@@ -6080,7 +6080,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         const card = appCardPost(res.post);
         STATE.shared[card.id] = Object.assign(STATE.shared[card.id] || {}, card);
       }
-      const replies = res.replies.map((item) => {
+      const replies = res.replies.filter(notGone).map((item) => {
         appThreadItems[item.id] = item;
         const card = appCardPost(item);
         card.replyingTo = { id: id, handle: post.handle || "" };
@@ -7333,10 +7333,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
     const muteCommunity = post.community ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : "";
     const quote = post.community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`;
-    if (self && !post.community && isAppPostId(post.id)) {
+    const communityOwn = !!(post.community && /^va_[a-f0-9]{16}$/.test(String(post.id || "")));
+    if (self && (communityOwn || (!post.community && isAppPostId(post.id)))) {
       const item = findAppItem(post.id);
-      const editable = item && Date.now() - (Number(item.createdAt) || 0) < 3600000;
-      return quote + (editable ? `<button type="button" data-act="app-edit" data-id="${esc(post.id)}">${esc(tr("Edit post"))}</button>` : "") + `<button type="button" data-act="app-delete" data-id="${esc(post.id)}">${esc(tr("Delete post"))}</button>`;
+      const born = Number(item && item.createdAt) || Date.parse(post.date || "") || 0;
+      const editable = Date.now() - born < 3600000;
+      const sub = post.community ? ` data-sub="${esc(post.community.name)}"` : "";
+      return `<button type="button" class="menu-danger" data-act="app-delete" data-id="${esc(post.id)}"${sub}>${icon("trash")}<span>${esc(tr("Delete"))}</span></button>`
+        + (editable ? `<button type="button" data-act="app-edit" data-id="${esc(post.id)}"${sub}>${icon("pencil")}<span>${esc(tr("Edit"))}</span></button>` : "")
+        + quote;
     }
     if (self || !post.authorId) return quote + muteCommunity;
     return quote + `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>` + muteCommunity;
@@ -8755,8 +8760,17 @@ const here = parseRoute();
       authorPostCache[key].posts = authorPostCache[key].posts.filter((item) => item && item.id !== id);
     });
   }
+  /* Posts this device deleted. A list that left before the delete landed (or
+     a replayed outbox) must not bring them back. */
+  const goneOwn = {};
+  function notGone(item) {
+    const at = item && goneOwn[item.id];
+    if (!at) return true;
+    if (Date.now() - at > 600000) { delete goneOwn[item.id]; return true; }
+    return false;
+  }
   function keepOwnPosts(list) {
-    const next = list.slice();
+    const next = list.filter(notGone);
     const ids = new Set(next.map((item) => item && item.id));
     const now = Date.now();
     Object.keys(ownSent).forEach((id) => {
@@ -13865,7 +13879,18 @@ const here = parseRoute();
     </div></div>`;
   }
 
+  function postAskDialog() {
+    return `<div class="modal-back remove-back" data-act="close-modal"><div class="modal remove-sheet" role="alertdialog" aria-modal="true" aria-labelledby="post-del-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="post-del-title">${esc(tr("Delete post?"))}</h2><p>${esc(tr("This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results."))}</p><button type="button" class="remove-go" data-act="confirm-post-delete">${esc(tr("Delete"))}</button><button type="button" class="remove-cancel" data-act="close-modal">${esc(tr("Cancel"))}</button></div></div>`;
+  }
+
+  function postEditDialog() {
+    const edit = STATE.postEdit;
+    return `<div class="modal-back" data-act="close-modal"><div class="modal post-edit-sheet" role="dialog" aria-modal="true" aria-labelledby="post-edit-title" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${esc(tr("Close"))}">${icon("close")}</button><h2 id="post-edit-title">${esc(tr("Edit post"))}</h2><button class="save" type="button" data-act="save-post-edit">${esc(tr("Save"))}</button></div><div class="modal-body"><textarea id="post-edit-text" class="post-edit-text" rows="5" maxlength="4000" aria-label="${esc(tr("Edit post"))}">${esc(edit.text || "")}</textarea><p class="phandle">${esc(tr("Posts can be edited for an hour after they go out."))}</p></div></div></div>`;
+  }
+
   function modal() {
+    if (STATE.postAsk) return postAskDialog();
+    if (STATE.postEdit) return postEditDialog();
     if (STATE.removeFeed) return removeFeedDialog();
 if (STATE.histClear) {
       const tab = STATE.histClear;
@@ -17047,7 +17072,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "close-modal" || act === "close-remove") {
       if (act === "close-modal" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.requestClose && window.ViktorychXCompose.requestClose()) return;
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
-      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
+      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; STATE.navNewFolderOpen = false; render(); return;
     }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
@@ -17150,30 +17175,33 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "app-edit") {
       const id = el.dataset.id || "";
       const item = findAppItem(id);
+      const shown = STATE.shared[id] || null;
       STATE.menu = null;
-      const next = window.prompt(tr("Edit post"), (item && item.body) || "");
-      if (next == null || !next.trim() || (item && next === item.body)) { render(); return; }
-      accountCall("/v1/posts/edit", { method: "POST", body: { id: id, body: next } }).then((res) => {
-        if (res && res.status === 200) { patchAppItem(id, { body: res.body, editedAt: res.editedAt }); render(); return; }
-        toast(res && res.error === "edit_closed" ? tr("Posts can be edited for an hour after they go out.") : tr("Could not save that."));
-      }).catch(() => toast(tr("Could not save that.")));
+      STATE.postEdit = { id: id, sub: el.dataset.sub || "", text: String((item && item.body) || (shown && shown.text) || "") };
+      render();
+      setTimeout(() => { const box = document.getElementById("post-edit-text"); if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); } }, 0);
+      return;
+    }
+    if (act === "save-post-edit") {
+      const edit = STATE.postEdit;
+      const box = document.getElementById("post-edit-text");
+      const text = box ? String(box.value || "") : "";
+      STATE.postEdit = null;
+      if (edit && text.trim() && text !== edit.text) editOwnPost({ id: edit.id, sub: edit.sub, text: text, was: edit.text });
+      render();
       return;
     }
     if (act === "app-delete") {
-      const id = el.dataset.id || "";
       STATE.menu = null;
-      if (!confirm(tr("Delete this post?"))) { render(); return; }
-      accountCall("/v1/posts/delete", { method: "POST", body: { id: id } }).then((res) => {
-        if (res && res.status === 200) {
-          forgetOwnPost(id);
-          dropAppItem(id);
-          toast(tr("Post deleted"));
-          refreshAppPosts();
-          if (String(STATE.focusId || "") === id) history.back();
-          return;
-        }
-        toast(tr("Could not save that."));
-      }).catch(() => toast(tr("Could not save that.")));
+      STATE.postAsk = { id: el.dataset.id || "", sub: el.dataset.sub || "" };
+      render();
+      return;
+    }
+    if (act === "confirm-post-delete") {
+      const ask = STATE.postAsk;
+      STATE.postAsk = null;
+      if (ask && ask.id) deleteOwnPost(ask);
+      render();
       return;
     }
     if (act === "public-report") {
@@ -22628,6 +22656,67 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   let rememberTimer = 0;
+  function outboxPost(type, id, snapshot) {
+    if (!window.ViktorychLocal || !window.ViktorychLocal.enqueue) return false;
+    window.ViktorychLocal.enqueue({ type: type, id: id, on: true, snapshot: snapshot });
+    toast(tr("Pending"));
+    return true;
+  }
+  function sendOwnDelete(ask) {
+    const req = ask.sub
+      ? accountCall("/v1/communities/" + encodeURIComponent(ask.sub) + "/posts/" + encodeURIComponent(ask.id), { method: "DELETE" })
+      : accountCall("/v1/posts/delete", { method: "POST", body: { id: ask.id } });
+    return Promise.resolve(req).then((res) => {
+      if (res && (res.status === 200 || res.status === 404 || res.status === 410)) { refreshAppPosts(); return; }
+      if (res && (!res.status || res.error === "all_endpoints_failed")) { outboxPost("app-delete", ask.id, { sub: ask.sub || "" }); return; }
+      delete goneOwn[ask.id];
+      toast(tr("Could not save that."));
+      refreshAppPosts();
+    }, () => { outboxPost("app-delete", ask.id, { sub: ask.sub || "" }); });
+  }
+  /* X-style delete: gone from Home, the profile and the thread at once, the
+     parent's reply count drops, and the request waits in the outbox offline. */
+  function deleteOwnPost(ask) {
+    const id = String(ask.id || "");
+    const item = findAppItem(id);
+    const parentId = String((item && item.parentId) || "");
+    goneOwn[id] = Date.now();
+    forgetOwnPost(id);
+    dropAppItem(id);
+    if (ask.sub) publicPosts = publicPosts.filter((row) => row && row.id !== id);
+    if (parentId) {
+      const parent = findAppItem(parentId);
+      if (parent) patchAppItem(parentId, { replyCount: Math.max(0, (Number(parent.replyCount) || 0) - 1) });
+      if (STATE.shared[parentId] && STATE.shared[parentId].stats) STATE.shared[parentId].stats.replies = Math.max(0, (Number(STATE.shared[parentId].stats.replies) || 0) - 1);
+    }
+    delete STATE.shared[id];
+    toast(tr("Post deleted"));
+    if (String(STATE.focusId || "") === id) history.back();
+    if (!navigator.onLine) { outboxPost("app-delete", id, { sub: ask.sub || "" }); return; }
+    sendOwnDelete(ask);
+  }
+  function sendOwnEdit(edit) {
+    const req = edit.sub
+      ? accountCall("/v1/communities/" + encodeURIComponent(edit.sub) + "/posts/" + encodeURIComponent(edit.id), { method: "PATCH", body: { text: edit.text } })
+      : accountCall("/v1/posts/edit", { method: "POST", body: { id: edit.id, body: edit.text } });
+    return Promise.resolve(req).then((res) => {
+      if (res && res.status === 200) {
+        if (!edit.sub) patchAppItem(edit.id, { body: res.body || edit.text, editedAt: res.editedAt || Date.now() });
+        refreshAppPosts();
+        return;
+      }
+      if (res && (!res.status || res.error === "all_endpoints_failed")) { outboxPost("app-edit", edit.id, { sub: edit.sub || "", text: edit.text }); return; }
+      if (edit.was != null) patchAppItem(edit.id, { body: edit.was });
+      toast(res && res.error === "edit_closed" ? tr("Posts can be edited for an hour after they go out.") : tr("Could not save that."));
+      refreshAppPosts();
+    }, () => { outboxPost("app-edit", edit.id, { sub: edit.sub || "", text: edit.text }); });
+  }
+  function editOwnPost(edit) {
+    patchAppItem(edit.id, { body: edit.text, editedAt: Date.now() });
+    if (STATE.shared[edit.id]) STATE.shared[edit.id].text = edit.text;
+    if (!navigator.onLine) { outboxPost("app-edit", edit.id, { sub: edit.sub || "", text: edit.text }); return; }
+    sendOwnEdit(edit);
+  }
   function queueOffline(action) {
     if (navigator.onLine || !window.ViktorychLocal) return;
     window.ViktorychLocal.enqueue(action);
@@ -22645,6 +22734,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       Promise.resolve(req).catch(() => {});
     } else if (action.type === "app-post" && action.snapshot && Array.isArray(action.snapshot.posts)) {
       publishComposer({ posts: action.snapshot.posts, parentId: action.snapshot.parentId || "", quoteId: action.snapshot.quoteId || "" }, true);
+    } else if (action.type === "app-delete") {
+      goneOwn[action.id] = goneOwn[action.id] || Date.now();
+      sendOwnDelete({ id: action.id, sub: (action.snapshot && action.snapshot.sub) || "" });
+    } else if (action.type === "app-edit" && action.snapshot && action.snapshot.text) {
+      sendOwnEdit({ id: action.id, sub: action.snapshot.sub || "", text: action.snapshot.text });
     } else if (action.type === "app-like") {
       sendAppLike(action.id, !!action.on);
     } else if (action.type === "reply" && window.ViktorychLocal) {
