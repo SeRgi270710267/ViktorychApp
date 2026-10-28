@@ -202,6 +202,7 @@
     histClear: "",
     history: null
   };
+  if (window.ProfileAbout) window.ProfileAbout.lists = function () { return (STATE.settings && STATE.settings.lists) || []; };
   let previewAnchor = 0;
   const SCROLLS = {};
   const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
@@ -11885,7 +11886,8 @@ const here = parseRoute();
     const gear = `<button class="icon-btn note-gear" type="button" data-act="note-gear" aria-label="${esc(tr("Notification options"))}" aria-haspopup="menu" aria-expanded="${gearOpen ? "true" : "false"}">${menuIcon("gear")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="notes-bar"><button class="m-ava" type="button" data-act="drawer" aria-label="${tr("Menu")}">${viewerFace()}${dot}</button><h1>${tr("Notifications")}</h1>${gear}</div>${bar}</div>`;
     const xBanner = window.ViktorychXCompose && window.ViktorychXCompose.mentionsBanner ? window.ViktorychXCompose.mentionsBanner() : "";
-    return head + xBanner + notesListHtml(notes, active, current, unreadIds) + noteGearMenu(active);
+    const upcoming = window.ProfileAbout && window.ProfileAbout.upcomingHtml ? window.ProfileAbout.upcomingHtml() : "";
+    return head + xBanner + upcoming + notesListHtml(notes, active, current, unreadIds) + noteGearMenu(active);
   }
 
   function openFeedTabEditor(id, presetFeed) {

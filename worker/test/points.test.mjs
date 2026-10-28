@@ -236,8 +236,8 @@ test("points ledger, caps, clawback, and gift privacy", async () => {
   const now = new Date();
   const stamp = "1990-" + String(now.getUTCMonth() + 1).padStart(2, "0") + "-" + String(now.getUTCDate()).padStart(2, "0");
   await bindings.DB.prepare(
-    "INSERT INTO about_fields (id, public_id, kind, body, audience, tz, created_at) VALUES ('bday0000000000000000000000000001', ?, 'birthday', ?, 'followers', 'UTC', ?)"
-  ).bind(bea.account.publicId, stamp, Date.now()).run();
+    "INSERT INTO about_fields (id, public_id, section, kind, body, audience, tz, created_at, updated_at) VALUES ('bday0000000000000000000000000001', ?, 'personal', 'birthday', ?, 'followers', 'UTC', ?, ?)"
+  ).bind(bea.account.publicId, stamp, Date.now(), Date.now()).run();
   await bindings.DB.prepare("UPDATE point_balances SET balance = balance + 100 WHERE public_id = ?").bind(ada.account.publicId).run();
   const closedGift = await call("/v1/gifts/send", {
     method: "POST",
