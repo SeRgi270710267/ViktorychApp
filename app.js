@@ -9901,9 +9901,12 @@ const here = parseRoute();
     const sub = subject.handle ? "@" + subject.handle : "";
     const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
     const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.ownsSubject ? window.ViktorychAccounts.ownsSubject(subject.id, subject.handle) : false;
-    const requestN = mineGraph && window.ViktorychAccounts.listPack ? (window.ViktorychAccounts.listPack(subject.id, "requests").accounts ? window.ViktorychAccounts.listPack(subject.id, "requests").accounts.length : 0) : 0;
+    if (mineGraph && window.ViktorychAccounts.ensureFriendRequests) window.ViktorychAccounts.ensureFriendRequests();
+    const followN = mineGraph && window.ViktorychAccounts.listPack ? ((window.ViktorychAccounts.listPack(subject.id, "requests").accounts || []).length) : 0;
+    const friendN = mineGraph && window.ViktorychAccounts.pendingFriendRequests ? window.ViktorychAccounts.pendingFriendRequests() : 0;
+    const requestN = followN + friendN;
     const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Follow requests"))}${requestBadge}</span></a>` : ""}` : "";
+    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -12818,7 +12821,7 @@ const here = parseRoute();
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
     if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
-    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Follow requests") };
+    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests") };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
@@ -15313,6 +15316,7 @@ if (STATE.histClear) {
   }
 
   function hscrollSettle(opts) {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.fitRequestPills) window.ViktorychAccounts.fitRequestPills();
     const reveal = !!(opts && opts.reveal && hscrollNav);
     const root = document.getElementById("app") || document.body;
     const store = hscrollStore();
