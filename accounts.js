@@ -2688,23 +2688,38 @@ function signupPayload() {
     var sub = isAnon ? tr("Profile-less") : "@" + (account.handle || "");
     return photo + '<span class="account-meta"><b>' + esc(name) + "</b><span>" + esc(sub) + "</span></span>";
   }
+  function drawerTools() {
+    return '<div class="drawer-id-tools">' +
+      '<button class="icon-btn" type="button" data-act="drawer-accounts" aria-label="' + esc(tr("Accounts")) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h9v-2.5c0-.9.3-1.7.8-2.4A12 12 0 0 0 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg></button>' +
+      '<button class="icon-btn" type="button" data-act="drawer-more" aria-label="' + esc(tr("Account menu")) + '" aria-haspopup="menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg></button>' +
+      '</div>';
+  }
   function drawerHead() {
     var session = readSession();
     if (!session || !session.account) {
-      return '<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer">' +
-        '<span class="ava initials">?</span>' +
-        '<div style="flex:1"><b>' + esc(tr("Sign in")) + '</b><div class="phandle">' + esc(tr("Not signed in")) + '</div></div>' +
-        '<button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">' + esc(tr("Sign in")) + '</button>' +
+      return '<div class="drawer-id">' +
+        '<div class="drawer-id-top"><button class="drawer-ava" type="button" data-acct="login" aria-label="' + esc(tr("Sign in")) + '"><span class="ava initials">?</span></button>' + drawerTools() + '</div>' +
+        '<button class="drawer-name" type="button" data-acct="login"><b>' + esc(tr("Sign in")) + '</b></button>' +
+        '<div class="drawer-handle">' + esc(tr("Not signed in")) + '</div>' +
         '</div>';
     }
     var account = session.account;
-    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, ""), true);
+    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, ""), false);
     var isAnon = !!account.profileLess;
     var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
     var sub = isAnon ? tr("Profile-less account") : "@" + (account.handle || "");
-    return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(name) + '</b><div class="phandle">' + esc(sub) + "</div></div></a>" +
-      '<div style="padding:0 20px 8px"><button class="outline presence-set" type="button" data-acct="presence-open">' + esc(tr("Set a status")) + '</button></div>' +
-      '<div style="padding:0 20px 12px"><button class="outline" type="button" data-acct="logout" style="width:100%;font-size:13px;padding:6px 12px;border-color:rgba(244,33,46,0.4);color:#f4212e">' + esc(tr("Log out")) + '</button></div>';
+    var href = account.handle ? "#/@" + encodeURIComponent(account.handle) : "#/settings";
+    var lock = (account.privateFollows || account.locked) ? '<span class="drawer-lock" title="' + esc(tr("Private account")) + '">' + lockIcon(16) + '</span>' : "";
+    var following = accountStat(account, "following");
+    var followers = accountStat(account, "followers");
+    var followerLabel = followers === 1 ? tr("Follower") : tr("Followers");
+    if (accountRef(account)) ensureCounts(accountRef(account));
+    return '<div class="drawer-id">' +
+      '<div class="drawer-id-top"><a class="drawer-ava" href="' + esc(href) + '">' + photo + '</a>' + drawerTools() + '</div>' +
+      '<a class="drawer-name" href="' + esc(href) + '"><b>' + esc(name) + '</b>' + lock + '</a>' +
+      '<a class="drawer-handle" href="' + esc(href) + '">' + esc(sub) + '</a>' +
+      '<div class="drawer-counts"><a href="' + esc(href + "/following") + '"><b>' + esc(formatNum(following)) + '</b> ' + esc(tr("Following count")) + '</a><a href="' + esc(href + "/followers") + '"><b>' + esc(formatNum(followers)) + '</b> ' + esc(followerLabel) + '</a></div>' +
+      '</div>';
   }
   var tiktokHealth = null;
   var tiktokHealthAt = 0;
