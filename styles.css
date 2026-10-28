@@ -2290,8 +2290,11 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .color-chip { width: 48px; height: 48px; border-radius: 12px; flex: none; }
 
 .drawer-back { justify-content: flex-start; padding: 0; background: rgba(0, 0, 0, 0.4); }
-@media (min-width: 500px) {
+@media (min-width: 1280px) {
   .drawer-back { display: none !important; }
+}
+@media (min-width: 500px) and (max-width: 1279px) {
+  html:not([data-nav-layout="bar"]) .drawer-back { display: none !important; }
 }
 .nav-rule { height: 1px; margin: 8px 12px; background: var(--line); }
 .nav-section { padding: 8px 16px 2px; color: var(--muted); font-size: 13px; font-weight: 700; }

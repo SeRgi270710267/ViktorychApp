@@ -12771,8 +12771,15 @@ const here = parseRoute();
     return rows + music + install;
   }
 
+  function sidebarOwnsNav() {
+    const width = window.innerWidth || 0;
+    if (width < 500) return false;
+    if (width >= 1280) return true;
+    return document.documentElement.getAttribute("data-nav-layout") !== "bar";
+  }
+
   function accountPopup() {
-    if (!STATE.accountMenu || (window.innerWidth || 0) < 500) return "";
+    if (!STATE.accountMenu || !sidebarOwnsNav()) return "";
     const mine = signedAccount();
     const accounts = mine
       ? `<button type="button" data-acct="login">${esc(tr("Add account"))}</button>`
@@ -12784,12 +12791,12 @@ const here = parseRoute();
   }
 
   function drawerEditModal() {
-    if (!STATE.drawerEdit || (window.innerWidth || 0) < 500) return "";
+    if (!STATE.drawerEdit || !sidebarOwnsNav()) return "";
     return `<div class="modal-back" data-act="drawer-edit-done"><div class="modal nav-customize-modal" role="dialog" aria-label="${esc(tr("Edit menu"))}" data-act="stop"><div class="modal-body">${drawerMenuHtml(getDrawerMenu(), true)}</div></div></div>`;
   }
 
   function drawer() {
-    if (!STATE.drawer || (window.innerWidth || 0) >= 500) return "";
+    if (!STATE.drawer || sidebarOwnsNav()) return "";
     const head = (window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead())
       || `<div class="drawer-id"><div class="drawer-id-top"><button class="drawer-ava" type="button" data-acct="login" aria-label="${esc(tr("Sign in"))}"><span class="ava initials">?</span></button></div><button class="drawer-name" type="button" data-acct="login"><b>${esc(tr("Sign in"))}</b></button><div class="drawer-handle">${esc(tr("Not signed in"))}</div></div>`;
     const rows = drawerMenuHtml(getDrawerMenu(), !!STATE.drawerEdit);
@@ -15741,7 +15748,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "drawer") {
-      if ((window.innerWidth || 0) >= 500) { STATE.accountMenu = true; STATE.drawer = false; render(); return; }
+      if (sidebarOwnsNav()) { STATE.accountMenu = true; STATE.drawer = false; render(); return; }
       STATE.drawer = true; STATE.drawerSheet = ""; STATE.accountMenu = false; render(); return;
     }
     if (act === "account-menu") {
@@ -15755,7 +15762,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "drawer-edit") {
       STATE.drawerEdit = true;
       STATE.accountMenu = false;
-      STATE.drawer = (window.innerWidth || 0) < 500;
+      STATE.drawer = !sidebarOwnsNav();
       render();
       return;
     }
