@@ -410,7 +410,19 @@ async function listPosts(request, env, deps) {
     stamped.push({ at: Number(post.createdAt) || 0, post: post });
   }
   let communitiesHome = true;
-  if (author) return deps.json(200, { posts: stamped.map((item) => item.post), author: author });
+  if (author) {
+    // Profiles list the account's community posts and replies too; they live in
+    // community_posts, not public_posts.
+    let list = stamped.slice();
+    if (!skip.has(author)) {
+      try {
+        const pack = await communityHomeRows(env, request, session, deps.presentAccount, { authorId: author });
+        (pack.posts || []).forEach((post) => list.push({ at: Number(post.createdAt) || 0, post: post }));
+      } catch (err) { /* public posts still list */ }
+    }
+    list.sort((a, b) => b.at - a.at);
+    return deps.json(200, { posts: list.slice(0, 60).map((item) => item.post), author: author });
+  }
   try {
     const pack = await communityHomeRows(env, request, session, deps.presentAccount);
     communitiesHome = !(pack && pack.communitiesHome === false);
