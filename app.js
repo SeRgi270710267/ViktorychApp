@@ -13156,20 +13156,20 @@ const here = parseRoute();
     const hidden = (menu.hidden || []).indexOf(item.id) >= 0;
     const locked = DRAWER_LOCKED.indexOf(item.id) >= 0;
     const eye = locked
-      ? `<span class="drawer-lock" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
+      ? `<span class="drawer-lock drawer-eye" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
       : `<button class="icon-btn drawer-eye" type="button" data-act="drawer-vis" data-id="${esc(item.id)}" aria-pressed="${hidden ? "false" : "true"}" aria-label="${esc(hidden ? tr("Hidden") : tr("Visible"))}">${icon(hidden ? "eyeOff" : "eye")}</button>`;
     const inPopup = (menu.popup || []).indexOf(item.id) >= 0;
     const placeLocked = item.id === "home" || item.id === "customize" || item.id === "settings" || item.id === "logout";
-    const placeBtn = placeLocked ? "" : `<button class="outline drawer-place" type="button" data-act="drawer-place" data-id="${esc(item.id)}" data-place="${inPopup ? "sidebar" : "popup"}">${esc(inPopup ? tr("Sidebar") : tr("Profile popup"))}</button>`;
+    const seg = (place, label, on) => `<button class="drawer-seg${on ? " on" : ""}" type="button"${on ? "" : ` data-act="drawer-place" data-id="${esc(item.id)}" data-place="${place}"`} aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+    const placeBtn = placeLocked ? "" : `<span class="drawer-place" role="group" aria-label="${esc(tr("Location"))}">${seg("sidebar", tr("Sidebar"), !inPopup)}${seg("popup", tr("Profile popup"), inPopup)}</span>`;
     const sections = (menu.sections || []).map((section) => `<option value="${esc(section.id)}">${esc(section.name)}</option>`).join("");
-    const move = locked || inPopup ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
+    const move = locked || inPopup || !sections ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
     return `<div class="drawer-edit-row${hidden ? " is-hidden" : ""}" data-drawer-key="${esc(item.id)}">
       <button class="drawer-grip" type="button" data-drag-drawer="${esc(item.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
       <span class="drawer-ico">${item.icon === "gear" ? menuIcon("gear") : icon(item.icon)}</span>
-      <span class="drawer-label">${esc(item.label)}</span>
-      ${move}
-      ${placeBtn}
+      <span class="drawer-label" title="${esc(item.label)}">${window.ViktorychAccounts && window.ViktorychAccounts.tabMarquee ? window.ViktorychAccounts.tabMarquee(item.label) : esc(item.label)}</span>
       ${eye}
+      ${move || placeBtn ? `<span class="drawer-ctl">${placeBtn}${move}</span>` : ""}
     </div>`;
   }
 
