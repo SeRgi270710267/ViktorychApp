@@ -272,8 +272,11 @@
       ensure(account, account.aboutPreview || "");
       return mine ? '<div class="about"><p class="about-wait">' + esc(tr("Loading…")) + "</p></div>" : "";
     }
-    if (!mine && !(account.about && account.about.visible)) return "";
-    return previewHtml(account.about, mine);
+    var affiliation = root.ViktorychAffiliations && root.ViktorychAffiliations.aboutHtml ? root.ViktorychAffiliations.aboutHtml(account) : "";
+    if (!mine && !(account.about && account.about.visible)) return affiliation ? '<div class="about">' + affiliation + "</div>" : "";
+    var body = previewHtml(account.about, mine);
+    if (!affiliation || !body) return body || (affiliation ? '<div class="about">' + affiliation + "</div>" : "");
+    return body.replace(/<\/div>\s*$/, affiliation + "</div>");
   }
 
   function openSheet(account, section) {
