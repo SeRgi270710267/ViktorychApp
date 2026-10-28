@@ -3084,7 +3084,6 @@ function signupPayload() {
     var tabs = bar.html;
 
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
-    var lock = account.privateFollows ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
     var top = window.ViktorychProfile && window.ViktorychProfile.top ? window.ViktorychProfile.top({
       name: account.displayName || account.handle || "",
       platform: "app",
@@ -3095,7 +3094,7 @@ function signupPayload() {
       count: tr("{count} posts", { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
-    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + (window.ViktorychAffiliations ? window.ViktorychAffiliations.slot(account.publicId) : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
+    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -3150,6 +3149,13 @@ function signupPayload() {
       '<button class="icon-btn" type="button" data-act="drawer-more" aria-label="' + esc(tr("Account menu")) + '" aria-haspopup="menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg></button>' +
       '</div>';
   }
+  /* One name row for the profile header and the drawer, so the protected
+     lock and the badges stay identical in size and order. */
+  function nameRowHtml(account) {
+    var name = account.displayName || account.handle || "";
+    var lock = (account.privateFollows || account.locked) ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
+    return '<span class="name-row-text">' + esc(name) + "</span>" + lock + (account.owner ? badge() : "") + (window.ViktorychAffiliations ? window.ViktorychAffiliations.slot(account.publicId) : "");
+  }
   function drawerHead() {
     var session = readSession();
     if (!session || !session.account) {
@@ -3165,14 +3171,13 @@ function signupPayload() {
     var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
     var sub = isAnon ? tr("Profile-less account") : "@" + (account.handle || "");
     var href = account.handle ? "#/@" + encodeURIComponent(account.handle) : "#/settings";
-    var lock = (account.privateFollows || account.locked) ? '<span class="drawer-lock" title="' + esc(tr("Private account")) + '">' + lockIcon(16) + '</span>' : "";
     var following = accountStat(account, "following");
     var followers = accountStat(account, "followers");
     var followerLabel = followers === 1 ? tr("Follower") : tr("Followers");
     if (accountRef(account)) ensureCounts(accountRef(account));
     return '<div class="drawer-id">' +
       '<div class="drawer-id-top"><a class="drawer-ava" href="' + esc(href) + '">' + photo + '</a>' + drawerTools() + '</div>' +
-      '<a class="drawer-name" href="' + esc(href) + '"><b>' + esc(name) + '</b>' + lock + '</a>' +
+      '<a class="drawer-name pname" href="' + esc(href) + '">' + (isAnon ? '<span class="name-row-text">' + esc(name) + "</span>" : nameRowHtml(account)) + '</a>' +
       '<a class="drawer-handle" href="' + esc(href) + '">' + esc(sub) + '</a>' +
       '<div class="drawer-counts"><a href="' + esc(href + "/following") + '"><b>' + esc(formatNum(following)) + '</b> ' + esc(tr("Following count")) + '</a><a href="' + esc(href + "/followers") + '"><b>' + esc(formatNum(followers)) + '</b> ' + esc(followerLabel) + '</a></div>' +
       '</div>';
@@ -4390,6 +4395,8 @@ else if (act === "copy-id") copyAccountId();
     showDeletedIfNeeded: showDeletedIfNeeded,
     onLocalChange: onLocalChange,
     bindProfileTabs: bindProfileTabs,
+    tabMarquee: tabMarquee,
+    nameRowHtml: nameRowHtml,
     profileTabPlan: profileTabPlan,
     onHistoryReady: onHistoryReady,
     requestRender: null,
