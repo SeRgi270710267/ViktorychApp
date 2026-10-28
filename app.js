@@ -21077,6 +21077,29 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         apiRoot: accountsApi,
         toast: toast
       });
+      if (window.Highlights) {
+        window.Highlights.bind({
+          token: accountToken,
+          api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+          render: render,
+          localMedia: function () {
+            const mine = window.ViktorychAccounts && window.ViktorychAccounts.account ? window.ViktorychAccounts.account() : null;
+            const handle = String((mine && mine.handle) || "").toLowerCase();
+            const saved = (STATE.settings && STATE.settings.savedPosts) || {};
+            const out = [];
+            Object.keys(saved).forEach((id) => {
+              const post = saved[id];
+              if (!post || !Array.isArray(post.media)) return;
+              const own = handle && String(post.handle || "").replace(/^@/, "").toLowerCase() === handle;
+              post.media.forEach((item, index) => {
+                if (!item || !item.url) return;
+                out.push({ source: own ? "post" : "saved", url: item.url, type: item.type || "photo", id: id + ":" + index });
+              });
+            });
+            return out;
+          }
+        });
+      }
     }
     if (window.Spaces && !window.Spaces.__shell) {
       window.Spaces.__shell = true;
