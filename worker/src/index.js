@@ -19,7 +19,7 @@ import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlayl
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
-import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
+import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
@@ -5291,6 +5291,9 @@ async function route(request, env, ctx) {
       if (posted) return posted;
     }
   }
+  if (path === "/v1/account/inactivity") {
+    return handleInactivity(request, env, { json, readJson, rateHit, limited, sessionAccount });
+  }
   if (path === "/v1/account/delete" && request.method === "POST") {
     return handleAccountDelete(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
   }
@@ -5521,7 +5524,7 @@ export default {
     // Jobs the Render backup claimed in the last couple of minutes run there.
     const away = await claimedJobs(env, at);
     const minute = new Date(at).getUTCMinutes();
-    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
+    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
     const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
     run("ownerFeeds", () => sweepOwnerFeeds(env, at));
     if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
