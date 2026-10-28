@@ -225,6 +225,8 @@ async function behavior(page) {
   const reply = await page.locator("#reply-draft").inputValue();
   if (!reply.trim()) fail("applying a suggestion left the reply empty");
   await page.locator(".xc-modal [data-act='close-modal']").click();
+  const discard = page.locator("[data-act='xc-discard']");
+  if (await discard.count()) await discard.click();
   await page.waitForFunction(() => !document.querySelector(".xc-modal"));
 }
 

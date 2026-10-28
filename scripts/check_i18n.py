@@ -19,6 +19,7 @@ UI_FILES = (
     "discord-ui.js",
     "spaces.js",
     "stories.js",
+    "live.js",
     "music.js",
     "tv.js",
     "people.js",

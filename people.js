@@ -415,7 +415,7 @@
     const posted = all.filter((post) => countsAsOwn(post, person)).length;
     const count = (h.formatCount ? h.formatCount(posted) : String(posted)) + " posts";
     const bannerFace = root.ViktorychFaces && root.ViktorychFaces.banner ? root.ViktorychFaces.banner(person.banner, person.bannerFace) : (person.banner ? "photo" : "default");
-    const banner = bannerFace === "none" ? "" : (bannerFace === "photo" ? `<img class="pbanner" src="${esc(person.banner)}" alt="">` : `<div class="pbanner"></div>`);
+    const banner = bannerFace === "photo" && person.banner ? `<img class="pbanner" src="${esc(person.banner)}" alt="">` : "";
     const base = baseFeed(person);
     const follow = h.followButtonClean ? h.followButtonClean(base.id, true) : "";
     const who = preferred(person) || base;
@@ -452,13 +452,16 @@
         return !!liveCard;
       });
     }
-    return `<div class="topbar profile-bar">
-      <div class="page-head">
-        <button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>
-        <div class="head-text"><div class="pt-name">${esc(person.name || person.id)}</div><div class="pt-count">${esc(count)}</div></div>
-      </div>
-    </div>
-    ${banner}
+    const top = root.ViktorychProfile && root.ViktorychProfile.top ? root.ViktorychProfile.top({
+      name: person.name || person.id || "",
+      platform: (who && who.platform) || "x",
+      handle: (who && who.handle) || "",
+      feedId: base.id || "",
+      url: (who && who.url) || "",
+      own: false,
+      count: count
+    }, banner) : `<div class="pt-count">${esc(count)}</div>${banner}`;
+    return `${top}
     <div class="pinfo" data-person="${esc(person.id)}">
       <div class="pava-row">
         ${avatar}

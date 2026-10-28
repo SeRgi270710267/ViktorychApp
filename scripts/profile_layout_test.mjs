@@ -21,7 +21,7 @@ const page = accounts.slice(pageStart, pageEnd);
 if (page.includes("acct-id")) fail("profile page still prints an account id");
 if (!page.includes("protected-badge")) fail("private badge is not next to the name");
 if (!page.includes('class="pactions"')) fail("profile actions missing");
-const markupAt = page.indexOf("return '<div class=\"topbar");
+const markupAt = page.indexOf("return top + '<div class=\"pinfo\"");
 const actionsAt = page.indexOf('class="pactions"', markupAt);
 const nameAt = page.indexOf('class="pname"', markupAt);
 const statusAt = page.indexOf("seenLine", actionsAt);
