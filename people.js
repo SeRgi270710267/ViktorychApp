@@ -460,7 +460,7 @@
       url: (who && who.url) || "",
       own: false,
       count: count
-    }, banner) : banner;
+    }, banner) : `<div class="pt-count">${esc(count)}</div>${banner}`;
     return `${top}
     <div class="pinfo" data-person="${esc(person.id)}">
       <div class="pava-row">
