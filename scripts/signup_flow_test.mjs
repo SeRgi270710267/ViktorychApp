@@ -133,11 +133,13 @@ async function gotoFresh(page) {
 }
 
 async function logOut(page) {
-  const button = page.locator("[data-acct='logout']");
-  await button.waitFor({ state: "attached", timeout: 20000 });
-  await button.evaluate((el) => {
-    el.scrollIntoView({ block: "center" });
-    el.click();
+  await page.locator("[data-acct='logout']").waitFor({ state: "attached", timeout: 20000 });
+  // Log out sits far below the phone viewport, and settings redraws while
+  // federation status loads. Scrolling, or clicking a node resolved earlier,
+  // misses the handler. Click the button that is in the document now.
+  await page.evaluate(() => {
+    const el = document.querySelector("[data-acct='logout']");
+    if (el) el.click();
   });
 }
 
