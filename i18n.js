@@ -27,7 +27,7 @@
     try {
       if (typeof localStorage === "undefined") return isRuRegion() ? "ru" : "en";
       var userPicked = localStorage.getItem("viktorychapp-lang-user-picked") === "1";
-      var hasSession = !!localStorage.getItem("viktorychapp-accounts-session-v1");
+      var hasSession = !!localStorage.getItem("viktorychapp-account-v1") || !!localStorage.getItem("viktorychapp-accounts-session-v1");
       var saved = localStorage.getItem(KEY);
       if ((userPicked || hasSession) && valid(saved)) return valid(saved);
       if (isRuRegion()) {
@@ -60,6 +60,15 @@
     var key = valid(code);
     if (!key || !pack) return;
     PACKS[key] = pack;
+  }
+
+  /* The saved language's pack may have been skipped at boot when the choice
+     was not yet certain; fetch it once the page is up. */
+  function ensureCurrentPack() {
+    if (lang !== "en" && !PACKS[lang] && !packLoads[lang]) {
+      var want = lang;
+      loadPack(want, function () { if (lang === want && PACKS[want]) setLang(want); });
+    }
   }
 
   function lookup(key) {
@@ -292,8 +301,29 @@
     }).catch(function () { /* the static manifest stays in English until the next try */ });
   }
 
+  var packLoads = {};
+  function loadPack(code, then) {
+    if (typeof document === "undefined" || PACKS[code] || code === "en") { then(); return; }
+    if (packLoads[code]) { packLoads[code].push(then); return; }
+    packLoads[code] = [then];
+    var el = document.createElement("script");
+    el.src = "i18n/" + code + ".js";
+    el.onload = el.onerror = function () {
+      var list = packLoads[code] || [];
+      delete packLoads[code];
+      list.forEach(function (fn) { try { fn(); } catch (err) { /* keep going */ } });
+    };
+    (document.head || document.documentElement).appendChild(el);
+  }
+
   function setLang(code) {
     var next = valid(code) || "en";
+    if (!PACKS[next] && next !== "en" && typeof document !== "undefined") {
+      lang = next;
+      try { localStorage.setItem(KEY, next); } catch (err) { /* private mode */ }
+      loadPack(next, function () { if (lang === next) setLang(next); });
+      return;
+    }
     lang = next;
     try { localStorage.setItem(KEY, next); } catch (err) { /* private mode */ }
     applyChrome();
@@ -310,6 +340,10 @@
   }
 
   function getLang() { return lang; }
+
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    window.addEventListener("viktorych-late", ensureCurrentPack);
+  }
 
   root.SI18n = {
     addPack: addPack,
