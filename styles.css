@@ -3555,7 +3555,8 @@ html.tv-on #new-posts { display: none; }
 .poll-question { font-weight: 700; margin-bottom: 4px; }
 
 .nav-ico { position: relative; display: inline-flex; }
-.nav-badge {
+.nav-badge,
+.online-count {
   position: absolute;
   top: -6px;
   right: -8px;
@@ -3570,6 +3571,8 @@ html.tv-on #new-posts { display: none; }
   line-height: 16px;
   text-align: center;
 }
+.drawer-ico { position: relative; }
+.drawer-row .online-count { position: static; margin-left: 8px; }
 .notify-bell {
   width: 36px;
   height: 36px;

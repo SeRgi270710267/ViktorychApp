@@ -783,6 +783,14 @@ function stripInnerHtml() {
   return shown.map(chipHtml).join("");
 }
 
+function onlineCount() {
+  let count = 0;
+  friends.forEach(function (person) {
+    if (person && person.state === "online") count += 1;
+  });
+  return count;
+}
+
 function railCollapsed() {
   try { return localStorage.getItem("viktorychapp-friends-rail") === "0"; }
   catch (err) { return false; }
@@ -965,6 +973,7 @@ function boot() {
     armHeart();
     beat(true);
     connect();
+    loadFriends(false);
     call("/v1/presence").then(function (body) {
       if (!body || body.status !== 200) return;
       applyMine(body);
@@ -989,7 +998,8 @@ const api = {
   channelOpen: socketOpen,
   stripHtml: stripHtml,
   pageHtml: pageHtml,
-  railHtml: railHtml
+  railHtml: railHtml,
+  onlineCount: onlineCount
 };
 window.ViktorychPresence = api;
 

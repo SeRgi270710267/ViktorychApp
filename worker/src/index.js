@@ -1039,7 +1039,7 @@ async function handleProfilePatch(request, env) {
   return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
-const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
+const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "online", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
 
 function cleanDrawerMenuSync(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
