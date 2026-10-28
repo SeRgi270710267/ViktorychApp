@@ -1125,6 +1125,37 @@
     return "embed";
   }
 
+  function drawerListsExplore(menu) {
+    if (!menu || typeof menu !== "object") return false;
+    if (Array.isArray(menu.order) && menu.order.indexOf("explore") >= 0) return true;
+    const sections = Array.isArray(menu.sections) ? menu.sections : [];
+    return sections.some((section) => section && Array.isArray(section.items) && section.items.indexOf("explore") >= 0);
+  }
+
+  // Explore was not a side-menu row, so a saved drawer sorted it past the
+  // six-icon cap and the phone bar dropped it. Put it back once. A later
+  // hide in the customizer stays hidden, and only Home stays locked.
+  function repairUnintentionalExplore(parsed) {
+    const menu = parsed && parsed.drawerMenu;
+    if (!menu || typeof menu !== "object" || !Array.isArray(menu.order)) return;
+    if (drawerListsExplore(menu)) return;
+    const drawerOrder = menu.order.filter((id) => id !== "explore");
+    const homeAt = drawerOrder.indexOf("home");
+    drawerOrder.splice(homeAt >= 0 ? homeAt + 1 : 0, 0, "explore");
+    menu.order = drawerOrder;
+    if (Array.isArray(menu.hidden)) menu.hidden = menu.hidden.filter((id) => id !== "explore");
+    const bottom = parsed.bottomNav && typeof parsed.bottomNav === "object" ? parsed.bottomNav : null;
+    if (bottom) {
+      const rest = Array.isArray(bottom.order) ? bottom.order.filter((id) => id !== "home" && id !== "explore") : [];
+      bottom.order = ["home", "explore"].concat(rest);
+      if (Array.isArray(bottom.hidden)) bottom.hidden = bottom.hidden.filter((id) => id !== "explore");
+      parsed.bottomNav = bottom;
+    }
+    if (parsed.navCustom && Array.isArray(parsed.navCustom.hidden)) {
+      parsed.navCustom.hidden = parsed.navCustom.hidden.filter((id) => id !== "explore");
+    }
+  }
+
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
 const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed" });
@@ -1185,6 +1216,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         parsed.seenDefaults = configured.slice();
         parsed.initialized = true;
       } else mergeDefaultFollows(parsed, configured);
+      repairUnintentionalExplore(parsed);
       parsed.navCustom = cleanNavCustom(parsed.navCustom);
       parsed.drawerMenu = cleanDrawerMenu(parsed.drawerMenu);
       parsed.bottomNav = cleanBottomNav(parsed.bottomNav);
@@ -2015,6 +2047,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const letter = initials(name);
     const safeSrc = ruSafeImageUrl(src);
     return `<img class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
+  }
+
+  function affSlot(source) {
+    if (!window.ViktorychAffiliations) return "";
+    const direct = source && (source.authorId || source.publicId);
+    if (/^\d{12}$/.test(String(direct || ""))) return window.ViktorychAffiliations.slot(direct);
+    const raw = source && source.id;
+    if (typeof raw === "string" && /^app:\d{12}$/.test(raw)) return window.ViktorychAffiliations.slot(raw.slice(4));
+    return "";
   }
 
   function badge(type) {
@@ -4677,7 +4718,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       </button>`;
     const replyCount = shownCount(stats.replies, 0);
     const replyOnX = (post.platform || "x") === "x";
-    const replyLink = replyOnX
+    const replyLink = post.appPost
+      ? `<button class="action reply" type="button" data-act="public-reply" data-id="${esc(id)}" aria-label="${tr("Reply")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</button>`
+      : replyOnX
       ? `<button class="action reply" type="button" data-act="xc-reply" data-id="${esc(id)}" aria-label="${tr("Reply")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</button>`
       : `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
     const menuOpen = STATE.repostMenu === id;
@@ -6909,7 +6952,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${avatar(face.avatar, post.author || post.handle)}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || tr("Post noun"))}${badge(face.verified)}</a>
+            <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || tr("Post noun"))}${badge(face.verified)}</a>${affSlot(post)}
             ${tombHandle ? `<a class="handle" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + post.handle)}">@${esc(tombHandle)}</a>` : ""}
             ${when}
             ${sourceBadge(post.platform)}
@@ -6994,7 +7037,19 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="thread">${parentHtml}${childHtml}</div>`;
   }
 
+  function appMenuItems(post) {
+    const mine = signedAccount();
+    const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
+    const muteCommunity = post.community ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : "";
+    const quote = post.community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`;
+    if (self || !post.authorId) return quote + muteCommunity;
+    return quote + `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>` + muteCommunity;
+  }
+
   function card(post, mode, opts) {
+    if (post && post.appPost && post.spamHidden) {
+      return `<article class="post" data-post="${esc(post.id)}"><div class="post-row"><div class="post-main"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></div></div></article>`;
+    }
     creditCarried(post);
     if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
@@ -7023,7 +7078,7 @@ const here = parseRoute();
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -7041,7 +7096,11 @@ const here = parseRoute();
     const threadLink = mode !== "status" && mode !== "reply" && (threadChildren(post).length || nestedDiscord)
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
+    const community = post.community && post.community.name && !opts.parentShown
+      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(post.community.name)}</a></div>`
+      : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
+      ${community}
       ${repost}
       ${sharedNote}
       ${forwarded}
@@ -7049,7 +7108,7 @@ const here = parseRoute();
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>
+            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
             ${displayHandle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(displayHandle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
@@ -7063,6 +7122,7 @@ const here = parseRoute();
           ${articleCardHtml(post)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
+          ${post.appPost ? (post.appExtra || "") : ""}
           ${postCards(post)}
           ${quoteCard(post.quoted)}
           ${giftChip(post)}
@@ -8106,7 +8166,7 @@ const here = parseRoute();
     if (which === "foryou") {
       label = tr("For you options");
       const box = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="foryou-toggle" data-key="${key}"`, text, on, glyph, "check");
-      body = box("reposts", tr("Show reposts"), STATE.settings.forYouReposts !== false, "repost") + box("replies", tr("Show replies in tab"), STATE.settings.forYouReplies !== false, "reply") + viewItems("foryou");
+      body = box("reposts", tr("Show reposts"), STATE.settings.forYouReposts !== false, "repost") + box("replies", tr("Show replies in tab"), STATE.settings.forYouReplies !== false, "reply") + box("communities", tr("Communities in Home"), STATE.settings.communitiesHome !== false, "posts") + viewItems("foryou");
     } else if (cat) {
       label = tr("{label} options", { label: cat.name });
       const sort = cat.sort === "popular" ? "popular" : "recent";
@@ -8321,6 +8381,7 @@ const here = parseRoute();
     publicStamp = now;
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
       if (samePublicPosts(res.posts)) return;
       publicPosts = res.posts;
       render();
@@ -8331,6 +8392,11 @@ const here = parseRoute();
     const token = accountToken();
     const root = accountsApi();
     if (!token || !root) return;
+    document.querySelectorAll(".pub-cm").forEach((el) => {
+      const text = el.querySelector("[data-pub-cm]");
+      const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.classList.toggle("is-on", !!(text && !reduced && text.scrollWidth > el.clientWidth + 1));
+    });
     document.querySelectorAll("[data-public-media]").forEach((el) => {
       if (el.getAttribute("data-public-tried")) return;
       const path = el.getAttribute("data-public-media") || "";
@@ -8361,21 +8427,6 @@ const here = parseRoute();
     if (!tag) return "";
     const extra = tag === "img" ? ` alt="${esc(item.alt || "")}"` : " controls";
     return `<${tag}${extra} data-public-media="${esc(item.url || "")}"></${tag}>`;
-  }
-
-  function publicPostHtml(post) {
-    if (!STATE.publicSpam) STATE.publicSpam = {};
-    if (publicPostSpam(post) && !STATE.publicSpam[post.id]) {
-      return `<article class="card public-post" data-post="${esc(post.id)}"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></article>`;
-    }
-    const media = (post.media || []).map(publicMediaHtml).join("");
-    const poll = post.poll && post.poll.options ? `<div class="public-poll">${post.poll.options.map((opt) => `<div>${esc(opt)}</div>`).join("")}</div>` : "";
-    const place = post.location ? `<p class="phandle">${esc(post.location)}</p>` : "";
-    const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
-    const mine = signedAccount();
-    const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
-    const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
-    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
   }
 
   function welcomeHtml(route) {
@@ -8500,6 +8551,7 @@ const here = parseRoute();
       const done = (res) => {
         if (res && res.status === 201 && res.post) {
           if (!(res.scheduled || part.scheduleAt) && res.post.id) publicPosts = [res.post].concat(publicPosts.filter((item) => item.id !== res.post.id));
+          if (res.post.community && res.post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(res.post.community.name);
           publicStamp = Date.now();
           sendAt(index + 1, res.post.id);
           return;
@@ -8560,6 +8612,7 @@ const here = parseRoute();
     const finishOk = (post) => {
       if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
       if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      if (post && post.community && post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(post.community.name);
       publicStamp = Date.now();
       toast(tr("Your post was sent."));
       render();
@@ -8594,17 +8647,95 @@ const here = parseRoute();
     }).catch(finishFail);
   }
 
+  // Posts written in this app (and in its communities) come from /v1/posts. Home shows
+  // them as normal post cards, merged into the timeline by time, on For you and Following.
+  function appCardPost(item) {
+    const created = Number(item.createdAt) || 0;
+    const date = new Date(created || Date.now()).toISOString();
+    const community = item.community && item.community.name ? { name: String(item.community.name), rootId: String(item.community.rootId || item.id || "") } : null;
+    const media = (item.media || []).map(publicMediaHtml).join("");
+    const poll = item.poll && item.poll.options ? `<div class="public-poll">${item.poll.options.map((opt) => `<div>${esc(opt)}</div>`).join("")}</div>` : "";
+    const place = item.location ? `<p class="phandle">${esc(item.location)}</p>` : "";
+    const post = {
+      id: String(item.id || ""),
+      statusId: String(item.id || ""),
+      platform: "app",
+      appPost: true,
+      handle: String(item.authorHandle || ""),
+      author: String(item.authorName || item.authorHandle || ""),
+      authorId: String(item.authorId || ""),
+      publicId: String(item.authorId || ""),
+      feedId: item.authorId ? "app:" + item.authorId : "",
+      avatar: String(item.authorAvatar || ""),
+      text: String(item.body || ""),
+      date: date,
+      sortDate: date,
+      kind: item.parentId ? "reply" : (item.quote ? "quote" : "post"),
+      stats: { replies: Number(item.replyCount) || 0, likes: Number(item.likes) || 0 },
+      media: [],
+      appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : ""),
+      community: community,
+      parentId: String(item.parentId || ""),
+      url: ""
+    };
+    if (item.quote) post.quoted = { platform: "app", id: String(item.quote.id || item.quoteId || ""), handle: String(item.quote.authorHandle || ""), author: String(item.quote.authorName || ""), text: String(item.quote.body || "") };
+    return post;
+  }
+
+  function appHomePosts(tab) {
+    if (tab !== "foryou" && tab !== "following") return [];
+    if (!STATE.publicSpam) STATE.publicSpam = {};
+    const mine = signedAccount();
+    const meId = mine && mine.publicId ? String(mine.publicId) : "";
+    const list = publicPosts.filter((item) => item && item.id).map((item) => {
+      const post = appCardPost(item);
+      if (publicPostSpam(item) && !STATE.publicSpam[item.id]) post.spamHidden = true;
+      return post;
+    });
+    const byId = {};
+    list.forEach((post) => {
+      byId[post.id] = post;
+      STATE.shared[post.id] = post;
+    });
+    list.forEach((post) => {
+      if (!post.parentId) return;
+      const parent = byId[post.parentId];
+      post.replyingTo = { id: post.parentId, handle: parent ? parent.handle : "" };
+    });
+    // A parent shown above its reply (as a thread) is not listed again on its own.
+    const threaded = {};
+    list.forEach((post) => { if (post.parentId && byId[post.parentId] && !post.spamHidden) threaded[post.parentId] = true; });
+    return list.filter((post) => {
+      if (threaded[post.id] || hiddenPost(post)) return false;
+      if (tab === "foryou") return true;
+      if (meId && post.authorId === meId) return true;
+      if (post.community) return true;
+      return !!post.feedId && isFollowed(post.feedId);
+    });
+  }
+
+  function mergeAppPosts(list, extra) {
+    if (!extra.length) return list;
+    const at = (post) => Date.parse(stamp(post)) || 0;
+    const queue = extra.slice().sort((a, b) => at(b) - at(a));
+    const out = [];
+    list.forEach((post) => {
+      while (queue.length && at(queue[0]) >= at(post)) out.push(queue.shift());
+      out.push(post);
+    });
+    return out.concat(queue);
+  }
+
   function homeView(route) {
     const tab = route.tab || "foryou";
-    const sorted = homeSorted(route);
+    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab));
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
     const findAccounts = !list.length && (tab === "following" || tab === "foryou")
       ? `<p class="empty-action"><a class="save" href="#/feeds">${esc(tr("Find accounts to follow"))}</a></p>`
       : "";
-    const published = tab === "foryou" ? publicPosts.map(publicPostHtml).join("") : "";
-    const body = published + (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const body = (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -9864,7 +9995,7 @@ const here = parseRoute();
     const appId = String(row.id || "").startsWith("app:") ? String(row.id).slice(4) : "";
     let face = avatar(row.avatar, row.name || row.handle, "", row.avatarFace);
     if (/^\d{12}$/.test(appId) && window.ViktorychPresence) face = window.ViktorychPresence.wrap(appId, face);
-    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${face}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span><span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
+    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${face}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span>${affSlot(row)}<span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
   }
 
   function connectionsHash(route, tab) {
@@ -9901,9 +10032,12 @@ const here = parseRoute();
     const sub = subject.handle ? "@" + subject.handle : "";
     const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
     const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.ownsSubject ? window.ViktorychAccounts.ownsSubject(subject.id, subject.handle) : false;
-    const requestN = mineGraph && window.ViktorychAccounts.listPack ? (window.ViktorychAccounts.listPack(subject.id, "requests").accounts ? window.ViktorychAccounts.listPack(subject.id, "requests").accounts.length : 0) : 0;
+    if (mineGraph && window.ViktorychAccounts.ensureFriendRequests) window.ViktorychAccounts.ensureFriendRequests();
+    const followN = mineGraph && window.ViktorychAccounts.listPack ? ((window.ViktorychAccounts.listPack(subject.id, "requests").accounts || []).length) : 0;
+    const friendN = mineGraph && window.ViktorychAccounts.pendingFriendRequests ? window.ViktorychAccounts.pendingFriendRequests() : 0;
+    const requestN = followN + friendN;
     const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Follow requests"))}${requestBadge}</span></a>` : ""}` : "";
+    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -10126,7 +10260,7 @@ const here = parseRoute();
     const face = authorFace(post);
     const statusHandle = internalPostHandle(post.handle || "", post);
     const names = `<div>
-            <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
+            <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>${affSlot(post)}
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(statusHandle)}</a>
           </div>
           <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
@@ -11537,7 +11671,7 @@ const here = parseRoute();
       <div class="xa-author">
         <a href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}" aria-label="${esc(post.author || who || tr("Profile"))}">${avatar(face.avatar || post.avatar, post.author)}</a>
         <div class="who">
-          <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}">${esc(post.author || who)}${badge(face.verified || post.verifiedType)}</a>
+          <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}">${esc(post.author || who)}${badge(face.verified || post.verifiedType)}</a>${affSlot(post)}
           ${who ? `<a class="handle" href="${esc(accountHash(post.platform, who))}">@${esc(who)}</a>` : ""}
         </div>
         ${who ? followButtonClean(followId) : ""}
@@ -12818,7 +12952,7 @@ const here = parseRoute();
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
     if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
-    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Follow requests") };
+    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests") };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
@@ -13203,7 +13337,7 @@ if (STATE.histClear) {
       const q = (STATE.draft.q || "").toLowerCase();
       const rows = feeds().filter((f) => !q || (f.name + " " + f.handle).toLowerCase().includes(q)).map((f) => {
         const on = (list.members || []).includes(f.id);
-        return `<div class="acct-row">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}</span><span class="handle">@${esc(f.handle)}</span></span><button class="follow${on ? " following" : ""}" data-act="${on ? "member-remove" : "member-add"}" data-id="${esc(f.id)}">${on ? ("<span class='f'" + ">" + tr("Member") + "<" + "/span><span class='u'" + ">" + tr("Remove") + "<" + "/span>") : tr("Add")}</button></div>`;
+        return `<div class="acct-row">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${affSlot(f)}</span><span class="handle">@${esc(f.handle)}</span></span><button class="follow${on ? " following" : ""}" data-act="${on ? "member-remove" : "member-add"}" data-id="${esc(f.id)}">${on ? ("<span class='f'" + ">" + tr("Member") + "<" + "/span><span class='u'" + ">" + tr("Remove") + "<" + "/span>") : tr("Add")}</button></div>`;
       }).join("");
       return `<div class="modal-back"><div class="modal" role="dialog">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Manage members")}</h2></div>
@@ -15313,6 +15447,8 @@ if (STATE.histClear) {
   }
 
   function hscrollSettle(opts) {
+    if (window.ViktorychAffiliations && window.ViktorychAffiliations.paint) window.ViktorychAffiliations.paint();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.fitRequestPills) window.ViktorychAccounts.fitRequestPills();
     const reveal = !!(opts && opts.reveal && hscrollNav);
     const root = document.getElementById("app") || document.body;
     const store = hscrollStore();
@@ -16399,6 +16535,15 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }).catch(() => {});
       return;
     }
+    if (act === "mute-community") {
+      const name = el.dataset.name || "";
+      accountCall("/v1/communities/" + encodeURIComponent(name) + "/feed", { method: "POST", body: { muted: true } }).then(() => {
+        publicPosts = publicPosts.filter((item) => !(item.community && item.community.name === name));
+        toast(tr("Mute community"));
+        render();
+      }).catch(() => {});
+      return;
+    }
     if (act === "compose-x") {
       STATE.composeVia = "x";
       if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
@@ -16514,6 +16659,17 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "foryou-toggle") {
+      if (el.dataset.key === "communities") {
+        STATE.settings.communitiesHome = STATE.settings.communitiesHome === false;
+        saveSettings();
+        accountCall("/v1/communities/home", { method: "POST", body: { showHome: STATE.settings.communitiesHome !== false } }).then(() => {
+          publicStamp = 0;
+          schedulePublicPosts();
+        }).catch(() => {});
+        STATE.tabMenu = "foryou";
+        render();
+        return;
+      }
       const key = el.dataset.key === "replies" ? "forYouReplies" : "forYouReposts";
       STATE.settings[key] = STATE.settings[key] === false;
       STATE.forYouSnap = null;

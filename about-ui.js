@@ -274,11 +274,14 @@
       ensure(account, account.aboutPreview || "");
       return mine ? '<div class="about"><p class="about-wait">' + esc(tr("Loading…")) + "</p></div>" : "";
     }
+    var affiliation = root.ViktorychAffiliations && root.ViktorychAffiliations.aboutHtml ? root.ViktorychAffiliations.aboutHtml(account) : "";
     if (!mine && !(account.about && account.about.visible)) {
-      var onlyBadges = root.ProfileBadges && root.ProfileBadges.blockHtml ? root.ProfileBadges.blockHtml(account) : "";
+      var onlyBadges = (root.ProfileBadges && root.ProfileBadges.blockHtml ? root.ProfileBadges.blockHtml(account) : "") + affiliation;
       return onlyBadges ? '<div class="about">' + onlyBadges + "</div>" : "";
     }
-    return previewHtml(account.about, mine, account);
+    var body = previewHtml(account.about, mine, account);
+    if (!affiliation || !body) return body || (affiliation ? '<div class="about">' + affiliation + "</div>" : "");
+    return body.replace(/<\/div>\s*$/, affiliation + "</div>");
   }
 
   function openSheet(account, section) {
