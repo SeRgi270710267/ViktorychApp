@@ -29,6 +29,9 @@
 .gift-art { display: flex; width: 64px; height: 64px; align-items: center; justify-content: center; color: var(--blue, #1d9bf0); }
 .gift-art svg { width: 48px; height: 48px; }
 .gift-tile.is-hidden { opacity: 0.45; }
+.gift-attach { display: flex; gap: 8px; align-items: center; margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; }
+.gift-attach .gift-art { width: 28px; height: 28px; }
+.gift-dm { padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .gift-sheet {
   position: fixed;
   inset: 0;

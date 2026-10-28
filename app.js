@@ -6834,7 +6834,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
-        <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
+        <div class="composer-bar"><button class="reply-send" type="button" data-gift="reply" data-parent="${esc((post && post.id) || "")}" data-handle="${esc((post && post.handle) || "")}">${tr("Send a gift")}</button><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
   }
@@ -6857,6 +6857,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         </div>
       </div>
     </article>`;
+  }
+
+  function giftChip(post) {
+    const gift = post && post.gift;
+    if (!gift) return "";
+    const who = gift.sender ? (gift.sender.name || gift.sender.handle || "") : tr("Anonymous gift");
+    const art = gift.svg ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${esc(gift.svg)}"/></svg>` : "";
+    return `<div class="gift-attach"><span class="gift-art">${art}</span><b>${esc(who)}</b>${gift.message ? `<p>${esc(gift.message)}</p>` : ""}</div>`;
   }
 
   function pollHtml(post) {
@@ -6953,7 +6961,7 @@ const here = parseRoute();
     const forYouItem = here.name === "home" && (here.tab || "foryou") === "foryou"
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
-    const giftItem = post.platform === "app" ? `<button type="button" data-gift="open" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>` : "";
+    const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
     const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
@@ -6996,6 +7004,7 @@ const here = parseRoute();
           ${mediaHtml(post.media, eager, post)}
           ${postCards(post)}
           ${quoteCard(post.quoted)}
+          ${giftChip(post)}
           ${threadLink}
           ${actionBar(post)}
         </div>
@@ -14098,8 +14107,8 @@ if (STATE.histClear) {
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
-    if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
-    if (route.name === "messages") return notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
+    if (route.name === "messages" && window.FeedsDiscord) return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + window.FeedsDiscord.page(route);
+    if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
     return homeView({ tab: "foryou", query: new URLSearchParams() });
   }
@@ -20981,7 +20990,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyTheme();
     applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
-    if (window.ProfileGifts) window.ProfileGifts.start();
+    if (window.ProfileGifts) {
+      window.ProfileGifts.onReply = function (parentId, post) {
+        const key = String(parentId || "");
+        const bucket = STATE.replies[key] || (STATE.replies[key] = { replies: [], loading: false });
+        bucket.replies = (bucket.replies || []).filter((item) => item && item.id !== post.id).concat([post]);
+        render();
+      };
+      window.ProfileGifts.start();
+    }
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     setTimeout(() => { loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {}); }, 8000);
     const snap = loadTimelineSnap();

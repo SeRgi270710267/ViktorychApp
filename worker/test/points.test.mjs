@@ -198,6 +198,37 @@ test("points ledger, caps, clawback, and gift privacy", async () => {
   });
   assert.equal(blocked.status, 403);
 
+  const missingParent = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.110",
+    token: ada.token,
+    body: { giftId: "heart", handle: "user_b", mode: "reply", privacy: "public" }
+  });
+  assert.equal(missingParent.status, 400);
+  const replyGift = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.111",
+    token: ada.token,
+    body: { giftId: "heart", handle: "user_b", mode: "reply", parentId: lastId, message: "for the thread", privacy: "public" }
+  });
+  assert.equal(replyGift.status, 201);
+  assert.equal(replyGift.body.context, "reply");
+  assert.equal(!!(replyGift.body.post && replyGift.body.post.gift && replyGift.body.post.gift.svg), true);
+  const listed = await call("/v1/posts", { ip: "203.0.113.112", token: bea.token });
+  const attached = (listed.body.posts || []).find((item) => item.id === replyGift.body.postId);
+  assert.equal(!!(attached && attached.gift && attached.gift.message === "for the thread"), true);
+  const dm = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.113",
+    token: ada.token,
+    body: { giftId: "heart", handle: "user_c", mode: "dm", message: "in a message", privacy: "private" }
+  });
+  assert.equal(dm.status, 201);
+  const inbox = await call("/v1/gifts/inbox", { ip: "203.0.113.114", token: cam.token });
+  assert.equal(inbox.body.gifts.some((item) => item.message === "in a message" && item.sender && item.sender.handle === "user_a"), true);
+  const otherInbox = await call("/v1/gifts/inbox", { ip: "203.0.113.115", token: bea.token });
+  assert.equal(otherInbox.body.gifts.some((item) => item.message === "in a message"), false);
+
   const board = await call("/v1/points/board", { ip: "203.0.113.108" });
   assert.equal(board.body.enabled, false);
   const free = await call("/v1/gifts/daily", { ip: "203.0.113.109" });
