@@ -583,6 +583,7 @@ SI18n.addPack("ru", {
   "Previous": "Назад",
   "Next": "Дальше",
   "Now playing": "Сейчас играет",
+  "Close player": "Закрыть плеер",
   "Up next": "Дальше",
   "Find a song by title, artist, or album.": "Найдите песню по названию, исполнителю или альбому.",
   "No songs yet": "Песен пока нет",
