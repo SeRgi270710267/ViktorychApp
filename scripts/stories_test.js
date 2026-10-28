@@ -115,7 +115,24 @@ Stories.applyBar("slim");
 assert.strictEqual(Stories.barState(), "slim");
 assert.strictEqual(Stories.trayExtra(), 52);
 Stories.applyBar("expanded");
-assert.strictEqual(Stories.trayExtra(), 118);
+assert.strictEqual(Stories.trayExtra(), 168);
+Stories.bind({
+  icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
+  follows() { return follows; },
+  account() { return { handle: "user_a", displayName: "User A", avatar: "" }; },
+  render() { rendered += 1; }
+});
+Stories.setNotes({ mine: { text: "" }, notes: [{ handle: "user_b", name: "User B", text: "hello there" }] });
+Stories.apply({ accounts: [] });
+const noted = Stories.homeTray();
+assert.ok(noted.indexOf("Your note") >= 0);
+assert.ok(noted.indexOf("Share a thought...") >= 0);
+assert.ok(noted.indexOf("hello there") >= 0);
+assert.ok(noted.indexOf("Your note") < noted.indexOf("Your story"));
+assert.ok(noted.indexOf("note-bubble") >= 0);
+Stories.applyBar("slim");
+assert.ok(Stories.homeTray().includes('data-state="slim"'));
+assert.ok(Stories.homeTray().includes("note-bubble"));
 Stories.bind({
   icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
   follows() { return follows; },

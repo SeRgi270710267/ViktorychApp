@@ -23,7 +23,8 @@ function staticChecks() {
   if (!shell.includes("position: relative")) fail("story shell must stay in flow");
   if (/position:\s*fixed/.test(shell) || /position:\s*absolute/.test(shell)) fail("story shell must not cover the feed");
   if (!shell.includes("backdrop-filter: none")) fail("story shell must not blur the feed");
-  if (!css.includes("height: 118px") || !css.includes("height: 52px") || !css.includes("height: 28px")) fail("collapse heights missing");
+  if (!css.includes("height: 168px") || !css.includes("height: 52px") || !css.includes("height: 28px")) fail("collapse heights missing");
+  if (!css.includes(".story-shell[data-state=\"slim\"] .note-bubble") || !css.includes("display: none")) fail("collapsed bar must hide note bubbles");
   if (!css.includes("border-radius: 999px")) fail("story rings must be circles");
   if (!css.includes("max-width: 499px") || !css.includes("min-width: 1000px") || !css.includes("max-width: 999px")) fail("story bar needs phone, tablet, and desktop rules");
   const app = read("app.js");
@@ -32,7 +33,7 @@ function staticChecks() {
   const tabsAt = header.indexOf('class="tabs-bar"');
   if (trayAt < 0 || tabsAt < 0 || trayAt > tabsAt) fail("stories must sit above For you and Following");
   if (!app.includes('getElementById("new-posts")')) fail("new posts pill hook missing");
-  if (!read("sw.js").includes('VERSION = "viktorych-a24-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a30-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok story bar layout rules");
 }
 
@@ -97,7 +98,7 @@ async function browserChecks() {
           icon: function () { return "<svg></svg>"; },
           follows: function () { return ["app:user_a"]; },
           owner: function () { return false; },
-          account: function () { return null; }
+          account: function () { return { handle: "user_b", displayName: "User B", avatar: "" }; }
         });
         Stories.apply({
           telegramConnected: true,
@@ -109,6 +110,7 @@ async function browserChecks() {
             items: [{ id: "1", type: "photo", url: "icons/icon-192.png", date: "2026-10-28T00:00:00Z", expires: "2026-10-29T00:00:00Z" }]
           }]
         });
+        Stories.setNotes({ mine: { text: "" }, notes: [{ handle: "user_a", name: "User A", text: "hi" }] });
         document.getElementById("mount").innerHTML = Stories.homeTray();
       });
       const before = await page.evaluate(() => {
@@ -142,6 +144,12 @@ async function browserChecks() {
       if (after.state !== "slim") fail(width + " collapse was not remembered");
       if (after.height > before.height - 20) fail(width + " collapse did not shrink the bar");
       if (after.overlap > 1) fail(width + " collapsed bar overlaps the post");
+      const bubbles = await page.evaluate(() => {
+        const node = document.querySelector(".note-bubble");
+        if (!node) return "missing";
+        return getComputedStyle(node).display;
+      });
+      if (bubbles !== "none") fail(width + " collapsed bar still shows note bubbles");
       await page.close();
     }
   } finally {

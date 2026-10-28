@@ -2,7 +2,7 @@
    so it never blurs the feed. Collapse only changes its height. */
 .story-shell {
   position: relative;
-  height: 118px;
+  height: 168px;
   overflow: hidden;
   background: var(--bg);
   backdrop-filter: none;
@@ -147,6 +147,66 @@
 .story-shell[data-state="slim"] .story-card { width: 48px; gap: 0; }
 .story-shell[data-state="slim"] .story-plus { top: 18px; right: 0; width: 16px; height: 16px; }
 .story-shell[data-state="slim"] .story-tray { padding-top: 8px; padding-bottom: 6px; }
+.story-shell[data-state="slim"] .note-bubble,
+.story-shell[data-state="hidden"] .note-bubble { display: none; }
+.note-slot { width: 84px; }
+.note-bubble {
+  width: 76px;
+  max-height: 40px;
+  margin: 0 0 4px;
+  padding: 4px 8px 6px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--hover, #eff3f4);
+  color: var(--text);
+  font: 12px/14px var(--font);
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+}
+.note-bubble.is-prompt { color: var(--muted); }
+.note-bubble:after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--hover, #eff3f4);
+  transform: translateX(-50%) rotate(45deg);
+}
+#stories.note-open {
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+.note-sheet {
+  width: min(420px, calc(100% - 32px));
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.note-sheet-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.note-sheet-bar button { border: 0; background: transparent; color: var(--text); font: 700 15px/20px var(--font); min-width: 36px; min-height: 36px; }
+.note-text, .note-reply {
+  width: 100%;
+  min-height: 72px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: 16px/22px var(--font);
+  padding: 8px 10px;
+  resize: vertical;
+}
+.note-emoji { display: flex; flex-wrap: wrap; gap: 6px; }
+.note-emoji button { border: 0; background: var(--hover, #eff3f4); border-radius: 999px; min-width: 36px; min-height: 36px; font-size: 18px; }
+.note-quote { margin: 0; font: 16px/22px var(--font); }
 .story-badge svg { width: 12px; height: 12px; fill: var(--text); }
 .story-name {
   max-width: 72px;
@@ -364,7 +424,7 @@ html.stories-open body { overflow: hidden; }
 
 @media (max-width: 499px) {
   .story-tray { gap: 12px; padding: 10px 44px 8px 12px; }
-  .story-shell { height: 118px; }
+  .story-shell { height: 168px; }
   .story-shell[data-state="slim"] { height: 52px; }
   .story-shell[data-state="hidden"] { height: 28px; }
 }
