@@ -135,14 +135,17 @@ async function gotoFresh(page) {
 async function openPage(page, path) {
   const url = pageOrigin + path;
   let last = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       await page.goto(url, { waitUntil: "domcontentloaded" });
       return;
     } catch (err) {
       last = err;
       const text = String(err && err.message || err);
-      if (attempt === 2 || text.indexOf("interrupted by another navigation") < 0) throw err;
+      if (text.indexOf("interrupted by another navigation") < 0) throw err;
+      const here = page.url();
+      if (path && here.indexOf(path.replace(/^\//, "")) >= 0) return;
+      await page.waitForTimeout(150);
     }
   }
   throw last;
