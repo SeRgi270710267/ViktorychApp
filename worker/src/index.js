@@ -263,14 +263,16 @@ async function addProfileColumns(env) {
     "ALTER TABLE accounts ADD COLUMN private_follows INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE accounts ADD COLUMN profile_less INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE accounts ADD COLUMN protected_account INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE accounts ADD COLUMN profile_tabs TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE accounts ADD COLUMN profile_tabs TEXT NOT NULL DEFAULT ''",
+    // 0036 used to add this; the runtime schema has it, older tables get it here.
+    "ALTER TABLE app_stories ADD COLUMN audience TEXT NOT NULL DEFAULT 'public'"
   ];
   for (let i = 0; i < statements.length; i++) {
     try {
       await env.DB.prepare(statements[i]).run();
     } catch (err) {
       const message = String(err && err.message || err);
-      if (!/duplicate column/i.test(message)) throw err;
+      if (!/duplicate column|no such table/i.test(message)) throw err;
     }
   }
 }
