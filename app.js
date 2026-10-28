@@ -12197,7 +12197,7 @@ const here = parseRoute();
   };
 
   function defaultDrawerMenu() {
-    return { sections: [], order: DRAWER_PRIMARY.slice(), hidden: DRAWER_EXTRA.slice(), at: 0 };
+    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA), hidden: [], at: 0 };
   }
 
   function cleanDrawerMenu(raw) {
@@ -12344,7 +12344,7 @@ const here = parseRoute();
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
-    if (id === "logout") return { id: id, href: "", icon: "user", label: mine ? tr("Log out") : tr("Sign in"), locked: true, acct: mine ? "logout" : "login" };
+    if (id === "logout") return { id: id, href: "", icon: "user", label: mine ? tr("Log out") : tr("Sign in"), locked: true, accountMenu: true };
     if (id === "customize") return { id: id, href: "", icon: "sliders", label: tr("Customize"), locked: true, act: "drawer-edit" };
     const def = navItemDef(id);
     if (!def) return null;
@@ -12381,6 +12381,9 @@ const here = parseRoute();
 
   function drawerMenuHtml(menu, editing) {
     const hidden = new Set(menu.hidden || []);
+    const inSection = new Set();
+    (menu.sections || []).forEach((section) => (section.items || []).forEach((id) => inSection.add(id)));
+    const more = [];
     const blocks = (menu.order || []).map((entry) => {
       if (String(entry).indexOf("section:") === 0) {
         const section = (menu.sections || []).find((item) => item.id === entry.slice(8));
@@ -12404,10 +12407,18 @@ const here = parseRoute();
       }
       const item = drawerItem(entry);
       if (!item) return "";
+      if (!editing && item.accountMenu) return "";
       if (!editing && hidden.has(entry)) return "";
+      if (!editing && DRAWER_EXTRA.indexOf(entry) >= 0 && !inSection.has(entry)) {
+        more.push(drawerViewRow(item));
+        return "";
+      }
       return editing ? drawerEditRow(item, menu) : drawerViewRow(item);
     }).join("");
-    if (!editing) return blocks;
+    if (!editing) {
+      const open = !!STATE.drawerFold;
+      return blocks + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
+    }
     return `<div class="drawer-edit-bar">
       <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("Add section"))}</button>
       <button class="outline" type="button" data-act="drawer-reset">${esc(tr("Reset to default"))}</button>

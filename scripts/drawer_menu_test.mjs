@@ -79,9 +79,11 @@ async function check(page, label) {
     customize: !!document.querySelector("[data-act='drawer-edit']"),
     bookmarks: [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"),
     settings: [...document.querySelectorAll(".drawer-label")].some((node) => /Settings/.test(node.textContent || "")),
-    session: [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Sign in" || node.textContent === "Log out")
+    fold: !!document.querySelector("[data-act='drawer-fold']"),
+    tv: !!document.querySelector('.drawer a[href="#/tv"]'),
+    logoutInBody: !!document.querySelector(".drawer-scroll [data-acct='logout']")
   }));
-  if (!before.customize || !before.bookmarks || !before.settings || !before.session) fail(label + " menu is missing a core row");
+  if (!before.customize || !before.bookmarks || !before.settings || !before.fold || !before.tv || before.logoutInBody) fail(label + " menu is missing a core row");
   await page.click("[data-act='drawer-edit']");
   await page.waitForSelector(".drawer-edit-list");
   const locked = await page.evaluate(() => {
@@ -99,12 +101,12 @@ async function check(page, label) {
   await page.click("[data-act='drawer-edit-done']");
   const hidden = await page.evaluate(() => [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"));
   if (hidden) fail(label + " hidden item is still shown");
-  const back = await page.evaluate(() => ({
+    const back = await page.evaluate(() => ({
     customize: !!document.querySelector("[data-act='drawer-edit']"),
     settings: [...document.querySelectorAll(".drawer-label")].some((node) => /Settings/.test(node.textContent || "")),
-    session: [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Sign in" || node.textContent === "Log out")
+    fold: !!document.querySelector("[data-act='drawer-fold']")
   }));
-  if (!back.customize || !back.settings || !back.session) fail(label + " core items disappeared");
+  if (!back.customize || !back.settings || !back.fold) fail(label + " core items disappeared");
   await page.click("[data-act='drawer-edit']");
   await page.click("[data-act='drawer-add-section']");
   await page.waitForSelector(".drawer-section-name");
