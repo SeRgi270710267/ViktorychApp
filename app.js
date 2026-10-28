@@ -1075,7 +1075,7 @@
   };
 
   const ALL_NAV_IDS = [
-    "home", "explore", "notifications", "messages", "feeds", "lists",
+    "home", "explore", "notifications", "messages", "online", "feeds", "lists",
     "history", "music", "shorts", "games", "tv", "communities",
     "subscriptions", "vault", "settings"
   ];
@@ -7148,6 +7148,7 @@ const here = parseRoute();
     }
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "points") return { name: "points", query };
+    if (parts[0] === "online") return { name: "online", query };
     if (parts[0] === "store") return { name: "store", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
@@ -7236,10 +7237,16 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
+  function onlineCountHtml() {
+    const count = window.ViktorychPresence && window.ViktorychPresence.onlineCount ? window.ViktorychPresence.onlineCount() : 0;
+    if (!count) return "";
+    return `<span class="online-count">${count > 20 ? "20+" : String(count)}</span>`;
+  }
+
   function navItem(href, name, label, on, aria, tip, extraClass) {
     const onName = name + tr("On");
     const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
-    const badge = name === "bell" ? bellBadgeHtml() : "";
+    const badge = name === "bell" ? bellBadgeHtml() : (href === "#/online" ? onlineCountHtml() : "");
     const accessible = aria || label;
     const tooltipText = tip || (name === "muBack" ? tr("Back") : label);
     const tight = name === "muBack" ? " nav-back" : "";
@@ -7261,6 +7268,8 @@ const here = parseRoute();
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
         return { id: "messages", href: "#/messages", icon: "mail", label: tr("Messages"), active: (r) => r.name === "messages" };
+      case "online":
+        return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
         return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" };
       case "lists":
@@ -7518,6 +7527,7 @@ const here = parseRoute();
       if (!id || seen.has(id)) return "";
       seen.add(id);
       if (id === "logout" || (menu.popup || []).indexOf(id) >= 0) return "";
+      if (id === "online") return "";
       if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
       const navId = DRAWER_NAV[id];
       if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
@@ -7611,6 +7621,7 @@ const here = parseRoute();
       <form class="side-search" data-act="search-form">
         <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="${tr("Search")}" aria-label="${tr("Search")}"></label>
       </form>
+      ${(!STATE.settings || STATE.settings.friendsRail !== false) && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
       ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
@@ -7620,7 +7631,7 @@ const here = parseRoute();
   const BOTTOM_NAV_MIN = 2;
   const BOTTOM_NAV_MAX = 6;
   const BOTTOM_NAV_IDS = [
-    "home", "explore", "tv", "communities", "notifications", "messages",
+    "home", "explore", "tv", "communities", "notifications", "messages", "online",
     "feeds", "lists", "history", "music", "shorts", "games",
     "subscriptions", "vault", "storage", "settings"
   ];
@@ -7651,6 +7662,10 @@ const here = parseRoute();
       ? raw.hidden
       : BOTTOM_NAV_IDS.filter((id) => !BOTTOM_NAV_DEFAULT_ON.includes(id));
     const hiddenSet = new Set(hiddenSrc.filter((id) => id !== "home" && BOTTOM_NAV_IDS.includes(id)));
+    // A saved bar from before an item existed keeps that new item hidden.
+    if (raw && Array.isArray(raw.order) && Array.isArray(raw.hidden)) {
+      BOTTOM_NAV_IDS.forEach((id) => { if (id !== "home" && raw.order.indexOf(id) < 0) hiddenSet.add(id); });
+    }
     if (order.indexOf("home") < 0) order.unshift("home");
     const visibleIds = () => order.filter((id) => !hiddenSet.has(id) && (id === "home" || bottomNavAvailable(id)));
     let visibleNow = visibleIds();
@@ -7724,7 +7739,7 @@ const here = parseRoute();
 
   function bottomNavLink(def, route) {
     const on = !!(def.active && def.active(route));
-    const badge = def.icon === "bell" ? bellBadgeHtml() : "";
+    const badge = def.icon === "bell" ? bellBadgeHtml() : (def.id === "online" ? onlineCountHtml() : "");
     const label = bottomBarLabel(def);
     return `<a href="${esc(def.href)}" class="${on ? "on" : ""}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(bottomGlyph(def, on))}${badge}</span></a>`;
   }
@@ -9895,9 +9910,12 @@ const here = parseRoute();
     const sub = subject.handle ? "@" + subject.handle : "";
     const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
     const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.ownsSubject ? window.ViktorychAccounts.ownsSubject(subject.id, subject.handle) : false;
-    const requestN = mineGraph && window.ViktorychAccounts.listPack ? (window.ViktorychAccounts.listPack(subject.id, "requests").accounts ? window.ViktorychAccounts.listPack(subject.id, "requests").accounts.length : 0) : 0;
+    if (mineGraph && window.ViktorychAccounts.ensureFriendRequests) window.ViktorychAccounts.ensureFriendRequests();
+    const followN = mineGraph && window.ViktorychAccounts.listPack ? ((window.ViktorychAccounts.listPack(subject.id, "requests").accounts || []).length) : 0;
+    const friendN = mineGraph && window.ViktorychAccounts.pendingFriendRequests ? window.ViktorychAccounts.pendingFriendRequests() : 0;
+    const requestN = followN + friendN;
     const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Follow requests"))}${requestBadge}</span></a>` : ""}` : "";
+    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -12524,6 +12542,7 @@ const here = parseRoute();
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${notesSwitch}
         ${presenceBlock}
+        ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
@@ -12622,7 +12641,7 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
@@ -12803,6 +12822,7 @@ const here = parseRoute();
     if (id === "explore") return { id: id, href: "#/explore", icon: "search", label: tr("Explore") };
     if (id === "notifications") return { id: id, href: "#/notifications", icon: "bell", label: tr("Notifications") };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
+    if (id === "online") return { id: id, href: "#/online", icon: "user", label: tr("Friends"), extra: onlineCountHtml() };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
     if (id === "bookmarks") return { id: id, href: "#/bookmarks", icon: "bookmark", label: tr("Bookmarks") };
@@ -12810,7 +12830,7 @@ const here = parseRoute();
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
     if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
-    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Follow requests") };
+    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests") };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
@@ -14839,6 +14859,7 @@ if (STATE.histClear) {
     const params = new URLSearchParams(location.search);
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
+    if (route.name === "online") return pageHead(tr("Friends")) + ((window.ViktorychPresence && window.ViktorychPresence.pageHtml && window.ViktorychPresence.pageHtml()) || "");
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces" && !route.id) {
       const models = window.Spaces && window.Spaces.models ? window.Spaces.models() : [];
@@ -15305,6 +15326,7 @@ if (STATE.histClear) {
 
   function hscrollSettle(opts) {
     if (window.ViktorychAffiliations && window.ViktorychAffiliations.paint) window.ViktorychAffiliations.paint();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.fitRequestPills) window.ViktorychAccounts.fitRequestPills();
     const reveal = !!(opts && opts.reveal && hscrollNav);
     const root = document.getElementById("app") || document.body;
     const store = hscrollStore();

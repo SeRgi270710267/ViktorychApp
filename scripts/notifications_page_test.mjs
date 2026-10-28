@@ -225,7 +225,7 @@ const DRAWER_LABELS = [
   "Guardados",
   "Listas",
   "Espacios",
-  "Solicitudes de seguimiento",
+  "Solicitudes",
   "Estudio de creadores",
   "Configuración y privacidad",
   "Centro de ayuda"
