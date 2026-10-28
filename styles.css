@@ -1844,22 +1844,71 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .connect-row .handle { color: var(--muted); }
 .connect-row:hover { background: var(--hover-soft); }
 .connect-bio { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; color: var(--text); font-size: 15px; line-height: 20px; margin-top: 2px; }
+.ptabs-wrap { position: sticky; top: 0; z-index: 4; background: var(--topbar); }
+.ptabs-wrap .ptabs { position: static; top: auto; }
 .ptabs {
   position: sticky;
   top: 0;
   z-index: 4;
+  display: flex;
+  height: 44px;
+  overflow-x: auto;
   background: var(--topbar);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
-.ptabs .tab {
+.ptabs .tab,
+.ptabs .ptab-edit {
+  height: 44px;
+  padding: 0 12px;
+  flex: 0 0 auto;
   max-width: min(220px, 46vw);
+  min-width: 0;
 }
 .ptabs .tab > span {
   display: block;
   min-width: 0;
   max-width: 100%;
   line-height: 20px;
+}
+.ptabs .tab.on span::after { content: none; }
+.ptabs .tab.on > .ptab-marquee::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -12px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--blue);
+}
+.ptab-marquee { display: block; min-width: 0; max-width: 100%; }
+.ptab-marquee-clip { display: block; overflow: hidden; min-width: 0; }
+.ptab-marquee-text { display: inline-block; white-space: nowrap; }
+.ptab-marquee:not(.is-on) .ptab-marquee-copy[aria-hidden="true"] { display: none; }
+.ptab-marquee:not(.is-on) .ptab-marquee-text { display: block; overflow: hidden; text-overflow: clip; max-width: none; }
+.ptab-marquee.is-on .ptab-marquee-track { display: flex; width: max-content; animation: ptab-marquee 12s linear infinite; }
+.ptab-marquee.is-on .ptab-marquee-copy { padding-right: 28px; }
+.ptab-marquee.is-held .ptab-marquee-track { animation-play-state: paused; }
+@keyframes ptab-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ptabs-tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px 10px; }
+.ptab-edit { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.ptab-edit.on { color: var(--text); font-weight: 700; }
+.ptab-edit.is-hidden { opacity: 0.45; }
+.ptab-edit.is-dragging { opacity: 0.55; }
+.ptab-grip, .ptab-eye, .ptab-lock {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ptabs-wrap.is-editing .ptabs { touch-action: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ptab-marquee.is-on .ptab-marquee-track { animation: none; }
+  .ptab-marquee.is-on .ptab-marquee-text { overflow: hidden; text-overflow: ellipsis; }
 }
 .ptabs::before {
   content: "";

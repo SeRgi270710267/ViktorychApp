@@ -1,4 +1,4 @@
-"""Normalize an RSSHub /instagram/user/<user> RSS feed."""
+"""Normalize an RSSHub or RSS-Bridge Instagram feed (RSS or Atom)."""
 
 from __future__ import annotations
 
@@ -8,23 +8,29 @@ from .common import (
     blank_profile,
     bridge_error_text,
     child_text,
-    children,
+    clean_meta_text,
+    feed_items,
     guard_posts,
     html_to_parts,
+    item_creator,
+    item_guid,
+    item_html,
+    item_permalink,
+    item_published,
     local_name,
+    meta_status_id,
     parse_xml,
     post_shell,
-    rfc822_to_iso,
 )
 
 POWERED = re.compile(r"\s*-\s*Powered by RSSHub\s*$", re.I)
 
 
 def _channel(root):
-    if local_name(root.tag) == "channel":
+    if local_name(root.tag) in ("channel", "feed"):
         return root
     for child in list(root):
-        if local_name(child.tag) == "channel":
+        if local_name(child.tag) in ("channel", "feed"):
             return child
     return root
 
@@ -33,6 +39,8 @@ def _image(channel) -> str:
     for child in list(channel):
         if local_name(child.tag) == "image":
             return child_text(child, "url")
+        if local_name(child.tag) in ("icon", "logo") and (child.text or "").strip().startswith("http"):
+            return child.text.strip()
     return ""
 
 
@@ -46,24 +54,22 @@ def parse(payload, feed: dict | None = None) -> dict:
     handle = feed.get("handle") or (match.group(1) if match else "instagram")
     name = re.sub(r"\s*\(@.*$", "", title).replace(" - Instagram", "").strip() or handle
     avatar = _image(channel)
-    raw_bio = POWERED.sub("", child_text(channel, "description")).strip()
+    raw_bio = POWERED.sub("", child_text(channel, "description") or child_text(channel, "subtitle")).strip()
     bio = "" if bridge_error_text(raw_bio) else raw_bio
     profile = blank_profile("instagram", handle, name, avatar)
     profile["bio"] = bio
     posts = []
-    for item in children(channel, "item"):
-        parts = html_to_parts(child_text(item, "description"))
-        text = parts["text"] or child_text(item, "title")
-        creator = handle
-        for child in list(item):
-            if local_name(child.tag) == "creator" and child.text:
-                creator = child.text.strip()
-        guid = child_text(item, "guid") or child_text(item, "link")
-        link = child_text(item, "link")
+    for item in feed_items(channel):
+        raw_html = item_html(item)
+        parts = html_to_parts(raw_html)
+        text = clean_meta_text(parts["text"] or child_text(item, "title"))
+        creator = item_creator(item) or handle
+        link = item_permalink(item)
+        code = meta_status_id("instagram", item_guid(item), link)
         posts.append(
             post_shell(
-                id=guid,
-                statusId=guid,
+                id=code,
+                statusId=code,
                 platform="instagram",
                 feedId=feed.get("id") or "",
                 kind="post",
@@ -72,7 +78,7 @@ def parse(payload, feed: dict | None = None) -> dict:
                 avatar=avatar,
                 text=text,
                 links=parts["links"],
-                date=rfc822_to_iso(child_text(item, "pubDate")),
+                date=item_published(item),
                 url=link,
                 media=parts["media"],
             )
