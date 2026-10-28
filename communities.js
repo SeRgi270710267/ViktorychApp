@@ -1307,6 +1307,7 @@
   window.ViktorychCommunities = {
     page: page,
     takeCompose: takeCompose,
+    label: communityLabel,
     pullNotes: pullNotes,
     invalidate: function (name) {
       if (!name) return;
