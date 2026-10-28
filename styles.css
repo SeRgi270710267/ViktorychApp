@@ -6110,14 +6110,13 @@ img, video { max-width: 100%; }
 .tabs { box-shadow: inset 0 -1px 0 var(--line); }
 .tabs-bar .tabs { box-shadow: none; }
 
-/* Post action bar like X: reply, repost, like and views spread across the row
-   (space-between), bookmark and share a tight pair on the right. 18.75px icons,
+/* Post action bar like X: reply, repost, like and views spread across the row,
+   bookmark and share a tight pair on the right. 18.75px icons,
    34px hit circles, the count 4px from its icon. Every card, thread and post page. */
 .actions { max-width: none; margin-top: 4px; }
-.action-stats { flex: 1 1 auto; justify-content: space-between; gap: 4px; margin-right: 16px; }
-.action-stats > .action,
-.action-stats > .repost-wrap { flex: 0 1 auto; max-width: none; }
-.action-stats > .vote-wrap { flex: 0 1 auto; }
+/* The four stats keep equal flex slots (icon at each slot's start), which is
+   how X spreads them; the bar now spans the full column instead of 425px. */
+.action-stats { margin-right: 16px; }
 .action { min-height: 34px; padding: 0; gap: 4px; }
 .action .ic::after { width: 34px; height: 34px; }
 .action-more { gap: 8px; margin-left: 0; }
