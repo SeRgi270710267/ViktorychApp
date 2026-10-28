@@ -14,10 +14,10 @@
   flex-direction: row;
   flex-wrap: nowrap !important;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 8px 12px;
+  padding: 4px 12px;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x pan-y;
@@ -45,12 +45,12 @@
 .sp-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 48px;
+  gap: 6px;
+  height: 36px;
   max-width: 100%;
   min-width: 0;
   width: max-content;
-  padding: 0 14px 0 6px;
+  padding: 0 10px 0 4px;
   border-radius: 999px;
   background: linear-gradient(90deg, #2a0f6b, #3a1a8f);
   color: #fff;
@@ -64,7 +64,8 @@
 }
 .sp-pill-text {
   min-width: 0;
-  font-size: 17px;
+  max-width: min(220px, 58vw);
+  font-size: 15px;
   line-height: 20px;
   font-weight: 700;
   color: inherit;
@@ -79,8 +80,8 @@
 .sp-stack { display: flex; flex: none; }
 .sp-stack .sp-face,
 .sp-stack .sp-initial {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid #c4b2ff;
   margin-left: -12px;
@@ -118,7 +119,8 @@
   animation: sp-marquee 20s linear infinite;
 }
 .sp-marquee.is-on .sp-marquee-copy { padding-right: 32px; }
-.sp-marquee.is-paused .sp-marquee-track { animation-play-state: paused; }
+.sp-marquee.is-paused .sp-marquee-track,
+.sp-marquee.is-held .sp-marquee-track { animation-play-state: paused; }
 @keyframes sp-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }

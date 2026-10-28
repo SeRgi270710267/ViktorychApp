@@ -737,6 +737,15 @@ html.is-split-drag * {
 }
 .tab-manage:hover { background: var(--hover); }
 .tab-manage svg { width: 20px; height: 20px; fill: currentColor; }
+.tabs-bar,
+.tabs-bar .tabs,
+.tabs-bar .tab,
+.tabs-bar .tab-pair,
+.tabs-bar .tab-manage { height: 44px; }
+.tabs-bar .tab { padding: 0 12px; }
+.tabs-bar .tab.on span:not(.tab-grip)::after { bottom: -12px; }
+.tabs-bar .tab span { overflow: visible; text-overflow: clip; max-width: none; }
+.tab-emoji { margin-right: 4px; }
 .tabs-bar::before,
 .tabs-bar::after {
   content: "";

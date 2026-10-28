@@ -773,7 +773,7 @@
   function rowExtra() {
     const hasSpaces = homeItems().length > 0;
     const hasScores = !!(root.SoccerScores && root.SoccerScores.loadTeams && root.SoccerScores.loadTeams().length);
-    return (hasSpaces || hasScores) ? 65 : 0;
+    return (hasSpaces || hasScores) ? 46 : 0;
   }
 
   function sideCard() {
@@ -1890,8 +1890,13 @@
     if (!clip || !text) return;
     if (clip.clientWidth < 2) {
       el.classList.remove("is-on");
+      if (!el.dataset.marqueeWait) {
+        el.dataset.marqueeWait = "1";
+        requestAnimationFrame(() => applyMarquee(el));
+      }
       return;
     }
+    delete el.dataset.marqueeWait;
     const overflow = text.scrollWidth - clip.clientWidth;
     const plan = marqueePlan(overflow, reduced);
     el.classList.toggle("is-on", !!plan.animate);
@@ -1909,6 +1914,12 @@
     rootEl.querySelectorAll("[data-sp-marquee]").forEach((el) => {
       if (seenMarquee.has(el)) { applyMarquee(el); return; }
       seenMarquee.add(el);
+      const hold = (on) => { el.classList.toggle("is-held", on); };
+      const host = el.closest(".sp-pill, .sc-pill, .wx-pill") || el;
+      host.addEventListener("pointerdown", () => hold(true));
+      host.addEventListener("pointerup", () => hold(false));
+      host.addEventListener("pointercancel", () => hold(false));
+      host.addEventListener("pointerleave", () => hold(false));
       const clip = el.querySelector(".sp-marquee-clip");
       if (clip && root.ResizeObserver) new root.ResizeObserver(() => applyMarquee(el)).observe(clip);
       if (!io && root.IntersectionObserver) {

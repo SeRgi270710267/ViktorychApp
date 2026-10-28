@@ -886,9 +886,12 @@
     return out;
   }
 
+  function clipTabName(value) {
+    return String(value || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 2000);
+  }
+
   function cleanEmoji(value) {
-    const text = String(value || "").replace(/[\u0000-\u001f<>]/g, "").trim();
-    return Array.from(text).slice(0, 4).join("");
+    return String(value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 500);
   }
 
   function tabColor(value) {
@@ -903,7 +906,7 @@
     list.forEach((item) => {
       if (!item || out.length >= 500) return;
       const id = String(item.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
-      const name = String(item.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      const name = clipTabName(item.name);
       if (!id || !name || seen[id]) return;
       seen[id] = true;
       const members = [];
@@ -7912,7 +7915,7 @@ const here = parseRoute();
         <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
           ${tabWithMenu("foryou", tr("For you"))}
           ${tabWithMenu("following", tr("Following"))}
-          ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, "", item.id)).join("")}
+          ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, item.emoji ? `<span class="tab-emoji">${esc(item.emoji)}</span>` : "", item.id)).join("")}
           ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
         </div>
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
@@ -11435,7 +11438,7 @@ const here = parseRoute();
   function tabMark(tab) {
     if (tab && tab.emoji) return esc(tab.emoji);
     if (tab && tab.color) return `<i class="tab-dot" style="background:${esc(tab.color)}"></i>`;
-    return icon("lists");
+    return "";
   }
 
   function feedTabChoices(feedId) {
@@ -11817,7 +11820,7 @@ const here = parseRoute();
   function saveFeedTabDraft() {
     syncFeedTabDraft();
     const draft = STATE.draft || {};
-    let name = String(draft.name || "").replace(/\s+/g, " ").trim();
+    let name = clipTabName(draft.name);
     if (!name) return;
     const tabs = scopeTabList();
     let tab = draft.id ? tabs.find((item) => item.id === draft.id) : null;
@@ -11831,7 +11834,7 @@ const here = parseRoute();
     }
     if (tab.kind === "verified" && name === tr("Note tab verified")) name = "verified";
     if (tab.kind === "mentions" && name === tr("Mentions")) name = "mentions";
-    tab.name = name.slice(0, 40);
+    tab.name = name;
     tab.emoji = cleanEmoji(draft.emoji);
     tab.color = tabColor(draft.color);
     tab.showHome = draft.showHome !== false;
@@ -11905,7 +11908,7 @@ const here = parseRoute();
     const orderHint = editingNoteTabs() ? tr("Drag the handle to reorder.") : tr("Drag the handle to reorder. The same order is used on Home.");
     const order = orderTabs.length > 1 ? `<h3>${tr("Order")}</h3><p class="phandle">${orderHint}</p>${orderTabs.map((tab) => `<div class="tab-order-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="${tr("Drag to reorder")}"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="tab-order-name">${esc(editingNoteTabs() ? noteTabLabel(tab) : tab.name)}</span></div>`).join("")}` : "";
     const homeSwitch = editingNoteTabs() ? "" : switches("showHome", tr("Show on Home"));
-    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? tr("Edit tab") : tr("New tab")}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${draft.id ? tr("Edit tab") : tr("New tab")}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>${tr("Save")}</button></div><div class="modal-body"><label class="field"><span>${tr("Name")}</span><input id="feed-tab-name" data-field="name" maxlength="40" value="${esc(draft.name || "")}"></label><label class="field"><span>${tr("Emoji")}</span><input id="feed-tab-emoji" data-field="emoji" maxlength="8" placeholder="${tr("Optional")}" value="${esc(draft.emoji || "")}"></label><div class="field"><span>${tr("Colour")}</span><div class="swatches">${swatches}</div></div>${homeSwitch}${switches("showNotes", tr("Show in Notifications"))}<h3>${tr("Accounts")}</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">${tr("Search to add accounts. Profiles with no tab stay in All.")}</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">${tr("Delete tab")}</button>` : ""}</div></div></div>`;
+    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? tr("Edit tab") : tr("New tab")}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${draft.id ? tr("Edit tab") : tr("New tab")}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>${tr("Save")}</button></div><div class="modal-body"><label class="field"><span>${tr("Name")}</span><input id="feed-tab-name" data-field="name" value="${esc(draft.name || "")}"></label><label class="field"><span>${tr("Emoji")}</span><input id="feed-tab-emoji" data-field="emoji" placeholder="${tr("Optional")}" value="${esc(draft.emoji || "")}"></label><div class="field"><span>${tr("Colour")}</span><div class="swatches">${swatches}</div></div>${homeSwitch}${switches("showNotes", tr("Show in Notifications"))}<h3>${tr("Accounts")}</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">${tr("Search to add accounts. Profiles with no tab stay in All.")}</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">${tr("Delete tab")}</button>` : ""}</div></div></div>`;
   }
 
   function isStandalone() {
@@ -12521,7 +12524,7 @@ if (STATE.histClear) {
       return `<div class="modal-back"><div class="modal" role="dialog">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${d.id ? tr("Edit List") : tr("Create a new List")}</h2><button class="save" data-act="save-list" ${d.name && d.name.trim() ? "" : "disabled"}>${tr("Save")}</button></div>
         <div class="modal-body">
-          <label class="field"><span>${tr("Name")}</span><input id="list-name" data-field="name" maxlength="50" value="${esc(d.name || "")}"></label>
+          <label class="field"><span>${tr("Name")}</span><input id="list-name" data-field="name" value="${esc(d.name || "")}"></label>
           <label class="field"><span>${tr("Description")}</span><textarea id="list-desc" data-field="description" maxlength="160">${esc(d.description || "")}</textarea></label>
           <div class="field"><span>${tr("Banner")}</span><div class="swatches">${COLORS.map((c) => `<button class="swatch${d.bannerColor === c ? " on" : ""}" style="background:${c}" data-act="color" data-color="${c}" aria-label="${tr("Banner color")}"></button>`).join("")}</div></div>
           ${d.id ? `<button class="danger" data-act="ask-delete">${tr("Delete List")}</button>` : ""}
@@ -12603,9 +12606,9 @@ if (STATE.histClear) {
     /* The home header always shows the pills row: weather, scores, or the
        live station. The phone header is fixed, so this height has to be
        reserved or the row covers the first card. */
-    if (window.WeatherPills && window.WeatherPills.homeRow) return 65;
-    if (window.Spaces && (window.Spaces.homeRow || window.Spaces.homePillsHtml)) return 65;
-    if (window.SoccerScores && window.SoccerScores.pillsHtml) return 65;
+    if (window.WeatherPills && window.WeatherPills.homeRow) return 46;
+    if (window.Spaces && (window.Spaces.homeRow || window.Spaces.homePillsHtml)) return 46;
+    if (window.SoccerScores && window.SoccerScores.pillsHtml) return 46;
     return 0;
   }
 
@@ -12617,7 +12620,7 @@ if (STATE.histClear) {
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = (route.name === "profile" || route.name === "user" || route.name === "person") ? 0 : (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 106 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
+    const top = (route.name === "profile" || route.name === "user" || route.name === "person") ? 0 : (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 97 : explore ? 0 : tall && !musicHome ? 97 : 53) + rowExtra + storyExtra;
     const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
@@ -16466,7 +16469,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "color") { STATE.draft.bannerColor = el.dataset.color; render(); return; }
     if (act === "save-list") {
-      const name = (STATE.draft.name || "").trim();
+      const name = clipTabName(STATE.draft.name || "");
       if (!name) return;
       if (STATE.draft.id) {
         const list = STATE.settings.lists.find((l) => l.id === STATE.draft.id);
