@@ -2065,6 +2065,34 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<span class="vbadge ${cls}" title="${label}">${icon("check")}</span>`;
   }
 
+  /* Outside accounts for @mention suggestions: followed sources first, then
+     authors already in the timeline. Matching is a case-insensitive prefix
+     on the handle or the name. */
+  window.ViktorychMentionsLocal = {
+    search(query) {
+      const q = String(query || "").toLowerCase();
+      if (!q) return [];
+      const out = [];
+      const seen = {};
+      const take = (row, follows) => {
+        if (!row || row.platform !== "x" || !row.handle) return;
+        const handle = String(row.handle);
+        const key = handle.toLowerCase();
+        if (seen[key]) return;
+        const name = String(row.name || row.author || "");
+        if (key.indexOf(q) !== 0 && name.toLowerCase().indexOf(q) !== 0) return;
+        seen[key] = true;
+        out.push({ handle, name, avatar: row.avatar || "", verifiedType: row.verifiedType || "", platform: "x", follows });
+      };
+      ((STATE.data && STATE.data.feeds) || []).forEach((feed) => take(feed, true));
+      ((STATE.data && STATE.data.posts) || []).slice(0, 400).forEach((post) => take(post, false));
+      return out.slice(0, 6);
+    },
+    badge(row) {
+      return (row && row.verifiedType ? badge(row.verifiedType) : "");
+    }
+  };
+
   function sourceBadge(platform) {
     if (!platform || platform === "x" || platform === "app") return "";
     const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : "rss";
