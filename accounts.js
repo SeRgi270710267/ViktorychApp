@@ -31,6 +31,38 @@
   var friendsCache = {};
   var friendsLoads = {};
   var friendRequestsCache = { incoming: [], outgoing: [] };
+  /* Pending friend requests survive a reload: the last server list is kept
+     per account in localStorage, so the profile button shows Request Sent
+     (or Confirm) at first paint instead of Add friend. */
+  var FRIEND_REQ_KEY = "friend-req-v1";
+  function friendReqHandles(list) {
+    return (list || []).map(function (r) { return String((r && r.handle) || "").replace(/^@/, "").toLowerCase(); }).filter(Boolean).slice(0, 200);
+  }
+  function friendReqOwner() {
+    var session = readSession();
+    return session && session.account ? String(session.account.publicId || session.account.handle || "") : "";
+  }
+  function saveFriendReqs() {
+    var owner = friendReqOwner();
+    if (!owner) return;
+    writeStored(FRIEND_REQ_KEY, JSON.stringify({ owner: owner, out: friendReqHandles(friendRequestsCache.outgoing), inc: friendReqHandles(friendRequestsCache.incoming) }));
+  }
+  function storedFriendReqs() {
+    try {
+      var raw = JSON.parse(readStored(FRIEND_REQ_KEY) || "null");
+      if (!raw || raw.owner !== friendReqOwner()) return { out: [], inc: [] };
+      return { out: Array.isArray(raw.out) ? raw.out : [], inc: Array.isArray(raw.inc) ? raw.inc : [] };
+    } catch (err) { return { out: [], inc: [] }; }
+  }
+  function pendingFriendStatus(handle) {
+    var h = String(handle || "").replace(/^@/, "").toLowerCase();
+    if (!h) return "";
+    var live = friendRequestsLoaded ? { out: friendReqHandles(friendRequestsCache.outgoing), inc: friendReqHandles(friendRequestsCache.incoming) } : storedFriendReqs();
+    if (live.out.indexOf(h) >= 0) return "sent";
+    if (live.inc.indexOf(h) >= 0) return "received";
+    return "";
+  }
+  var friendRequestsLoaded = false;
   var friendRequestsLoading = false;
   var friendsSearchQuery = "";
   var friendsSubTab = "all";
@@ -2217,7 +2249,7 @@ function signupPayload() {
     if (account.followingCount != null && !graphCounts[id].fresh) graphCounts[id].following = account.followingCount;
     if (account.followersCount != null && !graphCounts[id].fresh) graphCounts[id].followers = account.followersCount;
     if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
-    if (account.viewerFriendStatus != null) graphCounts[id].friendStatus = account.viewerFriendStatus;
+    if (account.viewerFriendStatus != null && !(graphCounts[id].friendAt && Date.now() - graphCounts[id].friendAt < 60000)) graphCounts[id].friendStatus = account.viewerFriendStatus;
     if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
     graphCounts[id].pending = !!account.viewerPending;
     graphCounts[id].viewerBlocks = !!account.viewerBlocks;
@@ -2534,7 +2566,10 @@ function signupPayload() {
     var session = readSession();
     var ref = accountRef(account);
     if (!session || !account || !ref || profileMine(account)) return "";
+    if (!friendRequestsLoaded) ensureFriendRequests();
     var status = (graphCounts[ref] && graphCounts[ref].friendStatus) || account.viewerFriendStatus || "none";
+    var recent = graphCounts[ref] && graphCounts[ref].friendAt && Date.now() - graphCounts[ref].friendAt < 60000;
+    if (status === "none" && !recent) status = pendingFriendStatus(account.handle) || "none";
     var pid = ref;
     var handle = account.handle || "";
 
@@ -2583,6 +2618,8 @@ function signupPayload() {
         incoming: Array.isArray(res.incoming) ? res.incoming : [],
         outgoing: Array.isArray(res.outgoing) ? res.outgoing : []
       };
+      friendRequestsLoaded = true;
+      saveFriendReqs();
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { friendRequestsLoading = false; });
   }
@@ -2622,26 +2659,29 @@ function signupPayload() {
     var prevCount = graphCounts[idKey].friends || 0;
     var prevMyCount = (graphCounts[meKey] && graphCounts[meKey].friends) || 0;
 
+    graphCounts[idKey].friendAt = Date.now();
+    var reqHandle = String(handle || "").replace(/^@/, "");
     if (action === "request") {
       graphCounts[idKey].friendStatus = "sent";
+      if (reqHandle && !friendRequestsCache.outgoing.some(function (r) { return String(r.handle || "").toLowerCase() === reqHandle.toLowerCase(); })) friendRequestsCache.outgoing.unshift({ handle: reqHandle, id: "app:@" + reqHandle, friendStatus: "sent" });
     } else if (action === "accept") {
       graphCounts[idKey].friendStatus = "friends";
       graphCounts[idKey].friends = prevCount + 1;
       graphCounts[meKey] = graphCounts[meKey] || {};
       graphCounts[meKey].friends = prevMyCount + 1;
       friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
-        return r.id !== tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId && !(reqHandle && String(r.handle || "").toLowerCase() === reqHandle.toLowerCase());
       });
       friendsCache = {};
     } else if (action === "decline") {
       graphCounts[idKey].friendStatus = "none";
       friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
-        return r.id !== tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId && !(reqHandle && String(r.handle || "").toLowerCase() === reqHandle.toLowerCase());
       });
     } else if (action === "cancel") {
       graphCounts[idKey].friendStatus = "none";
       friendRequestsCache.outgoing = friendRequestsCache.outgoing.filter(function (r) {
-        return r.id !== tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId && !(reqHandle && String(r.handle || "").toLowerCase() === reqHandle.toLowerCase());
       });
     } else if (action === "remove") {
       graphCounts[idKey].friendStatus = "none";
@@ -2651,12 +2691,16 @@ function signupPayload() {
       friendsCache = {};
     }
 
+    saveFriendReqs();
     if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
 
     var ep = "/v1/friends/" + action;
     api(ep, { method: "POST", token: session.token, body: { targetId: tId } }).then(function (res) {
       if (!res || res.status !== 200) {
         graphCounts[idKey].friendStatus = prevStatus;
+        graphCounts[idKey].friendAt = 0;
+        friendRequestsLoading = false;
+        ensureFriendRequests();
         graphCounts[idKey].friends = prevCount;
         if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
         if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -2676,6 +2720,9 @@ function signupPayload() {
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {
       graphCounts[idKey].friendStatus = prevStatus;
+      graphCounts[idKey].friendAt = 0;
+      friendRequestsLoading = false;
+      ensureFriendRequests();
       graphCounts[idKey].friends = prevCount;
       if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
