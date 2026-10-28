@@ -4718,7 +4718,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       </button>`;
     const replyCount = shownCount(stats.replies, 0);
     const replyOnX = (post.platform || "x") === "x";
-    const replyLink = replyOnX
+    const replyLink = post.appPost
+      ? `<button class="action reply" type="button" data-act="public-reply" data-id="${esc(id)}" aria-label="${tr("Reply")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</button>`
+      : replyOnX
       ? `<button class="action reply" type="button" data-act="xc-reply" data-id="${esc(id)}" aria-label="${tr("Reply")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</button>`
       : `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
     const menuOpen = STATE.repostMenu === id;
@@ -7035,7 +7037,19 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="thread">${parentHtml}${childHtml}</div>`;
   }
 
+  function appMenuItems(post) {
+    const mine = signedAccount();
+    const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
+    const muteCommunity = post.community ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : "";
+    const quote = post.community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`;
+    if (self || !post.authorId) return quote + muteCommunity;
+    return quote + `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>` + muteCommunity;
+  }
+
   function card(post, mode, opts) {
+    if (post && post.appPost && post.spamHidden) {
+      return `<article class="post" data-post="${esc(post.id)}"><div class="post-row"><div class="post-main"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></div></div></article>`;
+    }
     creditCarried(post);
     if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
@@ -7064,7 +7078,7 @@ const here = parseRoute();
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -7082,7 +7096,11 @@ const here = parseRoute();
     const threadLink = mode !== "status" && mode !== "reply" && (threadChildren(post).length || nestedDiscord)
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
+    const community = post.community && post.community.name && !opts.parentShown
+      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(post.community.name)}</a></div>`
+      : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
+      ${community}
       ${repost}
       ${sharedNote}
       ${forwarded}
@@ -7104,6 +7122,7 @@ const here = parseRoute();
           ${articleCardHtml(post)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
+          ${post.appPost ? (post.appExtra || "") : ""}
           ${postCards(post)}
           ${quoteCard(post.quoted)}
           ${giftChip(post)}
@@ -8410,25 +8429,6 @@ const here = parseRoute();
     return `<${tag}${extra} data-public-media="${esc(item.url || "")}"></${tag}>`;
   }
 
-  function publicPostHtml(post) {
-    if (!STATE.publicSpam) STATE.publicSpam = {};
-    if (publicPostSpam(post) && !STATE.publicSpam[post.id]) {
-      return `<article class="card public-post" data-post="${esc(post.id)}"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></article>`;
-    }
-    const media = (post.media || []).map(publicMediaHtml).join("");
-    const poll = post.poll && post.poll.options ? `<div class="public-poll">${post.poll.options.map((opt) => `<div>${esc(opt)}</div>`).join("")}</div>` : "";
-    const place = post.location ? `<p class="phandle">${esc(post.location)}</p>` : "";
-    const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
-    const mine = signedAccount();
-    const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
-    const community = post.community && post.community.name ? post.community : null;
-    const chip = community ? `<a class="pub-cm" href="#/communities/${encodeURIComponent(community.name)}/${encodeURIComponent(community.rootId || post.id)}" aria-label="${esc(tr("Community"))}"><span class="pub-cm-track"><span class="pub-cm-text" data-pub-cm>${esc(community.name)}</span><span class="pub-cm-text" aria-hidden="true">${esc(community.name)}</span></span></a>` : "";
-    const counts = community ? `<span class="pub-counts">${esc(String(post.replyCount || 0))} ${esc(tr("Replies"))} · ${esc(String(post.likes || 0))} ${esc(tr("Likes"))}</span>` : "";
-    const muteCommunity = community ? `<button type="button" data-act="mute-community" data-name="${esc(community.name)}">${esc(tr("Mute community"))}</button>` : "";
-    const tools = self ? muteCommunity : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>${muteCommunity}`;
-    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="pub-head"><div class="name">${esc(post.authorName || "")}${affSlot(post)}</div>${chip}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}${counts}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button>${community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`}${tools}</div></article>`;
-  }
-
   function welcomeHtml(route) {
     if (!route || route.name !== "home") return "";
     if (document.documentElement.getAttribute("data-wall") === "1") return "";
@@ -8647,17 +8647,95 @@ const here = parseRoute();
     }).catch(finishFail);
   }
 
+  // Posts written in this app (and in its communities) come from /v1/posts. Home shows
+  // them as normal post cards, merged into the timeline by time, on For you and Following.
+  function appCardPost(item) {
+    const created = Number(item.createdAt) || 0;
+    const date = new Date(created || Date.now()).toISOString();
+    const community = item.community && item.community.name ? { name: String(item.community.name), rootId: String(item.community.rootId || item.id || "") } : null;
+    const media = (item.media || []).map(publicMediaHtml).join("");
+    const poll = item.poll && item.poll.options ? `<div class="public-poll">${item.poll.options.map((opt) => `<div>${esc(opt)}</div>`).join("")}</div>` : "";
+    const place = item.location ? `<p class="phandle">${esc(item.location)}</p>` : "";
+    const post = {
+      id: String(item.id || ""),
+      statusId: String(item.id || ""),
+      platform: "app",
+      appPost: true,
+      handle: String(item.authorHandle || ""),
+      author: String(item.authorName || item.authorHandle || ""),
+      authorId: String(item.authorId || ""),
+      publicId: String(item.authorId || ""),
+      feedId: item.authorId ? "app:" + item.authorId : "",
+      avatar: String(item.authorAvatar || ""),
+      text: String(item.body || ""),
+      date: date,
+      sortDate: date,
+      kind: item.parentId ? "reply" : (item.quote ? "quote" : "post"),
+      stats: { replies: Number(item.replyCount) || 0, likes: Number(item.likes) || 0 },
+      media: [],
+      appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : ""),
+      community: community,
+      parentId: String(item.parentId || ""),
+      url: ""
+    };
+    if (item.quote) post.quoted = { platform: "app", id: String(item.quote.id || item.quoteId || ""), handle: String(item.quote.authorHandle || ""), author: String(item.quote.authorName || ""), text: String(item.quote.body || "") };
+    return post;
+  }
+
+  function appHomePosts(tab) {
+    if (tab !== "foryou" && tab !== "following") return [];
+    if (!STATE.publicSpam) STATE.publicSpam = {};
+    const mine = signedAccount();
+    const meId = mine && mine.publicId ? String(mine.publicId) : "";
+    const list = publicPosts.filter((item) => item && item.id).map((item) => {
+      const post = appCardPost(item);
+      if (publicPostSpam(item) && !STATE.publicSpam[item.id]) post.spamHidden = true;
+      return post;
+    });
+    const byId = {};
+    list.forEach((post) => {
+      byId[post.id] = post;
+      STATE.shared[post.id] = post;
+    });
+    list.forEach((post) => {
+      if (!post.parentId) return;
+      const parent = byId[post.parentId];
+      post.replyingTo = { id: post.parentId, handle: parent ? parent.handle : "" };
+    });
+    // A parent shown above its reply (as a thread) is not listed again on its own.
+    const threaded = {};
+    list.forEach((post) => { if (post.parentId && byId[post.parentId] && !post.spamHidden) threaded[post.parentId] = true; });
+    return list.filter((post) => {
+      if (threaded[post.id] || hiddenPost(post)) return false;
+      if (tab === "foryou") return true;
+      if (meId && post.authorId === meId) return true;
+      if (post.community) return true;
+      return !!post.feedId && isFollowed(post.feedId);
+    });
+  }
+
+  function mergeAppPosts(list, extra) {
+    if (!extra.length) return list;
+    const at = (post) => Date.parse(stamp(post)) || 0;
+    const queue = extra.slice().sort((a, b) => at(b) - at(a));
+    const out = [];
+    list.forEach((post) => {
+      while (queue.length && at(queue[0]) >= at(post)) out.push(queue.shift());
+      out.push(post);
+    });
+    return out.concat(queue);
+  }
+
   function homeView(route) {
     const tab = route.tab || "foryou";
-    const sorted = homeSorted(route);
+    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab));
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
     const findAccounts = !list.length && (tab === "following" || tab === "foryou")
       ? `<p class="empty-action"><a class="save" href="#/feeds">${esc(tr("Find accounts to follow"))}</a></p>`
       : "";
-    const published = tab === "foryou" ? publicPosts.map(publicPostHtml).join("") : "";
-    const body = published + (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const body = (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);

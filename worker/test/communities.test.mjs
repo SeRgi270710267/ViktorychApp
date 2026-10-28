@@ -134,7 +134,8 @@ test("internal community posts stay off anonymous responses and attach to a Redd
   });
   assert.equal(joined.status, 200);
   assert.equal(joined.body.joined, true);
-  assert.equal(joined.body.members, 1);
+  // Ada and Grace both posted here, and posting joins a public community.
+  assert.equal(joined.body.members, 2);
 
   const denied = await call("/v1/communities/teslamotors/posts/" + nested.body.post.id, {
     method: "DELETE",
@@ -318,8 +319,9 @@ test("home and a community share one post and one reply", async () => {
   assert.equal((locked.body.posts || []).some((item) => item.id === post.body.post.id), false);
   const strangerHome = await call("/v1/posts", { ip: "203.0.113.95", token: stranger.body.token });
   assert.equal((strangerHome.body.posts || []).some((item) => item.community && item.community.name === "homefeed"), false);
+  // Posting joined Ada to the community while it was public, so she still reads it.
   const memberHome = await call("/v1/posts", { ip: "203.0.113.96", token: ada.body.token });
-  assert.equal((memberHome.body.posts || []).some((item) => item.id === post.body.post.id), false);
+  assert.equal((memberHome.body.posts || []).filter((item) => item.id === post.body.post.id).length, 1);
   const globalOn = await call("/v1/communities/home", {
     method: "POST",
     ip: "203.0.113.97",
@@ -328,7 +330,7 @@ test("home and a community share one post and one reply", async () => {
   });
   assert.equal(globalOn.body.showHome, true);
   const adaBack = await call("/v1/posts", { ip: "203.0.113.98", token: ada.body.token });
-  assert.equal((adaBack.body.posts || []).some((item) => item.id === post.body.post.id), false);
+  assert.equal((adaBack.body.posts || []).filter((item) => item.id === post.body.post.id).length, 1);
   await call("/v1/communities/homefeed/join", { method: "POST", ip: "203.0.113.99", token: ada.body.token });
   const adaMember = await call("/v1/posts", { ip: "203.0.113.100", token: ada.body.token });
   assert.equal((adaMember.body.posts || []).filter((item) => item.id === post.body.post.id).length, 1);
@@ -340,4 +342,53 @@ test("home and a community share one post and one reply", async () => {
   });
   const graceBack = await call("/v1/posts", { ip: "203.0.113.102", token: grace.body.token });
   assert.equal((graceBack.body.posts || []).filter((item) => item.id === reply.body.post.id).length, 1);
+});
+
+test("home lists community posts for members, followers and the owner", async () => {
+  const sign = async (handle, ip) => {
+    const res = await call("/v1/signup", { method: "POST", ip, body: { displayName: handle, handle } });
+    assert.equal(res.status, 201);
+    return res.body;
+  };
+  const sees = async (token, id, ip) => {
+    const res = await call("/v1/posts", { ip, token });
+    assert.equal(res.status, 200);
+    return (res.body.posts || []).filter((item) => item.id === id).length === 1;
+  };
+  const cara = await sign("cara_home", "203.0.114.10");
+  const post = await call("/v1/communities/followfeed/posts", { method: "POST", ip: "203.0.114.11", token: cara.token, body: { text: "Cara in the community" } });
+  assert.equal(post.status, 200);
+  const id = post.body.post.id;
+  const dan = await sign("dan_home", "203.0.114.12");
+  assert.equal(await sees(dan.token, id, "203.0.114.13"), false);
+
+  const follow = await call("/v1/follows", { method: "PUT", ip: "203.0.114.14", token: dan.token, body: { id: "app:" + cara.account.publicId } });
+  assert.equal(follow.status, 200);
+  assert.equal(await sees(dan.token, id, "203.0.114.15"), true);
+
+  const fay = await sign("fay_home", "203.0.114.16");
+  const reply = await call("/v1/posts", { method: "POST", ip: "203.0.114.17", token: fay.token, body: { body: "Fay replies", parentId: id } });
+  assert.equal(reply.status, 201);
+  assert.equal(await sees(cara.token, reply.body.post.id, "203.0.114.18"), true);
+  const faySelf = await call("/v1/communities/followfeed/posts", { method: "POST", ip: "203.0.114.19", token: fay.token, body: { text: "Fay posts too" } });
+  assert.equal(faySelf.status, 200);
+  assert.equal(await sees(cara.token, faySelf.body.post.id, "203.0.114.20"), true);
+
+  const eve = await sign("eve_home", "203.0.114.21");
+  assert.equal(await sees(eve.token, id, "203.0.114.22"), false);
+  const db = await mf.getD1Database("DB");
+  const realOwner = await db.prepare("SELECT public_id FROM accounts WHERE owner = 1").first();
+  if (realOwner) await db.prepare("UPDATE accounts SET owner = 0 WHERE public_id = ?").bind(realOwner.public_id).run();
+  await db.prepare("UPDATE accounts SET owner = 1 WHERE public_id = ?").bind(eve.account.publicId).run();
+  try {
+    assert.equal(await sees(eve.token, id, "203.0.114.23"), true);
+    assert.equal(await sees(eve.token, reply.body.post.id, "203.0.114.24"), true);
+  } finally {
+    await db.prepare("UPDATE accounts SET owner = 0 WHERE public_id = ?").bind(eve.account.publicId).run();
+    if (realOwner) await db.prepare("UPDATE accounts SET owner = 1 WHERE public_id = ?").bind(realOwner.public_id).run();
+  }
+
+  await db.prepare("INSERT INTO community_meta (community_id, visibility, updated_at) VALUES (?, 'private', ?) ON CONFLICT(community_id) DO UPDATE SET visibility = 'private'").bind("followfeed", Date.now()).run();
+  assert.equal(await sees(dan.token, id, "203.0.114.25"), false);
+  assert.equal(await sees(fay.token, id, "203.0.114.26"), true);
 });
