@@ -539,6 +539,7 @@
     <script src="gifts-ui.js" defer></script>
     <script src="badges.js" defer></script>
     <script src="accounts.js" defer></script>
+    <script src="mention-suggest.js" defer></script>
     <script src="owner-keys.js" defer></script>
     <script src="yt-player.js" defer></script>
     <script src="update.js" defer></script>
@@ -590,24 +591,30 @@
           el.href = node.getAttribute("href");
           document.head.appendChild(el);
         });
-        var i = 0;
-        function next() {
-          if (i >= nodes.length) {
-            try { window.dispatchEvent(new Event("viktorych-late")); } catch (err) { /* the shell is already up */ }
-            return;
-          }
-          var node = nodes[i++];
+        /* Insert every script at once. async=false keeps execution in this
+           order while the browser downloads them in parallel, so the app no
+           longer waits one round trip per file. */
+        var left = 0;
+        function done() {
+          left -= 1;
+          if (left > 0) return;
+          try { window.dispatchEvent(new Event("viktorych-late")); } catch (err) { /* the shell is already up */ }
+        }
+        var frag = document.createDocumentFragment();
+        nodes.forEach(function (node) {
           var src = node.getAttribute("src");
-          if (!src) { next(); return; }
+          if (!src) return;
           var el = document.createElement("script");
           var type = node.getAttribute("type");
           if (type) el.type = type;
           el.async = false;
           el.src = src;
-          el.onload = el.onerror = next;
-          document.body.appendChild(el);
-        }
-        next();
+          el.onload = el.onerror = done;
+          left += 1;
+          frag.appendChild(el);
+        });
+        if (!left) { left = 1; done(); return; }
+        document.body.appendChild(frag);
       }
       var started = false;
       var scheduled = false;
@@ -618,6 +625,8 @@
       }
       function warmTimeline() {
         if (window.__VIKTORYCH_FEED) return;
+        /* The head script already started the fresh catalog read the app uses. */
+        if (window.__homeFreshBoot && window.__homeFreshBoot.feeds) return;
         try {
           window.__VIKTORYCH_FEED = fetch("feeds.json", { credentials: "omit", priority: "low" }).then(function (res) {
             if (!res.ok) return "";
@@ -655,6 +664,11 @@
         }
         if (scheduled || started) return;
         scheduled = true;
+        /* Signed-in people came for their feed: load it now instead of
+           holding the app back for an idle moment. */
+        var signedIn = false;
+        try { signedIn = !!(JSON.parse(localStorage.getItem("viktorychapp-account-v1") || "null") || {}).token; } catch (err) { signedIn = false; }
+        if (signedIn) { warmTimeline(); start(); return; }
         if (window.requestAnimationFrame) {
           requestAnimationFrame(function () { requestAnimationFrame(afterFirstPaint); });
         } else {
