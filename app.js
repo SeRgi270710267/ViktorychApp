@@ -7995,7 +7995,7 @@ const here = parseRoute();
       now: Date.now(),
       weights: window.ForYouWeights,
       memory: forYouMemory() || (window.ForYou && window.ForYou.emptyMemory()),
-      followed: (post) => followedPost(post),
+      followed: (post) => followedPost(post) || !!(post && post.feedId && feedById(post.feedId)),
       liked: (post) => !!(post && likes[post.id]),
       read: (post) => !!(STATE.openedPosts && post && STATE.openedPosts[post.id]),
       skip: (post) => hiddenPost(post)
@@ -8008,6 +8008,16 @@ const here = parseRoute();
       copy.sort(byStamp);
       return copy;
     }
+    try {
+    return forYouTimelineRanked(list);
+    } catch (err) {
+      const copy = list.slice();
+      copy.sort(byStamp);
+      return copy;
+    }
+  }
+
+  function forYouTimelineRanked(list) {
     const idOf = (post) => String((post && post.id) || "");
     const by = {};
     list.forEach((post) => {
@@ -8024,6 +8034,11 @@ const here = parseRoute();
     };
     if (!STATE.forYouSnap) {
       const ranked = window.ForYou.rank(list, forYouContext());
+      if (!ranked.length) {
+        const copy = list.slice();
+        copy.sort(byStamp);
+        return copy;
+      }
       remember(ranked.map(idOf));
       return ranked;
     }

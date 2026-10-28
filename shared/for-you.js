@@ -217,11 +217,17 @@ function candidates(posts, ctx, bag) {
   const oon = [];
   const served = {};
   (ctx.memory.served || []).forEach((id) => { served[id] = true; });
+  const pool = [];
+  const already = [];
   posts.forEach((post) => {
     if (!post || (ctx.skip && ctx.skip(post))) return;
     const id = postId(post);
     if (id && ctx.memory.hidden && ctx.memory.hidden[id]) return;
-    if (id && served[id] && !ctx.keepSeen) return;
+    if (id && served[id] && !ctx.keepSeen) already.push(post);
+    else pool.push(post);
+  });
+  const usable = pool.length >= 8 ? pool : pool.concat(already);
+  usable.forEach((post) => {
     const author = authorKey(post);
     const row = (ctx.memory.authors || {})[author] || {};
     if ((row.negative || 0) >= (ctx.weights.fatigueDrops || 3)) return;

@@ -86,9 +86,11 @@ const seenMemory = emptyMemory();
 seenMemory.served = ["b1"];
 const unseen = rank(flood.concat(others), ctx(followed, { memory: seenMemory }));
 assert.equal(unseen.some((item) => item.id === "b1"), false);
+const wiped = emptyMemory();
+wiped.served = flood.concat(others).map((item) => item.id);
+const backfill = rank(flood.concat(others), ctx(followed, { memory: wiped }));
+assert.ok(backfill.length >= 5, "seen posts come back when nothing newer is left");
 commitServed(seenMemory);
-const again = rank(flood.concat(others), ctx(followed, { memory: seenMemory, keepSeen: false }));
-assert.equal(again.some((item) => seenMemory.served.indexOf(item.id) >= 0), false);
 
 const neg = emptyMemory();
 note(neg, post("a0", "user_a", 0.1, { likes: 100, reposts: 10, replies: 5 }, "status"), "hide");
