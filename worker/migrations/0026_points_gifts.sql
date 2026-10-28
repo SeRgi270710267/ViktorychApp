@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS gift_sends (
   privacy TEXT NOT NULL DEFAULT 'public',
   hidden INTEGER NOT NULL DEFAULT 0,
   cost INTEGER NOT NULL,
+  context TEXT NOT NULL DEFAULT 'direct',
+  post_id TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS gift_sends_recipient ON gift_sends(recipient_id, created_at DESC);

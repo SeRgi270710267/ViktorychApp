@@ -301,6 +301,7 @@
       + '<button class="xc-tool" type="button" data-act="xc-file" data-slot="' + esc(slotName) + '" data-kind="gif" aria-label="' + esc(tr("GIF")) + '"><span class="xc-gif">GIF</span></button>'
       + '<button class="xc-tool" type="button" data-act="xc-file" data-slot="' + esc(slotName) + '" data-kind="video" aria-label="' + esc(tr("Video")) + '"><span class="xc-gif">▶</span></button>'
       + '<button class="xc-tool" type="button" data-act="xc-emoji" data-slot="' + esc(slotName) + '" aria-label="' + esc(tr("Emoji")) + '">' + icon(ICONS.emoji) + "</button>"
+      + (slotName === "reply" ? '<button class="xc-tool" type="button" data-gift="reply" data-parent="' + esc(slots.reply.replyTo || slots.reply.targetKey || "") + '" data-handle="' + esc(slots.reply.context || "") + '" aria-label="' + esc(tr("Send a gift")) + '">' + esc(tr("Gift")) + "</button>" : "")
       + aiButton(slotName)
       + '<button class="xc-tool" type="button" data-act="xc-add-post" data-slot="' + esc(slotName) + '" aria-label="' + esc(tr("Add post")) + '">' + icon(ICONS.plus) + "</button>"
       + '<span class="xc-end" data-xc="end" data-slot="' + esc(slotName) + '"><span data-xc="count" data-slot="' + esc(slotName) + '" data-index="0">' + meter(measure(slots[slotName], 0)) + "</span>" + postLink(slotName, 0, tr("Post to X")) + "</span></div>";

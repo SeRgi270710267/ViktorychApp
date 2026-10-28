@@ -52,6 +52,8 @@ export const POINTS_SCHEMA = [
     privacy TEXT NOT NULL DEFAULT 'public',
     hidden INTEGER NOT NULL DEFAULT 0,
     cost INTEGER NOT NULL,
+    context TEXT NOT NULL DEFAULT 'direct',
+    post_id TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL
   )`,
   "CREATE INDEX IF NOT EXISTS gift_sends_recipient ON gift_sends(recipient_id, created_at DESC)",
@@ -274,7 +276,9 @@ function presentGift(row, viewerId, owner) {
     svg: gift ? gift.svg : "",
     message: row.message || "",
     at: Number(row.created_at) || 0,
-    hidden: row.hidden === 1
+    hidden: row.hidden === 1,
+    context: row.context || "direct",
+    postId: row.post_id || ""
   };
   const showSender = privacy === "public" || (privacy === "private" && (owner || viewerId === row.recipient_id));
   if (showSender && privacy !== "anonymous") {
@@ -287,7 +291,7 @@ async function listGifts(env, ownerId, viewerId, owner) {
   const prefs = await prefsOf(env, ownerId);
   if (prefs.hideTab && !owner) return { hidden: true, who: prefs.who, gifts: [] };
   const listed = await env.DB.prepare(
-    "SELECT g.id, g.gift_id, g.sender_id, g.recipient_id, g.message, g.privacy, g.hidden, g.created_at, a.handle AS sender_handle, a.display_name AS sender_name FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.sender_id WHERE g.recipient_id = ? ORDER BY g.created_at DESC LIMIT 80"
+    "SELECT g.id, g.gift_id, g.sender_id, g.recipient_id, g.message, g.privacy, g.hidden, g.context, g.post_id, g.created_at, a.handle AS sender_handle, a.display_name AS sender_name FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.sender_id WHERE g.recipient_id = ? ORDER BY g.created_at DESC LIMIT 80"
   ).bind(ownerId).all();
   const gifts = [];
   rowsOf(listed).forEach((row) => {
@@ -301,6 +305,16 @@ export async function dailyFreeGift() {
   return { enabled: false };
 }
 
+export async function giftForPost(env, postId, viewerId) {
+  if (!postId) return null;
+  const row = await env.DB.prepare(
+    "SELECT g.id, g.gift_id, g.sender_id, g.recipient_id, g.message, g.privacy, g.hidden, g.context, g.post_id, g.created_at, a.handle AS sender_handle, a.display_name AS sender_name FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.sender_id WHERE g.post_id = ?"
+  ).bind(postId).first();
+  if (!row || row.hidden === 1) return null;
+  const owner = viewerId && viewerId === row.recipient_id;
+  return presentGift(row, viewerId || "", !!owner);
+}
+
 export async function handlePoints(request, env, path, deps) {
   const url = new URL(request.url);
   const viewer = await deps.sessionAccount(env, request);
@@ -310,6 +324,13 @@ export async function handlePoints(request, env, path, deps) {
   if (path === "/v1/gifts/daily" && request.method === "GET") return deps.json(200, await dailyFreeGift());
   if (path === "/v1/points/board" && request.method === "GET") {
     return deps.json(200, { enabled: String(env.POINTS_BOARD || "") === "on" });
+  }
+  if (path === "/v1/gifts/inbox" && request.method === "GET") {
+    if (!viewer) return deps.json(401, { error: "unauthorized" });
+    const listed = await env.DB.prepare(
+      "SELECT g.id, g.gift_id, g.sender_id, g.recipient_id, g.message, g.privacy, g.hidden, g.context, g.post_id, g.created_at, a.handle AS sender_handle, a.display_name AS sender_name FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.sender_id WHERE g.recipient_id = ? AND g.context = 'dm' AND g.hidden = 0 ORDER BY g.created_at DESC LIMIT 40"
+    ).bind(viewer.public_id).all();
+    return deps.json(200, { gifts: rowsOf(listed).map((row) => presentGift(row, viewer.public_id, true)) });
   }
   if (path === "/v1/gifts" && request.method === "GET") {
     const handle = String(url.searchParams.get("handle") || "");
@@ -392,13 +413,36 @@ export async function handlePoints(request, env, path, deps) {
       if (!follow) return deps.json(403, { error: "followers" });
     }
     const privacy = body.privacy === "private" || body.privacy === "anonymous" ? body.privacy : "public";
+    const mode = body.mode === "reply" || body.mode === "dm" ? body.mode : "direct";
+    const parentId = String(body.parentId || "").replace(/[^\w.:-]/g, "").slice(0, 80);
+    if (mode === "reply" && !parentId) return deps.json(400, { error: "parent" });
     const sendId = newId();
     const paid = await spendPoints(env, viewer.public_id, gift.price, "gift", sendId);
     if (!paid.ok) return deps.json(402, { error: paid.error, balance: paid.balance || 0 });
     const now = Date.now();
+    const message = cleanMessage(body.message);
+    let postId = "";
+    if (mode === "reply") {
+      postId = newId();
+      await env.DB.prepare(
+        "INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden) VALUES (?, ?, ?, ?, '', ?, 0)"
+      ).bind(postId, viewer.public_id, message || gift.id, parentId, now).run();
+      try {
+        await awardActivity(env, viewer.public_id, "comment", postId);
+        const parentRow = await env.DB.prepare("SELECT author_id FROM public_posts WHERE id = ?").bind(parentId).first();
+        if (parentRow && parentRow.author_id && parentRow.author_id !== viewer.public_id) {
+          await awardActivity(env, parentRow.author_id, "reply_in", postId);
+        }
+      } catch (err) { /* the reply is saved */ }
+    } else if (mode === "dm") {
+      postId = "ct_" + hex(crypto.getRandomValues(new Uint8Array(8)));
+      await env.DB.prepare(
+        "INSERT INTO account_content (id, author_id, kind, parent_id, body, created_at, updated_at, deleted_at) VALUES (?, ?, 'dm', ?, ?, ?, ?, 0)"
+      ).bind(postId, viewer.public_id, recipient.public_id, message || gift.id, now, now).run();
+    }
     await env.DB.prepare(
-      "INSERT INTO gift_sends (id, gift_id, sender_id, recipient_id, message, privacy, hidden, cost, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)"
-    ).bind(sendId, gift.id, viewer.public_id, recipient.public_id, cleanMessage(body.message), privacy, gift.price, now).run();
+      "INSERT INTO gift_sends (id, gift_id, sender_id, recipient_id, message, privacy, hidden, cost, context, post_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)"
+    ).bind(sendId, gift.id, viewer.public_id, recipient.public_id, message, privacy, gift.price, mode, postId, now).run();
     try {
       const named = privacy !== "anonymous";
       const note = await planNotification(env, {
@@ -415,7 +459,24 @@ export async function handlePoints(request, env, path, deps) {
       });
       if (note && note.statements) await commitBundled(env, note.statements, note.deliveries || [], request);
     } catch (err) { /* the gift is already stored */ }
-    return deps.json(201, { id: sendId, balance: paid.balance });
+    const attached = postId ? await giftForPost(env, postId, recipient.public_id) : null;
+    return deps.json(201, {
+      id: sendId,
+      balance: paid.balance,
+      context: mode,
+      postId: postId,
+      post: mode === "reply" ? {
+        id: postId,
+        text: message,
+        body: message,
+        handle: viewer.handle,
+        author: viewer.display_name,
+        platform: "app",
+        date: new Date(now).toISOString(),
+        parentId: parentId,
+        gift: attached
+      } : null
+    });
   }
   const hide = path.match(/^\/v1\/gifts\/([a-f0-9]{32})\/hide$/);
   if (hide && request.method === "POST") {

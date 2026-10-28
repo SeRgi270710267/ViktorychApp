@@ -10,6 +10,7 @@
   var sheet = null;
   var errorText = "";
   var started = false;
+  var viewedHandle = "";
 
   function tr(key, vars) {
     var fn = root.t || (typeof window !== "undefined" && window.t);
@@ -162,36 +163,48 @@
       var hide = mine ? '<button type="button" data-gift="hide" data-id="' + esc(gift.id) + '">' + esc(gift.hidden ? tr("Show gift") : tr("Hide gift")) + "</button>" : "";
       return '<article class="gift-tile' + (gift.hidden ? " is-hidden" : "") + '"><span class="gift-art">' + svg(gift.svg) + '</span><b>' + esc(who) + "</b><p>" + esc(gift.message || "") + "</p>" + hide + "</article>";
     }).join("");
-    var send = mine ? "" : '<button type="button" class="gift-send" data-gift="open">' + esc(tr("Send a gift")) + "</button>";
+    var send = mine ? "" : '<button type="button" class="gift-send" data-gift="open" data-handle="' + esc(viewedHandle) + '">' + esc(tr("Send a gift")) + "</button>";
     var prefs = mine ? '<div class="gift-prefs"><label>' + esc(tr("Who can send you gifts")) + '</label><select data-gift-who><option value="everyone">' + esc(tr("Everyone")) + '</option><option value="followers">' + esc(tr("Followers")) + '</option><option value="nobody">' + esc(tr("Nobody")) + '</option></select><label class="gift-check"><input type="checkbox" data-gift-hide-tab' + (pack.hideTab ? " checked" : "") + "> " + esc(tr("Hide the Gifts tab")) + "</label></div>" : "";
-    return '<div class="gifts-tab">' + send + prefs + '<div class="gift-grid">' + grid + "</div></div>";
+    var empty = grid ? "" : '<p class="points-note">' + esc(tr("No gifts yet")) + "</p>";
+    return '<div class="gifts-tab">' + send + prefs + empty + '<div class="gift-grid">' + grid + "</div></div>";
   }
 
   function showTab(account) {
     if (!account) return false;
-    var session = root.ViktorychAccounts && root.ViktorychAccounts.account && root.ViktorychAccounts.account();
-    if (session && account.publicId && session.publicId === account.publicId) return true;
-    return !!(account.gifts && !account.gifts.hidden);
+    if (account.gifts && account.gifts.hidden) {
+      var session = root.ViktorychAccounts && root.ViktorychAccounts.account && root.ViktorychAccounts.account();
+      return !!(session && account.publicId && session.publicId === account.publicId);
+    }
+    return true;
   }
 
   function ensure(account) {
     if (!account || !account.handle || account.giftsLoading) return;
+    viewedHandle = account.handle;
     if (account.giftsLoaded) return;
     account.giftsLoading = true;
     call("/v1/gifts?handle=" + encodeURIComponent(account.handle), { token: token() }).then(function (body) {
       account.giftsLoading = false;
       account.giftsLoaded = true;
-      account.gifts = body && body.gifts ? body : { gifts: [], hidden: true };
+      account.gifts = body && body.gifts ? body : { gifts: [], hidden: false };
       redraw();
     }).catch(function () {
       account.giftsLoading = false;
       account.giftsLoaded = true;
-      account.gifts = { gifts: [], hidden: true };
+      account.gifts = { gifts: [], hidden: false };
     });
   }
 
-  function openSheet(handle) {
-    sheet = { giftId: (catalog[0] && catalog[0].id) || "heart", handle: handle || "", message: "", privacy: "public" };
+  function openSheet(handle, extra) {
+    extra = extra || {};
+    sheet = {
+      giftId: (catalog[0] && catalog[0].id) || "heart",
+      handle: handle || "",
+      message: "",
+      privacy: "public",
+      mode: extra.mode === "reply" || extra.mode === "dm" ? extra.mode : "direct",
+      parentId: String(extra.parentId || "")
+    };
     errorText = "";
     loadCatalog().then(redraw);
     redraw();
@@ -204,7 +217,7 @@
     call("/v1/gifts/send", {
       method: "POST",
       token: auth,
-      body: { giftId: sheet.giftId, handle: sheet.handle, message: sheet.message, privacy: sheet.privacy }
+      body: { giftId: sheet.giftId, handle: sheet.handle, message: sheet.message, privacy: sheet.privacy, mode: sheet.mode || "direct", parentId: sheet.parentId || "" }
     }).then(function (body) {
       if (!body || (body.status && body.status >= 400)) {
         errorText = tr("Couldn’t send that gift.");
@@ -212,7 +225,10 @@
         return;
       }
       if (body.balance != null) balance = Number(body.balance) || 0;
+      var mode = sheet.mode;
+      var parentId = sheet.parentId;
       sheet = null;
+      if (mode === "reply" && body.post && root.ProfileGifts && root.ProfileGifts.onReply) root.ProfileGifts.onReply(parentId, body.post);
       redraw();
     }).catch(function () {
       errorText = tr("Couldn’t send that gift.");
@@ -227,8 +243,9 @@
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     var act = el.getAttribute("data-gift");
     if (act === "close") { sheet = null; errorText = ""; redraw(); return true; }
-    if (act === "pick" || act === "open") {
-      openSheet(el.getAttribute("data-handle") || (sheet && sheet.handle) || "");
+    if (act === "reply" || act === "dm" || act === "pick" || act === "open") {
+      var mode = act === "reply" ? "reply" : (act === "dm" ? "dm" : "direct");
+      openSheet(el.getAttribute("data-handle") || (sheet && sheet.handle) || "", { mode: mode, parentId: el.getAttribute("data-parent") || "" });
       if (act === "pick") sheet.giftId = el.getAttribute("data-gift-id") || sheet.giftId;
       redraw();
       return true;
@@ -283,6 +300,9 @@
     played: function (gameId) { touch("game", gameId); },
     pointsPage: pointsPage,
     storePage: storePage,
+    dmBar: function () {
+      return '<section class="gift-dm"><button class="primary" type="button" data-gift="dm">' + esc(tr("Send gift in a message")) + '</button><p class="phandle">' + esc(tr("A direct message gift uses the same privacy, limits, and points as any other gift.")) + "</p></section>";
+    },
     giftsHtml: giftsHtml,
     showTab: showTab,
     ensure: ensure,

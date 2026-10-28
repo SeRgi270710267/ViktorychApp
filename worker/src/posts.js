@@ -3,7 +3,7 @@
    Block, mute, and a hidden flag keep people and reported posts out of the
    timeline. The moderation list is owner-only. */
 
-import { awardActivity, clawback } from "./points.js";
+import { awardActivity, clawback, giftForPost } from "./points.js";
 
 const POST_MAX = 500;
 const MEDIA_MAX = 12 * 1024 * 1024;
@@ -127,7 +127,7 @@ async function readPostInput(request, deps) {
   return { fields: fields, file: file };
 }
 
-async function presentPost(env, request, row) {
+async function presentPost(env, request, row, viewerId) {
   const mediaRows = await env.DB.prepare("SELECT id, mime, size FROM public_post_media WHERE post_id = ?").bind(row.id).all();
   const media = ((mediaRows && mediaRows.results) || []).map((item) => ({
     id: item.id,
@@ -151,7 +151,8 @@ async function presentPost(env, request, row) {
     authorHandle: row.handle,
     authorAvatar: row.avatar || "",
     media: media,
-    quote: quote
+    quote: quote,
+    gift: await giftForPost(env, row.id, viewerId || "")
   };
 }
 
@@ -184,7 +185,7 @@ async function listPosts(request, env, deps) {
   const skip = await hiddenAuthors(env, session.public_id);
   const rows = ((listed && listed.results) || []).filter((row) => !skip.has(row.author_id));
   const posts = [];
-  for (let i = 0; i < rows.length && posts.length < 40; i++) posts.push(await presentPost(env, request, rows[i]));
+  for (let i = 0; i < rows.length && posts.length < 40; i++) posts.push(await presentPost(env, request, rows[i], session.public_id));
   return deps.json(200, { posts: posts });
 }
 
@@ -241,7 +242,7 @@ async function createPost(request, env, deps) {
       }
     }
   } catch (err) { /* the post is saved */ }
-  return deps.json(201, { post: await presentPost(env, request, row) });
+  return deps.json(201, { post: await presentPost(env, request, row, session.public_id) });
 }
 
 async function readMedia(request, env, id, deps) {
