@@ -727,6 +727,16 @@
     paint();
   }
 
+  /* Several open tabs share one version check per round. */
+  function claimCheck(now) {
+    try {
+      var last = Number(localStorage.getItem("viktorych-poll-version")) || 0;
+      if (now >= last && now - last < CHECK_MS * 0.8) return false;
+      localStorage.setItem("viktorych-poll-version", String(now));
+    } catch (err) { /* no storage: check anyway */ }
+    return true;
+  }
+
   function checkRemote() {
     if (checking || typeof fetch !== "function") return;
     checking = true;
@@ -910,7 +920,7 @@
     document.addEventListener("ended", refreshBusy, true);
     setInterval(refreshBusy, 1500);
     setInterval(function () {
-      if (document.visibilityState !== "hidden") checkRemote();
+      if (document.visibilityState !== "hidden" && claimCheck(Date.now())) checkRemote();
     }, CHECK_MS);
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.addEventListener("message", function (event) { onWorkerMessage(event.data || {}); });
