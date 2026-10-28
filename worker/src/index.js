@@ -38,7 +38,7 @@ import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingReq
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { POST_SCHEMA, handlePosts } from "./posts.js";
-import { POINTS_SCHEMA, handlePoints, awardActivity, clawback } from "./points.js";
+import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -5200,6 +5200,7 @@ export default {
     // writes after 04:17 UTC, once a day.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
     jobs.push(maybeBackupD1(env, at));
+    if (new Date(at).getUTCMinutes() === 0) jobs.push(awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") logError("cron", results[i].reason);
