@@ -295,6 +295,7 @@
     var rowEl = document.querySelector(".sp-row");
     if (rowEl) rowEl.innerHTML = pillsHtml();
     cleanDuplicateRows();
+    if (root.Spaces && root.Spaces.refreshMarquees) root.Spaces.refreshMarquees();
   }
 
   function fetchJson(url) {
