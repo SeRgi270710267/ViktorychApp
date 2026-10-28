@@ -4538,6 +4538,7 @@ else if (act === "copy-id") copyAccountId();
   });
 
   window.ViktorychAccounts = {
+    signOut: function () { logout(false); },
     uiSyncOn: function () { return uiSyncOn(); },
     deviceOwnUi: deviceOwnUi,
     setDeviceOwnUi: function (on) { setDeviceOwnUi(on); if (!on) pullSoon(); },
