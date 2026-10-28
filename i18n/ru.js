@@ -1714,6 +1714,7 @@ SI18n.addPack("ru", {
   "Feed failing": "Лента с ошибкой",
   "Feed paused": "Лента на паузе",
   "Last fetch": "Последняя загрузка",
+  "Last updated": "Обновлено",
   "Search feeds": "Искать ленты",
   "All platforms": "Все площадки",
   "All groups": "Все группы",

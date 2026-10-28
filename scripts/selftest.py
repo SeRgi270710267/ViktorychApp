@@ -600,6 +600,29 @@ def main() -> None:
     check("<img" not in ig["posts"][0]["text"] and "thoughtful" in ig["posts"][0]["text"], "instagram caption text")
     check(ig["profiles"][0]["bio"] == "I build stuff", "instagram bio without RSSHub suffix")
 
+    ig_atom = parse_ig((FIX / "ig_atom_bridge.xml").read_text(encoding="utf-8"), {"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"})
+    check(len(ig_atom["posts"]) == 1 and ig_atom["posts"][0]["id"] == "Abcd1234" and ig_atom["posts"][0]["statusId"] == "Abcd1234", "an Atom bridge keeps the shortcode, not the numeric id")
+    check("Building something new" in ig_atom["posts"][0]["text"] and "Bridge returned" not in ig_atom["posts"][0]["text"], "an Atom bridge keeps the caption and drops the error entry")
+    check(ig_atom["posts"][0]["media"][0]["url"].endswith("_nc_ht=scontent.cdninstagram.com") and "&amp;" not in ig_atom["posts"][0]["media"][0]["url"] and ig_atom["posts"][0]["media"][0]["width"] == 1080, "a double-escaped Instagram image URL is stored once")
+    th_atom = parse_threads((FIX / "threads_atom_bridge.xml").read_text(encoding="utf-8"), {"id": "threads:birchlane", "platform": "threads", "handle": "birchlane"})
+    check(len(th_atom["posts"]) == 1 and th_atom["posts"][0]["id"] == "Abcd1234" and th_atom["posts"][0]["kind"] == "reply", "a Threads Atom reply uses the shortcode")
+    check(th_atom["posts"][0]["text"] == "Hello from the bridge" and not th_atom["posts"][0]["text"].startswith("@"), "a Threads Atom caption drops the author line")
+    from adapters.common import dedupe_posts as dedupe_meta
+    from meta_media import instagram_pages, threads_pages, thumbnail_from_oembed
+    collapsed = dedupe_meta([
+        {"platform": "instagram", "id": "4006", "statusId": "4006", "url": "https://www.instagram.com/p/Abcd1234/", "text": "Building something new", "date": "2026-10-20T10:00:00Z", "media": [{"type": "photo", "url": "https://scontent.cdninstagram.com/v/a.jpg", "width": 1080}]},
+        {"platform": "instagram", "id": "https://www.instagram.com/p/Abcd1234/", "statusId": "https://www.instagram.com/p/Abcd1234/", "url": "https://www.instagram.com/p/Abcd1234/", "text": "▶ Building something new\n\nBuilding something new", "date": "2026-10-20T11:00:00Z", "media": [{"type": "photo", "url": "https://www.instagram.com/p/Abcd1234/media?size=l"}]},
+    ])
+    check(len(collapsed) == 1 and collapsed[0]["id"] == "Abcd1234" and "cdninstagram.com" in collapsed[0]["media"][0]["url"] and collapsed[0]["text"] == "Building something new", "a numeric id and a URL id collapse to the CDN copy")
+    check(instagram_pages("Abcd1234")[0].endswith("/reel/Abcd1234/embed/captioned/"), "Instagram media tries the reel embed first")
+    thread_pages = threads_pages({"platform": "threads", "statusId": "Abcd1234", "handle": "birchlane", "url": "https://www.threads.net/t/Abcd1234"})
+    check(thread_pages[0] == "https://www.threads.net/t/Abcd1234/embed", "Threads media tries the official embed first")
+    check(thumbnail_from_oembed((FIX / "own" / "ig_oembed.json").read_text(encoding="utf-8")).endswith("example.jpg"), "Instagram oEmbed keeps the thumbnail")
+    check(thumbnail_from_oembed((FIX / "own" / "threads_oembed.json").read_text(encoding="utf-8")).endswith("example-threads.jpg"), "Threads oEmbed keeps the thumbnail")
+    from meta_sources import feed_urls as meta_feed_urls
+    ig_urls = meta_feed_urls("instagram")
+    check(ig_urls[0].startswith("{rsshubBase}/instagram/user/") and any("rss-bridge.org" in url and "InstagramBridge" in url for url in ig_urls) and any("localhost:8080" in url for url in ig_urls), "Instagram tries local bridges before the public mirrors")
+
     gen = parse_generic((FIX / "generic_sample.xml").read_text(encoding="utf-8"), {"id": "rss:example", "platform": "rss", "handle": "example"})
     post = gen["posts"][0]
     check("Hello & welcome" in post["text"], "generic title unescaped")
@@ -1414,16 +1437,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a41-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a42-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a41-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a42-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in deployed_paths() and "spaces.css" in deployed_paths() and "live/" in deployed_paths(), "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a41-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a42-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -4424,7 +4447,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "viktorych-a41-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-a42-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     lazy = (ROOT / "shared" / "lazy-modules.js").read_text(encoding="utf-8")
     check('shorts.js", "shorts.css"' in lazy and "shorts.js" in worker and "shorts.css" in worker and 'info.name === "shorts"' in app, "the page and the service worker load Shorts on demand")
     check('drive.js", "drive.css"' in lazy and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker and 'ensureLazy("drive")' in app, "the page and the service worker load Drive on demand")
@@ -4479,7 +4502,7 @@ def story_checks() -> None:
     shorts_js = (ROOT / "shorts.js").read_text(encoding="utf-8")
     check('tr("added accounts")' in shorts_js and 'data-shorts="remove-account"' in shorts_js and 'tr("Original quality")' in shorts_js and "tracked" not in shorts_js.lower(), "Shorts lets the owner add an account and does not call it tracked")
     check("isTikTokCdn(url)" in worker and "if (isTikTokCdn(url)) return;" in worker, "the service worker does not intercept TikTok CDN media")
-    check('VERSION = "viktorych-a41-__SW_VERSION__"' in worker, "the service worker cache stamp is a41")
+    check('VERSION = "viktorych-a42-__SW_VERSION__"' in worker, "the service worker cache stamp is a42")
     check('tr("Too many plays. Try again in a minute.")' in shorts_js and 'tr("Signed out")' in shorts_js and 'tr("Couldn\'t play this video")' in shorts_js and "playbackNote(err)" in shorts_js and 'level + "-pending"' in shorts_js and "if (!autoplay) return Promise.resolve();" in shorts_js, "a For You miss names 429, a missing backup, or a signed-out session and only the next short is probed")
     check("maxBufferLength = 30" in shorts_js and "maxBufferLength: 30" in app and "function slowLink(" in shorts_js and "conn.saveData" in shorts_js and 'kind === "2g"' in shorts_js and "function prefetchUrls(" in shorts_js and "prefetchParts(" in shorts_js and 'armSlide(slides[i], "metadata")' in shorts_js, "For You and feed videos buffer about 30 seconds and only the next short is prefetched, except on Save-Data or 2g")
     check('source.kind === "tg"' in app and "URL.createObjectURL(blob)" not in app[app.index('source.kind === "tg"'):app.index('source.kind === "tg"') + 700], "a Telegram file streams from its Range URL")
