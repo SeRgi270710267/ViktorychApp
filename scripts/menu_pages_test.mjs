@@ -699,7 +699,12 @@ async function boot(browser, signedIn) {
 async function openSized(context, origin, size) {
   const page = await context.newPage();
   const problems = [];
-  page.on("pageerror", (err) => problems.push(redact(err && err.message)));
+  page.on("pageerror", (err) => {
+    const message = String(err && err.message || "");
+    // Chrome's extension activity logger throws this into the page. It is not app code.
+    if (message === "this.api.logApiCall is not a function") return;
+    problems.push(redact(message));
+  });
   const client = await context.newCDPSession(page);
   const target = await client.send("Browser.getWindowForTarget");
   await applySize(client, target.windowId, size);
