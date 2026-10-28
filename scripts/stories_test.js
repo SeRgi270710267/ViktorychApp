@@ -115,7 +115,15 @@ Stories.applyBar("slim");
 assert.strictEqual(Stories.barState(), "slim");
 assert.strictEqual(Stories.trayExtra(), 52);
 Stories.applyBar("expanded");
-assert.strictEqual(Stories.trayExtra(), 204);
+assert.strictEqual(Stories.trayExtra(), 112);
+Stories.nudge(30, 40);
+assert.ok(Stories.trayExtra() < 112 && Stories.trayExtra() > 52);
+Stories.nudge(-30, 10);
+assert.strictEqual(Stories.trayExtra(), 112);
+Stories.nudge(600, 600);
+assert.strictEqual(Stories.trayExtra(), 52);
+Stories.nudge(-10, 0);
+assert.strictEqual(Stories.trayExtra(), 112);
 Stories.bind({
   icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
   follows() { return follows; },
@@ -133,6 +141,15 @@ assert.ok(noted.indexOf("note-bubble") >= 0);
 Stories.applyBar("slim");
 assert.ok(Stories.homeTray().includes('data-state="slim"'));
 assert.ok(Stories.homeTray().includes("note-bubble"));
+Stories.applyBar("expanded");
+Stories.bind({
+  icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
+  follows() { return follows; },
+  account() { return { handle: "user_a", displayName: "User A", avatar: "" }; },
+  notesOn() { return false; },
+  render() { rendered += 1; }
+});
+assert.ok(!Stories.homeTray().includes("note-bubble"));
 var pinned = Stories.organize([
   { id: "telegram:laneharbor", platform: "telegram", handle: "laneharbor", name: "Telegram" },
   { id: "vk:vk", platform: "vk", handle: "vk", name: "VK" }
