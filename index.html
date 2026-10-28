@@ -618,10 +618,23 @@
           if (left > 0) return;
           try { window.dispatchEvent(new Event("viktorych-late")); } catch (err) { /* the shell is already up */ }
         }
+        /* Only the interface language in use downloads with the app. English
+           is the fallback and always loads; i18n.js fetches another pack if
+           the language changes later. A pack is skipped only when the saved
+           choice already rules it out. */
+        var skipPack = {};
+        try {
+          var savedLang = localStorage.getItem("superintelapp-lang");
+          var sure = localStorage.getItem("viktorychapp-lang-user-picked") === "1" || !!localStorage.getItem("viktorychapp-account-v1") || !!localStorage.getItem("viktorychapp-accounts-session-v1");
+          if (savedLang === "en" || savedLang === "ru" || savedLang === "es") {
+            if (savedLang !== "es") skipPack["i18n/es.js"] = 1;
+            if (savedLang !== "ru" && sure) skipPack["i18n/ru.js"] = 1;
+          }
+        } catch (err) { /* private mode keeps every pack */ }
         var frag = document.createDocumentFragment();
         nodes.forEach(function (node) {
           var src = node.getAttribute("src");
-          if (!src) return;
+          if (!src || skipPack[src.replace(/^\.\//, "")]) return;
           var el = document.createElement("script");
           var type = node.getAttribute("type");
           if (type) el.type = type;
