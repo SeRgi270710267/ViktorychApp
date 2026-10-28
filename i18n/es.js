@@ -1,5 +1,16 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("es", {
+  "Technology": "Tecnología",
+  "News": "Noticias",
+  "Gaming": "Videojuegos",
+  "Sports": "Deportes",
+  "Entertainment": "Entretenimiento",
+  "Science": "Ciencia",
+  "Business": "Negocios",
+  "See all communities": "Ver todas las comunidades",
+  "Recorded {date}": "Grabado {date}",
+  "Switch community": "Cambiar de comunidad",
+  "Popular communities": "Comunidades populares",
   "Delete post?": "¿Eliminar post?",
   "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.": "Esta acción no se puede deshacer y el post se eliminará de tu perfil, de la cronología de las cuentas que te siguen y de los resultados de búsqueda.",
   "{count} votes": "{count} votos",
