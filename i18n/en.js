@@ -1925,6 +1925,7 @@ SI18n.addPack("en", {
   "Partial. Replies on recent public posts, not X's mention inbox.": "Partial. Replies on recent public posts, not X's mention inbox.",
   "Saved on this device. X opened in a new tab": "Saved on this device. X opened in a new tab",
   "The draft stays on this device. You press Post on X.": "The draft stays on this device. You press Post on X.",
+  "Draft stays on this device.": "Draft stays on this device.",
   "Follows you": "Follows you",
   "You're blocked": "You're blocked",
   "You blocked this account": "You blocked this account",
