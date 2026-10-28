@@ -12863,7 +12863,12 @@ if (STATE.histClear) {
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
-    const top = (route.name === "profile" || route.name === "user" || route.name === "person") ? 0 : (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 97 : explore ? 0 : tall && !musicHome ? 97 : 53) + rowExtra + storyExtra + liveExtra;
+    const slimTabs = route.name === "home" || route.name === "notifications";
+    let bar = 53;
+    if (route.name === "profile" || route.name === "user" || route.name === "person" || route.name === "tv" || route.name === "shorts" || route.name === "messages" || explore) bar = 0;
+    else if (slimTabs && !musicHome) bar = 97;
+    else if (tall && !musicHome) bar = 106;
+    const top = bar + rowExtra + storyExtra + liveExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
