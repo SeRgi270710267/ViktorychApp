@@ -792,6 +792,9 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
 }
 
 .about { display: block; background: var(--bg); color: var(--text); }
+.about-upcoming { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.about-upcoming-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.about-upcoming-list li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
 .about-section { border-top: 1px solid var(--line); padding: 12px 16px 4px; }
 .about-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
 .about-head h2 { margin: 0; font: 700 17px/22px var(--font); color: var(--text); }

@@ -40,6 +40,8 @@
   var seq = 1;
   var privacyOpen = false;
   var errorText = "";
+  var notesOn = true;
+  var upcomingPack = null;
 
   function tr(key, vars) {
     var fn = root.t || (typeof window !== "undefined" && window.t);
@@ -234,11 +236,14 @@
       account.aboutLoading = false;
       account.aboutLoaded = true;
       account.about = body && body.sections ? body : { sections: [], visible: false, owner: false, preview: "" };
+      account.birthdayToday = !!(body && body.birthdayToday);
+      if (body && body.owner && body.birthdayNotes != null) notesOn = !!body.birthdayNotes;
       redraw();
     }).catch(function () {
       account.aboutLoading = false;
       account.aboutLoaded = true;
       account.about = { sections: [], visible: false, owner: false, preview: "" };
+      account.birthdayToday = false;
       redraw();
     });
   }
@@ -266,6 +271,7 @@
         url: field.url || "",
         audience: field.audience || (SENSITIVE[field.kind] ? "only" : "public"),
         showYear: !!field.showYear,
+        tz: field.tz || "",
         personHandle: field.personHandle || (field.person && field.person.handle) || "",
         listId: field.listId || ""
       };
@@ -298,6 +304,7 @@
       var extra = "";
       if (field.kind === "birthday") {
         extra = '<label class="about-check"><input type="checkbox" data-about-field="' + esc(field.id) + '" data-about-key="showYear"' + (field.showYear ? " checked" : "") + "> " + esc(tr("Show year")) + "</label>";
+        extra += '<input data-about-field="' + esc(field.id) + '" data-about-key="tz" value="' + esc(field.tz || "") + '" placeholder="' + esc(tr("Time zone")) + '" aria-label="' + esc(tr("Time zone")) + '">';
       }
       if (field.kind === "family") {
         extra += '<input data-about-field="' + esc(field.id) + '" data-about-key="personHandle" value="' + esc(field.personHandle || "") + '" placeholder="' + esc(tr("Linked account")) + '" aria-label="' + esc(tr("Linked account")) + '">';
@@ -324,7 +331,8 @@
       return '<div class="about-privacy-row"><span>' + esc(kindLabel(field.kind)) + '</span><span>' + esc(field.text || "") + '</span><select data-about-field="' + esc(field.id) + '" data-about-key="audience" data-about-live="1" aria-label="' + esc(tr("Who can see this")) + '">' + audienceOptions(field.audience || "public") + "</select></div>";
     }).join("");
     var empty = '<p>' + esc(tr("No details yet")) + '</p>';
-    return '<div class="about-sheet" role="dialog" aria-label="' + esc(tr("About privacy")) + '"><div class="about-sheet-bar"><button type="button" data-about="close" aria-label="' + esc(tr("Close")) + '">×</button><h2>' + esc(tr("About privacy")) + '</h2><span></span></div><div class="about-sheet-body">' + (rows || empty) + '</div></div>';
+    var notes = '<button class="tab-switch' + (notesOn ? " on" : "") + '" type="button" role="switch" aria-checked="' + (notesOn ? "true" : "false") + '" data-about="notes"><span>' + esc(tr("Birthday notifications")) + "</span><i></i></button>";
+    return '<div class="about-sheet" role="dialog" aria-label="' + esc(tr("About privacy")) + '"><div class="about-sheet-bar"><button type="button" data-about="close" aria-label="' + esc(tr("Close")) + '">×</button><h2>' + esc(tr("About privacy")) + '</h2><span></span></div><div class="about-sheet-body">' + notes + (rows || empty) + '</div></div>';
   }
 
   function findDraft(id) {
@@ -374,6 +382,7 @@
       audience: audience,
       listId: field.listId || "",
       showYear: !!field.showYear,
+      tz: field.tz || "",
       personHandle: field.personHandle || "",
       sort: index
     };
@@ -428,6 +437,12 @@
       redraw();
       return true;
     }
+    if (act === "notes") {
+      notesOn = !notesOn;
+      call("/v1/about/birthday-notes", { method: "PUT", token: token(), body: { notes: notesOn } }).then(function () { redraw(); });
+      redraw();
+      return true;
+    }
     if (act === "privacy") {
       privacyOpen = true;
       sheet = null;
@@ -450,6 +465,7 @@
         url: "",
         audience: SENSITIVE[kind] ? "only" : "public",
         showYear: false,
+        tz: "",
         personHandle: "",
         listId: ""
       });
@@ -522,10 +538,38 @@
     }, true);
   }
 
+  function loadUpcoming() {
+    if (upcomingPack || !token()) return;
+    upcomingPack = { upcoming: [], notes: notesOn, loading: true };
+    call("/v1/about/upcoming", { token: token() }).then(function (body) {
+      if (!body || body.status >= 400) {
+        upcomingPack = { upcoming: [], notes: notesOn };
+        return;
+      }
+      upcomingPack = body;
+      if (body.notes != null) notesOn = !!body.notes;
+      redraw();
+    }).catch(function () { upcomingPack = { upcoming: [], notes: notesOn }; });
+  }
+
+  function upcomingHtml() {
+    loadUpcoming();
+    if (!upcomingPack || upcomingPack.loading) return "";
+    var rows = (upcomingPack.upcoming || []).map(function (item) {
+      var when = item.inDays === 0 ? tr("Today") : tr("In {n} days", { n: String(item.inDays) });
+      var who = item.name || item.handle || "";
+      return '<li><b>' + esc(who) + "</b><span>" + esc(when) + "</span></li>";
+    }).join("");
+    var list = rows ? '<ul class="about-upcoming-list">' + rows + "</ul>" : '<p>' + esc(tr("No upcoming birthdays")) + "</p>";
+    var toggle = '<button class="tab-switch' + (notesOn ? " on" : "") + '" type="button" role="switch" aria-checked="' + (notesOn ? "true" : "false") + '" data-about="notes"><span>' + esc(tr("Birthday notifications")) + "</span><i></i></button>";
+    return '<section class="about-upcoming"><h2>' + esc(tr("Upcoming birthdays")) + "</h2><p>" + esc(tr("Reminders stay on the server and skip anyone who cannot see the birthday.")) + "</p>" + toggle + list + "</section>";
+  }
+
   root.ProfileAbout = {
     html: html,
     showTab: showTab,
     ensure: ensure,
+    upcomingHtml: upcomingHtml,
     previewHtml: previewHtml,
     privacyHtml: privacyHtml,
     privacyOpen: function () { return privacyOpen; },

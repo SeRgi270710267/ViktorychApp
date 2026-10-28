@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a25-__SW_VERSION__";
+const VERSION = "viktorych-a26-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
@@ -169,7 +169,7 @@ const PRECACHE_TRIES = 4;
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a25-";
+  const prefix = "viktorych-a26-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1128,7 +1128,7 @@ async function pullOne(path, report, state, signal, cache) {
           });
           const digest = await crypto.subtle.digest("SHA-256", all);
           const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-          if (hash) headers.set("x-shell-sha256", hash);
+          if (hash) headers.set("x-shell-sha266", hash);
         }
       } catch (err) { /* the versioned cache name still busts a changed shell */ }
       try {

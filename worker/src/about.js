@@ -16,6 +16,7 @@ export const ABOUT_SCHEMA = [
     url TEXT NOT NULL DEFAULT '',
     person_id TEXT NOT NULL DEFAULT '',
     show_year INTEGER NOT NULL DEFAULT 0,
+    tz TEXT NOT NULL DEFAULT '',
     audience TEXT NOT NULL DEFAULT 'public',
     list_id TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -28,7 +29,12 @@ export const ABOUT_SCHEMA = [
     user_id TEXT NOT NULL,
     PRIMARY KEY (field_id, user_id)
   )`,
-  "CREATE INDEX IF NOT EXISTS about_field_allow_user ON about_field_allow(user_id)"
+  "CREATE INDEX IF NOT EXISTS about_field_allow_user ON about_field_allow(user_id)",
+  `CREATE TABLE IF NOT EXISTS birthday_prefs (
+    public_id TEXT PRIMARY KEY,
+    notes INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL
+  )`
 ];
 
 const SECTIONS = ["personal", "interests", "work", "links", "websites"];
@@ -83,7 +89,68 @@ export function defaultAudience(kind) {
   return SENSITIVE[kind] ? "only" : "public";
 }
 
+export function birthdayParts(text) {
+  const raw = String(text || "").trim();
+  let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return partsOf(Number(match[1]), Number(match[2]), Number(match[3]));
+  match = raw.match(/^(\d{2})-(\d{2})$/);
+  if (match) return partsOf(0, Number(match[1]), Number(match[2]));
+  return null;
+}
+
+function partsOf(year, month, day) {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year: year, month: month, day: day };
+}
+
+export function cleanZone(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.length > 64 || !/^[A-Za-z0-9_+\-/]+$/.test(text)) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: text }).format(0);
+    return text;
+  } catch (err) {
+    return null;
+  }
+}
+
+export function zonedYmd(ms, timeZone) {
+  const zone = cleanZone(timeZone) || "UTC";
+  try {
+    const bag = {};
+    new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms)).forEach((part) => {
+      bag[part.type] = part.value;
+    });
+    return { year: Number(bag.year), month: Number(bag.month), day: Number(bag.day) };
+  } catch (err) {
+    const date = new Date(ms);
+    return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+  }
+}
+
+function leapDay(year, month, day) {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return Math.min(day, last);
+}
+
+export function daysUntilBirthday(parts, now, timeZone) {
+  if (!parts) return null;
+  const today = zonedYmd(now, timeZone);
+  const start = Date.UTC(today.year, today.month - 1, today.day);
+  let target = Date.UTC(today.year, parts.month - 1, leapDay(today.year, parts.month, parts.day));
+  if (target < start) target = Date.UTC(today.year + 1, parts.month - 1, leapDay(today.year + 1, parts.month, parts.day));
+  return Math.round((target - start) / 86400000);
+}
+
 export function publicBirthday(text, showYear) {
+  const parts = birthdayParts(text);
+  if (parts) {
+    const month = String(parts.month).padStart(2, "0");
+    const day = String(parts.day).padStart(2, "0");
+    if (showYear && parts.year) return parts.year + "-" + month + "-" + day;
+    return month + "-" + day;
+  }
   const raw = String(text || "");
   if (showYear) return raw;
   return raw.replace(/\b(?:19|20)\d{2}\b/g, "").replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").trim();
@@ -186,6 +253,7 @@ function presentField(row, relation, person, showPrivate) {
     field.audience = row.audience;
     field.listId = row.list_id || "";
     field.showYear = showYear;
+    if (row.kind === "birthday") field.tz = row.tz || "";
     if (row.person_id) field.personId = row.person_id;
     if (person) field.personHandle = person.handle;
   }
@@ -198,11 +266,12 @@ async function readFields(env, request, viewer, ownerRow, preview) {
     return { visible: false, owner: false, preview: preview || "", sections: [] };
   }
   const listed = await env.DB.prepare(
-    "SELECT id, public_id, section, kind, body, label, url, person_id, show_year, audience, list_id, sort_order FROM about_fields WHERE public_id = ? ORDER BY sort_order ASC, created_at ASC"
+    "SELECT id, public_id, section, kind, body, label, url, person_id, show_year, tz, audience, list_id, sort_order FROM about_fields WHERE public_id = ? ORDER BY sort_order ASC, created_at ASC"
   ).bind(ownerRow.public_id).all();
   const rows = rowsOf(listed);
   const allows = await allowMap(env, rows.map((row) => row.id));
   const showPrivate = relation.owner && !preview;
+  let birthdayToday = false;
   const grouped = {};
   SECTIONS.forEach((id) => { grouped[id] = []; });
   for (let i = 0; i < rows.length; i++) {
@@ -211,6 +280,7 @@ async function readFields(env, request, viewer, ownerRow, preview) {
     const allowed = allows[row.id] || {};
     if (!canSeeField(row.audience, relation, allowed)) continue;
     const person = row.kind === "family" ? await personCard(env, row.person_id) : null;
+    if (row.kind === "birthday" && daysUntilBirthday(birthdayParts(row.body), Date.now(), row.tz) === 0) birthdayToday = true;
     grouped[row.section].push(presentField(row, relation, person, showPrivate));
   }
   const sections = [];
@@ -219,10 +289,17 @@ async function readFields(env, request, viewer, ownerRow, preview) {
     sections.push({ id: id, fields: grouped[id] });
   });
   const visible = sections.some((section) => section.fields.length > 0);
+  let birthdayNotes = true;
+  if (showPrivate) {
+    const pref = await env.DB.prepare("SELECT notes FROM birthday_prefs WHERE public_id = ?").bind(ownerRow.public_id).first();
+    if (pref && pref.notes === 0) birthdayNotes = false;
+  }
   return {
     visible: showPrivate || visible,
     owner: showPrivate,
     preview: preview || "",
+    birthdayToday: birthdayToday,
+    birthdayNotes: showPrivate ? birthdayNotes : undefined,
     sections: sections
   };
 }
@@ -276,6 +353,12 @@ async function writeField(env, viewer, existing, body) {
     personId = resolved;
   } else if (kind !== "family") personId = "";
   const showYear = kind === "birthday" ? ((body && body.showYear != null) ? (body.showYear ? 1 : 0) : (existing ? existing.show_year : 0)) : 0;
+  let tz = "";
+  if (kind === "birthday") {
+    const asked = body && body.tz != null ? cleanZone(body.tz) : (existing ? existing.tz || "" : "");
+    if (asked == null) return { error: "zone", status: 400 };
+    tz = asked || "";
+  }
   const sort = body && body.sort != null ? Math.max(0, Math.min(10000, Math.floor(Number(body.sort) || 0))) : (existing ? Number(existing.sort_order) || 0 : 0);
   const now = Date.now();
   const id = existing ? existing.id : newId();
@@ -283,12 +366,12 @@ async function writeField(env, viewer, existing, body) {
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM about_fields WHERE public_id = ?").bind(viewer.public_id).first();
     if (Number(count && count.n) >= FIELD_CAP) return { error: "too_many", status: 429 };
     await env.DB.prepare(
-      "INSERT INTO about_fields (id, public_id, section, kind, body, label, url, person_id, show_year, audience, list_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(id, viewer.public_id, section, kind, text, label || "", url || "", personId, showYear, audience, listId, sort, now, now).run();
+      "INSERT INTO about_fields (id, public_id, section, kind, body, label, url, person_id, show_year, tz, audience, list_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(id, viewer.public_id, section, kind, text, label || "", url || "", personId, showYear, tz, audience, listId, sort, now, now).run();
   } else {
     await env.DB.prepare(
-      "UPDATE about_fields SET section = ?, kind = ?, body = ?, label = ?, url = ?, person_id = ?, show_year = ?, audience = ?, list_id = ?, sort_order = ?, updated_at = ? WHERE id = ? AND public_id = ?"
-    ).bind(section, kind, text, label || "", url || "", personId, showYear, audience, listId, sort, now, id, viewer.public_id).run();
+      "UPDATE about_fields SET section = ?, kind = ?, body = ?, label = ?, url = ?, person_id = ?, show_year = ?, tz = ?, audience = ?, list_id = ?, sort_order = ?, updated_at = ? WHERE id = ? AND public_id = ?"
+    ).bind(section, kind, text, label || "", url || "", personId, showYear, tz, audience, listId, sort, now, id, viewer.public_id).run();
   }
   if (audience === "list" && body && (body.members || body.allow)) await replaceAllow(env, id, readMembers(body));
   else if (audience !== "list") await env.DB.prepare("DELETE FROM about_field_allow WHERE field_id = ?").bind(id).run();
@@ -334,7 +417,7 @@ export async function handleAbout(request, env, path, deps) {
   const one = path.match(/^\/v1\/about\/([a-f0-9]{32})$/);
   if (!one) return null;
   const row = await env.DB.prepare(
-    "SELECT id, public_id, section, kind, body, label, url, person_id, show_year, audience, list_id, sort_order FROM about_fields WHERE id = ?"
+    "SELECT id, public_id, section, kind, body, label, url, person_id, show_year, tz, audience, list_id, sort_order FROM about_fields WHERE id = ?"
   ).bind(one[1]).first();
   if (!row || row.public_id !== viewer.public_id) return deps.json(404, { error: "not_found" });
   if (request.method === "DELETE") {

@@ -39,6 +39,7 @@ import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { POST_SCHEMA, handlePosts } from "./posts.js";
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
+import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -5095,6 +5096,8 @@ async function route(request, env, ctx) {
   if (path === "/v1/friends/cancel" && request.method === "POST") return handleFriendAction(request, env, "cancel");
   if (path === "/v1/friends/remove" && request.method === "POST") return handleFriendAction(request, env, "remove");
   if (path === "/v1/about" || path.startsWith("/v1/about/")) {
+    const birthday = await handleBirthdayRoutes(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (birthday) return birthday;
     const told = await handleAbout(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (told) return told;
   }
@@ -5182,6 +5185,7 @@ export default {
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (new Date(at).getUTCMinutes() === 0) jobs.push(runBirthdaySweep(env, at));
     jobs.push(maybeBackupD1(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {

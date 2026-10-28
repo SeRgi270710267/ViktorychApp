@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS about_fields (
   url TEXT NOT NULL DEFAULT '',
   person_id TEXT NOT NULL DEFAULT '',
   show_year INTEGER NOT NULL DEFAULT 0,
+  tz TEXT NOT NULL DEFAULT '',
   audience TEXT NOT NULL DEFAULT 'public',
   list_id TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -22,3 +23,9 @@ CREATE TABLE IF NOT EXISTS about_field_allow (
   PRIMARY KEY (field_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS about_field_allow_user ON about_field_allow(user_id);
+
+CREATE TABLE IF NOT EXISTS birthday_prefs (
+  public_id TEXT PRIMARY KEY,
+  notes INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL
+);
