@@ -7486,6 +7486,12 @@ const here = parseRoute();
     });
 
     html += sidebarDrawerLinks(route);
+    if (typeof isStandalone !== "function" || !isStandalone()) {
+      html += `<button type="button" class="nav-item" data-act="install" aria-label="${esc(tr("Install app"))}" data-tooltip="${esc(tr("Install app"))}">
+        <span class="nav-ico">${icon("plus")}</span>
+        <span class="nav-label">${esc(tr("Install app"))}</span>
+      </button>`;
+    }
     html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
       <span class="nav-ico">${icon("sliders")}</span>
       <span class="nav-label">${tr("Customize sidebar")}</span>
@@ -8378,6 +8384,53 @@ const here = parseRoute();
       body = `<h2>${esc(tr("Notifications can wait until you ask"))}</h2><button class="save" type="button" data-act="welcome-notify">${esc(tr("Notify me about new posts"))}</button>`;
     }
     return `<section class="welcome-sheet" data-welcome>${body}<div class="welcome-actions"><button type="button" data-act="welcome-skip">${esc(tr("Not now"))}</button><button class="save" type="button" data-act="welcome-next">${esc(tr("Next"))}</button></div></section>`;
+  }
+
+  function installChoice() {
+    const api = window.ViktorychNative;
+    if (api && api.readInstallChoice) return api.readInstallChoice();
+    return { mode: "", at: 0 };
+  }
+
+  function installKindNow() {
+    const api = window.ViktorychNative;
+    const ua = navigator.userAgent || "";
+    const extra = { touchMac: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 };
+    if (api && api.installKind) return api.installKind(ua, extra);
+    return "hint";
+  }
+
+  function canAutoInstall(reason) {
+    if (isStandalone()) return false;
+    const choice = installChoice();
+    const api = window.ViktorychNative;
+    const dismissed = choice.mode === "never" ? true : choice.mode;
+    if (api && api.shouldOfferInstall) {
+      return api.shouldOfferInstall({
+        standalone: false,
+        dismissed: dismissed,
+        dismissedAt: choice.at,
+        now: Date.now(),
+        afterSignup: reason === "signup",
+        prompt: reason !== "signup" && !!STATE.installPrompt,
+        ios: /iphone|ipad|ipod/i.test(navigator.userAgent || "")
+      });
+    }
+    return reason === "signup" && choice.mode !== "never";
+  }
+
+  function offerInstall(reason) {
+    if (reason !== "manual" && !canAutoInstall(reason)) return false;
+    if (isStandalone()) return false;
+    STATE.modal = "install";
+    return true;
+  }
+
+  function finishWelcome(notify, offer) {
+    writeWelcome({ step: 2, done: true });
+    if (offer !== false) offerInstall("signup");
+    render();
+    if (notify) enableNotifications();
   }
 
   function deviceScheduleKey() { return "viktorychapp-x-schedule-v1"; }
@@ -12165,6 +12218,37 @@ const here = parseRoute();
     return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
   }
 
+  function installOfferHtml() {
+    const kind = installKindNow();
+    const api = window.ViktorychNative;
+    const ua = navigator.userAgent || "";
+    const extra = { touchMac: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 };
+    const arrow = api && api.installArrow ? api.installArrow(kind, ua, extra) : (kind === "ios-safari" ? "down" : "");
+    const benefit = (glyph, text) => `<li class="install-benefit"><span aria-hidden="true">${icon(glyph)}</span><span>${esc(text)}</span></li>`;
+    const benefits = `<ul class="install-benefits">${benefit("home", tr("It opens full screen and loads faster."))}${benefit("check", tr("Posts you already opened stay available offline."))}${benefit("plus", tr("It stays on your Home Screen or desktop."))}</ul>`;
+    let body = "";
+    if (kind === "ios-browser") {
+      body = `<p>${esc(tr("This browser can’t add the app to your Home Screen. Open the page in Safari, then use the Share button."))}</p>`;
+    } else if (kind === "ios-safari") {
+      body = `${benefits}<ol class="install-steps"><li>${esc(tr("Tap Share in Safari"))}</li><li>${esc(tr("Choose Add to Home Screen"))}</li><li>${esc(tr("Tap Add"))}</li></ol>`;
+    } else if (kind === "native" || STATE.installPrompt) {
+      body = `${benefits}<button class="install-go" type="button" data-act="install-go">${esc(tr("Install"))}</button>`;
+    } else {
+      body = `<p>${esc(tr("In Safari, use Share or File, then Add to Dock. In Firefox, use the install icon in the address bar."))}</p>`;
+    }
+    const pointer = arrow ? `<div class="install-arrow is-${arrow}" aria-hidden="true">${icon(arrow === "up" ? "arrowUp" : "arrowDown")}</div>` : "";
+    return `<div class="install-offer" data-act="stop"><div class="install-panel" role="dialog" aria-modal="true" aria-label="${esc(tr("Install app"))}">
+      <div class="install-grab" aria-hidden="true"></div>
+      <h2>${esc(tr("Install app"))}</h2>
+      ${body}
+      ${pointer}
+      <div class="install-actions">
+        <button type="button" data-act="install-later">${esc(tr("Later"))}</button>
+        <button type="button" data-act="install-never">${esc(tr("Don't show again"))}</button>
+      </div>
+    </div></div>`;
+  }
+
   function installControl() {
     if (isStandalone()) return "";
     return `<button class="primary" type="button" data-act="install">${tr("Install app")}</button>`;
@@ -12524,6 +12608,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
+      ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
     </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
@@ -13057,16 +13142,7 @@ if (STATE.histClear) {
         <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (!STATE.modal) return "";
-    if (STATE.modal === "install") {
-      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      const steps = ios
-        ? `<div class="install-step"><span>1</span> ${tr("Tap Share in Safari")}</div><div class="install-step"><span>2</span> ${tr("Choose Add to Home Screen")}</div><div class="install-step"><span>3</span> ${tr("Tap Add")}</div>`
-        : `<p>${tr("Use the install icon in the address bar, or open the browser menu and choose Install app.")}</p>`;
-      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Install app"))}" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Install app")}</h2></div>
-        <div class="modal-body install-sheet">${steps}</div>
-      </div></div>`;
-    }
+    if (STATE.modal === "install") return installOfferHtml();
     if (STATE.modal === "compose") {
       if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
         const composed = window.ViktorychXCompose.modalHtml();
@@ -16227,8 +16303,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "welcome-skip") {
-      writeWelcome({ step: 0, done: true });
-      render();
+      finishWelcome(false, false);
       return;
     }
     if (act === "welcome-follow") {
@@ -16238,8 +16313,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "welcome-notify") {
-      writeWelcome({ step: 2, done: true });
-      enableNotifications();
+      finishWelcome(true);
       return;
     }
     if (act === "welcome-next") {
@@ -16262,14 +16336,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (step === 1) {
         const ids = Object.keys(welcomeFollows).filter((id) => welcomeFollows[id]);
         if (ids.length) applyFollow(ids, true);
-        writeWelcome({ step: 2, done: false });
-        render();
-        return;
-      }
-      writeWelcome({ step: 2, done: true });
+      writeWelcome({ step: 2, done: false });
       render();
       return;
     }
+    finishWelcome(false);
+    return;
+  }
     if (act === "show-public-spam") {
       if (!STATE.publicSpam) STATE.publicSpam = {};
       STATE.publicSpam[el.dataset.id || ""] = true;
@@ -16722,18 +16795,28 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "install") {
       STATE.drawer = false;
       STATE.drawerEdit = false;
-      if (STATE.installPrompt) {
-        const prompt = STATE.installPrompt;
-        STATE.installPrompt = null;
-        Promise.resolve()
-          .then(() => prompt.prompt())
-          .then(() => prompt.userChoice)
-          .then(() => render())
-          .catch(() => { STATE.modal = "install"; render(); });
-        render();
-        return;
-      }
+      STATE.accountMenu = false;
+      if (isStandalone()) return;
       STATE.modal = "install";
+      render();
+      return;
+    }
+    if (act === "install-go") {
+      const prompt = STATE.installPrompt || window.__VIKTORYCH_INSTALL;
+      if (prompt && prompt.prompt) {
+        STATE.installPrompt = null;
+        window.__VIKTORYCH_INSTALL = null;
+        Promise.resolve().then(() => prompt.prompt()).then(() => prompt.userChoice).then(() => {
+          STATE.modal = null;
+          render();
+        }).catch(() => render());
+      }
+      return;
+    }
+    if (act === "install-later" || act === "install-never") {
+      const api = window.ViktorychNative;
+      if (api && api.writeInstallChoice) api.writeInstallChoice(act === "install-never" ? "never" : "later");
+      STATE.modal = null;
       render();
       return;
     }
@@ -21371,6 +21454,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       });
     }
     bindGestures();
+    setTimeout(() => {
+      if (STATE.modal || isStandalone() || !accountToken()) return;
+      const choice = installChoice();
+      if (choice.mode !== "later") return;
+      if (offerInstall("return")) render();
+    }, 1600);
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       STATE.installPrompt = event;
