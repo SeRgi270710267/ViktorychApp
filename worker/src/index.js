@@ -5423,6 +5423,33 @@ function bindRequestOwner(env) {
 
 export { AccountChannel };
 
+/* JSON reads carry a short body hash. A client that sends it back gets an
+   empty 304 instead of the same bytes again. */
+const ETAG_MAX = 262144;
+export async function withEtag(request, response) {
+  if (!request || request.method !== "GET" || !response || response.status !== 200) return response;
+  if (response.headers.has("etag") || response.webSocket) return response;
+  if ((response.headers.get("content-type") || "").indexOf("application/json") < 0) return response;
+  let path = "";
+  try { path = new URL(request.url).pathname; } catch (err) { return response; }
+  if (!path.startsWith("/v1/")) return response;
+  if (Number(response.headers.get("content-length") || 0) > ETAG_MAX) return response;
+  const text = await response.text();
+  const headers = new Headers(response.headers);
+  if (text.length > ETAG_MAX) return new Response(text, { status: 200, statusText: response.statusText, headers });
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(text)));
+  let hex = "";
+  for (let i = 0; i < 10; i++) hex += digest[i].toString(16).padStart(2, "0");
+  const tag = 'W/"' + hex + '"';
+  headers.set("etag", tag);
+  const asked = String(request.headers.get("if-none-match") || "").split(/\s*,\s*/);
+  if (asked.includes(tag)) {
+    headers.delete("content-length");
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(text, { status: 200, statusText: response.statusText, headers });
+}
+
 /* Render's job loop: the offloaded jobs, all at once, against the same D1/R2.
    Each job keeps its own inner pool limits. */
 export async function runBackgroundJobs(env, at, only) {
@@ -5455,7 +5482,7 @@ export default {
       path = url.pathname;
       const origin = request.headers.get("Origin");
       if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
-      const response = await route(request, env, ctx);
+      const response = await withEtag(request, await route(request, env, ctx));
       return withCors(request, env, response);
     } catch (err) {
       logError(areaFor(path, request.method), err);
