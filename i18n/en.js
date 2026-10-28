@@ -2358,5 +2358,16 @@ SI18n.addPack("en", {
   "Picture of Safari install steps": "Picture of Safari install steps",
   "Sort replies": "Sort replies",
   "Follow {handle}": "Follow {handle}",
-  "Unfollow {handle}": "Unfollow {handle}"
+  "Unfollow {handle}": "Unfollow {handle}",
+  "Lives": "Lives",
+  "Telegram ingest": "Telegram ingest",
+  "Pills data": "Pills data",
+  "Server features": "Server features",
+  "Could not save that setting.": "Could not save that setting.",
+  "Shorts pages, TikTok live watching and its cron work.": "Shorts pages, TikTok live watching and its cron work.",
+  "Story uploads, the story bar and expiry sweeps.": "Story uploads, the story bar and expiry sweeps.",
+  "Going live, the live row and live sweeps.": "Going live, the live row and live sweeps.",
+  "The Telegram bot webhook and media relay.": "The Telegram bot webhook and media relay.",
+  "Weather and scores data for every visitor.": "Weather and scores data for every visitor.",
+  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it."
 });
