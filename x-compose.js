@@ -352,13 +352,12 @@
       + tool(slotName, "xc-location", tr("Add location"), icon(ICONS.pin))
       + tool(slotName, "xc-schedule", tr("Schedule post"), icon(ICONS.cal))
       + tool(slotName, "xc-emoji", tr("Emoji"), icon(ICONS.emoji), ' aria-pressed="' + (slots[slotName].emoji ? "true" : "false") + '"')
-      + (slotName === "reply" ? '<button class="xc-tool" type="button" data-gift="reply" data-parent="' + esc(slots.reply.replyTo || slots.reply.targetKey || "") + '" data-handle="' + esc(slots.reply.context || "") + '" aria-label="' + esc(tr("Send a gift")) + '">' + esc(tr("Gift")) + "</button>" : "")
       + "</div>" + end + "</div>";
   }
   function endChrome(slotName, withPost) {
     var info = measure(slots[slotName], 0);
     var split = info.weight > 0 ? '<span class="xc-split" aria-hidden="true"></span>' : "";
-    var post = withPost ? '<button class="xc-post-btn" type="button" data-act="xc-publish" data-slot="' + esc(slotName) + '"' + (canPost(slots[slotName]) ? "" : " disabled") + ">" + esc(tr("Post")) + "</button>" : "";
+    var post = withPost ? '<button class="xc-post-btn" type="button" data-act="xc-publish" data-slot="' + esc(slotName) + '"' + (canPost(slots[slotName]) ? "" : " disabled") + ">" + esc(tr(slotName === "reply" ? "Reply" : "Post")) + "</button>" : "";
     return '<span class="xc-end" data-xc="end" data-slot="' + esc(slotName) + '"><span data-xc="count" data-slot="' + esc(slotName) + '" data-index="0">' + meter(info) + "</span>" + split
       + '<button class="xc-plus" type="button" data-act="xc-add-post" data-slot="' + esc(slotName) + '" aria-label="' + esc(tr("Add another post")) + '">' + icon(ICONS.plus) + "</button>" + post + "</span>";
   }
@@ -474,6 +473,15 @@
   function setComposeOpen(on) {
     try { localStorage.setItem(OPEN_KEY, on ? "1" : "0"); } catch (err) { /* the sheet still toggles */ }
   }
+  var replyOpen = false;
+  var replyFor = "";
+  function replyDirty() {
+    var slot = slots.reply;
+    if (!slot) return false;
+    if (slot.media && slot.media.length) return true;
+    if (slot.poll || slot.scheduleAt || slot.location) return true;
+    return (slot.posts || []).some(function (post) { return post && String(post.text || "").trim(); });
+  }
   function homeDirty() {
     var slot = slots.post;
     if (!slot) return false;
@@ -488,6 +496,9 @@
     var homeInline = !sheet && slotName === "post";
     if (homeInline && !homeDirty() && !composeOpen()) {
       return '<div class="xc xc-inline is-collapsed" data-slot="post"><button type="button" class="xc-slim" data-act="xc-expand" aria-label="' + esc(placeholder) + '">' + face + '<span class="xc-slim-text">' + esc(placeholder) + "</span></button></div>";
+    }
+    if (!sheet && slotName === "reply" && !replyOpen && !replyDirty()) {
+      return '<div class="xc xc-inline is-collapsed xc-reply-slim" data-slot="reply"><button type="button" class="xc-slim" data-act="xc-expand-reply" aria-label="' + esc(placeholder) + '">' + face + '<span class="xc-slim-text">' + esc(placeholder) + '</span></button><button class="xc-post-btn" type="button" data-act="xc-expand-reply" disabled>' + esc(tr("Reply")) + "</button></div>";
     }
     var noteText = homeInline ? tr("Draft stays on this device.") : tr("The draft stays on this device. You press Post on X.");
     var note = fieldId(slotName, 0) === "compose-text"
@@ -551,7 +562,11 @@
   function inlineHtml(place, post) {
     bindUi();
     var slotName = place === "reply" ? "reply" : "post";
-    if (slotName === "reply" && post) seedReply(post);
+    if (slotName === "reply" && post) {
+      var target = String(post.id || "");
+      if (target !== replyFor) { replyFor = target; replyOpen = false; }
+      seedReply(post);
+    }
     return box(slotName, false);
   }
   function modalHtml() {
@@ -1009,6 +1024,7 @@
     }
     if (act === "xc-alt") { panel = panel === "alt:" + el.getAttribute("data-index") ? "" : "alt:" + el.getAttribute("data-index"); paint(); return true; }
     if (act === "xc-expand") { setComposeOpen(true); paint(); setTimeout(function () { var field = document.getElementById("compose-text"); if (field) field.focus(); }, 0); return true; }
+    if (act === "xc-expand-reply") { replyOpen = true; paint(); setTimeout(function () { var field = document.getElementById(fieldId("reply", 0)); if (field) field.focus(); }, 0); return true; }
     if (act === "xc-collapse") { setComposeOpen(false); paint(); return true; }
     if (act === "xc-audience-menu") { panel = panel === "audience" ? "" : "audience"; paint(); return true; }
     if (act === "xc-audience") { slot.audience = el.getAttribute("data-value") || "everyone"; panel = ""; paint(); return true; }
