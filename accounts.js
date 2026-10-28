@@ -271,6 +271,18 @@
       return res;
     });
   }
+  /* Last ETag and body per GET, in memory, so repeat reads can answer 304. */
+  var etagHeld = {};
+  var etagOrder = [];
+  function etagKey(url, token) {
+    return url + "#" + (token ? String(token).slice(-12) : "");
+  }
+  function keepEtag(key, tag, text) {
+    if (!key || !tag || typeof text !== "string" || text.length > 262144) return;
+    if (!etagHeld[key]) etagOrder.push(key);
+    etagHeld[key] = { tag: tag, text: text };
+    while (etagOrder.length > 60) delete etagHeld[etagOrder.shift()];
+  }
   function api(path, opts) {
     var list = apiEndpoints();
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
@@ -282,14 +294,23 @@
       Object.keys(opts.headers).forEach(function (key) { headers[key] = opts.headers[key]; });
     }
 
+    var reading = !opts.method || opts.method === "GET";
     function attempt(endpointIndex) {
       if (endpointIndex >= list.length) {
         return Promise.resolve({ status: 503, error: "all_endpoints_failed" });
       }
       var root = list[endpointIndex];
+      var tagKey = reading ? etagKey(root + path, opts.token) : "";
+      var held = tagKey ? etagHeld[tagKey] : null;
+      var sendHeaders = headers;
+      if (held) {
+        sendHeaders = {};
+        Object.keys(headers).forEach(function (key) { sendHeaders[key] = headers[key]; });
+        sendHeaders["If-None-Match"] = held.tag;
+      }
       return nativeFetch(root + path, {
         method: opts.method || "GET",
-        headers: headers,
+        headers: sendHeaders,
         body: opts.form || (opts.body ? JSON.stringify(opts.body) : undefined),
         credentials: "omit"
       }).then(function (res) {
@@ -298,11 +319,21 @@
           return attempt(endpointIndex + 1);
         }
         activeApiRoot = root;
-        return res.json().catch(function () { return {}; }).then(function (body) {
+        // A 304 means nothing changed since the last read: reuse that body.
+        var reused = res.status === 304 && !!held;
+        var code = reused ? 200 : res.status;
+        var tag = tagKey && res.status === 200 && res.headers && res.headers.get ? res.headers.get("ETag") : "";
+        var read = reused ? Promise.resolve(held.text)
+          : typeof res.text === "function" ? res.text()
+          : Promise.resolve(res.json()).then(function (b) { return JSON.stringify(b || {}); });
+        return read.then(function (text) {
+          if (tag) keepEtag(tagKey, tag, text);
+          try { return text ? JSON.parse(text) : {}; } catch (err) { return {}; }
+        }, function () { return {}; }).then(function (body) {
           body = body || {};
           // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
           if (typeof body.status === "string") body.bodyStatus = body.status;
-          body.status = res.status;
+          body.status = code;
           return body;
         });
       }).catch(function (err) {
