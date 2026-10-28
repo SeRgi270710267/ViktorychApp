@@ -405,7 +405,7 @@ async function listPosts(request, env, deps) {
   }
   let communitiesHome = true;
   try {
-    const pack = await communityHomeRows(env, request, session.public_id, deps.presentAccount);
+    const pack = await communityHomeRows(env, request, session, deps.presentAccount);
     communitiesHome = !(pack && pack.communitiesHome === false);
     const extra = (pack && pack.posts) || [];
     for (let i = 0; i < extra.length; i++) {
