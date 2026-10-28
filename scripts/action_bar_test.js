@@ -126,6 +126,15 @@ document.getElementById("out").textContent = JSON.stringify(rows);
 </script></body></html>`;
 
 function chrome(file, width) {
+  // Headless Chrome on CI sometimes exits before it dumps the page; try again before failing.
+  let last = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return chromeOnce(file, width); } catch (err) { last = err; }
+  }
+  throw last;
+}
+
+function chromeOnce(file, width) {
   const bin = fs.existsSync("/usr/bin/google-chrome") ? "/usr/bin/google-chrome" : "google-chrome";
   const run = spawnSync(bin, [
     "--headless=new",
@@ -137,7 +146,7 @@ function chrome(file, width) {
     "--window-size=" + width + ",900",
     "--dump-dom",
     "file://" + file
-  ], { encoding: "utf8", timeout: 30000 });
+  ], { encoding: "utf8", timeout: 60000 });
   if (run.status !== 0) throw new Error("chrome failed " + (run.stderr || run.stdout || run.status));
   const match = String(run.stdout || "").match(/<pre id="out">([\s\S]*?)<\/pre>/);
   if (!match) throw new Error("chrome did not measure layout");
