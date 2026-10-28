@@ -2356,7 +2356,22 @@ SI18n.addPack("en", {
   "Picture of badges": "Picture of badges",
   "Picture of installing the app": "Picture of installing the app",
   "Picture of Safari install steps": "Picture of Safari install steps",
+  "Live pills row": "Live pills row",
+  "Weather, scores and live spaces above the timeline. Off loads nothing for it.": "Weather, scores and live spaces above the timeline. Off loads nothing for it.",
+  "The stories tray and viewer. Off loads nothing for it.": "The stories tray and viewer. Off loads nothing for it.",
   "Sort replies": "Sort replies",
   "Follow {handle}": "Follow {handle}",
-  "Unfollow {handle}": "Unfollow {handle}"
+  "Unfollow {handle}": "Unfollow {handle}",
+  "Lives": "Lives",
+  "Telegram ingest": "Telegram ingest",
+  "Pills data": "Pills data",
+  "Server features": "Server features",
+  "Could not save that setting.": "Could not save that setting.",
+  "Shorts pages, TikTok live watching and its cron work.": "Shorts pages, TikTok live watching and its cron work.",
+  "Story uploads, the story bar and expiry sweeps.": "Story uploads, the story bar and expiry sweeps.",
+  "Going live, the live row and live sweeps.": "Going live, the live row and live sweeps.",
+  "The Telegram bot webhook and media relay.": "The Telegram bot webhook and media relay.",
+  "Weather and scores data for every visitor.": "Weather and scores data for every visitor.",
+  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.",
+  "Turned off for everyone by the owner.": "Turned off for everyone by the owner."
 });
