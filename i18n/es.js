@@ -1994,5 +1994,11 @@ SI18n.addPack("es", {
   "Notification filters": "Filtros de notificaciones",
   "Notification options": "Opciones de notificaciones",
   "No Spaces right now": "No hay Espacios ahora",
-  "Live audio shows up here.": "El audio en directo aparece aquí."
+  "Live audio shows up here.": "El audio en directo aparece aquí.",
+  "Feed tools": "Herramientas del feed",
+  "Search posts loaded here": "Buscar publicaciones cargadas aquí",
+  "Open original": "Abrir el original",
+  "Add or remove from lists": "Añadir o quitar de listas",
+  "Hide in For You": "Ocultar en Para ti",
+  "View in Feeds": "Ver en Feeds"
 });

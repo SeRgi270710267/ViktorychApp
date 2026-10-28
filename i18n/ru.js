@@ -1994,5 +1994,11 @@ SI18n.addPack("ru", {
   "Notification filters": "Фильтры уведомлений",
   "Notification options": "Параметры уведомлений",
   "No Spaces right now": "Сейчас нет пространств",
-  "Live audio shows up here.": "Прямой эфир появится здесь."
+  "Live audio shows up here.": "Прямой эфир появится здесь.",
+  "Feed tools": "Инструменты ленты",
+  "Search posts loaded here": "Искать загруженные записи",
+  "Open original": "Открыть оригинал",
+  "Add or remove from lists": "Добавить или убрать из списков",
+  "Hide in For You": "Скрыть в Для вас",
+  "View in Feeds": "Открыть в лентах"
 });
