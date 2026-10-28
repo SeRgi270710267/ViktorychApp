@@ -1,4 +1,4 @@
-"""Normalize an RSSHub /threads/<user> RSS feed."""
+"""Normalize an RSSHub or RSS-Bridge Threads feed (RSS or Atom)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,19 @@ from .common import (
     blank_profile,
     bridge_error_text,
     child_text,
-    children,
+    clean_meta_text,
+    feed_items,
     guard_posts,
     html_to_parts,
+    item_creator,
+    item_guid,
+    item_html,
+    item_permalink,
+    item_published,
     local_name,
+    meta_status_id,
     parse_xml,
     post_shell,
-    rfc822_to_iso,
     strip_author_prefix,
 )
 
@@ -23,10 +29,10 @@ REPLY_MARK = "↩️"
 
 
 def _channel(root):
-    if local_name(root.tag) == "channel":
+    if local_name(root.tag) in ("channel", "feed"):
         return root
     for child in list(root):
-        if local_name(child.tag) == "channel":
+        if local_name(child.tag) in ("channel", "feed"):
             return child
     return root
 
@@ -35,6 +41,8 @@ def _image(channel) -> str:
     for child in list(channel):
         if local_name(child.tag) == "image":
             return child_text(child, "url")
+        if local_name(child.tag) in ("icon", "logo") and (child.text or "").strip().startswith("http"):
+            return child.text.strip()
     return ""
 
 
@@ -42,7 +50,7 @@ def parse(payload, feed: dict | None = None) -> dict:
     feed = feed or {}
     root = parse_xml(payload) if isinstance(payload, str) else payload
     channel = _channel(root)
-    handle = feed.get("handle") or child_text(channel, "dc:creator") or "threads"
+    handle = feed.get("handle") or "threads"
     # dc:creator lives on items; channel title looks like "birchlane (@birchlane) on Threads"
     title = child_text(channel, "title")
     match = re.search(r"@([\w.]+)", title)
@@ -51,32 +59,27 @@ def parse(payload, feed: dict | None = None) -> dict:
     name = title.split("(@")[0].strip() or handle
     avatar = _image(channel)
     profile = blank_profile("threads", handle, name, avatar)
-    raw_bio = re.sub(r"\s*-\s*Powered by RSSHub\s*$", "", child_text(channel, "description")).strip()
+    raw_bio = re.sub(r"\s*-\s*Powered by RSSHub\s*$", "", child_text(channel, "description") or child_text(channel, "subtitle")).strip()
     profile["bio"] = "" if bridge_error_text(raw_bio) else raw_bio
     if profile["bio"].lower().startswith(name.lower()) or "on threads" in profile["bio"].lower():
         profile["bio"] = ""
     posts = []
-    for item in children(channel, "item"):
-        raw_html = child_text(item, "description")
+    for item in feed_items(channel):
+        raw_html = item_html(item)
         parts = html_to_parts(raw_html)
-        text = strip_author_prefix(parts["text"])
+        text = clean_meta_text(strip_author_prefix(parts["text"]))
         item_title = TITLE_PREFIX.sub("", child_text(item, "title"))
         if not text:
-            text = item_title
-        creator = ""
-        for child in list(item):
-            if local_name(child.tag) == "creator" and child.text:
-                creator = child.text.strip()
+            text = clean_meta_text(item_title)
+        creator = item_creator(item)
         item_handle = creator or handle
-        link = child_text(item, "link")
-        guid = child_text(item, "guid") or link
-        if guid.startswith("http"):
-            guid = guid.rstrip("/").rsplit("/", 1)[-1] or guid
+        link = item_permalink(item)
+        code = meta_status_id("threads", item_guid(item), link)
         kind = "reply" if (REPLY_MARK in raw_html or REPLY_MARK in child_text(item, "title")) else "post"
         posts.append(
             post_shell(
-                id=guid,
-                statusId=guid,
+                id=code,
+                statusId=code,
                 platform="threads",
                 feedId=feed.get("id") or "",
                 kind=kind,
@@ -85,7 +88,7 @@ def parse(payload, feed: dict | None = None) -> dict:
                 avatar=avatar,
                 text=text,
                 links=parts["links"],
-                date=rfc822_to_iso(child_text(item, "pubDate")),
+                date=item_published(item),
                 url=link,
                 media=parts["media"],
             )

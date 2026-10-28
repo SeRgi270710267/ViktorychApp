@@ -89,7 +89,7 @@
 
 /* Filter Chips (All / Reddit / ViktorychApp) */
 .cm-filter-bar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--bg); }
-.cm-chip { padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s ease; font-family: var(--font); white-space: nowrap; flex: none; }
+.cm-chip { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 9999px; font-size: 13px; font-weight: 600; line-height: 16px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s ease; font-family: var(--font); white-space: nowrap; flex: none; max-width: 220px; overflow: hidden; box-sizing: border-box; }
 .cm-chip:hover { background: var(--hover); color: var(--text); }
 .cm-chip.on { background: var(--text, #eff3f4); color: var(--bg, #000); border-color: transparent; }
 
