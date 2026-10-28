@@ -4959,6 +4959,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
       ${articleCardHtml(asQuoted)}
       ${mediaHtml(asQuoted.media, false, asQuoted)}
+      ${quoted.appPost && quoted.appExtra ? quoted.appExtra : ""}
     </div>`;
   }
 
@@ -6055,6 +6056,46 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  function appReplyBucket(post, id, want) {
+    const fresh = String(STATE.forceReply || "") === id;
+    if (fresh) STATE.forceReply = "";
+    const bucket = STATE.replies[id];
+    if (!fresh && bucket && (bucket.loading || (bucket.fetchedAt && Date.now() - bucket.fetchedAt < 30000))) return bucket;
+    STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want, fetchedAt: (bucket && bucket.fetchedAt) || 0 };
+    accountCall("/v1/posts/thread?id=" + encodeURIComponent(id) + "&sort=" + replySortMode()).then((res) => {
+      if (res && res.status === 410) {
+        dropAppItem(id);
+        STATE.replies[id] = { loading: false, replies: [], missing: true, cap: want, fetchedAt: Date.now(), settled: true, gone: true };
+        render();
+        return;
+      }
+      if (!res || res.status !== 200 || !Array.isArray(res.replies)) {
+        STATE.replies[id] = { loading: false, replies: (bucket && bucket.replies) || [], missing: !(bucket && bucket.replies && bucket.replies.length), cap: want, fetchedAt: Date.now(), settled: true };
+        render();
+        return;
+      }
+      if (res.post && res.post.id) {
+        appThreadItems[res.post.id] = res.post;
+        patchAppItem(res.post.id, res.post);
+        const card = appCardPost(res.post);
+        STATE.shared[card.id] = Object.assign(STATE.shared[card.id] || {}, card);
+      }
+      const replies = res.replies.map((item) => {
+        appThreadItems[item.id] = item;
+        const card = appCardPost(item);
+        card.replyingTo = { id: id, handle: post.handle || "" };
+        STATE.shared[card.id] = card;
+        return card;
+      });
+      STATE.replies[id] = { loading: false, replies: replies.slice(0, want), missing: false, cap: want, fetchedAt: Date.now(), settled: true };
+      render();
+    }).catch(() => {
+      STATE.replies[id] = { loading: false, replies: (bucket && bucket.replies) || [], missing: true, cap: want, fetchedAt: Date.now(), settled: true };
+      render();
+    });
+    return STATE.replies[id];
+  }
+
   function replyBucket(post) {
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
@@ -6079,6 +6120,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (post._community && post.kind !== "community") {
       return { loading: false, replies: Array.isArray(post.replies) ? post.replies : [], missing: false, cap: want };
     }
+    if (post.appPost && isAppPostId(id) && !post.community) return appReplyBucket(post, id, want);
     const fresh = String(STATE.forceReply || "") === id;
     if (fresh) STATE.forceReply = "";
     const bucket = STATE.replies[id];
@@ -7291,6 +7333,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
     const muteCommunity = post.community ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : "";
     const quote = post.community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`;
+    if (self && !post.community && isAppPostId(post.id)) {
+      const item = findAppItem(post.id);
+      const editable = item && Date.now() - (Number(item.createdAt) || 0) < 3600000;
+      return quote + (editable ? `<button type="button" data-act="app-edit" data-id="${esc(post.id)}">${esc(tr("Edit post"))}</button>` : "") + `<button type="button" data-act="app-delete" data-id="${esc(post.id)}">${esc(tr("Delete post"))}</button>`;
+    }
     if (self || !post.authorId) return quote + muteCommunity;
     return quote + `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>` + muteCommunity;
   }
@@ -7375,7 +7422,7 @@ const here = parseRoute();
           ${mediaHtml(post.media, eager, post)}
           ${post.appPost ? (post.appExtra || "") : ""}
           ${postCards(post)}
-          ${quoteCard(post.quoted)}
+          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
           ${giftChip(post)}
           ${threadLink}
           ${actionBar(post)}
@@ -8667,7 +8714,8 @@ const here = parseRoute();
 
   function samePublicPosts(next) {
     if (publicPosts.length !== next.length) return false;
-    for (let i = 0; i < next.length; i++) if (!publicPosts[i] || publicPosts[i].id !== next[i].id) return false;
+    const sig = (item) => item ? [item.id, item.replyCount, item.quoteCount, item.likes, item.reposts, item.editedAt, item.poll && item.poll.total, item.body].join("|") : "";
+    for (let i = 0; i < next.length; i++) if (sig(publicPosts[i]) !== sig(next[i])) return false;
     return true;
   }
 
@@ -8759,9 +8807,10 @@ const here = parseRoute();
         if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
         const mine = signedAccount();
         const next = mine && String(mine.publicId) === key ? keepOwnPosts(res.posts).filter((item) => String(item.authorId) === key) : res.posts;
-        const before = entry.posts.map((item) => item.id).join(",");
+        const sig = (list) => list.map((item) => [item.id, item.replyCount, item.quoteCount, item.likes, item.reposts, item.editedAt, item.body].join("|")).join(",");
+        const before = sig(entry.posts);
         entry.posts = next;
-        if (before !== next.map((item) => item.id).join(",")) render();
+        if (before !== sig(next)) render();
       }).catch(() => { entry.loading = false; });
     }
     const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
@@ -8913,6 +8962,15 @@ const here = parseRoute();
       toast(tr("If you’re signed in, the server publishes this when it’s due. Otherwise it stays on this device until the app is open."));
       return;
     }
+    // Offline with an account: text and polls wait in the outbox, with the post they
+    // reply to or quote, and go out when the device is back online. Media stays a draft.
+    const outboxable = !navigator.onLine && token && root && window.ViktorychLocal && posts.every((part) => !(part.media || []).length);
+    if (outboxable) {
+      const slim = posts.map((part) => ({ text: part.text || "", media: [], poll: part.poll || null, location: part.location || "", audience: part.audience || "everyone", listIds: part.listIds || [], replyControl: part.replyControl || "everyone", scheduleAt: 0 }));
+      queueOffline({ type: "app-post", id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), on: true, snapshot: { posts: slim, parentId: payload.parentId || "", quoteId: payload.quoteId || "" } });
+      toast(tr("Sends when you’re back online."));
+      return;
+    }
     if (!navigator.onLine || !token || !root) {
       const text = posts.map((part) => part.text).filter(Boolean).join("\n\n");
       if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
@@ -9050,8 +9108,9 @@ const here = parseRoute();
     const date = new Date(created || Date.now()).toISOString();
     const community = item.community && item.community.name ? { name: String(item.community.name), rootId: String(item.community.rootId || item.id || "") } : null;
     const media = (item.media || []).map(publicMediaHtml).join("");
-    const poll = item.poll && item.poll.options ? `<div class="public-poll">${item.poll.options.map((opt) => `<div>${esc(opt)}</div>`).join("")}</div>` : "";
+    const poll = appPollHtml(item);
     const place = item.location ? `<p class="phandle">${esc(item.location)}</p>` : "";
+    const edited = Number(item.editedAt) > 0 ? `<p class="phandle app-edited">${esc(tr("Edited"))}</p>` : "";
     const post = {
       id: String(item.id || ""),
       statusId: String(item.id || ""),
@@ -9067,9 +9126,16 @@ const here = parseRoute();
       date: date,
       sortDate: date,
       kind: item.parentId ? "reply" : (item.quote ? "quote" : "post"),
-      stats: { replies: Number(item.replyCount) || 0, likes: Number(item.likes) || 0 },
+      // The server counts include this account's own like and repost; the bar adds
+      // those from local state, so they come off here and are not counted twice.
+      stats: {
+        replies: Number(item.replyCount) || 0,
+        likes: Math.max(0, (Number(item.likes) || 0) - (item.liked ? 1 : 0)),
+        reposts: Math.max(0, (Number(item.reposts) || 0) - (item.reposted ? 1 : 0)),
+        quotes: Number(item.quoteCount) || 0
+      },
       media: [],
-      appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : ""),
+      appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : "") + edited,
       community: community,
       parentId: String(item.parentId || ""),
       url: ""
@@ -9080,8 +9146,92 @@ const here = parseRoute();
       post.replyParent = appCardPost(item.parent);
       post.replyingTo = { id: post.parentId, handle: post.replyParent.handle };
     } else if (post.parentId) post.replyingTo = { id: post.parentId, handle: String(item.parentHandle || "") };
-    if (item.quote) post.quoted = { platform: "app", id: String(item.quote.id || item.quoteId || ""), handle: String(item.quote.authorHandle || ""), author: String(item.quote.authorName || ""), text: String(item.quote.body || "") };
+    if (item.quote && item.quote.unavailable) post.quoteGone = true;
+    else if (item.quote) {
+      const qMedia = (item.quote.media || []).map(publicMediaHtml).join("");
+      post.quoted = {
+        platform: "app",
+        appPost: true,
+        id: String(item.quote.id || item.quoteId || ""),
+        statusId: String(item.quote.id || item.quoteId || ""),
+        handle: String(item.quote.authorHandle || ""),
+        author: String(item.quote.authorName || item.quote.authorHandle || ""),
+        authorId: String(item.quote.authorId || ""),
+        avatar: String(item.quote.authorAvatar || ""),
+        text: String(item.quote.body || ""),
+        date: item.quote.createdAt ? new Date(Number(item.quote.createdAt)).toISOString() : "",
+        media: [],
+        appExtra: qMedia ? `<div class="public-media">${qMedia}</div>` : ""
+      };
+    }
+    // Like state from other devices: the server knows this account liked it.
+    if (item.liked && STATE.settings && STATE.settings.likes && !STATE.settings.likes[post.id] && !appUnliked[post.id]) STATE.settings.likes[post.id] = Number(item.createdAt) || Date.now();
     return post;
+  }
+
+  var appUnliked = {};
+  function appPollHtml(item) {
+    const poll = item && item.poll;
+    if (!poll || !Array.isArray(poll.options) || !poll.options.length) return "";
+    const ends = (Number(item.createdAt) || 0) + (Number(poll.minutes) || 1440) * 60000;
+    const closed = Date.now() > ends;
+    const votes = Array.isArray(poll.votes) ? poll.votes : [];
+    const total = Number(poll.total) || 0;
+    const mine = Number(poll.mine);
+    const voted = isFinite(mine) && mine >= 0;
+    const rows = poll.options.map((opt, i) => {
+      if (voted || closed) {
+        const pct = total ? Math.round(((Number(votes[i]) || 0) / total) * 100) : 0;
+        return `<div class="poll-choice${mine === i ? " on" : ""}"><span class="poll-bar" style="width:${pct}%"></span><span class="poll-label">${esc(opt)}</span><span class="poll-pct">${esc(String(pct))}%</span></div>`;
+      }
+      return `<button class="poll-choice poll-vote" type="button" data-act="app-vote" data-id="${esc(String(item.id || ""))}" data-choice="${i}"><span class="poll-label">${esc(opt)}</span></button>`;
+    }).join("");
+    return `<div class="poll public-poll">${rows}<div class="poll-total">${esc(tr("{count} votes", { count: formatCount(total) }))}</div></div>`;
+  }
+
+  /* Every app post this device has seen: Home, profiles and open threads. */
+  var appThreadItems = {};
+  function findAppItem(id) {
+    if (!id) return null;
+    const hit = publicPosts.find((item) => item && item.id === id);
+    if (hit) return hit;
+    if (appThreadItems[id]) return appThreadItems[id];
+    const keys = Object.keys(authorPostCache);
+    for (let i = 0; i < keys.length; i++) {
+      const found = (authorPostCache[keys[i]].posts || []).find((item) => item && item.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+  function isAppPostId(id) {
+    return /^[a-f0-9]{32}$/.test(String(id || ""));
+  }
+  function patchAppItem(id, change) {
+    const apply = (item) => { if (item && item.id === id) Object.assign(item, change); };
+    publicPosts.forEach(apply);
+    Object.keys(appThreadItems).forEach((key) => apply(appThreadItems[key]));
+    Object.keys(authorPostCache).forEach((key) => (authorPostCache[key].posts || []).forEach(apply));
+  }
+  function dropAppItem(id) {
+    publicPosts = publicPosts.filter((item) => item && item.id !== id);
+    delete appThreadItems[id];
+    Object.keys(authorPostCache).forEach((key) => {
+      authorPostCache[key].posts = (authorPostCache[key].posts || []).filter((item) => item && item.id !== id);
+    });
+    Object.keys(STATE.replies || {}).forEach((key) => {
+      const bucket = STATE.replies[key];
+      if (bucket && bucket.replies) bucket.replies = bucket.replies.filter((reply) => postKey(reply) !== id);
+    });
+  }
+  /* Something changed on a post this account wrote or touched: counts, a reply,
+     a like. Home, profiles and the open thread fetch again. */
+  function refreshAppPosts() {
+    publicStamp = 0;
+    Object.keys(authorPostCache).forEach((key) => { if (authorPostCache[key]) authorPostCache[key].at = 0; });
+    const focus = String(STATE.focusId || "");
+    if (focus && isAppPostId(focus)) STATE.forceReply = focus;
+    schedulePublicPosts();
+    render();
   }
 
   function appHomePosts(tab) {
@@ -10660,8 +10810,9 @@ const here = parseRoute();
         ${discordMeta(post)}
         ${articleCardHtml(post)}
         ${mediaHtml(post.media, false, post)}
+        ${post.appPost ? (post.appExtra || "") : ""}
         ${postCards(post)}
-        ${quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
         ${statusMeta(post)}
         ${actionBar(post, true)}`;
     const face = authorFace(post);
@@ -13898,7 +14049,7 @@ if (STATE.histClear) {
       }
       if (act === "like") {
         histUpsert("likes", likedPost, { id: id });
-        queueLikeNote(likedPost, id);
+        if (!(likedPost && likedPost.appPost && isAppPostId(id))) queueLikeNote(likedPost, id);
       }
       if ((act === "like" || act === "repost") && likedPost && window.ForYou) {
         const memory = forYouMemory();
@@ -13909,9 +14060,21 @@ if (STATE.histClear) {
       }
     }
     saveSettings();
-    if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
+    const appLike = act === "like" && isAppPostId(id) && !!findAppItem(id);
+    if (appLike) {
+      const on = !!STATE.settings.likes[id];
+      if (on) delete appUnliked[id]; else appUnliked[id] = true;
+      if (navigator.onLine) sendAppLike(id, on);
+      else queueOffline({ type: "app-like", id: id, on: on });
+    } else if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
     if (parseRoute().name !== "shorts") render();
     return !!STATE.settings[bucket][id];
+  }
+
+  function sendAppLike(id, on) {
+    return accountCall("/v1/posts/like", { method: "POST", body: { id: id, on: !!on } }).then((res) => {
+      if (res && res.status === 200) patchAppItem(id, { likes: Number(res.likes) || 0, liked: !!res.liked });
+    }).catch(() => queueOffline({ type: "app-like", id: id, on: !!on }));
   }
 
   let pendingReposts = {};
@@ -15250,7 +15413,7 @@ if (STATE.histClear) {
         ${reply}
         ${textBlock(shown, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
-        ${quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
       </div>
     </article>`;
   }
@@ -16959,7 +17122,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "public-reply" || act === "public-quote") {
-      const found = publicPosts.find((item) => item && item.id === (el.dataset.id || ""));
+      const found = findAppItem(el.dataset.id || "");
       const opener = window.ViktorychXCompose;
       if (opener && opener.openReply && opener.openQuote) {
         const post = { id: el.dataset.id || "", handle: found && found.authorHandle, text: found && found.body, name: found && found.authorName };
@@ -16973,6 +17136,44 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       STATE.modal = "compose";
       STATE.composeSeed = "";
       render();
+      return;
+    }
+    if (act === "app-vote") {
+      const id = el.dataset.id || "";
+      const choice = Number(el.dataset.choice);
+      accountCall("/v1/posts/vote", { method: "POST", body: { id: id, choice: choice } }).then((res) => {
+        if (res && res.status === 200 && res.poll) { patchAppItem(id, { poll: res.poll }); render(); }
+        else toast(tr("Could not save that."));
+      }).catch(() => toast(tr("Could not save that.")));
+      return;
+    }
+    if (act === "app-edit") {
+      const id = el.dataset.id || "";
+      const item = findAppItem(id);
+      STATE.menu = null;
+      const next = window.prompt(tr("Edit post"), (item && item.body) || "");
+      if (next == null || !next.trim() || (item && next === item.body)) { render(); return; }
+      accountCall("/v1/posts/edit", { method: "POST", body: { id: id, body: next } }).then((res) => {
+        if (res && res.status === 200) { patchAppItem(id, { body: res.body, editedAt: res.editedAt }); render(); return; }
+        toast(res && res.error === "edit_closed" ? tr("Posts can be edited for an hour after they go out.") : tr("Could not save that."));
+      }).catch(() => toast(tr("Could not save that.")));
+      return;
+    }
+    if (act === "app-delete") {
+      const id = el.dataset.id || "";
+      STATE.menu = null;
+      if (!confirm(tr("Delete this post?"))) { render(); return; }
+      accountCall("/v1/posts/delete", { method: "POST", body: { id: id } }).then((res) => {
+        if (res && res.status === 200) {
+          forgetOwnPost(id);
+          dropAppItem(id);
+          toast(tr("Post deleted"));
+          refreshAppPosts();
+          if (String(STATE.focusId || "") === id) history.back();
+          return;
+        }
+        toast(tr("Could not save that."));
+      }).catch(() => toast(tr("Could not save that.")));
       return;
     }
     if (act === "public-report") {
@@ -17405,6 +17606,21 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const post = locatePost(el.dataset.id);
       STATE.repostMenu = null;
       if (!post) { render(); return; }
+      if (post.appPost && !post.community && isAppPostId(post.id)) {
+        const opener = window.ViktorychXCompose;
+        const item = findAppItem(post.id);
+        if (opener && opener.openQuote) {
+          opener.openQuote({ id: post.id, handle: post.handle, text: (item && item.body) || post.text, name: post.author });
+          return;
+        }
+        STATE.composeParent = "";
+        STATE.composeQuote = post.id;
+        STATE.composeVia = "app";
+        STATE.modal = "compose";
+        STATE.composeSeed = "";
+        render();
+        return;
+      }
       STATE.quoteTarget = post.id;
       STATE.modal = "quote";
       render();
@@ -21601,7 +21817,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     if (msg.op === "event" && msg.topic === "notifications" && msg.data) applyHubEvent(msg.data);
+    if (msg.op === "event" && msg.topic === "posts") {
+      clearTimeout(postsLiveTimer);
+      postsLiveTimer = setTimeout(refreshAppPosts, 600);
+    }
   }
+  var postsLiveTimer = 0;
 
   function bindChannel() {
     const presence = window.ViktorychPresence;
@@ -22422,6 +22643,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         ? accountCall("/v1/reposts", { method: "PUT", body: { kind: "repost", post: action.snapshot || {} } })
         : accountCall("/v1/reposts", { method: "POST", body: { postKey: action.postKey || "" } });
       Promise.resolve(req).catch(() => {});
+    } else if (action.type === "app-post" && action.snapshot && Array.isArray(action.snapshot.posts)) {
+      publishComposer({ posts: action.snapshot.posts, parentId: action.snapshot.parentId || "", quoteId: action.snapshot.quoteId || "" }, true);
+    } else if (action.type === "app-like") {
+      sendAppLike(action.id, !!action.on);
     } else if (action.type === "reply" && window.ViktorychLocal) {
       window.ViktorychLocal.saveDoc("drafts", "compose", { text: action.body || "" });
     }

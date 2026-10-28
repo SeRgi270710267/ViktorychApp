@@ -1,5 +1,13 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("es", {
+  "{count} votes": "{count} votos",
+  "Edit post": "Editar publicación",
+  "Delete post": "Eliminar publicación",
+  "Delete this post?": "¿Eliminar esta publicación?",
+  "Post deleted": "Publicación eliminada",
+  "Could not save that.": "No se pudo guardar.",
+  "Posts can be edited for an hour after they go out.": "Las publicaciones se pueden editar durante una hora después de publicarse.",
+  "Sends when you’re back online.": "Se enviará cuando vuelvas a estar en línea.",
   "Your settings follow your account on every device you sign in on. Private ones are stored encrypted.": "Tus ajustes siguen a tu cuenta en cada dispositivo donde inicies sesión. Los privados se guardan cifrados.",
   "Keep on this device only": "Mantener solo en este dispositivo",
   "What you switch on here stays on this device and is not synced.": "Lo que actives aquí se queda en este dispositivo y no se sincroniza.",
