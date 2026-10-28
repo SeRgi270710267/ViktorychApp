@@ -59,3 +59,10 @@ assert.equal(shared.order[0], "media", "a shared order is what visitors see");
 assert.ok(shared.hidden.includes("friends"), "a shared hide list is kept");
 
 console.log("profile tab order ok");
+
+// Device sync rides along so it runs in the nav workflow.
+{
+  const { spawnSync } = await import("node:child_process");
+  const run = spawnSync(process.execPath, ["scripts/device_sync_test.js"], { stdio: "inherit" });
+  if (run.status !== 0) throw new Error("device sync check failed");
+}
