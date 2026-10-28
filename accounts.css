@@ -744,12 +744,18 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 10px 12px;
   background: var(--hover, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
   border-radius: 12px;
   margin-bottom: 8px;
 }
+.acct-ident-aud { display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px; min-width: 0; font-size: 13px; color: var(--muted); }
+.acct-ident-aud select { width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--text); }
+.acct-ident-item .tab-switch { flex: 1 1 160px; }
+.acct-ident-chip.is-hidden { opacity: 0.45; }
 .acct-ident-item-left {
   display: flex;
   align-items: center;
