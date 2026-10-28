@@ -336,7 +336,6 @@
     else if (window.ViktorychDevice && window.ViktorychDevice.ensure) window.ViktorychDevice.ensure("ondevice").then(finish);
     else finish();
   }
-
   function tool(slotName, act, label, glyph, extra) {
     return '<button class="xc-tool" type="button" data-act="' + act + '" data-slot="' + esc(slotName) + '"' + (extra || "") + ' aria-label="' + esc(label) + '">' + glyph + "</button>";
   }
@@ -352,6 +351,7 @@
       + tool(slotName, "xc-location", tr("Add location"), icon(ICONS.pin))
       + tool(slotName, "xc-schedule", tr("Schedule post"), icon(ICONS.cal))
       + tool(slotName, "xc-emoji", tr("Emoji"), icon(ICONS.emoji), ' aria-pressed="' + (slots[slotName].emoji ? "true" : "false") + '"')
+      + (slotName === "reply" ? '<button class="xc-tool" type="button" data-gift="reply" data-parent="' + esc(slots.reply.replyTo || slots.reply.targetKey || "") + '" data-handle="' + esc(slots.reply.context || "") + '" aria-label="' + esc(tr("Send a gift")) + '">' + esc(tr("Gift")) + "</button>" : "")
       + "</div>" + endChrome(slotName, withPost) + "</div>";
   }
   function endChrome(slotName, withPost) {

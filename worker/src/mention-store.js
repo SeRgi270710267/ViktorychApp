@@ -189,6 +189,16 @@ export async function handleContentRoutes(request, env, path, deps) {
         "INSERT INTO account_content (id, author_id, kind, parent_id, body, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0)"
       ).bind(id, row.public_id, kind, parent, text, now, now)
     ].concat(planned.statements);
+    try {
+      const points = await import("./points.js");
+      await points.awardActivity(env, row.public_id, kind === "reply" || kind === "comment" ? "comment" : "post", id);
+      if ((kind === "reply" || kind === "comment") && parent && parent !== row.public_id) {
+        const parentRow = await env.DB.prepare("SELECT author_id FROM account_content WHERE id = ?").bind(parent).first();
+        if (parentRow && parentRow.author_id && parentRow.author_id !== row.public_id) {
+          await points.awardActivity(env, parentRow.author_id, "reply_in", id);
+        }
+      }
+    } catch (err) { /* the post is saved */ }
     const deliveries = planned.deliveries.slice();
     if (kind === "dm" && /^\d{12}$/.test(parent) && parent !== row.public_id && planned.targets.indexOf(parent) < 0) {
       const target = await env.DB.prepare("SELECT public_id, protected_account FROM accounts WHERE public_id = ?").bind(parent).first();

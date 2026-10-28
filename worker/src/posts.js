@@ -3,6 +3,7 @@
    Block, mute, and a hidden flag keep people and reported posts out of the
    timeline. The moderation list is owner-only. */
 
+import { awardActivity, clawback, giftForPost } from "./points.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
 
 const POST_MAX = 500;
@@ -221,7 +222,7 @@ async function readPostInput(request, deps) {
   return { fields: fields, file: files[0] || null, files: files };
 }
 
-async function presentPost(env, request, row) {
+async function presentPost(env, request, row, viewerId) {
   const mediaRows = await env.DB.prepare("SELECT id, mime, size, alt_text, sort_order FROM public_post_media WHERE post_id = ? ORDER BY sort_order ASC, id ASC").bind(row.id).all();
   const media = ((mediaRows && mediaRows.results) || []).map((item) => ({
     id: item.id,
@@ -256,7 +257,8 @@ async function presentPost(env, request, row) {
     replyControl: row.reply_control || "everyone",
     location: row.location || "",
     poll: poll,
-    scheduledAt: Number(row.scheduled_at) || 0
+    scheduledAt: Number(row.scheduled_at) || 0,
+    gift: await giftForPost(env, row.id, viewerId || "")
   };
 }
 
@@ -394,7 +396,7 @@ async function listPosts(request, env, deps) {
     if (canSee(row, session.public_id, sets)) visible.push(row);
   }
   const posts = [];
-  for (let i = 0; i < visible.length && posts.length < 40; i++) posts.push(await presentPost(env, request, visible[i]));
+  for (let i = 0; i < visible.length && posts.length < 40; i++) posts.push(await presentPost(env, request, visible[i], session.public_id));
   return deps.json(200, { posts: posts });
 }
 
@@ -489,7 +491,16 @@ async function createPost(request, env, deps) {
     ).run();
   }
   const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
-  return deps.json(201, { post: await presentPost(env, request, row), scheduled: when > 0 });
+  try {
+    await awardActivity(env, session.public_id, parent ? "comment" : "post", id);
+    if (parent) {
+      const parentRow = await env.DB.prepare("SELECT author_id FROM public_posts WHERE id = ?").bind(parent).first();
+      if (parentRow && parentRow.author_id && parentRow.author_id !== session.public_id) {
+        await awardActivity(env, parentRow.author_id, "reply_in", id);
+      }
+    }
+  } catch (err) { /* the post is saved */ }
+  return deps.json(201, { post: await presentPost(env, request, row, session.public_id), scheduled: when > 0 });
 }
 
 async function readMedia(request, env, id, deps) {
@@ -580,7 +591,12 @@ async function resolveReport(request, env, deps) {
   const row = await env.DB.prepare("SELECT post_id FROM post_reports WHERE id = ?").bind(id).first();
   if (!row) return deps.json(404, { error: "not_found" });
   if (action === "hide") {
+    const hiddenPost = await env.DB.prepare("SELECT author_id, parent_id FROM public_posts WHERE id = ?").bind(row.post_id).first();
     await env.DB.prepare("UPDATE public_posts SET hidden = 1 WHERE id = ?").bind(row.post_id).run();
+    if (hiddenPost && hiddenPost.author_id) {
+      try { await clawback(env, hiddenPost.author_id, hiddenPost.parent_id ? "comment" : "post", row.post_id); }
+      catch (err) { /* the post is still hidden */ }
+    }
     await env.DB.prepare("UPDATE post_reports SET status = 'hidden' WHERE post_id = ? AND status = 'open'").bind(row.post_id).run();
   } else {
     await env.DB.prepare("UPDATE post_reports SET status = 'dismissed' WHERE id = ?").bind(id).run();
