@@ -513,7 +513,9 @@
   function warmOpens() {
     var top = rankOpens(state.opens, 3);
     if (!prefetchLimit(null, prefetchEnabled())) return top;
-    if (typeof fetch === "function") {
+    /* The page shell already reads feeds.json fresh at boot; a second copy only costs bandwidth. */
+    var booted = typeof window !== "undefined" && window.__homeFreshBoot;
+    if (typeof fetch === "function" && !booted) {
       fetch("feeds.json", { cache: "force-cache" }).catch(function () {});
     }
     if (typeof window !== "undefined" && window.dispatchEvent) {
