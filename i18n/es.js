@@ -1774,10 +1774,10 @@ SI18n.addPack("es", {
   "Add a passkey": "Añadir una llave de acceso",
   "Covered": "Oculto",
   "Privacy screen": "Pantalla de privacidad",
-  "Cover messages when this window is in the background, split screen, picture-in-picture, or print.": "Oculta los mensajes cuando esta ventana está en segundo plano, en pantalla dividida, en imagen dentro de imagen o al imprimir.",
+  "Cover the app when this window is hidden, in the background, or locked.": "Cubre la app cuando esta ventana está oculta, en segundo plano o bloqueada.",
   "Messages only": "Solo mensajes",
   "Whole app": "Toda la app",
-  "Browsers cannot block operating-system screenshots. The cover hides messages from the app switcher, split screen, picture-in-picture, and print preview. A screenshot taken while this window is open and focused can still capture it.": "Los navegadores no pueden bloquear las capturas del sistema. La cubierta oculta los mensajes del cambiador de apps, la pantalla dividida, la imagen dentro de imagen y la vista de impresión. Una captura con esta ventana abierta y enfocada sí puede verse.",
+  "The cover is one layer. It does not blur, hide, or restyle the page, and it goes away when this window is in front.": "Es una sola capa. No desenfoca, no oculta ni cambia la página, y desaparece cuando esta ventana vuelve al frente.",
   "Android can block screenshots only in a wrapper that sets FLAG_SECURE. This site does not include that wrapper.": "Android solo puede bloquear capturas en un contenedor que active FLAG_SECURE. Este sitio no incluye ese contenedor.",
   "Stop text selection in messages": "Impedir seleccionar texto en los mensajes",
   "Unlock to open the app": "Desbloquea para abrir la app",
@@ -2035,5 +2035,10 @@ SI18n.addPack("es", {
   "Notification filters": "Filtros de notificaciones",
   "Notification options": "Opciones de notificaciones",
   "No Spaces right now": "No hay Espacios ahora",
-  "Live audio shows up here.": "El audio en directo aparece aquí."
+  "Live audio shows up here.": "El audio en directo aparece aquí.",
+  "Edit menu": "Editar menú",
+  "Add section": "Añadir sección",
+  "Section name": "Nombre de la sección",
+  "Main list": "Lista principal",
+  "This item always stays available": "Este elemento siempre permanece disponible"
 });

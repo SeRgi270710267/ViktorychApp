@@ -58,6 +58,12 @@ jobs:
       - name: Notifications list is never blank
         run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/notifications_page_test.mjs
 
+      - name: Drawer menu can be customized
+        run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/drawer_menu_test.mjs
+
+      - name: Following rows stay visible with the privacy screen off or on
+        run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/privacy_lists_test.mjs
+
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
 
