@@ -3,6 +3,8 @@
    Block, mute, and a hidden flag keep people and reported posts out of the
    timeline. The moderation list is owner-only. */
 
+import { awardActivity, clawback } from "./points.js";
+
 const POST_MAX = 500;
 const MEDIA_MAX = 12 * 1024 * 1024;
 
@@ -230,6 +232,15 @@ async function createPost(request, env, deps) {
     ).run();
   }
   const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
+  try {
+    await awardActivity(env, session.public_id, parent ? "comment" : "post", id);
+    if (parent) {
+      const parentRow = await env.DB.prepare("SELECT author_id FROM public_posts WHERE id = ?").bind(parent).first();
+      if (parentRow && parentRow.author_id && parentRow.author_id !== session.public_id) {
+        await awardActivity(env, parentRow.author_id, "reply_in", id);
+      }
+    }
+  } catch (err) { /* the post is saved */ }
   return deps.json(201, { post: await presentPost(env, request, row) });
 }
 
@@ -318,7 +329,12 @@ async function resolveReport(request, env, deps) {
   const row = await env.DB.prepare("SELECT post_id FROM post_reports WHERE id = ?").bind(id).first();
   if (!row) return deps.json(404, { error: "not_found" });
   if (action === "hide") {
+    const hiddenPost = await env.DB.prepare("SELECT author_id, parent_id FROM public_posts WHERE id = ?").bind(row.post_id).first();
     await env.DB.prepare("UPDATE public_posts SET hidden = 1 WHERE id = ?").bind(row.post_id).run();
+    if (hiddenPost && hiddenPost.author_id) {
+      try { await clawback(env, hiddenPost.author_id, hiddenPost.parent_id ? "comment" : "post", row.post_id); }
+      catch (err) { /* the post is still hidden */ }
+    }
     await env.DB.prepare("UPDATE post_reports SET status = 'hidden' WHERE post_id = ? AND status = 'open'").bind(row.post_id).run();
   } else {
     await env.DB.prepare("UPDATE post_reports SET status = 'dismissed' WHERE id = ?").bind(id).run();

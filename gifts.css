@@ -1,0 +1,64 @@
+.points-page, .store-page, .gifts-tab { background: var(--bg); color: var(--text); }
+.points-balance { padding: 20px 16px 8px; display: flex; align-items: baseline; gap: 8px; }
+.points-balance b { font: 700 34px/40px var(--font); }
+.points-note, .points-earn { margin: 0 16px 12px; color: var(--muted); font: 15px/20px var(--font); }
+.points-earn { padding: 0; list-style: none; }
+.points-earn li, .points-row { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.points-page h2, .store-page h1 { font: 700 20px/24px var(--font); }
+.points-store, .gift-send {
+  display: inline-flex;
+  margin: 0 16px 16px;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font: 700 15px/20px var(--font);
+  text-decoration: none;
+  border: 0;
+}
+.gift-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px 16px 24px; }
+.gift-card, .gift-tile {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+  font: 13px/18px var(--font);
+}
+.gift-art { display: flex; width: 64px; height: 64px; align-items: center; justify-content: center; color: var(--blue, #1d9bf0); }
+.gift-art svg { width: 48px; height: 48px; }
+.gift-tile.is-hidden { opacity: 0.45; }
+.gift-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+.gift-sheet-bar, .gift-sheet-body { padding: 12px 16px; }
+.gift-sheet-bar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); min-height: 53px; }
+.gift-sheet-bar button { border: 0; background: transparent; color: var(--text); font: 700 15px/20px var(--font); }
+.gift-sheet-body { display: flex; flex-direction: column; gap: 12px; }
+.gift-sheet-body input, .gift-sheet-body textarea, .gift-prefs select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: 17px/22px var(--font);
+  padding: 12px;
+}
+.gift-error { color: var(--red, #f4212e); margin: 0; }
+.gift-prefs { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.points-pill { margin-left: auto; color: var(--blue, #1d9bf0); font-weight: 700; }
+@media (max-width: 499px) {
+  .gift-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 500px) and (max-width: 999px) {
+  .gift-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 16px 20px 28px; }
+  .gift-sheet { left: 50%; width: min(560px, 100%); transform: translateX(-50%); }
+}
