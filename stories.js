@@ -12,7 +12,8 @@
   var VINE_MS = 6000;
   var SEEN_KEY = "rss-stories-seen-v1";
   var BAR_KEY = "viktorych-stories-bar-v1";
-  var BAR_H = { expanded: 118, slim: 52, hidden: 28 };
+  var BAR_H = { expanded: 168, slim: 52, hidden: 28 };
+  var NOTE_EMOJI = ["😀", "😂", "❤️", "🔥", "👏", "😮", "😢", "👍"];
   var REACTIONS = ["❤", "🔥", "👏", "😂", "😮", "😢"];
   var deps = {};
   var raw = { accounts: [], updated: "", telegramConnected: false };
@@ -24,6 +25,7 @@
   var suppressClick = false;
   var soundOn = false;
   var pickedFile = null;
+  var notes = { mine: null, notes: [] };
 
   function esc(value) {
     return String(value == null ? "" : value)
@@ -286,12 +288,43 @@
     var connect = showConnect();
     if (!list.length && !mine && !connect) return "";
     var state = barState();
-    var cards = (mine ? selfHtml(mine) : "") + (connect ? connectHtml() : "") + list.map(cardHtml).join("");
+    var noteCards = noteCardsHtml();
+    var cards = noteCards + (mine ? selfHtml(mine) : "") + (connect ? connectHtml() : "") + list.map(cardHtml).join("");
     return '<div class="story-shell" data-state="' + state + '">' +
       '<div class="story-tray" role="list" aria-label="' + esc(tr("Stories")) + '">' + cards + "</div>" +
       '<button type="button" class="story-fold" data-story-act="fold" aria-label="' + esc(tr("Collapse stories")) + '" aria-expanded="' + (state === "expanded" ? "true" : "false") + '">' +
       (deps.icon ? deps.icon("chevL") : "") + "</button>" +
       '<button type="button" class="story-peek" data-story-act="expand" aria-label="' + esc(tr("Show stories")) + '">' + esc(tr("Stories")) + "</button></div>";
+  }
+
+  function noteCardsHtml() {
+    if (!viewerAccount()) return "";
+    var mine = notes && notes.mine;
+    var others = (notes && notes.notes) || [];
+    return noteSlotHtml(mine, true) + others.map(function (item) { return noteSlotHtml(item, false); }).join("");
+  }
+
+  function noteSlotHtml(item, mine) {
+    var text = item && item.text ? String(item.text) : "";
+    var bubble = mine && !text ? tr("Share a thought...") : text;
+    if (!bubble) return "";
+    var account = viewerAccount();
+    var faceAccount = mine ? {
+      name: (account && (account.displayName || account.handle)) || "",
+      handle: (account && account.handle) || "",
+      avatar: mediaUrl((account && account.avatar) || (item && item.avatar) || "")
+    } : {
+      name: item.name || item.handle || "",
+      handle: item.handle || "",
+      avatar: mediaUrl(item.avatar || "")
+    };
+    var label = mine ? tr("Your note") : (item.name || item.handle || "");
+    var handle = mine ? "self" : (item.handle || "");
+    return '<div class="story-card note-slot" role="listitem">' +
+      '<button type="button" class="note-bubble' + (mine && !text ? " is-prompt" : "") + '" data-story-act="note" data-handle="' + esc(handle) + '">' + esc(bubble) + "</button>" +
+      '<button type="button" class="story-main" data-story-act="note" data-handle="' + esc(handle) + '" aria-label="' + esc(label) + '">' +
+      '<span class="story-ring"><span class="story-face">' + face(faceAccount) + "</span></span></button>" +
+      '<span class="story-name">' + esc(label) + "</span></div>";
   }
 
   function ago(iso) {
@@ -561,6 +594,7 @@
     if (!view || view.compose || view.connect) view = { list: list };
     view.compose = false;
     view.connect = false;
+    view.note = false;
     view.list = list;
     view.account = Math.max(0, Math.min(accountAt, list.length - 1));
     var items = view.list[view.account].items;
@@ -589,6 +623,7 @@
     if (node) {
       node.hidden = true;
       node.innerHTML = "";
+      node.classList.remove("note-open");
     }
     if (typeof document !== "undefined") document.documentElement.classList.remove("stories-open");
     if (deps.render) deps.render();
@@ -702,7 +737,7 @@
       close();
       return;
     }
-    if (view.compose || view.connect) return;
+    if (view.compose || view.connect || view.note) return;
     if (event.key === "ArrowRight") {
       event.preventDefault();
       advance(1);
@@ -789,6 +824,41 @@
     var name = act.getAttribute("data-story-act");
     if (name === "fold") { event.preventDefault(); event.stopPropagation(); cycleBar(-1); return; }
     if (name === "expand") { event.preventDefault(); event.stopPropagation(); applyBar("expanded"); return; }
+    if (name === "note") {
+      event.preventDefault();
+      event.stopPropagation();
+      var handle = act.getAttribute("data-handle") || "";
+      if (handle === "self") openOwnNote();
+      else openTheirNote(handle);
+      return;
+    }
+    if (name === "note-save") { event.preventDefault(); event.stopPropagation(); saveNote(); return; }
+    if (name === "note-delete") { event.preventDefault(); event.stopPropagation(); deleteNote(); return; }
+    if (name === "note-emoji") {
+      event.preventDefault();
+      event.stopPropagation();
+      var field = box() && box().querySelector(".note-text");
+      if (field) {
+        var next = String(field.value || "") + (act.getAttribute("data-emoji") || "");
+        field.value = Array.from(next).slice(0, 60).join("");
+      }
+      return;
+    }
+    if (name === "note-react") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!view || !view.handle) return;
+      storyApi("/v1/notes/react", { method: "POST", body: { handle: view.handle, emoji: act.getAttribute("data-emoji") || "" } }).then(function (body) {
+        if (deps.toast) deps.toast(body && body.status === 200 ? tr("Reaction sent") : tr("Couldn’t react to that note."));
+      });
+      return;
+    }
+    if (name === "note-reply") {
+      event.preventDefault();
+      event.stopPropagation();
+      sendNoteReply();
+      return;
+    }
     if (name === "add") {
       event.preventDefault();
       event.stopPropagation();
@@ -805,7 +875,7 @@
     }
     if (name === "post") { event.preventDefault(); event.stopPropagation(); submitCompose(); return; }
     if (name === "cancel-compose") { event.preventDefault(); event.stopPropagation(); close(); return; }
-    if (!view || !box() || view.compose || view.connect) return;
+    if (!view || !box() || view.compose || view.connect || view.note) return;
     if (!box().contains(act)) return;
     if (act.tagName !== "A") event.preventDefault();
     event.stopPropagation();
@@ -885,6 +955,133 @@
     };
   }
 
+  function setNotes(pack) {
+    notes = {
+      mine: pack && pack.mine ? pack.mine : null,
+      notes: (pack && pack.notes) || []
+    };
+  }
+
+  function loadNotes() {
+    var auth = token();
+    if (!auth || !deps.api) return Promise.resolve();
+    return deps.api("/v1/notes", { token: auth }).then(function (body) {
+      if (body && body.status === 200) setNotes(body);
+    }).catch(function () {});
+  }
+
+  function openOwnNote() {
+    view = { note: "edit" };
+    renderOwnNote();
+  }
+
+  function openTheirNote(handle) {
+    var found = null;
+    ((notes && notes.notes) || []).forEach(function (item) {
+      if (item && item.handle === handle) found = item;
+    });
+    if (!found) return;
+    view = { note: "reply", handle: handle, text: found.text || "", name: found.name || handle };
+    renderTheirNote();
+  }
+
+  function renderOwnNote() {
+    var node = box();
+    if (!node) return;
+    stopTimer();
+    var mine = notes && notes.mine;
+    var audience = mine && mine.audience ? mine.audience : "followers";
+    var expire = !(mine && mine.expiresAt === 0);
+    var emoji = NOTE_EMOJI.map(function (item) {
+      return '<button type="button" data-story-act="note-emoji" data-emoji="' + item + '">' + item + "</button>";
+    }).join("");
+    node.classList.add("note-open");
+    node.innerHTML = '<div class="note-sheet" role="dialog" aria-modal="true" aria-label="' + esc(tr("Your note")) + '">' +
+      '<div class="note-sheet-bar"><button type="button" data-story-act="cancel-compose" aria-label="' + esc(tr("Close")) + '">×</button><b>' + esc(tr("Your note")) + '</b><button type="button" data-story-act="note-save">' + esc(tr("Save")) + "</button></div>" +
+      '<textarea class="note-text" maxlength="60" aria-label="' + esc(tr("Share a thought...")) + '">' + esc(mine && mine.text || "") + "</textarea>" +
+      '<div class="note-emoji">' + emoji + "</div>" +
+      '<label>' + esc(tr("Who can see this")) + ' <select class="note-audience" aria-label="' + esc(tr("Who can see this")) + '">' +
+      '<option value="followers"' + (audience === "followers" ? " selected" : "") + ">" + esc(tr("Followers")) + "</option>" +
+      '<option value="friends"' + (audience === "friends" ? " selected" : "") + ">" + esc(tr("Mutuals")) + "</option>" +
+      '<option value="only"' + (audience === "only" ? " selected" : "") + ">" + esc(tr("Only me")) + "</option></select></label>" +
+      '<label class="note-expire"><input class="note-expire-input" type="checkbox"' + (expire ? " checked" : "") + "> " + esc(tr("Expire after 24 hours")) + "</label>" +
+      (mine && mine.text ? '<button type="button" data-story-act="note-delete">' + esc(tr("Delete note")) + "</button>" : "") +
+      '<p class="story-miss" hidden>' + esc(tr("Couldn’t save that note.")) + "</p></div>";
+    node.hidden = false;
+    document.documentElement.classList.add("stories-open");
+    if (node.focus) node.focus();
+  }
+
+  function renderTheirNote() {
+    var node = box();
+    if (!node || !view) return;
+    stopTimer();
+    var emoji = NOTE_EMOJI.map(function (item) {
+      return '<button type="button" data-story-act="note-react" data-emoji="' + item + '" aria-label="' + esc(tr("Send a reaction")) + '">' + item + "</button>";
+    }).join("");
+    node.classList.add("note-open");
+    node.innerHTML = '<div class="note-sheet" role="dialog" aria-modal="true" aria-label="' + esc(view.name || tr("Note")) + '">' +
+      '<div class="note-sheet-bar"><button type="button" data-story-act="cancel-compose" aria-label="' + esc(tr("Close")) + '">×</button><b>' + esc(view.name || "") + "</b><span></span></div>" +
+      '<p class="note-quote">' + esc(view.text || "") + "</p>" +
+      '<div class="note-emoji">' + emoji + "</div>" +
+      '<textarea class="note-reply" maxlength="280" aria-label="' + esc(tr("Reply")) + '" placeholder="' + esc(tr("Reply")) + '"></textarea>' +
+      '<button type="button" data-story-act="note-reply">' + esc(tr("Send")) + "</button>" +
+      '<p class="story-miss" hidden>' + esc(tr("Couldn’t send that reply.")) + "</p></div>";
+    node.hidden = false;
+    document.documentElement.classList.add("stories-open");
+    if (node.focus) node.focus();
+  }
+
+  function saveNote() {
+    var node = box();
+    if (!node) return;
+    var field = node.querySelector(".note-text");
+    var audience = node.querySelector(".note-audience");
+    var expire = node.querySelector(".note-expire-input");
+    var text = field ? String(field.value || "").trim() : "";
+    storyApi("/v1/notes", {
+      method: "PUT",
+      body: { text: text, audience: audience ? audience.value : "followers", expire: !(expire && !expire.checked) }
+    }).then(function (body) {
+      if (body && body.status === 200) {
+        close();
+        load();
+        if (deps.toast) deps.toast(tr("Note saved"));
+      } else {
+        var miss = node.querySelector(".story-miss");
+        if (miss) miss.hidden = false;
+      }
+    });
+  }
+
+  function deleteNote() {
+    storyApi("/v1/notes", { method: "DELETE" }).then(function (body) {
+      if (body && body.status === 200) {
+        notes.mine = null;
+        close();
+        load();
+      } else if (deps.toast) deps.toast(tr("Couldn’t save that note."));
+    });
+  }
+
+  function sendNoteReply() {
+    var node = box();
+    if (!node || !view || !view.handle) return;
+    var field = node.querySelector(".note-reply");
+    var text = field ? String(field.value || "").trim() : "";
+    if (!text) return;
+    storyApi("/v1/notes/reply", { method: "POST", body: { handle: view.handle, text: text } }).then(function (body) {
+      if (body && (body.status === 201 || body.status === 200)) {
+        close();
+        if (deps.toast) deps.toast(tr("Reply sent"));
+        if (typeof location !== "undefined") location.hash = "#/messages";
+      } else {
+        var miss = node.querySelector(".story-miss");
+        if (miss) miss.hidden = false;
+      }
+    });
+  }
+
   function loadApp() {
     var auth = token();
     if (!auth || !deps.api) return Promise.resolve(null);
@@ -899,7 +1096,7 @@
     if (!raw.accounts) raw.accounts = [];
     raw.telegramConnected = !!raw.telegramConnected;
     loadedAt = Date.now();
-    if (view && !view.compose && !view.connect) {
+    if (view && !view.compose && !view.connect && !view.note) {
       var id = view.list[view.account] && view.list[view.account].id;
       var index = view.index;
       var list = rows();
@@ -927,9 +1124,9 @@
       })
       : local;
     return remote.then(function (doc) {
-      return loadApp().then(function (extra) { apply(mergeDocs(doc, extra)); });
+      return Promise.all([loadApp(), loadNotes()]).then(function (pair) { apply(mergeDocs(doc, pair[0])); });
     }).catch(function () {
-      return loadApp().then(function (extra) { apply(mergeDocs({ accounts: [] }, extra)); });
+      return Promise.all([loadApp(), loadNotes()]).then(function (pair) { apply(mergeDocs({ accounts: [] }, pair[0])); });
     });
   }
 
@@ -974,6 +1171,7 @@
     homeTray: homeTray,
     trayExtra: trayExtra,
     apply: apply,
+    setNotes: setNotes,
     barState: barState,
     applyBar: applyBar,
     activeAccounts: activeAccounts,
