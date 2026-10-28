@@ -85,6 +85,10 @@
     return api.call(path, Object.assign({ token: token() }, opts));
   }
 
+  function rowExtra() {
+    return 44;
+  }
+
   function homeHtml() {
     return '<div class="live-row" data-live-row><button class="live-pill" type="button" data-act="go-live"><span class="live-dot" aria-hidden="true"></span><span>' + esc(tr("Go live")) + '</span></button></div>';
   }
@@ -923,6 +927,7 @@
 
   root.ViktorychLive = {
     homeHtml: homeHtml,
+    rowExtra: rowExtra,
     page: function (route) { return watch(route.id, route.query); },
     onAct: onAct,
     caps: caps,
