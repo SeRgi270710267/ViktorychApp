@@ -5942,3 +5942,14 @@ html.ios-lite {
   padding: 0 8px;
 }
 img, video { max-width: 100%; }
+
+/* @mention suggestions under the caret, like X. */
+.mention-pop { position: absolute; z-index: 1000; background: var(--sheet); border-radius: 12px; box-shadow: 0 0 15px var(--shadow), 0 0 3px 1px var(--shadow-tight); overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.mention-pop[hidden] { display: none; }
+.mention-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.mention-row.on, .mention-row:hover { background: var(--hover); }
+.mention-av { width: 40px; height: 40px; border-radius: 50%; flex: 0 0 40px; object-fit: cover; }
+.mention-av-empty { display: inline-flex; align-items: center; justify-content: center; background: var(--line); color: var(--text); font-weight: 700; }
+.mention-copy { display: flex; flex-direction: column; min-width: 0; }
+.mention-name { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 2px; }
+.mention-handle { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
