@@ -851,7 +851,10 @@ var numberNote = form.passkey
       historyPause: settings.historyPause || { videos: false, articles: false },
       historyCut: settings.historyCut || { video: 0, article: 0 },
       lang: readLang(),
-      bottomNavCustom: settings.bottomNavCustom === true
+      bottomNavCustom: settings.bottomNavCustom === true,
+      drawerMenu: settings.drawerMenu && typeof settings.drawerMenu === "object" ? settings.drawerMenu : null,
+      navCustom: settings.navCustom && typeof settings.navCustom === "object" ? settings.navCustom : null,
+      navCustomAt: Number(settings.navCustomAt) || 0
     };
     if (settings.bottomNav && typeof settings.bottomNav === "object") snap.bottomNav = settings.bottomNav;
     if (settings.navLayoutSync === true) {
@@ -1037,7 +1040,10 @@ var numberNote = form.passkey
       historyCut: cut,
       history: history,
       lang: local.lang || remote.lang || "en",
-      bottomNavCustom: pickedNav.bottomNavCustom
+      bottomNavCustom: pickedNav.bottomNavCustom,
+      drawerMenu: (Number(local.drawerMenu && local.drawerMenu.at) || 0) >= (Number(remote.drawerMenu && remote.drawerMenu.at) || 0) ? (local.drawerMenu || remote.drawerMenu || null) : (remote.drawerMenu || local.drawerMenu || null),
+      navCustom: (Number(local.navCustomAt) || 0) >= (Number(remote.navCustomAt) || 0) ? (local.navCustom || remote.navCustom || null) : (remote.navCustom || local.navCustom || null),
+      navCustomAt: Math.max(Number(local.navCustomAt) || 0, Number(remote.navCustomAt) || 0)
     };
     if ((local.devicePerf && typeof local.devicePerf === "object") || (remote.devicePerf && typeof remote.devicePerf === "object")) {
       merged.devicePerf = (local.devicePerf && typeof local.devicePerf === "object") ? local.devicePerf : remote.devicePerf;
