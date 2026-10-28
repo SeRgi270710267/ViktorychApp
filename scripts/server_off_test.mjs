@@ -8,8 +8,18 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function sandbox(off, hidden) {
-  const store = new Map([["viktorychapp-server-off", JSON.stringify(off)]]);
+const channels = [];
+const clock = { skew: 0 };
+class SkewDate extends Date {
+  static now() { return Date.now() + clock.skew; }
+}
+class FakeChannel {
+  constructor(name) { this.name = name; this.onmessage = null; channels.push(this); }
+  postMessage(data) { channels.forEach((c) => { if (c !== this && c.name === this.name && c.onmessage) c.onmessage({ data }); }); }
+}
+
+function sandbox(off, hidden, shared) {
+  const store = shared || new Map([["viktorychapp-server-off", JSON.stringify(off)]]);
   const timers = [];
   const listeners = {};
   const calls = [];
@@ -34,16 +44,17 @@ function sandbox(off, hidden) {
     addEventListener: () => {},
     dispatchEvent: () => true,
     CustomEvent: function () {},
+    BroadcastChannel: shared ? FakeChannel : undefined,
     ViktorychAccounts: {
       token: () => "tok",
       currentApi: () => "https://api.test",
-      call: (p) => { calls.push(p); return Promise.resolve({ status: 200, lives: [] }); }
+      call: (p) => { calls.push(p); return Promise.resolve({ status: 200, lives: [{ id: "live-1" }] }); }
     }
   };
   win.window = win;
   win.self = win;
-  const ctx = vm.createContext(Object.assign(win, { console, Promise, JSON, Date, Math, Object, Array, String, Number, Map, Set, URL }));
-  return { ctx, timers, listeners, calls, added, doc };
+  const ctx = vm.createContext(Object.assign(win, { console, Promise, JSON, Date: SkewDate, Math, Object, Array, String, Number, Map, Set, URL }));
+  return { ctx, timers, listeners, calls, added, doc, store };
 }
 
 function runFile(box, rel) {
@@ -69,6 +80,25 @@ box = sandbox(["lives"], false);
 runFile(box, "live.js");
 box.timers.forEach((fn) => fn());
 assert.equal(box.calls.length, 0, "lives off never polls");
+
+// Two visible tabs: one reads /v1/live per round and shares the answer.
+{
+  const shared = new Map([["viktorychapp-server-off", "[]"]]);
+  const a = sandbox([], false, shared);
+  const b = sandbox([], false, shared);
+  runFile(a, "live.js");
+  runFile(b, "live.js");
+  const before = a.calls.length + b.calls.length;
+  assert.equal(before, 2, "each tab reads once when it opens");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  clock.skew = 31000;
+  // The interval fires in both tabs; only the first claims the round.
+  a.timers.forEach((fn) => fn());
+  b.timers.forEach((fn) => fn());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(a.calls.length + b.calls.length - before, 1, "one request for two tabs");
+  clock.skew = 0;
+}
 
 // Lazy modules skip a feature that is off.
 box = sandbox(["shorts"], false);
