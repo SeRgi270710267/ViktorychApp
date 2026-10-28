@@ -1458,6 +1458,8 @@ export async function notifyRepost(env, actor, cleaned) {
 
 export async function planRepostNotification(env, actor, cleaned) {
   const post = cleaned && cleaned.post;
+  // Only app posts belong to app accounts; an X or Bluesky handle can match an app handle by chance.
+  if (post && post.platform && post.platform !== "app") return null;
   const handle = clip(post && post.handle, 80).replace(/^@/, "");
   if (!handle) return null;
   const checked = inspectHandle(handle);

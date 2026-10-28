@@ -8,6 +8,7 @@ import { canSeeAudience, setListGrants } from "./audience.js";
 import { addCommunityPost, communityHomeRows } from "./communities.js";
 import { attachParents } from "./reply-context.js";
 import { visibleAvatarUrl } from "./profile-media.js";
+import { POST_ACTION_SCHEMA, handlePostActions, decorate, quoteFor, viewerCanSee, notifyPost } from "./post-actions.js";
 
 const POST_MAX = 500;
 const MEDIA_MAX = 12 * 1024 * 1024;
@@ -70,7 +71,11 @@ const POST_COLUMNS = [
   "ALTER TABLE public_posts ADD COLUMN poll_json TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE public_posts ADD COLUMN scheduled_at INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE public_post_media ADD COLUMN alt_text TEXT NOT NULL DEFAULT ''",
-  "ALTER TABLE public_post_media ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"
+  "ALTER TABLE public_post_media ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE public_posts ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0",
+  // A reply to a post from another platform keeps that post's reference and a
+  // snapshot, so Home, the profile and the thread can show it above the reply.
+  "ALTER TABLE public_posts ADD COLUMN ext_parent TEXT NOT NULL DEFAULT ''"
 ];
 
 export async function ensurePostColumns(env) {
@@ -82,6 +87,9 @@ export async function ensurePostColumns(env) {
       const message = String(err && err.message || err);
       if (!/duplicate column/i.test(message)) throw err;
     }
+  }
+  for (const sql of POST_ACTION_SCHEMA) {
+    try { await env.DB.prepare(sql).run(); } catch (err) { /* the migration made it already */ }
   }
 }
 
@@ -225,7 +233,52 @@ async function readPostInput(request, deps) {
   return { fields: fields, file: files[0] || null, files: files };
 }
 
-async function presentPost(env, request, row, viewerId) {
+const EXT_PLATFORMS = new Set(["x", "threads", "instagram", "reddit", "rss", "telegram", "youtube", "tiktok", "bluesky", "mastodon", "facebook", "vk", "discord", "web"]);
+function cleanText(value, max) {
+  return String(value == null ? "" : value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, max);
+}
+function cleanHttps(value) {
+  const text = String(value || "").trim();
+  return /^https:\/\/[^\s"'<>]{1,1500}$/i.test(text) ? text : "";
+}
+/* The parent of a reply to an outside post: where it lives and a small snapshot
+   (author, text, media) for when the original can't be fetched again. */
+export function cleanExtParent(raw) {
+  let doc = raw;
+  if (typeof doc === "string") {
+    if (!doc || doc.length > 8000) return null;
+    try { doc = JSON.parse(doc); } catch (err) { return null; }
+  }
+  if (!doc || typeof doc !== "object") return null;
+  const platform = cleanText(doc.platform, 20).toLowerCase();
+  const id = cleanText(doc.id, 200);
+  if (!EXT_PLATFORMS.has(platform) || !id) return null;
+  const media = (Array.isArray(doc.media) ? doc.media : []).slice(0, 4).map((item) => ({
+    type: item && item.type === "video" ? "video" : "photo",
+    url: cleanHttps(item && item.url),
+    poster: cleanHttps(item && item.poster)
+  })).filter((item) => item.url || item.poster);
+  return {
+    platform: platform,
+    id: id,
+    statusId: cleanText(doc.statusId, 120),
+    url: cleanHttps(doc.url),
+    handle: cleanText(doc.handle, 80).replace(/^@/, ""),
+    author: cleanText(doc.author, 120),
+    avatar: cleanHttps(doc.avatar),
+    text: cleanText(doc.text, 1500),
+    title: cleanText(doc.title, 300),
+    date: cleanText(doc.date, 40),
+    community: cleanText(doc.community, 80),
+    score: Number.isFinite(Number(doc.score)) ? Math.trunc(Number(doc.score)) : 0,
+    media: media
+  };
+}
+function readExtParent(text) {
+  return text ? cleanExtParent(text) : null;
+}
+
+export async function presentPost(env, request, row, viewerId) {
   const mediaRows = await env.DB.prepare("SELECT id, mime, size, alt_text, sort_order FROM public_post_media WHERE post_id = ? ORDER BY sort_order ASC, id ASC").bind(row.id).all();
   const media = ((mediaRows && mediaRows.results) || []).map((item) => ({
     id: item.id,
@@ -241,8 +294,8 @@ async function presentPost(env, request, row, viewerId) {
   }
   let quote = null;
   if (row.quote_id) {
-    const quoted = await env.DB.prepare("SELECT p.id, p.body, p.created_at, a.handle, a.display_name FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ? AND p.hidden = 0").bind(row.quote_id).first();
-    if (quoted) quote = { id: quoted.id, body: quoted.body, createdAt: quoted.created_at, authorName: quoted.display_name, authorHandle: quoted.handle };
+    try { quote = await quoteFor(env, request, row.quote_id, viewerId || ""); }
+    catch (err) { quote = { id: row.quote_id, unavailable: true }; }
   }
   return {
     id: row.id,
@@ -260,12 +313,14 @@ async function presentPost(env, request, row, viewerId) {
     replyControl: row.reply_control || "everyone",
     location: row.location || "",
     poll: poll,
+    editedAt: Number(row.edited_at) || 0,
+    extParent: readExtParent(row.ext_parent),
     scheduledAt: Number(row.scheduled_at) || 0,
     gift: await giftForPost(env, row.id, viewerId || "")
   };
 }
 
-async function hiddenAuthors(env, viewerId) {
+export async function hiddenAuthors(env, viewerId) {
   const blocked = await env.DB.prepare("SELECT blocked_id AS id FROM account_blocks WHERE blocker_id = ? UNION SELECT blocker_id AS id FROM account_blocks WHERE blocked_id = ? UNION SELECT muted_id AS id FROM account_mutes WHERE muter_id = ?").bind(viewerId, viewerId, viewerId).all();
   const ids = new Set();
   ((blocked && blocked.results) || []).forEach((row) => ids.add(row.id));
@@ -338,6 +393,8 @@ export async function handlePosts(request, env, path, deps) {
   if (path === "/v1/posts" && request.method === "GET") return listPosts(request, env, deps);
   if (path === "/v1/posts" && request.method === "POST") return createPost(request, env, deps);
   if (path === "/v1/posts/report" && request.method === "POST") return reportPost(request, env, deps);
+  const acted = await handlePostActions(request, env, path, deps, cleanBody);
+  if (acted) return acted;
   if (path === "/v1/blocks" && request.method === "POST") return setRelation(request, env, deps, "account_blocks", "blocker_id", "blocked_id", true);
   if (path === "/v1/blocks" && request.method === "DELETE") return setRelation(request, env, deps, "account_blocks", "blocker_id", "blocked_id", false);
   if (path === "/v1/mutes" && request.method === "POST") return setRelation(request, env, deps, "account_mutes", "muter_id", "muted_id", true);
@@ -347,7 +404,7 @@ export async function handlePosts(request, env, path, deps) {
   return null;
 }
 
-async function audienceSets(env, viewerId, authors) {
+export async function audienceSets(env, viewerId, authors) {
   const friends = new Set();
   const following = new Set();
   const ids = authors.filter((id) => id && id !== viewerId);
@@ -364,7 +421,7 @@ async function audienceSets(env, viewerId, authors) {
   return { friends: friends, following: following };
 }
 
-function canSee(row, viewerId, sets) {
+export function canSee(row, viewerId, sets) {
   if (row.author_id === viewerId) return true;
   const audience = row.audience || "everyone";
   if (audience === "list") return false;
@@ -381,7 +438,7 @@ function listIdsOf(fields) {
   return Array.isArray(raw) ? raw : [];
 }
 
-async function withParents(env, request, session, posts, skip) {
+export async function withParents(env, request, session, posts, skip) {
   try {
     await attachParents(env, posts, {
       viewerId: session.public_id,
@@ -403,7 +460,7 @@ async function listPosts(request, env, deps) {
   // ?by=<public id> lists one account's posts for its profile, with the same rules.
   const author = new URL(request.url).searchParams.get("by") || "";
   if (author && !/^\d{12}$/.test(author)) return deps.json(400, { error: "bad_author" });
-  const select = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?)";
+  const select = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, p.ext_parent, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?)";
   const listed = author
     ? await env.DB.prepare(select + " AND p.author_id = ? ORDER BY p.created_at DESC LIMIT 60").bind(now, author).all()
     : await env.DB.prepare(select + " ORDER BY p.created_at DESC LIMIT 60").bind(now).all();
@@ -440,6 +497,7 @@ async function listPosts(request, env, deps) {
     list.sort((a, b) => b.at - a.at);
     const page = list.slice(0, 60).map((item) => item.post);
     await withParents(env, request, session, page, skip);
+    await decorate(env, page, session.public_id);
     return deps.json(200, { posts: page, author: author });
   }
   try {
@@ -459,6 +517,7 @@ async function listPosts(request, env, deps) {
     posts.push(stamped[i].post);
   }
   await withParents(env, request, session, posts, skip);
+  await decorate(env, posts, session.public_id);
   return deps.json(200, { posts: posts, communitiesHome: communitiesHome });
 }
 
@@ -513,15 +572,20 @@ async function createPost(request, env, deps) {
   const quote = input.fields.quoteId ? postId(input.fields.quoteId) : "";
   if (input.fields.parentId && !parent) return deps.json(400, { error: "bad_post" });
   if (input.fields.quoteId && !quote) return deps.json(400, { error: "bad_post" });
+  // Replies and quotes need a live post the viewer can see, from someone not blocked either way.
+  let parentRow = null;
+  let quoteRow = null;
   if (parent) {
-    const parentRow = await env.DB.prepare("SELECT id, author_id, body, reply_control, hidden, scheduled_at FROM public_posts WHERE id = ? AND hidden = 0").bind(parent).first();
+    parentRow = await env.DB.prepare("SELECT id, author_id, body, reply_control, hidden, audience, scheduled_at FROM public_posts WHERE id = ? AND hidden = 0").bind(parent).first();
     if (!parentRow) return deps.json(404, { error: "not_found" });
     if (Number(parentRow.scheduled_at) > Date.now()) return deps.json(404, { error: "not_found" });
+    if (!(await viewerCanSee(env, session.public_id, parentRow))) return deps.json(404, { error: "not_found" });
     if (!(await replyAllowed(env, session, parentRow))) return deps.json(403, { error: "reply_limited" });
   }
   if (quote) {
-    const quoteRow = await env.DB.prepare("SELECT id, scheduled_at FROM public_posts WHERE id = ? AND hidden = 0").bind(quote).first();
+    quoteRow = await env.DB.prepare("SELECT id, author_id, body, audience, scheduled_at FROM public_posts WHERE id = ? AND hidden = 0").bind(quote).first();
     if (!quoteRow || Number(quoteRow.scheduled_at) > Date.now()) return deps.json(404, { error: "not_found" });
+    if (!(await viewerCanSee(env, session.public_id, quoteRow))) return deps.json(404, { error: "not_found" });
   }
   const stored = [];
   if (files.length) {
@@ -556,8 +620,9 @@ async function createPost(request, env, deps) {
   const when = cleanSchedule(input.fields.scheduledAt, now);
   const created = when || now;
   const audience = cleanAudience(input.fields.audience);
-  await env.DB.prepare("INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden, audience, reply_control, location, poll_json, scheduled_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)").bind(
-    id, session.public_id, body, parent, quote, created, audience, cleanReply(input.fields.replyControl), cleanLocation(input.fields.location), poll ? JSON.stringify(poll) : "", when
+  const ext = parent ? null : cleanExtParent(input.fields.extParent);
+  await env.DB.prepare("INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden, audience, reply_control, location, poll_json, scheduled_at, ext_parent) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)").bind(
+    id, session.public_id, body, parent, quote, created, audience, cleanReply(input.fields.replyControl), cleanLocation(input.fields.location), poll ? JSON.stringify(poll) : "", when, ext ? JSON.stringify(ext) : ""
   ).run();
   if (audience === "list") await setListGrants(env, session.public_id, "post", id, listIdsOf(input.fields));
   for (let i = 0; i < stored.length; i++) {
@@ -566,17 +631,22 @@ async function createPost(request, env, deps) {
       item.id, id, item.key, item.mime, item.size, item.alt, item.order
     ).run();
   }
-  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
+  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, p.ext_parent, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
   try {
     await awardActivity(env, session.public_id, parent ? "comment" : "post", id);
-    if (parent) {
-      const parentRow = await env.DB.prepare("SELECT author_id FROM public_posts WHERE id = ?").bind(parent).first();
-      if (parentRow && parentRow.author_id && parentRow.author_id !== session.public_id) {
-        await awardActivity(env, parentRow.author_id, "reply_in", id);
-      }
+    if (parentRow && parentRow.author_id && parentRow.author_id !== session.public_id) {
+      await awardActivity(env, parentRow.author_id, "reply_in", id);
     }
   } catch (err) { /* the post is saved */ }
-  return deps.json(201, { post: await presentPost(env, request, row, session.public_id), scheduled: when > 0 });
+  // Scheduled posts stay quiet until they go out.
+  if (!when) {
+    try { await notifyPost(env, session, { id: id, body: body }, parentRow, quoteRow, deps); }
+    catch (err) { /* the post is saved */ }
+  }
+  const post = await presentPost(env, request, row, session.public_id);
+  await withParents(env, request, session, [post], await hiddenAuthors(env, session.public_id));
+  await decorate(env, [post], session.public_id);
+  return deps.json(201, { post: post, scheduled: when > 0 });
 }
 
 async function readMedia(request, env, id, deps) {

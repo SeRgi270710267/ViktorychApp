@@ -297,7 +297,7 @@ function connect() {
     ws.addEventListener("open", function () {
       attempt = 0;
       try {
-        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync"] }));
+        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync", "posts"] }));
         ws.send(JSON.stringify({ op: "watch", topic: "presence", ids: currentIds() }));
       } catch (err) { /* close reconnects */ }
       clearInterval(pollTimer);

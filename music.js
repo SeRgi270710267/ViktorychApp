@@ -599,6 +599,19 @@
   function save() {
     try { localStorage.setItem(STORE, JSON.stringify(local)); } catch (err) { /* private mode */ }
   }
+  // Synced player choices and liked songs from another device.
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("viktorych-music-prefs", function () {
+      try {
+        var data = JSON.parse(localStorage.getItem(STORE) || "null");
+        if (!data || typeof data !== "object") return;
+        local.shuffle = !!data.shuffle;
+        local.repeat = data.repeat === "one" || data.repeat === "all" ? data.repeat : "off";
+        local.view = data.view === "list" ? "list" : "grid";
+        if (Array.isArray(data.likes)) local.likes = data.likes;
+      } catch (err) { /* the next open reads it */ }
+    });
+  }
 
   function restore() {
     try {
