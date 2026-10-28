@@ -12439,9 +12439,9 @@ if (STATE.histClear) {
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 106 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
-    const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
+    const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
   function toggleReaction(act, id) {
@@ -14724,7 +14724,10 @@ if (STATE.histClear) {
       commitApp(shell(view(route), route));
       schedulePublicPosts();
       hydratePublicMedia();
-      if (window.ViktorychPrivacy && window.ViktorychPrivacy.paint) window.ViktorychPrivacy.paint();
+      if (window.ViktorychPrivacy) {
+        if (routeChanged && window.ViktorychPrivacy.clear) window.ViktorychPrivacy.clear();
+        else if (window.ViktorychPrivacy.paint) window.ViktorychPrivacy.paint();
+      }
       if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
@@ -21218,6 +21221,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   if (window.ViktorychAccounts) {
     window.ViktorychAccounts.requestRender = function () { render(); };
     window.ViktorychAccounts.followButton = followButtonClean;
+    window.ViktorychFollows = {
+      lookup: function (id) {
+        const feed = feedById(id);
+        if (!feed) return null;
+        return {
+          name: feed.name || "",
+          handle: feed.handle || "",
+          avatar: feed.avatar || "",
+          avatarFace: feed.avatarFace || "",
+          platform: feed.platform || ""
+        };
+      }
+    };
     window.ViktorychAccounts.toast = toast;
     if (window.ViktorychAccounts.syncFriends) window.ViktorychAccounts.syncFriends();
     window.ViktorychAccounts.onServerFollows = function (ids) {

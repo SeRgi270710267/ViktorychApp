@@ -37,8 +37,11 @@ const windowMock = {
       }
       return reply(200, {
         isPrivate: true,
-        accounts: [{ id: "app:@user_b", handle: "user_b", name: "User B" }],
-        followingCount: 1,
+        accounts: [
+          { id: "app:@user_b", handle: "user_b", name: "User B", avatar: "https://example.com/user_b.png", avatarFace: "photo" },
+          { id: "x:user_c" }
+        ],
+        followingCount: 2,
         cursor: ""
       });
     }
@@ -98,6 +101,9 @@ const windowMock = {
     querySelectorAll: () => []
   },
   HandleSkeleton: { skeleton: (handle) => String(handle || "").toLowerCase() },
+  ViktorychFollows: {
+    lookup: (id) => (id === "x:user_c" ? { name: "User C", handle: "user_c", avatar: "https://example.com/user_c.png" } : null)
+  },
   navigator: { serviceWorker: null },
   location: { hash: "", pathname: "/", search: "" },
   history: { replaceState: () => {} }
@@ -147,6 +153,9 @@ const drawn = accounts.graphListHtml("app:200000000001", "followers", "north_sg"
 assert.ok(drawn.indexOf("Follows you") >= 0);
 assert.ok(drawn.indexOf("Remove follower") >= 0);
 assert.ok(drawn.indexOf("Search followers") >= 0);
+assert.ok(drawn.indexOf("South Dock") >= 0);
+assert.ok(drawn.indexOf("@south_sg") >= 0);
+assert.ok(drawn.indexOf("ava") >= 0, "follower row has an avatar");
 assert.ok(list.length > 0);
 
 accounts.ensureProfile("wall_sg");
@@ -187,6 +196,10 @@ const other = accounts.graphListHtml("app:300000000002", "following", "user_b");
 const otherByHandle = accounts.graphListHtml("app:@user_b", "followers", "user_b");
 assert.equal(ownFollowing.indexOf("These lists are private"), -1);
 assert.ok(ownFollowing.indexOf("User B") >= 0, "owner sees the following list");
+assert.ok(ownFollowing.indexOf("@user_b") >= 0, "following handle");
+assert.ok(ownFollowing.indexOf("User C") >= 0, "catalog name fills an empty follow card");
+assert.ok(ownFollowing.indexOf("@user_c") >= 0, "catalog handle fills an empty follow card");
+assert.ok(ownFollowing.indexOf("ava") >= 0, "following row has an avatar");
 assert.equal(ownFollowers.indexOf("These lists are private"), -1);
 assert.ok(ownFollowers.indexOf("No followers yet") >= 0, "owner sees an empty followers list");
 assert.equal(ownByHandle.indexOf("These lists are private"), -1);
