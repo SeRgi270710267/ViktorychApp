@@ -232,3 +232,112 @@ test("profile-less accounts post and comment anonymously without revealing autho
   assert.equal(anonPost.author.profileLess, true);
   assert.equal(anonPost.mine, false);
 });
+
+test("home and a community share one post and one reply", async () => {
+  const ada = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.80",
+    body: { displayName: "Ada Home", handle: "ada_home" }
+  });
+  assert.equal(ada.status, 201);
+  const post = await call("/v1/communities/homefeed/posts", {
+    method: "POST",
+    ip: "203.0.113.81",
+    token: ada.body.token,
+    body: { text: "Hello from the community" }
+  });
+  assert.equal(post.status, 200);
+  const adaHome = await call("/v1/posts", { ip: "203.0.113.82", token: ada.body.token });
+  assert.equal(adaHome.status, 200);
+  const adaCard = (adaHome.body.posts || []).filter((item) => item.id === post.body.post.id);
+  assert.equal(adaCard.length, 1);
+  assert.equal(adaCard[0].community.name, "homefeed");
+
+  const grace = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.83",
+    body: { displayName: "Grace Home", handle: "grace_home" }
+  });
+  assert.equal(grace.status, 201);
+  const before = await call("/v1/posts", { ip: "203.0.113.84", token: grace.body.token });
+  assert.equal((before.body.posts || []).some((item) => item.id === post.body.post.id), false);
+
+  const joined = await call("/v1/communities/homefeed/join", {
+    method: "POST",
+    ip: "203.0.113.85",
+    token: grace.body.token
+  });
+  assert.equal(joined.status, 200);
+  const seen = await call("/v1/posts", { ip: "203.0.113.86", token: grace.body.token });
+  assert.equal((seen.body.posts || []).filter((item) => item.id === post.body.post.id).length, 1);
+
+  const reply = await call("/v1/posts", {
+    method: "POST",
+    ip: "203.0.113.87",
+    token: grace.body.token,
+    body: { body: "From the home feed", parentId: post.body.post.id }
+  });
+  assert.equal(reply.status, 201);
+  assert.match(reply.body.post.id, /^va_[a-f0-9]{16}$/);
+  assert.equal(reply.body.post.parentId, post.body.post.id);
+  assert.equal(reply.body.post.community.name, "homefeed");
+
+  const thread = await call("/v1/communities/homefeed", { ip: "203.0.113.88", token: grace.body.token });
+  const ids = (thread.body.posts || []).map((item) => item.id);
+  assert.equal(ids.filter((id) => id === post.body.post.id).length, 1);
+  assert.equal(ids.filter((id) => id === reply.body.post.id).length, 1);
+  const noted = await call("/v1/communities/homefeed", { ip: "203.0.113.89", token: ada.body.token });
+  assert.ok((noted.body.notes || []).some((note) => note.id === "cm_" + reply.body.post.id));
+
+  const homeAgain = await call("/v1/posts", { ip: "203.0.113.90", token: grace.body.token });
+  assert.equal((homeAgain.body.posts || []).filter((item) => item.id === reply.body.post.id).length, 1);
+  const parentCard = (homeAgain.body.posts || []).find((item) => item.id === post.body.post.id);
+  assert.ok(parentCard);
+  assert.equal(parentCard.replyCount >= 1, true);
+
+  const hidden = await call("/v1/communities/homefeed/feed", {
+    method: "POST",
+    ip: "203.0.113.91",
+    token: grace.body.token,
+    body: { showHome: false }
+  });
+  assert.equal(hidden.status, 200);
+  const off = await call("/v1/posts", { ip: "203.0.113.92", token: grace.body.token });
+  assert.equal((off.body.posts || []).some((item) => item.community && item.community.name === "homefeed"), false);
+
+  const db = await mf.getD1Database("DB");
+  await db.prepare("INSERT INTO community_meta (community_id, visibility, updated_at) VALUES (?, 'private', ?) ON CONFLICT(community_id) DO UPDATE SET visibility = 'private'").bind("homefeed", Date.now()).run();
+  const stranger = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.93",
+    body: { displayName: "Stranger Home", handle: "stranger_home" }
+  });
+  assert.equal(stranger.status, 201);
+  const locked = await call("/v1/communities/homefeed", { ip: "203.0.113.94", token: stranger.body.token });
+  assert.equal(locked.body.locked, true);
+  assert.equal((locked.body.posts || []).some((item) => item.id === post.body.post.id), false);
+  const strangerHome = await call("/v1/posts", { ip: "203.0.113.95", token: stranger.body.token });
+  assert.equal((strangerHome.body.posts || []).some((item) => item.community && item.community.name === "homefeed"), false);
+  const memberHome = await call("/v1/posts", { ip: "203.0.113.96", token: ada.body.token });
+  assert.equal((memberHome.body.posts || []).some((item) => item.id === post.body.post.id), false);
+  const globalOn = await call("/v1/communities/home", {
+    method: "POST",
+    ip: "203.0.113.97",
+    token: ada.body.token,
+    body: { showHome: true }
+  });
+  assert.equal(globalOn.body.showHome, true);
+  const adaBack = await call("/v1/posts", { ip: "203.0.113.98", token: ada.body.token });
+  assert.equal((adaBack.body.posts || []).some((item) => item.id === post.body.post.id), false);
+  await call("/v1/communities/homefeed/join", { method: "POST", ip: "203.0.113.99", token: ada.body.token });
+  const adaMember = await call("/v1/posts", { ip: "203.0.113.100", token: ada.body.token });
+  assert.equal((adaMember.body.posts || []).filter((item) => item.id === post.body.post.id).length, 1);
+  await call("/v1/communities/homefeed/feed", {
+    method: "POST",
+    ip: "203.0.113.101",
+    token: grace.body.token,
+    body: { showHome: true, muted: false }
+  });
+  const graceBack = await call("/v1/posts", { ip: "203.0.113.102", token: grace.body.token });
+  assert.equal((graceBack.body.posts || []).filter((item) => item.id === reply.body.post.id).length, 1);
+});
