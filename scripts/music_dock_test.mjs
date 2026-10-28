@@ -77,6 +77,18 @@ function startServer() {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
 }
 
+/* A busy runner can land an evaluate on a page that is still settling after
+   a navigation; run it again on the new document instead of failing. */
+async function ev(page, fn, arg) {
+  for (let attempt = 0; ; attempt += 1) {
+    try { return await page.evaluate(fn, arg); }
+    catch (err) {
+      if (attempt >= 3 || !/context was destroyed|navigat/i.test(String(err && err.message))) throw err;
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+    }
+  }
+}
+
 async function loadPlaywright() {
   const spec = process.env.PLAYWRIGHT_CORE || "playwright-core";
   const href = spec.startsWith("/") ? pathToFileURL(spec).href : spec;
@@ -107,8 +119,8 @@ async function wait(page, label, fn, arg, opts) {
   try {
     return await page.waitForFunction(fn, arg, opts);
   } catch (err) {
-    const snap = await page.evaluate(state).catch(() => ({}));
-    const seek = await page.evaluate(() => { const s = document.getElementById("mu-seek"); const a = document.getElementById("mu-audio"); return s ? s.max + "/" + s.value + " dur " + a.duration + " seekable " + (a.seekable.length ? a.seekable.end(0) : 0) : ""; }).catch(() => "");
+    const snap = await ev(page, state).catch(() => ({}));
+    const seek = await ev(page, () => { const s = document.getElementById("mu-seek"); const a = document.getElementById("mu-audio"); return s ? s.max + "/" + s.value + " dur " + a.duration + " seekable " + (a.seekable.length ? a.seekable.end(0) : 0) : ""; }).catch(() => "");
     fail(label + " timed out " + JSON.stringify(snap) + " " + seek);
   }
 }
@@ -145,11 +157,11 @@ async function exercise(browser, origin, vp) {
 
   /* Move around the app. The audio element and its playback survive. */
   for (const hash of ["#/explore", "#/notifications", "#/"]) {
-    await page.evaluate((next) => { location.hash = next; }, hash);
+    await ev(page, (next) => { location.hash = next; }, hash);
     await wait(page, where + " step 139", (next) => location.hash === next && !document.querySelector(".mu-grid, .mu-shelf"), hash, { timeout: 15000 });
-    const before = await page.evaluate(state);
+    const before = await ev(page, state);
     await page.waitForTimeout(700);
-    const after = await page.evaluate(state);
+    const after = await ev(page, state);
     if (after.paused) fail(where + " music stopped on " + hash);
     if (!(after.t > before.t)) fail(where + " music is not moving on " + hash);
     if (!after.mini || !after.shown) fail(where + " mini player is missing on " + hash);
@@ -165,7 +177,7 @@ async function exercise(browser, origin, vp) {
   await wait(page, where + " step 155", () => !document.getElementById("mu-audio").paused, null, { timeout: 5000 });
   await page.click("#mu-dock [data-act='music-next']");
   await wait(page, where + " step 157", () => (document.getElementById("mu-dock-title") || {}).textContent === "Tone B" && !document.getElementById("mu-audio").paused, null, { timeout: 8000 });
-  await page.evaluate(() => {
+  await ev(page, () => {
     const seek = document.getElementById("mu-seek");
     seek.max = String(Math.max(Number(seek.max) || 0, 30));
     seek.value = "12";
@@ -180,7 +192,7 @@ async function exercise(browser, origin, vp) {
   await wait(page, where + " step 169", () => document.getElementById("mu-now").hidden, null, { timeout: 5000 });
 
   /* Other sound in the app pauses the music. */
-  await page.evaluate(() => {
+  await ev(page, () => {
     const other = document.createElement("audio");
     other.id = "other-sound";
     other.src = "media/test-tone-c.wav";
@@ -189,10 +201,10 @@ async function exercise(browser, origin, vp) {
     other.play();
   });
   await wait(page, where + " step 180", () => document.getElementById("mu-audio").paused, null, { timeout: 8000 });
-  await page.evaluate(() => { const o = document.getElementById("other-sound"); o.pause(); o.remove(); });
+  await ev(page, () => { const o = document.getElementById("other-sound"); o.pause(); o.remove(); });
 
   /* The queue and the position survive a reload. */
-  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await ev(page, () => window.dispatchEvent(new Event("pagehide")));
   await page.reload({ waitUntil: "domcontentloaded" });
   await wait(page, where + " step 186", () => document.documentElement.classList.contains("music-mini") && (document.getElementById("mu-dock-title") || {}).textContent === "Tone B", null, { timeout: 20000 });
   await page.click("#mu-dock #mu-play");
