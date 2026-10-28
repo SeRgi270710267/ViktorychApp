@@ -2,6 +2,8 @@
    Nothing here re-encodes. Video responses are marked no-store so the
    Cloudflare cache does not keep them. Rows expire after 24 hours. */
 
+import { eachLimit } from "./limit.js";
+import { poolWidth } from "./job-runner.js";
 import { blocksEither } from "./social.js";
 import { canSeeAudience, normalizeAudience, setListGrants } from "./audience.js";
 
@@ -452,7 +454,8 @@ export async function sweepExpiredStories(env, now) {
       const expired = await env.DB.prepare(
         "SELECT id, public_id, kind, vine, r2_key, mime, bytes FROM app_stories WHERE expires_at <= ? LIMIT 40"
       ).bind(at).all();
-      for (const row of rowsOf(expired)) {
+      // Expired stories are archived four at a time.
+      await eachLimit(rowsOf(expired), poolWidth(env, 4), async (row) => {
         const archived = "stories/library/" + row.public_id + "/" + row.id;
         if (env.DATA && row.r2_key) {
           try {
@@ -478,7 +481,7 @@ export async function sweepExpiredStories(env, now) {
           try { await env.DATA.delete(row.r2_key); }
           catch (err) { /* the next pass retries */ }
         }
-      }
+      });
     } catch (err) { /* tables appear on the first request */ }
   }
   if (!env || !env.DATA) return;
@@ -488,15 +491,19 @@ export async function sweepExpiredStories(env, now) {
     const doc = JSON.parse(await object.text());
     const items = Array.isArray(doc.items) ? doc.items : [];
     const keep = [];
+    const gone = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const key = item && typeof item.key === "string" ? item.key : "";
       if (!/^stories\/telegram\/[a-f0-9]{64}\.(?:jpg|jpeg|png|webp|gif|mp4|webm|mov)$/.test(key)) continue;
-      if (Number(item.expires) <= at) {
-        try { await env.DATA.delete(key); }
-        catch (err) { keep.push(item); }
-      } else keep.push(item);
+      if (Number(item.expires) <= at) gone.push(item);
+      else keep.push(item);
     }
+    // Expired Telegram media is deleted six at a time; a failed delete stays listed.
+    await eachLimit(gone, poolWidth(env, 6), async (item) => {
+      try { await env.DATA.delete(item.key); }
+      catch (err) { keep.push(item); }
+    });
     if (keep.length !== items.length) {
       await env.DATA.put("stories/telegram/manifest.json", JSON.stringify({ items: keep }), {
         httpMetadata: { contentType: "application/json; charset=utf-8", cacheControl: "private, no-store" }

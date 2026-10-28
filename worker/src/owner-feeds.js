@@ -1,3 +1,5 @@
+import { eachLimit } from "./limit.js";
+import { isRunner } from "./job-runner.js";
 /* Owner-only feed catalog. Anonymous callers get 404. Other accounts get 403.
    The catalog stays in private R2. A sync dispatch does not include the handle. */
 
@@ -963,13 +965,16 @@ async function refreshAccount(row) {
 async function sweepOwnerFeeds(env, now) {
   if (!env || !env.DATA) return false;
   const doc = await readCatalog(env);
-  const due = (doc.accounts || []).find((row) => {
+  const due = (doc.accounts || []).filter((row) => {
     if (!row || row.paused) return false;
     const nextAt = Number(row.health && row.health.nextAt) || 0;
     return nextAt > 0 && nextAt <= (now || Date.now());
   });
-  if (!due) return false;
-  await refreshAccount(due);
+  if (!due.length) return false;
+  // The Worker refreshes one feed a minute. Render has no subrequest cap, so
+  // it catches up on several due feeds per pass, three fetches at a time.
+  const batch = isRunner(env) ? due.slice(0, 6) : due.slice(0, 1);
+  await eachLimit(batch, 3, (row) => refreshAccount(row));
   await writeCatalog(env, doc);
   return true;
 }

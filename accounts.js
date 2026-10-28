@@ -880,6 +880,48 @@ var numberNote = form.passkey
     } catch (err) { /* English */ }
     return "en";
   }
+  /* "Sync across my devices": menu, sidebar and display choices follow the
+     account unless the account switch is off or this device keeps its own.
+     The account switch syncs itself (last write wins by syncUiAt); the
+     device override never leaves this device. */
+  var UI_KEYS = ["appearance", "drawerMenu", "navCustom", "navCustomAt", "bottomNav", "bottomNavCustom", "profileTabs", "homePills", "stories", "prefsAt", "showPictures", "showBanners"];
+  var DEVICE_OWN_KEY = "viktorychapp-device-own-ui";
+  function deviceOwnUi() {
+    try { return localStorage.getItem(DEVICE_OWN_KEY) === "1"; } catch (err) { return false; }
+  }
+  function setDeviceOwnUi(on) {
+    try {
+      if (on) localStorage.setItem(DEVICE_OWN_KEY, "1");
+      else localStorage.removeItem(DEVICE_OWN_KEY);
+    } catch (err) { /* private mode keeps syncing */ }
+  }
+  function uiSyncOn(settings) {
+    if (deviceOwnUi()) return false;
+    if (!settings) {
+      var raw = readStored("settings-v1");
+      try { settings = raw ? JSON.parse(raw) : {}; } catch (err) { settings = {}; }
+    }
+    return settings.syncUi !== false;
+  }
+  function pickPrefs(local, remote) {
+    // Home pills and Stories: each key keeps the newer choice.
+    var out = {};
+    var at = {};
+    var lAt = (local && local.prefsAt) || {};
+    var rAt = (remote && remote.prefsAt) || {};
+    ["homePills", "stories"].forEach(function (key) {
+      var lt = Number(lAt[key]) || 0;
+      var rt = Number(rAt[key]) || 0;
+      var lv = local && typeof local[key] === "boolean" ? local[key] : undefined;
+      var rv = remote && typeof remote[key] === "boolean" ? remote[key] : undefined;
+      var pick = rt > lt ? (rv !== undefined ? rv : lv) : (lv !== undefined ? lv : rv);
+      if (pick !== undefined) out[key] = pick;
+      if (lt || rt) at[key] = Math.max(lt, rt);
+    });
+    out.prefsAt = at;
+    return out;
+  }
+
   function snapshotFrom(settings) {
     settings = settings || {};
     var snap = {
@@ -940,6 +982,16 @@ var numberNote = form.passkey
     if (live) {
       snap.history = live.history || [];
       snap.historyCut = live.historyCut || snap.historyCut;
+    }
+    if (typeof settings.homePills === "boolean") snap.homePills = settings.homePills;
+    if (typeof settings.stories === "boolean") snap.stories = settings.stories;
+    if (settings.prefsAt && typeof settings.prefsAt === "object") snap.prefsAt = settings.prefsAt;
+    if (settings.syncUi === false || settings.syncUi === true) snap.syncUi = settings.syncUi;
+    snap.syncUiAt = Number(settings.syncUiAt) || 0;
+    if (!uiSyncOn(settings)) {
+      // This device keeps its own look: the server keeps the account's copy.
+      UI_KEYS.forEach(function (key) { delete snap[key]; });
+      snap.uiLocal = true;
     }
     return snap;
   }
@@ -1116,6 +1168,23 @@ var numberNote = form.passkey
       merged.devicePerf = (local.devicePerf && typeof local.devicePerf === "object") ? local.devicePerf : remote.devicePerf;
     }
     if (pickedNav.bottomNav) merged.bottomNav = pickedNav.bottomNav;
+    var prefs = pickPrefs(local, remote);
+    if (typeof prefs.homePills === "boolean") merged.homePills = prefs.homePills;
+    if (typeof prefs.stories === "boolean") merged.stories = prefs.stories;
+    merged.prefsAt = prefs.prefsAt;
+    var lSync = Number(local.syncUiAt) || 0;
+    var rSync = Number(remote.syncUiAt) || 0;
+    var syncPick = rSync > lSync ? remote.syncUi : local.syncUi;
+    if (syncPick === true || syncPick === false) merged.syncUi = syncPick;
+    merged.syncUiAt = Math.max(lSync, rSync);
+    if (local.uiLocal) {
+      // Keep the account's look for the other devices, not this device's.
+      UI_KEYS.forEach(function (key) {
+        if (remote[key] !== undefined) merged[key] = remote[key];
+        else delete merged[key];
+      });
+      merged.uiLocal = true;
+    }
     if (pickedLayout && pickedLayout.clear) merged.navLayoutSync = false;
     else if (pickedLayout) {
       merged.navLayoutSync = true;
@@ -1128,8 +1197,15 @@ var numberNote = form.passkey
     var raw = readStored("settings-v1");
     var settings = {};
     try { settings = raw ? JSON.parse(raw) : {}; } catch (err) { settings = {}; }
+    var syncAt = Number(payload && payload.syncUiAt) || 0;
+    if (syncAt > (Number(settings.syncUiAt) || 0) && (payload.syncUi === true || payload.syncUi === false)) {
+      settings.syncUi = payload.syncUi;
+      settings.syncUiAt = syncAt;
+    }
+    var keepOwn = !uiSyncOn(settings);
     Object.keys(payload || {}).forEach(function (key) {
-      if (key === "lang" || key === "history") return;
+      if (key === "lang" || key === "history" || key === "uiLocal" || key === "syncUi" || key === "syncUiAt") return;
+      if (keepOwn && UI_KEYS.indexOf(key) >= 0) return;
       if ((key === "navLayout" || key === "navLayoutLand" || key === "navLayoutSync") && settings.navLayoutSync !== true) return;
       settings[key] = payload[key];
     });
@@ -1154,7 +1230,7 @@ var numberNote = form.passkey
     var session = readSession();
     if (!session || !hasApi()) return Promise.resolve();
     pushing = true;
-    return api("/v1/sync", { method: "PUT", token: session.token, body: { payload: payload, baseUpdatedAt: base || 0 } }).then(function (body) {
+    return api("/v1/sync", { method: "PUT", token: session.token, body: { payload: payload, baseUpdatedAt: base || 0, device: syncDeviceId() } }).then(function (body) {
       pushing = false;
       if (body.status === 409 && body.payload) {
         var merged = mergePayload(payload, body.payload);
@@ -1167,22 +1243,80 @@ var numberNote = form.passkey
       }
     }).catch(function () { pushing = false; });
   }
-  function mergeSync() {
+  function mergeSync(pullOnly) {
     var session = readSession();
     if (!session || !hasApi()) return Promise.resolve();
+    lastPull = Date.now();
     return api("/v1/sync", { token: session.token }).then(function (body) {
       var local = localSnapshot();
       if (!body || body.status !== 200) return;
+      if (pullOnly) {
+        // Another device changed something: take it in without pushing back,
+        // so two open devices never bounce writes at each other.
+        if (!body.payload) return;
+        applySnapshot(mergeRemoteFirst(local, body.payload));
+        rememberSync(body.updatedAt || 0);
+        return;
+      }
       if (!body.payload) return pushPayload(local, 0);
       var merged = mergePayload(local, body.payload);
       applySnapshot(merged);
       return pushPayload(merged, body.updatedAt || 0);
     }).catch(function () {});
   }
+  /* The remote copy is newer here, so plain single-value choices follow it;
+     sets (follows, likes, lists) still union as in mergePayload. */
+  function mergeRemoteFirst(local, remote) {
+    var merged = mergePayload(local, remote);
+    ["appearance", "autoplay", "translateTo", "followingSort", "notify", "showPictures", "showBanners", "forYouReposts", "forYouReplies"].forEach(function (key) {
+      if (remote[key] !== undefined) merged[key] = remote[key];
+    });
+    return merged;
+  }
+  var DEVICE_ID_KEY = "viktorychapp-sync-device";
+  function syncDeviceId() {
+    try {
+      var id = localStorage.getItem(DEVICE_ID_KEY);
+      if (!id) {
+        id = Math.random().toString(36).slice(2, 12);
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      }
+      return id;
+    } catch (err) { return ""; }
+  }
+  var lastPull = 0;
+  var pullTimer = 0;
+  var liveBound = false;
+  function pullSoon() {
+    if (!readSession() || !hasApi() || pushing) return;
+    clearTimeout(pullTimer);
+    pullTimer = setTimeout(function () { mergeSync(true); }, 400);
+  }
+  function bindLiveSync() {
+    var presence = window.ViktorychPresence;
+    if (liveBound || !presence || !presence.onChannel) return;
+    liveBound = true;
+    presence.onChannel(function (msg) {
+      if (!msg || msg.op !== "event" || msg.topic !== "sync" || !msg.data) return;
+      var session = readSession();
+      if (!session || msg.data.device === syncDeviceId()) return;
+      if (Number(msg.data.updatedAt) === Number(session.syncAt)) return;
+      pullSoon();
+    });
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState !== "visible" || !historyBooted) return;
+      bindLiveSync();
+      // Without a socket, a tab coming back checks at most once a minute.
+      if (Date.now() - lastPull > 60000) pullSoon();
+    });
+  }
   var historyBooted = false;
   function onHistoryReady() {
     if (historyBooted) return;
     historyBooted = true;
+    setTimeout(bindLiveSync, 3000);
     if (readSession()) mergeSync().then(function () { return syncFollows(); }, function () { return syncFollows(); });
   }
   function onLocalChange() {
@@ -4404,6 +4538,12 @@ else if (act === "copy-id") copyAccountId();
   });
 
   window.ViktorychAccounts = {
+    signOut: function () { logout(false); },
+    uiSyncOn: function () { return uiSyncOn(); },
+    deviceOwnUi: deviceOwnUi,
+    setDeviceOwnUi: function (on) { setDeviceOwnUi(on); if (!on) pullSoon(); },
+    mergePayload: mergePayload,
+    snapshotFrom: snapshotFrom,
     blocking: blocking,
     enter: enter,
     currentApi: currentApi,
