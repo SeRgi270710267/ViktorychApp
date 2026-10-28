@@ -182,8 +182,9 @@ async function main() {
       await exercise(page, vp, origin);
     }
     console.log("composer page ok");
-    const [home, own, single, dock] = await riders;
+    const [home, hub, own, single, dock] = await riders;
     if (home !== 0) fail("community home check failed");
+    if (hub !== 0) fail("communities hub check failed");
     if (own !== 0) fail("own post check failed");
     if (single !== 0) fail("post page check failed");
     if (dock !== 0) fail("music dock check failed");
