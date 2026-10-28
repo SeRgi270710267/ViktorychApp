@@ -148,13 +148,10 @@
     return tr("Status emoji");
   }
 
-  function marquee(label) {
+  function marquee(label, long) {
     var text = String(label || "");
-    var long = text.length > 10;
-    var inner = long
-      ? '<span class="marquee"><span>' + esc(text) + '</span><span aria-hidden="true">' + esc(text) + "</span></span>"
-      : esc(text);
-    return inner;
+    if (!long) return esc(text);
+    return '<span class="marquee"><span>' + esc(text) + '</span><span aria-hidden="true">' + esc(text) + "</span></span>";
   }
 
   function svg(path) {
@@ -270,8 +267,8 @@
     ];
     var tabHtml = tabs.map(function (pair) {
       var on = storeTab === pair[0];
-      var long = String(pair[1]).length > 10;
-      return '<button type="button" class="store-tab' + (on ? " on" : "") + (long ? " is-long" : "") + '" data-store="tab" data-tab="' + pair[0] + '" aria-pressed="' + (on ? "true" : "false") + '" aria-label="' + esc(pair[1]) + '">' + marquee(pair[1]) + "</button>";
+      var long = String(pair[1]).length > 14;
+      return '<button type="button" class="store-tab' + (on ? " on" : "") + (long ? " is-long" : "") + '" data-store="tab" data-tab="' + pair[0] + '" aria-pressed="' + (on ? "true" : "false") + '" aria-label="' + esc(pair[1]) + '">' + marquee(pair[1], long) + "</button>";
     }).join("");
     var items = storeItems();
     var grid = storeLoading
