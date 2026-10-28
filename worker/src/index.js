@@ -786,7 +786,8 @@ function recoveryDeps() {
     clientIp: clientIp,
     originAllowed: originAllowed,
     blockDeletedLogin: blockDeletedLogin,
-    accountCols: ACCOUNT_COLS
+    accountCols: ACCOUNT_COLS,
+    publish: publishToAccount
   };
 }
 
