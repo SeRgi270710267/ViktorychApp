@@ -129,8 +129,17 @@ async function measure(page) {
 }
 
 async function openMenu(page) {
-  await page.locator("#compose-text").scrollIntoViewIfNeeded();
-  await page.locator(".xc .xc-ai-btn").evaluate((el) => el.click());
+  await page.waitForFunction(() => {
+    const field = document.getElementById("compose-text");
+    const btn = document.querySelector(".xc .xc-ai-btn");
+    return !!(field && field.isConnected && btn && btn.isConnected);
+  }, null, { timeout: 10000 });
+  await page.evaluate(() => {
+    const field = document.getElementById("compose-text");
+    if (field && field.scrollIntoView) field.scrollIntoView({ block: "nearest" });
+    const btn = document.querySelector(".xc .xc-ai-btn");
+    if (btn) btn.click();
+  });
   await page.locator(".xc-ai-pop").waitFor({ timeout: 5000 });
 }
 
@@ -269,7 +278,7 @@ async function layout(page, vp) {
   if (row.bg !== "rgba(0, 0, 0, 0)" && row.bg !== "transparent") fail(vp.name + " sparkle has a filled background");
   await openMenu(page);
   const box = await page.locator(".xc-ai-pop").boundingBox();
-  if (!box || box.width < 160 || box.height < 80) fail(vp.name + " menu is not visible");
+  if (!box || box.width < 160 || box.height < 80) fail(vp.name + " menu is not visible " + JSON.stringify(box));
   if (box.x < -1 || box.x + box.width > vp.width + 1) fail(vp.name + " menu overflows horizontally");
   const labels = await page.locator(".xc-ai-pop").innerText();
   if (/Suggest replies|Sugerir respuestas/.test(labels)) fail(vp.name + " shows reply suggestions on a new post");
