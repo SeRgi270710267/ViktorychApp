@@ -7085,6 +7085,7 @@ const here = parseRoute();
     }
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "points") return { name: "points", query };
+    if (parts[0] === "online") return { name: "online", query };
     if (parts[0] === "store") return { name: "store", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
@@ -8480,7 +8481,10 @@ const here = parseRoute();
     const inline = (tab === "foryou" || tab === "following") && STATE.modal !== "compose" && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
-    return homeHeader(tab) + bar + inline + body + timelineSentinel(list.length, sorted.length);
+    const onlineStrip = (tab === "foryou" || tab === "following") && window.ViktorychPresence && window.ViktorychPresence.stripHtml
+      ? window.ViktorychPresence.stripHtml()
+      : "";
+    return homeHeader(tab) + bar + onlineStrip + inline + body + timelineSentinel(list.length, sorted.length);
   }
 
   function mobileLogo() {
@@ -12464,7 +12468,7 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
@@ -12626,6 +12630,7 @@ const here = parseRoute();
     const mine = signedAccount();
     if (id === "home") return { id: id, href: "#/", icon: "home", label: tr("Home"), locked: true };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
+    if (id === "online") return { id: id, href: "#/online", icon: "user", label: tr("Friends") };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
     if (id === "bookmarks") return { id: id, href: "#/bookmarks", icon: "bookmark", label: tr("Bookmarks") };
@@ -14637,6 +14642,7 @@ if (STATE.histClear) {
     const params = new URLSearchParams(location.search);
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
+    if (route.name === "online") return pageHead(tr("Friends")) + ((window.ViktorychPresence && window.ViktorychPresence.pageHtml && window.ViktorychPresence.pageHtml()) || "");
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces" && !route.id) {
       const models = window.Spaces && window.Spaces.models ? window.Spaces.models() : [];
