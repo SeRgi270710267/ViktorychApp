@@ -126,27 +126,26 @@ async function exercise(page, label, origin) {
   }, null, { timeout: 15000 });
 
   await page.goto(origin + "/#/", { waitUntil: "domcontentloaded" });
-  await page.evaluate(() => {
+  await page.waitForFunction(() => {
     window.scrollTo(0, 0);
-    document.querySelectorAll(".topbar, .mhead").forEach((el) => el.classList.remove("is-hidden"));
-  });
-  const phoneMenu = page.locator("button.m-ava");
-  if (await phoneMenu.count()) {
-    const hit = await page.evaluate(() => {
-      const el = document.querySelector("button.m-ava");
+    document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
+    const phone = document.querySelector("button.m-ava");
+    const side = document.querySelector("header.nav a.nav-item");
+    const shown = (el) => {
       if (!el) return false;
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") return false;
       const rect = el.getBoundingClientRect();
-      const top = document.elementFromPoint(rect.left + 8, rect.top + 8);
-      return rect.y >= 0 && rect.bottom <= window.innerHeight && !!(top && el.contains(top));
-    });
-    if (hit) {
-      await phoneMenu.first().evaluate((el) => el.click());
-      await page.waitForFunction(() => !!document.querySelector(".drawer"), null, { timeout: 8000 });
-      await page.keyboard.press("Escape");
-    } else if (!(await page.locator("header.nav, .nav").locator("visible=true").count())) {
-      fail(label + " has no menu");
-    }
-  } else if (!(await page.locator("header.nav, .nav").locator("visible=true").count())) {
+      return rect.height > 8 && rect.top >= 0 && rect.top < window.innerHeight;
+    };
+    return shown(phone) || shown(side);
+  }, null, { timeout: 15000 });
+  const phoneMenu = page.locator("button.m-ava").locator("visible=true");
+  if (await phoneMenu.count()) {
+    await phoneMenu.first().evaluate((el) => el.click());
+    await page.waitForFunction(() => !!document.querySelector(".drawer"), null, { timeout: 8000 });
+    await page.keyboard.press("Escape");
+  } else if (!(await page.locator("header.nav a.nav-item").locator("visible=true").count())) {
     fail(label + " has no menu");
   }
 
