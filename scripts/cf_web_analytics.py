@@ -161,7 +161,13 @@ def main() -> int:
     if not args.site:
         print("pass --site or --selftest")
         return 1
-    return apply(Path(args.site))
+    code = apply(Path(args.site))
+    # This is the last step that edits the site, so the shell manifest the
+    # service worker pins its download to is written here.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import shell_manifest
+    shell_manifest.write(Path(args.site))
+    return code
 
 
 if __name__ == "__main__":

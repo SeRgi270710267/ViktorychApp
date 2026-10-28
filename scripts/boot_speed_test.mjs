@@ -1,6 +1,7 @@
 /* Boot speed: a signed-in visit mounts the app scripts right away, downloads
    them in parallel (not one round trip per file), and reads feeds.json once. */
 import http from "node:http";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -58,3 +59,7 @@ try {
   await browser.close();
   server.close();
 }
+
+/* The interface pack check shares this browser setup. */
+const packs = spawnSync(process.execPath, [path.join(root, "scripts", "i18n_pack_test.mjs")], { stdio: "inherit", env: process.env });
+if (packs.status !== 0) process.exit(packs.status || 1);
