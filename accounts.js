@@ -859,6 +859,7 @@ var numberNote = form.passkey
       navCustomAt: Number(settings.navCustomAt) || 0,
       profileTabs: cleanProfileTabs(settings.profileTabs)
     };
+    if (settings.storyNotes === true || settings.storyNotes === false) snap.storyNotes = settings.storyNotes;
     if (settings.bottomNav && typeof settings.bottomNav === "object") snap.bottomNav = settings.bottomNav;
     if (settings.navLayoutSync === true) {
       navLayoutUnsync = false;
@@ -1049,6 +1050,8 @@ var numberNote = form.passkey
       navCustomAt: Math.max(Number(local.navCustomAt) || 0, Number(remote.navCustomAt) || 0),
       profileTabs: (Number(local.profileTabs && local.profileTabs.at) || 0) >= (Number(remote.profileTabs && remote.profileTabs.at) || 0) ? cleanProfileTabs(local.profileTabs || remote.profileTabs) : cleanProfileTabs(remote.profileTabs || local.profileTabs)
     };
+    if (local.storyNotes === true || local.storyNotes === false) merged.storyNotes = local.storyNotes;
+    else if (remote.storyNotes === true || remote.storyNotes === false) merged.storyNotes = remote.storyNotes;
     if ((local.devicePerf && typeof local.devicePerf === "object") || (remote.devicePerf && typeof remote.devicePerf === "object")) {
       merged.devicePerf = (local.devicePerf && typeof local.devicePerf === "object") ? local.devicePerf : remote.devicePerf;
     }
