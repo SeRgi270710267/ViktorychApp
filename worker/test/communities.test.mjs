@@ -392,3 +392,73 @@ test("home lists community posts for members, followers and the owner", async ()
   assert.equal(await sees(dan.token, id, "203.0.114.25"), false);
   assert.equal(await sees(fay.token, id, "203.0.114.26"), true);
 });
+
+test("an account's own posts, replies and quotes list on its profile with ?by=", async () => {
+  const lin = await call("/v1/signup", { method: "POST", ip: "203.0.113.140", body: { displayName: "Lin Own", handle: "lin_own" } });
+  assert.equal(lin.status, 201);
+  const sent = await call("/v1/posts", { method: "POST", ip: "203.0.113.141", token: lin.body.token, body: { body: "My first own post" } });
+  assert.equal(sent.status, 201);
+  const reply = await call("/v1/posts", { method: "POST", ip: "203.0.113.142", token: lin.body.token, body: { body: "A reply to myself", parentId: sent.body.post.id } });
+  assert.equal(reply.status, 201);
+  const quote = await call("/v1/posts", { method: "POST", ip: "203.0.113.143", token: lin.body.token, body: { body: "Quoting myself", quoteId: sent.body.post.id } });
+  assert.equal(quote.status, 201);
+  const id = lin.body.account.publicId;
+  const mine = await call("/v1/posts?by=" + id, { ip: "203.0.113.144", token: lin.body.token });
+  assert.equal(mine.status, 200);
+  const ids = (mine.body.posts || []).map((item) => item.id);
+  assert.deepEqual(ids.slice().sort(), [quote.body.post.id, reply.body.post.id, sent.body.post.id].sort());
+  assert.ok((mine.body.posts || []).every((item) => item.authorId === id));
+  const home = await call("/v1/posts", { ip: "203.0.113.145", token: lin.body.token });
+  assert.ok((home.body.posts || []).some((item) => item.id === sent.body.post.id));
+  const rae = await call("/v1/signup", { method: "POST", ip: "203.0.113.146", body: { displayName: "Rae Other", handle: "rae_other" } });
+  const seen = await call("/v1/posts?by=" + id, { ip: "203.0.113.147", token: rae.body.token });
+  assert.equal(seen.body.posts.length, 3);
+  const bad = await call("/v1/posts?by=nope", { ip: "203.0.113.148", token: rae.body.token });
+  assert.equal(bad.status, 400);
+});
+
+test("a profile lists the account's community posts and replies, with community privacy", async () => {
+  const sam = await call("/v1/signup", { method: "POST", ip: "203.0.113.150", body: { displayName: "Sam Comm", handle: "sam_comm" } });
+  assert.equal(sam.status, 201);
+  const root = await call("/v1/communities/proffeed/posts", { method: "POST", ip: "203.0.113.151", token: sam.body.token, body: { text: "Sam in a community" } });
+  assert.equal(root.status, 200);
+  const reply = await call("/v1/communities/proffeed/posts", { method: "POST", ip: "203.0.113.152", token: sam.body.token, body: { text: "Sam replies in a community", parentId: root.body.post.id } });
+  assert.equal(reply.status, 200);
+  const id = sam.body.account.publicId;
+  const own = await call("/v1/posts?by=" + id, { ip: "203.0.113.153", token: sam.body.token });
+  const ownRows = (own.body.posts || []).filter((item) => item.community && item.community.name === "proffeed");
+  assert.deepEqual(ownRows.map((item) => item.id).sort(), [root.body.post.id, reply.body.post.id].sort());
+  assert.equal(ownRows.find((item) => item.id === reply.body.post.id).parentId, root.body.post.id);
+
+  const viewer = await call("/v1/signup", { method: "POST", ip: "203.0.113.154", body: { displayName: "View Comm", handle: "view_comm" } });
+  const open = await call("/v1/posts?by=" + id, { ip: "203.0.113.155", token: viewer.body.token });
+  assert.equal((open.body.posts || []).filter((item) => item.community && item.community.name === "proffeed").length, 2);
+
+  const db = await mf.getD1Database("DB");
+  await db.prepare("INSERT INTO community_meta (community_id, visibility, updated_at) VALUES (?, 'private', ?) ON CONFLICT(community_id) DO UPDATE SET visibility = 'private'").bind("proffeed", Date.now()).run();
+  const closed = await call("/v1/posts?by=" + id, { ip: "203.0.113.156", token: viewer.body.token });
+  assert.equal((closed.body.posts || []).filter((item) => item.community).length, 0);
+  const still = await call("/v1/posts?by=" + id, { ip: "203.0.113.157", token: sam.body.token });
+  assert.equal((still.body.posts || []).filter((item) => item.community).length, 2);
+  await db.prepare("INSERT INTO community_members (community_id, public_id, created_at) VALUES (?, ?, ?)").bind("proffeed", viewer.body.account.publicId, Date.now()).run();
+  const member = await call("/v1/posts?by=" + id, { ip: "203.0.113.158", token: viewer.body.token });
+  assert.equal((member.body.posts || []).filter((item) => item.community).length, 2);
+});
+
+test("replies carry their parent chain for feeds and the post page", async () => {
+  const ana = await call("/v1/signup", { method: "POST", ip: "203.0.113.160", body: { displayName: "Ana Chain", handle: "ana_chain" } });
+  const ben = await call("/v1/signup", { method: "POST", ip: "203.0.113.161", body: { displayName: "Ben Chain", handle: "ben_chain" } });
+  const root = await call("/v1/communities/chainfeed/posts", { method: "POST", ip: "203.0.113.162", token: ana.body.token, body: { text: "Chain root" } });
+  const mid = await call("/v1/communities/chainfeed/posts", { method: "POST", ip: "203.0.113.163", token: ben.body.token, body: { text: "Chain middle", parentId: root.body.post.id } });
+  const leaf = await call("/v1/communities/chainfeed/posts", { method: "POST", ip: "203.0.113.164", token: ana.body.token, body: { text: "Chain leaf", parentId: mid.body.post.id } });
+  assert.equal(leaf.status, 200);
+  const list = await call("/v1/posts?by=" + ana.body.account.publicId, { ip: "203.0.113.165", token: ben.body.token });
+  const row = (list.body.posts || []).find((item) => item.id === leaf.body.post.id);
+  assert.ok(row && row.parent, "the reply has its parent");
+  assert.equal(row.parent.id, mid.body.post.id);
+  assert.equal(row.parent.authorHandle, "ben_chain");
+  assert.equal(row.parent.body, "Chain middle");
+  assert.equal(row.parent.parent.id, root.body.post.id);
+  assert.equal(row.parent.parent.authorHandle, "ana_chain");
+  assert.equal(row.parent.parent.parent, undefined);
+});
