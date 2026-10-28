@@ -8784,14 +8784,14 @@ const here = parseRoute();
     });
     return next.sort((a, b) => (Number(b && b.createdAt) || 0) - (Number(a && a.createdAt) || 0));
   }
-  function optimisticOwnPost(text, parentId, quoteId) {
+  function optimisticOwnPost(text, parentId, quoteId, extParent) {
     const mine = signedAccount();
     if (!mine || !mine.publicId) return "";
     const id = "tmp-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     rememberOwnPost({
       id: id, body: String(text || ""), parentId: parentId || "", quoteId: quoteId || "", createdAt: Date.now(),
       authorId: String(mine.publicId), authorHandle: String(mine.handle || ""), authorName: String(mine.displayName || mine.handle || ""),
-      authorAvatar: String(mine.avatar || ""), pending: true, likes: 0, replyCount: 0, media: []
+      authorAvatar: String(mine.avatar || ""), pending: true, likes: 0, replyCount: 0, media: [], extParent: extParent || null
     });
     return id;
   }
@@ -8981,7 +8981,7 @@ const here = parseRoute();
     const outboxable = !navigator.onLine && token && root && window.ViktorychLocal && posts.every((part) => !(part.media || []).length);
     if (outboxable) {
       const slim = posts.map((part) => ({ text: part.text || "", media: [], poll: part.poll || null, location: part.location || "", audience: part.audience || "everyone", listIds: part.listIds || [], replyControl: part.replyControl || "everyone", scheduleAt: 0 }));
-      queueOffline({ type: "app-post", id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), on: true, snapshot: { posts: slim, parentId: payload.parentId || "", quoteId: payload.quoteId || "" } });
+      queueOffline({ type: "app-post", id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), on: true, snapshot: { posts: slim, parentId: payload.parentId || "", quoteId: payload.quoteId || "", extParent: payload.extParent || null } });
       toast(tr("Sends when you’re back online."));
       return;
     }
@@ -9005,7 +9005,7 @@ const here = parseRoute();
       const parent = index === 0 ? (payload.parentId || "") : parentId;
       const quote = index === 0 ? (payload.quoteId || "") : "";
       const later = !!part.scheduleAt;
-      const tempId = later ? "" : optimisticOwnPost(part.text, parent, quote);
+      const tempId = later ? "" : optimisticOwnPost(part.text, parent, quote, index === 0 && !parent ? payload.extParent : null);
       if (tempId) render();
       const done = (res) => {
         if (tempId) forgetOwnPost(tempId);
@@ -9029,6 +9029,7 @@ const here = parseRoute();
         const data = new FormData();
         if (part.text) data.set("body", part.text);
         if (parent) data.set("parentId", parent);
+        if (!parent && index === 0 && payload.extParent) data.set("extParent", JSON.stringify(payload.extParent));
         if (quote) data.set("quoteId", quote);
         if (part.audience) data.set("audience", part.audience);
         if (part.listIds && part.listIds.length) data.set("listIds", JSON.stringify(part.listIds));
@@ -9047,6 +9048,7 @@ const here = parseRoute();
       }
       const body = { body: part.text || "" };
       if (parent) body.parentId = parent;
+      if (!parent && index === 0 && payload.extParent) body.extParent = payload.extParent;
       if (quote) body.quoteId = quote;
       if (part.audience) body.audience = part.audience;
       if (part.listIds && part.listIds.length) body.listIds = part.listIds;
@@ -9115,6 +9117,64 @@ const here = parseRoute();
     }).catch(finishFail);
   }
 
+  /* A reply to a post from X, Threads, Instagram, Reddit, RSS and the rest keeps
+     where that post lives and a snapshot of it. The server stores it with the
+     reply, so the original shows above the reply everywhere, like X. */
+  function extParentOf(post) {
+    if (!post || !post.platform || post.platform === "app" || post.appPost) return null;
+    const https = (value) => /^https:\/\//i.test(String(value || "")) ? String(value) : "";
+    const media = (post.media || []).slice(0, 4).map((item) => ({
+      type: item && item.type === "video" ? "video" : "photo",
+      url: https(item && (item.url || item.src)),
+      poster: https(item && (item.poster || item.thumb))
+    })).filter((item) => item.url || item.poster);
+    const stats = post.stats || {};
+    return {
+      platform: String(post.platform),
+      id: String(post.id || ""),
+      statusId: String(post.statusId || ""),
+      url: https(post.url),
+      handle: String(post.handle || "").replace(/^@/, ""),
+      author: String(post.author || post.handle || ""),
+      avatar: https(post.avatar),
+      text: String(post.text || "").slice(0, 1500),
+      title: String(post.title || "").slice(0, 300),
+      date: String(post.date || ""),
+      community: redditSub(post),
+      score: Number(post.score != null ? post.score : stats.score) || 0,
+      media: media
+    };
+  }
+
+  /* The live copy when this device has it loaded, the stored snapshot otherwise,
+     and "This post is unavailable" when neither has anything to show. */
+  function extParentCard(ext) {
+    const live = STATE.shared[ext.id] || (ext.statusId && STATE.shared[ext.statusId]) || null;
+    if (live && !live.appPost && (live.text || live.title || (live.media || []).length)) return live;
+    const card = {
+      id: ext.id,
+      statusId: ext.statusId || ext.id,
+      platform: ext.platform,
+      handle: ext.handle || "",
+      author: ext.author || ext.handle || "",
+      avatar: ext.avatar || "",
+      text: ext.text || "",
+      title: ext.title || "",
+      date: ext.date || "",
+      url: ext.url || "",
+      media: (ext.media || []).map((item) => ({ type: item.type, url: item.url || item.poster, poster: item.poster || "" })),
+      kind: "post",
+      extSnapshot: true
+    };
+    if (ext.community) card.subreddit = ext.community;
+    if (ext.platform === "reddit") card.score = Number(ext.score) || 0;
+    if (!card.text && !card.title && !card.media.length) {
+      card.text = tr("This post is unavailable.");
+      card.unavailable = true;
+    }
+    return card;
+  }
+
   // Posts written in this app (and in its communities) come from /v1/posts. Home shows
   // them as normal post cards, merged into the timeline by time, on For you and Following.
   function appCardPost(item) {
@@ -9160,6 +9220,11 @@ const here = parseRoute();
       post.replyParent = appCardPost(item.parent);
       post.replyingTo = { id: post.parentId, handle: post.replyParent.handle };
     } else if (post.parentId) post.replyingTo = { id: post.parentId, handle: String(item.parentHandle || "") };
+    else if (item.extParent && item.extParent.id) {
+      post.replyParent = extParentCard(item.extParent);
+      post.replyingTo = { id: String(post.replyParent.statusId || post.replyParent.id), handle: post.replyParent.handle || "" };
+      post.kind = "reply";
+    }
     if (item.quote && item.quote.unavailable) post.quoteGone = true;
     else if (item.quote) {
       const qMedia = (item.quote.media || []).map(publicMediaHtml).join("");
@@ -22733,7 +22798,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         : accountCall("/v1/reposts", { method: "POST", body: { postKey: action.postKey || "" } });
       Promise.resolve(req).catch(() => {});
     } else if (action.type === "app-post" && action.snapshot && Array.isArray(action.snapshot.posts)) {
-      publishComposer({ posts: action.snapshot.posts, parentId: action.snapshot.parentId || "", quoteId: action.snapshot.quoteId || "" }, true);
+      publishComposer({ posts: action.snapshot.posts, parentId: action.snapshot.parentId || "", quoteId: action.snapshot.quoteId || "", extParent: action.snapshot.extParent || null }, true);
     } else if (action.type === "app-delete") {
       goneOwn[action.id] = goneOwn[action.id] || Date.now();
       sendOwnDelete({ id: action.id, sub: (action.snapshot && action.snapshot.sub) || "" });
@@ -23372,6 +23437,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (window.ViktorychLocal && window.ViktorychLocal.saveDoc) window.ViktorychLocal.saveDoc("drafts", "compose", { text: value });
       },
       publish: function (payload) { publishComposer(payload); },
+      extParent: extParentOf,
       signedIn: function () { return !!accountToken(); },
       gifSearch: function (q) {
         return accountCall("/v1/gif?q=" + encodeURIComponent(q || "")).then((res) => {
