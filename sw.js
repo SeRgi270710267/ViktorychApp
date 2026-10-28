@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a75-__SW_VERSION__";
+const VERSION = "viktorych-a76-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-28T21:59:00Z-a75
+// cache-bust: 2026-10-28T22:34:00Z-a76
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -143,8 +143,6 @@ const SHELL_FILES = [
   "./communities.css",
   "./yt-player.js",
   "./yt-player.css",
-  "./hls-1.7.3.min.js",
-  "./mpegts-1.8.0.min.js",
   "./scores.js",
   "./scores.css",
   "./weather.js",
@@ -198,10 +196,11 @@ let peerOn = false;
 const armedClients = new Set();
 const reloadingClients = new Set();
 const PRECACHE_TRIES = 4;
+const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js"];
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a75-";
+  const prefix = "viktorych-a76-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -246,7 +245,7 @@ function safeShellPath(value) {
 
 function safeShellReason(value) {
   const text = String(value || "").toLowerCase();
-  if (text === "network" || text === "timeout" || text === "quota" || text === "replaced") return text;
+  if (text === "network" || text === "timeout" || text === "quota" || text === "replaced" || text === "newer" || text === "mismatch") return text;
   if (/^http-\d{3}$/.test(text)) return text;
   return "network";
 }
@@ -282,16 +281,22 @@ self.addEventListener("install", (event) => {
   })());
 });
 
+let activateBeat = null;
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const reloadClients = updateReporting;
     try {
       if (updateReporting) broadcastProgress({ step: "activate" }, true);
+      // Removing old caches can take a while on a full phone; keep the page's
+      // stall timer fed until the new shell is in charge.
+      const beat = updateReporting ? setInterval(() => broadcastProgress({ step: "activate" }, true), 4000) : null;
+      activateBeat = beat;
       const keys = await caches.keys();
       await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC && key !== PREFS_CACHE).map((key) => caches.delete(key)));
       try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
       if (updateReporting) broadcastProgress({ step: "clean" }, true);
     } catch (err) { /* a full disk must not leave the worker stuck activating */ }
+    if (activateBeat) { clearInterval(activateBeat); activateBeat = null; }
     try { await self.clients.claim(); } catch (err) { /* the page reloads once the worker is active */ }
     try {
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
@@ -1100,69 +1105,211 @@ function precacheShell(report, fresh) {
   return task;
 }
 
-async function fetchShellFile(path, signal) {
-  const sha = versionSha(VERSION) || "0";
-  const join = String(path).indexOf("?") >= 0 ? "&" : "?";
-  const bust = path + join + "sw=" + encodeURIComponent(sha);
-  const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort("timeout"), 7000);
-  const onAbort = () => timeout.abort("replaced");
+/* A big file on a slow phone link can take minutes, so a download only
+   fails when no bytes arrive for a while (or past a generous cap), never on
+   a fixed clock. */
+const SHELL_STALL_MS = 20000;
+const SHELL_FILE_CAP_MS = 240000;
+function stallWatch(signal) {
+  const ctl = new AbortController();
+  let timer = 0;
+  let why = "";
+  const stop = (reason) => {
+    if (why) return;
+    why = reason;
+    try { ctl.abort(reason); } catch (err) { /* already stopped */ }
+  };
+  const touch = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => stop("timeout"), SHELL_STALL_MS);
+  };
+  const cap = setTimeout(() => stop("timeout"), SHELL_FILE_CAP_MS);
+  const onAbort = () => stop("replaced");
   if (signal) {
-    if (signal.aborted) timeout.abort("replaced");
+    if (signal.aborted) stop("replaced");
     else signal.addEventListener("abort", onAbort, { once: true });
   }
+  touch();
+  return {
+    signal: ctl.signal,
+    touch: touch,
+    reason: () => why,
+    done: () => {
+      clearTimeout(timer);
+      clearTimeout(cap);
+      if (signal) signal.removeEventListener("abort", onAbort);
+    }
+  };
+}
+
+function shellUrl(path) {
+  const sha = versionSha(VERSION) || "0";
+  const join = String(path).indexOf("?") >= 0 ? "&" : "?";
+  return path + join + "sw=" + encodeURIComponent(sha);
+}
+
+async function fetchShellFile(path, watch) {
   try {
-    const request = new Request(bust, { cache: "no-store", signal: timeout.signal });
+    const request = new Request(shellUrl(path), { cache: "no-store", signal: watch.signal });
     return await mirrorFetch(request);
   } catch (err) {
-    if (signal && signal.aborted) throw shellError(path, "replaced");
-    if (err && (err.reason === "replaced" || err.name === "AbortError")) throw shellError(path, signal && signal.aborted ? "replaced" : "timeout");
+    if (watch.reason()) throw shellError(path, watch.reason());
     throw shellError(path, failureReason(err, 0));
-  } finally {
-    clearTimeout(timer);
-    if (signal) signal.removeEventListener("abort", onAbort);
   }
 }
 
-async function pullOne(path, report, state, signal, cache) {
+async function sha256Hex(chunks) {
+  if (!crypto.subtle || !chunks || !chunks.length) return "";
+  let size = 0;
+  chunks.forEach((chunk) => { size += chunk.byteLength || 0; });
+  const all = new Uint8Array(size);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    all.set(chunk, offset);
+    offset += chunk.byteLength || 0;
+  });
+  const digest = await crypto.subtle.digest("SHA-256", all);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* The deploy writes shell-manifest.json last: the commit it belongs to, when
+   it was built, and a SHA-256 and size per shell file. It pins a download to
+   one deploy and lets unchanged files come from the cache already here. */
+function isoTime(value) {
+  const t = Date.parse(String(value || ""));
+  return Number.isFinite(t) ? t : 0;
+}
+
+function readManifestDoc(doc) {
+  if (!doc || typeof doc !== "object" || !doc.files || typeof doc.files !== "object") return null;
+  const files = {};
+  Object.keys(doc.files).forEach((path) => {
+    const row = doc.files[path];
+    const hash = Array.isArray(row) ? String(row[0] || "") : "";
+    if (/^[a-f0-9]{64}$/.test(hash)) files[path] = { hash: hash, size: Math.max(0, Number(row[1]) || 0) };
+  });
+  return { sha: String(doc.sha || "").toLowerCase(), built: isoTime(doc.built), files: files };
+}
+
+async function loadShellManifest(signal) {
+  const watch = stallWatch(signal);
+  try {
+    const res = await mirrorFetch(new Request(shellUrl("./shell-manifest.json"), { cache: "no-store", signal: watch.signal }));
+    if (!res || !res.ok) return null;
+    return readManifestDoc(await res.json());
+  } catch (err) {
+    if (signal && signal.aborted) throw shellError("", "replaced");
+    return null;
+  } finally {
+    watch.done();
+  }
+}
+
+/* Which deploy a manifest belongs to, seen from this worker: "same", "newer"
+   (a deploy landed after this worker was built), or "unknown" (an older
+   mirror copy, or a local build with no stamps). */
+function manifestRelation(manifest) {
+  const own = versionSha(VERSION);
+  if (!manifest || !manifest.sha || !own) return "unknown";
+  if (manifest.sha === own) return "same";
+  const built = isoTime(BUILT);
+  if (built && manifest.built && manifest.built > built) return "newer";
+  return "unknown";
+}
+
+function cachePath(url) {
+  try { return new URL(url, self.registration.scope).pathname; } catch (err) { return ""; }
+}
+
+/* Files already on this device, by path and content hash: a half-finished
+   attempt of this version first, then the shell that is running now. */
+async function reusableShell(stagingName) {
+  const found = new Map();
+  let names = [];
+  try { names = await caches.keys(); } catch (err) { return found; }
+  const order = [stagingName, SHELL].concat(names.filter((name) => name.indexOf("shell-") === 0 && name !== stagingName && name !== SHELL));
+  for (const name of order) {
+    if (names.indexOf(name) < 0) continue;
+    try {
+      const cache = await caches.open(name);
+      const keys = await cache.keys();
+      for (const req of keys) {
+        const res = await cache.match(req);
+        const hash = res && res.headers.get("x-shell-sha256");
+        const key = cachePath(req.url) + "|" + (hash || "");
+        if (hash && !found.has(key)) found.set(key, { name: name, req: req });
+      }
+    } catch (err) { /* a cache that cannot be read is simply downloaded again */ }
+  }
+  return found;
+}
+
+async function pullOne(path, report, state, signal, cache, manifest) {
+  const want = manifest && manifest.files[path] ? manifest.files[path] : null;
+  const tick = () => { if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, false); };
+  if (want && state.reuse) {
+    const hit = state.reuse.get(cachePath(path) + "|" + want.hash);
+    if (hit) {
+      try {
+        const res = await (await caches.open(hit.name)).match(hit.req);
+        if (res) {
+          if (hit.name !== cache.name) await cache.put(path, res);
+          state.files += 1;
+          state.reused += 1;
+          state.bytes += want.size;
+          tick();
+          return;
+        }
+      } catch (err) { /* fall through to a download */ }
+    }
+  }
   let last = shellError(path, "network");
   for (let attempt = 0; attempt < PRECACHE_TRIES; attempt++) {
     if (signal && signal.aborted) throw shellError(path, "replaced");
     const delay = precacheDelay(attempt);
     if (delay) await wait(delay);
     if (signal && signal.aborted) throw shellError(path, "replaced");
+    const watch = stallWatch(signal);
+    let got = 0;
     try {
-      const res = await fetchShellFile(path, signal);
+      const res = await fetchShellFile(path, watch);
+      watch.touch();
       if (!res || !res.ok) {
         last = shellError(path, res && res.status ? "http-" + res.status : "network");
         if (!retryableStatus(res && res.status)) break;
         continue;
       }
       const declared = Number(res.headers.get("content-length")) || 0;
-      if (declared) state.totalBytes += declared;
-      const counted = await readCounted(res, (n) => {
-        state.bytes += n;
-        if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, false);
-      });
-      if (!declared) state.totalBytes += counted.size;
+      if (declared && !want) state.totalBytes += declared;
+      let counted;
+      try {
+        counted = await readCounted(res, (n) => {
+          watch.touch();
+          got += n;
+          state.bytes += n;
+          tick();
+        });
+      } catch (err) {
+        throw shellError(path, watch.reason() || failureReason(err, 0));
+      }
+      if (!declared && !want) state.totalBytes += counted.size;
       const headers = new Headers(res.headers);
       headers.delete("content-encoding");
       headers.delete("content-length");
-      try {
-        if (crypto.subtle && counted.chunks && counted.chunks.length) {
-          let size = 0;
-          counted.chunks.forEach((chunk) => { size += chunk.byteLength || 0; });
-          const all = new Uint8Array(size);
-          let offset = 0;
-          counted.chunks.forEach((chunk) => {
-            all.set(chunk, offset);
-            offset += chunk.byteLength || 0;
-          });
-          const digest = await crypto.subtle.digest("SHA-256", all);
-          const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-          if (hash) headers.set("x-shell-sha256", hash);
-        }
-      } catch (err) { /* the versioned cache name still busts a changed shell */ }
+      let hash = "";
+      try { hash = await sha256Hex(counted.chunks); } catch (err) { hash = ""; }
+      if (hash) headers.set("x-shell-sha256", hash);
+      if (want && hash && hash !== want.hash) {
+        // Another deploy may have landed while this one downloads. Never
+        // mix two builds: a newer manifest stops this attempt; otherwise
+        // (a lagging mirror copy) the file is fetched again.
+        state.bytes -= got;
+        got = 0;
+        const now = await loadShellManifest(signal);
+        if (now && manifestRelation(now) === "newer") throw shellError(path, "newer");
+        last = shellError(path, "mismatch");
+        continue;
+      }
       try {
         await cache.put(path, new Response(new Blob(counted.chunks), { status: 200, headers: headers }));
       } catch (err) {
@@ -1170,13 +1317,17 @@ async function pullOne(path, report, state, signal, cache) {
         throw shellError(path, reason === "timeout" ? "quota" : reason);
       }
       state.files += 1;
+      state.fetched += 1;
       if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
       return;
     } catch (err) {
-      if (err && err.reason === "replaced") throw err;
+      state.bytes -= got;
+      if (err && (err.reason === "replaced" || err.reason === "newer")) throw err;
       if (signal && signal.aborted) throw shellError(path, "replaced");
       last = err && err.shellPath ? err : shellError(path, failureReason(err, 0));
       if (last.reason === "quota") break;
+    } finally {
+      watch.done();
     }
   }
   if (shellOptional(path)) {
@@ -1185,6 +1336,20 @@ async function pullOne(path, report, state, signal, cache) {
     return;
   }
   throw last;
+}
+
+/* A short, private log of what went wrong with updates: file path in the
+   app shell, a reason word, counts. No URLs with queries, no user data. */
+const UPDATE_LOG = "./__prefs/update-log.json";
+async function logUpdate(row) {
+  try {
+    const cache = await caches.open(PREFS_CACHE);
+    const old = await cache.match(UPDATE_LOG);
+    let list = old ? await old.json() : [];
+    if (!Array.isArray(list)) list = [];
+    list.push(Object.assign({ t: Date.now(), v: versionSha(VERSION).slice(0, 12) }, row));
+    await cache.put(UPDATE_LOG, new Response(JSON.stringify(list.slice(-20)), { headers: { "Content-Type": "application/json" } }));
+  } catch (err) { /* the log is best effort */ }
 }
 
 /* Home pills and Stories can be turned fully off in Settings. The page
@@ -1211,13 +1376,26 @@ async function offFeatureFiles() {
 async function doPrecache(report, generation, signal) {
   // Download the whole shell into a staging cache. The live cache is
   // replaced only after every required file succeeds, so a client never
-  // runs one version's HTML with another version's scripts.
-  const stagingName = SHELL + "-staging-" + generation;
-  await caches.delete(stagingName);
+  // runs one version's HTML with another version's scripts. The staging
+  // cache belongs to this version and survives a failed attempt, so Retry
+  // carries on where it stopped instead of starting over.
+  const stagingName = SHELL + "-staging";
   const cache = await caches.open(stagingName);
+  cache.name = stagingName;
   const skip = await offFeatureFiles();
   const files = SHELL_FILES.filter((path) => skip.indexOf(path) < 0);
-  const state = { files: 0, totalFiles: files.length, bytes: 0, totalBytes: 0 };
+  const state = { files: 0, totalFiles: files.length, bytes: 0, totalBytes: 0, reused: 0, fetched: 0, reuse: null };
+  let manifest = await loadShellManifest(signal);
+  const relation = manifestRelation(manifest);
+  if (relation === "newer") {
+    await logUpdate({ reason: "newer", stage: "manifest" });
+    throw shellError("", "newer");
+  }
+  if (relation !== "same") manifest = null;
+  if (manifest) {
+    state.reuse = await reusableShell(stagingName);
+    files.forEach((path) => { if (manifest.files[path]) state.totalBytes += manifest.files[path].size; });
+  }
   let failed = null;
   // A single large file can sit in cache storage longer than the page's
   // stall timer. Keep telling the page this attempt is alive.
@@ -1228,7 +1406,7 @@ async function doPrecache(report, generation, signal) {
     while (files.length && !failed) {
       const path = files.shift();
       try {
-        await pullOne(path, report, state, signal, cache);
+        await pullOne(path, report, state, signal, cache, manifest);
       } catch (err) {
         failed = err && err.reason ? err : shellError(path, "network");
       }
@@ -1237,6 +1415,7 @@ async function doPrecache(report, generation, signal) {
   const workers = [];
   const width = Math.min(4, SHELL_FILES.length);
   for (let i = 0; i < width; i++) workers.push(pull());
+  let ok = false;
   try {
     await Promise.all(workers);
     if (signal && signal.aborted) throw shellError("", "replaced");
@@ -1248,11 +1427,18 @@ async function doPrecache(report, generation, signal) {
       const res = await cache.match(req);
       if (res) await live.put(req, res);
     }));
-    progressState = state;
-    return state;
+    ok = true;
+    console.info("shell update ready", "reused " + state.reused, "downloaded " + state.fetched);
+    progressState = { files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes };
+    return progressState;
+  } catch (err) {
+    const reason = safeShellReason(err && err.reason);
+    if (reason !== "replaced") await logUpdate({ reason: reason, path: safeShellPath(err && err.shellPath), files: state.files, of: state.totalFiles, reused: state.reused, pinned: !!manifest });
+    throw err;
   } finally {
     if (beat) clearInterval(beat);
-    try { await caches.delete(stagingName); } catch (err) { /* the next attempt opens a new staging cache */ }
+    // The staging cache is left for activate to remove: deleting a cache
+    // this attempt still holds can stall the worker before skipWaiting.
   }
 }
 
@@ -1268,6 +1454,14 @@ async function runApply(fresh) {
     if (generation !== precacheGeneration) return;
     broadcastProgress({ step: "install", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
     await self.skipWaiting();
+    // Activation can be held up by the old worker. If this worker is still
+    // waiting after a while, say so, and Retry asks again.
+    for (let waited = 0; waited < 20000; waited += 500) {
+      if (generation !== precacheGeneration || self.registration.active === self.serviceWorker || self.registration.waiting !== self.serviceWorker) return;
+      await wait(500);
+    }
+    if (generation !== precacheGeneration || self.registration.waiting !== self.serviceWorker) return;
+    throw shellError("", "timeout");
   } catch (err) {
     if (generation !== precacheGeneration || (err && err.reason === "replaced")) return;
     updateReporting = false;
@@ -1328,6 +1522,26 @@ self.addEventListener("message", (event) => {
       await precacheShell(false, false);
       await self.skipWaiting();
     })().catch(() => {}));
+    return;
+  }
+  if (data.type === "update-log") {
+    event.waitUntil((async () => {
+      let list = [];
+      try {
+        const res = await (await caches.open(PREFS_CACHE)).match(UPDATE_LOG);
+        list = res ? await res.json() : [];
+      } catch (err) { list = []; }
+      try { if (event.source) event.source.postMessage({ type: "update-log", log: Array.isArray(list) ? list : [] }); } catch (err) { /* the page closed */ }
+    })());
+    return;
+  }
+  if (data.type === "update-ping") {
+    // The page heard nothing for a while. Answer with where this worker is.
+    // A waiting worker with no download running is not making progress, so
+    // the page shows Retry instead of waiting on it forever.
+    if (shellTask) broadcastProgress({ step: "download" }, true);
+    else if (self.registration.active === self.serviceWorker) broadcastProgress({ step: "activate" }, true);
+    else broadcast({ type: "update-progress", step: "error", url: "", reason: "timeout" });
     return;
   }
   if (data.type === "apply-update" || data.type === "skip-waiting") {
@@ -1651,6 +1865,12 @@ self.addEventListener("fetch", (event) => {
       try {
         const res = await mirrorFetch(request);
         if (res && url.pathname.endsWith("manifest.webmanifest")) return brandManifestResponse(res);
+        // Video players load on first use instead of with every update, then
+        // stay for offline use until the next version.
+        if (res && res.ok && LAZY_FILES.some((path) => url.pathname.endsWith(path.slice(1)))) {
+          const copy = res.clone();
+          event.waitUntil(cache.put(request, copy).catch(() => {}));
+        }
         return res;
       } catch (err) {
         return Response.error();
