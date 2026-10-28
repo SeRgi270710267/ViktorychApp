@@ -18048,6 +18048,15 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
 
   window.__VIKTORYCH_CLICK = true;
   document.addEventListener("click", (event) => {
+    const item = event.target.closest && event.target.closest(".status-menu button, .status-menu a");
+    if (!item) return;
+    setTimeout(() => {
+      if (String(STATE.menu || "").indexOf("s:") !== 0) return;
+      STATE.menu = null;
+      render();
+    }, 0);
+  });
+  document.addEventListener("click", (event) => {
     const acct = event.target.closest && event.target.closest(".acct-menu [data-acct]");
     if (!acct) return;
     STATE.accountMenu = false;
