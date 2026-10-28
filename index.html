@@ -33,22 +33,23 @@
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
   <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-  <meta name="description" content="An X-style home for posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
+  <meta name="description" content="A home for posts, stories, and the people you choose.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="ViktorychApp">
-  <meta property="og:description" content="Posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
+  <meta property="og:description" content="A home for posts, stories, and the people you choose.">
   <meta property="og:url" content="">
   <meta property="og:site_name" content="ViktorychApp">
-  <meta property="og:image" content="icons/icon-512.png?v=7">
-  <meta property="og:image:width" content="512">
-  <meta property="og:image:height" content="512">
+  <meta property="og:image" content="landing/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="ViktorychApp">
-  <meta name="twitter:card" content="summary">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="ViktorychApp">
-  <meta name="twitter:description" content="Posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
-  <meta name="twitter:image" content="icons/icon-512.png?v=7">
+  <meta name="twitter:description" content="A home for posts, stories, and the people you choose.">
+  <meta name="twitter:image" content="landing/og.jpg">
   <link rel="canonical" href="">
-  <title>Home / ViktorychApp</title>
+  <title>ViktorychApp</title>
+  <link rel="stylesheet" href="landing.css">
   <script>
     (function () {
       var key = "superintelapp-lang";
@@ -162,7 +163,11 @@
       try {
         signed = !!(localStorage.getItem("viktorychapp-account-v1") || localStorage.getItem("superintelapp-account-v1") || localStorage.getItem("rss-" + "feeds-account-v1"));
       } catch (err) { signed = false; }
-      if (cfg.gate === true && !signed) {
+      var installed = false;
+      try {
+        installed = navigator.standalone === true || (window.matchMedia && (window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches));
+      } catch (err2) { installed = false; }
+      if (cfg.gate === true && !signed && !installed) {
         document.documentElement.setAttribute("data-wall", "1");
         var theme = document.documentElement.getAttribute("data-theme");
         var bg = theme === "default" ? "#fff" : theme === "dim" ? "#15202b" : "#000";
@@ -457,12 +462,12 @@
       if (!root || root.childElementCount) return;
       var lang = document.documentElement.lang === "ru" || document.documentElement.lang === "es" ? document.documentElement.lang : "en";
       var pack = {
-        en: ["Happening now", "Join today.", "Create account", "Already have an account?", "Sign in"],
-        es: ["Lo que está pasando", "Únete hoy.", "Crear cuenta", "¿Ya tienes una cuenta?", "Iniciar sesión"],
-        ru: ["Сейчас в сети", "Присоединяйтесь сегодня.", "Создать аккаунт", "Уже есть аккаунт?", "Войти"]
+        en: ["ViktorychApp", "A home for posts, stories, and the people you choose.", "Sign up", "Log in"],
+        es: ["ViktorychApp", "Un hogar para publicaciones, historias y las personas que eliges.", "Regístrate", "Entrar"],
+        ru: ["ВикторычАпп", "Дом для постов, историй и людей, которых вы выбираете.", "Регистрация", "Войти"]
       };
       var t = pack[lang];
-      root.innerHTML = '<div class="x-shell boot-land"><div class="x-land"><div class="x-land-logo"><img alt="" src="favicon.svg"></div><div class="x-land-copy"><h1>' + t[0] + "</h1><h2>" + t[1] + '</h2><button class="acct-fill" type="button" data-acct="signup">' + t[2] + "</button><h3>" + t[3] + '</h3><button class="acct-line" type="button" data-acct="login">' + t[4] + "</button></div></div></div>";
+      root.innerHTML = '<div class="x-shell land-page boot-land"><header class="land-bar"><a class="land-brand" href="./"><img alt="" src="favicon.svg" width="28" height="28"><span>' + t[0] + '</span></a><div class="land-bar-actions"><button class="land-btn land-btn-line" type="button" data-acct="login">' + t[3] + '</button><button class="land-btn land-btn-fill" type="button" data-acct="signup">' + t[2] + '</button></div></header><main><section class="land-hero x-land-copy"><h1>' + t[0] + '</h1><p class="land-tag">' + t[1] + "</p></section></main></div>";
       root.addEventListener("click", function (event) {
         var btn = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
         if (!btn || window.ViktorychAccounts) return;

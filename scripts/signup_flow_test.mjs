@@ -126,7 +126,7 @@ async function openFresh(browser, viewport) {
 async function gotoFresh(page) {
   const started = Date.now();
   await openPage(page, "/");
-  await page.getByRole("button", { name: "Create account" }).first().waitFor({ timeout: 8000 });
+  await page.getByRole("button", { name: "Sign up" }).first().waitFor({ timeout: 8000 });
   const firstScreen = Date.now() - started;
   await page.waitForFunction(() => window.ViktorychAccounts && window.ViktorychAccounts.blocking, null, { timeout: 20000 });
   return firstScreen;
@@ -170,8 +170,8 @@ async function layoutPass(page, viewport) {
       const r = el.getBoundingClientRect();
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
     };
-    const create = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Create account");
-    const signIn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Sign in");
+    const create = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Sign up");
+    const signIn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Log in");
     const app = document.getElementById("app");
     const appBox = app ? app.getBoundingClientRect() : null;
     return {
@@ -186,7 +186,7 @@ async function layoutPass(page, viewport) {
   if (metrics.wall !== "1") notes.push(viewport.name + ": wall not up");
   if (!metrics.appHidden) notes.push(viewport.name + ": logged-out app content is visible");
   if (metrics.overflowX > 1) notes.push(viewport.name + ": horizontal overflow " + metrics.overflowX);
-  if (metrics.heading.trim() !== "Happening now") notes.push(viewport.name + ": landing heading missing");
+  if (metrics.heading.trim() !== "ViktorychApp") notes.push(viewport.name + ": landing heading missing");
   for (const key of ["create", "signIn"]) {
     const b = metrics[key];
     if (!b || b.width < 8 || b.height < 8) { notes.push(viewport.name + ": " + key + " missing"); continue; }
@@ -194,7 +194,7 @@ async function layoutPass(page, viewport) {
       notes.push(viewport.name + ": " + key + " outside the viewport");
     }
   }
-  await page.getByRole("button", { name: "Create account" }).first().click();
+  await page.getByRole("button", { name: "Sign up" }).first().click();
   await page.getByRole("heading", { name: "Create your account" }).waitFor();
   await page.locator("#acct-displayName").fill("");
   await page.locator(".acct-modal [data-acct='next']").click();
@@ -217,7 +217,7 @@ async function layoutPass(page, viewport) {
   if (described !== "acct-error" || invalid !== "true") notes.push(viewport.name + ": error not tied to the field");
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".acct-modal"));
-  await page.getByRole("button", { name: "Sign in" }).first().click();
+  await page.getByRole("button", { name: "Log in" }).first().click();
   await page.getByRole("heading", { name: "Sign in to ViktorychApp" }).waitFor();
   const loginFields = await page.evaluate(() => {
     const form = document.getElementById("acct-login-form");
@@ -282,7 +282,7 @@ async function firstRun(page) {
     signupStatus = response.status();
     await route.fulfill({ response });
   });
-  await page.getByRole("button", { name: "Create account" }).first().click();
+  await page.getByRole("button", { name: "Sign up" }).first().click();
   await page.locator("#acct-displayName").fill("Example Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
@@ -350,7 +350,7 @@ async function firstRun(page) {
         home: /No posts yet/.test(text),
         missing: /load posts/.test(text),
         follow: /Find accounts to follow/.test(text),
-        happening: /Happening now/.test(text)
+        happening: /ViktorychApp/.test(text)
       };
     });
     notes.push("timeline did not open " + JSON.stringify(state));
@@ -412,8 +412,8 @@ async function firstRun(page) {
   await page.waitForFunction(() => !document.querySelector(".modal"));
   await openPage(page, "/#/settings");
   await logOut(page);
-  await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
-  await page.getByRole("button", { name: "Sign in" }).first().click();
+  await page.getByRole("heading", { name: "ViktorychApp" }).waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: "Log in" }).first().click();
   await page.evaluate(() => {
     const input = document.querySelector("#acct-accountNumber");
     input.focus();
@@ -423,7 +423,7 @@ async function firstRun(page) {
   });
   await page.getByText("Could not sign in.").waitFor({ timeout: 20000 });
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Sign in" }).first().click();
+  await page.getByRole("button", { name: "Log in" }).first().click();
   const loggedIn = await page.evaluate(() => {
     const number = JSON.parse(sessionStorage.getItem("viktorychapp-signup-number") || "null");
     const input = document.querySelector("#acct-accountNumber");
@@ -444,8 +444,8 @@ async function firstRun(page) {
   }
   await openPage(page, "/#/settings");
   await logOut(page);
-  await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
-  await page.getByRole("button", { name: "Create account" }).first().click();
+  await page.getByRole("heading", { name: "ViktorychApp" }).waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: "Sign up" }).first().click();
   await page.locator("#acct-displayName").fill("Second Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
@@ -462,7 +462,7 @@ async function firstRun(page) {
   await page.getByText("That handle is taken.").waitFor({ timeout: 20000 });
   await page.keyboard.press("Escape");
   await page.context().setOffline(true);
-  await page.getByRole("button", { name: "Create account" }).first().click();
+  await page.getByRole("button", { name: "Sign up" }).first().click();
   await page.locator("#acct-displayName").fill("Offline Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
