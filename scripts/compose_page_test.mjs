@@ -175,7 +175,7 @@ async function main() {
     const child = spawn(process.execPath, [path.join(root, "scripts", name)], { stdio: "inherit", env: process.env });
     child.on("close", (code) => resolve(code));
   });
-  const riders = Promise.all([ride("community_home_test.mjs"), ride("own_post_test.mjs"), ride("post_page_test.mjs"), ride("music_dock_test.mjs")]);
+  const riders = Promise.all([ride("community_home_test.mjs"), ride("communities_hub_test.mjs"), ride("own_post_test.mjs"), ride("post_page_test.mjs"), ride("music_dock_test.mjs")]);
   try {
     for (const vp of widths) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
