@@ -179,8 +179,13 @@ main().then(async () => {
   if (mentions.status !== 0) process.exitCode = 1;
   const friendState = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "friend_state_test.mjs")], { stdio: "inherit", env: process.env });
   if (friendState.status !== 0) process.exitCode = 1;
+<<<<<<< HEAD
   const feedsPage = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "feeds_page_test.mjs")], { stdio: "inherit", env: process.env });
   if (feedsPage.status !== 0) process.exitCode = 1;
+=======
+  const myDevices = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "my_devices_test.mjs")], { stdio: "inherit", env: process.env });
+  if (myDevices.status !== 0) process.exitCode = 1;
+>>>>>>> origin/main
 }).catch((err) => {
   console.error(err && err.message ? err.message : err);
   process.exitCode = 1;

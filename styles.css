@@ -6078,3 +6078,10 @@ img, video { max-width: 100%; }
 .xc-reply-slim .xc-slim { flex: 1; min-width: 0; width: auto; }
 .tr-credit { color: var(--muted); font-size: 13px; line-height: 16px; margin-top: 4px; }
 .tr-credit .show-more { color: var(--blue); font-size: 13px; }
+
+/* My devices */
+.device-row { display: flex; align-items: center; gap: 12px; }
+.device-row .set-copy { flex: 1; min-width: 0; }
+.device-actions { display: flex; gap: 8px; flex: none; }
+.device-actions .outline { padding: 4px 12px; min-height: 32px; }
+.device-tag { font-size: 12px; font-weight: 500; color: var(--muted, #71767b); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 6px; }

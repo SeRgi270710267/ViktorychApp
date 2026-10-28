@@ -3139,6 +3139,68 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       .catch(() => {});
   }
 
+  /* My devices. Every session of this account is a device; this one says
+     hello at most once an hour so the list knows its name and last seen. */
+  function deviceGuess() {
+    const ua = String((navigator && navigator.userAgent) || "");
+    const touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+    let type = "desktop";
+    if (/SmartTV|AppleTV|GoogleTV|Tizen|Web0S|\bTV\b/i.test(ua)) type = "tv";
+    else if (/iPad|Tablet/i.test(ua) || touchMac || (/Android/i.test(ua) && !/Mobile/i.test(ua))) type = "tablet";
+    else if (/Mobi|iPhone|Android/i.test(ua)) type = "phone";
+    const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) || touchMac ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /CrOS/.test(ua) ? "ChromeOS" : /Linux/.test(ua) ? "Linux" : "";
+    const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
+    return { type, name: [os, browser].filter(Boolean).join(" · ") || tr("This device") };
+  }
+  function deviceHello() {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!api || !token) return;
+    const mark = token.slice(-10);
+    try {
+      const last = JSON.parse(localStorage.getItem("viktorychapp-device-hello") || "{}");
+      if (last.mark === mark && Date.now() - (Number(last.at) || 0) < 60 * 60 * 1000) return;
+      localStorage.setItem("viktorychapp-device-hello", JSON.stringify({ mark, at: Date.now() }));
+    } catch (err) { /* storage blocked: say hello anyway */ }
+    const guess = deviceGuess();
+    fetch(api + "/v1/devices/hello", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify(guess)
+    }).catch(() => {});
+  }
+  let myDevices = null;
+  function devicesCall(path, body) {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!api || !token) return Promise.resolve(null);
+    return fetch(api + path, {
+      method: body ? "POST" : "GET",
+      headers: Object.assign({ Authorization: "Bearer " + token }, body ? { "content-type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store"
+    }).then((res) => res.ok ? res.json() : null).catch(() => null);
+  }
+  function loadMyDevices() {
+    if (myDevices && myDevices.busy) return;
+    myDevices = Object.assign({}, myDevices || { list: [] }, { busy: true });
+    devicesCall("/v1/devices").then((body) => {
+      myDevices = { list: (body && body.devices) || [], busy: false, loaded: true, failed: !body };
+      if (parseRoute().section === "devices") render();
+    });
+  }
+  function myDevicesView() {
+    if (!accountToken()) return settingsHead(tr("My devices"), "#/settings") + emptyBlock(tr("Sign in to see your devices"), "");
+    if (!myDevices || (!myDevices.loaded && !myDevices.busy)) loadMyDevices();
+    const list = (myDevices && myDevices.list) || [];
+    const glyph = { phone: "📱", tablet: "📱", desktop: "💻", tv: "📺", other: "🖥️" };
+    const rows = list.map((d) => `<div class="set-row device-row" data-device="${esc(d.id)}"><span class="set-copy"><b>${glyph[d.type] || glyph.other} ${esc(d.name || tr("Unnamed device"))}${d.current ? ` <span class="device-tag">${esc(tr("This device"))}</span>` : ""}</b><span class="set-sub">${esc(d.current ? tr("Active now") : tr("Last seen {when}", { when: relTime(new Date(d.lastSeen).toISOString()) }))}</span></span><span class="device-actions"><button class="outline" type="button" data-act="device-rename" data-id="${esc(d.id)}" data-name="${esc(d.name || "")}">${esc(tr("Rename"))}</button><button class="outline danger" type="button" data-act="device-remove" data-id="${esc(d.id)}" data-current="${d.current ? "1" : ""}">${esc(tr("Remove"))}</button></span></div>`).join("");
+    const body = myDevices && myDevices.loaded
+      ? (rows || `<div class="set-block"><p class="phandle">${esc(myDevices.failed ? tr("Could not load your devices.") : tr("No devices yet."))}</p></div>`)
+      : `<div class="set-block"><p class="phandle">${esc(tr("Loading…"))}</p></div>`;
+    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div>`;
+  }
+
   function accountsApi() {
     if (window.ViktorychAccounts && window.ViktorychAccounts.currentApi) {
       const cur = window.ViktorychAccounts.currentApi();
@@ -13105,6 +13167,7 @@ const here = parseRoute();
         : `<div class="set-block"><p class="phandle">${esc(tr("Direct posting stays off"))}</p></div>`;
       return settingsHead(tr("Post to X"), "#/settings") + body;
     }
+    if (section === "devices") return myDevicesView();
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
@@ -13120,6 +13183,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
+      ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
@@ -17455,6 +17519,29 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const cap = Number(el.dataset.cap);
       if (cap === 32768 || cap === 65536 || cap === 131072 || cap === 262144) writeDevicePerf({ peerUploadCap: cap });
       render();
+      return;
+    }
+    if (act === "device-rename") {
+      const id = el.dataset.id || "";
+      const next = window.prompt(tr("Device name"), el.dataset.name || "");
+      if (next == null || !String(next).trim()) return;
+      devicesCall("/v1/devices/rename", { id, name: String(next).trim().slice(0, 60) }).then((body) => {
+        if (!body || !Array.isArray(body.devices)) { toast(tr("Could not rename that device.")); return; }
+        myDevices = { list: body.devices, busy: false, loaded: true };
+        render();
+      });
+      return;
+    }
+    if (act === "device-remove") {
+      const id = el.dataset.id || "";
+      const current = el.dataset.current === "1";
+      if (!confirm(current ? tr("Remove this device? You will be signed out here.") : tr("Remove this device? It will be signed out."))) return;
+      devicesCall("/v1/devices/remove", { id }).then((body) => {
+        if (!body) { toast(tr("Could not remove that device.")); return; }
+        if (body.signedOut && window.ViktorychAccounts && window.ViktorychAccounts.signOut) { window.ViktorychAccounts.signOut(); return; }
+        myDevices = { list: body.devices || [], busy: false, loaded: true };
+        render();
+      });
       return;
     }
     if (act === "owner-feature") {
@@ -23004,6 +23091,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (info.name === "communities") bindCommunitiesModule();
     if (!info.silent) render();
   });
+  setTimeout(deviceHello, 6000);
   syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
