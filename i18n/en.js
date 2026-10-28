@@ -11,6 +11,8 @@ SI18n.addPack("en", {
   "Recorded {date}": "Recorded {date}",
   "Switch community": "Switch community",
   "Popular communities": "Popular communities",
+  "Delete post?": "Delete post?",
+  "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.": "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.",
   "{count} votes": "{count} votes",
   "Edit post": "Edit post",
   "Delete post": "Delete post",
