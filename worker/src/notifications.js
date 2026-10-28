@@ -17,7 +17,7 @@ import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 import { actorHidden, canMention } from "./social.js";
 
 const encoder = new TextEncoder();
-const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1 };
+const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1 };
 const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms"];
 const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
 const BACKOFF_MS = [2000, 10000, 60000, 300000, 1800000];
@@ -731,6 +731,8 @@ function titleKeyFor(item) {
   if (kind === "follow") return "{name} followed you";
   if (kind === "follow_request") return "{name} requested to follow you";
   if (kind === "follow_accept") return "{name} accepted your follow request";
+  if (kind === "friend_request") return "{name} sent you a friend request";
+  if (kind === "friend_accept") return "{name} accepted your friend request";
   if (kind === "live") return "{name} is live";
   if (kind === "birthday") return "It's {name}'s birthday today";
   if (kind === "birthday_self") return "Happy birthday";
@@ -750,7 +752,7 @@ function prefKind(kind) {
   if (kind === "quote") return "quotes";
   if (kind === "like") return "likes";
   if (kind === "repost") return "reposts";
-  if (kind === "follow" || kind === "follow_request" || kind === "follow_accept") return "follows";
+  if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "follows";
   if (kind === "dm") return "dms";
   return "";
 }
@@ -1394,6 +1396,37 @@ export async function notifyFollowAccept(env, actor, requesterPublicId) {
     platform: "app",
     feedId: "app:" + actor.public_id
   });
+}
+
+/* Friend requests and accepts land in the bell, the badge and push like
+   follow requests do. Every friend change also sends a quiet "friends"
+   signal on the notifications channel so open tabs on both sides refresh
+   their requests, friends list and presence without a reload. */
+export async function notifyFriend(env, actor, targetPublicId, kind, receiverHandle) {
+  if (!/^\d{12}$/.test(String(targetPublicId || "")) || targetPublicId === actor.public_id) return;
+  if (kind !== "friend_request" && kind !== "friend_accept") return;
+  const now = Date.now();
+  const mine = String(receiverHandle || "");
+  await emitNotification(env, {
+    publicId: targetPublicId,
+    kind: kind,
+    at: now,
+    actorId: actor.public_id,
+    idempotencyKey: (kind === "friend_request" ? "friendreq:" : "friendok:") + actor.public_id + ":" + now,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: "",
+    hash: kind === "friend_request" && mine ? "#/@" + encodeURIComponent(mine) + "/requests?kind=friends" : "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: "app:" + actor.public_id
+  });
+}
+
+export async function signalFriends(env, publicIds) {
+  const list = Array.isArray(publicIds) ? publicIds : [];
+  for (let i = 0; i < list.length; i++) {
+    if (/^\d{12}$/.test(String(list[i] || ""))) await publishNotes(env, list[i], { type: "friends" });
+  }
 }
 
 export async function notifyRepost(env, actor, cleaned) {
