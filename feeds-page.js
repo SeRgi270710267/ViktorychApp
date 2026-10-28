@@ -14,7 +14,13 @@
     preview: null,
     busy: false,
     drag: "",
-    confirmId: ""
+    confirmId: "",
+    menuId: "",
+    adding: [],
+    selecting: false,
+    loadError: false,
+    filtersOpen: false,
+    groupsOpen: false
   };
   let hooks = null;
   const STORE = "owner-feeds-v1";
@@ -114,15 +120,18 @@
     api("/v1/owner/feeds", "GET").then((result) => {
       if (!result.ok || !result.body || !Array.isArray(result.body.accounts)) {
         page.offline = !!cached;
+        page.loadError = true;
         paint();
         return;
       }
       const live = lib ? lib.mergeOffline(cached, result.body).doc : result.body;
       page.offline = false;
+      page.loadError = false;
       remember(live);
       paint();
     }).catch(() => {
-      page.offline = true;
+      page.offline = !!cached;
+      page.loadError = true;
       paint();
     });
   }
@@ -231,11 +240,17 @@
     return text ? tr(text) : fallback;
   }
 
+  function pendingKey(spec, raw) {
+    return "pending:" + (spec.platform || "rss") + ":" + String(spec.handle || spec.url || raw || "").toLowerCase();
+  }
+
+  /* One step: the row shows at once, the Worker fetches that one source in the
+     same request, and its posts land in the local catalog that Home reads. */
   function onAdd(form) {
     if (!ownerOn()) return false;
     const lib = sources();
     const input = form.querySelector("input");
-    const raw = input ? input.value : "";
+    const raw = input ? String(input.value || "").trim() : "";
     if (!lib) {
       hooks.toast(tr("Couldn’t reach the source."));
       return true;
@@ -245,48 +260,51 @@
       hooks.toast(tr(spec.message));
       return true;
     }
-    page.busy = true;
+    const key = pendingKey(spec, raw);
+    if (page.adding.some((item) => item.key === key && item.status === "adding")) return true;
+    page.adding = page.adding.filter((item) => item.key !== key);
+    const item = { key: key, input: raw, platform: spec.platform || "rss", handle: spec.handle || "", status: "adding", message: "" };
+    page.adding.unshift(item);
+    form.reset();
+    const hint = document.getElementById("feeds-add-hint");
+    if (hint) hint.textContent = "";
     paint();
-    api("/v1/owner/feeds/preview", "POST", { input: raw }).then((result) => {
-      page.busy = false;
-      if (!result.ok || !result.body || !result.body.preview) {
-        hooks.toast(messageOf(result, tr("Couldn’t reach the source.")));
-        paint();
-        return;
-      }
-      page.preview = { input: raw, card: result.body.preview };
-      form.reset();
-      paint();
-    }).catch(() => {
-      page.busy = false;
-      hooks.toast(tr("Couldn’t reach the source."));
-      paint();
-    });
+    sendAdd(item);
     return true;
   }
 
-  function confirmAdd() {
-    if (!page.preview || page.busy || !ownerOn()) return;
-    const input = page.preview.input;
-    page.busy = true;
-    paint();
-    api("/v1/owner/feeds", "POST", { input: input, confirm: true }).then((result) => {
-      page.busy = false;
+  function sendAdd(item) {
+    item.status = "adding";
+    item.message = "";
+    api("/v1/owner/feeds", "POST", { input: item.input, confirm: true }).then((result) => {
       if (!result.ok || !result.body || !result.body.account) {
-        hooks.toast(messageOf(result, tr("Couldn’t save this account.")));
+        item.status = "error";
+        item.message = messageOf(result, tr("Couldn’t save this account."));
         paint();
         return;
       }
+      page.adding = page.adding.filter((row) => row !== item);
       replaceAccount(result.body.account);
-      page.preview = null;
       if (hooks.applyFollow) hooks.applyFollow([result.body.account.id], true);
-      hooks.toast(tr("Account saved."));
+      hooks.toast((result.body.account.posts || []).length ? tr("Added. Its latest posts are on Home.") : tr("Account saved."));
       paint();
     }).catch(() => {
-      page.busy = false;
-      hooks.toast(tr("Couldn’t save this account."));
+      item.status = "error";
+      item.message = tr("Couldn’t reach the source.");
       paint();
     });
+  }
+
+  function confirmAdd() {
+    if (!page.preview || !ownerOn()) return;
+    const raw = page.preview.input;
+    page.preview = null;
+    const lib = sources();
+    const spec = lib ? lib.detectInput(raw) : { ok: true, platform: "rss", handle: "" };
+    const item = { key: pendingKey(spec, raw), input: raw, platform: spec.platform || "rss", handle: spec.handle || "", status: "adding", message: "" };
+    page.adding.unshift(item);
+    paint();
+    sendAdd(item);
   }
 
   function patchIds(ids, body) {
@@ -481,7 +499,7 @@
     else if (act === "retry") retry(id);
     else if (act === "up") moveWithin(id, -1);
     else if (act === "down") moveWithin(id, 1);
-    else if (act === "ask-remove") { page.confirmId = id; paint(); }
+    else if (act === "ask-remove") { page.confirmId = id; page.menuId = ""; paint(); }
     else if (act === "cancel-remove") { page.confirmId = ""; paint(); }
     else if (act === "confirm-remove") removeAccount(id);
     else if (act === "tab") toggleTab(id, el.dataset.tab || "");
@@ -506,7 +524,17 @@
     else if (act === "bulk-mute") patchIds(selectedIds(), { muted: true });
     else if (act === "bulk-pin") patchIds(selectedIds(), { pinned: true });
     else if (act === "bulk-move") patchIds(selectedIds(), { groupId: el.dataset.group || "" });
-    else if (act === "clear-selected") { page.selected = {}; paint(); }
+    else if (act === "clear-selected") { page.selected = {}; page.selecting = false; paint(); }
+    else if (act === "selecting") { page.selecting = true; paint(); }
+    else if (act === "menu") { page.menuId = page.menuId === id ? "" : id; page.confirmId = ""; paint(); }
+    else if (act === "platform") { page.platform = el.dataset.platform || ""; paint(); }
+    else if (act === "clear-filters") { page.q = ""; page.platform = ""; page.group = ""; page.status = ""; paint(); }
+    else if (act === "reload") { page.loadError = false; load(); paint(); }
+    else if (act === "pending-retry") {
+      const item = page.adding.find((row) => row.key === el.dataset.key);
+      if (item && ownerOn()) { sendAdd(item); paint(); }
+    }
+    else if (act === "pending-dismiss") { page.adding = page.adding.filter((row) => row.key !== el.dataset.key); paint(); }
     else if (act === "preview-cancel") { page.preview = null; paint(); }
     else if (act === "preview-confirm") confirmAdd();
     else return;
@@ -530,6 +558,16 @@
 
   function onInput(event) {
     const el = event.target;
+    if (el && el.id === "add-account" && el.closest && el.closest(".feeds-org")) {
+      const hint = document.getElementById("feeds-add-hint");
+      const lib = sources();
+      const raw = String(el.value || "").trim();
+      if (!hint) return;
+      if (!raw || !lib) { hint.textContent = ""; return; }
+      const spec = lib.detectInput(raw);
+      hint.textContent = spec.ok ? tr("Detected: {platform}", { platform: platformLabel(spec.platform) + (spec.handle ? " · @" + spec.handle : "") }) : "";
+      return;
+    }
     if (!el || el.id !== "feeds-q") return;
     page.q = el.value;
     paint();
@@ -576,66 +614,107 @@
     return `<option value="${esc(value)}"${value === current ? " selected" : ""}>${esc(label)}</option>`;
   }
 
+  function platformMark(platform) {
+    if (hooks.platformIcon) {
+      const svg = hooks.platformIcon(platform);
+      if (svg) return `<span class="feeds-plat" title="${esc(platformLabel(platform))}">${svg}</span>`;
+    }
+    return `<span class="feeds-plat is-text" title="${esc(platformLabel(platform))}">${esc(platform === "x" ? "𝕏" : platformLabel(platform).slice(0, 1))}</span>`;
+  }
+
+  function faceOf(row) {
+    const face = hooks.avatar ? hooks.avatar(row.avatar, row.label || row.name || row.handle) : "";
+    return `<span class="feeds-face">${face}${platformMark(row.platform)}</span>`;
+  }
+
   function previewCard() {
     if (!page.preview || !page.preview.card) return "";
     const card = page.preview.card;
-    const posts = (card.posts || []).slice(0, 3).map((post) => `<li>${esc(post.text || tr("Photo"))}</li>`).join("");
-    const face = hooks.avatar ? hooks.avatar(card.avatar, card.name || card.handle) : "";
     return `<section class="feeds-preview" role="dialog" aria-label="${esc(tr("Preview"))}">
-      <div class="feeds-preview-who">${face}<span><b>${esc(card.name || card.handle || "")}</b><span>@${esc(card.handle || "")} · ${esc(platformLabel(card.platform))}</span></span></div>
-      ${posts ? `<ul class="feeds-preview-posts">${posts}</ul>` : `<p class="feeds-quiet">${esc(tr("No posts yet"))}</p>`}
-      <div class="feeds-preview-actions"><button type="button" class="follow" data-feed-act="preview-confirm"${page.busy ? " disabled" : ""}>${esc(tr("Add this account"))}</button><button type="button" class="outline" data-feed-act="preview-cancel">${esc(tr("Cancel"))}</button></div>
+      <div class="feeds-preview-who">${faceOf(card)}<span><b>${esc(card.name || card.handle || "")}</b><span>@${esc(card.handle || "")} · ${esc(platformLabel(card.platform))}</span></span></div>
+      <div class="feeds-preview-actions"><button type="button" class="follow" data-feed-act="preview-confirm">${esc(tr("Add this account"))}</button><button type="button" class="outline" data-feed-act="preview-cancel">${esc(tr("Cancel"))}</button></div>
     </section>`;
+  }
+
+  function pendingHtml(item) {
+    const busy = item.status === "adding";
+    const status = busy
+      ? `<span class="feeds-status is-adding" role="status"><i class="feeds-spin" aria-hidden="true"></i>${esc(tr("Fetching posts…"))}</span>`
+      : `<span class="feeds-status is-failing" role="alert"><i class="feeds-dot" aria-hidden="true"></i>${esc(item.message || tr("Couldn’t save this account."))}</span>`;
+    const actions = busy ? "" : `<span class="feeds-row-end"><button type="button" class="feeds-pill" data-feed-act="pending-retry" data-key="${esc(item.key)}">${esc(tr("Retry"))}</button><button type="button" class="feeds-icon-btn" data-feed-act="pending-dismiss" data-key="${esc(item.key)}" aria-label="${esc(tr("Dismiss"))}">×</button></span>`;
+    return `<article class="feeds-row is-pending${busy ? " is-busy" : " is-error"}" data-key="${esc(item.key)}" aria-busy="${busy ? "true" : "false"}">
+      <span class="feeds-who">${faceOf({ platform: item.platform, handle: item.handle, name: item.handle })}<span class="feeds-copy"><span class="feeds-name">${esc(item.handle ? "@" + item.handle : item.input)}</span><span class="feeds-sub">${esc(platformLabel(item.platform))}</span>${status}</span></span>
+      ${actions}
+    </article>`;
+  }
+
+  function menuHtml(row) {
+    const id = row.id;
+    const owner = ownerOn() && !row.site;
+    const groups = page.doc.groups || [];
+    const groupOptions = [`<option value="">${esc(tr("Ungrouped"))}</option>`].concat(groups.map((group) => option(group.id, group.name, row.groupId || ""))).join("");
+    const tabs = hooks.feedTabs ? hooks.feedTabs() : [];
+    const tabBits = (tabs || []).filter((tab) => tab && tab.id && tab.kind !== "verified" && tab.kind !== "mentions").map((tab) => {
+      const on = tabIdsFor(id).indexOf(tab.id) >= 0;
+      return `<button type="button" class="feeds-tab${on ? " on" : ""}" data-feed-act="tab" data-id="${esc(id)}" data-tab="${esc(tab.id)}" aria-pressed="${on ? "true" : "false"}">${esc(tab.name || "")}</button>`;
+    }).join("");
+    const item = (act, label, extra) => `<button type="button" role="menuitem" data-feed-act="${act}" data-id="${esc(id)}"${extra || ""}>${esc(label)}</button>`;
+    const items = [];
+    if (owner) {
+      items.push(item("retry", tr("Refresh")));
+      items.push(item("pin", row.pinned ? tr("Unpin") : tr("Pin"), ` data-on="${row.pinned ? "1" : "0"}"`));
+      items.push(item("mute", row.muted ? tr("Unmute") : tr("Mute"), ` data-on="${row.muted ? "1" : "0"}"`));
+      items.push(item("up", tr("Move up")));
+      items.push(item("down", tr("Move down")));
+    }
+    items.push(`<button type="button" role="menuitem" class="is-danger" data-feed-act="ask-remove" data-id="${esc(id)}">${esc(tr("Remove"))}</button>`);
+    const edit = owner ? `<label class="feeds-label">${esc(tr("Account label"))}<span class="feeds-inline"><input id="feeds-label-${esc(id)}" value="${esc(row.label || "")}" maxlength="80"><button type="button" class="feeds-pill" data-feed-act="label" data-id="${esc(id)}">${esc(tr("Rename"))}</button></span></label>
+      <label class="feeds-move">${esc(tr("Move to group"))}<select data-feed-act="move-select" data-id="${esc(id)}">${groupOptions}</select></label>` : "";
+    return `<div class="feeds-menu" role="menu" aria-label="${esc(tr("More actions"))}"><div class="feeds-menu-items">${items.join("")}</div>${edit}${tabBits && owner ? `<div class="feeds-tabs"><span>${esc(tr("Show in tabs"))}</span>${tabBits}</div>` : ""}</div>`;
   }
 
   function rowHtml(row) {
     const id = row.id;
-    const healthClass = healthCode(row);
+    const status = healthCode(row);
     const text = (row.health && row.health.text) || "";
     const last = row.health && (row.health.updatedAt || row.health.lastOk);
     const when = last && hooks.relTime ? hooks.relTime(last) : (last ? String(last).slice(0, 16) : "");
-    const face = hooks.avatar ? hooks.avatar(row.avatar, row.label || row.name || row.handle) : "";
-    const tabs = hooks.feedTabs ? hooks.feedTabs() : [];
-    const tabBits = (tabs || []).filter((tab) => tab && tab.id && tab.kind !== "verified" && tab.kind !== "mentions").map((tab) => {
-      const on = tabIdsFor(id).indexOf(tab.id) >= 0;
-      return `<button type="button" class="feeds-tab${on ? " on" : ""}" data-feed-act="tab" data-id="${esc(id)}" data-tab="${esc(tab.id)}">${esc(tab.name || "")}</button>`;
-    }).join("");
-    const groups = page.doc.groups || [];
-    const groupOptions = [`<option value="">${esc(tr("Ungrouped"))}</option>`].concat(groups.map((group) => option(group.id, group.name, row.groupId || ""))).join("");
+    const owner = ownerOn() && !row.site;
+    const open = page.menuId === id;
+    const statusText = status === "failing" && text ? tr(text) : healthLabel(status);
+    const statusLine = row.site ? "" : `<span class="feeds-status is-${esc(status)}"><i class="feeds-dot" aria-hidden="true"></i><span>${esc(statusText)}</span>${when ? `<span class="feeds-when">· ${esc(when)}</span>` : ""}</span>`;
+    const check = page.selecting && owner ? `<label class="feeds-check"><input type="checkbox" data-feed-act="select" data-id="${esc(id)}"${page.selected[id] ? " checked" : ""} aria-label="${esc(tr("Select"))}"></label>` : "";
+    const toggle = owner ? `<button type="button" class="feeds-switch${row.paused ? "" : " on"}" role="switch" aria-checked="${row.paused ? "false" : "true"}" aria-label="${esc(row.paused ? tr("Resume") : tr("Pause"))}" data-feed-act="pause" data-id="${esc(id)}" data-on="${row.paused ? "1" : "0"}"><i></i></button>` : "";
+    const more = `<button type="button" class="feeds-icon-btn feeds-more${open ? " on" : ""}" data-feed-act="menu" data-id="${esc(id)}" aria-haspopup="menu" aria-expanded="${open ? "true" : "false"}" aria-label="${esc(tr("More actions"))}">${hooks.icon ? hooks.icon("more") : "⋯"}</button>`;
     const confirm = page.confirmId === id
       ? `<div class="feeds-confirm"><span>${esc(tr("Remove this account?"))}</span><button type="button" class="follow remove-pill" data-feed-act="confirm-remove" data-id="${esc(id)}">${esc(tr("Remove"))}</button><button type="button" class="outline" data-feed-act="cancel-remove">${esc(tr("Cancel"))}</button></div>`
       : "";
-    const checked = page.selected[id] ? " checked" : "";
-    const controls = ownerOn() ? `<label class="feeds-check"><input type="checkbox" data-feed-act="select" data-id="${esc(id)}"${checked} aria-label="${esc(tr("Select"))}"></label>` : "";
-    const actions = ownerOn() ? `<span class="feeds-row-actions">
-        <button type="button" class="outline" data-feed-act="pin" data-id="${esc(id)}" data-on="${row.pinned ? "1" : "0"}">${esc(row.pinned ? tr("Unpin") : tr("Pin"))}</button>
-        <button type="button" class="outline" data-feed-act="mute" data-id="${esc(id)}" data-on="${row.muted ? "1" : "0"}">${esc(row.muted ? tr("Unmute") : tr("Mute"))}</button>
-        <button type="button" class="outline" data-feed-act="pause" data-id="${esc(id)}" data-on="${row.paused ? "1" : "0"}">${esc(row.paused ? tr("Resume") : tr("Pause"))}</button>
-        <button type="button" class="outline" data-feed-act="retry" data-id="${esc(id)}">${esc(tr("Retry now"))}</button>
-        <button type="button" class="outline" data-feed-act="up" data-id="${esc(id)}" aria-label="${esc(tr("Move up"))}">↑</button>
-        <button type="button" class="outline" data-feed-act="down" data-id="${esc(id)}" aria-label="${esc(tr("Move down"))}">↓</button>
-        <button type="button" class="follow remove-pill" data-feed-act="ask-remove" data-id="${esc(id)}">${esc(tr("Remove"))}</button>
-      </span>` : `<button type="button" class="follow remove-pill" data-feed-act="ask-remove" data-id="${esc(id)}">${esc(tr("Remove"))}</button>`;
-    return `<article class="feeds-row${row.pinned ? " is-pinned" : ""}" data-feed-drag="${esc(id)}" data-feed-drop="row" data-id="${esc(id)}" data-group="${esc(row.groupId || "")}" draggable="${ownerOn() ? "true" : "false"}">
-      ${controls}
-      <a class="who-main" href="${esc(hooks.accountHash ? hooks.accountHash(row.platform, row.channelId || row.handle) : "#/feeds")}">${face}<span class="who-copy"><span class="name">${esc(row.label || row.name || row.handle)}</span><span class="handle">@${esc(row.handle || "")} · ${esc(platformLabel(row.platform))}</span></span></a>
-      <span class="feeds-health is-${esc(healthClass)}"><b>${esc(healthLabel(healthClass))}</b>${when ? `<span>${esc(tr("Last updated"))} ${esc(when)}</span>` : ""}${text ? `<span>${esc(tr(text))}</span>` : ""}</span>
-      ${actions}
-      ${ownerOn() ? `<label class="feeds-label">${esc(tr("Account label"))}<input id="feeds-label-${esc(id)}" value="${esc(row.label || "")}" maxlength="80"><button type="button" data-feed-act="label" data-id="${esc(id)}">${esc(tr("Rename"))}</button></label>` : ""}
-      ${ownerOn() ? `<label class="feeds-move">${esc(tr("Move to group"))}<select data-feed-act="move-select" data-id="${esc(id)}">${groupOptions}</select></label>` : ""}
-      ${tabBits ? `<div class="feeds-tabs"><span>${esc(tr("Show in tabs"))}</span>${tabBits}</div>` : ""}
+    const href = hooks.accountHash ? hooks.accountHash(row.platform, row.channelId || row.handle) : "#/feeds";
+    return `<article class="feeds-row${row.pinned ? " is-pinned" : ""}${row.paused ? " is-off" : ""}" data-feed-drag="${esc(id)}" data-feed-drop="row" data-id="${esc(id)}" data-group="${esc(row.groupId || "")}" draggable="${owner ? "true" : "false"}">
+      ${check}
+      <a class="feeds-who" href="${esc(href)}">${faceOf(row)}<span class="feeds-copy"><span class="feeds-name">${esc(row.label || row.name || row.handle)}${row.pinned ? `<span class="feeds-pin" aria-label="${esc(tr("Pinned"))}">${hooks.icon ? hooks.icon("pin") : ""}</span>` : ""}</span><span class="feeds-sub">@${esc(row.handle || "")} · ${esc(platformLabel(row.platform))}</span>${statusLine}</span></a>
+      <span class="feeds-row-end">${toggle}${more}</span>
+      ${open ? menuHtml(row) : ""}
       ${confirm}
     </article>`;
   }
 
   function sectionHtml(block, draggable) {
     const title = block.platform ? platformLabel(block.platform) : (block.title || tr("Ungrouped"));
-    const rename = draggable && block.id && ownerOn()
-      ? `<label class="feeds-rename"><input id="feeds-rename-${esc(block.id)}" value="${esc(block.title || "")}" maxlength="40" aria-label="${esc(tr("Group name"))}"><button type="button" data-feed-act="group-rename" data-id="${esc(block.id)}">${esc(tr("Rename"))}</button><button type="button" data-feed-act="group-delete" data-id="${esc(block.id)}">${esc(tr("Delete group"))}</button></label>`
-      : "";
     const rows = (block.rows || []).map(rowHtml).join("");
+    if (!rows) return "";
     const drag = draggable && block.id ? ` data-feed-drag="group:${esc(block.id)}" draggable="true"` : "";
-    return `<section class="feeds-section" data-feed-drop="group" data-id="${esc(block.id || "")}" data-group="${esc(block.id || "")}"${drag}><h2>${esc(title)}</h2>${rename}${rows || `<p class="feeds-quiet">${esc(tr("No accounts"))}</p>`}</section>`;
+    return `<section class="feeds-section" data-feed-drop="group" data-id="${esc(block.id || "")}" data-group="${esc(block.id || "")}"${drag}><h2>${esc(title)} <span class="feeds-count">${esc(String((block.rows || []).length))}</span></h2>${rows}</section>`;
+  }
+
+  function groupsPanel() {
+    if (!ownerOn()) return "";
+    const groups = page.doc.groups || [];
+    const list = groups.map((group) => `<label class="feeds-rename"><span class="feeds-inline"><input id="feeds-rename-${esc(group.id)}" value="${esc(group.name || "")}" maxlength="40" aria-label="${esc(tr("Group name"))}"><button type="button" class="feeds-pill" data-feed-act="group-rename" data-id="${esc(group.id)}">${esc(tr("Rename"))}</button><button type="button" class="feeds-pill" data-feed-act="group-delete" data-id="${esc(group.id)}">${esc(tr("Delete group"))}</button></span></label>`).join("");
+    return `<details class="feeds-more-panel"${page.groupsOpen ? " open" : ""} data-feed-panel="groups"><summary>${esc(tr("Groups"))}</summary>
+      <div class="feeds-group-create"><span class="feeds-inline"><input id="feeds-group-name" maxlength="40" placeholder="${esc(tr("Group name"))}" aria-label="${esc(tr("Group name"))}"><button type="button" class="follow" data-feed-act="group-create">${esc(tr("Create group"))}</button></span></div>
+      ${list}
+    </details>`;
   }
 
   function view() {
@@ -662,9 +741,11 @@
     } else {
       blocks = (page.group === "none" ? loose : named).map((block) => sectionHtml(block, !!block.id));
     }
+    blocks = blocks.filter(Boolean);
     const platforms = {};
     rows.forEach((row) => { platforms[row.platform || "rss"] = true; });
-    const platformOptions = [option("", tr("All platforms"), page.platform)].concat(Object.keys(platforms).sort().map((name) => option(name, platformLabel(name), page.platform))).join("");
+    const chips = [`<button type="button" class="feeds-chip${page.platform ? "" : " on"}" data-feed-act="platform" data-platform="" aria-pressed="${page.platform ? "false" : "true"}">${esc(tr("All"))}</button>`]
+      .concat(Object.keys(platforms).sort().map((name) => `<button type="button" class="feeds-chip${page.platform === name ? " on" : ""}" data-feed-act="platform" data-platform="${esc(name)}" aria-pressed="${page.platform === name ? "true" : "false"}">${esc(platformLabel(name))}</button>`)).join("");
     const groupOptions = [option("", tr("All groups"), page.group), option("none", tr("Ungrouped"), page.group)].concat(groups.map((group) => option(group.id, group.name, page.group))).join("");
     const statusOptions = ["", "ok", "slow", "failing", "paused"].map((value) => option(value, value ? healthLabel(value) : tr("All statuses"), page.status)).join("");
     const sortOptions = [
@@ -675,33 +756,56 @@
     ].join("");
     const picked = selectedIds();
     const bulkMove = groups.map((group) => `<button type="button" data-feed-act="bulk-move" data-group="${esc(group.id)}">${esc(group.name)}</button>`).join("");
-    const bulk = ownerOn() && picked.length
-      ? `<div class="feeds-bulk" role="region" aria-label="${esc(tr("Bulk actions"))}"><span>${esc(tr("{count} selected", { count: String(picked.length) }))}</span><button type="button" data-feed-act="bulk-pin">${esc(tr("Pin"))}</button><button type="button" data-feed-act="bulk-mute">${esc(tr("Mute"))}</button><button type="button" data-feed-act="bulk-pause">${esc(tr("Pause"))}</button>${bulkMove}<button type="button" data-feed-act="clear-selected">${esc(tr("Clear selection"))}</button></div>`
+    const bulk = ownerOn() && page.selecting
+      ? `<div class="feeds-bulk" role="region" aria-label="${esc(tr("Bulk actions"))}"><span>${esc(tr("{count} selected", { count: String(picked.length) }))}</span>${picked.length ? `<button type="button" data-feed-act="bulk-pin">${esc(tr("Pin"))}</button><button type="button" data-feed-act="bulk-mute">${esc(tr("Mute"))}</button><button type="button" data-feed-act="bulk-pause">${esc(tr("Pause"))}</button>${bulkMove}` : ""}<button type="button" data-feed-act="select-all" data-on="${picked.length === rows.length && rows.length ? "1" : "0"}">${esc(tr("Select all"))}</button><button type="button" data-feed-act="clear-selected">${esc(tr("Done"))}</button></div>`
       : "";
-    const offline = page.offline ? `<p class="feeds-offline">${esc(tr("Offline. Showing the last saved feeds."))}</p>` : "";
-    const add = `<form class="add-account"><label class="search"><span>${hooks.icon ? hooks.icon("search") : ""}</span><input id="add-account" placeholder="${esc(tr("Add account URL or @handle"))}" aria-label="${esc(tr("Add account"))}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>`;
+    const offline = page.offline ? `<p class="feeds-banner" role="status">${esc(tr("Offline. Showing the last saved feeds."))}</p>` : "";
+    const failed = page.loadError && !page.offline ? `<p class="feeds-banner is-error" role="alert"><span>${esc(tr("Couldn’t load your feeds."))}</span><button type="button" class="feeds-pill" data-feed-act="reload">${esc(tr("Retry"))}</button></p>` : "";
+    const add = `<form class="add-account feeds-add"><label class="search"><span>${hooks.icon ? hooks.icon("plus") : ""}</span><input id="add-account" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(tr("Paste a link or @handle"))}" aria-label="${esc(tr("Add account"))}" aria-describedby="feeds-add-hint"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form><p class="feeds-hint" id="feeds-add-hint" aria-live="polite"></p>`;
     const tools = `<div class="feeds-tools">
-      <label class="search feeds-search"><span class="sr">${hooks.icon ? hooks.icon("search") : ""}</span><input id="feeds-q" type="search" value="${esc(page.q)}" placeholder="${esc(tr("Search feeds"))}" aria-label="${esc(tr("Search feeds"))}"></label>
-      <label>${esc(tr("Filter by platform"))}<select id="feeds-platform">${platformOptions}</select></label>
-      <label>${esc(tr("Filter by group"))}<select id="feeds-group">${groupOptions}</select></label>
-      <label>${esc(tr("Filter by status"))}<select id="feeds-status">${statusOptions}</select></label>
-      <label>${esc(tr("Sort feeds"))}<select id="feeds-sort">${sortOptions}</select></label>
+      <label class="search feeds-search"><span>${hooks.icon ? hooks.icon("search") : ""}</span><input id="feeds-q" type="search" value="${esc(page.q)}" placeholder="${esc(tr("Search feeds"))}" aria-label="${esc(tr("Search feeds"))}"></label>
+      <div class="feeds-chips" role="group" aria-label="${esc(tr("Filter by platform"))}">${chips}</div>
+      <details class="feeds-more-panel"${page.filtersOpen ? " open" : ""} data-feed-panel="filters"><summary>${esc(tr("More filters"))}</summary><div class="feeds-selects">
+        <label>${esc(tr("Filter by group"))}<select id="feeds-group">${groupOptions}</select></label>
+        <label>${esc(tr("Filter by status"))}<select id="feeds-status">${statusOptions}</select></label>
+        <label>${esc(tr("Sort feeds"))}<select id="feeds-sort">${sortOptions}</select></label>
+        ${ownerOn() ? `<button type="button" class="feeds-pill" data-feed-act="selecting">${esc(tr("Select"))}</button>` : ""}
+      </div></details>
     </div>`;
-    const maker = ownerOn()
-      ? `<div class="feeds-group-create"><label>${esc(tr("Group name"))}<input id="feeds-group-name" maxlength="40"></label><button type="button" class="follow" data-feed-act="group-create">${esc(tr("Create group"))}</button><button type="button" class="outline" data-feed-act="select-all" data-on="${picked.length === rows.length && rows.length ? "1" : "0"}">${esc(tr("Select"))}</button></div>`
-      : "";
+    const pending = page.adding.map(pendingHtml).join("");
+    const filtered = !!(page.q || page.platform || page.group || page.status);
+    let body = blocks.join("");
+    if (!body && !pending) {
+      body = rows.length && filtered
+        ? `<div class="feeds-empty"><b>${esc(tr("No matches"))}</b><span>${esc(tr("Try another search or filter."))}</span><button type="button" class="feeds-pill" data-feed-act="clear-filters">${esc(tr("Clear filters"))}</button></div>`
+        : `<div class="feeds-empty"><b>${esc(tr("No sources yet"))}</b><span>${esc(tr("Paste a link or @handle above to add one."))}</span></div>`;
+    }
     const head = hooks.pageHead ? hooks.pageHead(tr("Feeds")) : "";
-    const body = blocks.length ? blocks.join("") : `<p class="feeds-quiet">${esc(tr("No accounts"))}</p>`;
-    return head + `<div class="feeds-org">${add}${offline}${previewCard()}${tools}${bulk}${maker}${body}</div>`;
+    return head + `<div class="feeds-org">${add}${offline}${failed}${previewCard()}${tools}${bulk}${pending ? `<section class="feeds-section is-pending-list">${pending}</section>` : ""}${body}${groupsPanel()}</div>`;
+  }
+
+  function onToggle(event) {
+    const el = event.target;
+    if (!el || !el.dataset || !el.dataset.feedPanel) return;
+    if (el.dataset.feedPanel === "filters") page.filtersOpen = el.open;
+    if (el.dataset.feedPanel === "groups") page.groupsOpen = el.open;
   }
 
   function attach(next) {
     hooks = next || hooks;
+    if (hooks && hooks.STATE && !hooks.STATE.ownerCatalog) {
+      const cached = readCache();
+      if (cached) {
+        page.doc = cached;
+        hooks.STATE.ownerCatalog = cached;
+      }
+    }
     if (page.bound) return;
     page.bound = true;
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
     document.addEventListener("input", onInput);
+    document.addEventListener("toggle", onToggle, true);
     document.addEventListener("dragstart", onDragStart);
     document.addEventListener("dragover", onDragOver);
     document.addEventListener("drop", onDrop);
