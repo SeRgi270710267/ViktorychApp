@@ -2059,5 +2059,10 @@ SI18n.addPack("en", {
   "Who can send you gifts": "Who can send you gifts",
   "Hide the Gifts tab": "Hide the Gifts tab",
   "You received a gift": "You received a gift",
-  "{name} sent you a gift": "{name} sent you a gift"
+  "{name} sent you a gift": "{name} sent you a gift",
+  "Edit menu": "Edit menu",
+  "Add section": "Add section",
+  "Section name": "Section name",
+  "Main list": "Main list",
+  "This item always stays available": "This item always stays available"
 });
