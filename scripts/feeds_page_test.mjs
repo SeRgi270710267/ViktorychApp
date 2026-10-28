@@ -216,7 +216,7 @@ async function run(browser, origin, vp) {
   // saved #/feeds before it closed, so open Home explicitly.
   await reload.waitForFunction(() => document.getElementById("app") && document.getElementById("app").childElementCount > 0, null, { timeout: 15000 }).catch(() => {});
   await reload.evaluate(() => { if (location.hash !== "#/") location.hash = "#/"; });
-  await reload.waitForFunction(() => Array.from(document.querySelectorAll("article.post")).some((a) => /Fresh post from the new source/.test(a.textContent)), null, { timeout: 15000 }).catch(() => fail(tag + ": after a reload Home still has the new posts from the local catalog"));
+  await reload.waitForFunction(() => { if (location.hash !== "#/") location.hash = "#/"; return Array.from(document.querySelectorAll("article.post")).some((a) => /Fresh post from the new source/.test(a.textContent)); }, null, { timeout: 15000 }).catch(() => fail(tag + ": after a reload Home still has the new posts from the local catalog"));
   await context.close();
   console.log("feeds page ok " + tag);
 }
