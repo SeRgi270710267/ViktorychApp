@@ -832,7 +832,7 @@
   function seedReply(post) {
     var id = String((post && (post.statusId || post.id)) || "");
     if (/^\d{5,22}$/.test(id) && !slots.reply.replyTo) slots.reply.replyTo = id;
-    if (/^[a-f0-9]{32}$/.test(id)) slots.reply.appParent = id;
+    if (/^[a-f0-9]{32}$/.test(id) || /^va_[a-f0-9]{16}$/.test(id)) slots.reply.appParent = id;
     if (!slots.reply.context) slots.reply.context = String((post && post.handle) || "").replace(/^@/, "");
     if (!slots.reply.targetKey) slots.reply.targetKey = String((post && post.id) || "");
     if (post && (post.text || post.body)) slots.reply.sourceText = String(post.text || post.body).slice(0, 2000);
