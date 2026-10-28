@@ -4,6 +4,7 @@
    normal browser chrome strip is not treated as split screen.
    Nothing here prints account names, handles, or ids. */
 import http from "node:http";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -809,6 +810,9 @@ async function main() {
   }
   if (process.exitCode) fail("menu page checks failed");
   console.log("menu pages ok");
+  /* The drawer layout check shares this job. */
+  const layout = spawnSync(process.execPath, [fileURLToPath(new URL("./drawer_layout_test.mjs", import.meta.url))], { stdio: "inherit", env: process.env });
+  if (layout.status !== 0) process.exit(layout.status || 1);
 }
 
 main().catch((err) => {

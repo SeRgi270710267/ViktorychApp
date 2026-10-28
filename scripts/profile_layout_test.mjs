@@ -19,14 +19,16 @@ const pageEnd = accounts.indexOf("function profileHtml");
 if (pageStart < 0 || pageEnd < pageStart) fail("profile page source missing");
 const page = accounts.slice(pageStart, pageEnd);
 if (page.includes("acct-id")) fail("profile page still prints an account id");
-if (!page.includes("protected-badge")) fail("private badge is not next to the name");
+const nameRowStart = accounts.indexOf("function nameRowHtml");
+const nameRow = nameRowStart < 0 ? "" : accounts.slice(nameRowStart, accounts.indexOf("\n  }\n", nameRowStart));
+if (!page.includes("protected-badge") && !(page.includes("nameRowHtml(") && nameRow.includes("protected-badge"))) fail("private badge is not next to the name");
 if (!page.includes('class="pactions"')) fail("profile actions missing");
 const markupAt = page.indexOf("return top + '<div class=\"pinfo\"");
 const actionsAt = page.indexOf('class="pactions"', markupAt);
 const nameAt = page.indexOf('class="pname"', markupAt);
 const statusAt = page.indexOf("seenLine", actionsAt);
 if (!(markupAt > 0 && statusAt > actionsAt && statusAt < nameAt)) fail("status text is not in the action row");
-if (!page.includes("lockIcon(18)")) fail("private badge is not the name-sized lock");
+if (!(page + nameRow).includes("lockIcon(18)")) fail("private badge is not the name-sized lock");
 
 function mime(file) {
   if (file.endsWith(".js") || file.endsWith(".mjs")) return "text/javascript; charset=utf-8";
