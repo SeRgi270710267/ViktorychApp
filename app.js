@@ -19933,7 +19933,21 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (dev && window.ViktorychStorage && window.ViktorychStorage.applyDeviceCap) window.ViktorychStorage.applyDeviceCap();
         releaseDeviceFeeds();
         resolve(dev);
-        if (dev) render();
+        if (dev) {
+          /* A route change already owns the next paint. Rendering again now
+             cancels that paint and can leave the old page under the new
+             route's header padding. */
+          let waits = 0;
+          const paint = () => {
+            if (routing && waits < 40) {
+              waits += 1;
+              setTimeout(paint, 50);
+              return;
+            }
+            render();
+          };
+          paint();
+        }
       };
       tag.onerror = () => resolve(null);
       (document.body || document.documentElement).appendChild(tag);

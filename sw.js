@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a20-__SW_VERSION__";
+const VERSION = "viktorych-a22-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-27T23:55:00Z-own-lists
+// cache-bust: 2026-10-28T00:10:00Z-own-lists
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -166,7 +166,7 @@ const PRECACHE_TRIES = 4;
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a20-";
+  const prefix = "viktorych-a22-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1162,6 +1162,11 @@ async function doPrecache(report, generation, signal) {
   const files = SHELL_FILES.slice();
   const state = { files: 0, totalFiles: files.length, bytes: 0, totalBytes: 0 };
   let failed = null;
+  // A single large file can sit in cache storage longer than the page's
+  // stall timer. Keep telling the page this attempt is alive.
+  const beat = report ? setInterval(() => {
+    broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
+  }, 4000) : null;
   const pull = async () => {
     while (files.length && !failed) {
       const path = files.shift();
@@ -1189,6 +1194,7 @@ async function doPrecache(report, generation, signal) {
     progressState = state;
     return state;
   } finally {
+    if (beat) clearInterval(beat);
     try { await caches.delete(stagingName); } catch (err) { /* the next attempt opens a new staging cache */ }
   }
 }

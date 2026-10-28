@@ -261,16 +261,8 @@ function ready(view) {
   if (view === "profile") {
     const hash = location.hash || "";
     const on = hash.indexOf("#/@") === 0 || hash.indexOf("#/u/") === 0 || hash.indexOf("#/p/") === 0 || /^#\/(?:x|threads|instagram|rss|youtube|vk|discord|telegram|tiktok|app)\//.test(hash);
-    const name = main.querySelector("h1.pname");
-    if (!on || !name) return false;
-    const bar = main.querySelector(".topbar");
-    const nameTop = name.getBoundingClientRect().top;
-    const barBottom = bar ? bar.getBoundingClientRect().bottom : 0;
-    if (nameTop < barBottom - 2) {
-      window.scrollTo(0, 0);
-      return false;
-    }
-    return true;
+    const profile = main.querySelector(".profile-bar, h1.pname");
+    return on && !!profile && (main.innerText || "").trim().length > 8;
   }
   return (main.innerText || "").trim().length > 8;
 }
@@ -603,7 +595,16 @@ async function openProfile(page, label) {
     fail(label + " profile link is not tappable " + reasonOf(err));
   }
   await page.waitForFunction(ready, "profile", { timeout: 15000 });
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => new Promise((resolve) => {
+    window.scrollTo(0, 0);
+    const pending = typeof document.getAnimations === "function" ? document.getAnimations() : [];
+    const done = Promise.all(pending.map((anim) => anim.finished.catch(() => {})));
+    const cap = new Promise((finish) => setTimeout(finish, 400));
+    Promise.race([done, cap]).then(() => {
+      window.scrollTo(0, 0);
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+  }));
 }
 
 async function pass(page, size) {
