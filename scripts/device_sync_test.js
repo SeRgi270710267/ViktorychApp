@@ -79,5 +79,5 @@ assert.equal(snap.syncUi, false, "the switch itself still syncs");
 
 // Live updates ride the account channel.
 const presence = fs.readFileSync("presence.js", "utf8");
-assert.match(presence, /topics: \["presence", "notifications", "sync"\]/);
+assert.match(presence, /topics: \["presence", "notifications", "sync", "posts"\]/);
 console.log("device sync ok");
