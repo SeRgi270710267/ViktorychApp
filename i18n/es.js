@@ -1994,5 +1994,7 @@ SI18n.addPack("es", {
   "Notification filters": "Filtros de notificaciones",
   "Notification options": "Opciones de notificaciones",
   "No Spaces right now": "No hay Espacios ahora",
-  "Live audio shows up here.": "El audio en directo aparece aquí."
+  "Live audio shows up here.": "El audio en directo aparece aquí.",
+  "Add to Home Screen to keep data on this device. Safari can clear site data after 7 days away.": "Añade la app a la pantalla de inicio para conservar los datos en este dispositivo. Safari puede borrar los datos del sitio tras 7 días sin usarla.",
+  "Notifications on iPhone need the installed app.": "Las notificaciones en el iPhone necesitan la app instalada."
 });

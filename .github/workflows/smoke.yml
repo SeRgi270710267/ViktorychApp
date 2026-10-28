@@ -91,3 +91,10 @@ jobs:
         run: |
           npm install --prefix /tmp/pw-compose --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw-compose/node_modules/playwright-core/index.js node scripts/compose_ai_test.mjs
+
+      - name: iOS WebKit layout
+        run: |
+          npm install --prefix /tmp/pw-ios --no-fund --no-audit playwright
+          cd /tmp/pw-ios && npx playwright install --with-deps webkit
+          cd "${GITHUB_WORKSPACE}"
+          PLAYWRIGHT_CORE=/tmp/pw-ios/node_modules/playwright-core/index.js node scripts/ios_webkit_test.mjs

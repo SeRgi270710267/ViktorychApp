@@ -80,7 +80,12 @@
 
   function startSegments(stream, timeslice) {
     if (typeof MediaRecorder === "undefined") return Promise.reject(new Error("unsupported"));
-    var rec = new MediaRecorder(stream);
+    var mime = "";
+    var ios = typeof self !== "undefined" && self.ViktorychIos;
+    if (ios && ios.recorderMime) mime = ios.recorderMime("video");
+    var rec;
+    try { rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+    catch (err) { rec = new MediaRecorder(stream); }
     var chunks = [];
     rec.addEventListener("dataavailable", function (event) {
       if (event.data && event.data.size) chunks.push(event.data);
