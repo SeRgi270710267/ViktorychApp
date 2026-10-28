@@ -152,6 +152,10 @@ async function main() {
       await context.close();
     }
     console.log("home reach ok");
+    // The Explore nav check rides along here so it runs in the nav workflow.
+    const { spawnSync } = await import("node:child_process");
+    const explore = spawnSync(process.execPath, [path.join(root, "scripts", "explore_nav_test.mjs")], { stdio: "inherit", env: process.env });
+    if (explore.status !== 0) throw new Error("explore nav check failed");
   } finally {
     await browser.close();
     server.close();
