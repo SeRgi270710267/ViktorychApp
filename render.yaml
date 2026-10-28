@@ -37,3 +37,11 @@ services:
         value: "8000"
       - key: TIKTOK_AUDIENCE
         value: "owner"
+      # While awake, this service runs the heavy cron jobs (feed ingest,
+      # expired stories, birthday sweeps) so the Worker cron skips them.
+      # "0" hands them all back to the Worker.
+      - key: RENDER_JOBS
+        value: "1"
+      # Optional: with this set, TikTok live watching moves here too.
+      - key: GITHUB_DISPATCH_TOKEN
+        sync: false
