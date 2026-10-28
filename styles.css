@@ -5942,3 +5942,4 @@ html.ios-lite {
   padding: 0 8px;
 }
 img, video { max-width: 100%; }
+#toast .toast-link { color: #fff; text-decoration: underline; margin-left: 8px; }

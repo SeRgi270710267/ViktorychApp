@@ -392,3 +392,27 @@ test("home lists community posts for members, followers and the owner", async ()
   assert.equal(await sees(dan.token, id, "203.0.114.25"), false);
   assert.equal(await sees(fay.token, id, "203.0.114.26"), true);
 });
+
+test("an account's own posts, replies and quotes list on its profile with ?by=", async () => {
+  const lin = await call("/v1/signup", { method: "POST", ip: "203.0.113.140", body: { displayName: "Lin Own", handle: "lin_own" } });
+  assert.equal(lin.status, 201);
+  const sent = await call("/v1/posts", { method: "POST", ip: "203.0.113.141", token: lin.body.token, body: { body: "My first own post" } });
+  assert.equal(sent.status, 201);
+  const reply = await call("/v1/posts", { method: "POST", ip: "203.0.113.142", token: lin.body.token, body: { body: "A reply to myself", parentId: sent.body.post.id } });
+  assert.equal(reply.status, 201);
+  const quote = await call("/v1/posts", { method: "POST", ip: "203.0.113.143", token: lin.body.token, body: { body: "Quoting myself", quoteId: sent.body.post.id } });
+  assert.equal(quote.status, 201);
+  const id = lin.body.account.publicId;
+  const mine = await call("/v1/posts?by=" + id, { ip: "203.0.113.144", token: lin.body.token });
+  assert.equal(mine.status, 200);
+  const ids = (mine.body.posts || []).map((item) => item.id);
+  assert.deepEqual(ids.slice().sort(), [quote.body.post.id, reply.body.post.id, sent.body.post.id].sort());
+  assert.ok((mine.body.posts || []).every((item) => item.authorId === id));
+  const home = await call("/v1/posts", { ip: "203.0.113.145", token: lin.body.token });
+  assert.ok((home.body.posts || []).some((item) => item.id === sent.body.post.id));
+  const rae = await call("/v1/signup", { method: "POST", ip: "203.0.113.146", body: { displayName: "Rae Other", handle: "rae_other" } });
+  const seen = await call("/v1/posts?by=" + id, { ip: "203.0.113.147", token: rae.body.token });
+  assert.equal(seen.body.posts.length, 3);
+  const bad = await call("/v1/posts?by=nope", { ip: "203.0.113.148", token: rae.body.token });
+  assert.equal(bad.status, 400);
+});

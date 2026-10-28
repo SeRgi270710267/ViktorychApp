@@ -8382,10 +8382,94 @@ const here = parseRoute();
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
       if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
-      if (samePublicPosts(res.posts)) return;
-      publicPosts = res.posts;
+      const merged = keepOwnPosts(res.posts);
+      if (samePublicPosts(merged)) return;
+      publicPosts = merged;
       render();
     }).catch(() => {});
+  }
+
+  /* Posts this device just sent. A /v1/posts reply that left before the post
+     landed (or came from a lagging read) used to replace the whole list and
+     drop the new post, so it vanished from Home and its profile. Own posts are
+     kept until the server lists them, for ten minutes at most. */
+  const ownSent = {};
+  function rememberOwnPost(post) {
+    if (!post || !post.id) return;
+    ownSent[post.id] = { post: post, at: Date.now() };
+    publicPosts = [post].concat(publicPosts.filter((item) => item && item.id !== post.id));
+    const mine = signedAccount();
+    const cache = mine && mine.publicId ? authorPostCache[String(mine.publicId)] : null;
+    if (cache) cache.posts = [post].concat(cache.posts.filter((item) => item && item.id !== post.id));
+  }
+  function forgetOwnPost(id) {
+    delete ownSent[id];
+    publicPosts = publicPosts.filter((item) => item && item.id !== id);
+    Object.keys(authorPostCache).forEach((key) => {
+      authorPostCache[key].posts = authorPostCache[key].posts.filter((item) => item && item.id !== id);
+    });
+  }
+  function keepOwnPosts(list) {
+    const next = list.slice();
+    const ids = new Set(next.map((item) => item && item.id));
+    const now = Date.now();
+    Object.keys(ownSent).forEach((id) => {
+      const entry = ownSent[id];
+      if (ids.has(id) || now - entry.at > 600000) { delete ownSent[id]; return; }
+      if (String(id).indexOf("tmp-") === 0) return;
+      next.unshift(entry.post);
+    });
+    Object.keys(ownSent).forEach((id) => {
+      if (String(id).indexOf("tmp-") === 0) next.unshift(ownSent[id].post);
+    });
+    return next.sort((a, b) => (Number(b && b.createdAt) || 0) - (Number(a && a.createdAt) || 0));
+  }
+  function optimisticOwnPost(text, parentId, quoteId) {
+    const mine = signedAccount();
+    if (!mine || !mine.publicId) return "";
+    const id = "tmp-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    rememberOwnPost({
+      id: id, body: String(text || ""), parentId: parentId || "", quoteId: quoteId || "", createdAt: Date.now(),
+      authorId: String(mine.publicId), authorHandle: String(mine.handle || ""), authorName: String(mine.displayName || mine.handle || ""),
+      authorAvatar: String(mine.avatar || ""), pending: true, likes: 0, replyCount: 0, media: []
+    });
+    return id;
+  }
+  function sentToast(post) {
+    const el = document.getElementById("toast");
+    if (!el || !post || !post.id) { toast(tr("Your post was sent.")); return; }
+    const handle = String(post.authorHandle || "_");
+    el.hidden = false;
+    el.innerHTML = `${esc(tr("Your post was sent."))} <a class="toast-link" href="#/app/${encodeURIComponent(handle)}/status/${encodeURIComponent(post.id)}">${esc(tr("View"))}</a>`;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, 4000);
+  }
+
+  /* One account's own posts for its profile: ?by= on /v1/posts. */
+  const authorPostCache = {};
+  function authorPosts(publicId) {
+    const key = String(publicId || "");
+    if (!/^\d{12}$/.test(key)) return [];
+    const cache = authorPostCache[key];
+    const now = Date.now();
+    if ((!cache || now - cache.at > 30000) && accountToken() && !(cache && cache.loading)) {
+      const entry = authorPostCache[key] = cache || { at: 0, posts: [] };
+      entry.loading = true;
+      entry.at = now;
+      accountCall("/v1/posts?by=" + key).then((res) => {
+        entry.loading = false;
+        if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+        const mine = signedAccount();
+        const next = mine && String(mine.publicId) === key ? keepOwnPosts(res.posts).filter((item) => String(item.authorId) === key) : res.posts;
+        const before = entry.posts.map((item) => item.id).join(",");
+        entry.posts = next;
+        if (before !== next.map((item) => item.id).join(",")) render();
+      }).catch(() => { entry.loading = false; });
+    }
+    const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
+    const ids = new Set(have.map((item) => item.id));
+    const extra = publicPosts.filter((item) => item && String(item.authorId) === key && !ids.has(item.id));
+    return have.concat(extra);
   }
 
   function hydratePublicMedia() {
@@ -8538,19 +8622,28 @@ const here = parseRoute();
       toast(navigator.onLine && !token ? tr("Saved on this device. This reader doesn’t publish.") : tr("Could not send that post. It is still saved on this device."));
       return;
     }
+    let firstSent = null;
     const sendAt = (index, parentId) => {
       if (index >= posts.length) {
         if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
-        toast(scheduled ? tr("Scheduled. It will publish when it’s due.") : tr("Your post was sent."));
+        if (scheduled) toast(tr("Scheduled. It will publish when it’s due."));
+        else sentToast(firstSent);
         render();
         return;
       }
       const part = posts[index];
       const parent = index === 0 ? (payload.parentId || "") : parentId;
       const quote = index === 0 ? (payload.quoteId || "") : "";
+      const later = !!part.scheduleAt;
+      const tempId = later ? "" : optimisticOwnPost(part.text, parent, quote);
+      if (tempId) render();
       const done = (res) => {
+        if (tempId) forgetOwnPost(tempId);
         if (res && res.status === 201 && res.post) {
-          if (!(res.scheduled || part.scheduleAt) && res.post.id) publicPosts = [res.post].concat(publicPosts.filter((item) => item.id !== res.post.id));
+          if (!(res.scheduled || part.scheduleAt) && res.post.id) {
+            rememberOwnPost(res.post);
+            if (!firstSent) firstSent = res.post;
+          }
           if (res.post.community && res.post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(res.post.community.name);
           publicStamp = Date.now();
           sendAt(index + 1, res.post.id);
@@ -8559,6 +8652,7 @@ const here = parseRoute();
         const text = posts.slice(index).map((item) => item.text).filter(Boolean).join("\n\n");
         if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
         toast(res && res.error === "reply_limited" ? tr("Replies are limited on that post.") : tr("Could not send that post. It is still saved on this device."));
+        if (tempId) render();
       };
       const files = (part.media || []).map((item) => item.file).filter(Boolean);
       if (files.length) {
@@ -8611,13 +8705,17 @@ const here = parseRoute();
     const root = accountsApi();
     const finishOk = (post) => {
       if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
-      if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      if (tempId) forgetOwnPost(tempId);
+      if (post && post.id) rememberOwnPost(post);
       if (post && post.community && post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(post.community.name);
       publicStamp = Date.now();
-      toast(tr("Your post was sent."));
+      sentToast(post);
       render();
     };
+    const tempId = optimisticOwnPost(text, parentId, quoteId);
+    if (tempId) render();
     const finishFail = () => {
+      if (tempId) { forgetOwnPost(tempId); render(); }
       if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
       toast(tr("Could not send that post. It is still saved on this device."));
     };
@@ -10187,6 +10285,10 @@ const here = parseRoute();
   }
 
   function statusView(route) {
+    if (route.platform === "app" && !STATE.shared[String(route.id)]) {
+      const sent = publicPosts.find((item) => item && String(item.id) === String(route.id));
+      if (sent) STATE.shared[String(route.id)] = appCardPost(sent);
+    }
     if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
       return pageHead(tr("Post noun"), "", true) + emptyBlock(tr("Post unavailable"), tr("This post isn’t in the current snapshot."));
     }
@@ -13567,7 +13669,8 @@ if (STATE.histClear) {
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
     const identities = (account && account.identities) || [];
-    if (!account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
+    const ownApp = account.publicId ? authorPosts(account.publicId).map(appCardPost) : [];
+    if (!ownApp.length && !account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
       return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: 0 };
     }
     const rows = rowsForAccount(account);
@@ -13611,6 +13714,10 @@ if (STATE.histClear) {
         });
       });
     }
+    ownApp.forEach((post) => {
+      STATE.shared[post.id] = post;
+      addPost(post);
+    });
     postList.sort(byStamp);
     let shown = postList;
     if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");

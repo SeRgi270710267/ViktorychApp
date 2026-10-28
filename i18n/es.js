@@ -1909,6 +1909,7 @@ SI18n.addPack("es", {
   "Save a passkey on this device": "Guardar una llave de acceso en este dispositivo",
   "Passkey saved": "Llave de acceso guardada",
   "Your post was sent.": "Tu publicación se envió.",
+  "View": "Ver",
   "Add a photo and a short bio": "Añade una foto y una biografía corta",
   "Pick feeds to follow": "Elige canales para seguir",
   "Notifications can wait until you ask": "Las notificaciones pueden esperar hasta que las pidas",

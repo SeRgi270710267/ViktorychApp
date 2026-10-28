@@ -383,7 +383,13 @@ async function listPosts(request, env, deps) {
   const session = await deps.sessionAccount(env, request);
   if (!session) return deps.json(401, { error: "unauthorized" });
   const now = Date.now();
-  const listed = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?) ORDER BY p.created_at DESC LIMIT 60").bind(now).all();
+  // ?by=<public id> lists one account's posts for its profile, with the same rules.
+  const author = new URL(request.url).searchParams.get("by") || "";
+  if (author && !/^\d{12}$/.test(author)) return deps.json(400, { error: "bad_author" });
+  const select = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?)";
+  const listed = author
+    ? await env.DB.prepare(select + " AND p.author_id = ? ORDER BY p.created_at DESC LIMIT 60").bind(now, author).all()
+    : await env.DB.prepare(select + " ORDER BY p.created_at DESC LIMIT 60").bind(now).all();
   const skip = await hiddenAuthors(env, session.public_id);
   const rows = ((listed && listed.results) || []).filter((row) => !skip.has(row.author_id));
   const sets = await audienceSets(env, session.public_id, rows.map((row) => row.author_id));
@@ -404,6 +410,7 @@ async function listPosts(request, env, deps) {
     stamped.push({ at: Number(post.createdAt) || 0, post: post });
   }
   let communitiesHome = true;
+  if (author) return deps.json(200, { posts: stamped.map((item) => item.post), author: author });
   try {
     const pack = await communityHomeRows(env, request, session, deps.presentAccount);
     communitiesHome = !(pack && pack.communitiesHome === false);
