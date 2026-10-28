@@ -2131,7 +2131,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (face === "default") return silhouette(extra);
     const letter = initials(name);
     const safeSrc = ruSafeImageUrl(src);
-    return `<img class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
+    return `<img decoding="async" class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
   }
 
   function affSlot(source) {
@@ -2279,7 +2279,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (!part || part.charAt(0) === "<") return part;
       return part.replace(/:([A-Za-z0-9_]{2,32}):/g, (whole, name) => {
         if (!map[name]) return whole;
-        return `<img class="discord-emoji" alt=":${esc(name)}:" src="${esc(map[name])}" referrerpolicy="no-referrer">`;
+        return `<img decoding="async" loading="lazy" class="discord-emoji" alt=":${esc(name)}:" src="${esc(map[name])}" referrerpolicy="no-referrer">`;
       });
     }).join("");
   }
@@ -2557,7 +2557,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!first || oePast(first) || (post && post.platform === "tiktok")));
     const tg = tgKey ? (lead ? tgLead(tgKey, stills.slice(1), first) : ` data-tg="${esc(tgKey)}"${stills.slice(1).length ? ` data-tg-alts="${esc(stills.slice(1).join(","))}"` : ""}`) : "";
     const src = lead ? "" : ` src="${esc(first)}"`;
-    return `<img class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
+    return `<img decoding="async" class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
   }
 
   function frameNarrow() {
@@ -2830,7 +2830,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const id = arguments[1] && arguments[1].id ? ` data-id="${esc(arguments[1].id)}"` : "";
       return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(external.openUrl)}"><span class="link-card-copy"><span class="link-title">${esc(tr("Open on X"))}</span></span></a>`;
     }
-    const image = link.image ? `<img class="link-card-img" src="${esc(link.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
+    const image = link.image ? `<img decoding="async" class="link-card-img" src="${esc(link.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
     const site = link.site ? `<span class="link-site">${esc(link.site)}</span>` : "";
     const title = `<span class="link-title">${esc(link.title || link.url)}</span>`;
     const description = link.description ? `<span class="link-desc">${esc(link.description)}</span>` : "";
@@ -3132,6 +3132,68 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         }
       })
       .catch(() => {});
+  }
+
+  /* My devices. Every session of this account is a device; this one says
+     hello at most once an hour so the list knows its name and last seen. */
+  function deviceGuess() {
+    const ua = String((navigator && navigator.userAgent) || "");
+    const touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+    let type = "desktop";
+    if (/SmartTV|AppleTV|GoogleTV|Tizen|Web0S|\bTV\b/i.test(ua)) type = "tv";
+    else if (/iPad|Tablet/i.test(ua) || touchMac || (/Android/i.test(ua) && !/Mobile/i.test(ua))) type = "tablet";
+    else if (/Mobi|iPhone|Android/i.test(ua)) type = "phone";
+    const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) || touchMac ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /CrOS/.test(ua) ? "ChromeOS" : /Linux/.test(ua) ? "Linux" : "";
+    const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
+    return { type, name: [os, browser].filter(Boolean).join(" · ") || tr("This device") };
+  }
+  function deviceHello() {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!api || !token) return;
+    const mark = token.slice(-10);
+    try {
+      const last = JSON.parse(localStorage.getItem("viktorychapp-device-hello") || "{}");
+      if (last.mark === mark && Date.now() - (Number(last.at) || 0) < 60 * 60 * 1000) return;
+      localStorage.setItem("viktorychapp-device-hello", JSON.stringify({ mark, at: Date.now() }));
+    } catch (err) { /* storage blocked: say hello anyway */ }
+    const guess = deviceGuess();
+    fetch(api + "/v1/devices/hello", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify(guess)
+    }).catch(() => {});
+  }
+  let myDevices = null;
+  function devicesCall(path, body) {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!api || !token) return Promise.resolve(null);
+    return fetch(api + path, {
+      method: body ? "POST" : "GET",
+      headers: Object.assign({ Authorization: "Bearer " + token }, body ? { "content-type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store"
+    }).then((res) => res.ok ? res.json() : null).catch(() => null);
+  }
+  function loadMyDevices() {
+    if (myDevices && myDevices.busy) return;
+    myDevices = Object.assign({}, myDevices || { list: [] }, { busy: true });
+    devicesCall("/v1/devices").then((body) => {
+      myDevices = { list: (body && body.devices) || [], busy: false, loaded: true, failed: !body };
+      if (parseRoute().section === "devices") render();
+    });
+  }
+  function myDevicesView() {
+    if (!accountToken()) return settingsHead(tr("My devices"), "#/settings") + emptyBlock(tr("Sign in to see your devices"), "");
+    if (!myDevices || (!myDevices.loaded && !myDevices.busy)) loadMyDevices();
+    const list = (myDevices && myDevices.list) || [];
+    const glyph = { phone: "📱", tablet: "📱", desktop: "💻", tv: "📺", other: "🖥️" };
+    const rows = list.map((d) => `<div class="set-row device-row" data-device="${esc(d.id)}"><span class="set-copy"><b>${glyph[d.type] || glyph.other} ${esc(d.name || tr("Unnamed device"))}${d.current ? ` <span class="device-tag">${esc(tr("This device"))}</span>` : ""}</b><span class="set-sub">${esc(d.current ? tr("Active now") : tr("Last seen {when}", { when: relTime(new Date(d.lastSeen).toISOString()) }))}</span></span><span class="device-actions"><button class="outline" type="button" data-act="device-rename" data-id="${esc(d.id)}" data-name="${esc(d.name || "")}">${esc(tr("Rename"))}</button><button class="outline danger" type="button" data-act="device-remove" data-id="${esc(d.id)}" data-current="${d.current ? "1" : ""}">${esc(tr("Remove"))}</button></span></div>`).join("");
+    const body = myDevices && myDevices.loaded
+      ? (rows || `<div class="set-block"><p class="phandle">${esc(myDevices.failed ? tr("Could not load your devices.") : tr("No devices yet."))}</p></div>`)
+      : `<div class="set-block"><p class="phandle">${esc(tr("Loading…"))}</p></div>`;
+    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div>`;
   }
 
   function accountsApi() {
@@ -10236,7 +10298,7 @@ const here = parseRoute();
     const bucket = tab ? liveBucket(row, tab) : "";
     const list = bucket ? (row[bucket] || []).slice().sort(byStamp) : [];
     const shown = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
-    const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : (profile.bannerColor ? `<div class="pbanner theme" style="background:${esc(profile.bannerColor)}"></div>` : "");
+    const banner = profile.banner ? `<img decoding="async" class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : (profile.bannerColor ? `<div class="pbanner theme" style="background:${esc(profile.bannerColor)}"></div>` : "");
     const meta = [
       profile.location ? `<span>${icon("loc")}${esc(profile.location)}</span>` : "",
       profile.website ? `<a data-act="stop" href="${esc(profile.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(profile.website).replace(/^https?:\/\//, ""))}</a>` : "",
@@ -10471,7 +10533,7 @@ const here = parseRoute();
     else list = list.filter((p) => p.kind !== "reply");
     const count = formatCount(total);
     const bannerFace = faceChoice("banner", feed.banner);
-    const banner = bannerFace === "photo" && feed.banner ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : (bannerFace !== "none" && feed.bannerColor && faceSetting("showBanners") === "show" ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : "");
+    const banner = bannerFace === "photo" && feed.banner ? `<img decoding="async" class="pbanner" src="${esc(feed.banner)}" alt="">` : (bannerFace !== "none" && feed.bannerColor && faceSetting("showBanners") === "show" ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : "");
     const meta = [
       feed.location ? `<span>${icon("loc")}${esc(feed.location)}</span>` : "",
       feed.website ? `<a href="${esc(feed.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(feed.website).replace(/^https?:\/\//, ""))}</a>` : "",
@@ -11668,7 +11730,7 @@ const here = parseRoute();
   function articleCardHtml(post) {
     const art = articleOf(post);
     if (!art || !post) return "";
-    const cover = art.cover ? `<img class="xa-cover" src="${esc(art.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
+    const cover = art.cover ? `<img decoding="async" class="xa-cover" src="${esc(art.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
     const title = art.title ? `<div class="xa-title">${esc(art.title)}</div>` : "";
     const preview = art.preview ? `<div class="xa-preview">${esc(art.preview)}</div>` : "";
     return `<a class="xa" href="${esc(articleHash(post))}" data-act="open-article" data-id="${esc(post.id)}">${cover}<div class="xa-copy">${title}${preview}<span class="xa-label">${icon("article")}<span>${tr("Article")}</span></span></div></a>`;
@@ -11880,7 +11942,7 @@ const here = parseRoute();
     if (block.type === "h1" || block.type === "h2") return `<h2 class="xa-h">${inlineRich(block)}</h2>`;
     if (block.type === "h3") return `<h3 class="xa-h">${inlineRich(block)}</h3>`;
     if (block.type === "quote") return `<blockquote>${inlineRich(block)}</blockquote>`;
-    if (block.type === "image" && block.url) return `<img class="xa-img" src="${esc(block.url)}" alt="${esc(block.alt || "")}" loading="lazy" referrerpolicy="no-referrer">`;
+    if (block.type === "image" && block.url) return `<img decoding="async" class="xa-img" src="${esc(block.url)}" alt="${esc(block.alt || "")}" loading="lazy" referrerpolicy="no-referrer">`;
     if (block.type === "video" && block.url) return `<video class="xa-video" controls playsinline ${block.poster ? `poster="${esc(block.poster)}"` : ""} src="${esc(block.url)}"></video>`;
     if (block.type === "link" && block.url) return `<a class="xa-link" href="${esc(block.url)}" target="_blank" rel="noopener noreferrer">${esc(block.title || block.url)}</a>`;
     if (block.type === "embed" && block.tweetId) {
@@ -12003,7 +12065,7 @@ const here = parseRoute();
     const face = authorFace(post);
     const who = post.handle || "";
     const followId = (post.platform === "discord" && post.guildId) ? "discord:" + post.guildId : (post.platform || "x") + ":" + who;
-    const cover = art.cover ? `<img class="xa-cover-lg" src="${esc(art.cover)}" alt="" referrerpolicy="no-referrer">` : "";
+    const cover = art.cover ? `<img decoding="async" class="xa-cover-lg" src="${esc(art.cover)}" alt="" referrerpolicy="no-referrer">` : "";
     const when = articleDate(post.date);
     return `${articleHead()}<article class="xa-page">
       ${cover}
@@ -12860,6 +12922,16 @@ const here = parseRoute();
     return `<a class="set-row" href="${href}"><span class="set-copy"><b>${esc(title)}</b>${sub ? `<span class="set-sub">${esc(sub)}</span>` : ""}</span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
   }
 
+  function deviceSyncSwitches() {
+    const accounts = window.ViktorychAccounts || {};
+    const shared = !(STATE.settings && STATE.settings.syncUi === false);
+    const own = !!(accounts.deviceOwnUi && accounts.deviceOwnUi());
+    const sw = (act, on, label, note) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(note)}</p>`;
+    return `<h2>${esc(tr("Devices"))}</h2>` +
+      sw("sync-ui", shared, tr("Sync across my devices"), tr("Menu, sidebar and display choices follow your account on every device you sign in on.")) +
+      sw("device-own-ui", own, tr("Keep this device's own look"), tr("Only this device ignores synced menu and display choices."));
+  }
+
   function homeFeatureSwitch(key, label, note) {
     const on = userFeatureOn(key);
     const blocked = featureOn(key) !== on;
@@ -12932,6 +13004,7 @@ const here = parseRoute();
         <h2>${esc(tr("Home"))}</h2>
         ${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
+        ${deviceSyncSwitches()}
         <h2>${esc(tr("Banners"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Banners"))}">
           ${faceBtn("banners", "show", tr("Show"))}
@@ -13095,6 +13168,7 @@ const here = parseRoute();
         : `<div class="set-block"><p class="phandle">${esc(tr("Direct posting stays off"))}</p></div>`;
       return settingsHead(tr("Post to X"), "#/settings") + body;
     }
+    if (section === "devices") return myDevicesView();
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
@@ -13110,6 +13184,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
+      ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
@@ -14745,11 +14820,11 @@ if (STATE.histClear) {
 
   function groupFace(group, large) {
     if (!group) return "";
-    if (group.icon && /^https:\/\//.test(group.icon) && group.icon.length <= 300) return `<img class="chip-icon${large ? " lg" : ""}" src="${esc(group.icon)}" alt="" referrerpolicy="no-referrer">`;
+    if (group.icon && /^https:\/\//.test(group.icon) && group.icon.length <= 300) return `<img decoding="async" loading="lazy" class="chip-icon${large ? " lg" : ""}" src="${esc(group.icon)}" alt="" referrerpolicy="no-referrer">`;
     const faces = (group.members || []).map((id) => feedById(id)).filter((feed) => feed && feed.avatar).slice(0, 4);
     if (!faces.length) return "";
     const cls = faces.length <= 1 ? "one" : faces.length === 2 ? "two" : "four";
-    return `<span class="collage ${cls}${large ? " lg" : ""}">${faces.map((feed) => `<img src="${esc(feed.avatar)}" alt="" referrerpolicy="no-referrer">`).join("")}</span>`;
+    return `<span class="collage ${cls}${large ? " lg" : ""}">${faces.map((feed) => `<img decoding="async" loading="lazy" src="${esc(feed.avatar)}" alt="" referrerpolicy="no-referrer">`).join("")}</span>`;
   }
 
   function subsView(route) {
@@ -14891,7 +14966,7 @@ if (STATE.histClear) {
     const mediaIndex = Math.max(0, (post.media || []).indexOf(media));
     const player = clip
       ? playerTile(post, media, mediaIndex).replace('class="tile vplay"', 'class="player vplay"')
-      : ((media.poster || media.url) ? `<div class="player"><img src="${esc(media.poster || media.url)}" alt="" referrerpolicy="no-referrer"></div>` : "");
+      : ((media.poster || media.url) ? `<div class="player"><img decoding="async" src="${esc(media.poster || media.url)}" alt="" referrerpolicy="no-referrer"></div>` : "");
     const pip = clip && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} ${tr("Picture in picture")}</button>` : "";
     const subs = creator.platform === "youtube" && creator.followers != null ? tr("{count} subscribers", { count: formatCount(creator.followers) }) : (creator.followers != null ? tr("{count} followers", { count: formatCount(creator.followers) }) : "");
     const liked = !!STATE.settings.likes[post.id];
@@ -14933,7 +15008,7 @@ if (STATE.histClear) {
     const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
     const upHtml = up.length ? `<aside class="upnext"><h2>${tr("Up next")}</h2>${up.map((item) => {
       const thumb = ((item.media || [])[0] || {}).poster || "";
-      return `<a class="up-row" href="${esc(watchHash(item))}"><div class="yt-thumb">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}${platMark(item.platform)}</div><div><h3 class="yt-title">${esc(item.title || item.text || "")}</h3><div class="yt-by">${esc(item.author || item.handle || "")}</div><div class="yt-sub">${esc(videoMeta(item))}</div></div></a>`;
+      return `<a class="up-row" href="${esc(watchHash(item))}"><div class="yt-thumb">${thumb ? `<img decoding="async" src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}${platMark(item.platform)}</div><div><h3 class="yt-title">${esc(item.title || item.text || "")}</h3><div class="yt-by">${esc(item.author || item.handle || "")}</div><div class="yt-sub">${esc(videoMeta(item))}</div></div></a>`;
     }).join("")}</aside>` : `<aside class="upnext"><h2>${tr("Up next")}</h2><p class="yt-sub">${tr("No other videos from accounts you follow.")}</p></aside>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><div class="pt-name grow">${tr("Watch")}</div></div></div>
       <div class="watch">
@@ -15581,12 +15656,14 @@ if (STATE.histClear) {
     if (!el || el.nodeType !== 1 || !el.matches) return false;
     if (el.matches(HSCROLL_SELECTOR)) return true;
     if (el.id === "app" || el.classList.contains("center") || el.classList.contains("app")) return false;
+    // Style first: most nodes are not scrollers, and reading the computed
+    // overflow is far cheaper than measuring every div's layout box.
+    let ox = "";
+    try { ox = getComputedStyle(el).overflowX; } catch (err) { return false; }
+    if (ox !== "auto" && ox !== "scroll" && ox !== "overlay") return false;
     if (el.scrollWidth <= el.clientWidth + 8) return false;
     if (el.clientHeight > 180 && el.scrollHeight > el.clientHeight + 24) return false;
-    try {
-      const ox = getComputedStyle(el).overflowX;
-      return ox === "auto" || ox === "scroll" || ox === "overlay";
-    } catch (err) { return false; }
+    return true;
   }
 
   function hscrollListLive(root) {
@@ -17105,6 +17182,21 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }
       return;
     }
+    if (act === "sync-ui") {
+      const on = STATE.settings.syncUi === false;
+      STATE.settings.syncUi = on;
+      STATE.settings.syncUiAt = Date.now();
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-own-ui") {
+      const accounts = window.ViktorychAccounts || {};
+      if (accounts.setDeviceOwnUi) accounts.setDeviceOwnUi(!(accounts.deviceOwnUi && accounts.deviceOwnUi()));
+      saveSettings();
+      render();
+      return;
+    }
     if (act === "home-feature") {
       const key = el.dataset.key;
       if (!Object.prototype.hasOwnProperty.call(HOME_FEATURE_FLAGS, key)) return;
@@ -17430,6 +17522,29 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const cap = Number(el.dataset.cap);
       if (cap === 32768 || cap === 65536 || cap === 131072 || cap === 262144) writeDevicePerf({ peerUploadCap: cap });
       render();
+      return;
+    }
+    if (act === "device-rename") {
+      const id = el.dataset.id || "";
+      const next = window.prompt(tr("Device name"), el.dataset.name || "");
+      if (next == null || !String(next).trim()) return;
+      devicesCall("/v1/devices/rename", { id, name: String(next).trim().slice(0, 60) }).then((body) => {
+        if (!body || !Array.isArray(body.devices)) { toast(tr("Could not rename that device.")); return; }
+        myDevices = { list: body.devices, busy: false, loaded: true };
+        render();
+      });
+      return;
+    }
+    if (act === "device-remove") {
+      const id = el.dataset.id || "";
+      const current = el.dataset.current === "1";
+      if (!confirm(current ? tr("Remove this device? You will be signed out here.") : tr("Remove this device? It will be signed out."))) return;
+      devicesCall("/v1/devices/remove", { id }).then((body) => {
+        if (!body) { toast(tr("Could not remove that device.")); return; }
+        if (body.signedOut && window.ViktorychAccounts && window.ViktorychAccounts.signOut) { window.ViktorychAccounts.signOut(); return; }
+        myDevices = { list: body.devices || [], busy: false, loaded: true };
+        render();
+      });
       return;
     }
     if (act === "owner-feature") {
@@ -19361,7 +19476,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       seen[seenKey] = true;
       faces.push(src);
     });
-    const avatars = faces.map((src) => `<img class="pill-ava" alt="" src="${esc(src)}">`).join("");
+    const avatars = faces.map((src) => `<img decoding="async" loading="lazy" class="pill-ava" alt="" src="${esc(src)}">`).join("");
     el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
     el.hidden = false;
     if (window.ViktorychLocal) {
@@ -20496,7 +20611,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const href = originalOf(post || {}, media);
         const lead = posterKey && accountToken() && (!poster || r2ObjectKey(poster) || oePast(poster) || (post && post.platform === "tiktok"));
         const img = poster || posterKey
-          ? `<img alt="" referrerpolicy="no-referrer"${lead ? tgLead(posterKey, stills.slice(1), poster) : ` src="${esc(poster)}"`}>`
+          ? `<img decoding="async" alt="" referrerpolicy="no-referrer"${lead ? tgLead(posterKey, stills.slice(1), poster) : ` src="${esc(poster)}"`}>`
           : "";
         box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>${img}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
         primeTelegramImages(box);
@@ -22986,6 +23101,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (info.name === "communities") bindCommunitiesModule();
     if (!info.silent) render();
   });
+  setTimeout(deviceHello, 6000);
   syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
@@ -23414,6 +23530,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("viktorych-settings-applied", () => {
     if (!STATE.settings) return;
     const next = loadSettings();
+    // Synced display choices from another device apply right away.
+    let lookChanged = false;
+    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs"].forEach((key) => {
+      if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
+      STATE.settings[key] = next[key];
+      lookChanged = true;
+    });
+    if (lookChanged) {
+      applyTheme();
+      syncFeatureFlags();
+      render();
+    }
     if ((next.storyNotes === true || next.storyNotes === false) && STATE.settings.storyNotes !== next.storyNotes) {
       STATE.settings.storyNotes = next.storyNotes;
       render();
