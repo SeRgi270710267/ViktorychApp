@@ -1243,6 +1243,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       STATE.settings.devicePerf = window.ViktorychDevice.persist(STATE.settings.devicePerf);
     }
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
+    syncFeatureFlags();
     syncWorkerState();
     applyPrivacyProtections();
     if (window.ViktorychAccounts && window.ViktorychAccounts.onLocalChange) window.ViktorychAccounts.onLocalChange();
@@ -1562,6 +1563,82 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         render();
       });
     }, 20000);
+  }
+
+  /* Owner kill switches. The public list is cached for ten minutes in
+     localStorage so lazy modules, the live row and the index mount skip
+     features the owner turned off without asking the server again. */
+  const SERVER_OFF_KEY = "viktorychapp-server-off";
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills"];
+  function serverOffList() {
+    try {
+      const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
+      return Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
+    } catch (err) { return []; }
+  }
+  function storeServerOff(list) {
+    try {
+      localStorage.setItem(SERVER_OFF_KEY, JSON.stringify(list || []));
+      localStorage.setItem(SERVER_OFF_KEY + "-at", String(Date.now()));
+    } catch (err) { /* private mode keeps the old list */ }
+    if (typeof syncFeatureFlags === "function") syncFeatureFlags();
+  }
+  function syncServerFeatures(force) {
+    const api = accountsApi();
+    if (!api) return Promise.resolve(serverOffList());
+    let at = 0;
+    try { at = Number(localStorage.getItem(SERVER_OFF_KEY + "-at")) || 0; } catch (err) { at = 0; }
+    if (!force && Date.now() - at < 10 * 60 * 1000) return Promise.resolve(serverOffList());
+    return fetch(api + "/v1/features").then((res) => res.ok ? res.json() : null).then((body) => {
+      if (body && Array.isArray(body.off)) storeServerOff(body.off);
+      return serverOffList();
+    }).catch(() => serverOffList());
+  }
+  let ownerFeatureState = null;
+  function loadOwnerFeatures() {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!signedOwner() || !api || !token || ownerFeatureState) return;
+    ownerFeatureState = { off: serverOffList(), busy: true };
+    fetch(api + "/v1/owner/features", { headers: { Authorization: "Bearer " + token }, cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((body) => {
+        if (body && Array.isArray(body.off)) { ownerFeatureState.off = body.off; storeServerOff(body.off); }
+        ownerFeatureState.busy = false;
+        render();
+      }).catch(() => { ownerFeatureState.busy = false; });
+  }
+  function setOwnerFeature(name, off) {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!signedOwner() || !api || !token || !SERVER_FEATURES.includes(name)) return;
+    fetch(api + "/v1/owner/features", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify({ name, off: !!off })
+    }).then((res) => res.ok ? res.json() : null).then((body) => {
+      if (!body || !Array.isArray(body.off)) { toast(tr("Could not save that setting.")); return; }
+      ownerFeatureState = { off: body.off, busy: false };
+      storeServerOff(body.off);
+      render();
+    }).catch(() => toast(tr("Could not save that setting.")));
+  }
+  function ownerFeaturesSection() {
+    if (!signedOwner()) return "";
+    loadOwnerFeatures();
+    const off = (ownerFeatureState && ownerFeatureState.off) || serverOffList();
+    const labels = {
+      shorts: [tr("Shorts"), tr("Shorts pages, TikTok live watching and its cron work.")],
+      stories: [tr("Stories"), tr("Story uploads, the story bar and expiry sweeps.")],
+      lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
+      telegram: [tr("Telegram ingest"), tr("The Telegram bot webhook and media relay.")],
+      pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")]
+    };
+    const rows = SERVER_FEATURES.map((name) => {
+      const on = !off.includes(name);
+      return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="owner-feature" data-feature="${esc(name)}"><span>${esc(labels[name][0])}</span><i></i></button><p class="phandle">${esc(labels[name][1])}</p>`;
+    }).join("");
+    return `<section class="owner-features"><h2>${esc(tr("Server features"))}</h2><p class="phandle">${esc(tr("Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it."))}</p>${rows}</section>`;
   }
 
   function loadOwnerAccounts() {
@@ -4742,7 +4819,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<button class="notify-bell${on ? " on" : ""}" type="button" data-act="bell" data-id="${esc(id)}" data-handle="${esc(String(handle || "").replace(/^@/, ""))}" title="${tr("Notify")}" aria-label="${tr("Notify")}" aria-haspopup="menu" aria-expanded="${open ? "true" : "false"}"><span class="bell-off">${bellGlyph("off-outline")}</span><span class="bell-add">${bellGlyph("plus")}</span><span class="bell-on">${bellGlyph("on")}</span></button>`;
   }
 
-  function actionBar(post) {
+  function actionBar(post, detail) {
     const id = post.id;
     const stats = post.stats || {};
     const liked = !!STATE.settings.likes[id];
@@ -4763,6 +4840,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const quoteOnX = replyOnX ? `<button type="button" data-act="xc-quote" data-id="${esc(id)}">${tr("Quote on X")}</button>` : "";
     const repostMenu = menuOpen ? `<div class="menu repost-menu" data-act="stop" role="menu" aria-label="${esc(tr("Repost"))}"><button type="button" data-act="repost-do" data-id="${esc(id)}">${reposted ? tr("Undo repost") : tr("Repost")}</button><button type="button" data-act="quote-open" data-id="${esc(id)}">${tr("Quote")}</button>${quoteOnX}</div>` : "";
     const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0), tr("Repost"))}${repostMenu}</span>`;
+    if (detail) {
+      return `<div class="actions status-actions">
+      <div class="action-stats">
+        ${redditVotes(post)}
+        ${replyLink}
+        ${repostBtn}
+        ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0), tr("Like"))}
+        ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), shownCount(stats.bookmarks, booked ? 1 : 0), tr("Bookmark"))}
+        ${btn("share", "share", "share", tr("Share"), "", tr("Share"))}
+      </div>
+    </div>`;
+    }
     return `<div class="actions">
       <div class="action-stats">
         ${redditVotes(post)}
@@ -6918,20 +7007,48 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return fxNum((b.stats || {}).likes) - fxNum((a.stats || {}).likes) || String(b.date || "").localeCompare(String(a.date || ""));
   }
 
-  function replySortTabs() {
+  function replySortTabs(thin) {
     const sort = replySortMode();
     const tab = (id, label) => `<button class="tab${sort === id ? " on" : ""}" type="button" data-act="reply-sort" data-sort="${id}" role="tab" aria-selected="${sort === id ? "true" : "false"}"><span>${label}</span></button>`;
-    return `<div class="tabs reply-tabs" role="tablist">${tab("relevant", tr("Relevant"))}${tab("recent", tr("Recent"))}${tab("liked", tr("Liked"))}</div>`;
+    return `<div class="tabs reply-tabs${thin ? " reply-tabs-thin" : ""}" role="tablist" aria-label="${esc(tr("Sort replies"))}">${tab("relevant", tr("Relevant"))}${tab("recent", tr("Recent"))}${tab("liked", tr("Liked"))}</div>`;
   }
 
-  function replyTools(post) {
+  function statusMeta(post) {
+    const stats = post.stats || {};
+    const when = fullTime(post.date);
+    const parts = [];
+    if (when) parts.push(`<a class="status-when" href="${esc(statusHash(post))}">${esc(when)}</a>`);
+    if (post.edited) parts.push(esc(tr("Edited")));
+    if (stats.views != null) parts.push(`<span class="status-viewcount"><b>${esc(formatCount(stats.views))}</b> ${tr("Views")}</span>`);
+    return `<div class="status-meta">${parts.join(`<span class="dot" aria-hidden="true">·</span>`)}</div>`;
+  }
+
+  function statusMenu(post) {
+    const key = "s:" + post.id;
+    const btn = `<button class="more-btn status-more" type="button" data-act="menu" data-id="${esc(key)}" aria-label="${tr("More")}" aria-haspopup="menu" aria-expanded="${STATE.menu === key ? "true" : "false"}">${icon("more")}</button>`;
+    if (STATE.menu !== key) return `<span class="status-menu-wrap">${btn}</span>`;
+    const followId = post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.handle ? (post.platform || "x") + ":" + post.handle : "");
+    const me = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+    const mine = followId && me && followId === "app:" + me.publicId;
+    const ids = followId && followId.indexOf("app:") !== 0 && window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(followId) : [followId];
+    const on = ids.some((item) => item && isFollowed(item));
+    const who = "@" + internalPostHandle(post.handle || "", post);
+    const follow = followId && !mine ? `<button type="button" data-act="follow" data-id="${esc(ids[0] || followId)}" data-ids="${esc(ids.join(","))}">${esc(on ? tr("Unfollow {handle}", { handle: who }) : tr("Follow {handle}", { handle: who }))}</button>` : "";
+    const shareLink = sharePostUrl(post, "post") || post.url || sitePermalink(statusHash(post));
+    const shareNote = sharePostUrl(post, "post") ? "" : unpublishedNote("post", post.platform, !!post.url);
     const bucket = STATE.replies[postKey(post)] || {};
-    const label = freshLabel(bucket.fetchedAt);
-    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}<button class="show-more odai-btn" type="button" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button></div>${replySortTabs()}`;
+    const fresh = freshLabel(bucket.fetchedAt);
+    const items = follow
+      + `<button type="button" data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button>`
+      + `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`
+      + `<button type="button" class="odai-btn" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button>`
+      + (post.appPost ? appMenuItems(post) : (post.url ? `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""))
+      + (fresh ? `<div class="menu-note reply-fresh">${esc(fresh)}</div>` : "");
+    return `<span class="status-menu-wrap">${btn}<div class="menu status-menu" data-act="stop" role="menu">${items}</div></span>`;
   }
 
   function replyList(post) {
-    const tools = replyTools(post);
+    const tools = "";
     const slice = replySlice(post);
     if (slice.loading) return tools + `<div class="reply-empty">${tr("Loading replies…")}</div>`;
     if (!slice.shown.length && !slice.more && !slice.spam) {
@@ -6975,7 +7092,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
-        <div class="composer-bar"><button class="reply-send" type="button" data-gift="reply" data-parent="${esc((post && post.id) || "")}" data-handle="${esc((post && post.handle) || "")}">${tr("Send a gift")}</button><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
+        <button class="reply-send" type="button" disabled>${tr("Reply")}</button>
       </div>
     </div>`;
   }
@@ -8169,7 +8286,47 @@ const here = parseRoute();
     return true;
   }
 
+  /* Home features that Settings can turn fully off. The flags are read by
+     index.html before any script loads, so an off feature downloads nothing.
+     SYNCED_UI_PREFS lists the settings keys that follow the account across
+     devices. */
+  const HOME_FEATURE_FLAGS = { homePills: "viktorychapp-off-home-pills", stories: "viktorychapp-off-stories" };
+  const SYNCED_UI_PREFS = ["homePills", "stories"];
+  window.ViktorychPrefs = Object.assign(window.ViktorychPrefs || {}, { synced: SYNCED_UI_PREFS.slice(), flags: Object.assign({}, HOME_FEATURE_FLAGS) });
+  const SERVER_FEATURE_FOR = { homePills: "pills", stories: "stories" };
+  function featureOn(key) {
+    // The owner's server switch wins over this device's choice.
+    if (SERVER_FEATURE_FOR[key] && serverOffList().includes(SERVER_FEATURE_FOR[key])) return false;
+    return userFeatureOn(key);
+  }
+  function userFeatureOn(key) {
+    const value = STATE.settings ? STATE.settings[key] : undefined;
+    if (typeof value === "boolean") return value;
+    // Before settings load (or for an old settings blob) the boot flag decides.
+    try { return localStorage.getItem(HOME_FEATURE_FLAGS[key]) !== "1"; } catch (err) { return true; }
+  }
+  let featureOffSent = null;
+  function syncFeatureFlags() {
+    const off = [];
+    Object.keys(HOME_FEATURE_FLAGS).forEach((key) => {
+      if (!featureOn(key)) off.push(key);
+      try {
+        if (userFeatureOn(key)) localStorage.removeItem(HOME_FEATURE_FLAGS[key]);
+        else localStorage.setItem(HOME_FEATURE_FLAGS[key], "1");
+      } catch (err) { /* storage blocked */ }
+    });
+    // The service worker reads this list so its shell download skips off features too.
+    const body = JSON.stringify(off);
+    if (body === featureOffSent || !window.caches) return;
+    featureOffSent = body;
+    caches.open("viktorych-prefs").then((cache) => cache.put("./__prefs/off.json", new Response(body, { headers: { "content-type": "application/json" } }))).catch(() => {});
+  }
+  function featureLoaded(key) {
+    return key === "stories" ? !!window.Stories : !!(window.WeatherPills || window.SoccerScores);
+  }
+
   function homeLivePillsRow() {
+    if (!featureOn("homePills")) return "";
     if (window.WeatherPills && window.WeatherPills.homeRow) {
       return window.WeatherPills.homeRow();
     }
@@ -8195,7 +8352,7 @@ const here = parseRoute();
         ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
-      ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
+      ${featureOn("stories") && window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       <div class="tabs-bar">
         <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button>
         <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
@@ -10438,16 +10595,15 @@ const here = parseRoute();
         ${mediaHtml(post.media, false, post)}
         ${postCards(post)}
         ${quoteCard(post.quoted)}
-        <div class="status-time">${esc(fullTime(post.date))}${post.edited ? " · " + tr("Edited") : ""}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""}</div>
-        ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> ${tr("Views")}</div>` : `<div class="status-views"></div>`}
-        ${actionBar(post)}`;
+        ${statusMeta(post)}
+        ${actionBar(post, true)}`;
     const face = authorFace(post);
     const statusHandle = internalPostHandle(post.handle || "", post);
     const names = `<div>
             <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>${affSlot(post)}
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(statusHandle)}</a>
           </div>
-          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
+          <span class="status-end">${sourceBadge(post.platform)}${statusMenu(post)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
       ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
@@ -10456,7 +10612,7 @@ const here = parseRoute();
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
       ${article}
-      ${talk == null ? composer(threaded, post) + replyList(post) : talk}`;
+      ${talk == null ? replySortTabs(true) + composer(threaded, post) + replyList(post) : talk}`;
   }
 
   function telegramTalk(post) {
@@ -12704,6 +12860,12 @@ const here = parseRoute();
     return `<a class="set-row" href="${href}"><span class="set-copy"><b>${esc(title)}</b>${sub ? `<span class="set-sub">${esc(sub)}</span>` : ""}</span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
   }
 
+  function homeFeatureSwitch(key, label, note) {
+    const on = userFeatureOn(key);
+    const blocked = featureOn(key) !== on;
+    return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="home-feature" data-key="${esc(key)}"${blocked ? " disabled" : ""}><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(blocked ? tr("Turned off for everyone by the owner.") : note)}</p>`;
+  }
+
   function settingsView() {
     const route = parseRoute();
     const section = route.section || "";
@@ -12767,6 +12929,9 @@ const here = parseRoute();
           ${faceBtn("pictures", "default", tr("Default"))}
           ${faceBtn("pictures", "none", tr("None"))}
         </div>
+        <h2>${esc(tr("Home"))}</h2>
+        ${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
+        ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
         <h2>${esc(tr("Banners"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Banners"))}">
           ${faceBtn("banners", "show", tr("Show"))}
@@ -12797,7 +12962,7 @@ const here = parseRoute();
           ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
         </div>
         ${peerMediaSettingsHtml()}
-      </div>`;
+      </div>${ownerFeaturesSection()}`;
     }
     if (section === "notifications" && sub === "discord") return discordAlertsView();
     if (section === "notifications") {
@@ -13596,6 +13761,7 @@ if (STATE.histClear) {
   }
 
   function homeRowExtra() {
+    if (!featureOn("homePills")) return 0;
     /* The home header always shows the pills row: weather, scores, or the
        live station. The phone header is fixed, so this height has to be
        reserved or the row covers the first card. */
@@ -15885,6 +16051,7 @@ if (STATE.histClear) {
     }
     const gen = (STATE.renderGen = (STATE.renderGen || 0) + 1);
     let route = parseRoute();
+    if (route.name === "spaces" && window.Spaces && window.Spaces.__shell && window.Spaces.start && !(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.Spaces.start();
     if (route.name === "drive") {
       if (window.ViktorychDrive && !window.ViktorychDrive.visible()) {
         route = { name: "home", tab: "foryou", query: route.query || new URLSearchParams() };
@@ -16938,6 +17105,19 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }
       return;
     }
+    if (act === "home-feature") {
+      const key = el.dataset.key;
+      if (!Object.prototype.hasOwnProperty.call(HOME_FEATURE_FLAGS, key)) return;
+      const on = !userFeatureOn(key);
+      STATE.settings[key] = on;
+      STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { [key]: Date.now() });
+      saveSettings();
+      render();
+      /* Off has to stop work that already started, and on needs files that
+         were skipped, so reload when the loaded state does not match. */
+      if (featureLoaded(key) !== featureOn(key)) setTimeout(() => location.reload(), 150);
+      return;
+    }
     if (act === "note-tabs-same") {
       const shared = noteTabsSame();
       STATE.settings.noteTabsSame = !shared;
@@ -17250,6 +17430,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const cap = Number(el.dataset.cap);
       if (cap === 32768 || cap === 65536 || cap === 131072 || cap === 262144) writeDevicePerf({ peerUploadCap: cap });
       render();
+      return;
+    }
+    if (act === "owner-feature") {
+      const name = el.getAttribute("data-feature") || "";
+      const nowOn = el.getAttribute("aria-checked") === "true";
+      setOwnerFeature(name, nowOn);
       return;
     }
     if (act === "peer-share") {
@@ -18029,6 +18215,15 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   });
 
   window.__VIKTORYCH_CLICK = true;
+  document.addEventListener("click", (event) => {
+    const item = event.target.closest && event.target.closest(".status-menu button, .status-menu a");
+    if (!item) return;
+    setTimeout(() => {
+      if (String(STATE.menu || "").indexOf("s:") !== 0) return;
+      STATE.menu = null;
+      render();
+    }, 0);
+  });
   document.addEventListener("click", (event) => {
     const acct = event.target.closest && event.target.closest(".acct-menu [data-acct]");
     if (!acct) return;
@@ -22380,7 +22575,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyTorProtections();
     applyTheme();
     applyPrivacyProtections();
-    if (window.Stories) window.Stories.start();
+    syncFeatureFlags();
+    if (window.Stories && featureOn("stories")) window.Stories.start();
     if (window.AudienceLists) {
       window.AudienceLists.bind({
         token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
@@ -22659,7 +22855,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         shareRoot: shareRoot,
         toast: toast
       });
-      if (!blocked) window.Spaces.start();
+      if (!blocked && (featureOn("homePills") || parseRoute().name === "spaces")) window.Spaces.start();
     }
     if (window.SIntelMusic && window.SIntelMusic.bind && !window.SIntelMusic.__shell && !blocked) {
       window.SIntelMusic.__shell = true;
@@ -22790,6 +22986,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (info.name === "communities") bindCommunitiesModule();
     if (!info.silent) render();
   });
+  syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
       window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
