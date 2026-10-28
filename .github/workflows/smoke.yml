@@ -85,6 +85,7 @@ jobs:
           node scripts/translate_test.js
           node scripts/ondevice_ai_test.js
           node scripts/dock_test.js
+          node scripts/for_you_test.mjs
 
       - name: Composer writing tools
         run: |
