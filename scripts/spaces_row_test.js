@@ -152,7 +152,7 @@ assert.strictEqual(still.animate, false);
 assert.strictEqual(L.marqueePlan(40, true).animate, false);
 const move = L.marqueePlan(40, false);
 assert.strictEqual(move.animate, true);
-assert.strictEqual(move.duration, 20);
+assert.strictEqual(move.duration, 18);
 assert.strictEqual(move.easing, "linear");
 assert.strictEqual(move.from, "0%");
 assert.strictEqual(move.to, "-100%");
@@ -539,7 +539,7 @@ assert.ok(src.includes(".canPlayType("));
 assert.strictEqual(src.includes('"/hls/stream.m3u8"'), src.includes('server + "/hls/stream.m3u8"'));
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "viktorych-a41-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "viktorych-a45-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import email.utils
 import hashlib
+import html as html_lib
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -60,6 +61,120 @@ def children(el, name: str):
     if el is None:
         return []
     return [c for c in list(el) if local_name(c.tag) == name]
+
+
+def feed_items(channel):
+    """RSS items, or Atom entries when the bridge speaks Atom."""
+    items = children(channel, "item")
+    if items:
+        return items
+    return children(channel, "entry")
+
+
+def item_permalink(item) -> str:
+    text = child_text(item, "link")
+    if text.startswith("http"):
+        return text
+    alternate = ""
+    for child in list(item or []):
+        if local_name(child.tag) != "link":
+            continue
+        href = (child.attrib.get("href") or child.text or "").strip()
+        if not href.startswith("http"):
+            continue
+        rel = (child.attrib.get("rel") or "alternate").lower()
+        if rel == "alternate":
+            return href
+        if not alternate:
+            alternate = href
+    return alternate or text
+
+
+def item_guid(item) -> str:
+    return child_text(item, "guid") or child_text(item, "id")
+
+
+def item_html(item) -> str:
+    encoded = ""
+    description = ""
+    for child in list(item or []):
+        name = local_name(child.tag)
+        if name not in ("encoded", "description", "summary", "content"):
+            continue
+        text = "".join(child.itertext()).strip()
+        if not text:
+            continue
+        if name == "encoded":
+            encoded = text
+        elif not description:
+            description = text
+    return encoded or description
+
+
+def item_creator(item) -> str:
+    for child in list(item or []):
+        if local_name(child.tag) == "creator" and (child.text or "").strip():
+            return child.text.strip()
+    for child in list(item or []):
+        if local_name(child.tag) != "author":
+            continue
+        name = child_text(child, "name") or (child.text or "").strip()
+        if name:
+            return name
+    return ""
+
+
+def item_published(item) -> str:
+    raw = child_text(item, "pubDate") or child_text(item, "published") or child_text(item, "updated")
+    if not raw:
+        return ""
+    if "," in raw or "GMT" in raw or "UTC" in raw:
+        return rfc822_to_iso(raw)
+    return to_iso(raw)
+
+
+def plain_url(url: str) -> str:
+    """Turn double-escaped bridge URLs into a real URL. Leave a clean URL alone."""
+    text = str(url or "").strip()
+    for _ in range(3):
+        nxt = html_lib.unescape(text).replace("\\u0026", "&").replace("\\/", "/")
+        if nxt == text:
+            break
+        text = nxt
+    return text
+
+
+_IG_CODE = re.compile(r"instagram\.com/(?:p|reel|tv)/([A-Za-z0-9_-]{1,80})")
+_TH_CODE = re.compile(r"threads\.(?:com|net)/(?:@[^/\s]+/)?(?:post|t)/([A-Za-z0-9_-]{1,80})")
+
+
+def meta_status_id(platform: str, guid: str, link: str = "") -> str:
+    """One shortcode per post. A numeric media id and a full URL are the same post."""
+    blob = (link or "") + "\n" + (guid or "")
+    if platform == "instagram":
+        match = _IG_CODE.search(blob)
+        if match:
+            return match.group(1)
+    elif platform == "threads":
+        match = _TH_CODE.search(blob)
+        if match:
+            return match.group(1)
+    text = (guid or link or "").strip()
+    if text.startswith("http://") or text.startswith("https://"):
+        tail = text.rstrip("/").rsplit("/", 1)[-1]
+        if re.fullmatch(r"[A-Za-z0-9_-]{5,80}", tail or ""):
+            return tail
+    return text
+
+
+def clean_meta_text(text: str) -> str:
+    """Drop a play-icon title and a caption that the bridge repeated."""
+    raw = (text or "").strip()
+    raw = re.sub(r"^▶\s*", "", raw)
+    parts = [part.strip() for part in re.split(r"\n\s*\n", raw) if part.strip()]
+    if len(parts) >= 2 and parts[0] == parts[1]:
+        raw = "\n\n".join([parts[0]] + parts[2:])
+    return clean_text(raw)
 
 
 def clean_text(text: str) -> str:
@@ -208,7 +323,7 @@ class _Extractor(HTMLParser):
                 self._bq_parts = []
                 self._bq_media = []
         elif tag == "img":
-            src = a.get("src") or ""
+            src = plain_url(a.get("src") or "")
             if src and not src.startswith("data:"):
                 item = {
                     "type": "photo",
@@ -220,11 +335,11 @@ class _Extractor(HTMLParser):
                 }
                 self._add_media(item)
         elif tag == "video":
-            self._video = {"poster": a.get("poster") or "", "srcs": []}
+            self._video = {"poster": plain_url(a.get("poster") or ""), "srcs": []}
             if a.get("src"):
-                self._video["srcs"].append(a["src"])
+                self._video["srcs"].append(plain_url(a["src"]))
         elif tag == "source" and self._video is not None and a.get("src"):
-            self._video["srcs"].append(a["src"])
+            self._video["srcs"].append(plain_url(a["src"]))
         elif tag == "a":
             self._anchor = {"href": a.get("href") or "", "buf": []}
 
@@ -613,6 +728,10 @@ def canonical_status_id(post: dict) -> str:
     reposter = str((by or {}).get("handle") or "").lstrip("@").lower()
     if reposter and post.get("kind") == "repost" and post.get("statusId") and platform != "youtube":
         return f"repost:{reposter}:{post.get('statusId')}"
+    if platform in ("instagram", "threads"):
+        code = meta_status_id(platform, raw, str(post.get("url") or ""))
+        if code:
+            return code
     if platform != "youtube" and not raw.startswith("yt:video:"):
         return raw
     if raw.startswith("yt:video:"):
@@ -1050,12 +1169,66 @@ def guard_posts(root, posts, channel_title: str = "", channel_description: str =
     return kept
 
 
+def _meta_quality(post: dict) -> tuple:
+    text = post.get("text") or ""
+    text_score = len(text)
+    if text.startswith("▶"):
+        text_score -= 40
+    chunks = [part.strip() for part in text.split("\n\n") if part.strip()]
+    if len(chunks) >= 2 and chunks[0] == chunks[1]:
+        text_score -= 40
+    media_score = 0
+    for item in post.get("media") or []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "")
+        if "cdninstagram.com" in url or "fbcdn.net" in url or "cdnthreads.net" in url:
+            media_score += 4
+        if "instagram.com" in url and "/media" in url:
+            media_score -= 3
+        if item.get("width"):
+            media_score += 1
+        if ".mp4" in url.split("?")[0]:
+            media_score += 2
+    return (media_score, text_score)
+
+
+def _normalize_meta_post(post: dict) -> None:
+    if not isinstance(post, dict):
+        return
+    platform = post.get("platform") or ""
+    if platform not in ("instagram", "threads"):
+        return
+    if str(post.get("id") or "").startswith("repost:"):
+        return
+    code = meta_status_id(platform, str(post.get("statusId") or post.get("id") or ""), str(post.get("url") or ""))
+    current = str(post.get("id") or "")
+    # A full URL or a numeric media id is the same post as the shortcode.
+    # A name that is already its own id stays, so an older row is not renamed.
+    if code and "://" not in code and "/" not in code and (current.startswith("http") or current.isdigit() or current == code):
+        post["id"] = code
+        post["statusId"] = code
+    if post.get("text"):
+        post["text"] = clean_meta_text(post.get("text") or "")
+
+
+def _prefer_meta(kept: dict, incoming: dict) -> None:
+    if _meta_quality(incoming) > _meta_quality(kept):
+        for field in ("text", "media", "images", "url", "links"):
+            if incoming.get(field):
+                kept[field] = incoming[field]
+    merged = earlier_iso(kept.get("date") or "", incoming.get("date") or "")
+    if merged:
+        kept["date"] = merged
+
+
 def dedupe_posts(posts, cap: int = 300):
     """One row per canonical id. The earliest trusted publish time stays."""
     ranked = sorted(posts, key=feed_sort_key)
     seen = {}
     order = []
     for post in ranked:
+        _normalize_meta_post(post)
         key_id = canonical_status_id(post) or str(post.get("id") or "")
         key = ((post.get("platform") or ""), key_id)
         if not key[1]:
@@ -1064,6 +1237,9 @@ def dedupe_posts(posts, cap: int = 300):
         if kept is None:
             seen[key] = post
             order.append(post)
+            continue
+        if (post.get("platform") or "") in ("instagram", "threads"):
+            _prefer_meta(kept, post)
             continue
         merged = earlier_iso(kept.get("date") or "", post.get("date") or "")
         if merged:
