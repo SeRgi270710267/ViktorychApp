@@ -63,6 +63,7 @@
     return "";
   }
   var friendRequestsLoaded = false;
+  var friendReqTriedAt = 0;
   var friendRequestsLoading = false;
   var friendsSearchQuery = "";
   var friendsSubTab = "all";
@@ -2566,7 +2567,7 @@ function signupPayload() {
     var session = readSession();
     var ref = accountRef(account);
     if (!session || !account || !ref || profileMine(account)) return "";
-    if (!friendRequestsLoaded) ensureFriendRequests();
+    if (!friendRequestsLoaded && Date.now() - friendReqTriedAt > 60000) { friendReqTriedAt = Date.now(); ensureFriendRequests(); }
     var status = (graphCounts[ref] && graphCounts[ref].friendStatus) || account.viewerFriendStatus || "none";
     var recent = graphCounts[ref] && graphCounts[ref].friendAt && Date.now() - graphCounts[ref].friendAt < 60000;
     if (status === "none" && !recent) status = pendingFriendStatus(account.handle) || "none";
