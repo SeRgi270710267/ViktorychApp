@@ -2353,5 +2353,8 @@ SI18n.addPack("es", {
   "Picture of an emoji status": "Imagen de un estado con emoji",
   "Picture of badges": "Imagen de las insignias",
   "Picture of installing the app": "Imagen de instalar la app",
-  "Picture of Safari install steps": "Imagen de los pasos para instalar en Safari"
+  "Picture of Safari install steps": "Imagen de los pasos para instalar en Safari",
+  "Sort replies": "Ordenar respuestas",
+  "Follow {handle}": "Seguir a {handle}",
+  "Unfollow {handle}": "Dejar de seguir a {handle}"
 });
