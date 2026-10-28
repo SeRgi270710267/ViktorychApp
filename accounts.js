@@ -2401,6 +2401,7 @@ function signupPayload() {
     if (mine) {
       pills = '<div class="friends-pills">' +
         '<button class="friends-pill' + (friendsSubTab === "all" ? " active" : "") + '" type="button" data-friend-sub="all">' + esc(tr("All Friends")) + ' <span class="pill-count">(' + friendsList.length + ')</span></button>' +
+        '<a class="friends-pill" href="#/online">' + esc(tr("Online")) + '</a>' +
         '<button class="friends-pill' + (friendsSubTab === "requests" ? " active" : "") + '" type="button" data-friend-sub="requests">' + esc(tr("Friend Requests")) + (requestsCount > 0 ? ' <span class="pill-badge">' + requestsCount + '</span>' : '') + '</button>' +
       '</div>';
     }
