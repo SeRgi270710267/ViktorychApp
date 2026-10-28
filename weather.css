@@ -79,8 +79,8 @@
 
 /* Icon Ring */
 .wx-icon-ring {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid #fff;
   display: flex;
@@ -111,14 +111,20 @@
 .wx-cond {
   color: rgba(255, 255, 255, 0.85);
   font-weight: 500;
+  font-size: 11px;
+  line-height: 16px;
   white-space: nowrap;
   max-width: min(160px, 40vw);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .wx-range {
   color: rgba(255, 255, 255, 0.65);
   font-size: 11px;
+  line-height: 16px;
   margin-left: 4px;
+  white-space: nowrap;
 }
 
 /* Pin indicator badge inside pill */

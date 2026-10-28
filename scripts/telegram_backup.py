@@ -616,7 +616,7 @@ def upsert_part(entry: dict, part: dict) -> None:
 
 
 SOCIAL_PLATFORMS = ("x", "instagram", "threads", "youtube", "vk", "telegram", "rss", "facebook")
-ORIGINAL_VIDEO = ("tiktok", "instagram", "x", "youtube", "vk", "facebook")
+ORIGINAL_VIDEO = ("tiktok", "instagram", "threads", "x", "youtube", "vk", "facebook")
 ORIGINAL_PHOTO = ORIGINAL_VIDEO + ("threads",)
 YTDLP_FORMAT = "bv*+ba/b"
 TIKTOK_FALLBACK = "bv*[vcodec^=hev]+ba/bv*[vcodec^=h265]+ba/bv*[vcodec*=bytevc1]+ba/bv*[vcodec^=hvc1]+ba/" + YTDLP_FORMAT
@@ -3093,7 +3093,7 @@ def selftest() -> int:
         {"format_id": "h265_540", "vcodec": "h265", "acodec": "none", "tbr": 900, "height": 540},
         {"format_id": "audio", "vcodec": "none", "acodec": "aac", "tbr": 128},
     ]) == "bytevc1_720+audio/bv*+ba/b", "TikTok prefers the top bytevc1 bitrate over a higher h264")
-    check(video_format_arg("instagram") == "bv*+ba/b", "Instagram, X, YouTube, VK, and Facebook use bv*+ba/b")
+    check(video_format_arg("instagram") == "bv*+ba/b" and "threads" in ORIGINAL_VIDEO, "Instagram, Threads, X, YouTube, VK, and Facebook use bv*+ba/b")
     gallery_args = gallery_download_args("https://www.instagram.com/p/DeZgzTEggQe/", Path("photos"), 2)
     check("--config-ignore" in gallery_args and "--cookies" not in gallery_args and "2-2" in gallery_args, "gallery-dl asks for one full-size photo and no cookies")
     meta = info_fields({"id": "abc", "view_count": 5, "like_count": 2, "comment_count": 1, "repost_count": 3, "upload_date": "20261011", "url": "https://cdn.example/file.mp4?token=secret", "formats": [{"url": "https://cdn.example/a"}]})

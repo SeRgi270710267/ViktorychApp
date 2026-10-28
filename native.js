@@ -21,10 +21,58 @@
 
   function shouldOfferInstall(opts) {
     opts = opts || {};
-    if (opts.standalone || opts.dismissed || opts.installed) return false;
+    if (opts.standalone || opts.installed) return false;
+    if (opts.manual) return true;
+    var mode = opts.dismissed === true || opts.dismissed === "never" ? "never" : (opts.dismissed === "later" ? "later" : "");
+    if (mode === "never") return false;
+    if (mode === "later") {
+      var wait = typeof opts.laterMs === "number" ? opts.laterMs : 7 * 24 * 60 * 60 * 1000;
+      var at = Number(opts.dismissedAt) || 0;
+      var now = Number(opts.now) || Date.now();
+      if (now - at < wait) return false;
+      return true;
+    }
     if (opts.prompt) return true;
     if (opts.ios && opts.engaged) return true;
+    if (opts.afterSignup) return true;
     return false;
+  }
+
+  function installKind(ua, extra) {
+    var text = String(ua || "");
+    var touchMac = !!(extra && extra.touchMac);
+    var ios = /iphone|ipad|ipod/i.test(text) || touchMac;
+    var other = /crios|fxios|edgios|instagram|fbav|fban|line\/|micromessenger|musical_ly|tiktok/i.test(text);
+    if (ios && other) return "ios-browser";
+    if (ios) return "ios-safari";
+    if (/edg\//i.test(text) || /edga\//i.test(text) || /chrome|chromium/i.test(text)) return "native";
+    return "hint";
+  }
+
+  function installArrow(kind, ua, extra) {
+    if (kind !== "ios-safari") return "";
+    var text = String(ua || "");
+    if (/ipad/i.test(text) || (extra && extra.touchMac)) return "up";
+    return "down";
+  }
+
+  function readInstallChoice() {
+    try {
+      var raw = localStorage.getItem(INSTALL_KEY);
+      if (!raw) return { mode: "", at: 0 };
+      if (raw === "1" || raw === "never") return { mode: "never", at: 0 };
+      var parsed = JSON.parse(raw);
+      if (parsed && parsed.mode === "later") return { mode: "later", at: Number(parsed.at) || 0 };
+      if (parsed && parsed.mode === "never") return { mode: "never", at: 0 };
+    } catch (err) { /* a broken value shows the offer again */ }
+    return { mode: "", at: 0 };
+  }
+
+  function writeInstallChoice(mode) {
+    try {
+      if (mode === "never") localStorage.setItem(INSTALL_KEY, "never");
+      else localStorage.setItem(INSTALL_KEY, JSON.stringify({ mode: "later", at: Date.now() }));
+    } catch (err) { /* private mode still closes the sheet */ }
   }
 
   function shouldAskPersist(opts) {
@@ -74,8 +122,7 @@
   }
 
   function dismissed() {
-    try { return localStorage.getItem(INSTALL_KEY) === "1"; }
-    catch (err) { return false; }
+    return readInstallChoice().mode === "never";
   }
 
   function dismissInstall() {
@@ -113,9 +160,12 @@
 
   function paintInstall() {
     if (typeof document === "undefined") return;
+    if (document.getElementById("app")) return;
+    var choice = readInstallChoice();
     var offer = shouldOfferInstall({
       standalone: standalone(),
-      dismissed: dismissed(),
+      dismissed: choice.mode === "later" ? "later" : choice.mode === "never",
+      dismissedAt: choice.at,
       prompt: !!(typeof window !== "undefined" && window.__VIKTORYCH_INSTALL),
       ios: iosDevice(),
       engaged: engaged
@@ -501,6 +551,10 @@
 
   return {
     shouldOfferInstall: shouldOfferInstall,
+    installKind: installKind,
+    installArrow: installArrow,
+    readInstallChoice: readInstallChoice,
+    writeInstallChoice: writeInstallChoice,
     shouldAskPersist: shouldAskPersist,
     protocolHash: protocolHash,
     outboxAction: outboxAction,
