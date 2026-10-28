@@ -23,6 +23,7 @@ REPORT = ROOT / "sync-report.json"
 
 def record_source(health: dict, feed_id: str, ok: bool, now: str, detail: str = "") -> None:
     row = dict(health.get(feed_id) or {})
+    row["checked"] = now
     if ok:
         row["ok"] = now
         row.pop("emptySince", None)
