@@ -55,7 +55,8 @@ async function loadPlaywright() {
 
 const SIZES = [
   { name: "phone", width: 390, height: 844 },
-  { name: "tablet", width: 820, height: 1180 }
+  { name: "tablet", width: 820, height: 1180 },
+  { name: "desktop", width: 1280, height: 800 }
 ];
 
 async function openProfile(browser, port, size) {
@@ -65,32 +66,63 @@ async function openProfile(browser, port, size) {
     localStorage.setItem("viktorychapp-lang-user-picked", "1");
     localStorage.setItem("superintelapp-lang", "en");
   });
+  await page.route("**/*", (route) => {
+    const url = route.request().url();
+    if (url.startsWith("http://127.0.0.1")) route.continue();
+    else route.abort();
+  });
   await page.goto("http://127.0.0.1:" + port + "/index.html#/x/user_a", { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".profile-chrome", { timeout: 15000 });
   return { context, page };
 }
 
 async function check(page, label) {
-  const box = await page.evaluate(() => {
-    const bar = document.querySelector(".profile-chrome");
-    const banner = document.querySelector("main .pbanner");
+  const bare = await page.evaluate(() => {
     const buttons = [...document.querySelectorAll(".profile-chrome .pfloat-btn")];
-    const bannerBox = banner ? banner.getBoundingClientRect() : null;
-    const sizes = buttons.map((btn) => {
-      const rect = btn.getBoundingClientRect();
-      return { w: Math.round(rect.width), h: Math.round(rect.height), top: rect.top, bottom: rect.bottom };
-    });
+    const name = document.querySelector(".profile-chrome-copy");
+    const avatar = document.querySelector(".pava, .pname");
+    const first = buttons[0] ? buttons[0].getBoundingClientRect() : null;
+    const face = avatar ? avatar.getBoundingClientRect() : null;
     return {
+      oldBar: !!document.querySelector(".topbar, .page-head"),
+      banner: !!document.querySelector(".pbanner"),
       buttons: buttons.length,
-      bannerTop: bannerBox ? bannerBox.top : -1,
-      bannerBottom: bannerBox ? bannerBox.bottom : -1,
-      sizes: sizes,
-      over: bannerBox ? sizes.every((item) => item.top >= bannerBox.top - 2 && item.bottom <= bannerBox.bottom + 2) : false
+      nameHidden: !!(name && name.hidden),
+      clear: !!(first && face && face.top >= first.bottom - 1)
     };
   });
-  if (box.buttons !== 4) fail(label + " button count " + box.buttons);
-  if (!box.over) fail(label + " buttons are not over the banner");
-  if (box.sizes.some((item) => item.w < 30 || item.w > 40 || item.h < 30 || item.h > 40)) fail(label + " button size");
+  if (bare.oldBar) fail(label + " still has the old header");
+  if (bare.banner) fail(label + " drew a banner placeholder");
+  if (bare.buttons !== 4) fail(label + " button count " + bare.buttons);
+  if (!bare.nameHidden) fail(label + " shows the name before scrolling");
+  if (!bare.clear) fail(label + " buttons overlap the profile");
+  await page.evaluate(() => {
+    const top = document.querySelector(".profile-top");
+    top.classList.remove("no-banner");
+    top.classList.add("has-banner");
+    const img = document.createElement("img");
+    img.className = "pbanner";
+    img.alt = "";
+    img.src = "icons/icon-512.png";
+    top.appendChild(img);
+  });
+  await page.waitForFunction(() => {
+    const banner = document.querySelector(".pbanner");
+    return !!(banner && banner.getBoundingClientRect().height > 40);
+  });
+  const laid = await page.evaluate(() => {
+    const banner = document.querySelector(".pbanner").getBoundingClientRect();
+    const buttons = [...document.querySelectorAll(".profile-chrome .pfloat-btn")].map((btn) => btn.getBoundingClientRect());
+    const ratio = banner.height / banner.width;
+    return {
+      ratio: ratio,
+      over: buttons.every((item) => item.top >= banner.top - 2 && item.bottom <= banner.bottom + 2),
+      wide: Math.round(banner.width) >= Math.round(document.querySelector("main").getBoundingClientRect().width) - 2
+    };
+  });
+  if (Math.abs(laid.ratio - 1 / 3) > 0.04) fail(label + " banner size changed");
+  if (!laid.over) fail(label + " buttons are not over the banner");
+  if (!laid.wide) fail(label + " banner is not full width");
   await page.click("[data-act='profile-tools']");
   await page.waitForSelector(".profile-menu", { timeout: 5000 });
   const tools = await page.evaluate(() => {
@@ -118,7 +150,8 @@ async function check(page, label) {
   });
   await page.waitForFunction(() => {
     const bar = document.querySelector(".profile-chrome");
-    return !!(bar && bar.classList.contains("is-solid"));
+    const copy = document.querySelector(".profile-chrome-copy");
+    return !!(bar && bar.classList.contains("is-solid") && copy && !copy.hidden);
   }, null, { timeout: 5000 });
 }
 
