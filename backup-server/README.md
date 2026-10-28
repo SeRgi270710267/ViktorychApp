@@ -107,3 +107,17 @@ The same Docker image works on Koyeb, Fly.io, a Hugging Face Docker Space, or
 Oracle Cloud Always Free. The only requirement is outbound HTTPS access to
 `api.cloudflare.com`. A second Cloudflare account is not needed (and would
 reintroduce separate account data, which this design avoids).
+
+## Background jobs
+
+While the service is awake it also runs the heavy, non-urgent cron jobs:
+feed ingest (several due feeds per pass, three fetches at a time), expired
+story cleanup (wider pools), the hourly birthday sweeps, and TikTok live
+watching when `GITHUB_DISPATCH_TOKEN` is set. Every minute it writes a claim
+to the shared D1 (`job_runner`); the Worker cron skips claimed jobs. If the
+free instance sleeps the claim goes stale within 2.5 minutes and the Worker
+runs them again by itself. `RENDER_JOBS=0` turns this off. `/backup/status`
+shows `jobs` (runs, last run, failures).
+
+Push delivery, account deletion and the D1 export stay on the Worker: they
+need secrets, Durable Objects or bindings this service does not have.

@@ -198,7 +198,8 @@ async function exercise(browser, origin, vp) {
     other.src = "media/test-tone-c.wav";
     other.volume = 0.1;
     document.body.appendChild(other);
-    other.play();
+    const started = other.play();
+    if (started && started.catch) started.catch(() => {});
   });
   await wait(page, where + " step 180", () => document.getElementById("mu-audio").paused, null, { timeout: 8000 });
   await ev(page, () => { const o = document.getElementById("other-sound"); o.pause(); o.remove(); });

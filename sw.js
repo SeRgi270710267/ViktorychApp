@@ -4,7 +4,11 @@ const VERSION = "viktorych-a67-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
+<<<<<<< HEAD
 // cache-bust: 2026-10-28T19:21:00Z-music
+=======
+// cache-bust: 2026-10-28T19:21:00Z-renderjobs
+>>>>>>> origin/main
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";

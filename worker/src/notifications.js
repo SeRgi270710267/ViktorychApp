@@ -1,3 +1,4 @@
+import { eachLimit } from "./limit.js";
 /* Account notifications.
    D1 is the source of truth: items, the read cursor, tab settings, bells,
    and one push subscription per device. Open pages hear changes on the
@@ -1029,14 +1030,14 @@ export async function drainOutbox(env) {
     "SELECT delivery_id, public_id, note_id, attempts FROM notification_outbox WHERE next_at <= ? ORDER BY next_at ASC LIMIT 20"
   ).bind(now).all();
   const rows = (listed && listed.results) || [];
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+  // Pushes go out four at a time instead of one after another.
+  await eachLimit(rows, 4, async (row) => {
     const note = await env.DB.prepare(
       "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? AND note_id = ?"
     ).bind(row.public_id, row.note_id).first();
     if (!note) {
       await completeOutbox(env, row.delivery_id);
-      continue;
+      return;
     }
     const item = itemFromRow(note, 0);
     await finishDeliveries(env, [{
@@ -1046,7 +1047,7 @@ export async function drainOutbox(env) {
       deliveryId: row.delivery_id,
       readUntil: 0
     }]);
-  }
+  });
 }
 
 export async function notifyLiveStarted(env, info) {
