@@ -1935,6 +1935,7 @@ SI18n.addPack("ru", {
   "Partial. Replies on recent public posts, not X's mention inbox.": "Частично. Ответы на недавние публичные посты, не входящие упоминания X.",
   "Saved on this device. X opened in a new tab": "Сохранено на этом устройстве. X открылся в новой вкладке",
   "The draft stays on this device. You press Post on X.": "Черновик остаётся на этом устройстве. Кнопку публикации вы нажимаете в X.",
+  "Draft stays on this device.": "Черновик остаётся на этом устройстве.",
   "Follows you": "Подписан на вас",
   "You're blocked": "Вас заблокировали",
   "You blocked this account": "Вы заблокировали этот аккаунт",
