@@ -66,3 +66,10 @@ console.log("profile tab order ok");
   const run = spawnSync(process.execPath, ["scripts/device_sync_test.js"], { stdio: "inherit" });
   if (run.status !== 0) throw new Error("device sync check failed");
 }
+
+// API ETag reuse rides along too.
+{
+  const { spawnSync } = await import("node:child_process");
+  const run = spawnSync(process.execPath, ["scripts/api_etag_test.mjs"], { stdio: "inherit" });
+  if (run.status !== 0) throw new Error("api etag check failed");
+}
