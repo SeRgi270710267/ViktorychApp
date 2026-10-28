@@ -1921,7 +1921,9 @@
       host.addEventListener("pointercancel", () => hold(false));
       host.addEventListener("pointerleave", () => hold(false));
       const clip = el.querySelector(".sp-marquee-clip");
+      const text = el.querySelector(".sp-marquee-text");
       if (clip && root.ResizeObserver) new root.ResizeObserver(() => applyMarquee(el)).observe(clip);
+      if (text && root.MutationObserver) new root.MutationObserver(() => applyMarquee(el)).observe(text, { childList: true, characterData: true, subtree: true });
       if (!io && root.IntersectionObserver) {
         io = new root.IntersectionObserver((entries) => {
           entries.forEach((entry) => {
