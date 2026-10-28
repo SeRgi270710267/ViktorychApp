@@ -126,28 +126,24 @@ async function exercise(page, label, origin) {
   }, null, { timeout: 15000 });
 
   await page.goto(origin + "/#/", { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => {
+  const opened = await page.waitForFunction(() => {
     window.scrollTo(0, 0);
     document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
-    const phone = document.querySelector("button.m-ava");
-    const side = document.querySelector("header.nav a.nav-item");
-    const shown = (el) => {
-      if (!el) return false;
+    const phone = [...document.querySelectorAll("button.m-ava")].find((el) => {
       const style = getComputedStyle(el);
-      if (style.display === "none" || style.visibility === "hidden") return false;
       const rect = el.getBoundingClientRect();
-      return rect.height > 8 && rect.top >= 0 && rect.top < window.innerHeight;
-    };
-    return shown(phone) || shown(side);
+      return style.display !== "none" && rect.height > 8 && rect.top >= 0 && rect.top < window.innerHeight;
+    });
+    const side = [...document.querySelectorAll("header.nav a.nav-item")].find((el) => {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && rect.height > 8 && rect.top >= 0 && rect.top < window.innerHeight;
+    });
+    if (phone) phone.click();
+    return !!document.querySelector(".drawer") || !!side;
   }, null, { timeout: 15000 });
-  const phoneMenu = page.locator("button.m-ava").locator("visible=true");
-  if (await phoneMenu.count()) {
-    await phoneMenu.first().evaluate((el) => el.click());
-    await page.waitForFunction(() => !!document.querySelector(".drawer"), null, { timeout: 8000 });
-    await page.keyboard.press("Escape");
-  } else if (!(await page.locator("header.nav a.nav-item").locator("visible=true").count())) {
-    fail(label + " has no menu");
-  }
+  if (await page.locator(".drawer").count()) await page.keyboard.press("Escape");
+  else if (!opened) fail(label + " has no menu");
 
   const caps = await page.evaluate(() => {
     const ios = window.ViktorychIos;
