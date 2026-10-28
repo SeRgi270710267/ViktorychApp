@@ -35,7 +35,8 @@
     repeat: "M7 7h8.2L13.6 5.4 15 4l4 4-4 4-1.4-1.4L15.2 9H7v3.2H5V9c0-1.1.9-2 2-2zm10 10H8.8l1.6 1.6L9 20l-4-4 4-4 1.4 1.4L8.8 15H17v-3.2h2V17c0 1.1-.9 2-2 2z",
     vol: "M4 9.2v5.6h3.4L12 19.5V4.5L7.4 9.2H4zm9.2 2.8a3.6 3.6 0 0 0-2-3.2v6.4a3.6 3.6 0 0 0 2-3.2z",
     up: "M7 14.2 12 9.2l5 5-1.4 1.4L12 12l-3.6 3.6z",
-    down: "M7 9.8 12 14.8l5-5-1.4-1.4L12 12 8.4 8.4z"
+    down: "M7 9.8 12 14.8l5-5-1.4-1.4L12 12 8.4 8.4z",
+    close: "M10.59 12 4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z"
   };
 
   function install(PATH) {
@@ -424,12 +425,81 @@
   var HLS_SRC = "hls-1.7.3.min.js";
   var OFFLINE_CACHE = "sintel-music-offline";
   var active = false;
+  /* The player keeps going after the user leaves the music pages. The dock
+     then shows as a mini player across the whole app. */
+  var docked = false;
+  var NOW_STORE = "viktorych-music-now-v1";
+  var resume = { id: "", at: 0 };
+  var savedAt = 0;
   var poll = 0;
   var blobUrls = {};
   var dragId = "";
   var dragList = "";
   var paintedId = "\0";
   var paintedPlaying = null;
+
+  function live() { return active || docked; }
+
+  function hasQueue() { return play.queue.length > 0 && play.index >= 0; }
+
+  function saveNow(force) {
+    var stamp = Date.now();
+    if (!force && stamp - savedAt < 4000) return;
+    savedAt = stamp;
+    try {
+      if (!hasQueue()) { localStorage.removeItem(NOW_STORE); return; }
+      var song = currentSong();
+      var at = song && song.id !== resume.id ? position().cur : (resume.at || position().cur);
+      localStorage.setItem(NOW_STORE, JSON.stringify({ queue: play.queue.slice(0, 500), index: play.index, id: play.queue[play.index] || "", at: Math.max(0, Math.floor(at || 0)) }));
+    } catch (err) { /* private mode */ }
+  }
+
+  function restoreNow() {
+    try {
+      var data = JSON.parse(localStorage.getItem(NOW_STORE) || "null");
+      if (!data || !Array.isArray(data.queue) || !data.queue.length) return;
+      var index = Number(data.index) || 0;
+      if (index < 0 || index >= data.queue.length) index = 0;
+      play.queue = data.queue.map(String);
+      play.index = index;
+      resume = { id: String(play.queue[index] || ""), at: Number(data.at) || 0 };
+    } catch (err) { /* nothing saved */ }
+  }
+
+  function setDocked(on) {
+    docked = !!on;
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("music-mini", docked);
+    var dock = document.getElementById("mu-dock");
+    if (dock) dock.hidden = !live();
+  }
+
+  /* Other sound in the app wins: a video or live that plays with sound
+     pauses the music. Muted autoplay in the timeline leaves it alone. */
+  function onOtherMedia(event) {
+    var el = event.target;
+    if (!el || el === audio || !el.tagName) return;
+    var tag = String(el.tagName).toLowerCase();
+    if (tag !== "video" && tag !== "audio") return;
+    if (el.paused || el.muted || el.volume === 0) return;
+    if (!play.playing) return;
+    pauseAll();
+    saveNow(true);
+    paint();
+  }
+
+  function stopPlayer() {
+    pauseAll();
+    clearMedia();
+    stopYouTube();
+    play.queue = [];
+    play.index = -1;
+    resume = { id: "", at: 0 };
+    ui.now = false;
+    saveNow(true);
+    clearSession();
+    setDocked(false);
+  }
 
   function library() { return mergeLibrary(remote, local); }
   function songs() { return library().songs; }
@@ -1465,7 +1535,7 @@
   }
 
   function session(song) {
-    if (!navigator.mediaSession || !song || !active) return;
+    if (!navigator.mediaSession || !song || !live()) return;
     try {
       var artworks = [];
       if (song.cover && song.cover.indexOf("https://") === 0) {
@@ -1504,8 +1574,9 @@
   }
 
   function paint() {
-    if (!active || typeof document === "undefined") return;
+    if (!live() || typeof document === "undefined") return;
     var song = currentSong();
+    if (play.playing) saveNow(false);
     var dock = document.getElementById("mu-dock");
     if (dock) dock.hidden = false;
     text("mu-dock-title", song ? (song.title || tr("Untitled")) : tr("Not playing"));
@@ -1571,7 +1642,7 @@
     }
     if (play.playing && !poll) {
       poll = root.setInterval(function () {
-        if (!active || !play.playing) {
+        if (!live() || !play.playing) {
           root.clearInterval(poll);
           poll = 0;
           return;
@@ -1601,7 +1672,7 @@
     dock.innerHTML = ("<div class=\"mu-bar\"><button class=\"mu-id\" type=\"button\" data-act=\"music-now\" " + "aria-label=\"" + tr("Now playing") + "\"" + "><span id=\"mu-dock-art\"></span><span class=\"mu-copy\"><b id=\"mu-dock-title\"" + ">" + tr("Not playing") + "<" + "/b><span id=\"mu-dock-artist\">") + productName("musicShort") + '</span></span></button>' +
       ("<div class=\"mu-transport\"><button type=\"button\" class=\"mu-shuffle\" data-act=\"music-shuffle\" " + "aria-label=\"" + tr("Shuffle") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.shuffle) + ("</button><button type=\"button\" data-act=\"music-prev\" " + "aria-label=\"" + tr("Previous") + "\"" + ">") + svg(CTRL.prev) + ("</button><button id=\"mu-play\" class=\"mu-play\" type=\"button\" data-act=\"music-toggle\" " + "aria-label=\"" + tr("Play") + "\"" + ">") + svg(CTRL.play) + ("</button><button type=\"button\" data-act=\"music-next\" " + "aria-label=\"" + tr("Next") + "\"" + ">") + svg(CTRL.next) + ("</button><button type=\"button\" class=\"mu-rep\" data-act=\"music-repeat\" " + "aria-label=\"" + tr("Repeat") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.repeat) + '<i></i></button></div>' +
       ("<div class=\"mu-seek\"><span class=\"mu-time\" id=\"mu-time\">0:00</span><input id=\"mu-seek\" class=\"mu-range\" type=\"range\" min=\"0\" max=\"0\" value=\"0\" step=\"0.1\" " + "aria-label=\"" + tr("Seek") + "\"" + "><span class=\"mu-time\" id=\"mu-end\">0:00</span></div>") +
-      ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div></div>");
+      ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div>") + '<button type="button" class="mu-mini-x" data-act="music-stop" aria-label="' + tr("Close player") + '">' + svg(CTRL.close) + "</button></div>";
     var now = document.createElement("div");
     now.id = "mu-now";
     now.className = "mu-now";
@@ -1631,7 +1702,18 @@
       writeSong(song);
     });
     audio.addEventListener("play", function () { play.playing = true; paint(); });
-    audio.addEventListener("pause", function () { if (active && !ytPending) { play.playing = false; paint(); } });
+    audio.addEventListener("pause", function () { if (live() && !ytPending) { play.playing = false; saveNow(true); paint(); } });
+    audio.addEventListener("loadedmetadata", function () {
+      var song = currentSong();
+      if (!song || !resume.at || resume.id !== song.id) return;
+      var at = resume.at;
+      resume = { id: "", at: 0 };
+      if (audio.duration && isFinite(audio.duration) && at >= audio.duration - 1) return;
+      try { audio.currentTime = at; } catch (err) { /* not seekable */ }
+    });
+    document.addEventListener("play", onOtherMedia, true);
+    document.addEventListener("volumechange", onOtherMedia, true);
+    root.addEventListener("pagehide", function () { saveNow(true); });
     document.addEventListener("contextmenu", function (event) {
       var node = event.target;
       if (node && node.closest && node.closest("#mu-dock, #mu-now, #mu-audio, .mu-release")) event.preventDefault();
@@ -1640,6 +1722,7 @@
 
   function enter() {
     active = true;
+    setDocked(false);
     document.documentElement.classList.add("music-on");
     loadMusicHls();
     var dock = document.getElementById("mu-dock");
@@ -1652,6 +1735,15 @@
   function leave(route) {
     var was = active;
     active = false;
+    if (hasQueue() && !(route && route.name === "watch")) {
+      /* Keep playing across the app. The dock becomes the mini player. */
+      if (was) ui.now = false;
+      if (typeof document !== "undefined") document.documentElement.classList.remove("music-on");
+      setDocked(true);
+      paint();
+      return;
+    }
+    setDocked(false);
     ui.now = false;
     if (poll) { root.clearInterval(poll); poll = 0; }
     if (typeof document !== "undefined") document.documentElement.classList.remove("music-on");
@@ -1816,6 +1908,7 @@
     }
     if (act === "music-now") { ui.now = true; paint(); return true; }
     if (act === "music-now-close") { ui.now = false; paint(); return true; }
+    if (act === "music-stop") { stopPlayer(); return true; }
     if (act === "music-offline") {
       var target = songById(id) || currentSong();
       if (!target) return true;
@@ -1958,6 +2051,7 @@
     if (next.repo) hooks.repo = next.repo;
     if (typeof document === "undefined") return;
     restore();
+    restoreNow();
     mount();
     loadRemote();
     document.addEventListener("load", onCoverEvent, true);
@@ -1998,8 +2092,10 @@
     onAct: onAct,
     page: page,
     afterRender: afterRender,
-    playing: function () { return !!(active && play.playing); },
-    ownsSession: function () { return active; },
+    playing: function () { return !!(live() && play.playing); },
+    ownsSession: function () { return live(); },
+    pause: function () { if (play.playing) { pauseAll(); saveNow(true); paint(); } },
+    docked: function () { return docked; },
     sameSection: sameSection,
     titleFor: titleFor,
     bottomHtml: bottomHtml,
