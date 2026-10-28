@@ -1083,8 +1083,8 @@ const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notificati
 
 function cleanDrawerMenuSync(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const ids = ["profile", "premium", "communities", "bookmarks", "lists", "spaces", "requests", "studio", "tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music", "settings", "help", "logout", "customize"];
-  const locked = { settings: true, logout: true, customize: true };
+  const ids = ["home", "explore", "notifications", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music", "settings", "help", "logout", "customize"];
+  const locked = { home: true, settings: true, logout: true, customize: true };
   const order = [];
   const seen = {};
   (Array.isArray(raw.order) ? raw.order : []).slice(0, 40).forEach((entry) => {
@@ -1108,14 +1108,21 @@ function cleanDrawerMenuSync(raw) {
     if (!section || typeof section !== "object") return;
     const id = String(section.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
     if (!id) return;
-    const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40) || "Section";
+    const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40) || "Folder";
+    const emoji = String(section.emoji || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
     const items = [];
     (Array.isArray(section.items) ? section.items : []).slice(0, 24).forEach((item) => {
       if (ids.indexOf(item) >= 0 && items.indexOf(item) < 0) items.push(item);
     });
-    sections.push({ id: id, name: name, items: items });
+    sections.push({ id: id, name: name, emoji: emoji, items: items });
   });
-  return { order: order, hidden: hidden, sections: sections, at: Number(raw.at) || 0 };
+  const popup = ["settings", "logout"];
+  (Array.isArray(raw.popup) ? raw.popup : []).forEach((id) => {
+    const text = String(id || "");
+    if (ids.indexOf(text) < 0 || text === "home" || text === "customize" || popup.indexOf(text) >= 0) return;
+    popup.push(text);
+  });
+  return { order: order, hidden: hidden, sections: sections, popup: popup, at: Number(raw.at) || 0 };
 }
 
 function cleanBottomNavSync(raw) {
