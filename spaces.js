@@ -1897,7 +1897,13 @@
       return;
     }
     delete el.dataset.marqueeWait;
+    const previousDisplay = text.style.display;
+    const previousSpace = text.style.whiteSpace;
+    text.style.display = "inline-block";
+    text.style.whiteSpace = "nowrap";
     const overflow = text.scrollWidth - clip.clientWidth;
+    text.style.display = previousDisplay;
+    text.style.whiteSpace = previousSpace;
     const plan = marqueePlan(overflow, reduced);
     el.classList.toggle("is-on", !!plan.animate);
     const track = el.querySelector(".sp-marquee-track");
