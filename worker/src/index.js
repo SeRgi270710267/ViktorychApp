@@ -39,12 +39,14 @@ import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingReq
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
+import { ABOUT_SCHEMA, handleAbout } from "./about.js";
+import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
+import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
 import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
 import { HIGHLIGHT_SCHEMA, handleHighlights } from "./highlights.js";
-import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -96,7 +98,7 @@ function areaFor(path, method) {
   if (text === "/v1/sync" || text.startsWith("/v1/sync/")) return "sync";
   if (text === "/v1/owner/keys" || text.startsWith("/v1/owner/keys/")) return "owner-keys";
   if (text.startsWith("/v1/media/") || (text === "/v1/profile" && method === "PATCH")) return "upload";
-  if (text === "/v1/profile" || text.startsWith("/v1/profile/")) return "profile";
+  if (text === "/v1/profile" || text.startsWith("/v1/profile/") || text === "/v1/about" || text.startsWith("/v1/about/")) return "profile";
   if (text.startsWith("/v1/stories")) return "upload";
   if (text === "/v1/notes" || text.startsWith("/v1/notes/") || text === "/v1/story-bar" || text === "/v1/highlights" || text.startsWith("/v1/highlights/") || text === "/v1/audience-lists" || text.startsWith("/v1/audience-lists/")) return "profile";
   if (text.startsWith("/v1/communities")) return "feed";
@@ -234,7 +236,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -5166,6 +5168,16 @@ async function route(request, env, ctx) {
   if (path === "/v1/friends/decline" && request.method === "POST") return handleFriendAction(request, env, "decline");
   if (path === "/v1/friends/cancel" && request.method === "POST") return handleFriendAction(request, env, "cancel");
   if (path === "/v1/friends/remove" && request.method === "POST") return handleFriendAction(request, env, "remove");
+  if (path === "/v1/audience-lists" || path.startsWith("/v1/audience-lists/")) {
+    const listed = await handleAudienceLists(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (listed) return listed;
+  }
+  if (path === "/v1/about" || path.startsWith("/v1/about/")) {
+    const birthday = await handleBirthdayRoutes(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (birthday) return birthday;
+    const told = await handleAbout(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (told) return told;
+  }
   const profile = path.match(/^\/v1\/profile\/([^/]+)$/);
   if (profile && request.method === "GET") {
     const viewer = await sessionAccount(env, request);
@@ -5278,6 +5290,7 @@ export default {
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (new Date(at).getUTCMinutes() === 0) jobs.push(runBirthdaySweep(env, at));
     jobs.push(maybeBackupD1(env, at));
     if (new Date(at).getUTCMinutes() === 0) jobs.push(awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
