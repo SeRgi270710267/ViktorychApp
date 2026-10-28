@@ -1,3 +1,4 @@
+import { mentionSuggest } from "./mention-suggest.js";
 import { bindOwner, inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 import { parseRoomId, pickStreams, roomStats, isTopQuality } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
@@ -225,6 +226,8 @@ function ensureSchema(env) {
     schemaReady = env.DB.batch([
       env.DB.prepare("CREATE TABLE IF NOT EXISTS accounts (public_id TEXT PRIMARY KEY, handle TEXT NOT NULL, skeleton TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT '', banner TEXT NOT NULL DEFAULT '', bio TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', hide_avatar TEXT NOT NULL DEFAULT '', avatar_empty TEXT NOT NULL DEFAULT 'default', banner_empty TEXT NOT NULL DEFAULT 'default', private_follows INTEGER NOT NULL DEFAULT 0, profile_less INTEGER NOT NULL DEFAULT 0, owner INTEGER NOT NULL DEFAULT 0, number_lookup TEXT NOT NULL UNIQUE, number_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS accounts_one_owner ON accounts(owner) WHERE owner = 1"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS accounts_handle_lower ON accounts(lower(handle))"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS accounts_name_lower ON accounts(lower(display_name))"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS sessions_account ON sessions(public_id)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS sync_state (public_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at INTEGER NOT NULL)"),
@@ -5022,6 +5025,27 @@ async function handleFriendsGet(request, env, url) {
 }
 
 async function handleFriendAction(request, env, action) {
+  const res = await friendAction(request, env, action);
+  const done = res && res.__friend;
+  if (done) {
+    try {
+      const notes = await import("./notifications.js");
+      if (done.note) {
+        const target = await env.DB.prepare("SELECT handle FROM accounts WHERE public_id = ?").bind(done.target).first();
+        await notes.notifyFriend(env, done.viewer, done.target, done.note, target && target.handle);
+      }
+      await notes.signalFriends(env, [done.viewer.public_id, done.target]);
+    } catch (err) { /* the friend change is saved */ }
+  }
+  return res;
+}
+
+function friendDone(res, viewer, target, note) {
+  res.__friend = { viewer: viewer, target: target, note: note || "" };
+  return res;
+}
+
+async function friendAction(request, env, action) {
   const viewer = await sessionAccount(env, request);
   if (!viewer) return json(401, { error: "unauthorized" });
 
@@ -5053,13 +5077,14 @@ async function handleFriendAction(request, env, action) {
         env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now),
         env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
       ]);
-      return json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) });
+      return friendDone(json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "friend_accept");
     }
     const paced = await rateHit(env, "freq:" + viewer.public_id, 40, 10 * 60 * 1000);
     if (!paced.ok) return limited(paced);
 
-    await env.DB.prepare("INSERT INTO account_friend_requests (sender_id, receiver_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now).run();
-    return json(200, { ok: true, status: "sent", friendsCount: await friendCount(env, viewer.public_id) });
+    const wrote = await env.DB.prepare("INSERT INTO account_friend_requests (sender_id, receiver_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now).run();
+    const fresh = !!(wrote && wrote.meta && wrote.meta.changes);
+    return friendDone(json(200, { ok: true, status: "sent", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, fresh ? "friend_request" : "");
   }
 
   if (action === "accept") {
@@ -5070,22 +5095,22 @@ async function handleFriendAction(request, env, action) {
       env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now),
       env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
     ]);
-    return json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "friend_accept");
   }
 
   if (action === "decline") {
     await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewer.public_id).run();
-    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "");
   }
 
   if (action === "cancel") {
     await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(viewer.public_id, targetId).run();
-    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "");
   }
 
   if (action === "remove") {
     await env.DB.prepare("DELETE FROM account_friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)").bind(viewer.public_id, targetId, targetId, viewer.public_id).run();
-    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+    return friendDone(json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "");
   }
 
   return json(400, { error: "bad_action" });
@@ -5231,6 +5256,11 @@ async function route(request, env, ctx) {
   if (path === "/v1/sync" && request.method === "PUT") return handleSyncPut(request, env);
   if (path === "/v1/reposts" && request.method === "PUT") return handleRepostPut(request, env);
   if (path === "/v1/reposts" && (request.method === "POST" || request.method === "DELETE")) return handleRepostDelete(request, env);
+  if (path === "/v1/mentions/suggest" && request.method === "GET") {
+    const viewer = await sessionAccount(env, request);
+    if (!viewer) return json(401, { error: "unauthorized" });
+    return mentionSuggest(env, request, url, viewer, { json, rateHit, mediaUrl: mediaPublicUrl });
+  }
   const social = await handleSocialRoutes(request, env, path, url, {
     json,
     readJson,

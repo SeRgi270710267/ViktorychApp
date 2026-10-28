@@ -888,7 +888,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, dm: 1, discord: 1, live: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -2072,6 +2072,34 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const label = cls === "business" ? tr("Verified business") : cls === "government" ? tr("Verified government") : tr("Verified");
     return `<span class="vbadge ${cls}" title="${label}">${icon("check")}</span>`;
   }
+
+  /* Outside accounts for @mention suggestions: followed sources first, then
+     authors already in the timeline. Matching is a case-insensitive prefix
+     on the handle or the name. */
+  window.ViktorychMentionsLocal = {
+    search(query) {
+      const q = String(query || "").toLowerCase();
+      if (!q) return [];
+      const out = [];
+      const seen = {};
+      const take = (row, follows) => {
+        if (!row || row.platform !== "x" || !row.handle) return;
+        const handle = String(row.handle);
+        const key = handle.toLowerCase();
+        if (seen[key]) return;
+        const name = String(row.name || row.author || "");
+        if (key.indexOf(q) !== 0 && name.toLowerCase().indexOf(q) !== 0) return;
+        seen[key] = true;
+        out.push({ handle, name, avatar: row.avatar || "", verifiedType: row.verifiedType || "", platform: "x", follows });
+      };
+      ((STATE.data && STATE.data.feeds) || []).forEach((feed) => take(feed, true));
+      ((STATE.data && STATE.data.posts) || []).slice(0, 400).forEach((post) => take(post, false));
+      return out.slice(0, 6);
+    },
+    badge(row) {
+      return (row && row.verifiedType ? badge(row.verifiedType) : "");
+    }
+  };
 
   function sourceBadge(platform) {
     if (!platform || platform === "x" || platform === "app") return "";
@@ -7327,6 +7355,13 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
+  function requestsCountHtml() {
+    const api = window.ViktorychAccounts;
+    const count = api && api.pendingFriendRequests ? api.pendingFriendRequests() : 0;
+    if (!count) return "";
+    return `<span class="online-count" data-requests-count>${count > 20 ? "20+" : String(count)}</span>`;
+  }
+
   function onlineCountHtml() {
     const count = window.ViktorychPresence && window.ViktorychPresence.onlineCount ? window.ViktorychPresence.onlineCount() : 0;
     if (!count) return "";
@@ -12166,6 +12201,8 @@ const here = parseRoute();
     if (kind === "follow") return tr("{name} followed you", { name: who });
     if (kind === "follow_request") return tr("{name} requested to follow you", { name: who });
     if (kind === "follow_accept") return tr("{name} accepted your follow request", { name: who });
+    if (kind === "friend_request") return tr("{name} sent you a friend request", { name: who });
+    if (kind === "friend_accept") return tr("{name} accepted your friend request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
     if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
     if (kind === "gift") return tr("{name} sent you a gift", { name: who });
@@ -12236,7 +12273,7 @@ const here = parseRoute();
     if (kind === "like") return "heart";
     if (kind === "repost" || kind === "quote") return "repost";
     if (kind === "reply" || kind === "mention" || (note && note.mention)) return "reply";
-    if (kind === "follow" || kind === "follow_request" || kind === "follow_accept") return "user";
+    if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "user";
     if (kind === "live") return "mic";
     return "bellOn";
   }
@@ -13101,7 +13138,7 @@ const here = parseRoute();
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
     if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
-    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests") };
+    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests"), extra: requestsCountHtml() };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
@@ -13125,20 +13162,20 @@ const here = parseRoute();
     const hidden = (menu.hidden || []).indexOf(item.id) >= 0;
     const locked = DRAWER_LOCKED.indexOf(item.id) >= 0;
     const eye = locked
-      ? `<span class="drawer-lock" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
+      ? `<span class="drawer-lock drawer-eye" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
       : `<button class="icon-btn drawer-eye" type="button" data-act="drawer-vis" data-id="${esc(item.id)}" aria-pressed="${hidden ? "false" : "true"}" aria-label="${esc(hidden ? tr("Hidden") : tr("Visible"))}">${icon(hidden ? "eyeOff" : "eye")}</button>`;
     const inPopup = (menu.popup || []).indexOf(item.id) >= 0;
     const placeLocked = item.id === "home" || item.id === "customize" || item.id === "settings" || item.id === "logout";
-    const placeBtn = placeLocked ? "" : `<button class="outline drawer-place" type="button" data-act="drawer-place" data-id="${esc(item.id)}" data-place="${inPopup ? "sidebar" : "popup"}">${esc(inPopup ? tr("Sidebar") : tr("Profile popup"))}</button>`;
+    const seg = (place, label, on) => `<button class="drawer-seg${on ? " on" : ""}" type="button"${on ? "" : ` data-act="drawer-place" data-id="${esc(item.id)}" data-place="${place}"`} aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+    const placeBtn = placeLocked ? "" : `<span class="drawer-place" role="group" aria-label="${esc(tr("Location"))}">${seg("sidebar", tr("Sidebar"), !inPopup)}${seg("popup", tr("Profile popup"), inPopup)}</span>`;
     const sections = (menu.sections || []).map((section) => `<option value="${esc(section.id)}">${esc(section.name)}</option>`).join("");
-    const move = locked || inPopup ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
+    const move = locked || inPopup || !sections ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
     return `<div class="drawer-edit-row${hidden ? " is-hidden" : ""}" data-drawer-key="${esc(item.id)}">
       <button class="drawer-grip" type="button" data-drag-drawer="${esc(item.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
       <span class="drawer-ico">${item.icon === "gear" ? menuIcon("gear") : icon(item.icon)}</span>
-      <span class="drawer-label">${esc(item.label)}</span>
-      ${move}
-      ${placeBtn}
+      <span class="drawer-label" title="${esc(item.label)}">${window.ViktorychAccounts && window.ViktorychAccounts.tabMarquee ? window.ViktorychAccounts.tabMarquee(item.label) : esc(item.label)}</span>
       ${eye}
+      ${move || placeBtn ? `<span class="drawer-ctl">${placeBtn}${move}</span>` : ""}
     </div>`;
   }
 
@@ -21106,6 +21143,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       saveSettings();
       paintBellBadge();
       if (parseRoute().name === "notifications") render();
+      return;
+    }
+    if (data.type === "friends") {
+      if (window.ViktorychAccounts && window.ViktorychAccounts.refreshFriends) window.ViktorychAccounts.refreshFriends();
       return;
     }
     if (data.type === "upsert" && Array.isArray(data.items)) {

@@ -999,7 +999,8 @@ const api = {
   stripHtml: stripHtml,
   pageHtml: pageHtml,
   railHtml: railHtml,
-  onlineCount: onlineCount
+  onlineCount: onlineCount,
+  reloadFriends: function () { return loadFriends(true); }
 };
 window.ViktorychPresence = api;
 

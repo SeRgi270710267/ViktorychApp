@@ -4,6 +4,7 @@
    normal browser chrome strip is not treated as split screen.
    Nothing here prints account names, handles, or ids. */
 import http from "node:http";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -694,6 +695,9 @@ async function pass(page, size) {
 
 async function boot(browser, signedIn) {
   const context = await browser.newContext({ viewport: null, serviceWorkers: "block" });
+  /* Keep the run hermetic: live scores, streams and other outside data
+     repaint rows mid-tap and made this check depend on the time of day. */
+  await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.fulfill({ status: 200, contentType: "text/plain", body: "" }));
   await context.addInitScript((signed) => {
     localStorage.setItem("superintelapp-lang", "es");
     localStorage.setItem("viktorychapp-lang-user-picked", "1");
@@ -806,6 +810,9 @@ async function main() {
   }
   if (process.exitCode) fail("menu page checks failed");
   console.log("menu pages ok");
+  /* The drawer layout check shares this job. */
+  const layout = spawnSync(process.execPath, [fileURLToPath(new URL("./drawer_layout_test.mjs", import.meta.url))], { stdio: "inherit", env: process.env });
+  if (layout.status !== 0) process.exit(layout.status || 1);
 }
 
 main().catch((err) => {
