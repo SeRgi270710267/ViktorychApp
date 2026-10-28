@@ -583,6 +583,7 @@ SI18n.addPack("es", {
   "Previous": "Anterior",
   "Next": "Siguiente",
   "Now playing": "Reproduciendo",
+  "Close player": "Cerrar reproductor",
   "Up next": "A continuación",
   "Find a song by title, artist, or album.": "Busca una canción por título, artista o álbum.",
   "No songs yet": "Aún no hay canciones",
