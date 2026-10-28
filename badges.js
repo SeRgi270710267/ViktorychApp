@@ -85,25 +85,6 @@
     return '<span class="badge-pill' + (tier ? " tier-" + tier : "") + '">' + (mark ? esc(mark) + " · " : "") + esc(name) + "</span>";
   }
 
-  function pinsHtml(account) {
-    var data = pack(account);
-    if (!data || !data.badges) return "";
-    var pinned = data.badges.filter(function (card) { return card.earned && card.pinned; }).slice(0, 3);
-    if (!pinned.length) return "";
-    return '<span class="badge-pins">' + pinned.map(pill).join("") + "</span>";
-  }
-
-  function rowHtml(account) {
-    var data = pack(account);
-    var earned = data && data.badges ? data.badges.filter(function (card) { return card.earned; }) : [];
-    var href = "#/@" + encodeURIComponent(account && account.handle || "") + "?tab=badges";
-    if (!earned.length) {
-      if (!account || !profileMine(account)) return "";
-      return '<a class="badge-row badge-row-empty" href="' + esc(href) + '">' + esc(tr("Badges")) + "</a>";
-    }
-    return '<a class="badge-row" href="' + esc(href) + '">' + earned.slice(0, 6).map(pill).join("") + "</a>";
-  }
-
   function profileMine(account) {
     var api = accounts();
     var session = api && api.account && api.account();
@@ -127,28 +108,44 @@
     }).join("") + "</div>";
   }
 
-  function html(account, mine) {
+  function tileHtml(card, mine, data) {
+    var pin = "";
+    var aud = "";
+    if (mine && card.earned) {
+      pin = '<button type="button" class="badge-pin' + (card.pinned ? " on" : "") + '" data-badge="pin" data-id="' + esc(card.id) + '" data-pinned="' + (card.pinned ? "1" : "0") + '">' + esc(card.pinned ? tr("Unpin") : tr("Pin")) + "</button>";
+      aud = audiencePills(card);
+    }
+    return '<div class="badge-tile' + (card.earned ? " earned" : "") + (card.pinned ? " featured" : "") + '">' +
+      '<div class="badge-card-top">' + pill(card) + pin + "</div>" +
+      '<p>' + esc(hint(card.id)) + "</p>" +
+      bar(card) +
+      aud +
+      (data && data.note && data.noteId === card.id ? '<p class="badge-note">' + esc(data.note) + "</p>" : "") +
+    "</div>";
+  }
+
+  function blockHtml(account) {
     ensure(account);
+    var mine = profileMine(account);
     var data = pack(account);
-    if (!data) return '<div class="reply-empty">' + esc(tr("Loading…")) + "</div>";
-    var list = (data.badges || []).slice();
-    if (!mine) list = list.filter(function (card) { return card.earned; });
-    if (!list.length) return '<div class="empty"><h2>' + esc(tr("Badges")) + "</h2><p>" + esc(tr("No badges yet")) + "</p></div>";
-    return '<div class="badge-sheet">' + list.map(function (card) {
-      var pin = "";
-      var aud = "";
-      if (mine && card.earned) {
-        pin = '<button type="button" class="badge-pin' + (card.pinned ? " on" : "") + '" data-badge="pin" data-id="' + esc(card.id) + '" data-pinned="' + (card.pinned ? "1" : "0") + '">' + esc(card.pinned ? tr("Unpin") : tr("Pin")) + "</button>";
-        aud = audiencePills(card);
-      }
-      return '<section class="badge-card' + (card.earned ? " earned" : "") + '">' +
-        '<div class="badge-card-top">' + pill(card) + pin + "</div>" +
-        '<p>' + esc(hint(card.id)) + "</p>" +
-        (mine ? bar(card) : "") +
-        aud +
-        (data.note && data.noteId === card.id ? '<p class="badge-note">' + esc(data.note) + "</p>" : "") +
-      "</section>";
-    }).join("") + "</div>";
+    if (!data) {
+      if (!mine) return "";
+      return '<section class="about-section badge-block"><div class="about-head"><h2>' + esc(tr("Badges")) + '</h2></div><p class="about-wait">' + esc(tr("Loading…")) + "</p></section>";
+    }
+    var earned = (data.badges || []).filter(function (card) { return card.earned; });
+    var pinned = earned.filter(function (card) { return card.pinned; }).slice(0, 3);
+    var grid = mine ? (data.badges || []).slice() : earned.slice();
+    if (!grid.length) {
+      if (!mine) return "";
+      return '<section class="about-section badge-block"><div class="about-head"><h2>' + esc(tr("Badges")) + '</h2></div><p>' + esc(tr("No badges yet")) + "</p></section>";
+    }
+    var featured = pinned.length ? '<div class="badge-featured">' + pinned.map(pill).join("") + "</div>" : "";
+    return '<section class="about-section badge-block"><div class="about-head"><h2>' + esc(tr("Badges")) + "</h2></div>" + featured + '<div class="badge-grid">' + grid.map(function (card) { return tileHtml(card, mine, data); }).join("") + "</div></section>";
+  }
+
+  function hasEarned(account) {
+    var data = pack(account);
+    return !!(data && data.badges && data.badges.some(function (card) { return card.earned; }));
   }
 
   function showToast(notice) {
@@ -249,9 +246,8 @@
 
   root.ProfileBadges = {
     ensure: ensure,
-    html: html,
-    pinsHtml: pinsHtml,
-    rowHtml: rowHtml
+    blockHtml: blockHtml,
+    hasEarned: hasEarned
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
