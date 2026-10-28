@@ -803,6 +803,21 @@
     renderViewer();
   }
 
+  function play(account) {
+    if (!account || !account.items || !account.items.length) return;
+    view = {
+      list: [account],
+      account: 0,
+      index: 0,
+      elapsed: 0,
+      paused: false,
+      compose: false,
+      connect: false,
+      note: false
+    };
+    renderViewer();
+  }
+
   function open(id) {
     var list = rows();
     var at = 0;
@@ -1641,6 +1656,7 @@
     bind: bind,
     start: start,
     open: open,
+    play: play,
     close: close,
     homeTray: homeTray,
     trayExtra: trayExtra,

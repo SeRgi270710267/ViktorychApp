@@ -423,16 +423,31 @@ export async function sweepExpiredStories(env, now) {
   if (env && env.DB) {
     try {
       const expired = await env.DB.prepare(
-        "SELECT id, r2_key FROM app_stories WHERE expires_at <= ? LIMIT 40"
+        "SELECT id, public_id, kind, vine, r2_key, mime, bytes FROM app_stories WHERE expires_at <= ? LIMIT 40"
       ).bind(at).all();
       for (const row of rowsOf(expired)) {
+        const archived = "stories/library/" + row.public_id + "/" + row.id;
+        if (env.DATA && row.r2_key) {
+          try {
+            const object = await env.DATA.get(row.r2_key);
+            if (object) {
+              const bytes = typeof object.arrayBuffer === "function" ? await object.arrayBuffer() : object.body;
+              await env.DATA.put(archived, bytes, {
+                httpMetadata: { contentType: row.mime || "application/octet-stream", cacheControl: "private, no-store" }
+              });
+              await env.DB.prepare(
+                "INSERT INTO story_library (id, public_id, kind, vine, r2_key, mime, bytes, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'story', ?) ON CONFLICT(id) DO NOTHING"
+              ).bind(row.id, row.public_id, row.kind || "photo", row.vine || 0, archived, row.mime || "", Number(row.bytes) || 0, at).run();
+            }
+          } catch (err) { /* the live row still leaves the bar */ }
+        }
         await env.DB.batch([
           env.DB.prepare("DELETE FROM app_story_views WHERE story_id = ?").bind(row.id),
           env.DB.prepare("DELETE FROM app_story_reactions WHERE story_id = ?").bind(row.id),
           env.DB.prepare("DELETE FROM app_story_replies WHERE story_id = ?").bind(row.id),
           env.DB.prepare("DELETE FROM app_stories WHERE id = ?").bind(row.id)
         ]);
-        if (env.DATA && row.r2_key) {
+        if (env.DATA && row.r2_key && row.r2_key !== archived) {
           try { await env.DATA.delete(row.r2_key); }
           catch (err) { /* the next pass retries */ }
         }

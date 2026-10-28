@@ -261,7 +261,7 @@
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     opts = opts || {};
     var headers = {};
-    if (opts.body) headers["content-type"] = "application/json";
+    if (opts.body && !opts.form) headers["content-type"] = "application/json";
     if (opts.token) headers.Authorization = "Bearer " + opts.token;
     if (opts.headers) {
       Object.keys(opts.headers).forEach(function (key) { headers[key] = opts.headers[key]; });
@@ -275,7 +275,7 @@
       return nativeFetch(root + path, {
         method: opts.method || "GET",
         headers: headers,
-        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        body: opts.form || (opts.body ? JSON.stringify(opts.body) : undefined),
         credentials: "omit"
       }).then(function (res) {
         if ((res.status === 429 || (res.status >= 502 && res.status <= 504)) && endpointIndex + 1 < list.length) {
@@ -2648,6 +2648,7 @@ function signupPayload() {
     var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
     var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tr("{count} mutual friends", { count: mutualCount })) + '</div>' : '';
 
+    var highlightRow = window.Highlights && window.Highlights.row ? window.Highlights.row(account, mine) : "";
     var tabs = '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '">' +
       '<a class="tab' + (activeTab === "posts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "posts" ? "true" : "false") + '" href="' + esc(profileHref) + '"><span>' + esc(tr("Posts")) + '</span></a>' +
       '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
@@ -2655,7 +2656,7 @@ function signupPayload() {
 
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
     var lock = account.privateFollows ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + highlightRow + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
