@@ -174,6 +174,10 @@ async function main() {
       await exercise(page, vp, origin);
     }
     console.log("composer page ok");
+    // Home's community and app post cards ride along here so the smoke workflow runs them.
+    const { spawnSync } = await import("node:child_process");
+    const home = spawnSync(process.execPath, [path.join(root, "scripts", "community_home_test.mjs")], { stdio: "inherit", env: process.env });
+    if (home.status !== 0) fail("community home check failed");
   } finally {
     await browser.close();
     server.close();
