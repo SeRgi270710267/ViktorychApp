@@ -934,6 +934,13 @@ var numberNote = form.passkey
     }
     return settings.syncUi !== false;
   }
+  function registry() { return window.ViktorychSettingsSync || null; }
+  function ownKeys(settings) {
+    var reg = registry();
+    if (!reg) return [];
+    return reg.localKeys({ allOff: !!settings && settings.syncUi === false, lookOwn: deviceOwnUi() });
+  }
+  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "friendsRail"];
   function pickPrefs(local, remote) {
     // Home pills and Stories: each key keeps the newer choice.
     var out = {};
@@ -1016,13 +1023,27 @@ var numberNote = form.passkey
     }
     if (typeof settings.homePills === "boolean") snap.homePills = settings.homePills;
     if (typeof settings.stories === "boolean") snap.stories = settings.stories;
-    if (settings.prefsAt && typeof settings.prefsAt === "object") snap.prefsAt = settings.prefsAt;
+    if (settings.prefsAt && typeof settings.prefsAt === "object") snap.prefsAt = Object.assign({}, settings.prefsAt);
     if (settings.syncUi === false || settings.syncUi === true) snap.syncUi = settings.syncUi;
     snap.syncUiAt = Number(settings.syncUiAt) || 0;
     if (!uiSyncOn(settings)) {
       // This device keeps its own look: the server keeps the account's copy.
       UI_KEYS.forEach(function (key) { delete snap[key]; });
       snap.uiLocal = true;
+    }
+    var reg = registry();
+    if (reg) {
+      EXTRA_PREFS.forEach(function (key) { if (settings[key] !== undefined) snap[key] = settings[key]; });
+      var music = reg.readMusic();
+      if (music) snap.musicPrefs = music;
+      reg.stamp(snap);
+      // "Keep on this device only": left out here, the server keeps the
+      // account's copy for the other devices.
+      var own = ownKeys(settings);
+      if (own.length) {
+        own.forEach(function (key) { delete snap[key]; if (snap.prefsAt) delete snap.prefsAt[key]; });
+        snap.localKeys = own;
+      }
     }
     return snap;
   }
@@ -1203,6 +1224,22 @@ var numberNote = form.passkey
     if (typeof prefs.homePills === "boolean") merged.homePills = prefs.homePills;
     if (typeof prefs.stories === "boolean") merged.stories = prefs.stories;
     merged.prefsAt = prefs.prefsAt;
+    var reg = registry();
+    if (reg) {
+      var lww = reg.pick(local, remote, reg.neverSynced());
+      Object.keys(lww.values).forEach(function (key) { merged[key] = lww.values[key]; });
+      Object.keys(lww.at).forEach(function (key) { merged.prefsAt[key] = lww.at[key]; });
+    }
+    if (Array.isArray(local.localKeys)) {
+      local.localKeys.forEach(function (key) {
+        if (remote[key] !== undefined) merged[key] = remote[key];
+        else delete merged[key];
+        var rAt = remote.prefsAt && Number(remote.prefsAt[key]);
+        if (rAt) merged.prefsAt[key] = rAt;
+        else delete merged.prefsAt[key];
+      });
+      merged.localKeys = local.localKeys.slice();
+    }
     var lSync = Number(local.syncUiAt) || 0;
     var rSync = Number(remote.syncUiAt) || 0;
     var syncPick = rSync > lSync ? remote.syncUi : local.syncUi;
@@ -1234,15 +1271,35 @@ var numberNote = form.passkey
       settings.syncUiAt = syncAt;
     }
     var keepOwn = !uiSyncOn(settings);
+    var own = ownKeys(settings);
+    var reg = registry();
+    var taken = {};
     Object.keys(payload || {}).forEach(function (key) {
-      if (key === "lang" || key === "history" || key === "uiLocal" || key === "syncUi" || key === "syncUiAt") return;
+      if (key === "lang" || key === "history" || key === "uiLocal" || key === "syncUi" || key === "syncUiAt" || key === "localKeys" || key === "sealed") return;
       if (keepOwn && UI_KEYS.indexOf(key) >= 0) return;
+      if (own.indexOf(key) >= 0) return;
+      taken[key] = payload[key];
+      if (key === "musicPrefs") {
+        if (reg) reg.writeMusic(payload.musicPrefs);
+        return;
+      }
+      if (key === "prefsAt" && payload.prefsAt && typeof payload.prefsAt === "object") {
+        // Stamps of device-only settings stay this device's own.
+        var keep = Object.assign({}, payload.prefsAt);
+        own.forEach(function (k) {
+          if (settings.prefsAt && settings.prefsAt[k]) keep[k] = settings.prefsAt[k];
+          else delete keep[k];
+        });
+        settings.prefsAt = keep;
+        return;
+      }
       if ((key === "navLayout" || key === "navLayoutLand" || key === "navLayoutSync") && settings.navLayoutSync !== true) return;
       settings[key] = payload[key];
     });
     writeStored("settings-v1", JSON.stringify(settings));
+    if (reg) reg.remember(taken);
     if (window.ViktorychAccounts && window.ViktorychAccounts.writeHistory) window.ViktorychAccounts.writeHistory(payload);
-    if (payload && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es")) {
+    if (payload && own.indexOf("lang") < 0 && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es")) {
       try { localStorage.setItem("superintelapp-lang", payload.lang); } catch (err) { /* the page language stays */ }
       try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
       if (window.SI18n && typeof window.SI18n.setLang === "function" && window.SI18n.getLang() !== payload.lang) {
@@ -1299,7 +1356,12 @@ var numberNote = form.passkey
      sets (follows, likes, lists) still union as in mergePayload. */
   function mergeRemoteFirst(local, remote) {
     var merged = mergePayload(local, remote);
+    var lAt = local.prefsAt || {};
+    var rAt = remote.prefsAt || {};
     ["appearance", "autoplay", "translateTo", "followingSort", "notify", "showPictures", "showBanners", "forYouReposts", "forYouReplies"].forEach(function (key) {
+      // A newer local change that has not been pushed yet stays.
+      if ((Number(lAt[key]) || 0) > (Number(rAt[key]) || 0)) return;
+      if (local.localKeys && local.localKeys.indexOf(key) >= 0) return;
       if (remote[key] !== undefined) merged[key] = remote[key];
     });
     return merged;
