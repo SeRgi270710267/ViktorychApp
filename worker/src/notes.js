@@ -3,6 +3,7 @@
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { blocksEither, actorHidden } from "./social.js";
+import { canSeeAudience, normalizeAudience, setListGrants, grantsFor } from "./audience.js";
 import { emitNotification } from "./notifications.js";
 
 export const NOTES_SCHEMA = [
@@ -90,12 +91,17 @@ async function canSee(env, viewerId, row, now) {
   if (viewerId === row.public_id) return true;
   if (await blocksEither(env, viewerId, row.public_id)) return false;
   if (!(await follows(env, viewerId, row.public_id))) return false;
-  if (row.audience === "only") return false;
-  if (row.audience === "friends") return mutual(env, viewerId, row.public_id);
-  return row.audience === "followers";
+  return canSeeAudience(env, {
+    viewerId: viewerId,
+    ownerId: row.public_id,
+    audience: row.audience || "followers",
+    subject: "note",
+    subjectId: row.public_id,
+    profileLess: row.profile_less === 1
+  });
 }
 
-function present(row, mine) {
+async function present(env, row, mine) {
   const item = {
     handle: row.handle || "",
     name: row.display_name || row.handle || "",
@@ -105,6 +111,7 @@ function present(row, mine) {
   if (mine) {
     item.audience = row.audience || "followers";
     item.expiresAt = Number(row.expires_at) || 0;
+    item.listIds = await grantsFor(env, row.public_id, "note", row.public_id);
   }
   return item;
 }
@@ -133,7 +140,7 @@ export async function sweepExpiredNotes(env, now) {
 async function listNotes(env, viewer) {
   const now = Date.now();
   const mineRow = await loadNote(env, viewer.public_id);
-  const mine = mineRow && live(mineRow, now) ? present(mineRow, true) : null;
+  const mine = mineRow && live(mineRow, now) ? await present(env, mineRow, true) : null;
   const followed = await env.DB.prepare(
     "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id LIKE 'app:%' LIMIT 200"
   ).bind(viewer.public_id).all();
@@ -145,7 +152,7 @@ async function listNotes(env, viewer) {
   const notes = [];
   for (let i = 0; i < ids.length; i++) {
     const row = await loadNote(env, ids[i]);
-    if (await canSee(env, viewer.public_id, row, now)) notes.push(present(row, false));
+    if (await canSee(env, viewer.public_id, row, now)) notes.push(await present(env, row, false));
   }
   return { mine: mine, notes: notes };
 }
@@ -171,12 +178,14 @@ export async function handleNotes(request, env, path, deps) {
     if (body.error) return deps.json(400, { error: body.error });
     const text = cleanNote(body.text);
     if (!text) return deps.json(400, { error: "text" });
-    const audience = AUDIENCES[body.audience] ? body.audience : "followers";
+    const audience = normalizeAudience(body.audience) || "followers";
     const now = Date.now();
     const expires = body.expire === false || body.expire === 0 ? 0 : now + DAY;
     await env.DB.prepare(
       "INSERT INTO profile_notes (public_id, body, audience, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET body = excluded.body, audience = excluded.audience, expires_at = excluded.expires_at, updated_at = excluded.updated_at"
     ).bind(viewer.public_id, text, audience, expires, now, now).run();
+    if (audience === "list") await setListGrants(env, viewer.public_id, "note", viewer.public_id, body.listIds);
+    else await setListGrants(env, viewer.public_id, "note", viewer.public_id, []);
     const stories = await env.DB.prepare("SELECT COUNT(*) AS n FROM app_stories WHERE public_id = ?").bind(viewer.public_id).first();
     return deps.json(200, { ok: true, stories: Number(stories && stories.n) || 0 });
   }

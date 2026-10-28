@@ -384,6 +384,7 @@
       + emojiHtml(slotName)
       + hiddenFiles(slotName)
       + tools(slotName)
+      + (typeof window !== "undefined" && window.AudienceLists && window.AudienceLists.composerHtml ? window.AudienceLists.composerHtml(slotName) : "")
       + note
       + threadHtml(slotName)
       + foot
