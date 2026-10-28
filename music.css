@@ -262,10 +262,33 @@
   font-size: 14px;
 }
 
-html.music-on .center { padding-bottom: 96px; }
+html.music-on .center, html.music-mini .center { padding-bottom: 96px; }
 
 .mu-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 24; }
 .mu-dock[hidden] { display: none !important; }
+/* The bar runs along the whole bottom on desktop, above the sidebar, and the
+   sidebar's account button moves up so the bar never covers it. */
+@media (min-width: 500px) {
+  html.music-on .mu-dock, html.music-mini .mu-dock { z-index: 27; }
+  html.music-on .nav, html.music-mini .nav { padding-bottom: 72px; }
+}
+/* Mini player outside the music pages: same bar plus a close button. */
+.mu-mini-x { display: none; }
+html.music-mini .mu-bar { grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.3fr) minmax(120px, 0.8fr) 36px; }
+html.music-mini .mu-mini-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+}
+html.music-mini .mu-mini-x:hover { background: var(--hover); }
+html.music-mini .mu-mini-x svg { width: 18px; height: 18px; fill: currentColor; }
 #mu-yt-host {
   position: fixed;
   left: -2400px;
@@ -409,12 +432,14 @@ html.music-on .center { padding-bottom: 96px; }
   }
   .mu-vol, .mu-transport .mu-shuffle, .mu-transport .mu-rep { display: none; }
   .mu-seek { display: flex; grid-column: 1 / -1; min-height: 28px; }
+  html.music-mini .mu-bar { grid-template-columns: minmax(0, 1fr) auto 36px; }
+  html.music-mini .mu-seek { grid-row: 2; }
 }
 @media (max-width: 499px) {
   html.music-on .topbar:not(.tall) { border-bottom: 1px solid var(--line); }
-  html.music-on .center { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
-  html.music-on .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
-  html.music-on .fab { bottom: calc(156px + env(safe-area-inset-bottom)); }
+  html.music-on .center, html.music-mini .center { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
+  html.music-on .mu-dock, html.music-mini .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
+  html.music-on .fab, html.music-mini .fab { bottom: calc(156px + env(safe-area-inset-bottom)); }
   .mu-bar { height: auto; min-height: 56px; padding-bottom: 8px; }
   .mu-id .mu-art { width: 40px; height: 40px; }
   .mu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
