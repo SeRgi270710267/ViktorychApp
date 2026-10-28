@@ -169,6 +169,11 @@
     return home;
   }
 
+  function marquee(text) {
+    var safe = esc(text || "");
+    return '<span class="sp-marquee" data-sp-marquee><span class="sp-marquee-clip"><span class="sp-marquee-track"><span class="sp-marquee-copy"><span class="sp-marquee-text">' + safe + '</span></span><span class="sp-marquee-copy" aria-hidden="true"><span class="sp-marquee-text">' + safe + '</span></span></span></span></span>';
+  }
+
   function renderPill(team) {
     if (!team || !team.match) return "";
     var api = pillApi();
@@ -186,8 +191,8 @@
     return '<button class="sc-pill sc-pill-' + esc(team.id) + '" type="button" data-sc-team="' + esc(team.id) + '" data-updated="' + esc(team.updatedAt) + '" aria-label="' + esc(team.nameKey + " " + statusLabel(match.status) + " " + scoreLine + " " + age) + '">'
       + '<span class="sc-crest-ring">' + getCrest(team.id) + "</span>"
       + '<span class="sc-pill-content">'
-      + '<span class="sc-pill-top">' + badgeHtml + '<span class="sc-pill-title">' + esc(team.nameKey) + "</span>" + pinBadge + "</span>"
-      + '<span class="sc-pill-bottom"><span class="sc-pill-score">' + esc(scoreLine) + '</span><span class="sc-pill-opp">vs ' + esc(opponentName(team, match)) + "</span></span>"
+      + '<span class="sc-pill-top">' + badgeHtml + '<span class="sc-pill-title">' + marquee(team.nameKey) + "</span>" + pinBadge + "</span>"
+      + '<span class="sc-pill-bottom"><span class="sc-pill-score">' + esc(scoreLine) + '</span><span class="sc-pill-opp">vs ' + marquee(opponentName(team, match)) + "</span></span>"
       + "</span>"
       + '<span class="pill-age">' + esc(age) + "</span>"
       + '<span class="sc-pill-arrow"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg></span>'
@@ -214,7 +219,7 @@
   }
 
   function rowExtra() {
-    return visibleTeams(Date.now()).length ? 65 : 0;
+    return visibleTeams(Date.now()).length ? 46 : 0;
   }
 
   function renderModalHtml(teamId) {
