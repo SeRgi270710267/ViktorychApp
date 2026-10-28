@@ -15,7 +15,7 @@ import {
 } from "./shared/presence.js";
 
 const CHOICE_IDS = ["online", "idle", "dnd", "invisible"];
-const PRIVACY_IDS = ["everyone", "follows", "nobody"];
+const PRIVACY_IDS = ["everyone", "followers", "mutuals", "follows", "lists", "nobody"];
 const CLEAR_IDS = ["30m", "1h", "4h", "today", "week", "never"];
 
 const cache = new Map();
@@ -37,6 +37,16 @@ let polledAt = 0;
 let sheet = null;
 let sheetAnchor = null;
 let audioCtx = null;
+let audienceLists = [];
+let friends = [];
+let friendsAt = 0;
+let friendsLoading = null;
+let friendsLoaded = false;
+let friendsQuery = "";
+let friendsFilter = "all";
+let railQuery = "";
+let railTo = "";
+let railNote = "";
 const noteListeners = [];
 
 function tr(key, vars) {
@@ -95,6 +105,8 @@ function applyMine(body) {
     text: body.text != null ? body.text : (prev.text || ""),
     preference: body.preference || prev.preference || "online",
     seenPrivacy: body.seenPrivacy || prev.seenPrivacy || "everyone",
+    reciprocal: body.reciprocal != null ? !!body.reciprocal : (prev.reciprocal != null ? !!prev.reciprocal : true),
+    seenLists: Array.isArray(body.seenLists) ? body.seenLists.slice() : (prev.seenLists || []).slice(),
     clearAt: body.clearAt != null ? Number(body.clearAt) || 0 : (prev.clearAt || 0)
   };
   cache.set(id, { view: mine, at: Date.now() });
@@ -341,6 +353,7 @@ function onVisibility() {
   beat(true);
   connect();
   armPoll();
+  loadFriends(false);
 }
 
 function paint(root) {
@@ -378,7 +391,10 @@ function choiceCopy(id) {
 }
 
 function privacyCopy(id) {
+  if (id === "followers") return tr("My followers");
+  if (id === "mutuals") return tr("Mutuals");
   if (id === "follows") return tr("People I follow and my followers");
+  if (id === "lists") return tr("Custom lists");
   if (id === "nobody") return tr("Nobody");
   return tr("Everyone");
 }
@@ -407,6 +423,22 @@ function privacyRows(selected) {
   }).join("");
 }
 
+function listRows() {
+  if (!mine || mine.seenPrivacy !== "lists") return "";
+  if (!audienceLists.length) return '<p class="presence-note">' + esc(tr("Create a list to choose who sees you.")) + "</p>";
+  const selected = mine.seenLists || [];
+  return '<div class="presence-lists">' + audienceLists.map(function (list) {
+    const id = String(list.id || "");
+    const on = selected.indexOf(id) >= 0;
+    return '<button type="button" class="presence-choice' + (on ? " on" : "") + '" data-presence="list" data-value="' + esc(id) + '" aria-pressed="' + (on ? "true" : "false") + '"><b>' + esc(list.name || tr("Custom lists")) + "</b></button>";
+  }).join("") + "</div>";
+}
+
+function reciprocalRow() {
+  const on = !mine || mine.reciprocal !== false;
+  return '<button type="button" class="presence-switch' + (on ? " on" : "") + '" role="switch" data-presence="reciprocal" aria-checked="' + (on ? "true" : "false") + '"><span>' + esc(tr("Hide their presence when they can’t see mine")) + "</span><i></i></button>";
+}
+
 function formHtml() {
   const pref = (mine && mine.preference) || "online";
   const privacy = (mine && mine.seenPrivacy) || "everyone";
@@ -429,6 +461,8 @@ function formHtml() {
     '<p class="presence-kicker">' + esc(tr("Who can see my last seen")) + '</p>' +
     '<p class="presence-note">' + esc(tr("Last seen and online")) + '</p>' +
     privacyRows(privacy) +
+    '<div data-presence-lists>' + listRows() + '</div>' +
+    reciprocalRow() +
     '<p class="presence-note" data-presence-note></p>' +
   '</div>';
 }
@@ -484,6 +518,11 @@ function open(anchor) {
     fillSheet();
     paint();
   });
+  call("/v1/audience-lists").then(function (body) {
+    if (!body || body.status !== 200 || !Array.isArray(body.lists)) return;
+    audienceLists = body.lists;
+    if (sheet && !sheet.hidden) fillSheet();
+  });
 }
 
 function close() {
@@ -511,6 +550,8 @@ function save(root, status) {
   const body = {};
   if (mine && mine.preference) body.preference = mine.preference;
   if (mine && mine.seenPrivacy) body.seenPrivacy = mine.seenPrivacy;
+  body.reciprocal = !mine || mine.reciprocal !== false;
+  body.seenLists = (mine && mine.seenLists) || [];
   if (status === null) body.status = null;
   else if (status) {
     const end = new Date();
@@ -547,7 +588,7 @@ function onClick(event) {
   if (act === "preference" || act === "privacy") {
     event.preventDefault();
     const value = el.getAttribute("data-value") || "";
-    if (!mine) mine = { id: selfId(), exact: true, preference: "online", seenPrivacy: "everyone", state: "offline", emoji: "", text: "" };
+    if (!mine) mine = { id: selfId(), exact: true, preference: "online", seenPrivacy: "everyone", reciprocal: true, seenLists: [], state: "offline", emoji: "", text: "" };
     if (act === "preference") {
       mine.preference = value;
       if (value === "invisible") mine.state = "invisible";
@@ -563,7 +604,70 @@ function onClick(event) {
       button.classList.toggle("on", on);
       button.setAttribute("aria-pressed", on ? "true" : "false");
     });
+    const host = box.querySelector("[data-presence-lists]");
+    if (host && act === "privacy") host.innerHTML = listRows();
     save(root);
+    return;
+  }
+  if (act === "list") {
+    event.preventDefault();
+    const id = el.getAttribute("data-value") || "";
+    if (!mine) mine = { id: selfId(), exact: true, preference: "online", seenPrivacy: "lists", reciprocal: true, seenLists: [], state: "offline", emoji: "", text: "" };
+    const selected = (mine.seenLists || []).slice();
+    const at = selected.indexOf(id);
+    if (at >= 0) selected.splice(at, 1);
+    else if (id) selected.push(id);
+    mine.seenLists = selected;
+    const on = selected.indexOf(id) >= 0;
+    el.classList.toggle("on", on);
+    el.setAttribute("aria-pressed", on ? "true" : "false");
+    save(root);
+    return;
+  }
+  if (act === "reciprocal") {
+    event.preventDefault();
+    if (!mine) mine = { id: selfId(), exact: true, preference: "online", seenPrivacy: "everyone", reciprocal: true, seenLists: [], state: "offline", emoji: "", text: "" };
+    mine.reciprocal = mine.reciprocal === false;
+    const on = mine.reciprocal !== false;
+    el.classList.toggle("on", on);
+    el.setAttribute("aria-checked", on ? "true" : "false");
+    save(root);
+    return;
+  }
+  if (act === "rail-fold") {
+    event.preventDefault();
+    const card = el.closest(".friends-rail");
+    const collapsed = !(card && card.classList.contains("is-collapsed"));
+    if (card) card.classList.toggle("is-collapsed", collapsed);
+    setRailCollapsed(collapsed);
+    el.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    el.textContent = collapsed ? "▸" : "▾";
+    return;
+  }
+  if (act === "rail-msg") {
+    event.preventDefault();
+    const id = el.getAttribute("data-id") || "";
+    railTo = railTo === id ? "" : id;
+    railNote = "";
+    paintRail();
+    const box = document.querySelector("[data-rail-text]");
+    if (box) box.focus();
+    return;
+  }
+  if (act === "rail-send") {
+    event.preventDefault();
+    const form = el.closest("form");
+    const field = form && form.querySelector("[data-rail-text]");
+    const text = field ? String(field.value || "").trim() : "";
+    const id = el.getAttribute("data-id") || "";
+    if (!text || !id) return;
+    sendRailMessage(id, text);
+    return;
+  }
+  if (act === "online-filter") {
+    event.preventDefault();
+    friendsFilter = el.getAttribute("data-value") || "all";
+    paintOnline();
     return;
   }
   if (act === "save" || act === "clear-status") {
@@ -619,12 +723,247 @@ function chime() {
   } catch (err) { /* a blocked audio context stays silent */ }
 }
 
+function friendRank(state) {
+  if (state === "online") return 0;
+  if (state === "idle") return 1;
+  if (state === "dnd") return 2;
+  return 3;
+}
+
+function friendPhoto(person) {
+  const letter = String(person.name || person.handle || "?").trim().charAt(0).toUpperCase() || "?";
+  if (person.avatar) return '<img class="online-ava" alt="" src="' + esc(person.avatar) + '">';
+  if (person.avatarFace === "none") return '<span class="ava ava-none online-ava"></span>';
+  return '<span class="ava initials online-ava">' + esc(letter) + "</span>";
+}
+
+function friendEmoji(person) {
+  if (!person || !person.emoji) return "";
+  return '<span class="online-emoji" aria-hidden="true">' + esc(person.emoji) + "</span>";
+}
+
+function friendSub(person) {
+  const seen = phrase(person);
+  if (person.text && seen) return person.text + " · " + seen;
+  return person.text || seen;
+}
+
+function rankedFriends() {
+  const query = friendsQuery.trim().toLowerCase();
+  return friends.filter(function (person) {
+    if (friendsFilter === "online" && person.state !== "online") return false;
+    if (friendsFilter === "away" && person.state !== "idle") return false;
+    if (friendsFilter === "offline" && person.state !== "offline") return false;
+    if (!query) return true;
+    const name = String(person.name || "").toLowerCase();
+    const handle = String(person.handle || "").toLowerCase();
+    return name.indexOf(query) >= 0 || handle.indexOf(query) >= 0;
+  }).slice().sort(function (a, b) {
+    const diff = friendRank(a.state) - friendRank(b.state);
+    if (diff) return diff;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+}
+
+function friendHref(person) {
+  if (!person.handle) return "#/online";
+  return "#/@" + encodeURIComponent(person.handle);
+}
+
+function chipHtml(person) {
+  const photo = wrap(person.publicId, friendPhoto(person));
+  return '<a class="online-chip" href="' + esc(friendHref(person)) + '">' + photo + friendEmoji(person) + '<span class="online-chip-name">' + esc(person.name || person.handle) + "</span></a>";
+}
+
+function stripInnerHtml() {
+  const shown = friends.filter(function (person) {
+    return person.state === "online" || person.state === "idle";
+  }).sort(function (a, b) { return friendRank(a.state) - friendRank(b.state); }).slice(0, 16);
+  if (!shown.length) return "";
+  return shown.map(chipHtml).join("");
+}
+
+function onlineCount() {
+  let count = 0;
+  friends.forEach(function (person) {
+    if (person && person.state === "online") count += 1;
+  });
+  return count;
+}
+
+function railCollapsed() {
+  try { return localStorage.getItem("viktorychapp-friends-rail") === "0"; }
+  catch (err) { return false; }
+}
+
+function setRailCollapsed(collapsed) {
+  try { localStorage.setItem("viktorychapp-friends-rail", collapsed ? "0" : "1"); }
+  catch (err) { /* the card still toggles for this view */ }
+}
+
+function activeFriends() {
+  const query = railQuery.trim().toLowerCase();
+  return friends.filter(function (person) {
+    if (person.state !== "online" && person.state !== "idle") return false;
+    if (!query) return true;
+    const name = String(person.name || "").toLowerCase();
+    const handle = String(person.handle || "").toLowerCase();
+    return name.indexOf(query) >= 0 || handle.indexOf(query) >= 0;
+  }).sort(function (a, b) {
+    const diff = friendRank(a.state) - friendRank(b.state);
+    if (diff) return diff;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+}
+
+function railRow(person) {
+  const photo = wrap(person.publicId, friendPhoto(person));
+  const compose = railTo === person.publicId
+    ? '<form class="friends-rail-compose"><textarea data-rail-text maxlength="500" placeholder="' + esc(tr("Send a message…")) + '" aria-label="' + esc(tr("Send a message…")) + '"></textarea><button type="submit" data-presence="rail-send" data-id="' + esc(person.publicId) + '">' + esc(tr("Message")) + "</button></form>"
+    : "";
+  return '<div class="friends-rail-row"><a class="friends-rail-main" href="' + esc(friendHref(person)) + '">' + photo + friendEmoji(person) + '<span class="friends-rail-copy"><b>' + esc(person.name || person.handle) + '</b><span data-pid-line="' + esc(person.publicId) + '">' + esc(phrase(person)) + "</span></span></a><button type=\"button\" class=\"friends-rail-msg\" data-presence=\"rail-msg\" data-id=\"" + esc(person.publicId) + "\" aria-label=\"" + esc(tr("Message")) + "\">" + esc(tr("Message")) + "</button></div>" + compose;
+}
+
+function railListHtml() {
+  if (!friendsLoaded) return '<p class="friends-rail-empty">' + esc(tr("Loading…")) + "</p>";
+  const list = activeFriends();
+  if (!list.length) {
+    return '<p class="friends-rail-empty">' + esc(railQuery.trim() ? tr("No friends found") : tr("No friends online")) + "</p>";
+  }
+  return list.map(railRow).join("") + (railNote ? '<p class="friends-rail-note">' + esc(railNote) + "</p>" : "");
+}
+
+function paintRail() {
+  const list = document.querySelector("[data-rail-list]");
+  if (list) list.innerHTML = railListHtml();
+}
+
+function railHtml() {
+  if (!token()) return "";
+  if (visible()) loadFriends(false);
+  const collapsed = railCollapsed();
+  return '<section class="card friends-rail' + (collapsed ? " is-collapsed" : "") + '" aria-label="' + esc(tr("Friends")) + '"><div class="friends-rail-head"><h2>' + esc(tr("Friends")) + '</h2><button type="button" class="friends-rail-fold" data-presence="rail-fold" aria-expanded="' + (collapsed ? "false" : "true") + '" aria-label="' + esc(tr("Collapse")) + '">' + (collapsed ? "▸" : "▾") + '</button></div><div class="friends-rail-body"><label class="friends-rail-search"><input type="search" data-rail-search placeholder="' + esc(tr("Search Friends")) + '" aria-label="' + esc(tr("Search Friends")) + '" value="' + esc(railQuery) + '"></label><div class="friends-rail-list" data-rail-list>' + railListHtml() + '</div><a class="show-more-row" href="#/online">' + esc(tr("See all")) + "</a></div></section>";
+}
+
+function sendRailMessage(id, text) {
+  railNote = "";
+  return call("/v1/messages", { method: "POST", body: { id: id, text: text } }).then(function (body) {
+    if (!body || body.status !== 200) {
+      railNote = tr("Couldn’t send that message.");
+      paintRail();
+      return;
+    }
+    railTo = "";
+    railNote = tr("Message sent");
+    paintRail();
+  });
+}
+
+function stripHtml() {
+  if (!token()) return "";
+  loadFriends(false);
+  const inner = stripInnerHtml();
+  if (!inner) return "";
+  return '<section class="online-home" aria-label="' + esc(tr("Online")) + '"><a class="online-home-title" href="#/online">' + esc(tr("Online")) + '</a><div class="online-home-row">' + inner + "</div></section>";
+}
+
+function onlineToolsHtml() {
+  const pills = [["all", tr("All")], ["online", tr("Online")], ["away", tr("Away")], ["offline", tr("Offline")]];
+  return '<div class="online-tools"><label class="online-search"><input type="search" data-online-search placeholder="' + esc(tr("Search Friends")) + '" aria-label="' + esc(tr("Search Friends")) + '" value="' + esc(friendsQuery) + '"></label><div class="online-pills">' + pills.map(function (pill) {
+    const on = friendsFilter === pill[0];
+    return '<button type="button" class="online-pill' + (on ? " on" : "") + '" data-presence="online-filter" data-value="' + pill[0] + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(pill[1]) + "</button>";
+  }).join("") + "</div></div>";
+}
+
+function onlineListHtml() {
+  if (!friendsLoaded) return '<div class="reply-empty">' + esc(tr("Loading…")) + "</div>";
+  if (!friends.length) return '<div class="empty"><h2>' + esc(tr("No friends yet")) + '</h2><p>' + esc(tr("When you become friends with people, they’ll show up here.")) + "</p></div>";
+  const list = rankedFriends();
+  if (!list.length) {
+    const empty = friendsFilter === "online" ? tr("No friends online") : tr("No friends found");
+    return '<div class="empty"><h2>' + esc(empty) + "</h2><p>" + esc(tr("Couldn’t find any friends matching your search.")) + "</p></div>";
+  }
+  return '<div class="online-list">' + list.map(function (person) {
+    const photo = wrap(person.publicId, friendPhoto(person));
+    return '<a class="online-row" href="' + esc(friendHref(person)) + '">' + photo + friendEmoji(person) + '<span class="online-copy"><b>' + esc(person.name || person.handle) + '</b><span>@' + esc(person.handle) + " · " + esc(friendSub(person)) + "</span></span></a>";
+  }).join("") + "</div>";
+}
+
+function paintOnline() {
+  const root = document.querySelector("[data-online-root]");
+  if (!root) return;
+  const list = root.querySelector("[data-online-list]");
+  if (list) list.innerHTML = onlineListHtml();
+  root.querySelectorAll("[data-presence='online-filter']").forEach(function (button) {
+    const on = button.getAttribute("data-value") === friendsFilter;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+function pageHtml() {
+  loadFriends(false);
+  if (!token()) return '<div class="online-page"><div class="empty"><h2>' + esc(tr("Friends")) + "</h2><p>" + esc(tr("Sign in to see this list.")) + "</p></div></div>";
+  const strip = stripInnerHtml();
+  const stripBlock = strip ? '<div class="online-home-row" data-online-strip>' + strip + "</div>" : '<div class="online-home-row" data-online-strip></div>';
+  return '<div class="online-page" data-online-root>' + stripBlock + onlineToolsHtml() + '<div data-online-list>' + onlineListHtml() + "</div></div>";
+}
+
+function loadFriends(force) {
+  if (!token()) {
+    friends = [];
+    friendsLoaded = true;
+    return Promise.resolve();
+  }
+  if (!visible()) return Promise.resolve();
+  if (!force && friendsAt && Date.now() - friendsAt < 20000) return Promise.resolve();
+  if (friendsLoading) return friendsLoading;
+  friendsLoading = call("/v1/friends/presence").then(function (body) {
+    friendsLoading = null;
+    if (!body || body.status !== 200) {
+      friendsLoaded = true;
+      return;
+    }
+    friends = Array.isArray(body.friends) ? body.friends : [];
+    friends.forEach(function (person) {
+      if (!person || !person.publicId) return;
+      remember({
+        id: person.publicId,
+        state: person.state,
+        exact: person.exact,
+        lastSeen: person.lastSeen,
+        emoji: person.emoji,
+        text: person.text
+      });
+    });
+    friendsAt = Date.now();
+    friendsLoaded = true;
+    paint();
+    paintRail();
+    const api = accounts();
+    if (api && api.requestRender) api.requestRender();
+  });
+  return friendsLoading;
+}
+
 function boot() {
   document.addEventListener("visibilitychange", onVisibility);
   window.addEventListener("pointerdown", noteInput, { passive: true, capture: true });
   window.addEventListener("keydown", noteInput, true);
   window.addEventListener("scroll", noteInput, { passive: true, capture: true });
   document.addEventListener("click", onClick);
+  document.addEventListener("input", function (event) {
+    const input = event.target && event.target.closest && event.target.closest("[data-online-search]");
+    if (input) {
+      friendsQuery = input.value || "";
+      paintOnline();
+      return;
+    }
+    const rail = event.target && event.target.closest && event.target.closest("[data-rail-search]");
+    if (!rail) return;
+    railQuery = rail.value || "";
+    paintRail();
+  });
   window.addEventListener("resize", placeSheet);
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") close();
@@ -634,6 +973,7 @@ function boot() {
     armHeart();
     beat(true);
     connect();
+    loadFriends(false);
     call("/v1/presence").then(function (body) {
       if (!body || body.status !== 200) return;
       applyMine(body);
@@ -655,7 +995,11 @@ const api = {
   dnd: mutesNotices,
   onChannel: onChannel,
   offChannel: offChannel,
-  channelOpen: socketOpen
+  channelOpen: socketOpen,
+  stripHtml: stripHtml,
+  pageHtml: pageHtml,
+  railHtml: railHtml,
+  onlineCount: onlineCount
 };
 window.ViktorychPresence = api;
 
