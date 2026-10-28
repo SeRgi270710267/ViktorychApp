@@ -2178,6 +2178,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
   };
 
+  function platformIcon(platform) {
+    const name = { instagram: "ig", threads: "threads", youtube: "subs", vk: "vk", telegram: "tg", discord: "discord", tiktok: "tiktok", rss: "rss" }[platform];
+    return name && PATH[name] ? icon(name) : "";
+  }
+
   function sourceBadge(platform) {
     if (!platform || platform === "x" || platform === "app") return "";
     const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : "rss";
@@ -23586,6 +23591,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       removeStored: removeStored,
       relTime: relTime,
       accountHash: accountHash,
+      platformIcon: platformIcon,
       STATE: STATE
     });
   }
