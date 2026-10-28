@@ -776,12 +776,6 @@
     return (hasSpaces || hasScores) ? 65 : 0;
   }
 
-  function homeCard() {
-    const items = homeItems().filter((item) => item.kind !== "video");
-    if (!items.length) return "";
-    return '<div class="sp-home-slot">' + items.map(cardHtml).join("") + "</div>";
-  }
-
   function sideCard() {
     const items = homeItems().filter((item) => item.kind !== "video");
     if (!items.length) return "";
@@ -2213,7 +2207,6 @@
     homeRow: homeRow,
     homePillsHtml: homePillsHtml,
     rowExtra: rowExtra,
-    homeCard: homeCard,
     sideCard: sideCard,
     profileCard: profileCard,
     avatar: avatar,
