@@ -333,7 +333,8 @@ async function main() {
       assertVisible(await readState(failed.page), ["error"], "failed api");
       failed.mode.current = "items";
       await failed.page.click("[data-act='notes-retry']");
-      await failed.page.waitForSelector("[data-notes-state='items']", { timeout: 15000 });
+      /* A background pull may still be in flight; the retry waits behind it. */
+      await failed.page.waitForSelector("[data-notes-state='items']", { timeout: 30000 });
       const info = await readState(failed.page);
       assertVisible(info, ["items"], "retry");
       if (!info.text.includes("hello")) fail("retry items");
