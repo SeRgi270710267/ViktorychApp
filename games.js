@@ -214,6 +214,7 @@
     var row = stat("regone");
     patch("regone", { last: Date.now(), ms: row.ms, fav: row.fav });
     startClock("regone");
+    if (window.ProfileGifts && window.ProfileGifts.played) window.ProfileGifts.played("regone");
     paintChrome();
     requestAnimationFrame(place);
   }

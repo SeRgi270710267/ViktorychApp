@@ -2655,10 +2655,14 @@ function signupPayload() {
     var banner = publicBanner(account.banner, account.bannerFace);
     if (banner.indexOf("<img") >= 0) banner = banner.replace("<img", '<img data-acct="open-gallery" data-kind="banner"');
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
+    var giftBtn = !mine ? '<button class="outline" type="button" data-gift="open" data-handle="' + esc(account.handle || "") + '">' + esc(tr("Send a gift")) + "</button>" : "";
     var followBtn = !mine && ref && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(ref, true) || "") : "";
     var friendBtn = !mine && ref ? friendButtonHtml(account) : "";
     var activeTab = (route && route.query && route.query.get("tab")) || (route && route.tab) || "posts";
-    if (activeTab !== "friends") activeTab = "posts";
+    if (activeTab !== "friends" && activeTab !== "gifts") activeTab = "posts";
+    if (window.ProfileGifts) window.ProfileGifts.ensure(account);
+    var showGifts = window.ProfileGifts && window.ProfileGifts.showTab(account);
+    if (activeTab === "gifts" && !showGifts) activeTab = "posts";
 
     var pack = { html: "", count: 0 };
     if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account) || pack;
@@ -2668,7 +2672,8 @@ function signupPayload() {
     if (!mine && account.viewerBlocks) postsBody = '<div class="empty"><h2>' + esc(tr("You blocked this account")) + '</h2><p>' + esc(tr("Posts from this account stay hidden.")) + '</p></div>';
     else if (!mine && account.locked) postsBody = '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
     var friendsBody = friendsSectionHtml(account);
-    var body = activeTab === "friends" ? friendsBody : postsBody;
+    var giftsBody = activeTab === "gifts" && window.ProfileGifts ? window.ProfileGifts.giftsHtml(account.gifts, mine) : "";
+    var body = activeTab === "gifts" ? giftsBody : (activeTab === "friends" ? friendsBody : postsBody);
 
     var profileHref = "#/@" + encodeURIComponent(account.handle || "");
     var friendsHref = "#/@" + encodeURIComponent(account.handle || "") + "?tab=friends";
@@ -2679,11 +2684,12 @@ function signupPayload() {
     var tabs = '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '">' +
       '<a class="tab' + (activeTab === "posts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "posts" ? "true" : "false") + '" href="' + esc(profileHref) + '"><span>' + esc(tr("Posts")) + '</span></a>' +
       '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
+      (showGifts ? '<a class="tab' + (activeTab === "gifts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "gifts" ? "true" : "false") + '" href="' + esc(profileHref + "?tab=gifts") + '"><span>' + esc(tr("Gifts")) + "</span></a>" : "") +
     '</div>';
 
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
     var lock = account.privateFollows ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";

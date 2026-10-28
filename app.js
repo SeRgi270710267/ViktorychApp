@@ -6953,7 +6953,8 @@ const here = parseRoute();
     const forYouItem = here.name === "home" && (here.tab || "foryou") === "foryou"
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
+    const giftItem = post.platform === "app" ? `<button type="button" data-gift="open" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -7066,6 +7067,8 @@ const here = parseRoute();
       return { name: "shorts", live: live, livePane: livePane, query };
     }
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
+    if (parts[0] === "points") return { name: "points", query };
+    if (parts[0] === "store") return { name: "store", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
@@ -12236,6 +12239,7 @@ const here = parseRoute();
       + drawerRow("#/settings", "check", tr("Premium"), premium)
       + drawerRow("#/communities", "communities", tr("Communities"))
       + drawerRow("#/bookmarks", "bookmark", tr("Bookmarks"))
+      + drawerRow("#/points", "spark", tr("Viktorychs"), `<span class="points-pill" data-points-balance></span>`)
       + drawerRow("#/lists", "lists", tr("Lists"))
       + drawerRow(drawerSpacesHref(), "mic", tr("Spaces"))
       + drawerRow(drawerRequestsHref(), "user", tr("Follow requests"))
@@ -14039,6 +14043,8 @@ if (STATE.histClear) {
       if (!window.ViktorychVault) { ensureLazy("vault"); return lazySkeleton(tr("Vault")); }
       return pageHead(tr("Vault")) + emptyBlock(tr("Vault"), tr("Reload the page."));
     }
+    if (route.name === "points" && window.ProfileGifts) return window.ProfileGifts.pointsPage();
+    if (route.name === "store" && window.ProfileGifts) return window.ProfileGifts.storePage();
     if (route.name === "games") {
       if (window.ViktorychGames && window.ViktorychGames.page(route)) return window.ViktorychGames.page(route);
       ensureLazy("games");
@@ -14813,7 +14819,7 @@ if (STATE.histClear) {
       /* The shell swap used to throw away every horizontal row. Tab rows are
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
-      commitApp(shell(view(route), route));
+      commitApp(shell(view(route), route) + (window.ProfileGifts && window.ProfileGifts.overlay ? window.ProfileGifts.overlay() : ""));
       schedulePublicPosts();
       hydratePublicMedia();
       if (window.ViktorychPrivacy) {
@@ -20975,6 +20981,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyTheme();
     applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
+    if (window.ProfileGifts) window.ProfileGifts.start();
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     setTimeout(() => { loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {}); }, 8000);
     const snap = loadTimelineSnap();
