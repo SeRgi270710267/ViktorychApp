@@ -10,6 +10,7 @@ on:
       - "i18n/**"
       - "scripts/bottom_nav_test.mjs"
       - "scripts/home_reach_test.mjs"
+      - "scripts/explore_nav_test.mjs"
       - "scripts/nav_custom_test.js"
       - "scripts/dock_test.js"
       - "scripts/landscape_layout_test.mjs"
@@ -33,6 +34,7 @@ on:
       - "i18n/**"
       - "scripts/bottom_nav_test.mjs"
       - "scripts/home_reach_test.mjs"
+      - "scripts/explore_nav_test.mjs"
       - "scripts/nav_custom_test.js"
       - "scripts/dock_test.js"
       - "scripts/landscape_layout_test.mjs"
@@ -70,6 +72,9 @@ jobs:
         run: |
           npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/home_reach_test.mjs
+
+      - name: Explore stays on the phone by default
+        run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/explore_nav_test.mjs
       - name: Corner drawers
         run: node scripts/dock_test.js
       - name: Landscape layout
