@@ -2361,5 +2361,10 @@ SI18n.addPack("ru", {
   "The stories tray and viewer. Off loads nothing for it.": "Лента и просмотр историй. Когда выключено, для них ничего не загружается.",
   "Sort replies": "Сортировка ответов",
   "Follow {handle}": "Читать {handle}",
-  "Unfollow {handle}": "Отписаться от {handle}"
+  "Unfollow {handle}": "Отписаться от {handle}",
+  "Devices": "Устройства",
+  "Sync across my devices": "Синхронизировать на моих устройствах",
+  "Menu, sidebar and display choices follow your account on every device you sign in on.": "Меню, боковая панель и настройки отображения следуют за вашим аккаунтом на каждом устройстве, где вы вошли.",
+  "Keep this device's own look": "Сохранить собственный вид этого устройства",
+  "Only this device ignores synced menu and display choices.": "Только это устройство игнорирует синхронизированные меню и настройки отображения."
 });

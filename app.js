@@ -12777,6 +12777,16 @@ const here = parseRoute();
     return `<a class="set-row" href="${href}"><span class="set-copy"><b>${esc(title)}</b>${sub ? `<span class="set-sub">${esc(sub)}</span>` : ""}</span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
   }
 
+  function deviceSyncSwitches() {
+    const accounts = window.ViktorychAccounts || {};
+    const shared = !(STATE.settings && STATE.settings.syncUi === false);
+    const own = !!(accounts.deviceOwnUi && accounts.deviceOwnUi());
+    const sw = (act, on, label, note) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(note)}</p>`;
+    return `<h2>${esc(tr("Devices"))}</h2>` +
+      sw("sync-ui", shared, tr("Sync across my devices"), tr("Menu, sidebar and display choices follow your account on every device you sign in on.")) +
+      sw("device-own-ui", own, tr("Keep this device's own look"), tr("Only this device ignores synced menu and display choices."));
+  }
+
   function homeFeatureSwitch(key, label, note) {
     const on = featureOn(key);
     return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="home-feature" data-key="${esc(key)}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(note)}</p>`;
@@ -12848,6 +12858,7 @@ const here = parseRoute();
         <h2>${esc(tr("Home"))}</h2>
         ${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
+        ${deviceSyncSwitches()}
         <h2>${esc(tr("Banners"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Banners"))}">
           ${faceBtn("banners", "show", tr("Show"))}
@@ -17014,6 +17025,21 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
           location.reload();
         }
       }
+      return;
+    }
+    if (act === "sync-ui") {
+      const on = STATE.settings.syncUi === false;
+      STATE.settings.syncUi = on;
+      STATE.settings.syncUiAt = Date.now();
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-own-ui") {
+      const accounts = window.ViktorychAccounts || {};
+      if (accounts.setDeviceOwnUi) accounts.setDeviceOwnUi(!(accounts.deviceOwnUi && accounts.deviceOwnUi()));
+      saveSettings();
+      render();
       return;
     }
     if (act === "home-feature") {
@@ -23311,6 +23337,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("viktorych-settings-applied", () => {
     if (!STATE.settings) return;
     const next = loadSettings();
+    // Synced display choices from another device apply right away.
+    let lookChanged = false;
+    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs"].forEach((key) => {
+      if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
+      STATE.settings[key] = next[key];
+      lookChanged = true;
+    });
+    if (lookChanged) {
+      applyTheme();
+      syncFeatureFlags();
+      render();
+    }
     if ((next.storyNotes === true || next.storyNotes === false) && STATE.settings.storyNotes !== next.storyNotes) {
       STATE.settings.storyNotes = next.storyNotes;
       render();
