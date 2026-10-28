@@ -6,6 +6,8 @@
 import { awardActivity, clawback, giftForPost } from "./points.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
 import { addCommunityPost, communityHomeRows } from "./communities.js";
+import { attachParents } from "./reply-context.js";
+import { visibleAvatarUrl } from "./profile-media.js";
 
 const POST_MAX = 500;
 const MEDIA_MAX = 12 * 1024 * 1024;
@@ -379,6 +381,21 @@ function listIdsOf(fields) {
   return Array.isArray(raw) ? raw : [];
 }
 
+async function withParents(env, request, session, posts, skip) {
+  try {
+    await attachParents(env, posts, {
+      viewerId: session.public_id,
+      skip: skip,
+      canSee: async (row) => {
+        if ((row.audience || "") === "list") return canSeeAudience(env, { viewerId: session.public_id, ownerId: row.author_id, audience: "list", subject: "post", subjectId: row.id });
+        if (row.author_id === session.public_id || (row.audience || "everyone") === "everyone") return true;
+        return canSee(row, session.public_id, await audienceSets(env, session.public_id, [row.author_id]));
+      },
+      avatarFor: (handle) => visibleAvatarUrl(env, request, { public_id: session.public_id }, handle)
+    });
+  } catch (err) { /* replies still list without their parents */ }
+}
+
 async function listPosts(request, env, deps) {
   const session = await deps.sessionAccount(env, request);
   if (!session) return deps.json(401, { error: "unauthorized" });
@@ -421,7 +438,9 @@ async function listPosts(request, env, deps) {
       } catch (err) { /* public posts still list */ }
     }
     list.sort((a, b) => b.at - a.at);
-    return deps.json(200, { posts: list.slice(0, 60).map((item) => item.post), author: author });
+    const page = list.slice(0, 60).map((item) => item.post);
+    await withParents(env, request, session, page, skip);
+    return deps.json(200, { posts: page, author: author });
   }
   try {
     const pack = await communityHomeRows(env, request, session, deps.presentAccount);
@@ -439,6 +458,7 @@ async function listPosts(request, env, deps) {
     seen.add(stamped[i].post.id);
     posts.push(stamped[i].post);
   }
+  await withParents(env, request, session, posts, skip);
   return deps.json(200, { posts: posts, communitiesHome: communitiesHome });
 }
 

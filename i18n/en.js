@@ -1910,6 +1910,8 @@ SI18n.addPack("en", {
   "Passkey saved": "Passkey saved",
   "Your post was sent.": "Your post was sent.",
   "View": "View",
+  "Upvote": "Upvote",
+  "Downvote": "Downvote",
   "Add a photo and a short bio": "Add a photo and a short bio",
   "Pick feeds to follow": "Pick feeds to follow",
   "Notifications can wait until you ask": "Notifications can wait until you ask",

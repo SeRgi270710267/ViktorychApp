@@ -1910,6 +1910,8 @@ SI18n.addPack("ru", {
   "Passkey saved": "Ключ доступа сохранён",
   "Your post was sent.": "Запись отправлена.",
   "View": "Открыть",
+  "Upvote": "Голосовать за",
+  "Downvote": "Голосовать против",
   "Add a photo and a short bio": "Добавьте фото и короткую биографию",
   "Pick feeds to follow": "Выберите ленты, на которые подписаться",
   "Notifications can wait until you ask": "Уведомления могут подождать, пока вы сами их не попросите",
