@@ -887,9 +887,12 @@
     return out;
   }
 
+  function clipTabName(value) {
+    return String(value || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 2000);
+  }
+
   function cleanEmoji(value) {
-    const text = String(value || "").replace(/[\u0000-\u001f<>]/g, "").trim();
-    return Array.from(text).slice(0, 4).join("");
+    return String(value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 500);
   }
 
   function tabColor(value) {
@@ -904,7 +907,7 @@
     list.forEach((item) => {
       if (!item || out.length >= 500) return;
       const id = String(item.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
-      const name = String(item.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      const name = clipTabName(item.name);
       if (!id || !name || seen[id]) return;
       seen[id] = true;
       const members = [];
@@ -6445,7 +6448,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function revealArchive() {
     const route = parseRoute();
-    if (route.name !== "home") { render(); return; }
+    if (route.name !== "home" && !document.getElementById("archive-more") && !document.querySelector("[data-hydrate]")) return;
     render({ y: window.scrollY });
   }
 
@@ -7915,7 +7918,7 @@ const here = parseRoute();
         <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
           ${tabWithMenu("foryou", tr("For you"))}
           ${tabWithMenu("following", tr("Following"))}
-          ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, "", item.id)).join("")}
+          ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, item.emoji ? `<span class="tab-emoji">${esc(item.emoji)}</span>` : "", item.id)).join("")}
           ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
         </div>
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
@@ -9447,6 +9450,94 @@ const here = parseRoute();
     return PLATFORM[platform] || tr("Web");
   }
 
+  function profileQueryMatch(post) {
+    const q = String(STATE.profileQuery || "").trim().toLowerCase();
+    if (!q || !post) return true;
+    const blob = String(post.text || "") + " " + String(post.title || "") + " " + String(post.handle || "");
+    return blob.toLowerCase().indexOf(q) >= 0;
+  }
+
+  function profileOpenUrl(feed) {
+    if (!feed || feed.platform === "app") return "";
+    const url = externalProfile(feed);
+    if (!url || url === "#" || !/^https?:\/\//i.test(url)) return "";
+    return url;
+  }
+
+  function profileChrome(opts) {
+    const o = opts || {};
+    STATE.profileTarget = {
+      name: String(o.name || ""),
+      platform: String(o.platform || ""),
+      handle: String(o.handle || "").replace(/^@/, ""),
+      feedId: String(o.feedId || ""),
+      url: String(o.url || ""),
+      own: !!o.own
+    };
+    const name = esc(o.name || o.handle || tr("Profile"));
+    const count = o.count ? `<div class="profile-chrome-count">${esc(o.count)}</div>` : "";
+    const search = STATE.profileSearch
+      ? `<form class="profile-search" data-act="stop"><label class="search"><span>${icon("search")}</span><input id="profile-q" type="search" value="${esc(STATE.profileQuery || "")}" placeholder="${esc(tr("Search posts loaded here"))}" aria-label="${esc(tr("Search posts loaded here"))}"></label></form>`
+      : "";
+    return `<div class="profile-chrome${STATE.profileSolid ? " is-solid" : ""}" data-profile-chrome>
+      <button class="pfloat-btn" type="button" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button>
+      <div class="profile-chrome-copy"${STATE.profileSolid ? "" : " hidden"}><div class="profile-chrome-name">${name}</div>${count}</div>
+      <div class="profile-chrome-actions">
+        <button class="pfloat-btn" type="button" data-act="profile-tools" aria-label="${esc(tr("Feed tools"))}" aria-haspopup="menu" aria-expanded="${STATE.profileMenu === "tools" ? "true" : "false"}">${icon("sliders")}</button>
+        <button class="pfloat-btn" type="button" data-act="profile-search" aria-label="${esc(tr("Search"))}" aria-expanded="${STATE.profileSearch ? "true" : "false"}">${icon("search")}</button>
+        <button class="pfloat-btn" type="button" data-act="profile-more" aria-label="${esc(tr("More"))}" aria-haspopup="menu" aria-expanded="${STATE.profileMenu === "more" ? "true" : "false"}">${icon("more")}</button>
+      </div>
+      ${search}
+    </div>`;
+  }
+
+  function profileTop(opts, bannerHtml) {
+    const banner = bannerHtml || "";
+    return `<div class="profile-top${banner ? " has-banner" : " no-banner"}">${profileChrome(opts)}${banner}</div>`;
+  }
+
+  function profileSheetRow(act, label, attrs) {
+    return `<button class="bell-choice" type="button" data-act="${act}" ${attrs || ""}><span class="bell-choice-label">${esc(label)}</span></button>`;
+  }
+
+  function profileSheets() {
+    const target = STATE.profileTarget;
+    const menu = STATE.profileMenu;
+    if (!target || !menu) return "";
+    const link = profileHash(target.platform || "x", target.handle || "");
+    const rows = [];
+    const open = target.url && /^https?:\/\//i.test(target.url) ? target.url : "";
+    if (menu === "tools" || menu === "more") {
+      if (open) rows.push(`<a class="bell-choice" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(open)}"><span class="bell-choice-label">${esc(tr("Open original"))}</span></a>`);
+      rows.push(profileSheetRow("copy", tr("Copy link"), `data-url="${esc(link)}"`));
+    }
+    if (menu === "tools") {
+      if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
+      if (!target.own && (target.feedId || target.handle)) {
+        rows.push(profileSheetRow("profile-mute", tr("Hide in For You"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}"`));
+        rows.push(profileSheetRow("profile-less", tr("Show less often"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}"`));
+      }
+      rows.push(`<a class="bell-choice" href="#/feeds"><span class="bell-choice-label">${esc(tr("View in Feeds"))}</span></a>`);
+    }
+    if (menu === "more") {
+      rows.push(profileSheetRow("share", tr("Share"), `data-kind="profile" data-id="${esc(target.feedId || link)}"`));
+      if (!target.own && (target.feedId || target.handle)) rows.push(profileSheetRow("profile-mute", tr("Mute"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}"`));
+      const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
+      if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
+      if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
+    }
+    if (menu === "lists") {
+      const lists = (STATE.settings && STATE.settings.lists) || [];
+      if (!lists.length) rows.push(`<p class="bell-note">${esc(tr("Create a List to group the accounts you follow."))}</p>`);
+      lists.forEach((list) => {
+        const on = target.feedId && (list.members || []).indexOf(target.feedId) >= 0;
+        rows.push(`<button class="bell-choice" type="button" data-act="profile-list-toggle" data-list="${esc(list.id)}" data-id="${esc(target.feedId)}"><span class="bell-choice-label">${esc(list.name || "")}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`);
+      });
+    }
+    const title = menu === "tools" ? tr("Feed tools") : menu === "lists" ? tr("Lists") : tr("More");
+    return `<div class="bell-sheet" data-act="close-profile-menu"><div class="menu bell-menu profile-menu" data-act="stop" role="menu" aria-label="${esc(title)}"><div class="bell-grab" aria-hidden="true"></div>${rows.join("")}</div></div>`;
+  }
+
   function userView(route) {
     if (window.FeedsPeople) {
       const merged = window.FeedsPeople.page(route);
@@ -9477,7 +9568,7 @@ const here = parseRoute();
     const bucket = tab ? liveBucket(row, tab) : "";
     const list = bucket ? (row[bucket] || []).slice().sort(byStamp) : [];
     const shown = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
-    const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : profile.bannerColor ? `<div class="pbanner theme" style="background:${esc(profile.bannerColor)}"></div>` : `<div class="pbanner"></div>`;
+    const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : (profile.bannerColor ? `<div class="pbanner theme" style="background:${esc(profile.bannerColor)}"></div>` : "");
     const meta = [
       profile.location ? `<span>${icon("loc")}${esc(profile.location)}</span>` : "",
       profile.website ? `<a data-act="stop" href="${esc(profile.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(profile.website).replace(/^https?:\/\//, ""))}</a>` : "",
@@ -9493,6 +9584,7 @@ const here = parseRoute();
     const limited = row.limited ? `<p class="pfollow-note">${tr("Posts from this account can’t be loaded in the browser.")}</p>` : "";
     const saved = row.saved ? `<p class="pfollow-note">${tr("Showing saved posts. The live timeline didn’t load.")}</p>` : "";
     const fresh = row.fetchedAt ? `<p class="source-checked">${esc(freshLabel(row.fetchedAt))}</p>` : "";
+    if (STATE.profileQuery) list = list.filter(profileQueryMatch);
     let body = "";
     if (!tabs.length) body = "";
     else if (row.loading && !list.length) body = `<div class="reply-empty">${tr("Loading…")}</div>`;
@@ -9502,13 +9594,15 @@ const here = parseRoute();
       row.error === "thin" && !row.saved ? tr("The live timeline didn’t load from the public sources.") : (tab === "replies" ? tr("Replies from this account will show up here.") : tab === "media" ? tr("Photos and videos from this account will show up here.") : tr("Posts from this account will show up here."))
     );
     const more = tab && row.cursor[tab] && !row.saved ? `<div id="live-more" class="live-more">${row.paging === tab ? tr("Loading…") : ""}</div>` : "";
-    return `<div class="topbar profile-bar">
-      <div class="page-head">
-        <button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>
-        <div class="head-text"><div class="pt-name">${esc(profile.name || profile.handle)}</div>${count ? `<div class="pt-count">${esc(count)}</div>` : ""}</div>
-      </div>
-    </div>
-    ${banner}
+    return `${profileTop({
+      name: profile.name || profile.handle,
+      platform: profile.platform,
+      handle: profile.handle,
+      feedId: liveFollowId(profile),
+      url: profileOpenUrl(profile),
+      own: false,
+      count: count
+    }, banner)}
     <div class="pinfo" data-live-error="${esc(row.errorDetail || row.error || "")}">
       <div class="pava-row">
         ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(profile.avatar, profile.name, "pava"), profile.platform, profile.handle) : avatar(profile.avatar, profile.name, "pava")}
@@ -9706,7 +9800,7 @@ const here = parseRoute();
     else list = list.filter((p) => p.kind !== "reply");
     const count = formatCount(total);
     const bannerFace = faceChoice("banner", feed.banner);
-    const banner = bannerFace === "none" ? "" : bannerFace === "photo" ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : (feed.bannerColor && faceSetting("showBanners") === "show" ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : `<div class="pbanner"></div>`);
+    const banner = bannerFace === "photo" && feed.banner ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : (bannerFace !== "none" && feed.bannerColor && faceSetting("showBanners") === "show" ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : "");
     const meta = [
       feed.location ? `<span>${icon("loc")}${esc(feed.location)}</span>` : "",
       feed.website ? `<a href="${esc(feed.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(feed.website).replace(/^https?:\/\//, ""))}</a>` : "",
@@ -9719,13 +9813,16 @@ const here = parseRoute();
       const href = profileHash(feed.platform, feed.handle) + (id === "posts" ? "" : "?tab=" + id);
       return `<a class="tab${tab === id ? " on" : ""}" role="tab" aria-selected="${tab === id ? "true" : "false"}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
     }).join("");
-    return `<div class="topbar profile-bar">
-      <div class="page-head">
-        <button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>
-        <div class="head-text"><div class="pt-name">${esc(feed.name || feed.handle)}</div><div class="pt-count">${esc(count)} posts</div></div>
-      </div>
-    </div>
-    ${banner}
+    if (STATE.profileQuery) list = list.filter(profileQueryMatch);
+    return `${profileTop({
+      name: feed.name || feed.handle,
+      platform: feed.platform,
+      handle: feed.handle,
+      feedId: feed.id,
+      url: profileOpenUrl(feed),
+      own: false,
+      count: tr("{count} posts", { count: count })
+    }, banner)}
     <div class="pinfo">
       <div class="pava-row">
         ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(feed.avatar, feed.name, "pava"), feed.platform, feed.handle) : avatar(feed.avatar, feed.name, "pava")}
@@ -11451,7 +11548,7 @@ const here = parseRoute();
   function tabMark(tab) {
     if (tab && tab.emoji) return esc(tab.emoji);
     if (tab && tab.color) return `<i class="tab-dot" style="background:${esc(tab.color)}"></i>`;
-    return icon("lists");
+    return "";
   }
 
   function feedTabChoices(feedId) {
@@ -11833,7 +11930,7 @@ const here = parseRoute();
   function saveFeedTabDraft() {
     syncFeedTabDraft();
     const draft = STATE.draft || {};
-    let name = String(draft.name || "").replace(/\s+/g, " ").trim();
+    let name = clipTabName(draft.name);
     if (!name) return;
     const tabs = scopeTabList();
     let tab = draft.id ? tabs.find((item) => item.id === draft.id) : null;
@@ -11847,7 +11944,7 @@ const here = parseRoute();
     }
     if (tab.kind === "verified" && name === tr("Note tab verified")) name = "verified";
     if (tab.kind === "mentions" && name === tr("Mentions")) name = "mentions";
-    tab.name = name.slice(0, 40);
+    tab.name = name;
     tab.emoji = cleanEmoji(draft.emoji);
     tab.color = tabColor(draft.color);
     tab.showHome = draft.showHome !== false;
@@ -11921,7 +12018,7 @@ const here = parseRoute();
     const orderHint = editingNoteTabs() ? tr("Drag the handle to reorder.") : tr("Drag the handle to reorder. The same order is used on Home.");
     const order = orderTabs.length > 1 ? `<h3>${tr("Order")}</h3><p class="phandle">${orderHint}</p>${orderTabs.map((tab) => `<div class="tab-order-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="${tr("Drag to reorder")}"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="tab-order-name">${esc(editingNoteTabs() ? noteTabLabel(tab) : tab.name)}</span></div>`).join("")}` : "";
     const homeSwitch = editingNoteTabs() ? "" : switches("showHome", tr("Show on Home"));
-    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? tr("Edit tab") : tr("New tab")}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${draft.id ? tr("Edit tab") : tr("New tab")}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>${tr("Save")}</button></div><div class="modal-body"><label class="field"><span>${tr("Name")}</span><input id="feed-tab-name" data-field="name" maxlength="40" value="${esc(draft.name || "")}"></label><label class="field"><span>${tr("Emoji")}</span><input id="feed-tab-emoji" data-field="emoji" maxlength="8" placeholder="${tr("Optional")}" value="${esc(draft.emoji || "")}"></label><div class="field"><span>${tr("Colour")}</span><div class="swatches">${swatches}</div></div>${homeSwitch}${switches("showNotes", tr("Show in Notifications"))}<h3>${tr("Accounts")}</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">${tr("Search to add accounts. Profiles with no tab stay in All.")}</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">${tr("Delete tab")}</button>` : ""}</div></div></div>`;
+    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? tr("Edit tab") : tr("New tab")}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${draft.id ? tr("Edit tab") : tr("New tab")}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>${tr("Save")}</button></div><div class="modal-body"><label class="field"><span>${tr("Name")}</span><input id="feed-tab-name" data-field="name" value="${esc(draft.name || "")}"></label><label class="field"><span>${tr("Emoji")}</span><input id="feed-tab-emoji" data-field="emoji" placeholder="${tr("Optional")}" value="${esc(draft.emoji || "")}"></label><div class="field"><span>${tr("Colour")}</span><div class="swatches">${swatches}</div></div>${homeSwitch}${switches("showNotes", tr("Show in Notifications"))}<h3>${tr("Accounts")}</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">${tr("Search to add accounts. Profiles with no tab stay in All.")}</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">${tr("Delete tab")}</button>` : ""}</div></div></div>`;
   }
 
   function isStandalone() {
@@ -12775,7 +12872,7 @@ if (STATE.histClear) {
       return `<div class="modal-back"><div class="modal" role="dialog">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${d.id ? tr("Edit List") : tr("Create a new List")}</h2><button class="save" data-act="save-list" ${d.name && d.name.trim() ? "" : "disabled"}>${tr("Save")}</button></div>
         <div class="modal-body">
-          <label class="field"><span>${tr("Name")}</span><input id="list-name" data-field="name" maxlength="50" value="${esc(d.name || "")}"></label>
+          <label class="field"><span>${tr("Name")}</span><input id="list-name" data-field="name" value="${esc(d.name || "")}"></label>
           <label class="field"><span>${tr("Description")}</span><textarea id="list-desc" data-field="description" maxlength="160">${esc(d.description || "")}</textarea></label>
           <div class="field"><span>${tr("Banner")}</span><div class="swatches">${COLORS.map((c) => `<button class="swatch${d.bannerColor === c ? " on" : ""}" style="background:${c}" data-act="color" data-color="${c}" aria-label="${tr("Banner color")}"></button>`).join("")}</div></div>
           ${d.id ? `<button class="danger" data-act="ask-delete">${tr("Delete List")}</button>` : ""}
@@ -12857,9 +12954,9 @@ if (STATE.histClear) {
     /* The home header always shows the pills row: weather, scores, or the
        live station. The phone header is fixed, so this height has to be
        reserved or the row covers the first card. */
-    if (window.WeatherPills && window.WeatherPills.homeRow) return 65;
-    if (window.Spaces && (window.Spaces.homeRow || window.Spaces.homePillsHtml)) return 65;
-    if (window.SoccerScores && window.SoccerScores.pillsHtml) return 65;
+    if (window.WeatherPills && window.WeatherPills.homeRow) return 46;
+    if (window.Spaces && (window.Spaces.homeRow || window.Spaces.homePillsHtml)) return 46;
+    if (window.SoccerScores && window.SoccerScores.pillsHtml) return 46;
     return 0;
   }
 
@@ -12872,10 +12969,15 @@ if (STATE.histClear) {
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
-    const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 106 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra + liveExtra;
+    const slimTabs = route.name === "home" || route.name === "notifications";
+    let bar = 53;
+    if (route.name === "profile" || route.name === "user" || route.name === "person" || route.name === "tv" || route.name === "shorts" || route.name === "messages" || explore) bar = 0;
+    else if (slimTabs && !musicHome) bar = 97;
+    else if (tall && !musicHome) bar = 106;
+    const top = bar + rowExtra + storyExtra + liveExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
   }
 
   function toggleReaction(act, id) {
@@ -15164,6 +15266,7 @@ if (STATE.histClear) {
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
       commitApp(shell(view(route), route));
+      paintProfileChrome();
       schedulePublicPosts();
       hydratePublicMedia();
       if (window.ViktorychPrivacy) {
@@ -16629,6 +16732,65 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "menu") { STATE.menu = STATE.menu === el.dataset.id ? null : el.dataset.id; render(); return; }
+    if (act === "profile-tools" || act === "profile-more") {
+      const next = act === "profile-tools" ? "tools" : "more";
+      STATE.profileMenu = STATE.profileMenu === next ? null : next;
+      render();
+      return;
+    }
+    if (act === "profile-search") {
+      STATE.profileSearch = !STATE.profileSearch;
+      STATE.profileMenu = null;
+      if (!STATE.profileSearch) STATE.profileQuery = "";
+      render();
+      const box = document.getElementById("profile-q");
+      if (box) box.focus();
+      return;
+    }
+    if (act === "close-profile-menu") { STATE.profileMenu = null; render(); return; }
+    if (act === "profile-lists") { STATE.profileMenu = "lists"; render(); return; }
+    if (act === "profile-list-toggle") {
+      const list = (STATE.settings.lists || []).find((item) => item.id === el.dataset.list);
+      const id = String(el.dataset.id || "");
+      if (list && id) {
+        list.members = list.members || [];
+        const at = list.members.indexOf(id);
+        if (at >= 0) list.members.splice(at, 1);
+        else if (list.members.length < 500) list.members.push(id);
+        saveSettings();
+      }
+      render();
+      return;
+    }
+    if (act === "profile-mute" || act === "profile-less") {
+      const target = STATE.profileTarget || {};
+      const id = String(el.dataset.id || target.feedId || "");
+      if (id && STATE.settings) {
+        if (act === "profile-mute") {
+          const muted = STATE.settings.mutedAccounts || (STATE.settings.mutedAccounts = []);
+          if (muted.indexOf(id) < 0) muted.push(id);
+          saveSettings();
+        }
+        if (window.ForYou) {
+          const memory = forYouMemory();
+          if (memory) {
+            window.ForYou.note(memory, { id: "", feedId: target.feedId || id, handle: target.handle, platform: target.platform }, act === "profile-mute" ? "hide" : "less");
+            window.ForYou.save(memory);
+          }
+        }
+      }
+      STATE.profileMenu = null;
+      toast(tr("We'll show you less of this."));
+      render();
+      return;
+    }
+    if (act === "profile-block") {
+      const accounts = window.ViktorychAccounts;
+      if (accounts && accounts.relationWrite && el.dataset.id && accounts.token && accounts.token()) accounts.relationWrite("blocks", el.dataset.id, false);
+      STATE.profileMenu = null;
+      render();
+      return;
+    }
     if (act === "share") {
       const kind = el.dataset.kind || "post";
       const id = el.dataset.id;
@@ -16727,7 +16889,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "color") { STATE.draft.bannerColor = el.dataset.color; render(); return; }
     if (act === "save-list") {
-      const name = (STATE.draft.name || "").trim();
+      const name = clipTabName(STATE.draft.name || "");
       if (!name) return;
       if (STATE.draft.id) {
         const list = STATE.settings.lists.find((l) => l.id === STATE.draft.id);
@@ -17327,6 +17489,15 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       render();
       return;
     }
+    if (el.id === "profile-q") {
+      STATE.profileQuery = el.value;
+      const q = String(el.value || "").trim().toLowerCase();
+      document.querySelectorAll("main article").forEach((article) => {
+        const text = String(article.innerText || "").toLowerCase();
+        article.hidden = !!(q && text.indexOf(q) < 0);
+      });
+      return;
+    }
     if (el.id === "hist-q") {
       STATE.histQ = el.value;
       render();
@@ -17847,7 +18018,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("resize", () => syncShell());
   window.addEventListener("orientationchange", () => syncShell());
   syncShell();
+  function paintProfileChrome() {
+    const bar = document.querySelector(".profile-chrome");
+    if (!bar) return;
+    const banner = document.querySelector("main .pbanner");
+    const height = banner ? banner.getBoundingClientRect().height : 120;
+    const solid = window.scrollY > Math.max(48, height - 52);
+    bar.classList.toggle("is-solid", solid);
+    const copy = bar.querySelector(".profile-chrome-copy");
+    if (copy) copy.hidden = !solid;
+    STATE.profileSolid = solid;
+  }
   window.addEventListener("scroll", () => {
+    paintProfileChrome();
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;
       return;
@@ -18016,6 +18199,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.noteGear = false;
     if ((location.hash || "#/").indexOf("#/notifications") !== 0) STATE.noteUnreadPaint = null;
     STATE.menu = null;
+    STATE.profileMenu = null;
+    STATE.profileSearch = false;
+    STATE.profileQuery = "";
     STATE.share = null;
     STATE.groupMenu = null;
     STATE.bellMenu = null;
@@ -20420,6 +20606,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
   window.ViktorychNotes = { beforeSignOut: beforeSignOut, lockChanged: onTiktokLockChanged, ingest: ingestXNotes };
+  window.ViktorychProfile = { chrome: profileChrome, top: profileTop };
   /* presence.js owns ViktorychPresence. A partial stand-in threw on .wrap and left a black page. */
 
   function commitBellNotes(list) {
