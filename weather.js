@@ -1097,6 +1097,7 @@
         mSheet.innerHTML = renderManageModalHtml();
       }
     }
+    if (typeof window !== "undefined" && window.Spaces && window.Spaces.refreshMarquees) window.Spaces.refreshMarquees();
   }
 
   /* Event Delegation */
