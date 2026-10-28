@@ -5,6 +5,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 
 const playwright = await import(process.env.PLAYWRIGHT_MJS || "playwright-core");
 const chromium = playwright.chromium || (playwright.default && playwright.default.chromium);
@@ -55,7 +56,20 @@ function startServer() {
     version: OLD,
     built: OLD_BUILT,
     fail: null,
-    css: []
+    css: [],
+    manifest: false,
+    patch: {},
+    hits: {}
+  };
+  const shellList = () => {
+    const text = fs.readFileSync(path.join(root, "sw.js"), "utf8");
+    const block = (text.match(/const SHELL_FILES = \[([\s\S]*?)\];/) || [])[1] || "";
+    return Array.from(block.matchAll(/"(\.\/[^"]*)"/g)).map((m) => m[1]);
+  };
+  const bodyOf = (rel) => {
+    if (state.patch[rel] != null) return Buffer.from(state.patch[rel]);
+    if (rel === "/index.html") return Buffer.from(PAGE);
+    try { return fs.readFileSync(path.join(root, rel)); } catch (err) { return null; }
   };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
@@ -87,6 +101,23 @@ function startServer() {
       }
     }
     if (rel === "/styles.css") state.css.push(url.search || "");
+    if (url.search.indexOf("sw=") >= 0) state.hits[rel] = (state.hits[rel] || 0) + 1;
+    if (rel === "/shell-manifest.json") {
+      if (!state.manifest) { res.writeHead(404, headers); res.end("missing"); return; }
+      const files = {};
+      shellList().forEach((item) => {
+        const data = bodyOf(item === "./" ? "/index.html" : item.slice(1));
+        if (data) files[item] = [crypto.createHash("sha256").update(data).digest("hex"), data.length];
+      });
+      res.writeHead(200, { ...headers, "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ sha: state.version, built: state.built, files }));
+      return;
+    }
+    if (state.patch[rel] != null) {
+      res.writeHead(200, { ...headers, "content-type": mime(rel) });
+      res.end(state.patch[rel]);
+      return;
+    }
     if (rel === "/index.html") {
       res.writeHead(200, { ...headers, "content-type": "text/html; charset=utf-8" });
       res.end(PAGE);
@@ -285,6 +316,77 @@ async function testRetryButton(browser) {
   console.log("retry succeeded after the file was fixed");
 }
 
+/* With a manifest, the next update downloads only the files that changed,
+   and Retry keeps what the failed attempt already saved. */
+async function testOnlyChangedFiles(browser) {
+  const { server, state, url } = await startServer();
+  state.manifest = true;
+  const { context, page } = await openApp(browser, url);
+  try {
+    state.version = NEW;
+    state.built = NEW_BUILT;
+    await offerUpdate(page);
+    await waitSha(page, NEW);
+    const NEWER = "c".repeat(40);
+    state.hits = {};
+    state.version = NEWER;
+    state.built = "2026-10-28T00:00:00Z";
+    state.patch["/styles.css"] = "/* changed */ body { color: inherit; }";
+    state.patch["/dock.css"] = "/* changed */ .x { color: inherit; }";
+    state.fail = { path: "/dock.css", sha: NEWER, remaining: -1 };
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitControlled(page);
+    await offerUpdate(page);
+    await page.waitForFunction(() => {
+      const title = document.getElementById("upd-title");
+      return title && /didn't finish/.test(title.textContent || "");
+    }, null, { timeout: 60000 });
+    const first = Object.assign({}, state.hits);
+    const pulled = Object.keys(first).filter((rel) => rel !== "/shell-manifest.json");
+    assert(pulled.join() === "/styles.css", "an unchanged file was downloaded again: " + pulled.slice(0, 5).join(" "));
+    state.fail = null;
+    state.hits = {};
+    await page.click("#upd-go");
+    await waitSha(page, NEWER);
+    const again = Object.keys(state.hits).filter((rel) => rel !== "/shell-manifest.json");
+    assert(again.join() === "/dock.css", "Retry started over: " + again.slice(0, 5).join(" "));
+    const log = await page.evaluate(() => new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 4000);
+      navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data && event.data.type === "update-log") { clearTimeout(timer); resolve(event.data.log); }
+      });
+      navigator.serviceWorker.controller.postMessage({ type: "update-log" });
+    }));
+    assert(Array.isArray(log) && log.some((row) => row.path === "dock.css" && row.reason === "http-503"), "the worker did not log the failure");
+  } finally {
+    await context.close();
+    server.close();
+  }
+  console.log("only changed files downloaded, Retry resumed");
+}
+
+/* A deploy that lands mid-download moves the update to the newest build
+   instead of mixing builds or failing. */
+async function testDeployMidDownload(browser) {
+  const { server, state, url } = await startServer();
+  state.manifest = true;
+  const { context, page } = await openApp(browser, url);
+  try {
+    state.version = NEW;
+    state.built = NEW_BUILT;
+    await offerUpdate(page);
+    const NEWER = "d".repeat(40);
+    await page.waitForFunction(() => document.getElementById("upd-root") && document.getElementById("upd-root").getAttribute("data-phase") === "working", null, { timeout: 20000 });
+    state.version = NEWER;
+    state.built = "2026-10-28T00:00:00Z";
+    await waitSha(page, NEWER);
+  } finally {
+    await context.close();
+    server.close();
+  }
+  console.log("a deploy mid-download moved the update to the newest build");
+}
+
 const browser = await chromium.launch({
   headless: true,
   executablePath: chromeBin(),
@@ -294,6 +396,8 @@ try {
   await testCleanUpdate(browser);
   await testRetryRecovers(browser);
   await testRetryButton(browser);
+  await testOnlyChangedFiles(browser);
+  await testDeployMidDownload(browser);
 } finally {
   await browser.close();
 }

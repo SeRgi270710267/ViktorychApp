@@ -42,6 +42,8 @@ PRIVATE_PUBLICATION = {
 HTML_REF = re.compile(r"""(?:src|href)\s*=\s*['"]([^'"]+)['"]""", re.I)
 QUOTED = re.compile(r"""['"]([^'"]+)['"]""")
 SHELL_ARRAY = re.compile(r"SHELL_FILES\s*=\s*\[(.*?)\]", re.S)
+# Files the worker caches on first use instead of with every update.
+LAZY_ARRAY = re.compile(r"LAZY_FILES\s*=\s*\[(.*?)\]", re.S)
 IMPORT_SCRIPTS = re.compile(r"importScripts\s*\((.*?)\)", re.S)
 LAZY_SCRIPTS = re.compile(r"scripts\s*:\s*\[([^\]]*)\]")
 MODULE_SPEC = re.compile(
@@ -90,6 +92,9 @@ def refs_from_worker(text: str) -> list[str]:
     match = SHELL_ARRAY.search(text)
     if match:
         found.extend(_quoted(match.group(1)))
+    lazy = LAZY_ARRAY.search(text)
+    if lazy:
+        found.extend(_quoted(lazy.group(1)))
     for block in IMPORT_SCRIPTS.findall(text):
         found.extend(_quoted(block))
     return found

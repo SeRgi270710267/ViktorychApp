@@ -7,7 +7,7 @@
   if (root) root.ViktorychUpdate = api;
   if (typeof document !== "undefined") api.start();
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var PREFIX = "viktorych-a75-";
+  var PREFIX = "viktorych-a76-";
   var SNOOZE_MS = 30 * 60 * 1000;
   var CHECK_MS = 3 * 60 * 1000;
   var RESTORE_MS = 2 * 60 * 1000;
@@ -136,7 +136,7 @@
 
   function safeFailure(input) {
     var reason = String(input && input.reason || "").toLowerCase();
-    if (reason !== "network" && reason !== "timeout" && reason !== "quota" && !/^http-\d{3}$/.test(reason)) reason = "network";
+    if (reason !== "network" && reason !== "timeout" && reason !== "quota" && reason !== "newer" && reason !== "mismatch" && !/^http-\d{3}$/.test(reason)) reason = "network";
     var raw = String(input && input.url || "");
     raw = raw.split("#")[0].split("?")[0].trim();
     try {
@@ -178,6 +178,7 @@
     failReason: "",
     failures: 0,
     failureNoted: false,
+    newerHops: 0,
     expectingController: false,
     reloaded: false,
     suppressAutoFallback: false,
@@ -445,13 +446,21 @@
     paint();
   }
 
+  /* The worker sends a heartbeat every few seconds while it works. After 45
+     seconds of silence the page asks it directly once and gives it a short
+     grace before showing Retry, so a busy but healthy update is not cut off. */
   function armStall() {
     clearTimeout(stallTimer);
     stallTimer = setTimeout(function () {
       if (state.phase !== "working") return;
-      noteFailure("", "timeout");
-      state.phase = "error";
-      paint();
+      var worker = state.waiting || (navigator.serviceWorker && navigator.serviceWorker.controller);
+      try { if (worker) worker.postMessage({ type: "update-ping" }); } catch (err) { /* it is gone; the grace ends in Retry */ }
+      stallTimer = setTimeout(function () {
+        if (state.phase !== "working") return;
+        noteFailure(state.failPath || "", "timeout");
+        state.phase = "error";
+        paint();
+      }, 10000);
     }, 45000);
   }
 
@@ -671,6 +680,23 @@
     if (typeof data.totalFiles === "number") state.totalFiles = data.totalFiles;
     if (typeof data.bytes === "number") state.bytes = data.bytes;
     if (typeof data.totalBytes === "number") state.totalBytes = data.totalBytes;
+    if (data.step === "error" && data.reason === "newer" && state.newerHops < 2) {
+      // A deploy landed while this one downloaded. Fetch the newest worker
+      // and continue with it instead of mixing builds or showing an error.
+      state.newerHops += 1;
+      clearTimeout(stallTimer);
+      state.waiting = null;
+      var reg = state.reg;
+      (reg && reg.update ? reg.update().catch(function () {}) : Promise.resolve()).then(function () {
+        return new Promise(function (resolve) {
+          var since = Date.now();
+          var poll = setInterval(function () {
+            if (!reg || !reg.installing || Date.now() - since > 60000) { clearInterval(poll); resolve(); }
+          }, 300);
+        });
+      }).then(function () { applyNow(); });
+      return;
+    }
     if (data.step === "error") {
       clearTimeout(stallTimer);
       noteFailure(data.url, data.reason);
