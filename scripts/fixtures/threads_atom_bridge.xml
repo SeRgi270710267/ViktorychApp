@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>birchlane (@birchlane) on Threads</title>
+  <subtitle>birchlane (@birchlane) on Threads</subtitle>
+  <entry>
+    <title>@birchlane: Hello from the bridge</title>
+    <content type="html">&lt;p&gt;&lt;strong&gt;@birchlane&lt;/strong&gt; ↩️:&lt;/p&gt;&lt;p&gt;Hello from the bridge&lt;/p&gt;&lt;img src="https://scontent.cdninstagram.com/v/thread.jpg?oe=6ADD0002" width="1080"&gt;</content>
+    <id>https://www.threads.net/@birchlane/post/Abcd1234</id>
+    <link rel="alternate" href="https://www.threads.net/t/Abcd1234"/>
+    <published>2026-10-20T10:00:00+00:00</published>
+    <author><name>birchlane</name></author>
+  </entry>
+</feed>

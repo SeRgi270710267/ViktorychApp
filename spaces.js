@@ -277,7 +277,8 @@
 
   function marqueePlan(overflow, reduced) {
     if (reduced || !(overflow > 1)) return { animate: false, duration: 0 };
-    return { animate: true, duration: 20, easing: "linear", from: "0%", to: "-100%" };
+    const duration = Math.max(18, Math.min(48, overflow / 22));
+    return { animate: true, duration: duration, easing: "linear", from: "0%", to: "-100%" };
   }
 
   // Telegram mirror of one published loop playlist. The version and the AAC
@@ -1915,8 +1916,40 @@
     el.classList.toggle("is-paused", paused);
   }
 
+  let marqueeHoldBound = false;
+
+  function marqueeHost(event) {
+    const raw = event && event.target;
+    const node = raw && raw.nodeType === 1 ? raw : (raw && raw.parentElement);
+    if (!node || !node.closest) return null;
+    return node.closest(".sp-pill, .sc-pill, .wx-pill");
+  }
+
+  function bindMarqueeHold() {
+    if (marqueeHoldBound) return;
+    if (!window || typeof window.addEventListener !== "function") return;
+    marqueeHoldBound = true;
+    // The row is swapped out from under the per-pill listeners when weather
+    // or scores refresh. Pausing from the window keeps a press on the pill
+    // that is on screen now, including one that was just rebuilt.
+    window.addEventListener("pointerdown", (event) => {
+      const host = marqueeHost(event);
+      if (!host) return;
+      host.querySelectorAll("[data-sp-marquee]").forEach((el) => el.classList.add("is-held"));
+    });
+    window.addEventListener("pointerup", (event) => {
+      const host = marqueeHost(event);
+      if (!host) return;
+      host.querySelectorAll("[data-sp-marquee]").forEach((el) => el.classList.remove("is-held"));
+    });
+    window.addEventListener("pointercancel", () => {
+      document.querySelectorAll("[data-sp-marquee].is-held").forEach((el) => el.classList.remove("is-held"));
+    });
+  }
+
   function bindMarquees(scope) {
     const rootEl = scope || document;
+    bindMarqueeHold();
     rootEl.querySelectorAll("[data-sp-marquee]").forEach((el) => {
       if (seenMarquee.has(el)) { applyMarquee(el); return; }
       seenMarquee.add(el);
@@ -1925,7 +1958,10 @@
       host.addEventListener("pointerdown", () => hold(true));
       host.addEventListener("pointerup", () => hold(false));
       host.addEventListener("pointercancel", () => hold(false));
-      host.addEventListener("pointerleave", () => hold(false));
+      // A layout shift during pointerdown can emit pointerleave before the
+      // press handler finishes. Clear on the next turn so the press still
+      // pauses the marquee that was hit.
+      host.addEventListener("pointerleave", () => { queueMicrotask(() => hold(false)); });
       const clip = el.querySelector(".sp-marquee-clip");
       const text = el.querySelector(".sp-marquee-text");
       if (clip && root.ResizeObserver) new root.ResizeObserver(() => applyMarquee(el)).observe(clip);
@@ -2232,6 +2268,7 @@
     page: page,
     models: models,
     afterRender: afterRender,
+    refreshMarquees: function () { bindMarquees(document); },
     noteLive: noteLive,
     playing: playing,
     homePills: homePills,
