@@ -104,6 +104,7 @@
     if (reason === "invite") return tr("Inviting someone");
     if (reason === "game") return tr("Playing a game");
     if (reason === "gift") return tr("Sent a gift");
+    if (reason === "birthday") return tr("Birthday bonus");
     return tr("Viktorychs");
   }
 
@@ -114,6 +115,8 @@
     if (id === "leaf") return tr("Leaf gift");
     if (id === "comet") return tr("Comet gift");
     if (id === "crown") return tr("Crown gift");
+    if (id === "cake") return tr("Cake gift");
+    if (id === "candle") return tr("Candle gift");
     return tr("Gift");
   }
 
@@ -135,7 +138,8 @@
 
   function storePage() {
     var cards = catalog.map(function (gift) {
-      return '<button type="button" class="gift-card" data-gift="pick" data-gift-id="' + esc(gift.id) + '"><span class="gift-art">' + svg(gift.svg) + '</span><b>' + esc(giftName(gift.id)) + "</b><span>" + esc(tr("{n} Viktorychs", { n: String(gift.price) })) + "</span>" + (gift.seasonal ? '<i>' + esc(tr("Seasonal")) + "</i>" : "") + "</button>";
+      var tag = gift.category === "birthday" ? '<i>' + esc(tr("Birthday gifts")) + "</i>" : (gift.seasonal ? '<i>' + esc(tr("Seasonal")) + "</i>" : "");
+      return '<button type="button" class="gift-card" data-gift="pick" data-gift-id="' + esc(gift.id) + '"><span class="gift-art">' + svg(gift.svg) + '</span><b>' + esc(giftName(gift.id)) + "</b><span>" + esc(tr("{n} Viktorychs", { n: String(gift.price) })) + "</span>" + tag + "</button>";
     }).join("");
     return '<div class="store-page"><div class="topbar"><div class="page-head"><h1>' + esc(tr("ViktorychStore")) + '</h1></div></div><div class="gift-grid">' + cards + "</div></div>";
   }
@@ -176,6 +180,15 @@
       return !!(session && account.publicId && session.publicId === account.publicId);
     }
     return true;
+  }
+
+  function watchBirthday(account) {
+    if (!account || !account.handle || account.birthdayChecked) return;
+    account.birthdayChecked = true;
+    call("/v1/about?handle=" + encodeURIComponent(account.handle), { token: token() }).then(function (body) {
+      account.birthdayToday = !!(body && body.status === 200 && body.birthdayToday);
+      redraw();
+    }).catch(function () { account.birthdayToday = false; });
   }
 
   function ensure(account) {
@@ -220,7 +233,7 @@
       body: { giftId: sheet.giftId, handle: sheet.handle, message: sheet.message, privacy: sheet.privacy, mode: sheet.mode || "direct", parentId: sheet.parentId || "" }
     }).then(function (body) {
       if (!body || (body.status && body.status >= 400)) {
-        errorText = tr("Couldn’t send that gift.");
+        errorText = body && body.error === "birthday" ? tr("That gift is only for their birthday.") : tr("Couldn’t send that gift.");
         redraw();
         return;
       }
@@ -248,6 +261,12 @@
       openSheet(el.getAttribute("data-handle") || (sheet && sheet.handle) || "", { mode: mode, parentId: el.getAttribute("data-parent") || "" });
       if (act === "pick") sheet.giftId = el.getAttribute("data-gift-id") || sheet.giftId;
       redraw();
+      return true;
+    }
+    if (act === "birthday") {
+      openSheet(el.getAttribute("data-handle") || "", { mode: "direct" });
+      if (sheet) sheet.giftId = "cake";
+      confirmSend();
       return true;
     }
     if (act === "confirm") { confirmSend(); return true; }
@@ -300,6 +319,18 @@
     played: function (gameId) { touch("game", gameId); },
     pointsPage: pointsPage,
     storePage: storePage,
+    banner: function (account) {
+      watchBirthday(account);
+      if (!account || !account.birthdayToday) return "";
+      var session = root.ViktorychAccounts && root.ViktorychAccounts.account && root.ViktorychAccounts.account();
+      var mine = !!(session && account.publicId && session.publicId === account.publicId);
+      var send = mine ? "" : '<button type="button" data-gift="birthday" data-handle="' + esc(account.handle || "") + '">' + esc(tr("Send birthday gift")) + "</button>";
+      return '<div class="bday-banner"><b>' + esc(tr("Birthday today")) + "</b>" + send + "</div>";
+    },
+    noteAction: function (note) {
+      if (!note || note.kind !== "birthday" || !note.handle) return "";
+      return '<button type="button" class="bday-send" data-gift="birthday" data-handle="' + esc(note.handle) + '">' + esc(tr("Send birthday gift")) + "</button>";
+    },
     dmBar: function () {
       return '<section class="gift-dm"><button class="primary" type="button" data-gift="dm">' + esc(tr("Send gift in a message")) + '</button><p class="phandle">' + esc(tr("A direct message gift uses the same privacy, limits, and points as any other gift.")) + "</p></section>";
     },

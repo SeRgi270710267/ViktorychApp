@@ -11487,6 +11487,10 @@ const here = parseRoute();
     if (kind === "follow_request") return tr("{name} requested to follow you", { name: who });
     if (kind === "follow_accept") return tr("{name} accepted your follow request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
+    if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
+    if (kind === "gift") return tr("{name} sent you a gift", { name: who });
+    if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
+    if (kind === "birthday_self") return tr("Happy birthday");
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
@@ -11564,7 +11568,8 @@ const here = parseRoute();
     const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
     const partial = note.partial ? `<p class="note-partial">${esc(tr("Partial. Replies on recent public posts, not X's mention inbox."))}</p>` : "";
     const text = (note.text || note.partial) ? `<div class="note-copy">${noteBody(note)}${partial}</div>` : "";
-    return `<article class="note-row${unread ? " is-unread" : ""}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a></article>`;
+    const birthday = window.ProfileGifts && window.ProfileGifts.noteAction ? window.ProfileGifts.noteAction(note) : "";
+    return `<article class="note-row${unread ? " is-unread" : ""}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a>${birthday}</article>`;
   }
 
   function notesSignedIn() {

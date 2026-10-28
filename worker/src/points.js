@@ -77,7 +77,8 @@ export const RULES = {
   follow: { points: 2, cap: 10 },
   profile: { points: 15, cap: 1 },
   invite: { points: 20, cap: 5 },
-  game: { points: 4, cap: 5 }
+  game: { points: 4, cap: 5 },
+  birthday: { points: 25, cap: 1 }
 };
 
 const GAMES = { regone: 1 };
@@ -89,7 +90,9 @@ const SVG = {
   spark: "M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6L12 2z",
   leaf: "M5 19c8-1 14-8 14-14-6 0-13 6-14 14zm2-2c1-4 5-8 9-9-1 4-5 8-9 9z",
   comet: "M14 4l1 4 4 1-4 1-1 4-1-4-4-1 4-1 1-4zM6 14l.6 2 2 .6-2 .6L6 20l-.6-2.8L3.4 16.6 5.4 16 6 14z",
-  crown: "M4 16l2-8 4 4 2-6 2 6 4-4 2 8H4zm1 2h14v2H5v-2z"
+  crown: "M4 16l2-8 4 4 2-6 2 6 4-4 2 8H4zm1 2h14v2H5v-2z",
+  cake: "M4 14h16v4H4v-4zm2-3h12l-1-4H7l-1 4zm4-6h2v3h-2V5zm-3 3h2v2H7V8zm6 0h2v2h-2V8z",
+  candle: "M11 3h2v3h-2V3zm-5 6h12l-1 9H7L6 9zm-1 11h14v2H5v-2z"
 };
 
 export const GIFT_CATALOG = [
@@ -98,7 +101,9 @@ export const GIFT_CATALOG = [
   { id: "spark", category: "celebrate", price: 50, seasonal: false, svg: SVG.spark },
   { id: "leaf", category: "seasonal", price: 50, seasonal: true, svg: SVG.leaf },
   { id: "comet", category: "celebrate", price: 100, seasonal: false, svg: SVG.comet },
-  { id: "crown", category: "celebrate", price: 250, seasonal: false, svg: SVG.crown }
+  { id: "crown", category: "celebrate", price: 250, seasonal: false, svg: SVG.crown },
+  { id: "cake", category: "birthday", price: 15, seasonal: false, svg: SVG.cake },
+  { id: "candle", category: "birthday", price: 40, seasonal: false, svg: SVG.candle }
 ];
 
 function giftById(id) {
@@ -315,6 +320,105 @@ export async function giftForPost(env, postId, viewerId) {
   return presentGift(row, viewerId || "", !!owner);
 }
 
+function birthdayParts(text) {
+  const raw = String(text || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/) || raw.match(/^(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = match.length > 3 ? Number(match[1]) : 0;
+  const month = Number(match[match.length > 3 ? 2 : 1]);
+  const day = Number(match[match.length > 3 ? 3 : 2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year: year, month: month, day: day };
+}
+
+function zonedYmd(ms, timeZone) {
+  const zone = timeZone || "UTC";
+  try {
+    const bag = {};
+    new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms)).forEach((part) => {
+      bag[part.type] = part.value;
+    });
+    return { year: Number(bag.year), month: Number(bag.month), day: Number(bag.day) };
+  } catch (err) {
+    const date = new Date(ms);
+    return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+  }
+}
+
+function daysUntilBirthday(parts, now, timeZone) {
+  if (!parts) return null;
+  const today = zonedYmd(now, timeZone);
+  const start = Date.UTC(today.year, today.month - 1, today.day);
+  const last = (year) => new Date(Date.UTC(year, parts.month, 0)).getUTCDate();
+  let target = Date.UTC(today.year, parts.month - 1, Math.min(parts.day, last(today.year)));
+  if (target < start) target = Date.UTC(today.year + 1, parts.month - 1, Math.min(parts.day, last(today.year + 1)));
+  return Math.round((target - start) / 86400000);
+}
+
+async function birthdayField(env, publicId) {
+  try {
+    return await env.DB.prepare(
+      "SELECT id, body, audience, tz FROM about_fields WHERE public_id = ? AND kind = 'birthday' ORDER BY created_at ASC LIMIT 1"
+    ).bind(publicId).first();
+  } catch (err) {
+    try {
+      return await env.DB.prepare(
+        "SELECT id, body, audience FROM about_fields WHERE public_id = ? AND kind = 'birthday' ORDER BY created_at ASC LIMIT 1"
+      ).bind(publicId).first();
+    } catch (err2) {
+      return null;
+    }
+  }
+}
+
+async function birthdayGiftAllowed(env, viewerId, recipientId, now) {
+  const field = await birthdayField(env, recipientId);
+  if (!field || daysUntilBirthday(birthdayParts(field.body), now, field.tz) !== 0) return false;
+  const audience = field.audience || "only";
+  if (audience === "only") return false;
+  if (audience === "list") {
+    const allow = await env.DB.prepare(
+      "SELECT user_id FROM about_field_allow WHERE field_id = ? AND user_id = ?"
+    ).bind(field.id, viewerId).first();
+    if (!allow) return false;
+  }
+  const follow = await env.DB.prepare(
+    "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id = ?"
+  ).bind(viewerId, "app:" + recipientId).first();
+  if (audience === "followers" && !follow) return false;
+  if (audience === "friends") {
+    const back = await env.DB.prepare(
+      "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id = ?"
+    ).bind(recipientId, "app:" + viewerId).first();
+    const friends = await env.DB.prepare(
+      "SELECT user_id FROM account_friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)"
+    ).bind(viewerId, recipientId, recipientId, viewerId).first();
+    if (!follow || (!back && !friends)) return false;
+  }
+  return true;
+}
+
+export async function awardBirthdayBonuses(env, now) {
+  if (String(env.BIRTHDAY_POINTS || "") === "off") return { awarded: 0 };
+  let listed = null;
+  try {
+    listed = await env.DB.prepare("SELECT public_id, body, tz FROM about_fields WHERE kind = 'birthday' LIMIT 400").all();
+  } catch (err) {
+    try { listed = await env.DB.prepare("SELECT public_id, body FROM about_fields WHERE kind = 'birthday' LIMIT 400").all(); }
+    catch (err2) { return { awarded: 0 }; }
+  }
+  const at = Number(now) || Date.now();
+  let awarded = 0;
+  for (const row of rowsOf(listed)) {
+    const parts = birthdayParts(row.body);
+    if (daysUntilBirthday(parts, at, row.tz) !== 0) continue;
+    const year = String(zonedYmd(at, row.tz).year);
+    const paid = await awardActivity(env, row.public_id, "birthday", "bday:" + year);
+    awarded += paid.awarded || 0;
+  }
+  return { awarded: awarded };
+}
+
 export async function handlePoints(request, env, path, deps) {
   const url = new URL(request.url);
   const viewer = await deps.sessionAccount(env, request);
@@ -404,6 +508,9 @@ export async function handlePoints(request, env, path, deps) {
     const recipient = await accountByHandle(env, body.handle || body.recipientHandle || "");
     if (!recipient || recipient.public_id === viewer.public_id) return deps.json(400, { error: "recipient" });
     if (await blocksEither(env, viewer.public_id, recipient.public_id)) return deps.json(403, { error: "blocked" });
+    if (gift.category === "birthday" && !(await birthdayGiftAllowed(env, viewer.public_id, recipient.public_id, Date.now()))) {
+      return deps.json(403, { error: "birthday" });
+    }
     const prefs = await prefsOf(env, recipient.public_id);
     if (prefs.who === "nobody") return deps.json(403, { error: "closed" });
     if (prefs.who === "followers") {

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
-import { awardActivity, clawback, dailyFreeGift } from "../src/points.js";
+import { awardActivity, awardBirthdayBonuses, clawback, dailyFreeGift } from "../src/points.js";
 
 let mf;
 let bindings;
@@ -228,6 +229,53 @@ test("points ledger, caps, clawback, and gift privacy", async () => {
   assert.equal(inbox.body.gifts.some((item) => item.message === "in a message" && item.sender && item.sender.handle === "user_a"), true);
   const otherInbox = await call("/v1/gifts/inbox", { ip: "203.0.113.115", token: bea.token });
   assert.equal(otherInbox.body.gifts.some((item) => item.message === "in a message"), false);
+
+  await bindings.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS about_fields (id TEXT PRIMARY KEY, public_id TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, audience TEXT NOT NULL, tz TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL)"
+  ).run();
+  const now = new Date();
+  const stamp = "1990-" + String(now.getUTCMonth() + 1).padStart(2, "0") + "-" + String(now.getUTCDate()).padStart(2, "0");
+  await bindings.DB.prepare(
+    "INSERT INTO about_fields (id, public_id, kind, body, audience, tz, created_at) VALUES ('bday0000000000000000000000000001', ?, 'birthday', ?, 'followers', 'UTC', ?)"
+  ).bind(bea.account.publicId, stamp, Date.now()).run();
+  await bindings.DB.prepare("UPDATE point_balances SET balance = balance + 100 WHERE public_id = ?").bind(ada.account.publicId).run();
+  const closedGift = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.116",
+    token: cam.token,
+    body: { giftId: "cake", handle: "user_b", privacy: "public" }
+  });
+  assert.equal(closedGift.status, 403);
+  assert.equal(JSON.stringify(closedGift.body).includes("1990"), false);
+  const before = await call("/v1/points", { ip: "203.0.113.117", token: bea.token });
+  const cake = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.118",
+    token: ada.token,
+    body: { giftId: "cake", handle: "user_b", privacy: "public" }
+  });
+  assert.equal(cake.status, 201);
+  assert.equal(JSON.stringify(cake.body).includes("1990"), false);
+  const bonus = await awardBirthdayBonuses(bindings, Date.now());
+  assert.equal(bonus.awarded, 25);
+  const secondBonus = await awardBirthdayBonuses(bindings, Date.now());
+  assert.equal(secondBonus.awarded, 0);
+  const after = await call("/v1/points", { ip: "203.0.113.119", token: bea.token });
+  assert.equal(after.body.balance, before.body.balance + 25);
+  await bindings.DB.prepare("UPDATE about_fields SET audience = 'only' WHERE public_id = ?").bind(bea.account.publicId).run();
+  const hiddenGift = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.120",
+    token: ada.token,
+    body: { giftId: "candle", handle: "user_b", privacy: "public" }
+  });
+  assert.equal(hiddenGift.status, 403);
+  bindings.BIRTHDAY_POINTS = "off";
+  const paused = await awardBirthdayBonuses(bindings, Date.now());
+  assert.equal(paused.awarded, 0);
+  delete bindings.BIRTHDAY_POINTS;
+  const source = fs.readFileSync(fileURLToPath(new URL("../src/index.js", import.meta.url)), "utf8");
+  assert.equal(source.includes("awardBirthdayBonuses(env, at)"), true);
 
   const board = await call("/v1/points/board", { ip: "203.0.113.108" });
   assert.equal(board.body.enabled, false);
