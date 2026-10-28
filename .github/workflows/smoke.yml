@@ -101,3 +101,8 @@ jobs:
           cd /tmp/pw-ios && npx playwright install --with-deps webkit
           cd "${GITHUB_WORKSPACE}"
           PLAYWRIGHT_CORE=/tmp/pw-ios/node_modules/playwright-core/index.js node scripts/ios_webkit_test.mjs
+
+      - name: Peer-to-peer live
+        run: |
+          npm install --prefix /tmp/pw-live --no-fund --no-audit playwright-core
+          PLAYWRIGHT_CORE=/tmp/pw-live/node_modules/playwright-core/index.js node scripts/live_page_test.mjs

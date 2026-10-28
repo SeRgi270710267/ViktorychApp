@@ -7054,6 +7054,7 @@ const here = parseRoute();
       return { name: "messages", channel: channel, query };
     }
     if (parts[0] === "spaces") return { name: "spaces", id: parts[1] || "", query };
+    if (parts[0] === "live" && /^[a-f0-9]{32}$/.test(parts[1] || "")) return { name: "live", id: parts[1], query };
     if (parts[0] === "history") {
       const tab = parts[1] === "likes" || parts[1] === "videos" || parts[1] === "articles" ? parts[1] : "bookmarks";
       return { name: "history", tab: tab, query };
@@ -7921,6 +7922,7 @@ const here = parseRoute();
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
+      ${window.ViktorychLive && window.ViktorychLive.homeHtml ? window.ViktorychLive.homeHtml() : ""}
       ${homeLivePillsRow()}
     </div>`;
   }
@@ -12764,7 +12766,8 @@ if (STATE.histClear) {
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 106 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
+    const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
+    const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 106 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra + liveExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
@@ -14319,6 +14322,7 @@ if (STATE.histClear) {
       return pageHead(tr("Spaces")) + (rows || emptyBlock(tr("No Spaces right now"), tr("Live audio shows up here.")));
     }
     if (route.name === "spaces") return (window.Spaces && window.Spaces.page && window.Spaces.page(route)) || pageHead(tr("Space"), "", true) + emptyBlock(tr("This Space has ended"), tr("This Space isn’t available."));
+    if (route.name === "live") return (window.ViktorychLive && window.ViktorychLive.page && window.ViktorychLive.page(route)) || pageHead(tr("Live"), "", true) + emptyBlock(tr("This live has ended"), tr("This live isn’t available."));
     if (route.name === "connections") return connectionsView(route);
     if (route.name === "profile") return profileView(route);
     if (route.name === "user") return userView(route);
@@ -15274,6 +15278,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "stop") return;
     if (act && act.indexOf("xc-") === 0 && window.ViktorychXCompose && window.ViktorychXCompose.onAct) {
       window.ViktorychXCompose.onAct(act, el);
+      return;
+    }
+    if ((act === "go-live" || (act && act.indexOf("live-") === 0)) && window.ViktorychLive && window.ViktorychLive.onAct) {
+      window.ViktorychLive.onAct(act, el);
       return;
     }
     if (act === "dock-pref") {
