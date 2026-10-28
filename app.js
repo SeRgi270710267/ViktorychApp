@@ -7653,6 +7653,10 @@ const here = parseRoute();
       ? raw.hidden
       : BOTTOM_NAV_IDS.filter((id) => !BOTTOM_NAV_DEFAULT_ON.includes(id));
     const hiddenSet = new Set(hiddenSrc.filter((id) => id !== "home" && BOTTOM_NAV_IDS.includes(id)));
+    // A saved bar from before an item existed keeps that new item hidden.
+    if (raw && Array.isArray(raw.order) && Array.isArray(raw.hidden)) {
+      BOTTOM_NAV_IDS.forEach((id) => { if (id !== "home" && raw.order.indexOf(id) < 0) hiddenSet.add(id); });
+    }
     if (order.indexOf("home") < 0) order.unshift("home");
     const visibleIds = () => order.filter((id) => !hiddenSet.has(id) && (id === "home" || bottomNavAvailable(id)));
     let visibleNow = visibleIds();
