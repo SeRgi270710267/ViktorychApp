@@ -6091,3 +6091,35 @@ img, video { max-width: 100%; }
 .menu .menu-danger svg, .menu .menu-danger .ic { color: #f4212e; fill: currentColor; }
 .post-edit-sheet { max-width: 600px; }
 .post-edit-text { width: 100%; min-height: 120px; resize: vertical; border: 0; outline: none; background: transparent; color: inherit; font: inherit; font-size: 20px; line-height: 24px; padding: 4px 0; box-sizing: border-box; }
+
+/* Active tab like X: a rounded 4px pill as wide as the label, centred under it
+   on the row's divider; active label bold in the text colour, the rest gray.
+   One colour for every tab row (Home, profile, communities, notifications,
+   search). */
+:root { --tab-pill: var(--text); }
+.tab { color: var(--muted); }
+.tab.on { color: var(--text); font-weight: 700; }
+.tab.on span:not(.tab-grip)::after,
+.tab-pair.on::after,
+.ptabs .tab.on > .ptab-marquee::after { background: var(--tab-pill); height: 4px; border-radius: 9999px; }
+.reply-tabs-thin .tab.on span:not(.tab-grip)::after { height: 4px; }
+/* A tab with a menu caret: the pill runs under the label and the caret. */
+.tab-pair.on::after { left: 16px; right: 2px; }
+.tabs-bar .tab-pair.on::after { left: 12px; right: 2px; }
+/* Rows outside a .tabs-bar still get the thin divider under the whole row. */
+.tabs { box-shadow: inset 0 -1px 0 var(--line); }
+.tabs-bar .tabs { box-shadow: none; }
+
+/* Post action bar like X: reply, repost, like and views spread across the row
+   (space-between), bookmark and share a tight pair on the right. 18.75px icons,
+   34px hit circles, the count 4px from its icon. Every card, thread and post page. */
+.actions { max-width: none; margin-top: 4px; }
+.action-stats { flex: 1 1 auto; justify-content: space-between; gap: 4px; margin-right: 16px; }
+.action-stats > .action,
+.action-stats > .repost-wrap { flex: 0 1 auto; max-width: none; }
+.action-stats > .vote-wrap { flex: 0 1 auto; }
+.action { min-height: 34px; padding: 0; gap: 4px; }
+.action .ic::after { width: 34px; height: 34px; }
+.action-more { gap: 8px; margin-left: 0; }
+.action-more .action { min-width: 34px; justify-content: center; }
+.status-actions .action-stats { margin-right: 16px; }

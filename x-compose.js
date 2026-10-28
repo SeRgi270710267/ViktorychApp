@@ -54,7 +54,7 @@
   function blank() {
     return {
       posts: [{ text: "", replyTo: "" }],
-      media: [], link: "", hashtags: [], replyTo: "", quoteUrl: "", appParent: "", appQuote: "",
+      media: [], link: "", hashtags: [], replyTo: "", quoteUrl: "", appParent: "", extParent: null, appQuote: "",
       context: "", targetKey: "", sourceText: "", emoji: false, audience: "everyone", replyControl: "everyone",
       location: "", poll: null, scheduleAt: 0, quoteBody: "", quoteName: ""
     };
@@ -756,6 +756,7 @@
         };
       }).filter(function (post) { return post.text.trim() || post.media.length || post.poll; }),
       parentId: slot.appParent || "",
+      extParent: slot.appParent ? null : (slot.extParent || null),
       quoteId: slot.appQuote || "",
       replyTo: slot.replyTo || "",
       quoteUrl: slot.quoteUrl || "",
@@ -766,6 +767,7 @@
     var slot = slots[slotName];
     slot.media.forEach(function (media) { if (media.url) URL.revokeObjectURL(media.url); });
     var keepParent = slot.appParent;
+    var keepExt = slot.extParent;
     var keepQuote = slot.appQuote;
     var keepReply = slot.replyTo;
     var keepUrl = slot.quoteUrl;
@@ -776,6 +778,7 @@
     var keepName = slot.quoteName;
     slots[slotName] = blank();
     slots[slotName].appParent = keepParent;
+    slots[slotName].extParent = keepExt;
     slots[slotName].appQuote = keepQuote;
     slots[slotName].replyTo = keepReply;
     slots[slotName].quoteUrl = keepUrl;
@@ -848,6 +851,7 @@
     var id = String((post && (post.statusId || post.id)) || "");
     if (/^\d{5,22}$/.test(id) && !slots.reply.replyTo) slots.reply.replyTo = id;
     if (/^[a-f0-9]{32}$/.test(id) || /^va_[a-f0-9]{16}$/.test(id)) slots.reply.appParent = id;
+    else if (post && post.platform && post.platform !== "app" && host && host.extParent) slots.reply.extParent = host.extParent(post);
     if (!slots.reply.context) slots.reply.context = String((post && post.handle) || "").replace(/^@/, "");
     if (!slots.reply.targetKey) slots.reply.targetKey = String((post && post.id) || "");
     if (post && (post.text || post.body)) slots.reply.sourceText = String(post.text || post.body).slice(0, 2000);
