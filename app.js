@@ -15035,6 +15035,33 @@ if (STATE.histClear) {
     });
   }
 
+  function pillMarqueeHtml(text) {
+    const safe = esc(text || "");
+    return `<span class="sp-marquee" data-sp-marquee><span class="sp-marquee-clip"><span class="sp-marquee-track"><span class="sp-marquee-copy"><span class="sp-marquee-text">${safe}</span></span><span class="sp-marquee-copy" aria-hidden="true"><span class="sp-marquee-text">${safe}</span></span></span></span></span>`;
+  }
+
+  function fitPillLabels(root) {
+    if (!root) return;
+    const nodes = root.querySelectorAll(".story-folder, .cm-chip, .yt-chip > span, .hist-chip, .friends-pill, .gchip, .ptabs .tab > span, .pill > span");
+    nodes.forEach((el) => {
+      if (el.querySelector("[data-sp-marquee]") || el.closest("[data-sp-marquee]")) return;
+      const loose = [];
+      el.childNodes.forEach((node) => {
+        if (node.nodeType === 3 && String(node.textContent || "").trim()) loose.push(node);
+      });
+      if (!el.childElementCount && String(el.textContent || "").trim()) {
+        el.innerHTML = pillMarqueeHtml(el.textContent);
+        return;
+      }
+      loose.forEach((node) => {
+        const span = document.createElement("span");
+        span.className = "pill-fit";
+        span.innerHTML = pillMarqueeHtml(String(node.textContent || "").trim());
+        node.replaceWith(span);
+      });
+    });
+  }
+
   function commitApp(html) {
     const app = document.getElementById("app");
     if (!app) return;
@@ -15460,6 +15487,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       watchHydration();
       scheduleDetect();
       if (window.FeedsTranslate) window.FeedsTranslate.paint();
+      fitPillLabels(document.getElementById("app"));
       if (window.SIntelMusic && window.SIntelMusic.afterRender) window.SIntelMusic.afterRender(route);
       syncMediaSession();
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);

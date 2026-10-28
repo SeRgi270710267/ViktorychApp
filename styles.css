@@ -1852,6 +1852,15 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+.ptabs .tab {
+  max-width: min(220px, 46vw);
+}
+.ptabs .tab > span {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 20px;
+}
 .ptabs::before {
   content: "";
   position: absolute;
@@ -2753,12 +2762,15 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 16px;
   white-space: nowrap;
   max-width: 240px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
-.yt-chip span { overflow: hidden; text-overflow: ellipsis; }
+.yt-chip span { overflow: hidden; text-overflow: clip; line-height: 16px; max-width: 180px; min-width: 0; }
 .yt-chip.on { background: var(--fill); color: var(--on-fill); border-color: transparent; }
 .yt-chip svg { width: 18px; height: 18px; fill: currentColor; }
 .yt-chip, .yt-card, .yt-item, .short-card, .yt-ch { -webkit-touch-callout: none; }
@@ -3052,8 +3064,16 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .text-btn { width: auto; height: auto; padding: 8px 0; color: var(--text); font-weight: 700; gap: 6px; }
 .text-btn svg { width: 18px; height: 18px; fill: currentColor; }
 .pills { display: flex; gap: 8px; overflow-x: auto; margin: 12px 0; min-width: 0; scrollbar-width: none; }
-.pill, .pill-group { display: inline-flex; align-items: center; gap: 6px; background: var(--search); border: 0; border-radius: 999px; color: var(--text); font-weight: 700; font-size: 14px; }
-.pill { height: 36px; padding: 0 16px; }
+.pill, .pill-group { display: inline-flex; align-items: center; gap: 6px; background: var(--search); border: 0; border-radius: 999px; color: var(--text); font-weight: 700; font-size: 13px; line-height: 16px; }
+.pill { height: 36px; padding: 0 16px; overflow: hidden; box-sizing: border-box; max-width: min(240px, 72vw); }
+.pill-fit, .pill > span, .story-folder .sp-marquee, .cm-chip .sp-marquee, .hist-chip .sp-marquee, .friends-pill .sp-marquee, .gchip .sp-marquee, .yt-chip > span {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  line-height: inherit;
+}
 .pill svg, .yt-c-likes svg { width: 18px; height: 18px; fill: currentColor; }
 .pill.on { color: var(--blue); }
 .pill-group .pill { background: transparent; border-radius: 0; }
@@ -3950,6 +3970,10 @@ html[data-theme="default"] .gresults-logo { color: #000; }
   font-family: var(--font);
   font-size: 13px;
   font-weight: 700;
+  line-height: 16px;
+  max-width: 220px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .gchip:hover { background: var(--hover); }
 .ghome-foot {
@@ -4054,14 +4078,21 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 }
 .hist-chips::-webkit-scrollbar { display: none; }
 .hist-chip {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
   border-radius: 9999px;
-  padding: 6px 14px;
+  height: 32px;
+  padding: 0 14px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 16px;
   white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .hist-chip.on { background: var(--fill); color: var(--on-fill); border-color: transparent; }
 .hist-tools { display: flex; gap: 8px; padding: 8px 16px; }
@@ -4476,14 +4507,19 @@ html[data-nav="icons"] .nav-item { overflow: visible; }
   background: transparent;
   border: 0;
   border-radius: 9999px;
-  padding: 6px 14px;
-  font-size: 14px;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 16px;
   color: var(--muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: 240px;
+  overflow: hidden;
+  box-sizing: border-box;
   transition: background 0.15s, color 0.15s;
 }
 .friends-pill:hover {
