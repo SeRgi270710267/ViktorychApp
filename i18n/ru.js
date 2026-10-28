@@ -2080,6 +2080,7 @@ SI18n.addPack("ru", {
   "Share a thought...": "Поделись мыслью...",
   "Note": "Заметка",
   "Who can see this": "Кто это видит",
+  "Show on profile": "Показывать в профиле",
   "Expire after 24 hours": "Исчезает через 24 часа",
   "Delete note": "Удалить заметку",
   "Couldn’t save that note.": "Не удалось сохранить заметку.",
