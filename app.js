@@ -13222,7 +13222,7 @@ if (STATE.histClear) {
     delete pendingReposts[postKey];
   }
 
-  function profilePostsHtml(account) {
+  function profilePostsHtml(account, tab) {
     const lib = repostLib();
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
@@ -13272,7 +13272,11 @@ if (STATE.histClear) {
       });
     }
     postList.sort(byStamp);
-    return { html: postList.map((post) => card(post, "")).join(""), count: postList.length };
+    let shown = postList;
+    if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
+    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
+    else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
+    return { html: shown.map((post) => card(post, "")).join(""), count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -15047,6 +15051,7 @@ if (STATE.histClear) {
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
     hscrollSettle({ reveal: true });
+    if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
 
   function hscrollRestoreSaved(retry) {

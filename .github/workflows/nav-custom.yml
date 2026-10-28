@@ -10,6 +10,8 @@ on:
       - "i18n/**"
       - "scripts/bottom_nav_test.mjs"
       - "scripts/home_reach_test.mjs"
+      - "scripts/profile_tabs_order_test.js"
+      - "scripts/profile_tabs_test.mjs"
       - "scripts/nav_custom_test.js"
       - "scripts/dock_test.js"
       - "scripts/landscape_layout_test.mjs"
@@ -33,6 +35,8 @@ on:
       - "i18n/**"
       - "scripts/bottom_nav_test.mjs"
       - "scripts/home_reach_test.mjs"
+      - "scripts/profile_tabs_order_test.js"
+      - "scripts/profile_tabs_test.mjs"
       - "scripts/nav_custom_test.js"
       - "scripts/dock_test.js"
       - "scripts/landscape_layout_test.mjs"
@@ -70,6 +74,11 @@ jobs:
         run: |
           npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/home_reach_test.mjs
+
+      - name: Profile tabs can be reordered
+        run: |
+          node scripts/profile_tabs_order_test.js
+          PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/profile_tabs_test.mjs
       - name: Corner drawers
         run: node scripts/dock_test.js
       - name: Landscape layout
