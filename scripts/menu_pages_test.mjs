@@ -4,7 +4,8 @@
    normal browser chrome strip is not treated as split screen.
    Nothing here prints account names, handles, or ids. */
 import http from "node:http";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -768,7 +769,65 @@ async function openSized(context, origin, size) {
   return { page, client, problems };
 }
 
+/* Each size runs in its own browser process, a few at a time, so the whole
+   check takes about a quarter of the serial time. ONLY and AUTH still pick
+   one case by hand. MENU_PARALLEL=1 runs everything in one process. */
+async function runParallel() {
+  const cases = [];
+  for (const auth of ["out", "in"]) {
+    for (const size of SIZES) if (size.auth.indexOf(auth) >= 0) cases.push({ auth, id: size.id });
+  }
+  const limit = Math.max(1, Math.min(Number(process.env.MENU_PARALLEL) || os.cpus().length, 6));
+  const results = new Array(cases.length);
+  let next = 0;
+  async function worker() {
+    while (next < cases.length) {
+      const index = next;
+      next += 1;
+      const item = cases[index];
+      results[index] = await new Promise((resolve) => {
+        const child = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
+          env: { ...process.env, ONLY: item.id, AUTH: item.auth, MENU_CHILD: "1" },
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+        let out = "";
+        child.stdout.on("data", (chunk) => { out += chunk; });
+        child.stderr.on("data", (chunk) => { out += chunk; });
+        child.on("close", (code) => resolve({ item, code, out }));
+      });
+      const done = results[index];
+      process.stdout.write((done.code === 0 ? "" : "FAILED " + done.item.auth + " " + done.item.id + "\n") + done.out);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, cases.length) }, worker));
+  /* A busy runner can leave a tap target mid-animation; a case that failed
+     next to others gets one quiet run on its own before it counts. */
+  for (let index = 0; index < results.length; index += 1) {
+    if (results[index].code === 0) continue;
+    const item = results[index].item;
+    console.log("retrying alone: " + item.auth + " " + item.id);
+    const again = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { env: { ...process.env, ONLY: item.id, AUTH: item.auth, MENU_CHILD: "1" }, encoding: "utf8" });
+    process.stdout.write((again.stdout || "") + (again.stderr || ""));
+    results[index] = { item, code: again.status, out: "" };
+  }
+  const failed = results.filter((done) => done.code !== 0);
+  if (failed.length) {
+    console.error("menu page checks failed: " + failed.map((done) => done.item.auth + " " + done.item.id).join(", "));
+    process.exit(1);
+  }
+}
+
 async function main() {
+  const parallel = !process.env.ONLY && !process.env.AUTH && !process.env.FROM && !process.env.MENU_CHILD && process.env.MENU_PARALLEL !== "1";
+  if (parallel) {
+    await runParallel();
+    console.log("signed-out ok");
+    console.log("signed-in ok");
+    console.log("menu pages ok");
+    const layout = spawnSync(process.execPath, [fileURLToPath(new URL("./drawer_layout_test.mjs", import.meta.url))], { stdio: "inherit", env: process.env });
+    if (layout.status !== 0) process.exit(layout.status || 1);
+    return;
+  }
   const chromium = await loadPlaywright();
   if (!chromium) fail("Playwright chromium is missing");
   const server = await startServer();
@@ -810,6 +869,7 @@ async function main() {
   }
   if (process.exitCode) fail("menu page checks failed");
   console.log("menu pages ok");
+  if (process.env.MENU_CHILD) return;
   /* The drawer layout check shares this job. */
   const layout = spawnSync(process.execPath, [fileURLToPath(new URL("./drawer_layout_test.mjs", import.meta.url))], { stdio: "inherit", env: process.env });
   if (layout.status !== 0) process.exit(layout.status || 1);

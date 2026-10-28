@@ -20,7 +20,8 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, resumeAccountDeletions } from "./account-delete.js";
-import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
+import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
 import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
@@ -36,6 +37,7 @@ import { maybeBackupD1 } from "./d1-backup.js";
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
+import { claimedJobs } from "./job-runner.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingRequest, importAllowed, readFollowRows, outgoingRequestIds, requestCount, followsYouSet, handleSocialRoutes, blockedProfile, stripBlockedView, blocksEither, pairState } from "./social.js";
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
@@ -867,6 +869,10 @@ async function handleLogout(request, env, all) {
     await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ?").bind(row.public_id).run();
     await env.DB.prepare("DELETE FROM channel_tickets WHERE public_id = ?").bind(row.public_id).run();
   } else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
+  try {
+    if (all) await env.DB.prepare("DELETE FROM session_devices WHERE public_id = ?").bind(row.public_id).run();
+    else await env.DB.prepare("DELETE FROM session_devices WHERE token_hash = ?").bind(hash).run();
+  } catch (err) { /* the table appears with the first device hello */ }
   return json(200, { ok: true });
 }
 
@@ -1260,6 +1266,8 @@ async function handleSyncGet(request, env) {
   return json(200, { payload, updatedAt: saved.updated_at });
 }
 
+const SYNC_UI_KEYS = ["appearance", "drawerMenu", "navCustom", "navCustomAt", "bottomNav", "bottomNavCustom", "profileTabs", "homePills", "stories", "prefsAt", "showPictures", "showBanners"];
+
 async function handleSyncPut(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
@@ -1320,6 +1328,19 @@ async function handleSyncPut(request, env) {
     delete payload.navLayoutSync;
   }
   delete payload.deviceStats;
+  // A device that keeps its own look sends uiLocal and leaves out the shared
+  // look, so the account's copy stays for the other devices.
+  if (payload.uiLocal === true && previous) {
+    SYNC_UI_KEYS.forEach((key) => {
+      if (payload[key] === undefined && previous[key] !== undefined) payload[key] = previous[key];
+    });
+  }
+  delete payload.uiLocal;
+  if (payload.syncUi != null) payload.syncUi = payload.syncUi !== false;
+  payload.syncUiAt = Math.max(0, Math.min(Number(payload.syncUiAt) || 0, Date.now() + 60000));
+  if (payload.prefsAt != null && (typeof payload.prefsAt !== "object" || Array.isArray(payload.prefsAt))) delete payload.prefsAt;
+  if (payload.homePills != null && typeof payload.homePills !== "boolean") delete payload.homePills;
+  if (payload.stories != null && typeof payload.stories !== "boolean") delete payload.stories;
   if (payload.storyNotes === true || payload.storyNotes === false) payload.storyNotes = payload.storyNotes === true;
   else if (previous && (previous.storyNotes === true || previous.storyNotes === false)) payload.storyNotes = previous.storyNotes === true;
   if (payload.devicePerf != null) {
@@ -1337,6 +1358,12 @@ async function handleSyncPut(request, env) {
   }
   const now = Date.now();
   await env.DB.prepare("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").bind(row.public_id, text, now).run();
+  // Other signed-in devices hear about a real change and pull it.
+  if (!current || current.payload !== text) {
+    const device = String(body.device || "").replace(/[^a-z0-9]/gi, "").slice(0, 24);
+    try { await publishToAccount(env, row.public_id, "sync", { updatedAt: now, device }, row.public_id); }
+    catch (err) { /* devices also check when they come back */ }
+  }
   return json(200, { payload: body.payload, updatedAt: now });
 }
 
@@ -5266,6 +5293,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/account/deletions" && request.method === "GET") {
     return handleDeletionList(request, env, { json, rateHit, limited });
   }
+  if (path === "/v1/devices" || path.startsWith("/v1/devices/")) return handleDevices(request, env, { json, bearer, sha256Hex });
   if (path === "/v1/logout" && request.method === "POST") return handleLogout(request, env, false);
   if (path === "/v1/logout-all" && request.method === "POST") return handleLogout(request, env, true);
   if (path === "/v1/session" && request.method === "GET") return handleSession(request, env);
@@ -5418,6 +5446,56 @@ function bindRequestOwner(env) {
 
 export { AccountChannel };
 
+/* JSON reads carry a short body hash. A client that sends it back gets an
+   empty 304 instead of the same bytes again. */
+const ETAG_MAX = 262144;
+export async function withEtag(request, response) {
+  if (!request || request.method !== "GET" || !response || response.status !== 200) return response;
+  if (response.headers.has("etag") || response.webSocket) return response;
+  if ((response.headers.get("content-type") || "").indexOf("application/json") < 0) return response;
+  let path = "";
+  try { path = new URL(request.url).pathname; } catch (err) { return response; }
+  if (!path.startsWith("/v1/")) return response;
+  if (Number(response.headers.get("content-length") || 0) > ETAG_MAX) return response;
+  const text = await response.text();
+  const headers = new Headers(response.headers);
+  if (text.length > ETAG_MAX) return new Response(text, { status: 200, statusText: response.statusText, headers });
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(text)));
+  let hex = "";
+  for (let i = 0; i < 10; i++) hex += digest[i].toString(16).padStart(2, "0");
+  const tag = 'W/"' + hex + '"';
+  headers.set("etag", tag);
+  const asked = String(request.headers.get("if-none-match") || "").split(/\s*,\s*/);
+  if (asked.includes(tag)) {
+    headers.delete("content-length");
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(text, { status: 200, statusText: response.statusText, headers });
+}
+
+/* Render's job loop: the offloaded jobs, all at once, against the same D1/R2.
+   Each job keeps its own inner pool limits. */
+export async function runBackgroundJobs(env, at, only) {
+  bindRequestOwner(env);
+  const now = Number(at) || Date.now();
+  const off = await readFlags(env, now);
+  const minute = new Date(now).getUTCMinutes();
+  const jobs = { ownerFeeds: () => sweepOwnerFeeds(env, now) };
+  if (!off.shorts && !off.lives) jobs.tiktokLive = () => watchTikTokLive(env, now);
+  if (!off.stories) jobs.storiesSweep = () => sweepExpiredStories(env, now);
+  if (minute === 0) {
+    jobs.birthdays = () => runBirthdaySweep(env, now);
+    jobs.birthdayPoints = () => awardBirthdayBonuses(env, now);
+  }
+  const names = Object.keys(jobs).filter((name) => !only || only.includes(name));
+  const results = await Promise.allSettled(names.map((name) => jobs[name]()));
+  const failed = [];
+  results.forEach((result, i) => {
+    if (result.status === "rejected") { failed.push(names[i]); logError("render-job:" + names[i], result.reason); }
+  });
+  return { ran: names, failed };
+}
+
 export default {
   async fetch(request, env, ctx) {
     let path = "";
@@ -5427,7 +5505,7 @@ export default {
       path = url.pathname;
       const origin = request.headers.get("Origin");
       if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
-      const response = await route(request, env, ctx);
+      const response = await withEtag(request, await route(request, env, ctx));
       return withCors(request, env, response);
     } catch (err) {
       logError(areaFor(path, request.method), err);
@@ -5439,17 +5517,22 @@ export default {
     const at = Number(event && event.scheduledTime) || Date.now();
     // Features the owner turned off do no cron work at all.
     const off = await readFlags(env, at);
-    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
-    if (!off.shorts && !off.lives) jobs.push(watchTikTokLive(env, at));
+    // Jobs the Render backup claimed in the last couple of minutes run there.
+    const away = await claimedJobs(env, at);
+    const minute = new Date(at).getUTCMinutes();
+    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
+    const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
+    run("ownerFeeds", () => sweepOwnerFeeds(env, at));
+    if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
     if (!off.lives) jobs.push(sweepLive(env, at));
-    if (!off.stories) jobs.push(sweepExpiredStories(env, at));
+    if (!off.stories) run("storiesSweep", () => sweepExpiredStories(env, at));
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
-    if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
-    if (new Date(at).getUTCMinutes() === 0) jobs.push(runBirthdaySweep(env, at));
+    if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(maybeBackupD1(env, at));
-    if (new Date(at).getUTCMinutes() === 0) jobs.push(awardBirthdayBonuses(env, at));
+    if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") logError("cron", results[i].reason);
