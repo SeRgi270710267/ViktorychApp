@@ -2601,7 +2601,104 @@ function signupPayload() {
     var name = row.name || row.displayName || (known && (known.name || known.displayName)) || handle || "";
     return { id: row.id || "", name: name, handle: handle, avatar: avatar, avatarFace: face };
   }
+  function requestHashKind() {
+    var hash = (typeof location !== "undefined" && location.hash) || "";
+    var cut = hash.indexOf("?");
+    if (cut < 0) return { kind: "follow", box: "in" };
+    var kind = "follow";
+    var box = "in";
+    hash.slice(cut + 1).split("&").forEach(function (part) {
+      var bits = part.split("=");
+      var key = bits[0];
+      var value = "";
+      try { value = decodeURIComponent(bits.slice(1).join("=") || ""); } catch (err) { value = bits.slice(1).join("=") || ""; }
+      if (key === "kind" && value === "friends") kind = "friends";
+      if (key === "box" && value === "out") box = "out";
+    });
+    return { kind: kind, box: box };
+  }
+
+  function requestPill(attrs, label, count, on) {
+    var badge = count > 0 ? '<span class="pill-badge">' + count + "</span>" : "";
+    var text = esc(label);
+    return '<button type="button" class="req-pill' + (on ? " on" : "") + '" ' + attrs + ' aria-pressed="' + (on ? "true" : "false") + '"><span class="req-pill-clip"><span class="req-pill-track"><span class="req-pill-text">' + text + '</span><span class="req-pill-text" aria-hidden="true">' + text + "</span></span></span>" + badge + "</button>";
+  }
+
+  function requestPersonRow(person, actions) {
+    var href = person.handle ? "#/@" + encodeURIComponent(person.handle) : "#/";
+    var letter = String(person.name || person.handle || "?").trim().charAt(0).toUpperCase() || "?";
+    var face = publicAvatar(person.avatar, person.avatarFace, "", letter);
+    return '<div class="connect-row"><a class="who-main" href="' + esc(href) + '">' + face + '<span class="who-copy"><span class="name">' + esc(person.name || person.handle || "") + '</span><span class="handle">' + (person.handle ? "@" + esc(person.handle) : "") + '</span></span></a><span class="row-actions">' + actions + "</span></div>";
+  }
+
+  function requestsHubHtml(subjectId) {
+    ensureList(subjectId, "requests", false);
+    ensureFriendRequests();
+    var view = requestHashKind();
+    var pack = listPack(subjectId, "requests");
+    var follows = pack.accounts || [];
+    var incoming = friendRequestsCache.incoming || [];
+    var outgoing = friendRequestsCache.outgoing || [];
+    var followN = follows.length;
+    var friendN = incoming.length;
+    var pills = '<div class="req-pills" role="tablist">' +
+      requestPill('data-req-kind="follow"', tr("Follow requests"), followN, view.kind !== "friends") +
+      requestPill('data-req-kind="friends"', tr("Friend Requests"), friendN + outgoing.length, view.kind === "friends") +
+      "</div>";
+    if (view.kind === "friends" && incoming.length && outgoing.length) {
+      pills += '<div class="req-pills req-pills-sub" role="tablist">' +
+        requestPill('data-req-box="in"', tr("Received"), incoming.length, view.box !== "out") +
+        requestPill('data-req-box="out"', tr("Sent"), outgoing.length, view.box === "out") +
+        "</div>";
+    }
+    var body = "";
+    if (view.kind !== "friends") {
+      if (pack.loading && !pack.accounts) body = '<div class="reply-empty">' + esc(tr("Loading…")) + "</div>";
+      else if (!follows.length) body = '<div class="empty"><h2>' + esc(tr("No follow requests")) + "</h2><p>" + esc(tr("When someone asks to follow you, they’ll show up here.")) + "</p></div>";
+      else body = follows.map(function (item) {
+        var person = graphPerson(item);
+        var actions = '<button class="friend-btn friend-accept" type="button" data-act="accept-follow" data-id="' + esc(person.id) + '">' + esc(tr("Accept")) + '</button><button class="friend-btn friend-decline" type="button" data-act="decline-follow" data-id="' + esc(person.id) + '">' + esc(tr("Decline")) + "</button>";
+        return requestPersonRow(person, actions);
+      }).join("");
+    } else {
+      var showOut = outgoing.length && (view.box === "out" || !incoming.length);
+      if (!incoming.length && !outgoing.length) {
+        body = '<div class="empty"><h2>' + esc(tr("No friend requests")) + "</h2><p>" + esc(tr("You don’t have any pending friend requests.")) + "</p></div>";
+      } else if (showOut) {
+        body = outgoing.map(function (req) {
+          var person = graphPerson(req);
+          var pid = String(req.id || "").replace(/^app:/, "");
+          var actions = '<button class="friend-btn friend-decline" type="button" data-friend-act="cancel" data-friend-id="' + esc(pid) + '" data-handle="' + esc(person.handle) + '">' + esc(tr("Cancel Request")) + "</button>";
+          return requestPersonRow(person, actions);
+        }).join("");
+      } else {
+        body = incoming.map(function (req) {
+          var person = graphPerson(req);
+          var pid = String(req.id || "").replace(/^app:/, "");
+          var actions = '<button class="friend-btn friend-accept" type="button" data-friend-act="accept" data-friend-id="' + esc(pid) + '" data-handle="' + esc(person.handle) + '">' + esc(tr("Accept")) + '</button><button class="friend-btn friend-decline" type="button" data-friend-act="decline" data-friend-id="' + esc(pid) + '" data-handle="' + esc(person.handle) + '">' + esc(tr("Decline")) + "</button>";
+          return requestPersonRow(person, actions);
+        }).join("");
+      }
+    }
+    return '<div class="requests-hub">' + pills + body + "</div>";
+  }
+
+  function fitRequestPills() {
+    var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.querySelectorAll(".req-pill-clip").forEach(function (clip) {
+      var text = clip.querySelector(".req-pill-text");
+      if (!text) return;
+      var over = !reduced && text.scrollWidth > clip.clientWidth + 1;
+      clip.classList.toggle("is-over", !!over);
+    });
+  }
+
+  function pendingFriendRequests() {
+    return (friendRequestsCache.incoming || []).length;
+  }
+
   function graphListHtml(subjectId, tab, handle) {
+    if (tab === "requests" && viewerOwnsSubject(subjectId, handle)) return requestsHubHtml(subjectId);
     ensureList(subjectId, tab, false);
     var pack = listPack(subjectId, tab);
     var q = graphQuery[subjectId + "|" + tab] || "";
@@ -3250,6 +3347,21 @@ function signupPayload() {
       '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
       '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
+    var reqKind = event.target && event.target.closest ? event.target.closest("[data-req-kind]") : null;
+    if (reqKind) {
+      event.preventDefault();
+      var hash = location.hash || "";
+      var path = hash.split("?")[0];
+      location.hash = path + (reqKind.getAttribute("data-req-kind") === "friends" ? "?kind=friends" : "");
+      return;
+    }
+    var reqBox = event.target && event.target.closest ? event.target.closest("[data-req-box]") : null;
+    if (reqBox) {
+      event.preventDefault();
+      var base = (location.hash || "").split("?")[0];
+      location.hash = base + "?kind=friends" + (reqBox.getAttribute("data-req-box") === "out" ? "&box=out" : "");
+      return;
+    }
     var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
     if (friendSub) {
       event.preventDefault();
@@ -3973,6 +4085,9 @@ else if (act === "copy-id") copyAccountId();
     previewFollow: previewFollow,
     followControlHtml: followControlHtml,
     graphListHtml: graphListHtml,
+    ensureFriendRequests: ensureFriendRequests,
+    pendingFriendRequests: pendingFriendRequests,
+    fitRequestPills: fitRequestPills,
     setGraphQuery: setGraphQuery,
     relationWrite: relationWrite,
     blockSet: function () {
