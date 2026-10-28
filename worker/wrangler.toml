@@ -19,6 +19,11 @@ workers_dev = true
 # VAPID_PRIVATE_JWK is the private key as a JSON JWK string.
 # npx wrangler secret put VAPID_PUBLIC_KEY
 # npx wrangler secret put VAPID_PRIVATE_JWK
+# Optional live TURN. Leave unset to use only the free STUN servers.
+# LIVE_TURN_URLS is a comma-separated list of turn: or turns: URLs (four max).
+# npx wrangler secret put LIVE_TURN_URLS
+# npx wrangler secret put LIVE_TURN_USERNAME
+# npx wrangler secret put LIVE_TURN_CREDENTIAL
 # When it is unset, an added TikTok account waits for the next scheduled sync.
 # HANDLE_HOLD_DAYS keeps a deleted handle from being registered again.
 # The default is 30. Set it to 0 to free the handle immediately.
