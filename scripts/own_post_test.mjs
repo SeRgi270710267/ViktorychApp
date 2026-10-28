@@ -169,7 +169,9 @@ async function run(browser, vp, origin) {
   const created = { id: NEW_ID, body: "Fresh own post", createdAt: Date.now() - 5000, media: [], authorName: "User A", authorHandle: "user_a", authorId: ME };
   const group = { name: "placeholder_group", rootId: "va_00000000000000a1" };
   const commPost = { id: "va_00000000000000a1", body: "My community post", createdAt: Date.now() - 9000, media: [], authorName: "User A", authorHandle: "user_a", authorId: ME, community: group };
-  const commReply = { id: "va_00000000000000a2", body: "My community reply", parentId: "va_00000000000000b9", createdAt: Date.now() - 7000, media: [], authorName: "User A", authorHandle: "user_a", authorId: ME, community: { name: "placeholder_group", rootId: "va_00000000000000b9" } };
+  const grand = { id: "va_00000000000000b8", body: "Grandparent post", parentId: "", createdAt: Date.now() - 60000, media: [], authorName: "User C", authorHandle: "user_c", authorId: "100000000003", community: { name: "placeholder_group", rootId: "" } };
+  const parentRow = { id: "va_00000000000000b9", body: "Parent post", parentId: grand.id, createdAt: Date.now() - 30000, media: [], authorName: "User B", authorHandle: "user_b", authorId: "100000000002", community: { name: "placeholder_group", rootId: "" }, parent: grand };
+  const commReply = { id: "va_00000000000000a2", body: "My community reply", parentId: "va_00000000000000b9", createdAt: Date.now() - 7000, media: [], authorName: "User A", authorHandle: "user_a", authorId: ME, community: { name: "placeholder_group", rootId: "va_00000000000000b9" }, parent: parentRow };
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/v1/posts") {
@@ -192,8 +194,26 @@ async function run(browser, vp, origin) {
     .catch(() => fail(vp.name + " the profile Posts tab is missing the community post"));
   if (await page.locator('article.post[data-post="va_00000000000000a2"]').count()) fail(vp.name + " a community reply is on the Posts tab");
   await page.goto(origin + "/#/@user_a?tab=replies", { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => !!document.querySelector('article.post[data-post="va_00000000000000a2"] .community-line'), null, { timeout: 15000 })
+  await page.waitForFunction(() => { const el = document.querySelector('article.post[data-post="va_00000000000000a2"]'); const wrap = el && (el.closest(".thread") || el); return !!(wrap && wrap.querySelector(".community-line")); }, null, { timeout: 15000 })
     .catch(() => fail(vp.name + " the profile Replies tab is missing the community reply"));
+  // Replies show their parent above them with the thread line and a "Replying to" line, like X.
+  const thread = await page.evaluate(() => {
+    const child = document.querySelector('article.post[data-post="va_00000000000000a2"]');
+    const wrap = child && child.closest(".thread");
+    const parent = wrap && wrap.querySelector('article.post[data-post="va_00000000000000b9"]');
+    const line = child && child.querySelector(".replying");
+    const label = wrap && wrap.querySelector(".community-line");
+    return { parent: !!parent, connector: !!(parent && parent.querySelector(".thread-line")), replying: line ? line.textContent : "", label: label ? label.textContent : "" };
+  });
+  if (!thread.parent || !thread.connector) fail(vp.name + " the reply does not show its parent with the thread line: " + JSON.stringify(thread));
+  if (thread.replying.indexOf("@user_b") < 0) fail(vp.name + " the reply has no Replying to line: " + JSON.stringify(thread));
+  if (thread.label.indexOf("r/placeholder_group") < 0) fail(vp.name + " the community line does not read r/name: " + JSON.stringify(thread));
+  // The post page shows the whole ancestor chain above the reply.
+  await page.goto(origin + "/#/app/user_a/status/va_00000000000000a2", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => { const t = document.body.textContent; return t.indexOf("Grandparent post") >= 0 && t.indexOf("Parent post") >= 0 && t.indexOf("My community reply") >= 0; }, null, { timeout: 15000 })
+    .catch(() => fail(vp.name + " the post page does not show the ancestor chain"));
+  const order = await page.evaluate(() => { const t = document.body.textContent; return [t.indexOf("Grandparent post"), t.indexOf("Parent post"), t.lastIndexOf("My community reply")]; });
+  if (!(order[0] < order[1] && order[1] < order[2])) fail(vp.name + " the ancestors are out of order: " + order.join(","));
   await page.goto(origin + "/#/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction((id) => { const first = document.querySelector("article.post"); return first && first.getAttribute("data-post") === id; }, NEW_ID, { timeout: 15000 })
     .catch(() => fail(vp.name + " Home lost the post after a refresh"));

@@ -1910,6 +1910,8 @@ SI18n.addPack("es", {
   "Passkey saved": "Llave de acceso guardada",
   "Your post was sent.": "Tu publicación se envió.",
   "View": "Ver",
+  "Upvote": "Votar a favor",
+  "Downvote": "Votar en contra",
   "Add a photo and a short bio": "Añade una foto y una biografía corta",
   "Pick feeds to follow": "Elige canales para seguir",
   "Notifications can wait until you ask": "Las notificaciones pueden esperar hasta que las pidas",

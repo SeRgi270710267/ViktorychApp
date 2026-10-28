@@ -444,3 +444,21 @@ test("a profile lists the account's community posts and replies, with community 
   const member = await call("/v1/posts?by=" + id, { ip: "203.0.113.158", token: viewer.body.token });
   assert.equal((member.body.posts || []).filter((item) => item.community).length, 2);
 });
+
+test("replies carry their parent chain for feeds and the post page", async () => {
+  const ana = await call("/v1/signup", { method: "POST", ip: "203.0.113.160", body: { displayName: "Ana Chain", handle: "ana_chain" } });
+  const ben = await call("/v1/signup", { method: "POST", ip: "203.0.113.161", body: { displayName: "Ben Chain", handle: "ben_chain" } });
+  const root = await call("/v1/communities/chainfeed/posts", { method: "POST", ip: "203.0.113.162", token: ana.body.token, body: { text: "Chain root" } });
+  const mid = await call("/v1/communities/chainfeed/posts", { method: "POST", ip: "203.0.113.163", token: ben.body.token, body: { text: "Chain middle", parentId: root.body.post.id } });
+  const leaf = await call("/v1/communities/chainfeed/posts", { method: "POST", ip: "203.0.113.164", token: ana.body.token, body: { text: "Chain leaf", parentId: mid.body.post.id } });
+  assert.equal(leaf.status, 200);
+  const list = await call("/v1/posts?by=" + ana.body.account.publicId, { ip: "203.0.113.165", token: ben.body.token });
+  const row = (list.body.posts || []).find((item) => item.id === leaf.body.post.id);
+  assert.ok(row && row.parent, "the reply has its parent");
+  assert.equal(row.parent.id, mid.body.post.id);
+  assert.equal(row.parent.authorHandle, "ben_chain");
+  assert.equal(row.parent.body, "Chain middle");
+  assert.equal(row.parent.parent.id, root.body.post.id);
+  assert.equal(row.parent.parent.authorHandle, "ana_chain");
+  assert.equal(row.parent.parent.parent, undefined);
+});
