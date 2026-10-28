@@ -80,7 +80,7 @@ async function remoteEnv() {
   stats.mode = "remote";
   stats.d1DatabaseId = databaseId;
   stats.r2Bucket = bucket;
-  return workerEnv({ DB: createD1(client, databaseId), DATA: createR2(client, bucket) });
+  return workerEnv({ DB: createD1(client, databaseId), DATA: createR2(client, bucket), JOB_RUNNER: "render" });
 }
 
 async function localEnv() {
@@ -119,6 +119,9 @@ async function main() {
     globalThis.caches = createMemoryCache();
     const worker = await import(pathToFileURL(scriptPath).href);
     dispatch = (request) => worker.default.fetch(request, remote);
+    if (String(process.env.RENDER_JOBS || "1") !== "0" && typeof worker.runBackgroundJobs === "function") {
+      startJobLoop(worker, remote);
+    }
     console.log("[ViktorychApp Backup Backend] shared Cloudflare D1 + R2 mode");
     console.log("[ViktorychApp Backup Backend] D1 database: " + stats.d1DatabaseId);
     console.log("[ViktorychApp Backup Backend] R2 bucket: " + stats.r2Bucket);
@@ -161,6 +164,7 @@ async function main() {
           d1: stats.d1DatabaseId || null,
           r2: stats.r2Bucket || null,
           requests: stats.requests,
+          jobs: stats.jobs || null,
           errors: stats.errors,
           uptimeSeconds: Math.round((Date.now() - stats.startedAt) / 1000)
         }));
@@ -220,6 +224,46 @@ async function main() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+}
+
+/* While awake, Render claims the heavy cron jobs every minute and runs them
+   here; the Worker cron skips claimed jobs. When the free instance sleeps
+   the claim goes stale and the Worker takes them back by itself. */
+function startJobLoop(worker, env) {
+  const jobs = stats.jobs = { on: true, runs: 0, skipped: 0, lastAt: 0, lastMs: 0, failed: [], error: null };
+  let busySince = 0;
+  let runner = null;
+  const tick = async () => {
+    const at = Date.now();
+    // A pass stuck for ten minutes stops claiming so the Worker takes over.
+    if (busySince && at - busySince > 600000) { jobs.error = "stuck"; return; }
+    try {
+      if (!runner) runner = await import(pathToFileURL(path.resolve(path.dirname(scriptPath), "job-runner.js")).href);
+      // Live watching starts recordings through GitHub; without that token it stays on the Worker.
+      const names = runner.OFFLOAD_JOBS.filter((name) => name !== "tiktokLive" || env.GITHUB_DISPATCH_TOKEN);
+      jobs.claimed = await runner.claimJobs(env, at, names);
+    } catch (err) {
+      jobs.error = "claim: " + String(err && err.message || err).slice(0, 160);
+      return;
+    }
+    if (busySince) { jobs.skipped += 1; return; }
+    busySince = at;
+    try {
+      const result = await worker.runBackgroundJobs(env, at, jobs.claimed);
+      jobs.runs += 1;
+      jobs.failed = result.failed;
+      jobs.error = null;
+    } catch (err) {
+      jobs.error = String(err && err.message || err).slice(0, 160);
+    } finally {
+      jobs.lastAt = at;
+      jobs.lastMs = Date.now() - at;
+      busySince = 0;
+    }
+  };
+  setTimeout(tick, Number(process.env.RENDER_JOBS_FIRST_MS) || 5000);
+  setInterval(tick, 60000).unref();
+  console.log("[ViktorychApp Backup Backend] background jobs: on");
 }
 
 function readBody(req) {
