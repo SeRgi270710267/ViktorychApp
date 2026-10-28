@@ -63,11 +63,13 @@ Chrome 156's DevTools virtual authenticator (`ctap2`, internal transport, `hasPr
 
 ## Privacy screen
 
-The cover is created in the document head, before the app paints. It turns on synchronously when the window blurs, the page becomes hidden, the page is frozen, picture-in-picture starts, printing starts, or the window looks like a split (one side still fills the screen and the other is clearly reduced). A normal unmaximized desktop window, smaller in both directions, is not treated as a split.
+The cover is off until someone turns it on. Existing installs that never chose a mode stay off. An explicit choice of messages only or the whole app is kept.
 
-The setting is off, messages only, or the whole app. Messages only covers direct messages, the chat drawer, notifications, and profile privacy settings. Print rules hide those regions, or the whole page except the cover. Text selection and dragging in those regions can be switched off.
+It is one fixed layer. It appears when the window is hidden, in the background, or the app lock is on. It does not blur, hide, resize, or restyle the page, and it does not change lists, notifications, menus, or profiles. Focus, a visibility change, and a route change clear it. A visible window, split screen, picture-in-picture, and print do not turn it on.
 
-Browsers cannot block an operating-system screenshot or screen recording. There is no web API that sets Android `FLAG_SECURE`. While this window is focused and visible, a screenshot can still capture it. The cover is there so the app-switcher snapshot, a blur, split screen, picture-in-picture, and print preview are not left on the sensitive view.
+Messages only uses that same layer, and only while Messages is open or the app is locked. Text selection in messages can still be switched off.
+
+Browsers cannot block an operating-system screenshot or screen recording. There is no web API that sets Android `FLAG_SECURE`. While this window is focused and visible, a screenshot can still capture it.
 
 ### What a future Android wrapper would take
 
