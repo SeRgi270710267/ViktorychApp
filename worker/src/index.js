@@ -21,7 +21,7 @@ import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountR
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
-import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
+import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, drainOutbox, handleNotificationRoutes, notifyFollow, planRepostNotification, notifyLiveStarted } from "./notifications.js";
 import { MENTION_SCHEMA, commitBundled, handleBlockMuteRoutes, handleContentRoutes, planMentions } from "./mention-store.js";
 import { DISCORD_ALERT_SCHEMA, handleDiscordAlertRoutes } from "./discord-alerts.js";
@@ -40,6 +40,7 @@ import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
+import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
@@ -236,7 +237,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -1081,11 +1082,11 @@ async function handleProfilePatch(request, env) {
   return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
-const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
+const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "online", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
 
 function cleanDrawerMenuSync(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const ids = ["home", "explore", "notifications", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music", "settings", "help", "logout", "customize"];
+  const ids = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music", "settings", "help", "logout", "customize"];
   const locked = { home: true, settings: true, logout: true, customize: true };
   const order = [];
   const seen = {};
@@ -5220,6 +5221,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/follows" && request.method === "DELETE") return handleFollowDelete(request, env);
   if (path === "/v1/follows/import" && request.method === "POST") return handleFollowImport(request, env);
   if (path === "/v1/handle" && request.method === "GET") return handleHandle(env, url);
+  if (path === "/v1/friends/presence" && request.method === "GET") {
+    return handleFriendPresence(request, env, { json, readJson, rateHit, limited, sessionAccount });
+  }
   if (path === "/v1/friends" && request.method === "GET") return handleFriendsGet(request, env, url);
   if (path === "/v1/friends/request" && request.method === "POST") return handleFriendAction(request, env, "request");
   if (path === "/v1/friends/accept" && request.method === "POST") return handleFriendAction(request, env, "accept");
@@ -5229,6 +5233,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/audience-lists" || path.startsWith("/v1/audience-lists/")) {
     const listed = await handleAudienceLists(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (listed) return listed;
+  }
+  if (path === "/v1/affiliations" || path.startsWith("/v1/affiliations/")) {
+    const marks = await handleAffiliations(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (marks) return marks;
   }
   if (path === "/v1/about" || path.startsWith("/v1/about/")) {
     const birthday = await handleBirthdayRoutes(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
