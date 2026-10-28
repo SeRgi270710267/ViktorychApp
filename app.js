@@ -7443,6 +7443,42 @@ const here = parseRoute();
     return html;
   }
 
+  function sidebarDrawerLinks(route) {
+    if (typeof getDrawerMenu !== "function" || typeof drawerItem !== "function") return "";
+    const menu = getDrawerMenu();
+    const hidden = new Set(menu.hidden || []);
+    const seen = new Set();
+    const row = (id) => {
+      if (!id || seen.has(id)) return "";
+      seen.add(id);
+      if (id === "logout") return "";
+      if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
+      const navId = DRAWER_NAV[id];
+      if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
+      const item = drawerItem(id);
+      if (!item || item.accountMenu) return "";
+      if (item.act) {
+        return `<button type="button" class="nav-item" data-act="${item.act}" aria-label="${esc(item.label)}" data-tooltip="${esc(item.label)}"><span class="nav-ico">${icon(item.icon)}</span><span class="nav-label">${esc(item.label)}</span></button>`;
+      }
+      const on = item.href && (location.hash || "#/") === item.href;
+      return navItem(item.href, item.icon, item.label, !!on);
+    };
+    let html = "";
+    (menu.order || []).forEach((entry) => {
+      if (String(entry).indexOf("section:") === 0) {
+        const section = (menu.sections || []).find((item) => item.id === entry.slice(8));
+        if (!section) return;
+        const inner = (section.items || []).map(row).join("");
+        if (!inner) return;
+        html += `<div class="nav-section">${esc(section.name)}</div>${inner}`;
+        return;
+      }
+      html += row(entry);
+    });
+    if (!html) return "";
+    return `<div class="nav-rule"></div>${html}`;
+  }
+
   function brandLink() {
     return `<a class="logo" href="#/" aria-label="${productName("app")}" data-tooltip="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}${markSvg("mark", "logo-si")}</a>`;
   }
@@ -12732,41 +12768,6 @@ const here = parseRoute();
       : "";
     const install = isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${esc(tr("Install app"))}</button>`;
     return rows + music + install;
-  }
-
-  function sidebarDrawerLinks(route) {
-    const menu = getDrawerMenu();
-    const hidden = new Set(menu.hidden || []);
-    const seen = new Set();
-    const row = (id) => {
-      if (!id || seen.has(id)) return "";
-      seen.add(id);
-      if (id === "logout") return "";
-      if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
-      const navId = DRAWER_NAV[id];
-      if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
-      const item = drawerItem(id);
-      if (!item || item.accountMenu) return "";
-      if (item.act) {
-        return `<button type="button" class="nav-item" data-act="${item.act}" aria-label="${esc(item.label)}" data-tooltip="${esc(item.label)}"><span class="nav-ico">${icon(item.icon)}</span><span class="nav-label">${esc(item.label)}</span></button>`;
-      }
-      const on = item.href && (location.hash || "#/") === item.href;
-      return navItem(item.href, item.icon, item.label, !!on);
-    };
-    let html = "";
-    (menu.order || []).forEach((entry) => {
-      if (String(entry).indexOf("section:") === 0) {
-        const section = (menu.sections || []).find((item) => item.id === entry.slice(8));
-        if (!section) return;
-        const inner = (section.items || []).map(row).join("");
-        if (!inner) return;
-        html += `<div class="nav-section">${esc(section.name)}</div>${inner}`;
-        return;
-      }
-      html += row(entry);
-    });
-    if (!html) return "";
-    return `<div class="nav-rule"></div>${html}`;
   }
 
   function accountPopup() {
