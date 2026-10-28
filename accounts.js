@@ -4404,6 +4404,7 @@ else if (act === "copy-id") copyAccountId();
   });
 
   window.ViktorychAccounts = {
+    signOut: function () { logout(false); },
     blocking: blocking,
     enter: enter,
     currentApi: currentApi,
