@@ -263,6 +263,7 @@
 }
 
 html.music-on .center { padding-bottom: 96px; }
+html.music-mini .center { padding-bottom: 96px; }
 
 .mu-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 24; }
 .mu-dock[hidden] { display: none !important; }
@@ -415,6 +416,9 @@ html.music-on .center { padding-bottom: 96px; }
   html.music-on .center { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
   html.music-on .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
   html.music-on .fab { bottom: calc(156px + env(safe-area-inset-bottom)); }
+  html.music-mini .center { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
+  html.music-mini .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
+  html.music-mini .fab { bottom: calc(156px + env(safe-area-inset-bottom)); }
   .mu-bar { height: auto; min-height: 56px; padding-bottom: 8px; }
   .mu-id .mu-art { width: 40px; height: 40px; }
   .mu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

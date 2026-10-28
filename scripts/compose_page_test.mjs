@@ -180,6 +180,8 @@ async function main() {
     if (home.status !== 0) fail("community home check failed");
     const own = spawnSync(process.execPath, [path.join(root, "scripts", "own_post_test.mjs")], { stdio: "inherit", env: process.env });
     if (own.status !== 0) fail("own post check failed");
+    const music = spawnSync(process.execPath, [path.join(root, "scripts", "music_player_test.mjs")], { stdio: "inherit", env: process.env });
+    if (music.status !== 0) fail("music player check failed");
   } finally {
     await browser.close();
     server.close();

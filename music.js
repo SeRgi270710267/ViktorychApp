@@ -413,6 +413,37 @@
   var local = { songs: [], edits: {}, hidden: [], order: [], playlists: [], playlistTouched: false, likes: [], offline: {}, volume: 1, shuffle: false, repeat: "off", view: "grid" };
   var ui = { q: "", draft: {}, now: false, confirm: "", plName: "", offline: null };
   var play = { queue: [], index: -1, playing: false, lastVolume: 1 };
+  // The player outlives the music page: a loaded song keeps playing in the mini dock on every route.
+  var PLAY_STORE = "viktorychmusic-play-v1";
+  var mini = false;
+  var resume = { id: "", at: 0 };
+  var savedAt = 0;
+  var lastHash = "";
+  function savePlay(force, fresh) {
+    var now = Date.now();
+    if (!force && now - savedAt < 4000) return;
+    savedAt = now;
+    var song = currentSong();
+    try {
+      if (!song) { localStorage.removeItem(PLAY_STORE); return; }
+      var held = resume.id === song.id ? resume.at : 0;
+      var pos = !fresh && audio && audio.src && classifySource(song.source).kind !== "youtube" ? (audio.currentTime || 0) : held;
+      localStorage.setItem(PLAY_STORE, JSON.stringify({ queue: play.queue.slice(0, 500), index: play.index, id: song.id, at: Math.max(0, Math.round(pos * 10) / 10) }));
+    } catch (err) { /* private mode */ }
+  }
+  function loadPlay() {
+    try {
+      var data = JSON.parse(localStorage.getItem(PLAY_STORE) || "null");
+      if (!data || !Array.isArray(data.queue) || !data.queue.length) return;
+      var index = Math.max(0, Math.min(data.queue.length - 1, Number(data.index) || 0));
+      play.queue = data.queue.map(String);
+      play.index = index;
+      resume = { id: String(data.id || play.queue[index] || ""), at: Number(data.at) || 0 };
+    } catch (err) { /* nothing saved */ }
+  }
+  function setPlaybackState(state) {
+    try { if (navigator.mediaSession) navigator.mediaSession.playbackState = state; } catch (err) { /* optional */ }
+  }
   var audio = null;
   var yt = null;
   var ytReady = false;
@@ -1140,6 +1171,7 @@
   function startCurrent(fromUser) {
     var song = currentSong();
     playToken += 1;
+    savePlay(true, true);
     if (!song) { pauseAll(); paint(); return; }
     if (song.kind === "hls" || streamReady(song)) startHls(song, fromUser, playToken);
     else if (song.kind === "youtube" || classifySource(song.source).kind === "youtube") startYouTube(song, fromUser);
@@ -1625,13 +1657,31 @@
     audio.addEventListener("ended", function () { next(true); });
     audio.addEventListener("loadedmetadata", function () {
       var song = currentSong();
+      if (song && resume.id === song.id && resume.at > 0 && audio.duration && resume.at < audio.duration - 1) {
+        try { audio.currentTime = resume.at; } catch (err) { /* starts from the top */ }
+      }
+      if (song && resume.id === song.id) resume = { id: "", at: 0 };
       if (!song || !audio.duration || !isFinite(audio.duration)) return;
       if (song.duration && Math.abs(song.duration - audio.duration) < 0.75) return;
       song.duration = Math.round(audio.duration);
       writeSong(song);
     });
-    audio.addEventListener("play", function () { play.playing = true; paint(); });
-    audio.addEventListener("pause", function () { if (active && !ytPending) { play.playing = false; paint(); } });
+    audio.addEventListener("play", function () { play.playing = true; setPlaybackState("playing"); paint(); });
+    audio.addEventListener("pause", function () { setPlaybackState("paused"); savePlay(true); if (active && !ytPending) { play.playing = false; paint(); } });
+    audio.addEventListener("timeupdate", function () { if (play.playing) savePlay(false); });
+    // Sound from a post's video, a live or a Space takes over: the music pauses instead of mixing.
+    var otherMedia = function (event) {
+      var node = event.target;
+      if (!node || node === audio || !node.tagName || !/^(VIDEO|AUDIO)$/.test(node.tagName)) return;
+      if (node.closest && node.closest("#mu-yt-host")) return;
+      if (node.paused || node.muted || node.volume === 0) return;
+      if (!play.playing) return;
+      pauseAll();
+      paint();
+    };
+    document.addEventListener("play", otherMedia, true);
+    document.addEventListener("volumechange", otherMedia, true);
+    root.addEventListener("pagehide", function () { savePlay(true); });
     document.addEventListener("contextmenu", function (event) {
       var node = event.target;
       if (node && node.closest && node.closest("#mu-dock, #mu-now, #mu-audio, .mu-release")) event.preventDefault();
@@ -1640,6 +1690,8 @@
 
   function enter() {
     active = true;
+    mini = false;
+    document.documentElement.classList.remove("music-mini");
     document.documentElement.classList.add("music-on");
     loadMusicHls();
     var dock = document.getElementById("mu-dock");
@@ -1650,6 +1702,23 @@
   }
 
   function leave(route) {
+    var hash = typeof location !== "undefined" ? String(location.hash || "") : "";
+    var moved = hash !== lastHash;
+    lastHash = hash;
+    if (currentSong() && typeof document !== "undefined") {
+      // Keep the song: the dock turns into the mini player over this route.
+      active = true;
+      mini = true;
+      if (moved) ui.now = false;
+      document.documentElement.classList.remove("music-on");
+      document.documentElement.classList.add("music-mini");
+      var miniDock = document.getElementById("mu-dock");
+      if (miniDock) miniDock.hidden = false;
+      paint();
+      return;
+    }
+    mini = false;
+    if (typeof document !== "undefined") document.documentElement.classList.remove("music-mini");
     var was = active;
     active = false;
     ui.now = false;
@@ -1958,6 +2027,7 @@
     if (next.repo) hooks.repo = next.repo;
     if (typeof document === "undefined") return;
     restore();
+    loadPlay();
     mount();
     loadRemote();
     document.addEventListener("load", onCoverEvent, true);
