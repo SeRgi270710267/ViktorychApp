@@ -132,6 +132,15 @@ async function gotoFresh(page) {
   return firstScreen;
 }
 
+async function logOut(page) {
+  const button = page.locator("[data-acct='logout']");
+  await button.waitFor({ state: "attached", timeout: 20000 });
+  await button.evaluate((el) => {
+    el.scrollIntoView({ block: "center" });
+    el.click();
+  });
+}
+
 async function openPage(page, path) {
   const url = pageOrigin + path;
   let last = null;
@@ -400,7 +409,7 @@ async function firstRun(page) {
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".modal"));
   await openPage(page, "/#/settings");
-  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await logOut(page);
   await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Sign in" }).first().click();
   await page.evaluate(() => {
@@ -432,7 +441,7 @@ async function firstRun(page) {
     return notes;
   }
   await openPage(page, "/#/settings");
-  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await logOut(page);
   await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Create account" }).first().click();
   await page.locator("#acct-displayName").fill("Second Reader");
