@@ -12650,6 +12650,7 @@ const here = parseRoute();
       else if (section === "data") key = tr("Data usage");
       else if (section === "notifications") key = tr("Notifications");
       else if (section === "privacy") key = tr("Privacy and safety");
+      else if (section === "usernames") key = tr("Usernames");
       else if (section === "content") key = tr("Custom tabs");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
@@ -12832,6 +12833,10 @@ const here = parseRoute();
       const screen = window.ViktorychPrivacy && window.ViktorychPrivacy.settingsHtml ? window.ViktorychPrivacy.settingsHtml() : "";
       return settingsHead(tr("Security"), "#/settings") + `<div class="set-block">${pass}${lock}${screen}</div>`;
     }
+    if (section === "usernames") {
+      const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
+      return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
+    }
     if (section === "privacy") {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       const privSection = acct ? `<h2>${esc(tr("Private followers and following"))}</h2>
@@ -12852,6 +12857,7 @@ const here = parseRoute();
         ${presenceBlock}
         ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
+        ${acct && window.ViktorychUsernames ? `<div class="set-list">${settingsRow("#/settings/usernames", tr("Usernames"), tr("Choose who sees which username, nicknames, and who can mention you."))}</div>` : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
@@ -22377,6 +22383,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (window.Stories) window.Stories.start();
     if (window.AudienceLists) {
       window.AudienceLists.bind({
+        token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
+        api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+        render: render
+      });
+    }
+    if (window.ViktorychUsernames) {
+      window.ViktorychUsernames.bind({
         token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
         api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
         render: render

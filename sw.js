@@ -92,6 +92,7 @@ const SHELL_FILES = [
   "./stories.css",
   "./highlights.js",
   "./audience-ui.js",
+  "./usernames-ui.js",
   "./live.js",
   "./live.css",
   "./marks.js",
