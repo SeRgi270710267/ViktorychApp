@@ -7412,6 +7412,7 @@ const here = parseRoute();
     const custom = getNavCustom();
     const openFolders = getNavOpenFolders();
     const hiddenSet = new Set(custom.hidden || []);
+    const popupIds = typeof getDrawerMenu === "function" ? new Set((getDrawerMenu().popup) || []) : new Set();
     const folderMap = new Map();
     custom.folders.forEach((f) => folderMap.set(f.id, f));
 
@@ -7422,7 +7423,7 @@ const here = parseRoute();
         const folder = folderMap.get(fId);
         if (!folder) return;
         const visibleItems = (folder.items || []).filter((itId) => {
-          if (hiddenSet.has(itId)) return false;
+          if (hiddenSet.has(itId) || popupIds.has(itId)) return false;
           const def = navItemDef(itId);
           if (!def) return false;
           if (def.visible && !def.visible()) return false;
@@ -7475,7 +7476,7 @@ const here = parseRoute();
           </div>
         </div>`;
       } else {
-        if (hiddenSet.has(entry)) return;
+        if (hiddenSet.has(entry) || popupIds.has(entry)) return;
         const def = navItemDef(entry);
         if (!def) return;
         if (def.visible && !def.visible()) return;
@@ -7485,10 +7486,6 @@ const here = parseRoute();
     });
 
     html += sidebarDrawerLinks(route);
-    html += `<button type="button" class="nav-item" data-act="go-live" aria-label="${esc(tr("Go live"))}" data-tooltip="${esc(tr("Go live"))}">
-      <span class="nav-ico">${icon("video")}</span>
-      <span class="nav-label">${esc(tr("Go live"))}</span>
-    </button>`;
     html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
       <span class="nav-ico">${icon("sliders")}</span>
       <span class="nav-label">${tr("Customize sidebar")}</span>
@@ -7505,7 +7502,7 @@ const here = parseRoute();
     const row = (id) => {
       if (!id || seen.has(id)) return "";
       seen.add(id);
-      if (id === "logout") return "";
+      if (id === "logout" || (menu.popup || []).indexOf(id) >= 0) return "";
       if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
       const navId = DRAWER_NAV[id];
       if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
@@ -7524,7 +7521,20 @@ const here = parseRoute();
         if (!section) return;
         const inner = (section.items || []).map(row).join("");
         if (!inner) return;
-        html += `<div class="nav-section">${esc(section.name)}</div>${inner}`;
+        const folderId = "menu-" + section.id;
+        const openMap = getNavOpenFolders();
+        const isOpen = !!openMap[folderId];
+        const mark = section.emoji
+          ? `<span class="nav-folder-emoji">${esc(section.emoji)}</span>`
+          : icon(isOpen ? "folderOpen" : "folder");
+        html += `<div class="nav-folder-wrapper${isOpen ? " open" : ""}" data-folder-id="${esc(folderId)}">
+          <button type="button" class="nav-item nav-folder-btn${isOpen ? " open" : ""}" data-act="toggle-nav-folder" data-folder-id="${esc(folderId)}" aria-expanded="${isOpen ? "true" : "false"}" aria-label="${esc(section.name)}" data-tooltip="${esc(section.name)}">
+            <span class="nav-ico">${mark}</span>
+            <span class="nav-label">${esc(section.name)}</span>
+            <span class="nav-folder-caret">${icon("caret")}</span>
+          </button>
+          <div class="nav-folder-children${isOpen ? " open" : ""}">${inner}</div>
+        </div>`;
         return;
       }
       html += row(entry);
@@ -12518,11 +12528,13 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
     home: "home",
+    explore: "explore",
+    notifications: "notifications",
     communities: "communities",
     lists: "lists",
     studio: "feeds",
@@ -12540,7 +12552,7 @@ const here = parseRoute();
   };
 
   function defaultDrawerMenu() {
-    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA), hidden: [], at: 0 };
+    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA).filter((id) => id !== "settings" && id !== "logout"), hidden: [], popup: ["settings", "logout"], at: 0 };
   }
 
   function cleanDrawerMenu(raw) {
@@ -12553,13 +12565,28 @@ const here = parseRoute();
       const id = String(section.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
       if (!id || sectionIds.has(id)) return;
       sectionIds.add(id);
-      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
+      const emoji = String(section.emoji || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
       const items = [];
       (Array.isArray(section.items) ? section.items : []).forEach((item) => {
         if (DRAWER_IDS.indexOf(item) < 0 || items.indexOf(item) >= 0) return;
         items.push(item);
       });
-      sections.push({ id: id, name: name, items: items });
+      sections.push({ id: id, name: name, emoji: emoji, items: items });
+    });
+    const popup = [];
+    const popupSeen = new Set();
+    const takePopup = (id) => {
+      if (!id || popupSeen.has(id) || DRAWER_IDS.indexOf(id) < 0) return;
+      if (id === "home" || id === "customize") return;
+      popupSeen.add(id);
+      popup.push(id);
+    };
+    (Array.isArray(raw.popup) ? raw.popup : ["settings", "logout"]).forEach(takePopup);
+    ["settings", "logout"].forEach(takePopup);
+    const popupSet = new Set(popup);
+    sections.forEach((section) => {
+      section.items = section.items.filter((item) => !popupSet.has(item));
     });
     const inSection = new Set();
     sections.forEach((section) => section.items.forEach((item) => inSection.add(item)));
@@ -12567,7 +12594,7 @@ const here = parseRoute();
     const seen = new Set();
     (Array.isArray(raw.order) ? raw.order : []).forEach((entry) => {
       const text = String(entry || "");
-      if (!text || seen.has(text)) return;
+      if (!text || seen.has(text) || popupSet.has(text)) return;
       if (text.indexOf("section:") === 0) {
         const id = text.slice(8);
         if (!sectionIds.has(id)) return;
@@ -12584,7 +12611,7 @@ const here = parseRoute();
       if (order.indexOf(key) < 0) order.push(key);
     });
     DRAWER_IDS.forEach((id) => {
-      if (seen.has(id) || inSection.has(id)) return;
+      if (seen.has(id) || inSection.has(id) || popupSet.has(id)) return;
       order.push(id);
     });
     const hidden = [];
@@ -12592,7 +12619,7 @@ const here = parseRoute();
       if (DRAWER_IDS.indexOf(id) < 0 || DRAWER_LOCKED.indexOf(id) >= 0 || hidden.indexOf(id) >= 0) return;
       hidden.push(id);
     });
-    return { sections: sections, order: order, hidden: hidden, at: Number(raw.at) || 0 };
+    return { sections: sections, order: order, hidden: hidden, popup: popup, at: Number(raw.at) || 0 };
   }
 
   function getDrawerMenu() {
@@ -12679,6 +12706,8 @@ const here = parseRoute();
   function drawerItem(id) {
     const mine = signedAccount();
     if (id === "home") return { id: id, href: "#/", icon: "home", label: tr("Home"), locked: true };
+    if (id === "explore") return { id: id, href: "#/explore", icon: "search", label: tr("Explore") };
+    if (id === "notifications") return { id: id, href: "#/notifications", icon: "bell", label: tr("Notifications") };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
@@ -12713,15 +12742,17 @@ const here = parseRoute();
     const eye = locked
       ? `<span class="drawer-lock" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
       : `<button class="icon-btn drawer-eye" type="button" data-act="drawer-vis" data-id="${esc(item.id)}" aria-pressed="${hidden ? "false" : "true"}" aria-label="${esc(hidden ? tr("Hidden") : tr("Visible"))}">${icon(hidden ? "eyeOff" : "eye")}</button>`;
+    const inPopup = (menu.popup || []).indexOf(item.id) >= 0;
+    const placeLocked = item.id === "home" || item.id === "customize" || item.id === "settings" || item.id === "logout";
+    const placeBtn = placeLocked ? "" : `<button class="outline drawer-place" type="button" data-act="drawer-place" data-id="${esc(item.id)}" data-place="${inPopup ? "sidebar" : "popup"}">${esc(inPopup ? tr("Sidebar") : tr("Profile popup"))}</button>`;
     const sections = (menu.sections || []).map((section) => `<option value="${esc(section.id)}">${esc(section.name)}</option>`).join("");
-    const placed = (menu.sections || []).find((section) => (section.items || []).indexOf(item.id) >= 0);
-    const move = locked ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
+    const move = locked || inPopup ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
     return `<div class="drawer-edit-row${hidden ? " is-hidden" : ""}" data-drawer-key="${esc(item.id)}">
       <button class="drawer-grip" type="button" data-drag-drawer="${esc(item.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
       <span class="drawer-ico">${item.icon === "gear" ? menuIcon("gear") : icon(item.icon)}</span>
       <span class="drawer-label">${esc(item.label)}</span>
       ${move}
-      ${placed ? "" : ""}
+      ${placeBtn}
       ${eye}
     </div>`;
   }
@@ -12742,11 +12773,13 @@ const here = parseRoute();
           return editing ? drawerEditRow(item, menu) : drawerViewRow(item);
         }).join("");
         if (!editing && !inner) return "";
-        if (!editing) return `<div class="drawer-section-label">${esc(section.name)}</div>${inner}`;
+        const folderMark = section.emoji ? esc(section.emoji) + " " : "";
+        if (!editing) return `<details class="drawer-folder"><summary class="drawer-folder-sum">${folderMark}${esc(section.name)}</summary>${inner}</details>`;
         return `<div class="drawer-section" data-drawer-key="section:${esc(section.id)}">
           <div class="drawer-section-head">
             <button class="drawer-grip" type="button" data-drag-drawer="section:${esc(section.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
-            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Section name"))}">
+            <input class="drawer-section-emoji" data-section-id="${esc(section.id)}" value="${esc(section.emoji || "")}" maxlength="8" aria-label="${esc(tr("Emoji"))}" placeholder="${esc(tr("Emoji"))}">
+            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Folder name"))}">
             <button class="icon-btn" type="button" data-act="drawer-drop-section" data-id="${esc(section.id)}" aria-label="${esc(tr("Delete"))}">${icon("trash")}</button>
           </div>
           <div class="drawer-section-items" data-section-items="${esc(section.id)}">${inner}</div>
@@ -12764,13 +12797,27 @@ const here = parseRoute();
     }).join("");
     if (!editing) {
       const open = !!STATE.drawerFold;
-      return blocks + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
+      const popupRows = (menu.popup || []).map((id) => {
+        if (hidden.has(id)) return "";
+        const item = drawerItem(id);
+        if (!item || item.accountMenu) return "";
+        return drawerViewRow(item);
+      }).join("");
+      return blocks + popupRows + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
     }
+    const popupBlocks = (menu.popup || []).map((id) => {
+      const item = drawerItem(id);
+      return item ? drawerEditRow(item, menu) : "";
+    }).join("");
     return `<div class="drawer-edit-bar">
-      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("Add section"))}</button>
+      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("New folder"))}</button>
       <button class="outline" type="button" data-act="drawer-reset">${esc(tr("Reset to default"))}</button>
       <button class="save" type="button" data-act="drawer-edit-done">${esc(tr("Done"))}</button>
-    </div><p class="drawer-edit-note">${esc(tr("This item always stays available"))}</p><div class="drawer-edit-list">${blocks}</div>`;
+    </div><p class="drawer-edit-note">${esc(tr("Home stays in the sidebar. Settings and Log out stay in the profile popup."))}</p>
+      <h3 class="drawer-place-title">${esc(tr("Sidebar"))}</h3>
+      <div class="drawer-edit-list" data-place="sidebar">${blocks}</div>
+      <h3 class="drawer-place-title">${esc(tr("Profile popup"))}</h3>
+      <div class="drawer-edit-list" data-place="popup">${popupBlocks}</div>`;
   }
 
   function drawerRow(href, glyph, label, extra) {
@@ -12835,13 +12882,25 @@ const here = parseRoute();
   function accountPopup() {
     if (!STATE.accountMenu || !sidebarOwnsNav()) return "";
     const mine = signedAccount();
+    const menu = getDrawerMenu();
+    const hidden = new Set(menu.hidden || []);
     const accounts = mine
       ? `<button type="button" data-acct="login">${esc(tr("Add account"))}</button>`
       : "";
-    const leave = mine
-      ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
-      : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
-    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}<a href="#/settings">${esc(tr("Settings"))}</a>${leave}</div></div>`;
+    const rows = (menu.popup || []).map((id) => {
+      if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
+      const item = drawerItem(id);
+      if (!item) return "";
+      if (id === "logout") {
+        return mine
+          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+          : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+      }
+      if (item.act) return `<button type="button" data-act="${esc(item.act)}">${esc(item.label)}</button>`;
+      if (!item.href) return "";
+      return `<a href="${esc(item.href)}">${esc(item.label)}</a>`;
+    }).join("");
+    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${rows}</div></div>`;
   }
 
   function drawerEditModal() {
@@ -15855,6 +15914,20 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "drawer-edit-done") { STATE.drawerEdit = false; render(); return; }
     if (act === "drawer-reset") { saveDrawerMenu(null); render(); return; }
+    if (act === "drawer-place") {
+      const id = el.dataset.id || "";
+      const place = el.dataset.place || "";
+      if (!id || id === "home" || id === "customize" || id === "settings" || id === "logout") return;
+      const menu = getDrawerMenu();
+      menu.popup = (menu.popup || []).filter((item) => item !== id);
+      menu.sections.forEach((section) => { section.items = section.items.filter((item) => item !== id); });
+      menu.order = (menu.order || []).filter((entry) => entry !== id);
+      if (place === "popup") menu.popup.push(id);
+      else if (menu.order.indexOf(id) < 0) menu.order.push(id);
+      saveDrawerMenu(menu);
+      render();
+      return;
+    }
     if (act === "drawer-vis") {
       const id = el.dataset.id || "";
       if (DRAWER_LOCKED.indexOf(id) >= 0) return;
@@ -15870,7 +15943,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "drawer-add-section") {
       const menu = getDrawerMenu();
       const id = "s" + Date.now().toString(36);
-      menu.sections.push({ id: id, name: tr("Section name"), items: [] });
+      menu.sections.push({ id: id, name: tr("Folder name"), emoji: "", items: [] });
       menu.order.push("section:" + id);
       saveDrawerMenu(menu);
       render();
@@ -15960,8 +16033,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "open-nav-customize") {
-      STATE.modal = "nav-customize";
+      STATE.drawerEdit = true;
+      STATE.accountMenu = false;
+      STATE.modal = null;
       STATE.navNewFolderOpen = false;
+      STATE.drawer = !sidebarOwnsNav();
       render();
       return;
     }
@@ -22559,16 +22635,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         document.removeEventListener("pointermove", cancel);
       }, { once: true });
     });
+    const drawerLists = () => [...document.querySelectorAll(".drawer-edit-list, .drawer-section-items")];
+    const listAt = (event) => drawerLists().find((list) => {
+      const box = list.getBoundingClientRect();
+      return event.clientY >= box.top && event.clientY <= box.bottom;
+    });
     document.addEventListener("pointermove", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
-      const node = drag.list.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
+      const node = document.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
       if (!node) return;
-      const over = rows.find((el) => {
-        if (el === node) return false;
-        const box = el.getBoundingClientRect();
-        return event.clientY < box.top + box.height / 2;
-      });
+      const sectionKey = String(drag.key).indexOf("section:") === 0;
+      const locked = DRAWER_LOCKED.indexOf(drag.key) >= 0;
+      const hit = listAt(event);
+      if (hit && hit !== drag.list && !sectionKey && !locked && !(hit.classList.contains("drawer-section-items") && locked)) {
+        hit.appendChild(node);
+        drag.list = hit;
+      }
+      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
       const target = rows.find((el) => {
         if (el === node) return false;
         const box = el.getBoundingClientRect();
@@ -22582,19 +22665,49 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     document.addEventListener("pointerup", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const list = drag.list;
-      const keys = [...list.querySelectorAll(":scope > [data-drawer-key]")].map((el) => el.getAttribute("data-drawer-key"));
       drag = null;
-      commitDrawerKeys(list, keys);
+      const sidebar = document.querySelector(".drawer-edit-list[data-place='sidebar']") || document.querySelector(".drawer-edit-list");
+      const popupList = document.querySelector(".drawer-edit-list[data-place='popup']");
+      if (!sidebar) return;
+      const menu = getDrawerMenu();
+      const order = [];
+      const sectionItems = {};
+      const readKey = (el) => el.getAttribute("data-drawer-key") || "";
+      [...sidebar.children].forEach((el) => {
+        const key = readKey(el);
+        if (!key) return;
+        if (key.indexOf("section:") === 0) {
+          order.push(key);
+          const id = key.slice(8);
+          sectionItems[id] = [...el.querySelectorAll(":scope > .drawer-section-items > [data-drawer-key]")].map(readKey).filter((item) => DRAWER_IDS.indexOf(item) >= 0 && item !== "home" && item !== "settings" && item !== "logout" && item !== "customize");
+          return;
+        }
+        if (DRAWER_IDS.indexOf(key) >= 0) order.push(key);
+      });
+      const popup = [];
+      if (popupList) {
+        [...popupList.querySelectorAll(":scope > [data-drawer-key]")].forEach((el) => {
+          const key = readKey(el);
+          if (DRAWER_IDS.indexOf(key) >= 0 && key !== "home" && key !== "customize") popup.push(key);
+        });
+      }
+      menu.order = order;
+      menu.popup = popup;
+      menu.sections.forEach((section) => {
+        if (sectionItems[section.id]) section.items = sectionItems[section.id];
+      });
+      saveDrawerMenu(menu);
+      render();
     });
     document.addEventListener("change", (event) => {
       const el = event.target;
       if (!el) return;
-      if (el.classList && el.classList.contains("drawer-section-name")) {
+      if (el.classList && (el.classList.contains("drawer-section-name") || el.classList.contains("drawer-section-emoji"))) {
         const menu = getDrawerMenu();
         const section = (menu.sections || []).find((item) => item.id === el.dataset.sectionId);
         if (!section) return;
-        section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+        if (el.classList.contains("drawer-section-emoji")) section.emoji = String(el.value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
+        else section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
         saveDrawerMenu(menu);
         return;
       }
