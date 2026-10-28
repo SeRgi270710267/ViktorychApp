@@ -156,4 +156,19 @@ test("one app account replies to and quotes another, end to end", async () => {
   await call("/v1/blocks", { method: "POST", ip: IP.b, token: b.token, json: { accountId: a.account.publicId } });
   assert.equal((await call("/v1/posts", { method: "POST", ip: IP.a, token: a.token, json: { body: "blocked reply", parentId: fresh.body.post.id } })).status, 404);
   assert.equal((await call("/v1/posts", { method: "POST", ip: IP.a, token: a.token, json: { body: "blocked quote", quoteId: fresh.body.post.id } })).status, 404);
+
+  // A reply to an outside post keeps its parent so Home, the profile and the thread show it above.
+  const ext = { platform: "reddit", id: "reddit:t3_abc", statusId: "t3_abc", url: "https://www.reddit.com/r/test/comments/abc/", handle: "member_test", author: "member_test", text: "outside parent", community: "test", score: 12, media: [{ type: "photo", url: "https://i.redd.it/x.jpg" }, { type: "photo", url: "javascript:alert(1)" }] };
+  const extReply = await call("/v1/posts", { method: "POST", ip: IP.b, token: b.token, json: { body: "b replies to reddit", extParent: ext } });
+  assert.equal(extReply.status, 201, JSON.stringify(extReply.body));
+  assert.equal(extReply.body.post.extParent.platform, "reddit");
+  const listed = await call("/v1/posts?by=" + b.account.publicId, { ip: IP.b, token: b.token });
+  const row = listed.body.posts.find((post) => post.id === extReply.body.post.id);
+  assert.equal(row.extParent.text, "outside parent");
+  assert.equal(row.extParent.community, "test");
+  assert.equal(row.extParent.score, 12);
+  assert.deepEqual(row.extParent.media.map((item) => item.url), ["https://i.redd.it/x.jpg"]);
+  const bogus = await call("/v1/posts", { method: "POST", ip: IP.b, token: b.token, json: { body: "no platform", extParent: { platform: "nope", id: "1" } } });
+  assert.equal(bogus.status, 201);
+  assert.equal(bogus.body.post.extParent, null);
 });
