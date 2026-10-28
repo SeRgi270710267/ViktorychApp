@@ -295,6 +295,10 @@ async function handleCreate(request, env, viewer, deps) {
     "INSERT INTO app_stories (id, public_id, kind, vine, r2_key, mime, bytes, caption, audience, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).bind(id, viewer.public_id, kind, vine, key, mime, bytes.length, caption, audience, now, now + DAY).run();
   if (audience === "list") await setListGrants(env, viewer.public_id, "story", id, listIds);
+  try {
+    const badges = await import("./badges.js");
+    await badges.syncBadges(env, viewer.public_id);
+  } catch (err) { /* the story is saved */ }
   return deps.json(201, {
     id: id,
     type: kind === "video" ? "video" : "photo",

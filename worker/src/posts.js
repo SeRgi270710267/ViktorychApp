@@ -642,6 +642,12 @@ async function resolveReport(request, env, deps) {
       catch (err) { /* the post is still hidden */ }
     }
     await env.DB.prepare("UPDATE post_reports SET status = 'hidden' WHERE post_id = ? AND status = 'open'").bind(row.post_id).run();
+    try {
+      const reporters = await env.DB.prepare("SELECT reporter_id FROM post_reports WHERE post_id = ? AND status = 'hidden' LIMIT 20").bind(row.post_id).all();
+      const badges = await import("./badges.js");
+      const found = (reporters && reporters.results) || [];
+      for (let i = 0; i < found.length; i++) await badges.syncBadges(env, found[i].reporter_id);
+    } catch (err) { /* the report is already resolved */ }
   } else {
     await env.DB.prepare("UPDATE post_reports SET status = 'dismissed' WHERE id = ?").bind(id).run();
   }
