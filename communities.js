@@ -435,7 +435,21 @@
     }).map(function (reply) {
       return { source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply };
     });
-    var internal = internalPosts(name).filter(function (post) { return post.parentId === parentId; }).map(function (post) {
+    var inThread = {};
+    inThread[parentId] = true;
+    var guard = 0;
+    var grew = true;
+    while (grew && guard < 8) {
+      grew = false;
+      guard += 1;
+      internalPosts(name).forEach(function (post) {
+        if (post.parentId && inThread[post.parentId] && !inThread[post.id]) {
+          inThread[post.id] = true;
+          grew = true;
+        }
+      });
+    }
+    var internal = internalPosts(name).filter(function (post) { return post.parentId && inThread[post.parentId]; }).map(function (post) {
       return { source: "app", id: post.id, created: Number(post.createdAt) || 0, post: post };
     });
     var items = reddit.concat(internal);
@@ -795,8 +809,10 @@
         '</form>'
       : '<div class="cm-footer-note"><p>' + esc(tr("Sign in to post here.")) + '</p></div>';
 
-    var items = feedItems(name, doc);
-    var empty = state.filter === "app" && !signedIn()
+    var items = (bag && bag.locked) ? [] : feedItems(name, doc);
+    var empty = bag && bag.locked
+      ? '<div class="empty"><h2>' + esc(tr("Only members can see posts in this community.")) + '</h2></div>'
+      : state.filter === "app" && !signedIn()
       ? '<div class="empty"><p>' + esc(tr("Sign in to post here.")) + "</p></div>"
       : (items.length ? "" : '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2></div>");
 
@@ -810,6 +826,8 @@
               shareBtn +
               removeBtn +
               joinBtn(name, joined) +
+              (signedIn() && joined ? '<button type="button" class="cm-btn-join" data-cm="home-feed" data-sub="' + esc(name) + '" aria-pressed="' + ((bag && bag.showHome === false) ? "false" : "true") + '"><span>' + esc((bag && bag.showHome === false) ? tr("Hidden on Home") : tr("Show in Home")) + '</span></button><button type="button" class="cm-btn-join" data-cm="mute-community" data-sub="' + esc(name) + '"><span>' + esc((bag && bag.muted) ? tr("Unmute community") : tr("Mute community")) + '</span></button>' : "") +
+              (owner() ? '<button type="button" class="cm-btn-join" data-cm="visibility" data-sub="' + esc(name) + '" data-vis="' + esc((bag && bag.visibility) || "public") + '"><span>' + esc((bag && bag.visibility) === "private" ? tr("Private community") : (bag && bag.visibility) === "restricted" ? tr("Restricted community") : tr("Public community")) + '</span></button>' : "") +
             '</div>' +
           '</div>' +
           '<h1 class="cm-hero-title">' + (forum ? esc(title) : "r/" + esc(name)) + forumBadge(name) + '</h1>' +
@@ -1141,6 +1159,32 @@
       }
       return;
     }
+    if (act === "home-feed" || act === "mute-community") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!signedIn()) { toast(tr("Sign in to post here.")); return; }
+      var prefName = el.dataset.sub;
+      var prefBag = state.internal[prefName] || {};
+      var prefBody = act === "mute-community" ? { muted: !prefBag.muted } : { showHome: prefBag.showHome === false };
+      call("/v1/communities/" + encodeURIComponent(prefName) + "/feed", { method: "POST", body: prefBody }).then(function () {
+        delete state.internal[prefName];
+        loadInternal(prefName).then(render);
+      });
+      return;
+    }
+    if (act === "visibility") {
+      event.preventDefault();
+      event.stopPropagation();
+      var visName = el.dataset.sub;
+      var order = ["public", "restricted", "private"];
+      var current = el.dataset.vis || "public";
+      var nextVis = order[(order.indexOf(current) + 1) % order.length];
+      call("/v1/communities/" + encodeURIComponent(visName) + "/visibility", { method: "POST", body: { visibility: nextVis } }).then(function () {
+        delete state.internal[visName];
+        loadInternal(visName).then(render);
+      });
+      return;
+    }
     if (act === "join") {
       event.preventDefault();
       event.stopPropagation();
@@ -1264,6 +1308,13 @@
     page: page,
     takeCompose: takeCompose,
     pullNotes: pullNotes,
+    invalidate: function (name) {
+      if (!name) return;
+      delete state.internal[name];
+      if (currentSub() === name) loadInternal(name).then(function () {
+        if (window.ViktorychCommunities.requestRender) window.ViktorychCommunities.requestRender();
+      });
+    },
     requestRender: null,
     toast: null,
     hidden: null,

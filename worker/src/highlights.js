@@ -399,6 +399,10 @@ export async function handleHighlights(request, env, path, deps) {
     await env.DB.prepare(
       "INSERT INTO highlights (id, public_id, title, audience, cover_item, crop_x, crop_y, crop_w, crop_h, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(id, viewer.public_id, text(body.title), audience, made[coverAt], crop.x, crop.y, crop.w, crop.h, Number(count && count.n) || 0, now, now).run();
+    try {
+      const badges = await import("./badges.js");
+      await badges.syncBadges(env, viewer.public_id);
+    } catch (err) { /* the highlight is saved */ }
     if (audience === "list") await setListGrants(env, viewer.public_id, "highlight", id, body.listIds);
     return deps.json(201, { id: id, title: text(body.title) });
   }

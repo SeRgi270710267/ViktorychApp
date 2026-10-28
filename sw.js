@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a47-__SW_VERSION__";
+const VERSION = "viktorych-a55-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-28T11:45:00Z-home-composer
+// cache-bust: 2026-10-28T15:05:00Z-merit-badges
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -67,6 +67,9 @@ const SHELL_FILES = [
   "./device-media.js",
   "./device-record.js",
   "./logo/v.svg",
+  "./logo/affiliation-viktorych.svg",
+  "./affiliations.js",
+  "./affiliations.css",
   "./logo/v-music.svg",
   "./logo/viktorychapp.svg",
   "./logo/viktorychapp-short.svg",
@@ -99,6 +102,8 @@ const SHELL_FILES = [
   "./shared/presence.js",
   "./about-ui.js",
   "./gifts-ui.js",
+  "./badges.js",
+  "./badges.css",
   "./audience-ui.js",
   "./gifts.css",
   "./accounts.js",
@@ -110,6 +115,22 @@ const SHELL_FILES = [
   "./shared/ios.js",
   "./owner-keys.js",
   "./accounts.css",
+  "./landing.css",
+  "./landing/og.jpg",
+  "./landing/timeline.webp",
+  "./landing/stories.webp",
+  "./landing/notes.webp",
+  "./landing/highlights.webp",
+  "./landing/lists.webp",
+  "./landing/live.webp",
+  "./landing/store.webp",
+  "./landing/birthdays.webp",
+  "./landing/details.webp",
+  "./landing/sidebar.webp",
+  "./landing/status.webp",
+  "./landing/badges.webp",
+  "./landing/pwa.webp",
+  "./landing/safari.webp",
   "./accounts.config.js",
   "./shorts.js",
   "./shorts.css",
@@ -178,7 +199,7 @@ const PRECACHE_TRIES = 4;
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a47-";
+  const prefix = "viktorych-a55-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";

@@ -337,3 +337,93 @@ test("live presence reaches watchers and skips coalesced beats", async () => {
   watcher.ws.close();
   stranger.ws.close();
 });
+
+test("friend presence is sorted, private, and reciprocal", async () => {
+  const nyx = await signup("nyx_on", "Nyx Online", "203.0.113.140");
+  const orb = await signup("orb_on", "Orb Online", "203.0.113.141");
+  const kit = await signup("kit_on", "Kit Online", "203.0.113.142");
+  const asked = await call("/v1/friends/request", { method: "POST", token: nyx.token, ip: "203.0.113.143", body: { targetId: orb.account.publicId } });
+  assert.equal(asked.status, 200, JSON.stringify(asked.body));
+  const accepted = await call("/v1/friends/accept", { method: "POST", token: orb.token, ip: "203.0.113.144", body: { targetId: nyx.account.publicId } });
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+  await beat(orb.token, "203.0.113.145", "active");
+  const status = await call("/v1/presence", {
+    method: "PATCH",
+    token: orb.token,
+    ip: "203.0.113.146",
+    body: { status: { emoji: "✨", text: "around", clear: "never" }, seenPrivacy: "mutuals" }
+  });
+  assert.equal(status.status, 200, JSON.stringify(status.body));
+  const seen = await call("/v1/friends/presence", { token: nyx.token, ip: "203.0.113.147" });
+  assert.equal(seen.status, 200, JSON.stringify(seen.body));
+  assert.equal(seen.body.friends.length, 1);
+  assert.equal(seen.body.friends[0].state, "online");
+  assert.equal(seen.body.friends[0].emoji, "✨");
+  assert.equal(seen.body.friends[0].handle, "orb_on");
+  const stranger = await call("/v1/presence?ids=" + orb.account.publicId, { token: kit.token, ip: "203.0.113.148" });
+  assert.equal(stranger.body.presence[0].state, "offline");
+  assert.equal(stranger.body.presence[0].exact, false);
+
+  const followers = await call("/v1/presence", {
+    method: "PATCH",
+    token: orb.token,
+    ip: "203.0.113.149",
+    body: { seenPrivacy: "followers" }
+  });
+  assert.equal(followers.status, 200);
+  await call("/v1/follows", { method: "PUT", token: nyx.token, ip: "203.0.113.150", body: { id: "app:" + orb.account.publicId } });
+  const followed = await call("/v1/presence?ids=" + orb.account.publicId, { token: nyx.token, ip: "203.0.113.151" });
+  assert.equal(followed.body.presence[0].exact, true);
+  assert.equal(followed.body.presence[0].state, "online");
+
+  await call("/v1/follows", { method: "PUT", token: kit.token, ip: "203.0.113.151", body: { id: "app:" + orb.account.publicId } });
+  const list = await call("/v1/audience-lists", { method: "POST", token: orb.token, ip: "203.0.113.152", body: { name: "Close" } });
+  assert.equal(list.status, 201, JSON.stringify(list.body));
+  const member = await call("/v1/audience-lists/" + list.body.id + "/members", {
+    method: "POST",
+    token: orb.token,
+    ip: "203.0.113.153",
+    body: { handle: "kit_on" }
+  });
+  assert.equal(member.status, 200, JSON.stringify(member.body));
+  const listed = await call("/v1/presence", {
+    method: "PATCH",
+    token: orb.token,
+    ip: "203.0.113.154",
+    body: { seenPrivacy: "lists", seenLists: [list.body.id] }
+  });
+  assert.equal(listed.status, 200, JSON.stringify(listed.body));
+  assert.deepEqual(listed.body.seenLists, [list.body.id]);
+  const kitView = await call("/v1/presence?ids=" + orb.account.publicId, { token: kit.token, ip: "203.0.113.155" });
+  assert.equal(kitView.body.presence[0].state, "online");
+  const nyxHidden = await call("/v1/presence?ids=" + orb.account.publicId, { token: nyx.token, ip: "203.0.113.156" });
+  assert.equal(nyxHidden.body.presence[0].exact, false);
+
+  const open = await call("/v1/presence", {
+    method: "PATCH",
+    token: orb.token,
+    ip: "203.0.113.157",
+    body: { seenPrivacy: "everyone" }
+  });
+  assert.equal(open.status, 200);
+  const quiet = await call("/v1/presence", {
+    method: "PATCH",
+    token: nyx.token,
+    ip: "203.0.113.158",
+    body: { seenPrivacy: "nobody", reciprocal: false }
+  });
+  assert.equal(quiet.status, 200);
+  assert.equal(quiet.body.reciprocal, false);
+  const still = await call("/v1/presence?ids=" + orb.account.publicId, { token: nyx.token, ip: "203.0.113.159" });
+  assert.equal(still.body.presence[0].state, "online");
+  const locked = await call("/v1/presence", {
+    method: "PATCH",
+    token: nyx.token,
+    ip: "203.0.113.160",
+    body: { reciprocal: true }
+  });
+  assert.equal(locked.body.reciprocal, true);
+  const hidden = await call("/v1/presence?ids=" + orb.account.publicId, { token: nyx.token, ip: "203.0.113.161" });
+  assert.equal(hidden.body.presence[0].exact, false);
+  assert.equal(hidden.body.presence[0].state, "offline");
+});
