@@ -268,13 +268,13 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(beaViewsAdaFollowers.body.isPrivate, true);
   assert.equal(beaViewsAdaFollowers.body.accounts.length, 0);
 
-  // Ada views their own following list - owner can view
+  // Ada views their own following list - owner can view, so the denial flag stays off
   const adaViewsOwnFollowing = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=following", {
     ip: "203.0.113.236",
     token: ada.token
   });
   assert.equal(adaViewsOwnFollowing.status, 200);
-  assert.equal(adaViewsOwnFollowing.body.isPrivate, true);
+  assert.equal(adaViewsOwnFollowing.body.isPrivate, false);
   assert.equal(adaViewsOwnFollowing.body.accounts.length > 0, true);
 
   // Reset privateFollows back to false
@@ -294,4 +294,70 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(beaViewsAdaAgain.status, 200);
   assert.equal(beaViewsAdaAgain.body.isPrivate, false);
   assert.equal(beaViewsAdaAgain.body.accounts.length > 0, true);
+});
+
+test("the owner sees private follower lists and another account does not", async () => {
+  const userA = await signup("203.0.113.240", "user_a", "User A");
+  const userB = await signup("203.0.113.241", "user_b", "User B");
+  const followed = await call("/v1/follows", {
+    method: "PUT",
+    ip: "203.0.113.242",
+    token: userA.token,
+    body: { id: "app:@" + userB.account.handle }
+  });
+  assert.equal(followed.status, 200, followed.text);
+  assert.equal(followed.body.pending, undefined);
+  const setPrivate = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.243",
+    token: userA.token,
+    body: { privateFollows: true }
+  });
+  assert.equal(setPrivate.status, 200);
+  assert.equal(setPrivate.body.account.privateFollows, true);
+
+  const ownById = await call("/v1/follows?id=" + encodeURIComponent("app:" + userA.account.publicId) + "&tab=following", {
+    ip: "203.0.113.244",
+    token: userA.token
+  });
+  assert.equal(ownById.status, 200, ownById.text);
+  assert.equal(ownById.body.isPrivate, false);
+  assert.equal(ownById.body.accounts.length, 1);
+  assert.equal(ownById.body.accounts[0].handle, "user_b");
+  assert.equal(JSON.stringify(ownById.body).includes(userA.account.publicId), false);
+  assert.equal(JSON.stringify(ownById.body).includes(userB.account.publicId), false);
+
+  const ownByHandle = await call("/v1/follows?id=" + encodeURIComponent("app:@USER_A") + "&tab=following", {
+    ip: "203.0.113.245",
+    token: userA.token
+  });
+  assert.equal(ownByHandle.status, 200, ownByHandle.text);
+  assert.equal(ownByHandle.body.isPrivate, false);
+  assert.equal(ownByHandle.body.accounts.length, 1);
+  assert.equal(ownByHandle.body.accounts[0].handle, "user_b");
+
+  const ownFollowers = await call("/v1/follows?id=" + encodeURIComponent("app:@user_a") + "&tab=followers", {
+    ip: "203.0.113.246",
+    token: userA.token
+  });
+  assert.equal(ownFollowers.status, 200, ownFollowers.text);
+  assert.equal(ownFollowers.body.isPrivate, false);
+  assert.ok(Array.isArray(ownFollowers.body.accounts));
+
+  const otherById = await call("/v1/follows?id=" + encodeURIComponent("app:" + userA.account.publicId) + "&tab=following", {
+    ip: "203.0.113.247",
+    token: userB.token
+  });
+  assert.equal(otherById.status, 200, otherById.text);
+  assert.equal(otherById.body.isPrivate, true);
+  assert.equal(otherById.body.accounts.length, 0);
+  assert.equal(JSON.stringify(otherById.body).includes(userA.account.publicId), false);
+
+  const otherByHandle = await call("/v1/follows?id=" + encodeURIComponent("app:@user_a") + "&tab=followers", {
+    ip: "203.0.113.248",
+    token: userB.token
+  });
+  assert.equal(otherByHandle.status, 200, otherByHandle.text);
+  assert.equal(otherByHandle.body.isPrivate, true);
+  assert.equal(otherByHandle.body.accounts.length, 0);
 });
