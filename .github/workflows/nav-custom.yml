@@ -15,6 +15,9 @@ on:
       - "scripts/phone_resize_test.mjs"
       - "scripts/profile_layout_test.mjs"
       - "scripts/menu_pages_test.mjs"
+      - "scripts/ios_webkit_test.mjs"
+      - "shared/ios.js"
+      - "index.html"
       - "dock.js"
       - "dock.css"
       - "worker/**"
@@ -34,6 +37,9 @@ on:
       - "scripts/phone_resize_test.mjs"
       - "scripts/profile_layout_test.mjs"
       - "scripts/menu_pages_test.mjs"
+      - "scripts/ios_webkit_test.mjs"
+      - "shared/ios.js"
+      - "index.html"
       - "dock.js"
       - "dock.css"
       - "worker/**"
@@ -66,3 +72,9 @@ jobs:
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/phone_resize_test.mjs
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/profile_layout_test.mjs
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/menu_pages_test.mjs
+      - name: iOS WebKit layout
+        run: |
+          npm install --prefix /tmp/pw-ios-nav --no-fund --no-audit playwright
+          cd /tmp/pw-ios-nav && npx playwright install --with-deps webkit
+          cd "${GITHUB_WORKSPACE}"
+          PLAYWRIGHT_CORE=/tmp/pw-ios-nav/node_modules/playwright-core/index.js node scripts/ios_webkit_test.mjs
