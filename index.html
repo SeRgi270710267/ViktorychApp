@@ -571,6 +571,23 @@
           links.push.apply(links, Array.prototype.slice.call(tpl.content.querySelectorAll("link")));
           nodes.push.apply(nodes, Array.prototype.slice.call(tpl.content.querySelectorAll("script")));
         }
+        /* Home pills and Stories can be turned off in Settings. Off means
+           their files are never requested, not just hidden. */
+        var off = [];
+        try {
+          if (localStorage.getItem("viktorychapp-off-home-pills") === "1") off.push("shared/pill-data.js", "scores.js", "weather.js", "scores.css", "weather.css");
+          if (localStorage.getItem("viktorychapp-off-stories") === "1") off.push("stories.js", "stories.css");
+          /* Features the owner switched off on the server load nothing either. */
+          var server = JSON.parse(localStorage.getItem("viktorychapp-server-off") || "[]") || [];
+          if (server.indexOf("pills") >= 0) off.push("shared/pill-data.js", "scores.js", "weather.js", "scores.css", "weather.css");
+          if (server.indexOf("stories") >= 0) off.push("stories.js", "stories.css");
+        } catch (err) { /* storage blocked */ }
+        function wanted(node) {
+          var ref = (node.getAttribute("src") || node.getAttribute("href") || "").replace(/^\.\//, "").split("?")[0];
+          return off.indexOf(ref) < 0;
+        }
+        links = links.filter(wanted);
+        nodes = nodes.filter(wanted);
         if (!links.length && !nodes.length) return;
         if (document.documentElement.getAttribute("data-wall") === "1") {
           var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "accounts.js"];
