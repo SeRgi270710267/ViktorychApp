@@ -1125,6 +1125,37 @@
     return "embed";
   }
 
+  function drawerListsExplore(menu) {
+    if (!menu || typeof menu !== "object") return false;
+    if (Array.isArray(menu.order) && menu.order.indexOf("explore") >= 0) return true;
+    const sections = Array.isArray(menu.sections) ? menu.sections : [];
+    return sections.some((section) => section && Array.isArray(section.items) && section.items.indexOf("explore") >= 0);
+  }
+
+  // Explore was not a side-menu row, so a saved drawer sorted it past the
+  // six-icon cap and the phone bar dropped it. Put it back once. A later
+  // hide in the customizer stays hidden, and only Home stays locked.
+  function repairUnintentionalExplore(parsed) {
+    const menu = parsed && parsed.drawerMenu;
+    if (!menu || typeof menu !== "object" || !Array.isArray(menu.order)) return;
+    if (drawerListsExplore(menu)) return;
+    const drawerOrder = menu.order.filter((id) => id !== "explore");
+    const homeAt = drawerOrder.indexOf("home");
+    drawerOrder.splice(homeAt >= 0 ? homeAt + 1 : 0, 0, "explore");
+    menu.order = drawerOrder;
+    if (Array.isArray(menu.hidden)) menu.hidden = menu.hidden.filter((id) => id !== "explore");
+    const bottom = parsed.bottomNav && typeof parsed.bottomNav === "object" ? parsed.bottomNav : null;
+    if (bottom) {
+      const rest = Array.isArray(bottom.order) ? bottom.order.filter((id) => id !== "home" && id !== "explore") : [];
+      bottom.order = ["home", "explore"].concat(rest);
+      if (Array.isArray(bottom.hidden)) bottom.hidden = bottom.hidden.filter((id) => id !== "explore");
+      parsed.bottomNav = bottom;
+    }
+    if (parsed.navCustom && Array.isArray(parsed.navCustom.hidden)) {
+      parsed.navCustom.hidden = parsed.navCustom.hidden.filter((id) => id !== "explore");
+    }
+  }
+
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
 const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed" });
@@ -1185,6 +1216,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         parsed.seenDefaults = configured.slice();
         parsed.initialized = true;
       } else mergeDefaultFollows(parsed, configured);
+      repairUnintentionalExplore(parsed);
       parsed.navCustom = cleanNavCustom(parsed.navCustom);
       parsed.drawerMenu = cleanDrawerMenu(parsed.drawerMenu);
       parsed.bottomNav = cleanBottomNav(parsed.bottomNav);
