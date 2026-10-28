@@ -94,6 +94,7 @@ jobs:
         run: |
           npm install --prefix /tmp/pw-compose --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw-compose/node_modules/playwright-core/index.js node scripts/compose_ai_test.mjs
+          PLAYWRIGHT_CORE=/tmp/pw-compose/node_modules/playwright-core/index.js node scripts/compose_page_test.mjs
 
       - name: Peer-to-peer live
         run: |

@@ -7,9 +7,9 @@ const POST_MAX = 500;
 const MEDIA_MAX = 12 * 1024 * 1024;
 
 export const POST_SCHEMA = [
-  "CREATE TABLE IF NOT EXISTS public_posts (id TEXT PRIMARY KEY, author_id TEXT NOT NULL, body TEXT NOT NULL, parent_id TEXT NOT NULL DEFAULT '', quote_id TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS public_posts (id TEXT PRIMARY KEY, author_id TEXT NOT NULL, body TEXT NOT NULL, parent_id TEXT NOT NULL DEFAULT '', quote_id TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0, audience TEXT NOT NULL DEFAULT 'everyone', reply_control TEXT NOT NULL DEFAULT 'everyone', location TEXT NOT NULL DEFAULT '', poll_json TEXT NOT NULL DEFAULT '', scheduled_at INTEGER NOT NULL DEFAULT 0)",
   "CREATE INDEX IF NOT EXISTS public_posts_recent ON public_posts(created_at DESC)",
-  "CREATE TABLE IF NOT EXISTS public_post_media (id TEXT PRIMARY KEY, post_id TEXT NOT NULL, object_key TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS public_post_media (id TEXT PRIMARY KEY, post_id TEXT NOT NULL, object_key TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, alt_text TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS post_reports (id TEXT PRIMARY KEY, post_id TEXT NOT NULL, reporter_id TEXT NOT NULL, reason TEXT NOT NULL, created_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open')",
   "CREATE UNIQUE INDEX IF NOT EXISTS post_reports_once ON post_reports(post_id, reporter_id)",
   "CREATE TABLE IF NOT EXISTS account_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (blocker_id, blocked_id))",
@@ -55,6 +55,92 @@ function sniff(bytes) {
   if (bytes.length >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) return { mime: "audio/mpeg", ext: "mp3" };
   if (bytes.length >= 4 && bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) return { mime: "audio/ogg", ext: "ogg" };
   return null;
+}
+
+const POST_COLUMNS = [
+  "ALTER TABLE public_posts ADD COLUMN audience TEXT NOT NULL DEFAULT 'everyone'",
+  "ALTER TABLE public_posts ADD COLUMN reply_control TEXT NOT NULL DEFAULT 'everyone'",
+  "ALTER TABLE public_posts ADD COLUMN location TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE public_posts ADD COLUMN poll_json TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE public_posts ADD COLUMN scheduled_at INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE public_post_media ADD COLUMN alt_text TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE public_post_media ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"
+];
+
+export async function ensurePostColumns(env) {
+  if (!env || !env.DB) return;
+  for (let i = 0; i < POST_COLUMNS.length; i++) {
+    try {
+      await env.DB.prepare(POST_COLUMNS[i]).run();
+    } catch (err) {
+      const message = String(err && err.message || err);
+      if (!/duplicate column/i.test(message)) throw err;
+    }
+  }
+}
+
+export async function publishDuePosts(env, at) {
+  if (!env || !env.DB) return;
+  const now = Number(at) || Date.now();
+  try {
+    await env.DB.prepare("UPDATE public_posts SET scheduled_at = 0 WHERE scheduled_at > 0 AND scheduled_at <= ?").bind(now).run();
+  } catch (err) {
+    const message = String(err && err.message || err);
+    if (!/no such column/i.test(message)) throw err;
+  }
+}
+
+const POLL_MINUTES = [5, 60, 1440, 4320, 10080];
+
+function cleanAudience(value) {
+  const text = String(value || "");
+  return text === "friends" || text === "following" ? text : "everyone";
+}
+
+function cleanReply(value) {
+  const text = String(value || "");
+  return text === "following" || text === "verified" || text === "mentioned" ? text : "everyone";
+}
+
+function cleanLocation(value) {
+  return String(value || "").replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function cleanPoll(value) {
+  let data = value;
+  if (typeof value === "string") {
+    if (!value.trim()) return null;
+    try { data = JSON.parse(value); } catch (err) { return null; }
+  }
+  if (!data || typeof data !== "object") return null;
+  const options = [];
+  (Array.isArray(data.options) ? data.options : []).forEach((item) => {
+    const text = String(item || "").replace(/[\u0000-\u001F\u007F]/g, "").trim();
+    if (!text || Array.from(text).length > 25 || options.length >= 4) return;
+    options.push(text);
+  });
+  if (options.length < 2) return null;
+  const minutes = POLL_MINUTES.indexOf(Number(data.minutes)) >= 0 ? Number(data.minutes) : 1440;
+  return { options: options, minutes: minutes };
+}
+
+function cleanSchedule(value, now) {
+  const at = Number(value) || 0;
+  if (!at || at <= now + 30 * 1000) return 0;
+  if (at > now + 366 * 24 * 60 * 60 * 1000) return 0;
+  return Math.floor(at);
+}
+
+function cleanAlt(value) {
+  return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, 1000);
+}
+
+function mediaKindOf(mime) {
+  if (mime === "image/gif") return "gif";
+  if (mime.indexOf("image/") === 0) return "image";
+  if (mime.indexOf("video/") === 0) return "video";
+  if (mime.indexOf("audio/") === 0) return "audio";
+  return "other";
 }
 
 function parseMultipart(bytes, boundary) {
@@ -117,22 +203,34 @@ async function readPostInput(request, deps) {
   if (raw.length > MEDIA_MAX + 20000) return { error: "too_large", status: 413 };
   const parts = parseMultipart(raw, (boundary[1] || boundary[2] || "").trim());
   const fields = {};
-  let file = null;
+  const files = [];
+  const alts = [];
   parts.forEach((part) => {
-    if (part.filename) file = part;
-    else fields[part.name] = new TextDecoder().decode(part.body);
+    if (part.filename) files.push(part);
+    else {
+      const text = new TextDecoder().decode(part.body);
+      if (part.name === "alt" || /^alt\d+$/.test(part.name)) alts.push(text);
+      else fields[part.name] = text;
+    }
   });
-  return { fields: fields, file: file };
+  fields.alts = alts;
+  return { fields: fields, file: files[0] || null, files: files };
 }
 
 async function presentPost(env, request, row) {
-  const mediaRows = await env.DB.prepare("SELECT id, mime, size FROM public_post_media WHERE post_id = ?").bind(row.id).all();
+  const mediaRows = await env.DB.prepare("SELECT id, mime, size, alt_text, sort_order FROM public_post_media WHERE post_id = ? ORDER BY sort_order ASC, id ASC").bind(row.id).all();
   const media = ((mediaRows && mediaRows.results) || []).map((item) => ({
     id: item.id,
     mime: item.mime,
     size: item.size,
+    alt: item.alt_text || "",
     url: new URL("/v1/posts/media/" + item.id, request.url).pathname
   }));
+  let poll = null;
+  if (row.poll_json) {
+    try { poll = JSON.parse(row.poll_json); } catch (err) { poll = null; }
+    if (!poll || !Array.isArray(poll.options)) poll = null;
+  }
   let quote = null;
   if (row.quote_id) {
     const quoted = await env.DB.prepare("SELECT p.id, p.body, p.created_at, a.handle, a.display_name FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ? AND p.hidden = 0").bind(row.quote_id).first();
@@ -149,7 +247,12 @@ async function presentPost(env, request, row) {
     authorHandle: row.handle,
     authorAvatar: row.avatar || "",
     media: media,
-    quote: quote
+    quote: quote,
+    audience: row.audience || "everyone",
+    replyControl: row.reply_control || "everyone",
+    location: row.location || "",
+    poll: poll,
+    scheduledAt: Number(row.scheduled_at) || 0
   };
 }
 
@@ -160,7 +263,67 @@ async function hiddenAuthors(env, viewerId) {
   return ids;
 }
 
+function gifHostOk(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return host === "gifcities.org" || host === "web.archive.org" || host === "archive.org" || host.endsWith(".archive.org");
+}
+
+async function searchGifs(request, env, deps) {
+  const session = await deps.sessionAccount(env, request);
+  if (!session) return deps.json(401, { error: "unauthorized" });
+  const gate = await deps.rateHit(env, "gif:" + session.public_id, 30, 60 * 60 * 1000);
+  if (!gate.ok) return deps.limited(gate);
+  const q = String(new URL(request.url).searchParams.get("q") || "").replace(/[\u0000-\u001F\u007F<>"']/g, "").trim().slice(0, 40);
+  if (!q) return deps.json(400, { error: "bad_query" });
+  let res;
+  try {
+    res = await fetch("https://gifcities.org/api/v1/gifsearch?limit=12&q=" + encodeURIComponent(q), {
+      headers: { accept: "application/json", "user-agent": "ViktorychApp/1.0" }
+    });
+  } catch (err) {
+    return deps.json(503, { error: "unavailable" });
+  }
+  if (!res || !res.ok) return deps.json(503, { error: "unavailable" });
+  let data = [];
+  try { data = await res.json(); } catch (err) { return deps.json(503, { error: "unavailable" }); }
+  const gifs = [];
+  (Array.isArray(data) ? data : []).forEach((item) => {
+    if (!item || gifs.length >= 12) return;
+    let parsed;
+    try { parsed = new URL(String(item.gif || item.url || item.src || "")); } catch (err) { return; }
+    if (parsed.protocol !== "https:" || !gifHostOk(parsed.hostname)) return;
+    gifs.push({ url: parsed.toString().slice(0, 500) });
+  });
+  return deps.json(200, { gifs: gifs });
+}
+
+async function gifFile(request, env, deps) {
+  const session = await deps.sessionAccount(env, request);
+  if (!session) return deps.json(401, { error: "unauthorized" });
+  const gate = await deps.rateHit(env, "giffile:" + session.public_id, 40, 60 * 60 * 1000);
+  if (!gate.ok) return deps.limited(gate);
+  let target;
+  try { target = new URL(new URL(request.url).searchParams.get("u") || ""); } catch (err) { return deps.json(400, { error: "bad_query" }); }
+  if (target.protocol !== "https:" || !gifHostOk(target.hostname)) return deps.json(400, { error: "bad_query" });
+  let res;
+  try {
+    res = await fetch(target.toString(), { headers: { "user-agent": "ViktorychApp/1.0", accept: "image/gif,image/*" } });
+  } catch (err) { return deps.json(503, { error: "unavailable" }); }
+  if (!res || !res.ok) return deps.json(503, { error: "unavailable" });
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.length < 6 || bytes.length > 8 * 1024 * 1024) return deps.json(413, { error: "too_large" });
+  const kind = sniff(bytes);
+  if (!kind || kind.mime !== "image/gif") return deps.json(400, { error: "bad_media" });
+  const headers = new Headers();
+  headers.set("content-type", "image/gif");
+  headers.set("cache-control", "private, no-store");
+  headers.set("x-content-type-options", "nosniff");
+  return new Response(bytes, { status: 200, headers: headers });
+}
+
 export async function handlePosts(request, env, path, deps) {
+  if (path === "/v1/gif" && request.method === "GET") return searchGifs(request, env, deps);
+  if (path === "/v1/gif/file" && request.method === "GET") return gifFile(request, env, deps);
   const media = path.match(/^\/v1\/posts\/media\/([a-f0-9]{32})$/);
   if (media && request.method === "GET") return readMedia(request, env, media[1], deps);
   if (path === "/v1/posts" && request.method === "GET") return listPosts(request, env, deps);
@@ -175,15 +338,64 @@ export async function handlePosts(request, env, path, deps) {
   return null;
 }
 
+async function audienceSets(env, viewerId, authors) {
+  const friends = new Set();
+  const following = new Set();
+  const ids = authors.filter((id) => id && id !== viewerId);
+  if (!ids.length) return { friends: friends, following: following };
+  const marks = ids.map(() => "?").join(",");
+  try {
+    const friendRows = await env.DB.prepare("SELECT friend_id FROM account_friends WHERE user_id = ? AND friend_id IN (" + marks + ")").bind(viewerId, ...ids).all();
+    ((friendRows && friendRows.results) || []).forEach((row) => friends.add(row.friend_id));
+  } catch (err) { /* a missing friends table hides circle posts */ }
+  try {
+    const followRows = await env.DB.prepare("SELECT follower_id FROM account_follows WHERE target_id = ? AND follower_id IN (" + marks + ")").bind("app:" + viewerId, ...ids).all();
+    ((followRows && followRows.results) || []).forEach((row) => following.add(row.follower_id));
+  } catch (err) { /* a missing follow table hides that audience */ }
+  return { friends: friends, following: following };
+}
+
+function canSee(row, viewerId, sets) {
+  if (row.author_id === viewerId) return true;
+  const audience = row.audience || "everyone";
+  if (audience === "friends") return sets.friends.has(row.author_id);
+  if (audience === "following") return sets.following.has(row.author_id);
+  return true;
+}
+
 async function listPosts(request, env, deps) {
   const session = await deps.sessionAccount(env, request);
   if (!session) return deps.json(401, { error: "unauthorized" });
-  const listed = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 ORDER BY p.created_at DESC LIMIT 60").all();
+  const now = Date.now();
+  const listed = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?) ORDER BY p.created_at DESC LIMIT 60").bind(now).all();
   const skip = await hiddenAuthors(env, session.public_id);
   const rows = ((listed && listed.results) || []).filter((row) => !skip.has(row.author_id));
+  const sets = await audienceSets(env, session.public_id, rows.map((row) => row.author_id));
+  const visible = rows.filter((row) => canSee(row, session.public_id, sets));
   const posts = [];
-  for (let i = 0; i < rows.length && posts.length < 40; i++) posts.push(await presentPost(env, request, rows[i]));
+  for (let i = 0; i < visible.length && posts.length < 40; i++) posts.push(await presentPost(env, request, visible[i]));
   return deps.json(200, { posts: posts });
+}
+
+async function replyAllowed(env, session, parent) {
+  const control = parent.reply_control || "everyone";
+  if (!control || control === "everyone" || parent.author_id === session.public_id) return true;
+  if (control === "following") {
+    const row = await env.DB.prepare("SELECT follower_id FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(parent.author_id, "app:" + session.public_id).first();
+    return !!row;
+  }
+  if (control === "verified") {
+    try {
+      const row = await env.DB.prepare("SELECT id FROM account_identities WHERE public_id = ? AND verified = 1 LIMIT 1").bind(session.public_id).first();
+      return !!row;
+    } catch (err) { return false; }
+  }
+  if (control === "mentioned") {
+    const handle = String(session.handle || "").replace(/^@/, "");
+    if (!/^[A-Za-z0-9_]{1,32}$/.test(handle)) return false;
+    return new RegExp("(^|[^A-Za-z0-9_])@" + handle + "(?![A-Za-z0-9_])", "i").test(String(parent.body || ""));
+  }
+  return true;
 }
 
 async function createPost(request, env, deps) {
@@ -193,44 +405,68 @@ async function createPost(request, env, deps) {
   if (!gate.ok) return deps.limited(gate);
   const input = await readPostInput(request, deps);
   if (input.error) return deps.json(input.status || 400, { error: input.error });
+  const poll = cleanPoll(input.fields.poll);
   const body = cleanBody(input.fields.body);
-  if (!body && !input.file) return deps.json(400, { error: "bad_post" });
+  const files = Array.isArray(input.files) ? input.files : (input.file ? [input.file] : []);
+  if (!body && !files.length && !poll) return deps.json(400, { error: "bad_post" });
+  if (poll && files.length) return deps.json(400, { error: "bad_post" });
   const parent = input.fields.parentId ? postId(input.fields.parentId) : "";
   const quote = input.fields.quoteId ? postId(input.fields.quoteId) : "";
   if (input.fields.parentId && !parent) return deps.json(400, { error: "bad_post" });
   if (input.fields.quoteId && !quote) return deps.json(400, { error: "bad_post" });
   if (parent) {
-    const parentRow = await env.DB.prepare("SELECT id FROM public_posts WHERE id = ? AND hidden = 0").bind(parent).first();
+    const parentRow = await env.DB.prepare("SELECT id, author_id, body, reply_control, hidden, scheduled_at FROM public_posts WHERE id = ? AND hidden = 0").bind(parent).first();
     if (!parentRow) return deps.json(404, { error: "not_found" });
+    if (Number(parentRow.scheduled_at) > Date.now()) return deps.json(404, { error: "not_found" });
+    if (!(await replyAllowed(env, session, parentRow))) return deps.json(403, { error: "reply_limited" });
   }
   if (quote) {
-    const quoteRow = await env.DB.prepare("SELECT id FROM public_posts WHERE id = ? AND hidden = 0").bind(quote).first();
-    if (!quoteRow) return deps.json(404, { error: "not_found" });
+    const quoteRow = await env.DB.prepare("SELECT id, scheduled_at FROM public_posts WHERE id = ? AND hidden = 0").bind(quote).first();
+    if (!quoteRow || Number(quoteRow.scheduled_at) > Date.now()) return deps.json(404, { error: "not_found" });
   }
-  let stored = null;
-  if (input.file) {
+  const stored = [];
+  if (files.length) {
     if (!env.DATA) return deps.json(503, { error: "not_configured" });
-    const bytes = input.file.body;
-    if (!bytes || bytes.length < 8 || bytes.length > MEDIA_MAX) return deps.json(413, { error: "too_large" });
-    const kind = sniff(bytes);
-    if (!kind) return deps.json(400, { error: "bad_media" });
-    const id = randomId();
-    const key = "post-media/" + id + "." + kind.ext;
-    await env.DATA.put(key, bytes, { httpMetadata: { contentType: kind.mime } });
-    stored = { id: id, key: key, mime: kind.mime, size: bytes.length };
+    const kinds = [];
+    for (let i = 0; i < files.length; i++) {
+      const bytes = files[i].body;
+      if (!bytes || bytes.length < 8 || bytes.length > MEDIA_MAX) return deps.json(413, { error: "too_large" });
+      let kind = sniff(bytes);
+      if (!kind) return deps.json(400, { error: "bad_media" });
+      if (String(input.fields.mediaKind || "") === "audio" && kind.mime === "video/webm") kind = { mime: "audio/webm", ext: "webm" };
+      kinds.push(kind);
+    }
+    const labels = kinds.map((kind) => mediaKindOf(kind.mime));
+    const gif = labels.filter((kind) => kind === "gif").length;
+    const video = labels.filter((kind) => kind === "video").length;
+    const image = labels.filter((kind) => kind === "image").length;
+    const audio = labels.filter((kind) => kind === "audio").length;
+    if (labels.some((kind) => kind === "other") || (gif && (video || image || audio)) || (video && (image || audio)) || (image && audio) || gif > 1 || video > 1 || audio > 1 || image > 4) {
+      return deps.json(400, { error: "bad_media" });
+    }
+    const alts = Array.isArray(input.fields.alts) ? input.fields.alts : [];
+    for (let i = 0; i < files.length; i++) {
+      const id = randomId();
+      const key = "post-media/" + id + "." + kinds[i].ext;
+      await env.DATA.put(key, files[i].body, { httpMetadata: { contentType: kinds[i].mime } });
+      stored.push({ id: id, key: key, mime: kinds[i].mime, size: files[i].body.length, alt: cleanAlt(alts[i] || ""), order: i });
+    }
   }
   const id = randomId();
   const now = Date.now();
-  await env.DB.prepare("INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)").bind(
-    id, session.public_id, body, parent, quote, now
+  const when = cleanSchedule(input.fields.scheduledAt, now);
+  const created = when || now;
+  await env.DB.prepare("INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden, audience, reply_control, location, poll_json, scheduled_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)").bind(
+    id, session.public_id, body, parent, quote, created, cleanAudience(input.fields.audience), cleanReply(input.fields.replyControl), cleanLocation(input.fields.location), poll ? JSON.stringify(poll) : "", when
   ).run();
-  if (stored) {
-    await env.DB.prepare("INSERT INTO public_post_media (id, post_id, object_key, mime, size) VALUES (?, ?, ?, ?, ?)").bind(
-      stored.id, id, stored.key, stored.mime, stored.size
+  for (let i = 0; i < stored.length; i++) {
+    const item = stored[i];
+    await env.DB.prepare("INSERT INTO public_post_media (id, post_id, object_key, mime, size, alt_text, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+      item.id, id, item.key, item.mime, item.size, item.alt, item.order
     ).run();
   }
-  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
-  return deps.json(201, { post: await presentPost(env, request, row) });
+  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
+  return deps.json(201, { post: await presentPost(env, request, row), scheduled: when > 0 });
 }
 
 async function readMedia(request, env, id, deps) {
