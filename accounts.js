@@ -515,11 +515,12 @@ var numberNote = form.passkey
       '<button class="acct-next" type="button" data-acct="do-restore">' + esc(tr("Restore session")) + '</button>' +
       '<p class="acct-switch"><button type="button" data-acct="login">' + esc(tr("Back to sign in")) + '</button></p>';
   }
-  function photoHtml(url, cls) {
+  function photoHtml(url, cls, initials) {
     if (!url) return "";
     var remote = url.indexOf("/v1/media/") >= 0;
     var classAttr = cls ? ' class="' + cls + '"' : "";
-    return "<img" + classAttr + ' alt="" src="' + esc(url) + '"' + (remote ? ' data-photo="' + esc(url) + '"' : "") + ">";
+    var fallback = initials ? ' data-fallback="avatar" data-initials="' + esc(initials) + '"' : "";
+    return "<img" + classAttr + ' alt="" src="' + esc(url) + '"' + fallback + (remote ? ' data-photo="' + esc(url) + '"' : "") + ">";
   }
   function currentPhoto(kind) {
     var session = readSession();
@@ -543,11 +544,12 @@ var numberNote = form.passkey
     if (!api || typeof api.wrap !== "function" || !/^\d{12}$/.test(String(id || ""))) return html;
     return api.wrap(id, html, opener ? ' data-acct="presence-open"' : "");
   }
-  function publicAvatar(src, accountFace, cls) {
+  function publicAvatar(src, accountFace, cls, initials) {
     var mode = faceOf("picture", src, accountFace);
     if (mode === "none") return '<span class="ava-none"></span>';
     var classes = "ava" + (cls ? " " + cls : "") + (mode === "default" ? " silhouette" : "");
-    if (mode === "photo") return photoHtml(src, classes);
+    var letter = String(initials || "?").trim().charAt(0).toUpperCase() || "?";
+    if (mode === "photo") return photoHtml(src, classes, letter);
     return '<span class="' + classes + '" aria-hidden="true">' + PERSON + "</span>";
   }
   function publicBanner(src, accountFace) {
@@ -849,7 +851,10 @@ var numberNote = form.passkey
       historyPause: settings.historyPause || { videos: false, articles: false },
       historyCut: settings.historyCut || { video: 0, article: 0 },
       lang: readLang(),
-      bottomNavCustom: settings.bottomNavCustom === true
+      bottomNavCustom: settings.bottomNavCustom === true,
+      drawerMenu: settings.drawerMenu && typeof settings.drawerMenu === "object" ? settings.drawerMenu : null,
+      navCustom: settings.navCustom && typeof settings.navCustom === "object" ? settings.navCustom : null,
+      navCustomAt: Number(settings.navCustomAt) || 0
     };
     if (settings.bottomNav && typeof settings.bottomNav === "object") snap.bottomNav = settings.bottomNav;
     if (settings.navLayoutSync === true) {
@@ -1035,7 +1040,10 @@ var numberNote = form.passkey
       historyCut: cut,
       history: history,
       lang: local.lang || remote.lang || "en",
-      bottomNavCustom: pickedNav.bottomNavCustom
+      bottomNavCustom: pickedNav.bottomNavCustom,
+      drawerMenu: (Number(local.drawerMenu && local.drawerMenu.at) || 0) >= (Number(remote.drawerMenu && remote.drawerMenu.at) || 0) ? (local.drawerMenu || remote.drawerMenu || null) : (remote.drawerMenu || local.drawerMenu || null),
+      navCustom: (Number(local.navCustomAt) || 0) >= (Number(remote.navCustomAt) || 0) ? (local.navCustom || remote.navCustom || null) : (remote.navCustom || local.navCustom || null),
+      navCustomAt: Math.max(Number(local.navCustomAt) || 0, Number(remote.navCustomAt) || 0)
     };
     if ((local.devicePerf && typeof local.devicePerf === "object") || (remote.devicePerf && typeof remote.devicePerf === "object")) {
       merged.devicePerf = (local.devicePerf && typeof local.devicePerf === "object") ? local.devicePerf : remote.devicePerf;
@@ -2561,6 +2569,30 @@ function signupPayload() {
       '<button class="acct-next" type="button" data-acct="gen-challenge">' + esc(linkIdentityForm.loading ? tr("Loading…") : tr("Generate verification code")) + '</button>';
   }
 
+  function followLookup(id) {
+    var api = window.ViktorychFollows;
+    if (!api || typeof api.lookup !== "function" || !id) return null;
+    try { return api.lookup(id) || null; } catch (err) { return null; }
+  }
+  function handleFromFollowId(id) {
+    var text = String(id || "");
+    if (text.indexOf("app:@") === 0) return text.slice(5);
+    var cut = text.indexOf(":");
+    if (cut <= 0) return "";
+    var rest = text.slice(cut + 1).replace(/^@/, "");
+    if (!rest || rest.length > 40 || /[\s<>]/.test(rest) || /^\d{8,}$/.test(rest)) return "";
+    return rest;
+  }
+  function graphPerson(item) {
+    var row = item || {};
+    var known = followLookup(row.id);
+    var handle = row.handle || (known && known.handle) || handleFromFollowId(row.id) || "";
+    var avatar = row.avatar || (known && known.avatar) || "";
+    var face = row.avatarFace || (known && known.avatarFace) || "";
+    if (!face) face = avatar ? "photo" : "default";
+    var name = row.name || row.displayName || (known && (known.name || known.displayName)) || handle || "";
+    return { id: row.id || "", name: name, handle: handle, avatar: avatar, avatarFace: face };
+  }
   function graphListHtml(subjectId, tab, handle) {
     ensureList(subjectId, tab, false);
     var pack = listPack(subjectId, tab);
@@ -2580,13 +2612,15 @@ function signupPayload() {
     }
     var mine = viewerOwnsSubject(subjectId, handle);
     var html = rows.map(function (item) {
-      var button = window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(item.id, false) || "") : "";
+      var person = graphPerson(item);
+      var button = window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(person.id, false) || "") : "";
       var badge = item.followsYou ? '<span class="pill-badge">' + esc(tr("Follows you")) + '</span>' : "";
-      var remove = mine && tab === "followers" && item.removable ? '<button class="outline" type="button" data-act="remove-follower" data-id="' + esc(item.id) + '">' + esc(tr("Remove follower")) + '</button>' : "";
-      var accept = mine && tab === "requests" ? '<button class="friend-btn friend-accept" type="button" data-act="accept-follow" data-id="' + esc(item.id) + '">' + esc(tr("Accept")) + '</button><button class="friend-btn friend-decline" type="button" data-act="decline-follow" data-id="' + esc(item.id) + '">' + esc(tr("Decline")) + '</button>' : "";
-      var name = item.name || item.handle || "";
-      var href = item.handle ? "#/@" + encodeURIComponent(item.handle) : (item.id ? "#/p/" + encodeURIComponent(item.id) : "#/");
-      return '<div class="connect-row"><a class="who-main" href="' + esc(href) + '"><span class="who-copy"><span class="name">' + esc(name) + badge + '</span><span class="handle">' + (item.handle ? "@" + esc(item.handle) : "") + '</span></span></a><span class="row-actions">' + accept + remove + button + '</span></div>';
+      var remove = mine && tab === "followers" && item.removable ? '<button class="outline" type="button" data-act="remove-follower" data-id="' + esc(person.id) + '">' + esc(tr("Remove follower")) + '</button>' : "";
+      var accept = mine && tab === "requests" ? '<button class="friend-btn friend-accept" type="button" data-act="accept-follow" data-id="' + esc(person.id) + '">' + esc(tr("Accept")) + '</button><button class="friend-btn friend-decline" type="button" data-act="decline-follow" data-id="' + esc(person.id) + '">' + esc(tr("Decline")) + '</button>' : "";
+      var href = person.handle ? "#/@" + encodeURIComponent(person.handle) : (person.id ? "#/p/" + encodeURIComponent(String(person.id).replace(/^app:/, "")) : "#/");
+      var letter = String(person.name || person.handle || "?").trim().charAt(0).toUpperCase() || "?";
+      var face = publicAvatar(person.avatar, person.avatarFace, "", letter);
+      return '<div class="connect-row"><a class="who-main" href="' + esc(href) + '">' + face + '<span class="who-copy"><span class="name">' + esc(person.name) + badge + '</span><span class="handle">' + (person.handle ? "@" + esc(person.handle) : "") + '</span></span></a><span class="row-actions">' + accept + remove + button + '</span></div>';
     }).join("");
     var more = pack.cursor ? '<button class="outline" type="button" data-act="graph-more" data-id="' + esc(subjectId) + '" data-tab="' + esc(tab) + '">' + esc(tr("Load more")) + '</button>' : "";
     return search + html + more;
