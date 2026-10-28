@@ -78,4 +78,8 @@ assert.equal(box.added.length, 0, "shorts off loads nothing");
 box.ctx.ViktorychLazy.ensure("games");
 assert.ok(box.added.some((src) => /games\.js/.test(src)), "other modules still load");
 
+// The index mount skips Stories and pills files when the server turned them off.
+const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
+assert.match(index, /viktorychapp-server-off[\s\S]{0,400}"stories\.js"/, "index mount reads the server-off list");
+
 console.log("server off ok");

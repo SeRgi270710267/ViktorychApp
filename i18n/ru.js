@@ -2356,6 +2356,9 @@ SI18n.addPack("ru", {
   "Picture of badges": "Изображение значков",
   "Picture of installing the app": "Изображение установки приложения",
   "Picture of Safari install steps": "Изображение шагов установки в Safari",
+  "Live pills row": "Строка live-плашек",
+  "Weather, scores and live spaces above the timeline. Off loads nothing for it.": "Погода, счёт матчей и эфиры над лентой. Когда выключено, для неё ничего не загружается.",
+  "The stories tray and viewer. Off loads nothing for it.": "Лента и просмотр историй. Когда выключено, для них ничего не загружается.",
   "Sort replies": "Сортировка ответов",
   "Follow {handle}": "Читать {handle}",
   "Unfollow {handle}": "Отписаться от {handle}",
@@ -2369,5 +2372,6 @@ SI18n.addPack("ru", {
   "Going live, the live row and live sweeps.": "Запуск эфиров, строка эфиров и их очистка.",
   "The Telegram bot webhook and media relay.": "Вебхук Telegram-бота и пересылка медиа.",
   "Weather and scores data for every visitor.": "Данные погоды и счёта для всех посетителей.",
-  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Только для владельца. Выключение останавливает функцию для всех: без фоновых задач, её эндпоинты отвечают пусто, а приложения ничего для неё не загружают."
+  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Только для владельца. Выключение останавливает функцию для всех: без фоновых задач, её эндпоинты отвечают пусто, а приложения ничего для неё не загружают.",
+  "Turned off for everyone by the owner.": "Отключено владельцем для всех."
 });
