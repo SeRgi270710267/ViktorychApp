@@ -234,4 +234,39 @@ test("public posts, media, block, mute, and owner-only reports", async () => {
   assert.equal(hide.status, 200);
   const after = await call("/v1/posts", { token: owner.token });
   assert.equal(after.body.posts.some((item) => item.id === postId), false);
+  const later = Date.now() + 60 * 60 * 1000;
+  const scheduled = await call("/v1/posts", {
+    method: "POST",
+    token: ada.token,
+    body: {
+      body: "A note for later",
+      audience: "friends",
+      replyControl: "mentioned",
+      location: "Nearby",
+      poll: { options: ["Yes", "No"], minutes: 1440 },
+      scheduledAt: later
+    }
+  });
+  assert.equal(scheduled.status, 201);
+  assert.equal(scheduled.body.scheduled, true);
+  assert.equal(scheduled.body.post.poll.options.length, 2);
+  assert.equal(scheduled.body.post.audience, "friends");
+  const hiddenSchedule = await call("/v1/posts", { token: bee.token });
+  assert.equal(hiddenSchedule.body.posts.some((item) => item.id === scheduled.body.post.id), false);
+  const limited = await call("/v1/posts", {
+    method: "POST",
+    token: bee.token,
+    body: { body: "hello @" + ada.account.handle, replyControl: "mentioned" }
+  });
+  assert.equal(limited.status, 201);
+  const blockedReply = await call("/v1/posts", { method: "POST", token: owner.token, body: { body: "Not mentioned", parentId: limited.body.post.id } });
+  assert.equal(blockedReply.status, 403);
+  const allowedReply = await call("/v1/posts", { method: "POST", token: ada.token, body: { body: "I was mentioned", parentId: limited.body.post.id } });
+  assert.equal(allowedReply.status, 201);
+  const circle = await call("/v1/posts", { method: "POST", token: ada.token, body: { body: "Circle only", audience: "friends" } });
+  assert.equal(circle.status, 201);
+  const outsider = await call("/v1/posts", { token: bee.token });
+  assert.equal(outsider.body.posts.some((item) => item.id === circle.body.post.id), false);
+  const mine = await call("/v1/posts", { token: ada.token });
+  assert.equal(mine.body.posts.some((item) => item.id === circle.body.post.id), true);
 });
