@@ -41,6 +41,10 @@ jobs:
           python3 scripts/r2_catalog.py --selftest
           python3 scripts/catalog_migrate.py --selftest
           python3 scripts/handle_guard.py --selftest
+          python3 scripts/check_i18n.py
+          python3 scripts/telegram_stories.py --selftest
+          node scripts/stories_test.js
+          node scripts/stories_layout_test.mjs
           python3 scripts/assemble_site.py --site _site
           python3 scripts/cf_pages_prepare.py --site _site --out _mirror
 
