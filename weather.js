@@ -642,6 +642,11 @@
     return tr(phrase.key, { count: phrase.count });
   }
 
+  function marquee(text) {
+    var safe = esc(text || "");
+    return '<span class="sp-marquee" data-sp-marquee><span class="sp-marquee-clip"><span class="sp-marquee-track"><span class="sp-marquee-copy"><span class="sp-marquee-text">' + safe + '</span></span><span class="sp-marquee-copy" aria-hidden="true"><span class="sp-marquee-text">' + safe + '</span></span></span></span></span>';
+  }
+
   function renderPill(place, unit, pinned) {
     if (!place || place.temp == null || place.updatedAt == null) return "";
     var api = pillApi();
@@ -657,8 +662,8 @@
     return '<button class="sc-pill wx-pill ' + esc(cond.css) + ' wx-pill-' + esc(place.id) + '" type="button" data-wx-id="' + esc(place.id) + '" data-updated="' + esc(place.updatedAt) + '" aria-label="' + esc(place.name) + " " + esc(tempStr) + " " + esc(condLabel) + " " + esc(age) + '">'
       + '<span class="wx-icon-ring">' + getWeatherIcon(cond.icon) + '</span>'
       + '<span class="sc-pill-content">'
-      + '<span class="sc-pill-top"><span class="sc-badge is-live wx-badge is-temp">' + esc(tempStr) + '</span><span class="sc-pill-title">' + esc(place.name) + '</span>' + pinBadge + '</span>'
-      + '<span class="sc-pill-bottom"><span class="wx-cond">' + esc(condLabel) + '</span><span class="wx-range">' + esc(rangeStr) + '</span></span>'
+      + '<span class="sc-pill-top"><span class="sc-badge is-live wx-badge is-temp">' + esc(tempStr) + '</span><span class="sc-pill-title">' + marquee(place.name) + '</span>' + pinBadge + '</span>'
+      + '<span class="sc-pill-bottom"><span class="wx-cond">' + marquee(condLabel) + '</span><span class="wx-range">' + esc(rangeStr) + '</span></span>'
       + '</span>'
       + '<span class="pill-age">' + esc(age) + '</span>'
       + '<span class="sc-pill-arrow"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg></span>'
