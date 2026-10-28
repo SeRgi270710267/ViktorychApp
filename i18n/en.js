@@ -3,6 +3,7 @@ SI18n.addPack("en", {
   "Home": "Home",
   "Explore": "Explore",
   "Notifications": "Notifications",
+  "Suggested accounts": "Suggested accounts",
   "Messages": "Messages",
   "Feeds": "Feeds",
   "Lists": "Lists",
