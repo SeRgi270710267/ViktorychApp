@@ -2191,6 +2191,7 @@ SI18n.addPack("en", {
   "Section name": "Section name",
   "Main list": "Main list",
   "This item always stays available": "This item always stays available",
+  "Home, Settings, and Log out stay put. Folders take a name and an emoji, then collapse in the sidebar.": "Home, Settings, and Log out stay put. Folders take a name and an emoji, then collapse in the sidebar.",
   "Go live": "Go live",
   "Screen": "Screen",
   "Camera and screen": "Camera and screen",

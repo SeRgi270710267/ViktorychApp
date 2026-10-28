@@ -7431,10 +7431,6 @@ const here = parseRoute();
     });
 
     html += sidebarDrawerLinks(route);
-    html += `<button type="button" class="nav-item" data-act="go-live" aria-label="${esc(tr("Go live"))}" data-tooltip="${esc(tr("Go live"))}">
-      <span class="nav-ico">${icon("video")}</span>
-      <span class="nav-label">${esc(tr("Go live"))}</span>
-    </button>`;
     html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
       <span class="nav-ico">${icon("sliders")}</span>
       <span class="nav-label">${tr("Customize sidebar")}</span>
@@ -7470,7 +7466,20 @@ const here = parseRoute();
         if (!section) return;
         const inner = (section.items || []).map(row).join("");
         if (!inner) return;
-        html += `<div class="nav-section">${esc(section.name)}</div>${inner}`;
+        const folderId = "menu-" + section.id;
+        const openMap = getNavOpenFolders();
+        const isOpen = !!openMap[folderId];
+        const mark = section.emoji
+          ? `<span class="nav-folder-emoji">${esc(section.emoji)}</span>`
+          : icon(isOpen ? "folderOpen" : "folder");
+        html += `<div class="nav-folder-wrapper${isOpen ? " open" : ""}" data-folder-id="${esc(folderId)}">
+          <button type="button" class="nav-item nav-folder-btn${isOpen ? " open" : ""}" data-act="toggle-nav-folder" data-folder-id="${esc(folderId)}" aria-expanded="${isOpen ? "true" : "false"}" aria-label="${esc(section.name)}" data-tooltip="${esc(section.name)}">
+            <span class="nav-ico">${mark}</span>
+            <span class="nav-label">${esc(section.name)}</span>
+            <span class="nav-folder-caret">${icon("caret")}</span>
+          </button>
+          <div class="nav-folder-children${isOpen ? " open" : ""}">${inner}</div>
+        </div>`;
         return;
       }
       html += row(entry);
@@ -12464,11 +12473,13 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
     home: "home",
+    explore: "explore",
+    notifications: "notifications",
     communities: "communities",
     lists: "lists",
     studio: "feeds",
@@ -12499,13 +12510,14 @@ const here = parseRoute();
       const id = String(section.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
       if (!id || sectionIds.has(id)) return;
       sectionIds.add(id);
-      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
+      const emoji = String(section.emoji || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
       const items = [];
       (Array.isArray(section.items) ? section.items : []).forEach((item) => {
         if (DRAWER_IDS.indexOf(item) < 0 || items.indexOf(item) >= 0) return;
         items.push(item);
       });
-      sections.push({ id: id, name: name, items: items });
+      sections.push({ id: id, name: name, emoji: emoji, items: items });
     });
     const inSection = new Set();
     sections.forEach((section) => section.items.forEach((item) => inSection.add(item)));
@@ -12625,6 +12637,8 @@ const here = parseRoute();
   function drawerItem(id) {
     const mine = signedAccount();
     if (id === "home") return { id: id, href: "#/", icon: "home", label: tr("Home"), locked: true };
+    if (id === "explore") return { id: id, href: "#/explore", icon: "search", label: tr("Explore") };
+    if (id === "notifications") return { id: id, href: "#/notifications", icon: "bell", label: tr("Notifications") };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
@@ -12688,11 +12702,13 @@ const here = parseRoute();
           return editing ? drawerEditRow(item, menu) : drawerViewRow(item);
         }).join("");
         if (!editing && !inner) return "";
-        if (!editing) return `<div class="drawer-section-label">${esc(section.name)}</div>${inner}`;
+        const folderMark = section.emoji ? esc(section.emoji) + " " : "";
+        if (!editing) return `<details class="drawer-folder"><summary class="drawer-folder-sum">${folderMark}${esc(section.name)}</summary>${inner}</details>`;
         return `<div class="drawer-section" data-drawer-key="section:${esc(section.id)}">
           <div class="drawer-section-head">
             <button class="drawer-grip" type="button" data-drag-drawer="section:${esc(section.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
-            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Section name"))}">
+            <input class="drawer-section-emoji" data-section-id="${esc(section.id)}" value="${esc(section.emoji || "")}" maxlength="8" aria-label="${esc(tr("Emoji"))}" placeholder="${esc(tr("Emoji"))}">
+            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Folder name"))}">
             <button class="icon-btn" type="button" data-act="drawer-drop-section" data-id="${esc(section.id)}" aria-label="${esc(tr("Delete"))}">${icon("trash")}</button>
           </div>
           <div class="drawer-section-items" data-section-items="${esc(section.id)}">${inner}</div>
@@ -12713,10 +12729,10 @@ const here = parseRoute();
       return blocks + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
     }
     return `<div class="drawer-edit-bar">
-      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("Add section"))}</button>
+      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("New folder"))}</button>
       <button class="outline" type="button" data-act="drawer-reset">${esc(tr("Reset to default"))}</button>
       <button class="save" type="button" data-act="drawer-edit-done">${esc(tr("Done"))}</button>
-    </div><p class="drawer-edit-note">${esc(tr("This item always stays available"))}</p><div class="drawer-edit-list">${blocks}</div>`;
+    </div><p class="drawer-edit-note">${esc(tr("Home, Settings, and Log out stay put. Folders take a name and an emoji, then collapse in the sidebar."))}</p><div class="drawer-edit-list">${blocks}</div>`;
   }
 
   function drawerRow(href, glyph, label, extra) {
@@ -15783,7 +15799,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "drawer-add-section") {
       const menu = getDrawerMenu();
       const id = "s" + Date.now().toString(36);
-      menu.sections.push({ id: id, name: tr("Section name"), items: [] });
+      menu.sections.push({ id: id, name: tr("Folder name"), emoji: "", items: [] });
       menu.order.push("section:" + id);
       saveDrawerMenu(menu);
       render();
@@ -15873,8 +15889,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "open-nav-customize") {
-      STATE.modal = "nav-customize";
+      STATE.drawerEdit = true;
+      STATE.accountMenu = false;
+      STATE.modal = null;
       STATE.navNewFolderOpen = false;
+      STATE.drawer = !sidebarOwnsNav();
       render();
       return;
     }
@@ -22472,16 +22491,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         document.removeEventListener("pointermove", cancel);
       }, { once: true });
     });
+    const drawerLists = () => [...document.querySelectorAll(".drawer-edit-list, .drawer-section-items")];
+    const listAt = (event) => drawerLists().find((list) => {
+      const box = list.getBoundingClientRect();
+      return event.clientY >= box.top && event.clientY <= box.bottom;
+    });
     document.addEventListener("pointermove", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
-      const node = drag.list.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
+      const node = document.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
       if (!node) return;
-      const over = rows.find((el) => {
-        if (el === node) return false;
-        const box = el.getBoundingClientRect();
-        return event.clientY < box.top + box.height / 2;
-      });
+      const sectionKey = String(drag.key).indexOf("section:") === 0;
+      const locked = DRAWER_LOCKED.indexOf(drag.key) >= 0;
+      const hit = listAt(event);
+      if (hit && hit !== drag.list && !sectionKey && !locked && !(hit.classList.contains("drawer-section-items") && locked)) {
+        hit.appendChild(node);
+        drag.list = hit;
+      }
+      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
       const target = rows.find((el) => {
         if (el === node) return false;
         const box = el.getBoundingClientRect();
@@ -22495,19 +22521,39 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     document.addEventListener("pointerup", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const list = drag.list;
-      const keys = [...list.querySelectorAll(":scope > [data-drawer-key]")].map((el) => el.getAttribute("data-drawer-key"));
       drag = null;
-      commitDrawerKeys(list, keys);
+      const root = document.querySelector(".drawer-edit-list");
+      if (!root) return;
+      const menu = getDrawerMenu();
+      const order = [];
+      const sectionItems = {};
+      [...root.children].forEach((el) => {
+        const key = el.getAttribute("data-drawer-key") || "";
+        if (!key) return;
+        if (key.indexOf("section:") === 0) {
+          order.push(key);
+          const id = key.slice(8);
+          sectionItems[id] = [...el.querySelectorAll(":scope > .drawer-section-items > [data-drawer-key]")].map((row) => row.getAttribute("data-drawer-key")).filter((item) => DRAWER_IDS.indexOf(item) >= 0 && DRAWER_LOCKED.indexOf(item) < 0);
+          return;
+        }
+        if (DRAWER_IDS.indexOf(key) >= 0) order.push(key);
+      });
+      menu.order = order;
+      menu.sections.forEach((section) => {
+        if (sectionItems[section.id]) section.items = sectionItems[section.id];
+      });
+      saveDrawerMenu(menu);
+      render();
     });
     document.addEventListener("change", (event) => {
       const el = event.target;
       if (!el) return;
-      if (el.classList && el.classList.contains("drawer-section-name")) {
+      if (el.classList && (el.classList.contains("drawer-section-name") || el.classList.contains("drawer-section-emoji"))) {
         const menu = getDrawerMenu();
         const section = (menu.sections || []).find((item) => item.id === el.dataset.sectionId);
         if (!section) return;
-        section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+        if (el.classList.contains("drawer-section-emoji")) section.emoji = String(el.value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
+        else section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
         saveDrawerMenu(menu);
         return;
       }
