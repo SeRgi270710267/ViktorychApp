@@ -205,16 +205,17 @@
     return tr("Everyone");
   }
 
-  function previewHtml(pack, mine) {
+  function previewHtml(pack, mine, account) {
     var html = SECTIONS.map(function (id) { return sectionHtml(pack, id, mine); }).join("");
-    if (!html) return "";
+    var badges = account && root.ProfileBadges && root.ProfileBadges.blockHtml ? root.ProfileBadges.blockHtml(account) : "";
+    if (!html && !badges) return "";
     var viewAs = "";
     if (mine && !(pack && pack.preview)) {
       viewAs = '<div class="about-viewas"><button type="button" data-about="as" data-as="public">' + esc(tr("View as public")) + '</button><button type="button" data-about="as" data-as="follower">' + esc(tr("View as a follower")) + "</button></div>";
     } else if (pack && pack.preview) {
       viewAs = '<div class="about-viewas"><p>' + esc(pack.preview === "follower" ? tr("View as a follower") : tr("View as public")) + '</p><button type="button" data-about="as" data-as="">' + esc(tr("Back to your view")) + "</button></div>";
     }
-    return '<div class="about">' + viewAs + html + sheetHtml() + "</div>";
+    return '<div class="about">' + viewAs + badges + html + sheetHtml() + "</div>";
   }
 
   function showTab(account) {
@@ -222,6 +223,7 @@
     var session = root.ViktorychAccounts && root.ViktorychAccounts.account && root.ViktorychAccounts.account();
     var mine = !!(session && account.publicId && session.publicId === account.publicId);
     if (mine || account.aboutPreview) return true;
+    if (root.ProfileBadges && root.ProfileBadges.hasEarned && root.ProfileBadges.hasEarned(account)) return true;
     return !!(account.about && account.about.visible && allFields(account.about).length);
   }
 
@@ -273,8 +275,11 @@
       return mine ? '<div class="about"><p class="about-wait">' + esc(tr("Loading…")) + "</p></div>" : "";
     }
     var affiliation = root.ViktorychAffiliations && root.ViktorychAffiliations.aboutHtml ? root.ViktorychAffiliations.aboutHtml(account) : "";
-    if (!mine && !(account.about && account.about.visible)) return affiliation ? '<div class="about">' + affiliation + "</div>" : "";
-    var body = previewHtml(account.about, mine);
+    if (!mine && !(account.about && account.about.visible)) {
+      var onlyBadges = (root.ProfileBadges && root.ProfileBadges.blockHtml ? root.ProfileBadges.blockHtml(account) : "") + affiliation;
+      return onlyBadges ? '<div class="about">' + onlyBadges + "</div>" : "";
+    }
+    var body = previewHtml(account.about, mine, account);
     if (!affiliation || !body) return body || (affiliation ? '<div class="about">' + affiliation + "</div>" : "");
     return body.replace(/<\/div>\s*$/, affiliation + "</div>");
   }

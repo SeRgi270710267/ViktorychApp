@@ -3055,6 +3055,7 @@ function signupPayload() {
     var requested = (route && route.query && route.query.get("tab")) || (route && route.tab) || "posts";
     if (window.ProfileAbout) window.ProfileAbout.ensure(account, account.aboutPreview || "");
     if (window.ProfileGifts) window.ProfileGifts.ensure(account);
+    if (window.ProfileBadges) window.ProfileBadges.ensure(account);
     var profileHref = "#/@" + encodeURIComponent(account.handle || "");
     var bar = profileTabBar(account, mine, requested, profileHref);
     var activeTab = bar.active;

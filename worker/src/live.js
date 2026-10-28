@@ -385,6 +385,10 @@ export async function handleLive(request, env, path, url, deps) {
     await env.DB.prepare("INSERT INTO live_sessions (id, host_id, title, audience, fanout, sources, pass_hash, state, created_at, updated_at, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'live', ?, ?, 0)").bind(
       id, account.public_id, cleanTitle(body.title), audience, normalizeFanout(body.fanout), cleanSources(body.sources), passHash, now, now
     ).run();
+    try {
+      const badges = await import("./badges.js");
+      await badges.syncBadges(env, account.public_id);
+    } catch (err) { /* the live is saved */ }
     for (let i = 0; i < members.length; i++) {
       await env.DB.prepare("INSERT INTO live_members (session_id, account_id) VALUES (?, ?)").bind(id, members[i]).run();
     }
