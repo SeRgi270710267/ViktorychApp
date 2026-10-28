@@ -44,6 +44,9 @@ let friendsLoading = null;
 let friendsLoaded = false;
 let friendsQuery = "";
 let friendsFilter = "all";
+let railQuery = "";
+let railTo = "";
+let railNote = "";
 const noteListeners = [];
 
 function tr(key, vars) {
@@ -350,6 +353,7 @@ function onVisibility() {
   beat(true);
   connect();
   armPoll();
+  loadFriends(false);
 }
 
 function paint(root) {
@@ -630,6 +634,36 @@ function onClick(event) {
     save(root);
     return;
   }
+  if (act === "rail-fold") {
+    event.preventDefault();
+    const card = el.closest(".friends-rail");
+    const collapsed = !(card && card.classList.contains("is-collapsed"));
+    if (card) card.classList.toggle("is-collapsed", collapsed);
+    setRailCollapsed(collapsed);
+    el.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    el.textContent = collapsed ? "▸" : "▾";
+    return;
+  }
+  if (act === "rail-msg") {
+    event.preventDefault();
+    const id = el.getAttribute("data-id") || "";
+    railTo = railTo === id ? "" : id;
+    railNote = "";
+    paintRail();
+    const box = document.querySelector("[data-rail-text]");
+    if (box) box.focus();
+    return;
+  }
+  if (act === "rail-send") {
+    event.preventDefault();
+    const form = el.closest("form");
+    const field = form && form.querySelector("[data-rail-text]");
+    const text = field ? String(field.value || "").trim() : "";
+    const id = el.getAttribute("data-id") || "";
+    if (!text || !id) return;
+    sendRailMessage(id, text);
+    return;
+  }
   if (act === "online-filter") {
     event.preventDefault();
     friendsFilter = el.getAttribute("data-value") || "all";
@@ -749,6 +783,74 @@ function stripInnerHtml() {
   return shown.map(chipHtml).join("");
 }
 
+function railCollapsed() {
+  try { return localStorage.getItem("viktorychapp-friends-rail") === "0"; }
+  catch (err) { return false; }
+}
+
+function setRailCollapsed(collapsed) {
+  try { localStorage.setItem("viktorychapp-friends-rail", collapsed ? "0" : "1"); }
+  catch (err) { /* the card still toggles for this view */ }
+}
+
+function activeFriends() {
+  const query = railQuery.trim().toLowerCase();
+  return friends.filter(function (person) {
+    if (person.state !== "online" && person.state !== "idle") return false;
+    if (!query) return true;
+    const name = String(person.name || "").toLowerCase();
+    const handle = String(person.handle || "").toLowerCase();
+    return name.indexOf(query) >= 0 || handle.indexOf(query) >= 0;
+  }).sort(function (a, b) {
+    const diff = friendRank(a.state) - friendRank(b.state);
+    if (diff) return diff;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+}
+
+function railRow(person) {
+  const photo = wrap(person.publicId, friendPhoto(person));
+  const compose = railTo === person.publicId
+    ? '<form class="friends-rail-compose"><textarea data-rail-text maxlength="500" placeholder="' + esc(tr("Send a message…")) + '" aria-label="' + esc(tr("Send a message…")) + '"></textarea><button type="submit" data-presence="rail-send" data-id="' + esc(person.publicId) + '">' + esc(tr("Message")) + "</button></form>"
+    : "";
+  return '<div class="friends-rail-row"><a class="friends-rail-main" href="' + esc(friendHref(person)) + '">' + photo + friendEmoji(person) + '<span class="friends-rail-copy"><b>' + esc(person.name || person.handle) + '</b><span data-pid-line="' + esc(person.publicId) + '">' + esc(phrase(person)) + "</span></span></a><button type=\"button\" class=\"friends-rail-msg\" data-presence=\"rail-msg\" data-id=\"" + esc(person.publicId) + "\" aria-label=\"" + esc(tr("Message")) + "\">" + esc(tr("Message")) + "</button></div>" + compose;
+}
+
+function railListHtml() {
+  if (!friendsLoaded) return '<p class="friends-rail-empty">' + esc(tr("Loading…")) + "</p>";
+  const list = activeFriends();
+  if (!list.length) {
+    return '<p class="friends-rail-empty">' + esc(railQuery.trim() ? tr("No friends found") : tr("No friends online")) + "</p>";
+  }
+  return list.map(railRow).join("") + (railNote ? '<p class="friends-rail-note">' + esc(railNote) + "</p>" : "");
+}
+
+function paintRail() {
+  const list = document.querySelector("[data-rail-list]");
+  if (list) list.innerHTML = railListHtml();
+}
+
+function railHtml() {
+  if (!token()) return "";
+  if (visible()) loadFriends(false);
+  const collapsed = railCollapsed();
+  return '<section class="card friends-rail' + (collapsed ? " is-collapsed" : "") + '" aria-label="' + esc(tr("Friends")) + '"><div class="friends-rail-head"><h2>' + esc(tr("Friends")) + '</h2><button type="button" class="friends-rail-fold" data-presence="rail-fold" aria-expanded="' + (collapsed ? "false" : "true") + '" aria-label="' + esc(tr("Collapse")) + '">' + (collapsed ? "▸" : "▾") + '</button></div><div class="friends-rail-body"><label class="friends-rail-search"><input type="search" data-rail-search placeholder="' + esc(tr("Search Friends")) + '" aria-label="' + esc(tr("Search Friends")) + '" value="' + esc(railQuery) + '"></label><div class="friends-rail-list" data-rail-list>' + railListHtml() + '</div><a class="show-more-row" href="#/online">' + esc(tr("See all")) + "</a></div></section>";
+}
+
+function sendRailMessage(id, text) {
+  railNote = "";
+  return call("/v1/messages", { method: "POST", body: { id: id, text: text } }).then(function (body) {
+    if (!body || body.status !== 200) {
+      railNote = tr("Couldn’t send that message.");
+      paintRail();
+      return;
+    }
+    railTo = "";
+    railNote = tr("Message sent");
+    paintRail();
+  });
+}
+
 function stripHtml() {
   if (!token()) return "";
   loadFriends(false);
@@ -805,6 +907,7 @@ function loadFriends(force) {
     friendsLoaded = true;
     return Promise.resolve();
   }
+  if (!visible()) return Promise.resolve();
   if (!force && friendsAt && Date.now() - friendsAt < 20000) return Promise.resolve();
   if (friendsLoading) return friendsLoading;
   friendsLoading = call("/v1/friends/presence").then(function (body) {
@@ -828,6 +931,7 @@ function loadFriends(force) {
     friendsAt = Date.now();
     friendsLoaded = true;
     paint();
+    paintRail();
     const api = accounts();
     if (api && api.requestRender) api.requestRender();
   });
@@ -842,9 +946,15 @@ function boot() {
   document.addEventListener("click", onClick);
   document.addEventListener("input", function (event) {
     const input = event.target && event.target.closest && event.target.closest("[data-online-search]");
-    if (!input) return;
-    friendsQuery = input.value || "";
-    paintOnline();
+    if (input) {
+      friendsQuery = input.value || "";
+      paintOnline();
+      return;
+    }
+    const rail = event.target && event.target.closest && event.target.closest("[data-rail-search]");
+    if (!rail) return;
+    railQuery = rail.value || "";
+    paintRail();
   });
   window.addEventListener("resize", placeSheet);
   document.addEventListener("keydown", function (event) {
@@ -878,7 +988,8 @@ const api = {
   offChannel: offChannel,
   channelOpen: socketOpen,
   stripHtml: stripHtml,
-  pageHtml: pageHtml
+  pageHtml: pageHtml,
+  railHtml: railHtml
 };
 window.ViktorychPresence = api;
 
