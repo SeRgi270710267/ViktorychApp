@@ -4,6 +4,7 @@
    timeline. The moderation list is owner-only. */
 
 import { awardActivity, clawback, giftForPost } from "./points.js";
+import { canSeeAudience, setListGrants } from "./audience.js";
 
 const POST_MAX = 500;
 const MEDIA_MAX = 12 * 1024 * 1024;
@@ -96,7 +97,9 @@ const POLL_MINUTES = [5, 60, 1440, 4320, 10080];
 
 function cleanAudience(value) {
   const text = String(value || "");
-  return text === "friends" || text === "following" ? text : "everyone";
+  if (text === "friends" || text === "following") return text;
+  if (text === "list" || text === "lists") return "list";
+  return "everyone";
 }
 
 function cleanReply(value) {
@@ -361,9 +364,18 @@ async function audienceSets(env, viewerId, authors) {
 function canSee(row, viewerId, sets) {
   if (row.author_id === viewerId) return true;
   const audience = row.audience || "everyone";
+  if (audience === "list") return false;
   if (audience === "friends") return sets.friends.has(row.author_id);
   if (audience === "following") return sets.following.has(row.author_id);
   return true;
+}
+
+function listIdsOf(fields) {
+  let raw = fields && fields.listIds;
+  if (typeof raw === "string") {
+    try { raw = JSON.parse(raw); } catch (err) { raw = []; }
+  }
+  return Array.isArray(raw) ? raw : [];
 }
 
 async function listPosts(request, env, deps) {
@@ -374,7 +386,15 @@ async function listPosts(request, env, deps) {
   const skip = await hiddenAuthors(env, session.public_id);
   const rows = ((listed && listed.results) || []).filter((row) => !skip.has(row.author_id));
   const sets = await audienceSets(env, session.public_id, rows.map((row) => row.author_id));
-  const visible = rows.filter((row) => canSee(row, session.public_id, sets));
+  const visible = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if ((row.audience || "") === "list") {
+      if (await canSeeAudience(env, { viewerId: session.public_id, ownerId: row.author_id, audience: "list", subject: "post", subjectId: row.id })) visible.push(row);
+      continue;
+    }
+    if (canSee(row, session.public_id, sets)) visible.push(row);
+  }
   const posts = [];
   for (let i = 0; i < visible.length && posts.length < 40; i++) posts.push(await presentPost(env, request, visible[i], session.public_id));
   return deps.json(200, { posts: posts });
@@ -459,9 +479,11 @@ async function createPost(request, env, deps) {
   const now = Date.now();
   const when = cleanSchedule(input.fields.scheduledAt, now);
   const created = when || now;
+  const audience = cleanAudience(input.fields.audience);
   await env.DB.prepare("INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden, audience, reply_control, location, poll_json, scheduled_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)").bind(
-    id, session.public_id, body, parent, quote, created, cleanAudience(input.fields.audience), cleanReply(input.fields.replyControl), cleanLocation(input.fields.location), poll ? JSON.stringify(poll) : "", when
+    id, session.public_id, body, parent, quote, created, audience, cleanReply(input.fields.replyControl), cleanLocation(input.fields.location), poll ? JSON.stringify(poll) : "", when
   ).run();
+  if (audience === "list") await setListGrants(env, session.public_id, "post", id, listIdsOf(input.fields));
   for (let i = 0; i < stored.length; i++) {
     const item = stored[i];
     await env.DB.prepare("INSERT INTO public_post_media (id, post_id, object_key, mime, size, alt_text, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
@@ -486,10 +508,13 @@ async function readMedia(request, env, id, deps) {
   if (!session) return deps.json(401, { error: "unauthorized" });
   const row = await env.DB.prepare("SELECT object_key, mime, size, post_id FROM public_post_media WHERE id = ?").bind(id).first();
   if (!row || !env.DATA) return deps.json(404, { error: "not_found" });
-  const post = await env.DB.prepare("SELECT hidden, author_id FROM public_posts WHERE id = ?").bind(row.post_id).first();
+  const post = await env.DB.prepare("SELECT hidden, author_id, audience FROM public_posts WHERE id = ?").bind(row.post_id).first();
   if (!post || post.hidden) return deps.json(404, { error: "not_found" });
   const skip = await hiddenAuthors(env, session.public_id);
   if (skip.has(post.author_id)) return deps.json(404, { error: "not_found" });
+  if ((post.audience || "") === "list" && !(await canSeeAudience(env, { viewerId: session.public_id, ownerId: post.author_id, audience: "list", subject: "post", subjectId: row.post_id }))) {
+    return deps.json(404, { error: "not_found" });
+  }
   const object = await env.DATA.get(row.object_key);
   if (!object) return deps.json(404, { error: "not_found" });
   const headers = new Headers();

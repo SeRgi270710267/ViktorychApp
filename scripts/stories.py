@@ -764,12 +764,22 @@ def _remember(health: list, platform: str, detail: str) -> None:
     health.append({"platform": platform, "ok": False, "detail": detail})
 
 
+_FILE_URL = re.compile(r"^/v1/stories/file/[a-f0-9]{64}\.(?:jpg|jpeg|png|webp|gif|mp4|webm|mov)$")
+
+
+def _playable(url) -> bool:
+    text = str(url or "")
+    if _https(text):
+        return True
+    return bool(_FILE_URL.match(text))
+
+
 def _unexpired(account: dict, now: datetime) -> dict | None:
     if not isinstance(account, dict):
         return None
     items = []
     for item in account.get("items") or []:
-        if not isinstance(item, dict) or not _https(item.get("url") or ""):
+        if not isinstance(item, dict) or not _playable(item.get("url") or ""):
             continue
         expires = _rss_date(str(item.get("expires") or ""))
         if expires is not None and expires <= now:
@@ -813,11 +823,35 @@ def load_document(path: Path) -> list:
     return [row for row in accounts or [] if isinstance(row, dict)]
 
 
-def save_document(path: Path, accounts: list, now: datetime) -> None:
-    path.write_text(
-        json.dumps({"updated": _iso(now), "accounts": accounts}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+def save_document(path: Path, accounts: list, now: datetime, extra: dict | None = None) -> None:
+    doc = {"updated": _iso(now), "accounts": accounts}
+    if isinstance(extra, dict) and "telegramConnected" in extra:
+        doc["telegramConnected"] = bool(extra["telegramConnected"])
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def apply_telegram(accounts: list, previous: list, now: datetime, tg: dict) -> tuple[list, bool, list]:
+    """Merge a read-only Telegram pull. An unset secret removes telegram rows."""
+    mode = str((tg or {}).get("mode") or "off")
+    if mode == "ok":
+        rest = [row for row in accounts or [] if not (isinstance(row, dict) and row.get("platform") == "telegram")]
+        fresh = [row for row in (tg or {}).get("accounts") or [] if isinstance(row, dict) and row.get("items")]
+        return rest + fresh, True, []
+    if mode == "error":
+        kept = list(accounts or [])
+        seen = {str(row.get("id") or "") for row in kept if isinstance(row, dict)}
+        for row in previous or []:
+            if not isinstance(row, dict) or row.get("platform") != "telegram":
+                continue
+            if str(row.get("id") or "") in seen:
+                continue
+            alive = _unexpired(row, now)
+            if alive:
+                kept.append(alive)
+        connected = not bool((tg or {}).get("needsSetup"))
+        return kept, connected, [{"platform": "telegram", "ok": False, "detail": "Telegram stories did not run."}]
+    rest = [row for row in accounts or [] if not (isinstance(row, dict) and row.get("platform") == "telegram")]
+    return rest, False, []
 
 
 def _fail_vk(previous: list, feeds: list, failed: set) -> None:
@@ -976,6 +1010,7 @@ def publish(
     import time
 
     moment = now or datetime.now(timezone.utc)
+    previous_accounts = load_document(dest)
     if secret is None:
         secret = os.environ.get("IG_SESSION") or ""
     if vk_secret is None:
@@ -1010,7 +1045,7 @@ def publish(
         (config or {}).get("feeds") or [],
         secret,
         moment,
-        load_document(dest),
+        previous_accounts,
         transport=transport,
         rsshub=rsshub,
         vk_secret=vk_secret,
@@ -1027,7 +1062,16 @@ def publish(
         vk_sign_in=vk_sign_in,
         vk_spa=vk_spa,
     )
-    save_document(dest, accounts, moment)
+    try:
+        from telegram_stories import pull as pull_telegram
+
+        tg = pull_telegram(moment)
+    except Exception:
+        print("[telegram-stories] Error")
+        tg = {"mode": "error"}
+    accounts, connected, extra_health = apply_telegram(accounts, previous_accounts, moment, tg)
+    health.extend(extra_health)
+    save_document(dest, accounts, moment, {"telegramConnected": connected})
     count = sum(len(row.get("items") or []) for row in accounts)
     print(f"[stories] wrote {dest.name} ({len(accounts)} accounts, {count} items)")
     return health
