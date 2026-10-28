@@ -7,12 +7,15 @@ from .common import (
     bridge_error_text,
     child_text,
     children,
+    clean_meta_text,
     guard_posts,
     html_to_parts,
     local_name,
+    meta_status_id,
     parse_xml,
     post_shell,
     rfc822_to_iso,
+    strip_author_prefix,
 )
 
 
@@ -100,7 +103,9 @@ def parse(payload, feed: dict | None = None) -> dict:
         parts = html_to_parts(html)
         item_title = child_text(item, "title")
         text = parts["text"] or item_title
-        if item_title and item_title not in text:
+        if platform in ("instagram", "threads"):
+            text = clean_meta_text(strip_author_prefix(text))
+        elif item_title and item_title not in text:
             text = (item_title + "\n\n" + text).strip() if text else item_title
         link = child_text(item, "link")
         if not link:
@@ -110,6 +115,8 @@ def parse(payload, feed: dict | None = None) -> dict:
                     if link:
                         break
         guid = child_text(item, "guid") or child_text(item, "id") or link
+        if platform in ("instagram", "threads"):
+            guid = meta_status_id(platform, guid, link)
         published = child_text(item, "pubDate") or child_text(item, "published") or child_text(item, "updated")
         date = rfc822_to_iso(published) if "GMT" in published or "," in published else published
         media = list(parts["media"])
