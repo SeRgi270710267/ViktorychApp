@@ -559,6 +559,8 @@ async function openMenuAndEscape(page, opener, item, label) {
   let has = false;
   for (let attempt = 0; attempt < 6 && !has; attempt += 1) {
     has = await page.evaluate((sel) => {
+      window.scrollTo(0, 0);
+      document.querySelectorAll(".topbar.is-hidden").forEach((el) => el.classList.remove("is-hidden"));
       const nodes = document.querySelectorAll(sel);
       for (let i = 0; i < nodes.length; i += 1) {
         const el = nodes[i];
