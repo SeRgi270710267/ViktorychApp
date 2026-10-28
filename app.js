@@ -9374,7 +9374,7 @@ const here = parseRoute();
     const inline = (tab === "foryou" || tab === "following") && STATE.modal !== "compose" && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
-    return homeHeader(tab) + bar + inline + body + timelineSentinel(list.length, sorted.length);
+    return homeHeader(tab) + bar + inline + showPostsRowHtml() + body + timelineSentinel(list.length, sorted.length);
   }
 
   function mobileLogo() {
@@ -19814,6 +19814,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return added.concat(live);
   }
 
+  function showPostsRowHtml() {
+    return `<div class="show-posts-slot">${STATE.showPostsRow ? `<button type="button" class="show-posts" data-act="show-new-posts">${STATE.showPostsRow}</button>` : ""}</div>`;
+  }
+
+  function setShowPostsRow(html) {
+    if ((STATE.showPostsRow || "") === html) return;
+    STATE.showPostsRow = html;
+    const slot = document.querySelector(".show-posts-slot");
+    if (slot) slot.outerHTML = showPostsRowHtml();
+  }
+
+  function syncPillScroll() {
+    const el = document.getElementById("new-posts");
+    if (!el) return;
+    const hide = !STATE.showPostsRow || parseRoute().name !== "home" || (window.scrollY || 0) < 40;
+    if (el.hidden !== hide) el.hidden = hide;
+  }
+  window.addEventListener("scroll", () => { if (STATE.showPostsRow) syncPillScroll(); }, { passive: true });
+
   function showPill(posts) {
     const el = document.getElementById("new-posts");
     if (!el) return;
@@ -19823,6 +19842,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     list = list.filter((post) => homeShows(post, route) && !noteHidden(post));
     if (!list.length) {
       el.hidden = true;
+      setShowPostsRow("");
       if (window.ViktorychLocal) window.ViktorychLocal.savePill([]);
       return;
     }
@@ -19837,8 +19857,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       faces.push(src);
     });
     const avatars = faces.map((src) => `<img decoding="async" loading="lazy" class="pill-ava" alt="" src="${esc(src)}">`).join("");
-    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
-    el.hidden = false;
+    // Like X: an inline "Show N posts" row at the top of Home. The floating
+    // pill shows only once the reader has scrolled away from the top.
+    const label = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
+    el.innerHTML = label;
+    setShowPostsRow(label);
+    syncPillScroll();
     if (window.ViktorychLocal) {
       window.ViktorychLocal.savePill(list.slice(0, 20).map((post) => ({
         id: post.id,
@@ -22536,6 +22560,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
       if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
+    });
+    document.addEventListener("click", (event) => {
+      const row = event.target && event.target.closest ? event.target.closest('[data-act="show-new-posts"]') : null;
+      if (!row) return;
+      event.preventDefault();
+      document.getElementById("new-posts").click();
     });
     document.getElementById("new-posts").addEventListener("click", () => {
       if (parseRoute().name !== "home") { showPill(pendingPillPosts()); return; }
