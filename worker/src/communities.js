@@ -145,7 +145,13 @@ function rootOf(parentId, id) {
   return parent || id;
 }
 
-export async function communityHomeRows(env, request, viewerId, presentAccount) {
+export async function communityHomeRows(env, request, viewer, presentAccount) {
+  // The app owner adds communities from the owner list rather than joining them,
+  // so the owner reads every community on Home. Others read the communities they
+  // joined (posting joins a public one), plus public-community posts from people
+  // they follow.
+  const viewerId = typeof viewer === "string" ? viewer : String((viewer && viewer.public_id) || "");
+  const ownerView = !!(viewer && typeof viewer === "object" && Number(viewer.owner) === 1);
   let communitiesHome = true;
   try {
     const global = await env.DB.prepare("SELECT show_home FROM community_feed_prefs WHERE public_id = ? AND community_id = ''").bind(viewerId).first();
@@ -157,8 +163,8 @@ export async function communityHomeRows(env, request, viewerId, presentAccount) 
   let listed;
   try {
     listed = await env.DB.prepare(
-      "SELECT c.id, c.author_id, c.parent_id, c.body, c.created_at, c.community_id, a.handle, a.display_name, a.avatar, a.profile_less FROM community_posts c JOIN accounts a ON a.public_id = c.author_id LEFT JOIN community_meta meta ON meta.community_id = c.community_id LEFT JOIN community_members mem ON mem.community_id = c.community_id AND mem.public_id = ? LEFT JOIN community_feed_prefs pref ON pref.public_id = ? AND pref.community_id = c.community_id WHERE c.deleted_at = 0 AND COALESCE(pref.show_home, 1) = 1 AND COALESCE(pref.muted, 0) = 0 AND ((COALESCE(meta.visibility, 'public') = 'public' AND (mem.public_id IS NOT NULL OR c.author_id = ?)) OR (COALESCE(meta.visibility, 'public') != 'public' AND mem.public_id IS NOT NULL)) ORDER BY c.created_at DESC LIMIT 40"
-    ).bind(viewerId, viewerId, viewerId).all();
+      "SELECT c.id, c.author_id, c.parent_id, c.body, c.created_at, c.community_id, a.handle, a.display_name, a.avatar, a.profile_less FROM community_posts c JOIN accounts a ON a.public_id = c.author_id LEFT JOIN community_meta meta ON meta.community_id = c.community_id LEFT JOIN community_members mem ON mem.community_id = c.community_id AND mem.public_id = ? LEFT JOIN community_feed_prefs pref ON pref.public_id = ? AND pref.community_id = c.community_id LEFT JOIN account_follows fol ON fol.follower_id = ? AND fol.target_id = 'app:' || c.author_id WHERE c.deleted_at = 0 AND COALESCE(pref.show_home, 1) = 1 AND COALESCE(pref.muted, 0) = 0 AND (? = 1 OR mem.public_id IS NOT NULL OR (COALESCE(meta.visibility, 'public') = 'public' AND (c.author_id = ? OR fol.follower_id IS NOT NULL))) ORDER BY c.created_at DESC LIMIT 60"
+    ).bind(viewerId, viewerId, viewerId, ownerView ? 1 : 0, viewerId).all();
   } catch (err) {
     return { posts: [], communitiesHome: true };
   }
@@ -244,6 +250,8 @@ export async function addCommunityPost(env, request, opts) {
   const statements = [
     env.DB.prepare("INSERT INTO community_posts (id, community_id, author_id, parent_id, body, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, 0)").bind(id, name, row.public_id, parent, text, now)
   ];
+  // Posting in a public community joins it, so other members see the post on Home.
+  if (visibility === "public") statements.push(env.DB.prepare("INSERT INTO community_members (community_id, public_id, created_at) VALUES (?, ?, ?) ON CONFLICT(community_id, public_id) DO NOTHING").bind(name, row.public_id, now));
   const deliveries = [];
   if (parentAuthor && parentAuthor !== row.public_id) {
     const noteId = "cm_" + id;
