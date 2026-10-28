@@ -108,6 +108,16 @@ const state = () => {
     mini: document.documentElement.classList.contains("music-mini"),
     shown: !!box && box.height > 20,
     bottom: box ? box.bottom : 0,
+    top: box ? box.top : 0,
+    left: box ? box.left : 0,
+    right: box ? box.right : 0,
+    width: box ? box.width : 0,
+    height: box ? box.height : 0,
+    vw: window.innerWidth,
+    side: !!document.querySelector(".side") && getComputedStyle(document.querySelector(".side")).display !== "none",
+    pad: (() => { const c = document.querySelector(".center"); return c ? parseFloat(getComputedStyle(c).paddingBottom) || 0 : 0; })(),
+    center: (() => { const c = document.querySelector(".center"); if (!c) return null; const r = c.getBoundingClientRect(); return { left: r.left, right: r.right }; })(),
+    fill: parseFloat((document.getElementById("mu-pop-fill") || { style: {} }).style.width || "0") || 0,
     navTop: navBox && navBox.height ? navBox.top : 0,
     vh: window.innerHeight,
     title: (document.getElementById("mu-dock-title") || {}).textContent || "",
@@ -167,7 +177,11 @@ async function exercise(browser, origin, vp) {
     if (!after.mini || !after.shown) fail(where + " mini player is missing on " + hash);
     if (after.title !== "Tone A") fail(where + " mini player title " + after.title);
     if (after.navTop && after.bottom > after.navTop + 1) fail(where + " mini player covers the bottom bar");
-    if (!after.navTop && Math.abs(after.bottom - after.vh) > 2) fail(where + " mini player is not along the bottom");
+    if (Math.abs(after.width - after.height) > 1 || after.width > 180 || after.width < 96) fail(where + " mini player is not a small square " + after.width + "x" + after.height);
+    if (after.right > after.vw + 1 || after.bottom > after.vh + 1 || after.left < 0 || after.top < 0) fail(where + " mini player is off screen");
+    if (after.side && after.center && after.left < after.center.right && after.right > after.center.left) fail(where + " mini player covers the timeline");
+    if (after.pad < after.height + 8) fail(where + " the page leaves no room under the mini player " + after.pad);
+    if (!(after.fill > 0)) fail(where + " mini player progress line did not move");
   }
 
   /* Controls in the mini player. */
@@ -184,6 +198,19 @@ async function exercise(browser, origin, vp) {
     seek.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await wait(page, where + " step 163", () => document.getElementById("mu-audio").currentTime >= 11.5, null, { timeout: 5000 });
+
+  /* With a mouse the popout drags into the nearest corner and remembers it. */
+  if (where === "desktop") {
+    const box = await page.$eval("#mu-dock", (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 24 }; });
+    await page.mouse.move(box.x, box.y);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 300, box.y - 200, { steps: 6 });
+    await page.mouse.move(120, 120, { steps: 6 });
+    await page.mouse.up();
+    await wait(page, where + " drag", () => { const d = document.getElementById("mu-dock"); const r = d.getBoundingClientRect(); return d.getAttribute("data-corner") === "tl" && r.top < 60 && r.left < 60 && localStorage.getItem("viktorych-music-corner") === "tl"; }, null, { timeout: 5000 });
+    if (!(await ev(page, () => document.getElementById("mu-now").hidden))) fail(where + " dragging opened the full player");
+    await ev(page, () => { localStorage.setItem("viktorych-music-corner", "br"); document.getElementById("mu-dock").setAttribute("data-corner", "br"); });
+  }
 
   /* The mini player opens the full now playing view. */
   await page.click("#mu-dock .mu-id");
