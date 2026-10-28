@@ -115,6 +115,26 @@ def account_url(platform: str, handle: str, channel_id: str = "") -> str:
     return ""
 
 
+def catalog_meta_accounts(doc: dict | None) -> list:
+    """Owner-added Instagram and Threads profiles. Handles stay out of the log."""
+    try:
+        from owner_catalog import feed_rows
+    except Exception:
+        return []
+    rows, _ids = feed_rows(doc if isinstance(doc, dict) else {})
+    found = []
+    for row in rows:
+        platform = str(row.get("platform") or "")
+        handle = str(row.get("handle") or "").lstrip("@")
+        if platform not in ("instagram", "threads") or not HANDLE_RE.fullmatch(handle):
+            continue
+        url = account_url(platform, handle)
+        if not tb.page_host_ok(url):
+            continue
+        found.append({"platform": platform, "handle": handle, "url": url})
+    return found
+
+
 def accounts_from(config: dict, tiktok_handles: list, accounts_doc: dict | None = None, x_doc: dict | None = None) -> list:
     """Private added TikTok and X rows, config rows, then the fallback handles."""
     from account_identity import clean_id, norm_handle, tiktok_accounts
@@ -835,6 +855,18 @@ def extract() -> int:
     tracked = env_tracked()
     accounts = accounts_from(config if isinstance(config, dict) else {}, tracked, accounts_doc, x_doc)
     try:
+        from owner_catalog import _load_blob
+
+        seen_meta = {(row.get("platform"), str(row.get("handle") or "").lower()) for row in accounts}
+        for row in catalog_meta_accounts(_load_blob()):
+            key = (row.get("platform"), str(row.get("handle") or "").lower())
+            if key in seen_meta:
+                continue
+            seen_meta.add(key)
+            accounts.append(row)
+    except Exception:
+        pass
+    try:
         from log_redact import install
 
         install(tracked + [row.get("handle") for row in accounts if isinstance(row, dict)])
@@ -1018,6 +1050,13 @@ def selftest() -> int:
     check("https://www.tiktok.com/@lockclip" in urls, "TikTok is included with the added accounts")
     check("https://www.youtube.com/channel/UCsyntheticmaple00001000/videos" in urls, "YouTube uses the public channel videos page")
     check("https://x.com/copperlane" in urls and "https://www.instagram.com/birchlane/" in urls, "X and Instagram use the public profile")
+    added_meta = catalog_meta_accounts({"accounts": [
+        {"id": "instagram:orbitfox", "platform": "instagram", "handle": "orbitfox"},
+        {"id": "threads:orbitfox", "platform": "threads", "handle": "orbitfox"},
+        {"id": "tiktok:laneharbor", "platform": "tiktok", "handle": "laneharbor"},
+    ]})
+    added_urls = {row["url"] for row in added_meta}
+    check(added_urls == {"https://www.instagram.com/orbitfox/", "https://www.threads.net/@orbitfox"}, "owner Instagram and Threads accounts are extracted with the public profile")
     check(all("t.me" not in row["url"] for row in rows), "a Telegram channel is not extracted")
     turned = rotate([{"handle": "a"}, {"handle": "b"}, {"handle": "c"}], 1)
     check([row["handle"] for row in turned] == ["b", "c", "a"], "added accounts rotate so a later run reaches the rest")

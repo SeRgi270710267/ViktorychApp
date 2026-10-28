@@ -40,6 +40,11 @@ test("each supported source is detected and has a public plan", () => {
       assert.equal(step.url.includes("api.x.com"), false);
       assert.equal(step.url.includes("api.twitter.com"), false);
     });
+    if (row[0] === "instagram" || row[0] === "threads") {
+      const bridgeAt = plan.findIndex((step) => step.url.includes("rss-bridge.org"));
+      const mirrorAt = plan.findIndex((step) => step.url.includes("rsshub.pseudoyu.com"));
+      assert.ok(bridgeAt > 0 && mirrorAt > bridgeAt, row[0]);
+    }
   });
   assert.equal(detectInput("https://facebook.com/samplefeed").error, "unsupported_facebook");
   assert.equal(detectInput("https://discord.gg/samplefeed").error, "unsupported_discord");
