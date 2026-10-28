@@ -6092,6 +6092,20 @@ img, video { max-width: 100%; }
 .post-edit-sheet { max-width: 600px; }
 .post-edit-text { width: 100%; min-height: 120px; resize: vertical; border: 0; outline: none; background: transparent; color: inherit; font: inherit; font-size: 20px; line-height: 24px; padding: 4px 0; box-sizing: border-box; }
 
+/* Notifications: swipe to dismiss, the desktop x, Clear all. */
+.note-row { position: relative; transition: transform 0.18s ease, opacity 0.18s ease; touch-action: pan-y; }
+.note-row.is-swiping { transition: none; }
+.note-row.is-dismissed { opacity: 0; transform: translateX(-24px); }
+.note-x {
+  position: absolute; top: 8px; right: 8px; width: 34px; height: 34px;
+  display: none; align-items: center; justify-content: center;
+  border: 0; border-radius: 9999px; background: none; color: var(--muted); cursor: pointer;
+}
+.note-x svg { width: 18px; height: 18px; fill: currentColor; }
+.note-x:hover { background: var(--blue-dim); color: var(--blue); }
+@media (hover: hover) and (pointer: fine) {
+  .note-row:hover .note-x, .note-x:focus-visible { display: inline-flex; }
+}
 /* Active tab like X: a rounded 4px pill as wide as the label, centred under it
    on the row's divider; active label bold in the text colour, the rest gray.
    One colour for every tab row (Home, profile, communities, notifications,

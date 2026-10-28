@@ -1205,6 +1205,8 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.bellNotes = cleanBellNotes(parsed.bellNotes);
       parsed.bellSeen = Array.isArray(parsed.bellSeen) ? parsed.bellSeen.map((id) => String(id)).slice(-500) : [];
       parsed.bellRead = Number(parsed.bellRead) || 0;
+      parsed.noteClearedAt = Number(parsed.noteClearedAt) || 0;
+      parsed.noteDismissed = parsed.noteDismissed && typeof parsed.noteDismissed === "object" && !Array.isArray(parsed.noteDismissed) ? parsed.noteDismissed : {};
 parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       parsed.feedTabs = cleanFeedTabs(parsed.feedTabs);
       parsed.noteTabs = cleanFeedTabs(parsed.noteTabs);
@@ -7567,9 +7569,46 @@ const here = parseRoute();
 
   function visibleNotes(list) {
     if (window.TiktokLock && typeof window.TiktokLock.visibleNotes === "function") {
-      return window.TiktokLock.visibleNotes(list || [], noteViewer());
+      return window.TiktokLock.visibleNotes(list || [], noteViewer()).filter((note) => !noteDismissed(note));
     }
-    return (list || []).filter((note) => !noteHidden(note));
+    return (list || []).filter((note) => !noteHidden(note) && !noteDismissed(note));
+  }
+
+  /* Dismissed notifications (swipe, the desktop x, Clear all) stay hidden on
+     every device: the ids and the clear-all time live in synced settings. */
+  function noteDismissed(note) {
+    if (!note || !STATE.settings) return false;
+    const cleared = Number(STATE.settings.noteClearedAt) || 0;
+    if (cleared && (Number(note.at) || 0) && Number(note.at) <= cleared) return true;
+    const gone = STATE.settings.noteDismissed;
+    return !!(gone && note.id && gone[String(note.id)]);
+  }
+
+  function dismissNotes(ids) {
+    if (!STATE.settings || !ids.length) return;
+    const gone = Object.assign({}, STATE.settings.noteDismissed || {});
+    const now = Date.now();
+    ids.forEach((id) => { if (id) gone[String(id)] = now; });
+    const keys = Object.keys(gone).sort((a, b) => gone[b] - gone[a]).slice(0, 500);
+    const kept = {};
+    keys.forEach((key) => { kept[key] = gone[key]; });
+    STATE.settings.noteDismissed = kept;
+    saveSettings();
+    if (notesSignedIn()) accountCall("/v1/notifications/read", { method: "POST", body: { ids: ids.slice(0, 200) } }).catch(() => {});
+    updateBadge(bellUnread());
+  }
+
+  function clearAllNotes() {
+    if (!STATE.settings) return;
+    STATE.settings.noteClearedAt = Date.now();
+    STATE.settings.noteDismissed = {};
+    saveSettings();
+    markNoteTabRead("all");
+    updateBadge(bellUnread());
+  }
+
+  function noteX(ids) {
+    return `<button class="note-x" type="button" data-act="note-dismiss" data-ids="${esc(ids.join(","))}" aria-label="${esc(tr("Dismiss"))}" title="${esc(tr("Dismiss"))}">${icon("close")}</button>`;
   }
 
   function bellUnread() {
@@ -12718,7 +12757,8 @@ const here = parseRoute();
       : tr("New post notifications for {name}", { name: "{name}" });
     const when = noteWhen(first);
     const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
-    return `<article class="note-row note-group${unread ? " is-unread" : ""}"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(first.hash || "#/notifications")}"><div class="note-faces">${faces}</div><p class="note-line">${fillNoteName(raw, `<b>${name}</b>${mark}`)}${time}</p></a></article>`;
+    const groupIds = (notes || []).map((note) => String((note && note.id) || "")).filter(Boolean);
+    return `<article class="note-row note-group${unread ? " is-unread" : ""}" data-note-ids="${esc(groupIds.join(","))}"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(first.hash || "#/notifications")}"><div class="note-faces">${faces}</div><p class="note-line">${fillNoteName(raw, `<b>${name}</b>${mark}`)}${time}</p></a>${groupIds.length ? noteX(groupIds) : ""}</article>`;
   }
 
   function noteKindIcon(note) {
@@ -12739,7 +12779,7 @@ const here = parseRoute();
     const partial = note.partial ? `<p class="note-partial">${esc(tr("Partial. Replies on recent public posts, not X's mention inbox."))}</p>` : "";
     const text = (note.text || note.partial) ? `<div class="note-copy">${noteBody(note)}${partial}</div>` : "";
     const birthday = window.ProfileGifts && window.ProfileGifts.noteAction ? window.ProfileGifts.noteAction(note) : "";
-    return `<article class="note-row${unread ? " is-unread" : ""}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a>${birthday}</article>`;
+    return `<article class="note-row${unread ? " is-unread" : ""}" data-note-ids="${esc(String(note.id || ""))}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a>${birthday}${note.id ? noteX([String(note.id)]) : ""}</article>`;
   }
 
   function notesSignedIn() {
@@ -12820,7 +12860,7 @@ const here = parseRoute();
       return `<button class="bell-choice" type="button" data-act="note-tab" data-tab="${esc(tab.id)}" role="menuitemradio" aria-checked="${on ? "true" : "false"}"><span class="bell-choice-label">${esc(noteTabLabel(tab))}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
     }).join("");
     const filterBlock = filters ? `<div class="tab-menu-label">${esc(tr("Notification filters"))}</div>${filters}` : "";
-    return `<div class="bell-sheet" data-act="close-note-gear"><div class="menu bell-menu note-gear-menu" data-act="stop" role="menu" aria-label="${esc(tr("Notification options"))}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="note-mark-all"><span class="bell-choice-label">${esc(tr("Mark all as read"))}</span></button><a class="bell-choice" href="#/settings/notifications"><span class="bell-choice-label">${esc(tr("Notifications"))}</span></a><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-label">${esc(tr("Manage tabs"))}</span></button>${filterBlock}</div></div>`;
+    return `<div class="bell-sheet" data-act="close-note-gear"><div class="menu bell-menu note-gear-menu" data-act="stop" role="menu" aria-label="${esc(tr("Notification options"))}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="note-mark-all"><span class="bell-choice-label">${esc(tr("Mark all as read"))}</span></button><button class="bell-choice" type="button" data-act="note-clear-all"><span class="bell-choice-label">${esc(tr("Clear all"))}</span></button><a class="bell-choice" href="#/settings/notifications"><span class="bell-choice-label">${esc(tr("Notifications"))}</span></a><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-label">${esc(tr("Manage tabs"))}</span></button>${filterBlock}</div></div>`;
   }
 
   function notificationsView(route) {
@@ -17931,6 +17971,21 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "note-dismiss") {
+      const ids = String(el.dataset.ids || "").split(",").filter(Boolean);
+      const row = el.closest(".note-row");
+      if (row) row.classList.add("is-dismissed");
+      dismissNotes(ids);
+      setTimeout(render, row ? 180 : 0);
+      return;
+    }
+    if (act === "note-clear-all") {
+      STATE.noteGear = false;
+      STATE.noteUnreadPaint = { tab: "all", ids: {} };
+      clearAllNotes();
+      render();
+      return;
+    }
     if (act === "note-mark-all") {
       STATE.noteGear = false;
       STATE.noteUnreadPaint = { tab: "all", ids: {} };
@@ -19445,6 +19500,46 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
   window.addEventListener("resize", () => syncShell());
 
+  // Swipe a notification sideways to dismiss it (phones and tablets).
+  (function noteSwipe() {
+    let row = null, x0 = 0, y0 = 0, dx = 0, sideways = false;
+    document.addEventListener("touchstart", (event) => {
+      const hit = event.target && event.target.closest ? event.target.closest(".note-row[data-note-ids]") : null;
+      if (!hit || !hit.dataset.noteIds || event.touches.length !== 1) { row = null; return; }
+      row = hit; x0 = event.touches[0].clientX; y0 = event.touches[0].clientY; dx = 0; sideways = false;
+    }, { passive: true });
+    document.addEventListener("touchmove", (event) => {
+      if (!row || !event.touches[0]) return;
+      const mx = event.touches[0].clientX - x0;
+      const my = event.touches[0].clientY - y0;
+      if (!sideways) {
+        if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { row = null; return; }
+        if (Math.abs(mx) < 12) return;
+        sideways = true;
+        row.classList.add("is-swiping");
+      }
+      dx = mx;
+      row.style.transform = "translateX(" + dx + "px)";
+      row.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / (row.offsetWidth || 1)));
+    }, { passive: true });
+    const end = () => {
+      if (!row) return;
+      const el = row; row = null;
+      el.classList.remove("is-swiping");
+      if (sideways && Math.abs(dx) > (el.offsetWidth || 300) * 0.35) {
+        el.style.transform = "translateX(" + (dx > 0 ? "100%" : "-100%") + ")";
+        el.style.opacity = "0";
+        el.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); }, { capture: true, once: true });
+        dismissNotes(String(el.dataset.noteIds).split(",").filter(Boolean));
+        setTimeout(render, 180);
+      } else {
+        el.style.transform = "";
+        el.style.opacity = "";
+      }
+    };
+    document.addEventListener("touchend", end, { passive: true });
+    document.addEventListener("touchcancel", end, { passive: true });
+  })();
   // Right rail like X: sticky at top 0 when it fits the viewport, otherwise
   // it scrolls with the page until its bottom meets the viewport bottom
   // (top = viewport height - rail height). No blank space below it.
