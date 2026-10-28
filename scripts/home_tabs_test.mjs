@@ -134,9 +134,24 @@ async function check(page, label, reduced) {
     });
   }, { title: longPill, wantOff: reduced }, { timeout: 8000 });
   if (!reduced) {
-    await page.dispatchEvent(".sp-pill", "pointerdown");
-    const held = await page.evaluate(() => document.querySelector("[data-sp-marquee]").classList.contains("is-held"));
-    if (!held) fail(label + " marquee did not pause");
+    // A home rebuild can replace the row between a click and a later read.
+    // Press the visible space pill and read its own marquee in the same turn.
+    try {
+      await page.waitForFunction(() => {
+        const pills = [...document.querySelectorAll(".sp-pill")].filter((pill) => {
+          const box = pill.getBoundingClientRect();
+          const marquee = pill.querySelector("[data-sp-marquee]");
+          return box.width > 8 && box.height > 8 && marquee && marquee.classList.contains("is-on");
+        });
+        const pill = pills[0];
+        if (!pill) return false;
+        pill.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        const marquee = pill.querySelector("[data-sp-marquee]");
+        return !!(marquee && marquee.classList.contains("is-held"));
+      }, null, { timeout: 4000 });
+    } catch (err) {
+      fail(label + " marquee did not pause");
+    }
   }
 }
 
