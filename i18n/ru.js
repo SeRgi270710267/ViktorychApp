@@ -2355,5 +2355,8 @@ SI18n.addPack("ru", {
   "Picture of an emoji status": "Изображение статуса с эмодзи",
   "Picture of badges": "Изображение значков",
   "Picture of installing the app": "Изображение установки приложения",
-  "Picture of Safari install steps": "Изображение шагов установки в Safari"
+  "Picture of Safari install steps": "Изображение шагов установки в Safari",
+  "Live pills row": "Строка live-плашек",
+  "Weather, scores and live spaces above the timeline. Off loads nothing for it.": "Погода, счёт матчей и эфиры над лентой. Когда выключено, для неё ничего не загружается.",
+  "The stories tray and viewer. Off loads nothing for it.": "Лента и просмотр историй. Когда выключено, для них ничего не загружается."
 });
