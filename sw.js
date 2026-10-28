@@ -1436,9 +1436,8 @@ async function doPrecache(report, generation, signal) {
     throw err;
   } finally {
     if (beat) clearInterval(beat);
-    if (ok) {
-      try { await caches.delete(stagingName); } catch (err) { /* activate removes it too */ }
-    }
+    // The staging cache is left for activate to remove: deleting a cache
+    // this attempt still holds can stall the worker before skipWaiting.
   }
 }
 
@@ -1454,6 +1453,14 @@ async function runApply(fresh) {
     if (generation !== precacheGeneration) return;
     broadcastProgress({ step: "install", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
     await self.skipWaiting();
+    // Activation can be held up by the old worker. If this worker is still
+    // waiting after a while, say so, and Retry asks again.
+    for (let waited = 0; waited < 20000; waited += 500) {
+      if (generation !== precacheGeneration || self.registration.active === self.serviceWorker || self.registration.waiting !== self.serviceWorker) return;
+      await wait(500);
+    }
+    if (generation !== precacheGeneration || self.registration.waiting !== self.serviceWorker) return;
+    throw shellError("", "timeout");
   } catch (err) {
     if (generation !== precacheGeneration || (err && err.reason === "replaced")) return;
     updateReporting = false;
@@ -1529,8 +1536,11 @@ self.addEventListener("message", (event) => {
   }
   if (data.type === "update-ping") {
     // The page heard nothing for a while. Answer with where this worker is.
-    const step = shellTask ? "download" : (self.registration.active === self.serviceWorker ? "activate" : "install");
-    broadcastProgress({ step: step }, true);
+    // A waiting worker with no download running is not making progress, so
+    // the page shows Retry instead of waiting on it forever.
+    if (shellTask) broadcastProgress({ step: "download" }, true);
+    else if (self.registration.active === self.serviceWorker) broadcastProgress({ step: "activate" }, true);
+    else broadcast({ type: "update-progress", step: "error", url: "", reason: "timeout" });
     return;
   }
   if (data.type === "apply-update" || data.type === "skip-waiting") {
