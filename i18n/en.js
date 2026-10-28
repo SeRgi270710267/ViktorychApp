@@ -2378,5 +2378,18 @@ SI18n.addPack("en", {
   "The Telegram bot webhook and media relay.": "The Telegram bot webhook and media relay.",
   "Weather and scores data for every visitor.": "Weather and scores data for every visitor.",
   "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.",
-  "Turned off for everyone by the owner.": "Turned off for everyone by the owner."
+  "Turned off for everyone by the owner.": "Turned off for everyone by the owner.",
+  "Added. Its latest posts are on Home.": "Added. Its latest posts are on Home.",
+  "Clear filters": "Clear filters",
+  "Couldn’t load your feeds.": "Couldn’t load your feeds.",
+  "Detected: {platform}": "Detected: {platform}",
+  "Groups": "Groups",
+  "More actions": "More actions",
+  "More filters": "More filters",
+  "No matches": "No matches",
+  "No sources yet": "No sources yet",
+  "Paste a link or @handle above to add one.": "Paste a link or @handle above to add one.",
+  "Paste a link or @handle": "Paste a link or @handle",
+  "Select all": "Select all",
+  "Try another search or filter.": "Try another search or filter."
 });

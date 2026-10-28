@@ -2378,5 +2378,18 @@ SI18n.addPack("es", {
   "The Telegram bot webhook and media relay.": "El webhook del bot de Telegram y el reenvío de medios.",
   "Weather and scores data for every visitor.": "Datos de tiempo y marcadores para cada visitante.",
   "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Solo el propietario. Apagado detiene la función para todos: sin tareas programadas, sus endpoints responden vacío y las apps no cargan nada de ella.",
-  "Turned off for everyone by the owner.": "Desactivado para todos por el propietario."
+  "Turned off for everyone by the owner.": "Desactivado para todos por el propietario.",
+  "Added. Its latest posts are on Home.": "Añadida. Sus últimas publicaciones ya están en Inicio.",
+  "Clear filters": "Borrar filtros",
+  "Couldn’t load your feeds.": "No se pudieron cargar tus fuentes.",
+  "Detected: {platform}": "Detectado: {platform}",
+  "Groups": "Grupos",
+  "More actions": "Más acciones",
+  "More filters": "Más filtros",
+  "No matches": "Sin resultados",
+  "No sources yet": "Aún no hay fuentes",
+  "Paste a link or @handle above to add one.": "Pega un enlace o @usuario arriba para añadir una.",
+  "Paste a link or @handle": "Pega un enlace o @usuario",
+  "Select all": "Seleccionar todo",
+  "Try another search or filter.": "Prueba otra búsqueda o filtro."
 });

@@ -2378,5 +2378,18 @@ SI18n.addPack("ru", {
   "The Telegram bot webhook and media relay.": "Вебхук Telegram-бота и пересылка медиа.",
   "Weather and scores data for every visitor.": "Данные погоды и счёта для всех посетителей.",
   "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Только для владельца. Выключение останавливает функцию для всех: без фоновых задач, её эндпоинты отвечают пусто, а приложения ничего для неё не загружают.",
-  "Turned off for everyone by the owner.": "Отключено владельцем для всех."
+  "Turned off for everyone by the owner.": "Отключено владельцем для всех.",
+  "Added. Its latest posts are on Home.": "Добавлено. Последние посты уже на главной.",
+  "Clear filters": "Сбросить фильтры",
+  "Couldn’t load your feeds.": "Не удалось загрузить ваши ленты.",
+  "Detected: {platform}": "Определено: {platform}",
+  "Groups": "Группы",
+  "More actions": "Другие действия",
+  "More filters": "Другие фильтры",
+  "No matches": "Ничего не найдено",
+  "No sources yet": "Источников пока нет",
+  "Paste a link or @handle above to add one.": "Вставьте ссылку или @имя выше, чтобы добавить источник.",
+  "Paste a link or @handle": "Вставьте ссылку или @имя",
+  "Select all": "Выбрать все",
+  "Try another search or filter.": "Попробуйте другой запрос или фильтр."
 });
