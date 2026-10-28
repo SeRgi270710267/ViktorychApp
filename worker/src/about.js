@@ -4,6 +4,7 @@
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { blocksEither, pairState } from "./social.js";
+import { canSeeAudience, setListGrants } from "./audience.js";
 
 export const ABOUT_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS about_fields (
@@ -278,7 +279,17 @@ async function readFields(env, request, viewer, ownerRow, preview) {
     const row = rows[i];
     if (!kindOk(row.section, row.kind)) continue;
     const allowed = allows[row.id] || {};
-    if (!canSeeField(row.audience, relation, allowed)) continue;
+    let see = canSeeField(row.audience, relation, allowed);
+    if (!see && row.audience === "list" && relation.viewerId) {
+      see = await canSeeAudience(env, {
+        viewerId: relation.viewerId,
+        ownerId: row.public_id,
+        audience: "list",
+        subject: "about",
+        subjectId: row.id
+      });
+    }
+    if (!see) continue;
     const person = row.kind === "family" ? await personCard(env, row.person_id) : null;
     if (row.kind === "birthday" && daysUntilBirthday(birthdayParts(row.body), Date.now(), row.tz) === 0) birthdayToday = true;
     grouped[row.section].push(presentField(row, relation, person, showPrivate));
@@ -375,6 +386,8 @@ async function writeField(env, viewer, existing, body) {
   }
   if (audience === "list" && body && (body.members || body.allow)) await replaceAllow(env, id, readMembers(body));
   else if (audience !== "list") await env.DB.prepare("DELETE FROM about_field_allow WHERE field_id = ?").bind(id).run();
+  if (audience === "list" && body && body.listIds) await setListGrants(env, viewer.public_id, "about", id, body.listIds);
+  else if (audience !== "list") await setListGrants(env, viewer.public_id, "about", id, []);
   return { id: id };
 }
 
