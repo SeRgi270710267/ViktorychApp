@@ -225,24 +225,41 @@
     return !!(account.about && account.about.visible && allFields(account.about).length);
   }
 
+  var aboutCache = {};
+
   function ensure(account, preview) {
     if (!account || !account.handle) return;
     var key = (preview || "") + ":" + account.handle;
+    var cached = aboutCache[key];
+    var fresh = account.aboutLoaded !== false;
+    if (cached && cached.loaded && fresh) {
+      account.about = cached.about;
+      account.aboutLoaded = true;
+      account.aboutKey = key;
+      account.birthdayToday = !!cached.birthdayToday;
+      return;
+    }
+    if (cached && cached.loading && fresh) return;
     if (account.aboutKey === key && (account.aboutLoaded || account.aboutLoading)) return;
     account.aboutLoading = true;
     account.aboutKey = key;
+    aboutCache[key] = { loading: true };
     var path = "/v1/about?handle=" + encodeURIComponent(account.handle) + (preview ? "&as=" + encodeURIComponent(preview) : "");
     call(path, { token: token() }).then(function (body) {
+      var pack = body && body.sections ? body : { sections: [], visible: false, owner: false, preview: "" };
+      aboutCache[key] = { loaded: true, about: pack, birthdayToday: !!(body && body.birthdayToday) };
       account.aboutLoading = false;
       account.aboutLoaded = true;
-      account.about = body && body.sections ? body : { sections: [], visible: false, owner: false, preview: "" };
+      account.about = pack;
       account.birthdayToday = !!(body && body.birthdayToday);
       if (body && body.owner && body.birthdayNotes != null) notesOn = !!body.birthdayNotes;
       redraw();
     }).catch(function () {
+      var pack = { sections: [], visible: false, owner: false, preview: "" };
+      aboutCache[key] = { loaded: true, about: pack, birthdayToday: false };
       account.aboutLoading = false;
       account.aboutLoaded = true;
-      account.about = { sections: [], visible: false, owner: false, preview: "" };
+      account.about = pack;
       account.birthdayToday = false;
       redraw();
     });
