@@ -192,6 +192,8 @@ async function behavior(page) {
 
   await tune(page, "balanced", "es");
   await page.locator(".xc .xc-ai-btn").waitFor();
+  /* Only the language in use ships with the app, so Spanish arrives a moment later. */
+  await page.waitForFunction(() => { const b = document.querySelector(".xc .xc-ai-btn"); return b && b.getAttribute("aria-label") === "Herramientas de escritura"; }, null, { timeout: 15000 }).catch(() => {});
   const esLabel = await page.locator(".xc .xc-ai-btn").getAttribute("aria-label");
   if (esLabel !== "Herramientas de escritura") fail("Spanish sparkle label is missing");
   const note = await page.locator("#compose-note").innerText();

@@ -6085,3 +6085,67 @@ img, video { max-width: 100%; }
 .device-actions { display: flex; gap: 8px; flex: none; }
 .device-actions .outline { padding: 4px 12px; min-height: 32px; }
 .device-tag { font-size: 12px; font-weight: 500; color: var(--muted, #71767b); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+
+/* Own post menu: X-style red Delete, and the edit dialog. */
+.menu .menu-danger { color: #f4212e; }
+.menu .menu-danger svg, .menu .menu-danger .ic { color: #f4212e; fill: currentColor; }
+.post-edit-sheet { max-width: 600px; }
+.post-edit-text { width: 100%; min-height: 120px; resize: vertical; border: 0; outline: none; background: transparent; color: inherit; font: inherit; font-size: 20px; line-height: 24px; padding: 4px 0; box-sizing: border-box; }
+
+/* Notifications: swipe to dismiss, the desktop x, Clear all. */
+.note-row { position: relative; transition: transform 0.18s ease, opacity 0.18s ease; touch-action: pan-y; }
+.note-row.is-swiping { transition: none; }
+.note-row.is-dismissed { opacity: 0; transform: translateX(-24px); }
+.note-x {
+  position: absolute; top: 8px; right: 8px; width: 34px; height: 34px;
+  display: none; align-items: center; justify-content: center;
+  border: 0; border-radius: 9999px; background: none; color: var(--muted); cursor: pointer;
+}
+.note-x svg { width: 18px; height: 18px; fill: currentColor; }
+.note-x:hover { background: var(--blue-dim); color: var(--blue); }
+@media (hover: hover) and (pointer: fine) {
+  .note-row:hover .note-x, .note-x:focus-visible { display: inline-flex; }
+}
+/* Active tab like X: a rounded 4px pill as wide as the label, centred under it
+   on the row's divider; active label bold in the text colour, the rest gray.
+   One colour for every tab row (Home, profile, communities, notifications,
+   search). */
+:root { --tab-pill: var(--text); }
+.tab { color: var(--muted); }
+.tab.on { color: var(--text); font-weight: 700; }
+.tab.on span:not(.tab-grip)::after,
+.tab-pair.on::after,
+.ptabs .tab.on > .ptab-marquee::after { background: var(--tab-pill); height: 4px; border-radius: 9999px; }
+.reply-tabs-thin .tab.on span:not(.tab-grip)::after { height: 4px; }
+/* A tab with a menu caret: the pill runs under the label and the caret. */
+.tab-pair.on::after { left: 16px; right: 2px; }
+.tabs-bar .tab-pair.on::after { left: 12px; right: 2px; }
+/* Rows outside a .tabs-bar still get the thin divider under the whole row. */
+.tabs { box-shadow: inset 0 -1px 0 var(--line); }
+.tabs-bar .tabs { box-shadow: none; }
+
+/* Post action bar like X: reply, repost, like and views spread across the row,
+   bookmark and share a tight pair on the right. 18.75px icons,
+   34px hit circles, the count 4px from its icon. Every card, thread and post page. */
+.actions { max-width: none; margin-top: 4px; }
+/* The four stats keep equal flex slots (icon at each slot's start), which is
+   how X spreads them; the bar now spans the full column instead of 425px. */
+.action-stats { margin-right: 16px; }
+.action { min-height: 34px; padding: 0; gap: 4px; }
+.action .ic::after { width: 34px; height: 34px; }
+.action-more { gap: 8px; margin-left: 0; }
+.action-more .action { min-width: 34px; justify-content: center; }
+.status-actions .action-stats { margin-right: 16px; }
+
+/* Sticky right rail (see fitRail in app.js). */
+.side { position: sticky; top: var(--rail-top, 0px); align-self: flex-start; }
+
+/* Inline "Show N posts" row at the top of Home, like X. */
+.show-posts {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 48px; padding: 0 16px;
+  background: none; border: 0; border-bottom: 1px solid var(--line);
+  color: var(--blue); font-size: 15px; font-weight: 400; cursor: pointer;
+}
+.show-posts:hover { background: var(--hover, rgba(255, 255, 255, 0.03)); }
+.show-posts .pill-ava { width: 24px; height: 24px; }
