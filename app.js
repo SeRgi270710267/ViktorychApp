@@ -96,6 +96,9 @@
     views: "M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z",
     share: "M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41l-3.3 3.3-1.41-1.42L12 2.59zM21 15l-.02 3.51c0 1.38-1.12 2.49-2.5 2.49H5.5C4.11 21 3 19.88 3 18.5V15h2v3.5c0 .28.22.5.5.5h12.98c.28 0 .5-.22.5-.5L19 15h2z",
     lock: "M17 9V7A5 5 0 0 0 7 7v2H5v12h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7zm8 12H7v-8h10v8z",
+    user: "M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z",
+    moon: "M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z",
+    help: "M12 2a10 10 0 1 0 .01 20.01A10 10 0 0 0 12 2zm0 15.2a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4zM12 6.2c2 0 3.4 1.1 3.4 2.7 0 1.2-.7 2-1.8 2.6l-.6.3v1.4h-2v-2.2l1.1-.5c.6-.3.9-.7.9-1.3 0-.7-.6-1.2-1.5-1.2-.9 0-1.5.5-1.6 1.3H7.5c.1-1.9 1.8-3.1 4.5-3.1z",
     shield: "M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.52-3.13 8.75-7 9.88-3.87-1.13-7-5.36-7-9.88V6.3l7-3.12z",
     check: "M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.222 1.261.27 1.894.139.634-.13 1.22-.435 1.689-.882.445-.47.749-1.055.878-1.688.132-.633.084-1.29-.139-1.896.586-.274 1.084-.705 1.438-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z",
     back: "M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z",
@@ -144,6 +147,9 @@
     draft: {},
     menu: null,
     drawer: false,
+    drawerSheet: "",
+    drawerFold: false,
+    noteGear: false,
     headerHidden: false,
     confirm: null,
     removeFeed: null,
@@ -7042,7 +7048,7 @@ const here = parseRoute();
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
       return { name: "messages", channel: channel, query };
     }
-    if (parts[0] === "spaces" && parts[1]) return { name: "spaces", id: parts[1], query };
+    if (parts[0] === "spaces") return { name: "spaces", id: parts[1] || "", query };
     if (parts[0] === "history") {
       const tab = parts[1] === "likes" || parts[1] === "videos" || parts[1] === "articles" ? parts[1] : "bookmarks";
       return { name: "history", tab: tab, query };
@@ -11401,12 +11407,67 @@ const here = parseRoute();
     return `<p>${esc(text)}</p>${extra}`;
   }
 
-  function noteRow(note) {
-    const who = note.handle || note.name || "account";
-    const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
-    const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
+  function noteFace(note) {
+    const who = (note && (note.name || note.handle)) || "";
+    if (note && note.avatar) return avatar(note.avatar, who, "note-face");
+    return `<span class="ava initials note-face">${initials(who || "?")}</span>`;
+  }
+
+  function noteWhen(note) {
+    const at = Number(note && note.at) || 0;
+    if (!at) return "";
+    return relTime(at);
+  }
+
+  function fillNoteName(template, nameHtml) {
+    return esc(template).replace("{name}", nameHtml);
+  }
+
+  function postGroupRow(notes, unreadIds) {
+    const people = [];
+    const seen = {};
+    (notes || []).forEach((note) => {
+      if (!note) return;
+      const key = String(note.handle || note.name || note.id || "").toLowerCase();
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      people.push(note);
+    });
+    if (!people.length) return "";
+    const first = people[0];
+    const others = Math.max(0, people.length - 1);
+    const unread = (notes || []).some((note) => note && unreadIds && unreadIds[note.id]);
+    const faces = people.slice(0, 6).map((note, index) => {
+      return `<span class="note-face-wrap" style="z-index:${10 - index}">${noteFace(note)}</span>`;
+    }).join("");
+    const name = esc(first.name || first.handle || tr("Someone"));
+    const mark = noteIsVerified(first) ? badge("blue") : "";
+    const raw = others
+      ? tr("New post notifications for {name} and {n} others", { name: "{name}", n: others })
+      : tr("New post notifications for {name}", { name: "{name}" });
+    const when = noteWhen(first);
+    const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
+    return `<article class="note-row note-group${unread ? " is-unread" : ""}"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(first.hash || "#/notifications")}"><div class="note-faces">${faces}</div><p class="note-line">${fillNoteName(raw, `<b>${name}</b>${mark}`)}${time}</p></a></article>`;
+  }
+
+  function noteKindIcon(note) {
+    const kind = note && note.kind;
+    if (kind === "like") return "heart";
+    if (kind === "repost" || kind === "quote") return "repost";
+    if (kind === "reply" || kind === "mention" || (note && note.mention)) return "reply";
+    if (kind === "follow" || kind === "follow_request" || kind === "follow_accept") return "user";
+    if (kind === "live") return "mic";
+    return "bellOn";
+  }
+
+  function noteRow(note, unreadIds) {
+    if (!note) return "";
+    const unread = !!(unreadIds && unreadIds[note.id]);
+    const when = noteWhen(note);
+    const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
     const partial = note.partial ? `<p class="note-partial">${esc(tr("Partial. Replies on recent public posts, not X's mention inbox."))}</p>` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${partial}${image}</div></div></a></article>`;
+    const text = (note.text || note.partial) ? `<div class="note-copy">${noteBody(note)}${partial}</div>` : "";
+    return `<article class="note-row${unread ? " is-unread" : ""}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a></article>`;
   }
 
   function notesSignedIn() {
@@ -11441,12 +11502,22 @@ const here = parseRoute();
     }
   }
 
-  function notesListHtml(notes, active, current) {
+  function notesListHtml(notes, active, current, unreadIds) {
     if (notes.length) {
       const rows = [];
+      let grouped = false;
       notes.forEach((note) => {
         try {
-          const row = noteRow(note);
+          const post = !note || !note.kind || note.kind === "post";
+          if (post) {
+            if (!grouped) {
+              const row = postGroupRow(notes.filter((item) => item && (!item.kind || item.kind === "post")), unreadIds);
+              if (row) rows.push(row);
+              grouped = true;
+            }
+            return;
+          }
+          const row = noteRow(note, unreadIds);
           if (row) rows.push(row);
         } catch (err) { /* one bad row does not blank the list */ }
       });
@@ -11457,19 +11528,53 @@ const here = parseRoute();
     return notesEmpty(active, current);
   }
 
+  function viewerFace() {
+    const mine = signedAccount();
+    if (!mine) return `<span class="ava initials">Y</span>`;
+    if (mine.avatar) return avatar(mine.avatar, mine.displayName || mine.handle || "");
+    return `<span class="ava initials">${initials(mine.displayName || mine.handle || "Y")}</span>`;
+  }
+
+  function noteMainTab(id, label, on, withBell) {
+    const bell = withBell ? `<span class="tab-bell">${icon("bell")}</span>` : "";
+    return `<button class="tab${on ? " on" : ""}" type="button" data-act="note-tab" data-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${bell}${esc(label)}</span></button>`;
+  }
+
+  function noteGearMenu(active) {
+    if (!STATE.noteGear) return "";
+    const extras = visibleNoteTabs().filter((tab) => tab.kind !== "verified" && tab.kind !== "mentions");
+    const filters = extras.map((tab) => {
+      const on = active === tab.id;
+      return `<button class="bell-choice" type="button" data-act="note-tab" data-tab="${esc(tab.id)}" role="menuitemradio" aria-checked="${on ? "true" : "false"}"><span class="bell-choice-label">${esc(noteTabLabel(tab))}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
+    }).join("");
+    const filterBlock = filters ? `<div class="tab-menu-label">${esc(tr("Notification filters"))}</div>${filters}` : "";
+    return `<div class="bell-sheet" data-act="close-note-gear"><div class="menu bell-menu note-gear-menu" data-act="stop" role="menu" aria-label="${esc(tr("Notification options"))}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="note-mark-all"><span class="bell-choice-label">${esc(tr("Mark all as read"))}</span></button><a class="bell-choice" href="#/settings/notifications"><span class="bell-choice-label">${esc(tr("Notifications"))}</span></a><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-label">${esc(tr("Manage tabs"))}</span></button>${filterBlock}</div></div>`;
+  }
+
   function notificationsView(route) {
     ensureNotesLoad();
     const active = settleNoteTab(route || parseRoute());
-    markNoteTabRead(active);
-    const tabs = visibleNoteTabs();
     const current = active === "all" ? null : noteTabById(active);
     const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
-    const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
-    const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
-    const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
+    /* Marking the tab read happens in this same paint. Keep the ids that were
+       unread when they appeared so the row stays highlighted for this visit. */
+    if (!STATE.noteUnreadPaint || STATE.noteUnreadPaint.tab !== active) STATE.noteUnreadPaint = { tab: active, ids: {} };
+    const unreadIds = STATE.noteUnreadPaint.ids;
+    notes.forEach((note) => {
+      if (note && note.id && !note.read) unreadIds[note.id] = true;
+    });
+    const showDot = Object.keys(unreadIds).length > 0;
+    markNoteTabRead(active);
+    const buttons = noteMainTab("all", tr("All"), active === "all", active === "all")
+      + noteMainTab("mentions", tr("Mentions"), active === "mentions", false)
+      + noteMainTab("verified", tr("Note tab verified"), active === "verified", false);
+    const bar = `<div class="tabs-bar notes-tabs"><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div></div>`;
+    const dot = showDot ? `<span class="ava-dot" aria-hidden="true"></span>` : "";
+    const gearOpen = !!STATE.noteGear;
+    const gear = `<button class="icon-btn note-gear" type="button" data-act="note-gear" aria-label="${esc(tr("Notification options"))}" aria-haspopup="menu" aria-expanded="${gearOpen ? "true" : "false"}">${menuIcon("gear")}</button>`;
+    const head = `<div class="topbar tall notes-top"><div class="notes-bar"><button class="m-ava" type="button" data-act="drawer" aria-label="${tr("Menu")}">${viewerFace()}${dot}</button><h1>${tr("Notifications")}</h1>${gear}</div>${bar}</div>`;
     const xBanner = window.ViktorychXCompose && window.ViktorychXCompose.mentionsBanner ? window.ViktorychXCompose.mentionsBanner() : "";
-    return head + xBanner + notesListHtml(notes, active, current);
+    return head + xBanner + notesListHtml(notes, active, current, unreadIds) + noteGearMenu(active);
   }
 
   function openFeedTabEditor(id, presetFeed) {
@@ -11983,16 +12088,85 @@ const here = parseRoute();
     </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
+  function drawerRow(href, glyph, label, extra) {
+    const mark = glyph === "gear" ? menuIcon("gear") : icon(glyph);
+    return `<a class="drawer-row" href="${esc(href)}"><span class="drawer-ico">${mark}</span><span class="drawer-label">${esc(label)}</span>${extra || ""}</a>`;
+  }
+
+  function drawerProfileHref() {
+    const mine = signedAccount();
+    if (mine && mine.handle && !mine.profileLess) return "#/@" + encodeURIComponent(mine.handle);
+    return "";
+  }
+
+  function drawerSpacesHref() {
+    const models = window.Spaces && window.Spaces.models ? window.Spaces.models() : [];
+    const first = (models || []).find((item) => item && item.href);
+    return first && first.href ? first.href : "#/spaces";
+  }
+
+  function drawerRequestsHref() {
+    const href = drawerProfileHref();
+    return href ? href + "/requests" : "#/settings";
+  }
+
+  function drawerSheet() {
+    const sheet = STATE.drawerSheet;
+    if (sheet !== "more" && sheet !== "accounts") return "";
+    const mine = signedAccount();
+    if (sheet === "accounts") {
+      const current = mine
+        ? `<div class="drawer-pop-current"><b>${esc(mine.displayName || mine.handle || "")}</b><span>${esc(mine.profileLess ? tr("Profile-less account") : "@" + (mine.handle || ""))}</span></div>`
+        : "";
+      return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Accounts"))}">${current}<button type="button" data-acct="login">${esc(tr("Add account"))}</button></div>`;
+    }
+    const status = mine ? `<button type="button" data-acct="presence-open">${esc(tr("Set a status"))}</button>` : "";
+    const leave = mine ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>` : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+    return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Account menu"))}">${status}${leave}</div>`;
+  }
+
+  function drawerExtraRows() {
+    const ids = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
+    const rows = ids.map((id) => {
+      const def = navItemDef(id);
+      if (!def) return "";
+      if (def.visible && !def.visible()) return "";
+      return drawerRow(def.href, def.icon, navChoiceLabel(def));
+    }).join("");
+    const music = parseRoute().name === "music" && window.SIntelMusic && window.SIntelMusic.drawerLinks
+      ? window.SIntelMusic.drawerLinks(icon)
+      : "";
+    const install = isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${esc(tr("Install app"))}</button>`;
+    return rows + music + install;
+  }
+
   function drawer() {
     if (!STATE.drawer) return "";
-    const music = parseRoute().name === "music" && window.SIntelMusic;
-    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().filter((def) => def.id !== "games" && def.id !== "music").map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
-    const menuLinks = `<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
-    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
-      ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
-      ${links}
-      ${menuLinks}
-      ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${tr("Install app")}</button>`}
+    const head = (window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead())
+      || `<div class="drawer-id"><div class="drawer-id-top"><button class="drawer-ava" type="button" data-acct="login" aria-label="${esc(tr("Sign in"))}"><span class="ava initials">?</span></button></div><button class="drawer-name" type="button" data-acct="login"><b>${esc(tr("Sign in"))}</b></button><div class="drawer-handle">${esc(tr("Not signed in"))}</div></div>`;
+    const profile = drawerProfileHref() || "#/settings";
+    const premium = `<span class="drawer-pill">${esc(tr("New"))}</span>`;
+    const open = !!STATE.drawerFold;
+    const rows = drawerRow(profile, "user", tr("Profile"))
+      + drawerRow("#/settings", "check", tr("Premium"), premium)
+      + drawerRow("#/communities", "communities", tr("Communities"))
+      + drawerRow("#/bookmarks", "bookmark", tr("Bookmarks"))
+      + drawerRow("#/lists", "lists", tr("Lists"))
+      + drawerRow(drawerSpacesHref(), "mic", tr("Spaces"))
+      + drawerRow(drawerRequestsHref(), "user", tr("Follow requests"))
+      + drawerRow("#/feeds", "spark", tr("Creator Studio"))
+      + `<div class="drawer-rule"></div>`
+      + drawerRow("#/settings", "gear", tr("Settings and privacy"))
+      + drawerRow("#/settings/resources", "help", tr("Help Center"));
+    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer drawer-x" data-act="stop">
+      ${head}
+      ${drawerSheet()}
+      <div class="drawer-scroll">
+        ${rows}
+        <button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button>
+        ${open ? `<div class="drawer-fold-body">${drawerExtraRows()}</div>` : ""}
+      </div>
+      <div class="drawer-foot"><button class="drawer-theme" type="button" data-act="explore-theme" aria-label="${esc(tr("Theme"))}">${icon("moon")}</button></div>
     </div></div>`;
   }
 
@@ -12264,7 +12438,7 @@ if (STATE.histClear) {
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
+    const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 106 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
@@ -13806,6 +13980,11 @@ if (STATE.histClear) {
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
+    if (route.name === "spaces" && !route.id) {
+      const models = window.Spaces && window.Spaces.models ? window.Spaces.models() : [];
+      const rows = (models || []).filter((item) => item && item.href).map((item) => `<a class="acct-row" href="${esc(item.href)}"><span class="who-copy"><span class="name">${esc(item.title || tr("Space"))}</span></span></a>`).join("");
+      return pageHead(tr("Spaces")) + (rows || emptyBlock(tr("No Spaces right now"), tr("Live audio shows up here.")));
+    }
     if (route.name === "spaces") return (window.Spaces && window.Spaces.page && window.Spaces.page(route)) || pageHead(tr("Space"), "", true) + emptyBlock(tr("This Space has ended"), tr("This Space isn’t available."));
     if (route.name === "connections") return connectionsView(route);
     if (route.name === "profile") return profileView(route);
@@ -14901,8 +15080,29 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       pullNotes();
       return;
     }
-    if (act === "drawer") { STATE.drawer = true; render(); return; }
-    if (act === "close-drawer") { STATE.drawer = false; render(); return; }
+    if (act === "drawer") { STATE.drawer = true; STATE.drawerSheet = ""; render(); return; }
+    if (act === "close-drawer") { STATE.drawer = false; STATE.drawerSheet = ""; render(); return; }
+    if (act === "drawer-more" || act === "drawer-accounts") {
+      const next = act === "drawer-more" ? "more" : "accounts";
+      STATE.drawerSheet = STATE.drawerSheet === next ? "" : next;
+      render();
+      return;
+    }
+    if (act === "drawer-fold") {
+      STATE.drawerFold = !STATE.drawerFold;
+      render();
+      return;
+    }
+    if (act === "note-gear") {
+      STATE.noteGear = !STATE.noteGear;
+      render();
+      return;
+    }
+    if (act === "close-note-gear") {
+      STATE.noteGear = false;
+      render();
+      return;
+    }
     if (act === "compose") {
       STATE.composeVia = "app";
       STATE.modal = "compose";
@@ -15317,6 +15517,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "manage-tabs") {
+      STATE.noteGear = false;
       STATE.tabMenu = null;
       STATE.tabScope = (!noteTabsSame() && parseRoute().name === "notifications") ? "notes" : "";
       STATE.modal = "tabs";
@@ -15706,6 +15907,8 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "note-mark-all") {
+      STATE.noteGear = false;
+      STATE.noteUnreadPaint = { tab: "all", ids: {} };
       markNoteTabRead("all");
       render();
       return;
@@ -15774,6 +15977,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const id = el.dataset.tab || "all";
       STATE.settings.lastNoteTab = id === "all" ? "all" : id;
       saveSettings();
+      STATE.noteGear = false;
       STATE.tabContext = null;
       goHash(id === "all" ? "#/notifications" : "#/notifications/" + encodeURIComponent(id));
       return;
@@ -16396,6 +16600,15 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     }
     if (actEl && actEl.dataset.act === "search-form" && actEl.tagName === "FORM") return;
     if (actEl) {
+      if (actEl.dataset.act === "stop") {
+        const acct = event.target.closest && event.target.closest(".drawer-pop [data-acct]");
+        if (acct) {
+          STATE.drawer = false;
+          STATE.drawerSheet = "";
+          const back = document.querySelector(".drawer-back");
+          if (back) back.remove();
+        }
+      }
       if (actEl.dataset.act !== "stop" && actEl.tagName !== "A") event.preventDefault();
       if (actEl.dataset.act !== "stop") event.stopPropagation();
       onAct(actEl);
@@ -16877,10 +17090,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
     }
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
       STATE.modal = null;
       STATE.composeVia = "";
       STATE.drawer = false;
+      STATE.drawerSheet = "";
+      STATE.noteGear = false;
       STATE.menu = null;
       STATE.share = null;
       STATE.groupMenu = null;
@@ -17271,6 +17486,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     scrollFreeze = true;
     STATE.modal = null;
     STATE.drawer = false;
+    STATE.drawerSheet = "";
+    STATE.noteGear = false;
+    if ((location.hash || "#/").indexOf("#/notifications") !== 0) STATE.noteUnreadPaint = null;
     STATE.menu = null;
     STATE.share = null;
     STATE.groupMenu = null;

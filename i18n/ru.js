@@ -1979,5 +1979,17 @@ SI18n.addPack("ru", {
   "Account unblocked": "Аккаунт разблокирован",
   "Account muted": "Аккаунт скрыт",
   "Account unmuted": "Аккаунт снова виден",
-  "Search mutuals": "Искать взаимные"
+  "Search mutuals": "Искать взаимные",
+  "Follower": "Подписчик",
+  "Premium": "Премиум",
+  "New": "Новое",
+  "Creator Studio": "Студия автора",
+  "Settings and privacy": "Настройки и конфиденциальность",
+  "Spaces": "Пространства",
+  "New post notifications for {name}": "Уведомления о новых постах {name}",
+  "New post notifications for {name} and {n} others": "Уведомления о новых постах {name} и ещё {n}",
+  "Notification filters": "Фильтры уведомлений",
+  "Notification options": "Параметры уведомлений",
+  "No Spaces right now": "Сейчас нет пространств",
+  "Live audio shows up here.": "Прямой эфир появится здесь."
 });

@@ -1979,5 +1979,17 @@ SI18n.addPack("es", {
   "Account unblocked": "Cuenta desbloqueada",
   "Account muted": "Cuenta silenciada",
   "Account unmuted": "Cuenta no silenciada",
-  "Search mutuals": "Buscar mutuos"
+  "Search mutuals": "Buscar mutuos",
+  "Follower": "Seguidor",
+  "Premium": "Premium",
+  "New": "Nuevo",
+  "Creator Studio": "Estudio de creadores",
+  "Settings and privacy": "Configuración y privacidad",
+  "Spaces": "Espacios",
+  "New post notifications for {name}": "Notificaciones de posts nuevos de {name}",
+  "New post notifications for {name} and {n} others": "Notificaciones de posts nuevos de {name} y {n} más",
+  "Notification filters": "Filtros de notificaciones",
+  "Notification options": "Opciones de notificaciones",
+  "No Spaces right now": "No hay Espacios ahora",
+  "Live audio shows up here.": "El audio en directo aparece aquí."
 });
