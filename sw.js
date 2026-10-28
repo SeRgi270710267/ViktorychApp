@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a63-__SW_VERSION__";
+const VERSION = "viktorych-a65-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-28T18:22:00Z-postpage
+// cache-bust: 2026-10-28T18:47:00Z-killswitch
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -200,7 +200,7 @@ const PRECACHE_TRIES = 4;
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a63-";
+  const prefix = "viktorych-a65-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -287,7 +287,7 @@ self.addEventListener("activate", (event) => {
     try {
       if (updateReporting) broadcastProgress({ step: "activate" }, true);
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC).map((key) => caches.delete(key)));
+      await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC && key !== PREFS_CACHE).map((key) => caches.delete(key)));
       try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
       if (updateReporting) broadcastProgress({ step: "clean" }, true);
     } catch (err) { /* a full disk must not leave the worker stuck activating */ }
@@ -1186,6 +1186,27 @@ async function pullOne(path, report, state, signal, cache) {
   throw last;
 }
 
+/* Home pills and Stories can be turned fully off in Settings. The page
+   writes the off list here, and the shell download skips those files so an
+   off feature costs no network at all. Turned back on, they load on demand. */
+const PREFS_CACHE = "viktorych-prefs";
+const FEATURE_FILES = {
+  homePills: ["./scores.js", "./scores.css", "./weather.js", "./weather.css", "./shared/pill-data.js"],
+  stories: ["./stories.js", "./stories.css"]
+};
+async function offFeatureFiles() {
+  try {
+    const cache = await caches.open(PREFS_CACHE);
+    const res = await cache.match("./__prefs/off.json");
+    const off = res ? await res.json() : [];
+    const out = [];
+    (Array.isArray(off) ? off : []).forEach((key) => { (FEATURE_FILES[key] || []).forEach((path) => out.push(path)); });
+    return out;
+  } catch (err) {
+    return [];
+  }
+}
+
 async function doPrecache(report, generation, signal) {
   // Download the whole shell into a staging cache. The live cache is
   // replaced only after every required file succeeds, so a client never
@@ -1193,7 +1214,8 @@ async function doPrecache(report, generation, signal) {
   const stagingName = SHELL + "-staging-" + generation;
   await caches.delete(stagingName);
   const cache = await caches.open(stagingName);
-  const files = SHELL_FILES.slice();
+  const skip = await offFeatureFiles();
+  const files = SHELL_FILES.filter((path) => skip.indexOf(path) < 0);
   const state = { files: 0, totalFiles: files.length, bytes: 0, totalBytes: 0 };
   let failed = null;
   // A single large file can sit in cache storage longer than the page's

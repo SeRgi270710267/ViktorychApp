@@ -2356,7 +2356,22 @@ SI18n.addPack("es", {
   "Picture of badges": "Imagen de las insignias",
   "Picture of installing the app": "Imagen de instalar la app",
   "Picture of Safari install steps": "Imagen de los pasos para instalar en Safari",
+  "Live pills row": "Fila de píldoras en vivo",
+  "Weather, scores and live spaces above the timeline. Off loads nothing for it.": "Clima, marcadores y espacios en vivo sobre la cronología. Si está desactivada, no se carga nada para ella.",
+  "The stories tray and viewer. Off loads nothing for it.": "La bandeja y el visor de historias. Si está desactivado, no se carga nada para ellos.",
   "Sort replies": "Ordenar respuestas",
   "Follow {handle}": "Seguir a {handle}",
-  "Unfollow {handle}": "Dejar de seguir a {handle}"
+  "Unfollow {handle}": "Dejar de seguir a {handle}",
+  "Lives": "En vivo",
+  "Telegram ingest": "Ingesta de Telegram",
+  "Pills data": "Datos de las píldoras",
+  "Server features": "Funciones del servidor",
+  "Could not save that setting.": "No se pudo guardar ese ajuste.",
+  "Shorts pages, TikTok live watching and its cron work.": "Páginas de Shorts, seguimiento de directos de TikTok y sus tareas programadas.",
+  "Story uploads, the story bar and expiry sweeps.": "Subida de historias, la barra de historias y la limpieza de caducadas.",
+  "Going live, the live row and live sweeps.": "Emitir en vivo, la fila de directos y su limpieza.",
+  "The Telegram bot webhook and media relay.": "El webhook del bot de Telegram y el reenvío de medios.",
+  "Weather and scores data for every visitor.": "Datos de tiempo y marcadores para cada visitante.",
+  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Solo el propietario. Apagado detiene la función para todos: sin tareas programadas, sus endpoints responden vacío y las apps no cargan nada de ella.",
+  "Turned off for everyone by the owner.": "Desactivado para todos por el propietario."
 });
