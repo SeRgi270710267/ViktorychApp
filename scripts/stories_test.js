@@ -115,7 +115,7 @@ Stories.applyBar("slim");
 assert.strictEqual(Stories.barState(), "slim");
 assert.strictEqual(Stories.trayExtra(), 52);
 Stories.applyBar("expanded");
-assert.strictEqual(Stories.trayExtra(), 204);
+assert.strictEqual(Stories.trayExtra(), 112);
 Stories.bind({
   icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
   follows() { return follows; },

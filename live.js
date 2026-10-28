@@ -86,28 +86,28 @@
   }
 
   function rowExtra() {
-    return 44;
+    return 0;
   }
 
   function homeHtml() {
-    return '<div class="live-row" data-live-row><button class="live-pill" type="button" data-act="go-live"><span class="live-dot" aria-hidden="true"></span><span>' + esc(tr("Go live")) + '</span></button></div>';
+    return "";
   }
 
   function rowInner() {
-    var go = '<button class="live-pill" type="button" data-act="go-live"><span class="live-dot" aria-hidden="true"></span><span>' + esc(tr("Go live")) + '</span></button>';
     var lives = state.lives.map(function (item) {
       var name = item.hostName || tr("Live");
       return '<button class="live-pill" type="button" data-act="live-open" data-id="' + esc(item.id) + '"><span class="live-dot" aria-hidden="true"></span><span class="live-name">' + esc(name) + '</span><span class="live-tag">' + esc(tr("Live")) + '</span></button>';
     }).join("");
-    return go + lives;
+    return lives;
   }
 
   function paintRow() {
     var node = document.querySelector("[data-live-row]");
     if (!node) return;
     if (node.getAttribute("data-stamp") === state.rowStamp) return;
-    node.innerHTML = rowInner();
-    node.hidden = false;
+    var html = rowInner();
+    node.innerHTML = html;
+    node.hidden = !html;
     node.setAttribute("aria-label", tr("Live"));
     node.setAttribute("data-stamp", state.rowStamp);
   }
