@@ -70,6 +70,9 @@ jobs:
       - name: Home tabs and pills
         run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/home_tabs_test.mjs
 
+      - name: Pill text fits inside the pill
+        run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/pill_fit_test.mjs
+
       - name: Drawer menu can be customized
         run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/drawer_menu_test.mjs
 

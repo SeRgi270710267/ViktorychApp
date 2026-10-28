@@ -134,9 +134,38 @@ async function check(page, label, reduced) {
     });
   }, { title: longPill, wantOff: reduced }, { timeout: 8000 });
   if (!reduced) {
-    await page.dispatchEvent(".sp-pill", "pointerdown");
-    const held = await page.evaluate(() => document.querySelector("[data-sp-marquee]").classList.contains("is-held"));
-    if (!held) fail(label + " marquee did not pause");
+    // A home rebuild can replace the row between a click and a later read.
+    // Put the long title back, press the visible space pill at its center,
+    // and read that pill's own marquee in the same turn.
+    try {
+      await page.waitForFunction((title) => {
+        document.querySelectorAll(".sp-pill .sp-marquee-text, .sc-pill .sp-marquee-text, .wx-pill .sp-marquee-text").forEach((node) => {
+          if ((node.textContent || "").length < 40) node.textContent = title;
+        });
+        const pills = [...document.querySelectorAll(".sp-pill")].filter((pill) => {
+          const box = pill.getBoundingClientRect();
+          const marquee = pill.querySelector("[data-sp-marquee]");
+          return box.width > 8 && box.height > 8 && marquee && marquee.classList.contains("is-on");
+        });
+        const pill = pills[0];
+        if (!pill) return false;
+        const box = pill.getBoundingClientRect();
+        pill.dispatchEvent(new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          clientX: box.left + box.width / 2,
+          clientY: box.top + box.height / 2,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true
+        }));
+        const marquee = pill.querySelector("[data-sp-marquee]");
+        return !!(marquee && marquee.classList.contains("is-held"));
+      }, longPill, { timeout: 4000 });
+    } catch (err) {
+      fail(label + " marquee did not pause");
+    }
   }
 }
 
