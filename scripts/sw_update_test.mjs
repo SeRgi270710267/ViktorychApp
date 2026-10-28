@@ -167,9 +167,8 @@ async function registrationState(page) {
     const go = document.getElementById("upd-go");
     const phase = root ? root.getAttribute("data-phase") || "" : "";
     const waiting = registration && registration.waiting;
-    if (waiting) {
-      try { waiting.postMessage({ type: "apply-update", fresh: false }); } catch (err) { /* the next poll can try again */ }
-    }
+    /* The new worker stays waiting for the whole download. A second
+       apply-update aborts that download, so this only reports state. */
     return {
       phase: phase,
       installing: !!(registration && registration.installing),
@@ -191,7 +190,7 @@ async function waitSha(page, expected) {
     if (nudged < 5 && Date.now() - start > 12000 && Date.now() - nudgedAt > 12000) {
       nudgedAt = Date.now();
       detail = await registrationState(page);
-      if (detail && (detail.failed || detail.waiting)) {
+      if (detail && detail.failed) {
         nudged += 1;
         await page.click("#upd-go").catch(() => {});
       }
