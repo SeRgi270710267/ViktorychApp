@@ -12928,12 +12928,27 @@ const here = parseRoute();
 
   function deviceSyncSwitches() {
     const accounts = window.ViktorychAccounts || {};
+    const reg = window.ViktorychSettingsSync;
     const shared = !(STATE.settings && STATE.settings.syncUi === false);
     const own = !!(accounts.deviceOwnUi && accounts.deviceOwnUi());
-    const sw = (act, on, label, note) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(note)}</p>`;
-    return `<h2>${esc(tr("Devices"))}</h2>` +
-      sw("sync-ui", shared, tr("Sync across my devices"), tr("Menu, sidebar and display choices follow your account on every device you sign in on.")) +
-      sw("device-own-ui", own, tr("Keep this device's own look"), tr("Only this device ignores synced menu and display choices."));
+    const sw = (act, on, label, note, extra) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"${extra || ""}><span>${esc(label)}</span><i></i></button>${note ? `<p class="phandle">${esc(note)}</p>` : ""}`;
+    let out = `<h2>${esc(tr("Devices"))}</h2>` +
+      sw("sync-ui", shared, tr("Sync across my devices"), tr("Your settings follow your account on every device you sign in on. Private ones are stored encrypted."));
+    if (!reg || !shared) return out;
+    out += `<h3 class="sync-local-title">${esc(tr("Keep on this device only"))}</h3><p class="phandle">${esc(tr("What you switch on here stays on this device and is not synced."))}</p>`;
+    reg.CATS.forEach((cat) => {
+      const on = cat.id === "look" ? own : reg.catLocal(cat.id);
+      out += sw(cat.id === "look" ? "device-own-ui" : "sync-cat-local", on, tr(cat.label), "", ` data-cat="${esc(cat.id)}"`);
+    });
+    out += `<details class="sync-keys"><summary>${esc(tr("Individual settings"))}</summary>`;
+    reg.CATS.forEach((cat) => {
+      const catOwn = cat.id === "look" ? own : reg.catLocal(cat.id);
+      cat.keys.forEach((row) => {
+        const on = catOwn || reg.keyLocal(row[0]);
+        out += sw("sync-key-local", on, tr(row[1]), "", ` data-key="${esc(row[0])}"${catOwn ? " disabled" : ""}`);
+      });
+    });
+    return out + "</details>";
   }
 
   function homeFeatureSwitch(key, label, note) {
@@ -13107,7 +13122,7 @@ const here = parseRoute();
         ${optToggle("privacyAntiFingerprint", tr("Fingerprint resistance"), tr("Reduces browser fingerprinting by disabling battery status and sensor enumeration APIs."), true)}
 
         <h2>${esc(tr("Mute and block"))}</h2>
-        <p class="phandle">${esc(tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
+        <p class="phandle">${esc(signedAccount() ? tr("Muted words, muted accounts, and reposts you turn off follow your account and are stored encrypted.") : tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
         <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
         ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
         <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
@@ -17185,6 +17200,15 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const on = STATE.settings.syncUi === false;
       STATE.settings.syncUi = on;
       STATE.settings.syncUiAt = Date.now();
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "sync-cat-local" || act === "sync-key-local") {
+      const reg = window.ViktorychSettingsSync;
+      if (!reg) return;
+      if (act === "sync-cat-local" && el.dataset.cat && reg.CATS.some((cat) => cat.id === el.dataset.cat)) reg.setCatLocal(el.dataset.cat, !reg.catLocal(el.dataset.cat));
+      if (act === "sync-key-local" && el.dataset.key && reg.CAT_OF[el.dataset.key]) reg.setKeyLocal(el.dataset.key, !reg.keyLocal(el.dataset.key));
       saveSettings();
       render();
       return;
@@ -23524,7 +23548,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs"].forEach((key) => {
+    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;

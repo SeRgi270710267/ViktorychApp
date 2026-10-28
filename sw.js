@@ -106,6 +106,7 @@ const SHELL_FILES = [
   "./badges.css",
   "./audience-ui.js",
   "./gifts.css",
+  "./settings-sync.js",
   "./accounts.js",
   "./passkeys.js",
   "./app-lock.js",
