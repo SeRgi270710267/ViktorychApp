@@ -1,5 +1,13 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("ru", {
+  "{count} votes": "Голосов: {count}",
+  "Edit post": "Изменить пост",
+  "Delete post": "Удалить пост",
+  "Delete this post?": "Удалить этот пост?",
+  "Post deleted": "Пост удалён",
+  "Could not save that.": "Не удалось сохранить.",
+  "Posts can be edited for an hour after they go out.": "Пост можно изменить в течение часа после публикации.",
+  "Sends when you’re back online.": "Отправится, когда появится сеть.",
   "Your settings follow your account on every device you sign in on. Private ones are stored encrypted.": "Ваши настройки следуют за аккаунтом на каждом устройстве, где вы входите. Личные хранятся в зашифрованном виде.",
   "Keep on this device only": "Только на этом устройстве",
   "What you switch on here stays on this device and is not synced.": "То, что вы включите здесь, остаётся на этом устройстве и не синхронизируется.",
