@@ -3690,8 +3690,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       try { el._ytPlayer.destroy(); } catch (err) {}
       el._ytPlayer = null;
     }
-    el.classList.remove("is-x-embed");
-    el.querySelectorAll("video, iframe, .html5-video-player, .vshield, .ytp-video-click-target, a.x-open").forEach((node) => node.remove());
+    el.classList.remove("is-x-embed", "is-official", "is-official-wait");
+    el.querySelectorAll("video, iframe, .html5-video-player, .vshield, .ytp-video-click-target, a.x-open, .vembed-tap, .vembed-fit").forEach((node) => {
+      if (node._fitStop) node._fitStop();
+      node.remove();
+    });
     const play = el.querySelector(":scope > .play");
     if (play && !el.classList.contains("is-failed")) play.hidden = false;
   }
@@ -4224,6 +4227,44 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     startPlayback(el, { muted: saved.muted, resume: saved.time });
   }
 
+  /* The other API hosts (the Render failover and any extra mirrors) run the
+     same Worker, so each one can fetch a video when the main relay fails. */
+  function backupApis(current) {
+    const bag = window.VIKTORYCH_ACCOUNTS || {};
+    const list = [].concat(Array.isArray(bag.apis) ? bag.apis : [], bag.api || [], bag.backupApi || []);
+    const now = String(current || "").replace(/\/$/, "");
+    const out = [];
+    list.forEach((raw) => {
+      const root = String(raw || "").replace(/\/$/, "");
+      if (root && /^https:\/\//.test(root) && root !== now && out.indexOf(root) < 0) out.push(root);
+    });
+    return out.slice(0, 2);
+  }
+
+  /* Last resort once every direct route failed: the platform's official
+     embed behind a tap-to-load placeholder, so it costs nothing until used. */
+  function officialFallback(el, post, media) {
+    const helper = window.ViktorychEmbed;
+    const embed = helper && helper.officialEmbed ? helper.officialEmbed(post, media) : null;
+    if (!embed || !embed.url || !helper.mountTapEmbed) return false;
+    showVideoCard(el, post, media);
+    const link = el.querySelector(".vfallback");
+    if (link) link.hidden = true;
+    const retry = el.querySelector(".vretry");
+    if (retry) retry.hidden = true;
+    el.classList.add("is-official-wait");
+    notePlay(el, "official-" + embed.site + "-wait");
+    helper.mountTapEmbed(el, embed, {
+      label: embed.site === "tiktok" ? tr("Play with the TikTok player") : tr("Play with the X player"),
+      title: (post && (post.title || post.text)) || tr("Video"),
+      onLoad: () => {
+        el.classList.remove("is-official-wait", "is-failed");
+        notePlay(el, "official-" + embed.site);
+      }
+    });
+    return true;
+  }
+
   function xPlaybackPlan(post, media) {
     const helper = window.ViktorychEmbed;
     if (!helper || !helper.xPlan || !helper.xRoute) return null;
@@ -4242,11 +4283,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       expired: oePast,
       route: (url) => {
         let relay = "";
+        let backups = [];
         try {
           const host = new URL(url).hostname;
           if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
+          if (/(^|\.)video\.twimg\.com$/i.test(host)) backups = backupApis(api).map((root) => root + "/v1/media?url=" + encodeURIComponent(url));
         } catch (err) { relay = ""; }
-        return helper.xRoute(url, {
+        const routed = helper.xRoute(url, {
           networkMode: mode,
           relay: relay,
           preferRelay: mode === "auto" && isRuVisitor(),
@@ -4256,6 +4299,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
             signals: dev.signals()
           }) : null
         });
+        if (routed && typeof routed === "object") routed.backups = backups;
+        return routed;
       }
     });
     if (!plan || (!plan.primary && !plan.embedUrl && !plan.openUrl)) return null;
@@ -4318,6 +4363,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       resume: opts.resume || 0,
       stallMs: helper.X_STALL_MS || 3000,
       linkLabel: tr("Open on X"),
+      tapToLoad: true,
+      tapLabel: tr("Play with the X player"),
+      refresh: () => xRefresh(post),
       title: (post && (post.title || post.text)) || tr("Video"),
       active: opts.active,
       onFrame: (video) => {
@@ -4449,6 +4497,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     const platform = (post && post.platform) || "";
     const can = platform === "vk" || platform === "instagram" || platform === "threads" || platform === "x";
+    const lastResort = () => { if (!officialFallback(el, post, media)) showVideoCard(el, post, media); };
     if (!can || el._recovered) {
       const tgKey = socialFileKey(post, media);
       const tgUrl = tgKey ? tgMediaUrl(tgKey) : "";
@@ -4458,13 +4507,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         playSource(el, { kind: "hls", url: tgUrl + "/index.m3u8", telegram: true }, post, media, opts, gen, () => {
           playSource(el, { kind: "tg", url: tgUrl, telegram: true }, post, media, opts, gen, () => {
             notePlay(el, "no-source");
-            showVideoCard(el, post, media);
+            lastResort();
           });
         });
         return;
       }
       notePlay(el, "no-source");
-      showVideoCard(el, post, media);
+      lastResort();
       return;
     }
     el._recovered = 1;
@@ -4473,10 +4522,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const job = platform === "vk" ? vkRefresh(post, media) : platform === "x" ? xRefresh(post) : metaRefresh(post);
     job.then((fresh) => {
       if (el._gen !== gen) return;
-      if (!fresh || !fresh.url || !playableFile(fresh.url) || oePast(fresh.url)) { showVideoCard(el, post, media); return; }
+      if (!fresh || !fresh.url || !playableFile(fresh.url) || oePast(fresh.url)) { lastResort(); return; }
       const kind = /\.m3u8(\?|$)/i.test(fresh.url) ? "hls" : "mp4";
-      playSource(el, { kind: kind, url: fresh.url }, post, media, opts, gen, () => showVideoCard(el, post, media));
-    }).catch(() => { if (el._gen === gen) showVideoCard(el, post, media); });
+      playSource(el, { kind: kind, url: fresh.url }, post, media, opts, gen, lastResort);
+    }).catch(() => { if (el._gen === gen) lastResort(); });
   }
 
   function stopPlayback(el) {
