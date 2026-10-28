@@ -152,7 +152,17 @@ async function run(browser, origin, vp) {
   console.log("home features ok " + tag);
 }
 
+function staticChecks() {
+  const sw = fs.readFileSync(path.join(root, "sw.js"), "utf8");
+  if (!sw.includes("const skip = await offFeatureFiles();") || !sw.includes("SHELL_FILES.filter((path) => skip.indexOf(path) < 0)")) fail("the service worker shell download skips off features");
+  if (!sw.includes("key !== PREFS_CACHE")) fail("activation keeps the feature prefs cache");
+  for (const file of ["./scores.js", "./weather.js", "./stories.js", "./shared/pill-data.js"]) {
+    if (!sw.includes('"' + file + '"')) fail("the service worker knows " + file);
+  }
+}
+
 async function main() {
+  staticChecks();
   const chromium = await loadPlaywright();
   const server = await startServer();
   const origin = "http://127.0.0.1:" + server.address().port;

@@ -8177,13 +8177,21 @@ const here = parseRoute();
     // Before settings load (or for an old settings blob) the boot flag decides.
     try { return localStorage.getItem(HOME_FEATURE_FLAGS[key]) !== "1"; } catch (err) { return true; }
   }
+  let featureOffSent = null;
   function syncFeatureFlags() {
+    const off = [];
     Object.keys(HOME_FEATURE_FLAGS).forEach((key) => {
+      if (!featureOn(key)) off.push(key);
       try {
         if (featureOn(key)) localStorage.removeItem(HOME_FEATURE_FLAGS[key]);
         else localStorage.setItem(HOME_FEATURE_FLAGS[key], "1");
       } catch (err) { /* storage blocked */ }
     });
+    // The service worker reads this list so its shell download skips off features too.
+    const body = JSON.stringify(off);
+    if (body === featureOffSent || !window.caches) return;
+    featureOffSent = body;
+    caches.open("viktorych-prefs").then((cache) => cache.put("./__prefs/off.json", new Response(body, { headers: { "content-type": "application/json" } }))).catch(() => {});
   }
   function featureLoaded(key) {
     return key === "stories" ? !!window.Stories : !!(window.WeatherPills || window.SoccerScores);
