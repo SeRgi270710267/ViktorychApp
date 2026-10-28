@@ -28,6 +28,7 @@ UI_FILES = (
     "index.html",
     "404.html",
     "about-ui.js",
+    "gifts-ui.js",
     "accounts.js",
     "passkeys.js",
     "app-lock.js",

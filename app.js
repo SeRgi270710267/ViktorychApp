@@ -6840,7 +6840,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
-        <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
+        <div class="composer-bar"><button class="reply-send" type="button" data-gift="reply" data-parent="${esc((post && post.id) || "")}" data-handle="${esc((post && post.handle) || "")}">${tr("Send a gift")}</button><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
   }
@@ -6863,6 +6863,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         </div>
       </div>
     </article>`;
+  }
+
+  function giftChip(post) {
+    const gift = post && post.gift;
+    if (!gift) return "";
+    const who = gift.sender ? (gift.sender.name || gift.sender.handle || "") : tr("Anonymous gift");
+    const art = gift.svg ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${esc(gift.svg)}"/></svg>` : "";
+    return `<div class="gift-attach"><span class="gift-art">${art}</span><b>${esc(who)}</b>${gift.message ? `<p>${esc(gift.message)}</p>` : ""}</div>`;
   }
 
   function pollHtml(post) {
@@ -6959,7 +6967,8 @@ const here = parseRoute();
     const forYouItem = here.name === "home" && (here.tab || "foryou") === "foryou"
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
+    const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -7001,6 +7010,7 @@ const here = parseRoute();
           ${mediaHtml(post.media, eager, post)}
           ${postCards(post)}
           ${quoteCard(post.quoted)}
+          ${giftChip(post)}
           ${threadLink}
           ${actionBar(post)}
         </div>
@@ -7073,6 +7083,8 @@ const here = parseRoute();
       return { name: "shorts", live: live, livePane: livePane, query };
     }
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
+    if (parts[0] === "points") return { name: "points", query };
+    if (parts[0] === "store") return { name: "store", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
@@ -11685,6 +11697,8 @@ const here = parseRoute();
     if (kind === "follow_request") return tr("{name} requested to follow you", { name: who });
     if (kind === "follow_accept") return tr("{name} accepted your follow request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
+    if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
+    if (kind === "gift") return tr("{name} sent you a gift", { name: who });
     if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
     if (kind === "birthday_self") return tr("Happy birthday");
     return tr("New post notifications for @{handle}", { handle: who });
@@ -11764,7 +11778,8 @@ const here = parseRoute();
     const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
     const partial = note.partial ? `<p class="note-partial">${esc(tr("Partial. Replies on recent public posts, not X's mention inbox."))}</p>` : "";
     const text = (note.text || note.partial) ? `<div class="note-copy">${noteBody(note)}${partial}</div>` : "";
-    return `<article class="note-row${unread ? " is-unread" : ""}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a></article>`;
+    const birthday = window.ProfileGifts && window.ProfileGifts.noteAction ? window.ProfileGifts.noteAction(note) : "";
+    return `<article class="note-row${unread ? " is-unread" : ""}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a>${birthday}</article>`;
   }
 
   function notesSignedIn() {
@@ -12388,7 +12403,7 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["profile", "premium", "communities", "bookmarks", "lists", "spaces", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
@@ -12550,6 +12565,7 @@ const here = parseRoute();
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
     if (id === "bookmarks") return { id: id, href: "#/bookmarks", icon: "bookmark", label: tr("Bookmarks") };
+    if (id === "points") return { id: id, href: "#/points", icon: "spark", label: tr("Viktorychs"), extra: `<span class="points-pill" data-points-balance></span>` };
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
     if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Follow requests") };
@@ -14497,6 +14513,8 @@ if (STATE.histClear) {
       if (!window.ViktorychVault) { ensureLazy("vault"); return lazySkeleton(tr("Vault")); }
       return pageHead(tr("Vault")) + emptyBlock(tr("Vault"), tr("Reload the page."));
     }
+    if (route.name === "points" && window.ProfileGifts) return window.ProfileGifts.pointsPage();
+    if (route.name === "store" && window.ProfileGifts) return window.ProfileGifts.storePage();
     if (route.name === "games") {
       if (window.ViktorychGames && window.ViktorychGames.page(route)) return window.ViktorychGames.page(route);
       ensureLazy("games");
@@ -14551,8 +14569,8 @@ if (STATE.histClear) {
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
-    if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
-    if (route.name === "messages") return notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
+    if (route.name === "messages" && window.FeedsDiscord) return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + window.FeedsDiscord.page(route);
+    if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
     return homeView({ tab: "foryou", query: new URLSearchParams() });
   }
@@ -15272,7 +15290,7 @@ if (STATE.histClear) {
       /* The shell swap used to throw away every horizontal row. Tab rows are
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
-      commitApp(shell(view(route), route));
+      commitApp(shell(view(route), route) + (window.ProfileGifts && window.ProfileGifts.overlay ? window.ProfileGifts.overlay() : ""));
       paintProfileChrome();
       schedulePublicPosts();
       hydratePublicMedia();
@@ -21585,6 +21603,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyTheme();
     applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
+    if (window.AudienceLists) {
+      window.AudienceLists.bind({
+        token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
+        api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+        render: render
+      });
+    }
+    if (window.ProfileGifts) {
+      window.ProfileGifts.onReply = function (parentId, post) {
+        const key = String(parentId || "");
+        const bucket = STATE.replies[key] || (STATE.replies[key] = { replies: [], loading: false });
+        bucket.replies = (bucket.replies || []).filter((item) => item && item.id !== post.id).concat([post]);
+        render();
+      };
+      window.ProfileGifts.start();
+    }
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     setTimeout(() => { loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {}); }, 8000);
     const snap = loadTimelineSnap();

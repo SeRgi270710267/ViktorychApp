@@ -42,6 +42,7 @@ import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
+import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
 import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
@@ -235,7 +236,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -613,6 +614,8 @@ async function createAccount(env, request, fields) {
       now,
       fields.profileLess ? 1 : 0
     ).run();
+    try { await awardActivity(env, publicId, "signup", "signup"); }
+    catch (err) { /* the account exists even if the bonus ledger is late */ }
   } catch (err) {
     const message = String(err && err.message || err);
     if (/UNIQUE/i.test(message)) return { error: fields.owner ? "handle_taken" : "handle_taken" };
@@ -949,6 +952,10 @@ async function handleRepostPut(request, env) {
     } catch (err) { /* the quote text is still stored */ }
   }
   await commitBundled(env, statements, deliveries, request);
+  if (!existing) {
+    try { await awardActivity(env, row.public_id, "repost", cleaned.postKey); }
+    catch (err) { /* the repost is saved */ }
+  }
   await trimReposts(env, row.public_id);
   await invalidate(env, "p:" + row.public_id);
   return json(200, { ok: true, repost: { postKey: cleaned.postKey, kind: cleaned.kind, comment: cleaned.comment, createdAt: created, post: cleaned.post } });
@@ -962,6 +969,8 @@ async function handleRepostDelete(request, env) {
   const postKey = cleanRepostKey(body.postKey);
   if (!postKey) return json(400, { error: "bad_repost" });
   await env.DB.prepare("DELETE FROM account_reposts WHERE public_id = ? AND post_key = ?").bind(row.public_id, postKey).run();
+  try { await clawback(env, row.public_id, "repost", postKey); }
+  catch (err) { /* the repost is already removed */ }
   await invalidate(env, "p:" + row.public_id);
   return json(200, { ok: true });
 }
@@ -4627,6 +4636,10 @@ async function handleFollowPut(request, env) {
   if (!existing) {
     try { await notifyFollow(env, gate.row, id, request); }
     catch (err) { /* the follow is saved */ }
+    if (id.indexOf("app:") === 0 && /^\d{12}$/.test(id.slice(4))) {
+      try { await awardActivity(env, gate.row.public_id, "follow", id.slice(4)); }
+      catch (err) { /* the follow is saved */ }
+    }
   }
   return followWriteResult(env, gate.row.public_id, id, target.shown || id, true);
 }
@@ -4650,6 +4663,10 @@ async function handleFollowDelete(request, env) {
     await deleteOutgoingRequest(env, gate.row.public_id, account.public_id);
   }
   await env.DB.prepare("DELETE FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).run();
+  if (id.indexOf("app:") === 0 && /^\d{12}$/.test(id.slice(4))) {
+    try { await clawback(env, gate.row.public_id, "follow", id.slice(4)); }
+    catch (err) { /* the unfollow is saved */ }
+  }
   return followWriteResult(env, gate.row.public_id, id, shown, false);
 }
 
@@ -5216,6 +5233,10 @@ async function route(request, env, ctx) {
     const listed = await handleAudienceLists(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (listed) return listed;
   }
+  if (path === "/v1/points" || path.startsWith("/v1/points/") || path === "/v1/gifts" || path.startsWith("/v1/gifts/")) {
+    const paid = await handlePoints(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (paid) return paid;
+  }
   if (path === "/v1/highlights" || path.startsWith("/v1/highlights/")) {
     const shown = await handleHighlights(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (shown) return shown;
@@ -5271,6 +5292,7 @@ export default {
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
     if (new Date(at).getUTCMinutes() === 0) jobs.push(runBirthdaySweep(env, at));
     jobs.push(maybeBackupD1(env, at));
+    if (new Date(at).getUTCMinutes() === 0) jobs.push(awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") logError("cron", results[i].reason);

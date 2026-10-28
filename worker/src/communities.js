@@ -5,6 +5,7 @@ import { logError } from "./log.js";
 import { notifyCommunity, planNotification } from "./notifications.js";
 import { commitBundled, planMentions } from "./mention-store.js";
 import { blocksEither, hiddenAuthorSet } from "./social.js";
+import { awardActivity, clawback } from "./points.js";
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { visibleAvatarUrl } from "./profile-media.js";
 
@@ -388,6 +389,11 @@ async function setLike(request, env, row, json, readJson, rateHit, limited) {
   let createdLike = false;
   if (request.method === "DELETE") {
     await env.DB.prepare("DELETE FROM community_likes WHERE public_id = ? AND item_id = ?").bind(row.public_id, item).run();
+    const liked = await env.DB.prepare("SELECT author_id FROM community_posts WHERE id = ?").bind(item).first();
+    if (liked && liked.author_id && liked.author_id !== row.public_id) {
+      try { await clawback(env, liked.author_id, "like_in", row.public_id + ":" + item); }
+      catch (err) { /* the like is already removed */ }
+    }
   } else {
     const before = await env.DB.prepare("SELECT created_at FROM community_likes WHERE public_id = ? AND item_id = ?").bind(row.public_id, item).first();
     await env.DB.prepare("INSERT INTO community_likes (public_id, item_id, created_at) VALUES (?, ?, ?) ON CONFLICT(public_id, item_id) DO NOTHING").bind(row.public_id, item, Date.now()).run();
@@ -396,6 +402,8 @@ async function setLike(request, env, row, json, readJson, rateHit, limited) {
   if (createdLike && /^va_[a-f0-9]{16}$/.test(item)) {
     const liked = await env.DB.prepare("SELECT author_id FROM community_posts WHERE id = ? AND deleted_at = 0").bind(item).first();
     if (liked && liked.author_id && liked.author_id !== row.public_id) {
+      try { await awardActivity(env, liked.author_id, "like_in", row.public_id + ":" + item); }
+      catch (err) { /* the like is saved */ }
       const me = await env.DB.prepare("SELECT handle, display_name FROM accounts WHERE public_id = ?").bind(row.public_id).first();
       await notifyCommunity(env, {
         publicId: liked.author_id,
