@@ -178,6 +178,8 @@ async function main() {
     const { spawnSync } = await import("node:child_process");
     const home = spawnSync(process.execPath, [path.join(root, "scripts", "community_home_test.mjs")], { stdio: "inherit", env: process.env });
     if (home.status !== 0) fail("community home check failed");
+    const own = spawnSync(process.execPath, [path.join(root, "scripts", "own_post_test.mjs")], { stdio: "inherit", env: process.env });
+    if (own.status !== 0) fail("own post check failed");
   } finally {
     await browser.close();
     server.close();
