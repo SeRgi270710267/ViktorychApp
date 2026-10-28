@@ -72,7 +72,10 @@ const POST_COLUMNS = [
   "ALTER TABLE public_posts ADD COLUMN scheduled_at INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE public_post_media ADD COLUMN alt_text TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE public_post_media ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE public_posts ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0"
+  "ALTER TABLE public_posts ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0",
+  // A reply to a post from another platform keeps that post's reference and a
+  // snapshot, so Home, the profile and the thread can show it above the reply.
+  "ALTER TABLE public_posts ADD COLUMN ext_parent TEXT NOT NULL DEFAULT ''"
 ];
 
 export async function ensurePostColumns(env) {
@@ -230,6 +233,51 @@ async function readPostInput(request, deps) {
   return { fields: fields, file: files[0] || null, files: files };
 }
 
+const EXT_PLATFORMS = new Set(["x", "threads", "instagram", "reddit", "rss", "telegram", "youtube", "tiktok", "bluesky", "mastodon", "facebook", "vk", "discord", "web"]);
+function cleanText(value, max) {
+  return String(value == null ? "" : value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, max);
+}
+function cleanHttps(value) {
+  const text = String(value || "").trim();
+  return /^https:\/\/[^\s"'<>]{1,1500}$/i.test(text) ? text : "";
+}
+/* The parent of a reply to an outside post: where it lives and a small snapshot
+   (author, text, media) for when the original can't be fetched again. */
+export function cleanExtParent(raw) {
+  let doc = raw;
+  if (typeof doc === "string") {
+    if (!doc || doc.length > 8000) return null;
+    try { doc = JSON.parse(doc); } catch (err) { return null; }
+  }
+  if (!doc || typeof doc !== "object") return null;
+  const platform = cleanText(doc.platform, 20).toLowerCase();
+  const id = cleanText(doc.id, 200);
+  if (!EXT_PLATFORMS.has(platform) || !id) return null;
+  const media = (Array.isArray(doc.media) ? doc.media : []).slice(0, 4).map((item) => ({
+    type: item && item.type === "video" ? "video" : "photo",
+    url: cleanHttps(item && item.url),
+    poster: cleanHttps(item && item.poster)
+  })).filter((item) => item.url || item.poster);
+  return {
+    platform: platform,
+    id: id,
+    statusId: cleanText(doc.statusId, 120),
+    url: cleanHttps(doc.url),
+    handle: cleanText(doc.handle, 80).replace(/^@/, ""),
+    author: cleanText(doc.author, 120),
+    avatar: cleanHttps(doc.avatar),
+    text: cleanText(doc.text, 1500),
+    title: cleanText(doc.title, 300),
+    date: cleanText(doc.date, 40),
+    community: cleanText(doc.community, 80),
+    score: Number.isFinite(Number(doc.score)) ? Math.trunc(Number(doc.score)) : 0,
+    media: media
+  };
+}
+function readExtParent(text) {
+  return text ? cleanExtParent(text) : null;
+}
+
 export async function presentPost(env, request, row, viewerId) {
   const mediaRows = await env.DB.prepare("SELECT id, mime, size, alt_text, sort_order FROM public_post_media WHERE post_id = ? ORDER BY sort_order ASC, id ASC").bind(row.id).all();
   const media = ((mediaRows && mediaRows.results) || []).map((item) => ({
@@ -266,6 +314,7 @@ export async function presentPost(env, request, row, viewerId) {
     location: row.location || "",
     poll: poll,
     editedAt: Number(row.edited_at) || 0,
+    extParent: readExtParent(row.ext_parent),
     scheduledAt: Number(row.scheduled_at) || 0,
     gift: await giftForPost(env, row.id, viewerId || "")
   };
@@ -411,7 +460,7 @@ async function listPosts(request, env, deps) {
   // ?by=<public id> lists one account's posts for its profile, with the same rules.
   const author = new URL(request.url).searchParams.get("by") || "";
   if (author && !/^\d{12}$/.test(author)) return deps.json(400, { error: "bad_author" });
-  const select = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?)";
+  const select = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, p.ext_parent, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?)";
   const listed = author
     ? await env.DB.prepare(select + " AND p.author_id = ? ORDER BY p.created_at DESC LIMIT 60").bind(now, author).all()
     : await env.DB.prepare(select + " ORDER BY p.created_at DESC LIMIT 60").bind(now).all();
@@ -571,8 +620,9 @@ async function createPost(request, env, deps) {
   const when = cleanSchedule(input.fields.scheduledAt, now);
   const created = when || now;
   const audience = cleanAudience(input.fields.audience);
-  await env.DB.prepare("INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden, audience, reply_control, location, poll_json, scheduled_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)").bind(
-    id, session.public_id, body, parent, quote, created, audience, cleanReply(input.fields.replyControl), cleanLocation(input.fields.location), poll ? JSON.stringify(poll) : "", when
+  const ext = parent ? null : cleanExtParent(input.fields.extParent);
+  await env.DB.prepare("INSERT INTO public_posts (id, author_id, body, parent_id, quote_id, created_at, hidden, audience, reply_control, location, poll_json, scheduled_at, ext_parent) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)").bind(
+    id, session.public_id, body, parent, quote, created, audience, cleanReply(input.fields.replyControl), cleanLocation(input.fields.location), poll ? JSON.stringify(poll) : "", when, ext ? JSON.stringify(ext) : ""
   ).run();
   if (audience === "list") await setListGrants(env, session.public_id, "post", id, listIdsOf(input.fields));
   for (let i = 0; i < stored.length; i++) {
@@ -581,7 +631,7 @@ async function createPost(request, env, deps) {
       item.id, id, item.key, item.mime, item.size, item.alt, item.order
     ).run();
   }
-  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
+  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, p.ext_parent, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(id).first();
   try {
     await awardActivity(env, session.public_id, parent ? "comment" : "post", id);
     if (parentRow && parentRow.author_id && parentRow.author_id !== session.public_id) {
