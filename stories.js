@@ -12,7 +12,8 @@
   var VINE_MS = 6000;
   var SEEN_KEY = "rss-stories-seen-v1";
   var BAR_KEY = "viktorych-stories-bar-v1";
-  var BAR_H = { expanded: 168, slim: 52, hidden: 28 };
+  var BAR_H = { expanded: 204, slim: 52, hidden: 28 };
+  var ORG_KEY = "viktorych-story-org-v1";
   var NOTE_EMOJI = ["😀", "😂", "❤️", "🔥", "👏", "😮", "😢", "👍"];
   var REACTIONS = ["❤", "🔥", "👏", "😂", "😮", "😢"];
   var deps = {};
@@ -26,6 +27,8 @@
   var soundOn = false;
   var pickedFile = null;
   var notes = { mine: null, notes: [] };
+  var orgMenu = null;
+  var holdTimer = 0;
 
   function esc(value) {
     return String(value == null ? "" : value)
@@ -228,6 +231,150 @@
     }
   }
 
+  function emptyOrg() {
+    return { pins: [], hidden: [], folders: [], active: "", updatedAt: 0 };
+  }
+
+  function cleanOrg(raw) {
+    var org = emptyOrg();
+    if (!raw || typeof raw !== "object") return org;
+    var seen = {};
+    (raw.pins || []).forEach(function (id) {
+      id = String(id || "");
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      org.pins.push(id);
+    });
+    var hiddenSeen = {};
+    (raw.hidden || []).forEach(function (item) {
+      if (!item) return;
+      var id = String(item.id || item || "");
+      if (!id || hiddenSeen[id]) return;
+      hiddenSeen[id] = true;
+      org.hidden.push({
+        id: id,
+        name: item.name == null ? "" : String(item.name),
+        platform: item.platform == null ? "" : String(item.platform),
+        handle: item.handle == null ? "" : String(item.handle),
+        also: (item.also || []).map(function (key) { return String(key || ""); }).filter(Boolean)
+      });
+    });
+    var folderSeen = {};
+    (raw.folders || []).forEach(function (item) {
+      if (!item) return;
+      var id = String(item.id || "");
+      if (!id || folderSeen[id]) return;
+      folderSeen[id] = true;
+      var members = [];
+      var memberSeen = {};
+      (item.members || []).forEach(function (key) {
+        key = String(key || "");
+        if (!key || memberSeen[key]) return;
+        memberSeen[key] = true;
+        members.push(key);
+      });
+      org.folders.push({
+        id: id,
+        name: item.name == null ? "" : String(item.name),
+        icon: item.icon == null ? "" : String(item.icon),
+        members: members
+      });
+    });
+    var active = String(raw.active || "");
+    org.active = org.folders.some(function (folder) { return folder.id === active; }) ? active : "";
+    org.updatedAt = Math.max(0, Number(raw.updatedAt) || 0);
+    return org;
+  }
+
+  function readOrg() {
+    try { return cleanOrg(JSON.parse(localStorage.getItem(ORG_KEY) || "")); }
+    catch (err) { return emptyOrg(); }
+  }
+
+  function writeOrg(org) {
+    var next = cleanOrg(org);
+    next.updatedAt = Date.now();
+    try { localStorage.setItem(ORG_KEY, JSON.stringify(next)); } catch (err) { /* private mode */ }
+    var auth = token();
+    if (auth && deps.api) {
+      deps.api("/v1/story-bar", { method: "PUT", token: auth, body: next }).catch(function () {});
+    }
+    return next;
+  }
+
+  function sourceId(account) {
+    if (!account) return "";
+    return String(account.id || ((account.platform || "") + ":" + (account.handle || "")));
+  }
+
+  function hiddenMap(org) {
+    var map = {};
+    (org.hidden || []).forEach(function (row) {
+      if (!row) return;
+      map[row.id] = true;
+      (row.also || []).forEach(function (id) { map[id] = true; });
+      if (row.handle) map["note:" + row.handle] = true;
+      if (row.platform && row.handle) map[row.platform + ":" + row.handle] = true;
+    });
+    return map;
+  }
+
+  function activeMembers(org) {
+    var folder = null;
+    (org.folders || []).forEach(function (item) { if (item && item.id === org.active) folder = item; });
+    if (!folder) return null;
+    var map = {};
+    (folder.members || []).forEach(function (id) { map[id] = true; });
+    return map;
+  }
+
+  function matchesMember(id, handle, platform, members) {
+    if (!members) return true;
+    if (members[id]) return true;
+    if (handle && members["note:" + handle]) return true;
+    if (platform && handle && members[platform + ":" + handle]) return true;
+    return false;
+  }
+
+  function organize(list, org) {
+    org = cleanOrg(org || emptyOrg());
+    var hidden = hiddenMap(org);
+    var members = activeMembers(org);
+    var pinAt = {};
+    org.pins.forEach(function (id, index) { pinAt[id] = index; });
+    var pinned = [];
+    var rest = [];
+    (list || []).forEach(function (account) {
+      if (!account || account.self) return;
+      var id = sourceId(account);
+      if (hidden[id] || (account.handle && hidden["note:" + account.handle])) return;
+      if (!matchesMember(id, account.handle, account.platform, members)) return;
+      if (pinAt[id] != null) pinned.push(account);
+      else rest.push(account);
+    });
+    pinned.sort(function (a, b) { return pinAt[sourceId(a)] - pinAt[sourceId(b)]; });
+    return pinned.concat(rest);
+  }
+
+  function noteVisible(item, org) {
+    if (!item) return false;
+    var hidden = hiddenMap(org);
+    var id = "note:" + String(item.handle || "");
+    if (hidden[id] || hidden[item.handle || ""]) return false;
+    return matchesMember(id, item.handle, "app", activeMembers(org));
+  }
+
+  function keysFor(id, handle, platform) {
+    var keys = [];
+    var seen = {};
+    [id, handle ? "note:" + handle : "", platform && handle ? platform + ":" + handle : ""].forEach(function (key) {
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      keys.push(key);
+    });
+    return keys;
+  }
+
   function cycleBar(dir) {
     var order = ["hidden", "slim", "expanded"];
     var at = order.indexOf(barState());
@@ -247,13 +394,20 @@
     return '<img src="' + esc(account.avatar) + '" alt="" loading="lazy" referrerpolicy="no-referrer">';
   }
 
+  function orgButton(id, name, handle, platform) {
+    return '<button type="button" class="story-org" data-story-act="org-menu" data-id="' + esc(id) + '" data-name="' + esc(name || "") + '" data-handle="' + esc(handle || "") + '" data-platform="' + esc(platform || "") + '" aria-label="' + esc(tr("Story options")) + '">⋯</button>';
+  }
+
   function cardHtml(account) {
     var seen = readSeen();
     var fresh = unseen(account, seen);
     var label = (account.name || account.handle || tr("Story")) + (fresh ? tr(", unseen story") : tr(", story"));
-    return '<button type="button" class="story-card' + (fresh ? " unseen" : " seen") + '" role="listitem" data-act="story" data-id="' + esc(account.id) + '" aria-label="' + esc(label) + '">' +
-      '<span class="story-ring"><span class="story-face">' + face(account) + "</span>" + badge(account.platform) + "</span>" +
-      '<span class="story-name">' + esc(account.name || account.handle || "") + "</span></button>";
+    var pinned = readOrg().pins.indexOf(account.id) >= 0;
+    return '<div class="story-card' + (fresh ? " unseen" : " seen") + (pinned ? " is-pinned" : "") + '" role="listitem">' +
+      '<button type="button" class="story-main" data-act="story" data-id="' + esc(account.id) + '" aria-label="' + esc(label) + '">' +
+      '<span class="story-ring"><span class="story-face">' + face(account) + "</span>" + badge(account.platform) + "</span></button>" +
+      orgButton(account.id, account.name || account.handle, account.handle, account.platform) +
+      '<span class="story-name">' + esc(account.name || account.handle || "") + "</span></div>";
   }
 
   function selfHtml(account) {
@@ -279,19 +433,21 @@
   function homeTray() {
     var all = rows();
     var mine = selfRow(all);
-    var list = all.filter(function (account) {
+    var list = organize(all.filter(function (account) {
       if (!account) return false;
       if (account.self) return false;
       if (mine && account.id === mine.id) return false;
       return true;
-    });
+    }), readOrg());
     var connect = showConnect();
-    if (!list.length && !mine && !connect) return "";
+    if (!list.length && !mine && !connect && !viewerAccount()) return "";
     var state = barState();
     var noteCards = noteCardsHtml();
     var cards = noteCards + (mine ? selfHtml(mine) : "") + (connect ? connectHtml() : "") + list.map(cardHtml).join("");
     return '<div class="story-shell" data-state="' + state + '">' +
+      folderBarHtml() +
       '<div class="story-tray" role="list" aria-label="' + esc(tr("Stories")) + '">' + cards + "</div>" +
+      orgMenuHtml() +
       '<button type="button" class="story-fold" data-story-act="fold" aria-label="' + esc(tr("Collapse stories")) + '" aria-expanded="' + (state === "expanded" ? "true" : "false") + '">' +
       (deps.icon ? deps.icon("chevL") : "") + "</button>" +
       '<button type="button" class="story-peek" data-story-act="expand" aria-label="' + esc(tr("Show stories")) + '">' + esc(tr("Stories")) + "</button></div>";
@@ -299,9 +455,20 @@
 
   function noteCardsHtml() {
     if (!viewerAccount()) return "";
+    var org = readOrg();
     var mine = notes && notes.mine;
-    var others = (notes && notes.notes) || [];
-    return noteSlotHtml(mine, true) + others.map(function (item) { return noteSlotHtml(item, false); }).join("");
+    var others = ((notes && notes.notes) || []).filter(function (item) { return noteVisible(item, org); });
+    var pinAt = {};
+    org.pins.forEach(function (id, index) { pinAt[id] = index; });
+    var pinned = [];
+    var rest = [];
+    others.forEach(function (item) {
+      var id = "note:" + String(item.handle || "");
+      if (pinAt[id] != null) pinned.push(item);
+      else rest.push(item);
+    });
+    pinned.sort(function (a, b) { return pinAt["note:" + a.handle] - pinAt["note:" + b.handle]; });
+    return noteSlotHtml(mine, true) + pinned.concat(rest).map(function (item) { return noteSlotHtml(item, false); }).join("");
   }
 
   function noteSlotHtml(item, mine) {
@@ -320,11 +487,45 @@
     };
     var label = mine ? tr("Your note") : (item.name || item.handle || "");
     var handle = mine ? "self" : (item.handle || "");
+    var source = mine ? "" : "note:" + String(item.handle || "");
+    var menu = mine ? "" : orgButton(source, item.name || item.handle, item.handle, "app");
     return '<div class="story-card note-slot" role="listitem">' +
       '<button type="button" class="note-bubble' + (mine && !text ? " is-prompt" : "") + '" data-story-act="note" data-handle="' + esc(handle) + '">' + esc(bubble) + "</button>" +
       '<button type="button" class="story-main" data-story-act="note" data-handle="' + esc(handle) + '" aria-label="' + esc(label) + '">' +
       '<span class="story-ring"><span class="story-face">' + face(faceAccount) + "</span></span></button>" +
+      menu +
       '<span class="story-name">' + esc(label) + "</span></div>";
+  }
+
+  function folderBarHtml() {
+    var org = readOrg();
+    var chips = org.folders.map(function (folder) {
+      var on = org.active === folder.id;
+      var title = (folder.icon ? folder.icon + " " : "") + folder.name;
+      return '<button type="button" class="story-folder' + (on ? " on" : "") + '" data-story-act="folder-pick" data-id="' + esc(folder.id) + '" title="' + esc(title) + '">' +
+        (folder.icon ? '<span class="story-folder-icon">' + esc(folder.icon) + "</span>" : "") +
+        '<span>' + esc(folder.name) + "</span></button>";
+    }).join("");
+    var hidden = org.hidden.length ? '<button type="button" class="story-folder" data-story-act="hidden-open">' + esc(tr("Hidden stories")) + "</button>" : "";
+    return '<div class="story-folders" role="tablist" aria-label="' + esc(tr("Story folders")) + '">' +
+      '<button type="button" class="story-folder' + (!org.active ? " on" : "") + '" data-story-act="folder-pick" data-id="">' + esc(tr("All")) + "</button>" +
+      chips + hidden +
+      '<button type="button" class="story-folder" data-story-act="folder-new" aria-label="' + esc(tr("New folder")) + '">+</button></div>';
+  }
+
+  function orgMenuHtml() {
+    if (!orgMenu) return "";
+    var org = readOrg();
+    var pinned = org.pins.indexOf(orgMenu.id) >= 0;
+    var pin = pinned
+      ? '<button type="button" data-story-act="unpin">' + esc(tr("Unpin")) + "</button>" +
+        '<button type="button" data-story-act="pin-up">' + esc(tr("Move earlier")) + "</button>" +
+        '<button type="button" data-story-act="pin-down">' + esc(tr("Move later")) + "</button>"
+      : '<button type="button" data-story-act="pin">' + esc(tr("Pin")) + "</button>";
+    return '<div class="story-org-menu" role="menu" data-act="stop">' + pin +
+      '<button type="button" data-story-act="hide-source">' + esc(tr("Hide stories")) + "</button>" +
+      '<button type="button" data-story-act="folder-add">' + esc(tr("Add to folder")) + "</button>" +
+      '<button type="button" data-story-act="org-close">' + esc(tr("Close")) + "</button></div>";
   }
 
   function ago(iso) {
@@ -800,9 +1001,20 @@
     if (!event.target.closest || !event.target.closest(".story-shell")) return;
     if (event.target.closest("#stories")) return;
     shellPointer = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    var card = event.target.closest(".story-card, .note-slot");
+    if (!card || card.classList.contains("story-self") || card.classList.contains("story-connect")) return;
+    var button = card.querySelector("[data-story-act='org-menu']");
+    if (!button) return;
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = setTimeout(function () {
+      holdTimer = 0;
+      suppressClick = true;
+      openOrgMenu(button);
+    }, 500);
   }
 
   function onShellUp(event) {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
     if (!shellPointer || shellPointer.id !== event.pointerId) return;
     var dx = event.clientX - shellPointer.x;
     var dy = event.clientY - shellPointer.y;
@@ -824,6 +1036,52 @@
     var name = act.getAttribute("data-story-act");
     if (name === "fold") { event.preventDefault(); event.stopPropagation(); cycleBar(-1); return; }
     if (name === "expand") { event.preventDefault(); event.stopPropagation(); applyBar("expanded"); return; }
+    if (name === "org-menu") {
+      event.preventDefault();
+      event.stopPropagation();
+      openOrgMenu(act);
+      return;
+    }
+    if (name === "org-close") { event.preventDefault(); event.stopPropagation(); orgMenu = null; paintOrg(); return; }
+    if (name === "pin" || name === "unpin" || name === "pin-up" || name === "pin-down") {
+      event.preventDefault();
+      event.stopPropagation();
+      changePin(name);
+      return;
+    }
+    if (name === "hide-source") { event.preventDefault(); event.stopPropagation(); hideCurrent(); return; }
+    if (name === "unhide") {
+      event.preventDefault();
+      event.stopPropagation();
+      unhide(act.getAttribute("data-id") || "");
+      return;
+    }
+    if (name === "folder-pick") {
+      event.preventDefault();
+      event.stopPropagation();
+      var orgPick = readOrg();
+      orgPick.active = act.getAttribute("data-id") || "";
+      writeOrg(orgPick);
+      paintOrg();
+      return;
+    }
+    if (name === "folder-new") { event.preventDefault(); event.stopPropagation(); openFolderSheet(""); return; }
+    if (name === "folder-save") { event.preventDefault(); event.stopPropagation(); saveFolderSheet(); return; }
+    if (name === "folder-delete") { event.preventDefault(); event.stopPropagation(); deleteFolder(act.getAttribute("data-id") || ""); return; }
+    if (name === "folder-left" || name === "folder-right") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveFolder(act.getAttribute("data-id") || "", name === "folder-left" ? -1 : 1);
+      return;
+    }
+    if (name === "folder-add") { event.preventDefault(); event.stopPropagation(); openFolderAdd(); return; }
+    if (name === "folder-member") {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleFolderMember(act.getAttribute("data-id") || "");
+      return;
+    }
+    if (name === "hidden-open") { event.preventDefault(); event.stopPropagation(); openHidden(); return; }
     if (name === "note") {
       event.preventDefault();
       event.stopPropagation();
@@ -953,6 +1211,215 @@
       accounts: accounts,
       telegramConnected: !!(base.telegramConnected || (extra && extra.telegramConnected))
     };
+  }
+
+  function paintOrg() {
+    orgMenu = null;
+    if (deps.render) deps.render();
+  }
+
+  function openOrgMenu(act) {
+    orgMenu = {
+      id: act.getAttribute("data-id") || "",
+      name: act.getAttribute("data-name") || "",
+      handle: act.getAttribute("data-handle") || "",
+      platform: act.getAttribute("data-platform") || ""
+    };
+    if (deps.render) deps.render();
+  }
+
+  function changePin(action) {
+    if (!orgMenu || !orgMenu.id) return;
+    var org = readOrg();
+    var at = org.pins.indexOf(orgMenu.id);
+    if (action === "pin" && at < 0) org.pins.unshift(orgMenu.id);
+    if (action === "unpin" && at >= 0) org.pins.splice(at, 1);
+    if (action === "pin-up" && at > 0) {
+      var up = org.pins[at - 1];
+      org.pins[at - 1] = org.pins[at];
+      org.pins[at] = up;
+    }
+    if (action === "pin-down" && at >= 0 && at < org.pins.length - 1) {
+      var down = org.pins[at + 1];
+      org.pins[at + 1] = org.pins[at];
+      org.pins[at] = down;
+    }
+    writeOrg(org);
+    orgMenu = null;
+    paintOrg();
+  }
+
+  function hideCurrent() {
+    if (!orgMenu || !orgMenu.id) return;
+    var org = readOrg();
+    var keys = keysFor(orgMenu.id, orgMenu.handle, orgMenu.platform);
+    org.hidden = org.hidden.filter(function (row) { return keys.indexOf(row.id) < 0; });
+    org.hidden.push({
+      id: orgMenu.id,
+      name: orgMenu.name || orgMenu.handle || "",
+      platform: orgMenu.platform || "",
+      handle: orgMenu.handle || "",
+      also: keys.filter(function (id) { return id !== orgMenu.id; })
+    });
+    org.pins = org.pins.filter(function (id) { return keys.indexOf(id) < 0; });
+    org.folders.forEach(function (folder) {
+      folder.members = (folder.members || []).filter(function (id) { return keys.indexOf(id) < 0; });
+    });
+    writeOrg(org);
+    orgMenu = null;
+    paintOrg();
+  }
+
+  function unhide(id) {
+    var org = readOrg();
+    org.hidden = org.hidden.filter(function (row) { return row.id !== id; });
+    writeOrg(org);
+    openHidden();
+  }
+
+  function openFolderSheet(id) {
+    var folder = null;
+    readOrg().folders.forEach(function (item) { if (item.id === id) folder = item; });
+    view = { org: "folder", folderId: id, name: folder ? folder.name : "", icon: folder ? folder.icon : "" };
+    renderFolderSheet();
+  }
+
+  function renderFolderSheet() {
+    var node = box();
+    if (!node || !view) return;
+    stopTimer();
+    node.classList.add("note-open");
+    node.innerHTML = '<div class="note-sheet" role="dialog" aria-modal="true" aria-label="' + esc(tr("Story folders")) + '">' +
+      '<div class="note-sheet-bar"><button type="button" data-story-act="cancel-compose" aria-label="' + esc(tr("Close")) + '">×</button><b>' + esc(view.folderId ? tr("Rename") : tr("New folder")) + '</b><button type="button" data-story-act="folder-save">' + esc(tr("Save")) + "</button></div>" +
+      '<input class="note-folder-name" aria-label="' + esc(tr("Folder name")) + '" placeholder="' + esc(tr("Folder name")) + '" value="' + esc(view.name || "") + '">' +
+      '<input class="note-folder-icon" aria-label="' + esc(tr("Folder icon")) + '" placeholder="' + esc(tr("Folder icon")) + '" value="' + esc(view.icon || "") + '">' +
+      (view.folderId ? '<button type="button" data-story-act="folder-left" data-id="' + esc(view.folderId) + '">' + esc(tr("Move earlier")) + '</button><button type="button" data-story-act="folder-right" data-id="' + esc(view.folderId) + '">' + esc(tr("Move later")) + '</button><button type="button" data-story-act="folder-delete" data-id="' + esc(view.folderId) + '">' + esc(tr("Delete folder")) + "</button>" : "") +
+      "</div>";
+    node.hidden = false;
+    document.documentElement.classList.add("stories-open");
+  }
+
+  function saveFolderSheet() {
+    var node = box();
+    if (!node || !view) return;
+    var name = node.querySelector(".note-folder-name");
+    var icon = node.querySelector(".note-folder-icon");
+    var org = readOrg();
+    var folderName = name ? String(name.value || "") : "";
+    var folderIcon = icon ? String(icon.value || "") : "";
+    if (view.folderId) {
+      org.folders.forEach(function (folder) {
+        if (folder.id === view.folderId) {
+          folder.name = folderName;
+          folder.icon = folderIcon;
+        }
+      });
+    } else {
+      org.folders.push({ id: "fld_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36), name: folderName, icon: folderIcon, members: [] });
+    }
+    writeOrg(org);
+    close();
+  }
+
+  function deleteFolder(id) {
+    var org = readOrg();
+    org.folders = org.folders.filter(function (folder) { return folder.id !== id; });
+    if (org.active === id) org.active = "";
+    writeOrg(org);
+    close();
+  }
+
+  function moveFolder(id, dir) {
+    var org = readOrg();
+    var at = -1;
+    org.folders.forEach(function (folder, index) { if (folder.id === id) at = index; });
+    var next = at + dir;
+    if (at < 0 || next < 0 || next >= org.folders.length) return;
+    var swap = org.folders[at];
+    org.folders[at] = org.folders[next];
+    org.folders[next] = swap;
+    writeOrg(org);
+    view.name = org.folders[next].name;
+    view.icon = org.folders[next].icon;
+    renderFolderSheet();
+  }
+
+  function openFolderAdd() {
+    if (!orgMenu) return;
+    view = { org: "add", source: orgMenu };
+    var org = readOrg();
+    var node = box();
+    if (!node) return;
+    stopTimer();
+    var rows = org.folders.map(function (folder) {
+      var on = (folder.members || []).indexOf(orgMenu.id) >= 0;
+      return '<button type="button" data-story-act="folder-member" data-id="' + esc(folder.id) + '">' + esc((on ? "✓ " : "") + (folder.icon ? folder.icon + " " : "") + folder.name) + "</button>";
+    }).join("");
+    node.classList.add("note-open");
+    node.innerHTML = '<div class="note-sheet" role="dialog" aria-modal="true" aria-label="' + esc(tr("Add to folder")) + '">' +
+      '<div class="note-sheet-bar"><button type="button" data-story-act="cancel-compose" aria-label="' + esc(tr("Close")) + '">×</button><b>' + esc(tr("Add to folder")) + "</b><span></span></div>" +
+      (rows || '<p>' + esc(tr("New folder")) + "</p>") +
+      '<button type="button" data-story-act="folder-new">' + esc(tr("New folder")) + "</button></div>";
+    node.hidden = false;
+    document.documentElement.classList.add("stories-open");
+    orgMenu = null;
+  }
+
+  function toggleFolderMember(folderId) {
+    if (!view || !view.source) return;
+    var org = readOrg();
+    var keys = keysFor(view.source.id, view.source.handle, view.source.platform);
+    org.folders.forEach(function (folder) {
+      if (folder.id !== folderId) return;
+      var has = keys.some(function (id) { return folder.members.indexOf(id) >= 0; });
+      if (has) folder.members = folder.members.filter(function (id) { return keys.indexOf(id) < 0; });
+      else folder.members = folder.members.concat(keys);
+    });
+    writeOrg(org);
+    close();
+  }
+
+  function openHidden() {
+    var org = readOrg();
+    var node = box();
+    if (!node) return;
+    stopTimer();
+    view = { org: "hidden" };
+    var rows = org.hidden.map(function (row) {
+      var label = row.name || row.handle || row.id;
+      return '<div class="story-hidden-row"><span>' + esc(label) + '</span><button type="button" data-story-act="unhide" data-id="' + esc(row.id) + '">' + esc(tr("Unhide")) + "</button></div>";
+    }).join("");
+    node.classList.add("note-open");
+    node.innerHTML = '<div class="note-sheet" role="dialog" aria-modal="true" aria-label="' + esc(tr("Hidden stories")) + '">' +
+      '<div class="note-sheet-bar"><button type="button" data-story-act="cancel-compose" aria-label="' + esc(tr("Close")) + '">×</button><b>' + esc(tr("Hidden stories")) + "</b><span></span></div>" +
+      (rows || "<p>" + esc(tr("No hidden stories")) + "</p>") + "</div>";
+    node.hidden = false;
+    document.documentElement.classList.add("stories-open");
+  }
+
+  function pullOrg() {
+    var auth = token();
+    if (!auth || !deps.api) return Promise.resolve();
+    return deps.api("/v1/story-bar", { token: auth }).then(function (body) {
+      if (!body || body.status !== 200 || !body.doc) return;
+      var local = readOrg();
+      var remoteAt = Number(body.updatedAt) || 0;
+      if (remoteAt > (local.updatedAt || 0)) {
+        var doc = cleanOrg(body.doc);
+        doc.updatedAt = remoteAt;
+        try { localStorage.setItem(ORG_KEY, JSON.stringify(doc)); } catch (err) { /* private mode */ }
+        if (deps.render) deps.render();
+      } else if ((local.updatedAt || 0) > remoteAt) {
+        deps.api("/v1/story-bar", { method: "PUT", token: auth, body: local }).catch(function () {});
+      }
+    }).catch(function () {});
+  }
+
+  function setOrg(org) {
+    var next = cleanOrg(org);
+    next.updatedAt = Number(org && org.updatedAt) || Date.now();
+    try { localStorage.setItem(ORG_KEY, JSON.stringify(next)); } catch (err) { /* private mode */ }
+    return next;
   }
 
   function setNotes(pack) {
@@ -1145,6 +1612,7 @@
       node.addEventListener("pointercancel", onPointerCancel);
     }
     load();
+    pullOrg();
   }
 
   if (typeof document !== "undefined") {
@@ -1152,6 +1620,12 @@
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onShellDown, true);
     document.addEventListener("pointerup", onShellUp, true);
+    document.addEventListener("contextmenu", function (event) {
+      var button = event.target.closest && event.target.closest("[data-story-act='org-menu']");
+      if (!button) return;
+      event.preventDefault();
+      openOrgMenu(button);
+    }, true);
     document.addEventListener("visibilitychange", function () {
       if (!view) {
         if (document.visibilityState === "visible" && loadedAt && Date.now() - loadedAt > 10 * 60 * 1000) load();
@@ -1172,6 +1646,8 @@
     trayExtra: trayExtra,
     apply: apply,
     setNotes: setNotes,
+    setOrg: setOrg,
+    organize: organize,
     barState: barState,
     applyBar: applyBar,
     activeAccounts: activeAccounts,
