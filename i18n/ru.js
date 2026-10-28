@@ -3,6 +3,7 @@ SI18n.addPack("ru", {
   "Home": "Главная",
   "Explore": "Обзор",
   "Notifications": "Уведомления",
+  "Suggested accounts": "Предлагаемые аккаунты",
   "Messages": "Сообщения",
   "Feeds": "Ленты",
   "Lists": "Списки",
