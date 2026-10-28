@@ -1,7 +1,9 @@
 /* Presence and custom status rules shared by the Worker and the page.
-   Last-seen wording follows Telegram. Exact times are hidden both ways:
-   if either person would not show the other an exact time, both see
-   "last seen recently". */
+   Last-seen wording follows Telegram. While reciprocity is on, exact
+   times stay hidden both ways: if either person would not show the
+   other an exact time, both see "last seen recently". Turning
+   reciprocity off still hides you from them, and lets you see someone
+   whose own setting allows you. */
 
 export const WRITE_WINDOW_MS = 55000;
 export const STALE_MS = 150000;
@@ -14,7 +16,7 @@ export const WATCH_LIMIT = 30;
 
 const PREFERENCES = ["online", "idle", "dnd", "invisible"];
 const ACTIVITIES = ["active", "idle", "hidden"];
-const PRIVACY = ["everyone", "follows", "nobody"];
+const PRIVACY = ["everyone", "follows", "followers", "mutuals", "lists", "nobody"];
 const CLEARS = ["30m", "1h", "4h", "today", "week", "never"];
 
 export function normalizePreference(value) {
@@ -117,18 +119,49 @@ export function shouldWriteBeat(prev, next, now, windowMs) {
   return false;
 }
 
-export function privacyAllows(privacy, iFollow, followsMe) {
+export function listIds(value) {
+  const raw = Array.isArray(value) ? value.join(",") : String(value || "");
+  const out = [];
+  raw.split(",").forEach((part) => {
+    const id = part.trim().toLowerCase();
+    if (/^[a-f0-9]{32}$/.test(id) && out.indexOf(id) < 0) out.push(id);
+  });
+  return out.slice(0, 12);
+}
+
+export function relationAllows(privacy, rel) {
   const mode = normalizePrivacy(privacy);
+  const link = rel || {};
   if (mode === "nobody") return false;
-  if (mode === "follows") return !!(iFollow || followsMe);
+  if (mode === "followers") return !!link.followsSubject;
+  if (mode === "mutuals") return !!link.friends || (!!link.followsSubject && !!link.subjectFollows);
+  if (mode === "lists") return !!link.onList;
+  if (mode === "follows") return !!(link.followsSubject || link.subjectFollows);
   return true;
 }
 
-export function canSeeExact(viewerPrivacy, targetPrivacy, viewerFollowsTarget, targetFollowsViewer, same) {
+export function privacyAllows(privacy, iFollow, followsMe) {
+  return relationAllows(privacy, { followsSubject: !!iFollow, subjectFollows: !!followsMe });
+}
+
+export function canSeeExact(viewerPrivacy, targetPrivacy, viewerFollowsTarget, targetFollowsViewer, same, opts) {
   if (same) return true;
-  const targetOk = privacyAllows(targetPrivacy, viewerFollowsTarget, targetFollowsViewer);
-  const viewerOk = privacyAllows(viewerPrivacy, viewerFollowsTarget, targetFollowsViewer);
-  return !!(targetOk && viewerOk);
+  const extra = opts || {};
+  const reciprocal = extra.reciprocal == null ? true : !!extra.reciprocal;
+  const targetOk = relationAllows(targetPrivacy, {
+    followsSubject: viewerFollowsTarget,
+    subjectFollows: targetFollowsViewer,
+    friends: extra.friends,
+    onList: extra.targetList
+  });
+  if (!targetOk) return false;
+  if (!reciprocal) return true;
+  return relationAllows(viewerPrivacy, {
+    followsSubject: targetFollowsViewer,
+    subjectFollows: viewerFollowsTarget,
+    friends: extra.friends,
+    onList: extra.viewerList
+  });
 }
 
 export function activeStatus(status, now) {
@@ -153,8 +186,11 @@ export function publicPresence(presence, status, exact, now, self) {
     text: custom.text
   };
   if (self) {
+    const rawReciprocal = presence && (presence.reciprocal != null ? presence.reciprocal : presence.reciprocalFlag);
     view.preference = effect.preference;
     view.seenPrivacy = normalizePrivacy(presence && (presence.seen_privacy || presence.seenPrivacy));
+    view.reciprocal = rawReciprocal == null ? true : Number(rawReciprocal) !== 0;
+    view.seenLists = listIds(presence && (presence.seen_lists != null ? presence.seen_lists : presence.seenLists));
     view.clearAt = custom.clearAt;
     if (effect.preference === "invisible") view.state = "invisible";
   } else if (!exact || effect.preference === "invisible") {
@@ -211,6 +247,7 @@ const api = {
   normalizePreference,
   normalizeActivity,
   normalizePrivacy,
+  listIds,
   cleanStatusText,
   cleanEmoji,
   clearAtFrom,
