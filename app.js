@@ -11476,6 +11476,8 @@ const here = parseRoute();
     if (kind === "follow_request") return tr("{name} requested to follow you", { name: who });
     if (kind === "follow_accept") return tr("{name} accepted your follow request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
+    if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
+    if (kind === "birthday_self") return tr("Happy birthday");
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
@@ -11660,7 +11662,8 @@ const here = parseRoute();
     const gear = `<button class="icon-btn note-gear" type="button" data-act="note-gear" aria-label="${esc(tr("Notification options"))}" aria-haspopup="menu" aria-expanded="${gearOpen ? "true" : "false"}">${menuIcon("gear")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="notes-bar"><button class="m-ava" type="button" data-act="drawer" aria-label="${tr("Menu")}">${viewerFace()}${dot}</button><h1>${tr("Notifications")}</h1>${gear}</div>${bar}</div>`;
     const xBanner = window.ViktorychXCompose && window.ViktorychXCompose.mentionsBanner ? window.ViktorychXCompose.mentionsBanner() : "";
-    return head + xBanner + notesListHtml(notes, active, current, unreadIds) + noteGearMenu(active);
+    const upcoming = window.ProfileAbout && window.ProfileAbout.upcomingHtml ? window.ProfileAbout.upcomingHtml() : "";
+    return head + xBanner + upcoming + notesListHtml(notes, active, current, unreadIds) + noteGearMenu(active);
   }
 
   function openFeedTabEditor(id, presetFeed) {

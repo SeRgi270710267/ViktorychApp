@@ -1414,16 +1414,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a25-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a26-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a25-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a26-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in deployed_paths() and "spaces.css" in deployed_paths() and "live/" in deployed_paths(), "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a25-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a26-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -3561,7 +3561,7 @@ def ia_backup_checks() -> None:
     check(again["manifest"]["items"] == manifest["items"], "a second run keeps the same random item ids")
 
     jpeg_old = b"\xff\xd8\xff\xd9"
-    old_digest = hashlib.sha256(jpeg_old).hexdigest()
+    old_digest = hashlib.sha266(jpeg_old).hexdigest()
     old_name = old_digest[:20] + ".jpg"
     saved_files = {}
     deleted = []
@@ -3881,7 +3881,7 @@ def ia_backup_checks() -> None:
     check(shard_url({"shards": {"2026-10": "https://archive.org/download/superintelapp-2026-10/2026-10.json"}}, "archive/2026-10.json") == "", "a named item url is not used")
 
     sample = b"hello-archive"
-    sample_digest = hashlib.sha256(sample).hexdigest()
+    sample_digest = hashlib.sha266(sample).hexdigest()
     retire_host = "http://127.0.0.1"
     copied_url = retire_host + "/download/" + anon + "/file.json"
     retire_state = {
@@ -4424,7 +4424,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "viktorych-a25-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-a26-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     lazy = (ROOT / "shared" / "lazy-modules.js").read_text(encoding="utf-8")
     check('shorts.js", "shorts.css"' in lazy and "shorts.js" in worker and "shorts.css" in worker and 'info.name === "shorts"' in app, "the page and the service worker load Shorts on demand")
     check('drive.js", "drive.css"' in lazy and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker and 'ensureLazy("drive")' in app, "the page and the service worker load Drive on demand")
@@ -4479,7 +4479,7 @@ def story_checks() -> None:
     shorts_js = (ROOT / "shorts.js").read_text(encoding="utf-8")
     check('tr("added accounts")' in shorts_js and 'data-shorts="remove-account"' in shorts_js and 'tr("Original quality")' in shorts_js and "tracked" not in shorts_js.lower(), "Shorts lets the owner add an account and does not call it tracked")
     check("isTikTokCdn(url)" in worker and "if (isTikTokCdn(url)) return;" in worker, "the service worker does not intercept TikTok CDN media")
-    check('VERSION = "viktorych-a25-__SW_VERSION__"' in worker, "the service worker cache stamp is a25")
+    check('VERSION = "viktorych-a26-__SW_VERSION__"' in worker, "the service worker cache stamp is a26")
     check('tr("Too many plays. Try again in a minute.")' in shorts_js and 'tr("Signed out")' in shorts_js and 'tr("Couldn\'t play this video")' in shorts_js and "playbackNote(err)" in shorts_js and 'level + "-pending"' in shorts_js and "if (!autoplay) return Promise.resolve();" in shorts_js, "a For You miss names 429, a missing backup, or a signed-out session and only the next short is probed")
     check("maxBufferLength = 30" in shorts_js and "maxBufferLength: 30" in app and "function slowLink(" in shorts_js and "conn.saveData" in shorts_js and 'kind === "2g"' in shorts_js and "function prefetchUrls(" in shorts_js and "prefetchParts(" in shorts_js and 'armSlide(slides[i], "metadata")' in shorts_js, "For You and feed videos buffer about 30 seconds and only the next short is prefetched, except on Save-Data or 2g")
     check('source.kind === "tg"' in app and "URL.createObjectURL(blob)" not in app[app.index('source.kind === "tg"'):app.index('source.kind === "tg"') + 700], "a Telegram file streams from its Range URL")
@@ -4497,7 +4497,7 @@ def story_checks() -> None:
     dispatch_wf = (ROOT / ".github" / "workflows" / "worker-dispatch-secret.yml").read_text(encoding="utf-8")
     check("WORKER_DISPATCH_TOKEN" in readme and "WORKER_DISPATCH_TOKEN" in wrangler and ".github/worker-dispatch-secret" in (ROOT / "worker" / "README.md").read_text(encoding="utf-8"), "WORKER_DISPATCH_TOKEN is the repo secret")
     check("not set yet" in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\" | npx wrangler secret put GITHUB_DISPATCH_TOKEN --name viktorych-accounts" in dispatch_wf, "an empty dispatch token is skipped and a set one is copied from stdin")
-    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha256sum" in dispatch_wf and "actions/cache/restore@v4" in dispatch_wf and "actions/cache/save@v4" in dispatch_wf, "the dispatch secret workflow retries itself and skips a value it already copied")
+    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha266sum" in dispatch_wf and "actions/cache/restore@v4" in dispatch_wf and "actions/cache/save@v4" in dispatch_wf, "the dispatch secret workflow retries itself and skips a value it already copied")
     check('echo "$WORKER_DISPATCH_TOKEN"' not in dispatch_wf and "echo $WORKER_DISPATCH_TOKEN" not in dispatch_wf and "echo ${{ secrets" not in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\"" in dispatch_wf, "the dispatch secret workflow does not print the token")
     live_check = (ROOT / "worker" / "dispatch-live-check.mjs").read_text(encoding="utf-8")
     check("node dispatch-live-check.mjs" in dispatch_wf and "/tiktok-live.yml/dispatches" in live_check and "media-extract.yml" not in live_check and "tiktok-added.yml" not in live_check, "the worker dispatch check starts only tiktok-live.yml")
@@ -4929,7 +4929,7 @@ def gdrive_checks() -> None:
     sizes = {media[0]["logical"]: 10, media[-1]["logical"]: 90}
     ordered = [row for row in gdrive_backup.sort_media(media, sizes) if row["kind"] == "media"]
     check(len(ordered) == 2 and sizes[ordered[0]["logical"]] == 90 and sizes[ordered[1]["logical"]] == 10, "the larger video is uploaded before the smaller one")
-    known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha256": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
+    known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha266": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
     check(songs[0]["logical"] in gdrive_backup.known_ids(known) and ("ab" * 32) in gdrive_backup.known_hashes(known), "a stored hash and logical id are treated as already uploaded")
     import cf_pages_prepare
     import cf_pages_deploy

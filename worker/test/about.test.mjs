@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
-import { canSeeField, publicBirthday } from "../src/about.js";
+import { canSeeField, daysUntilBirthday, publicBirthday } from "../src/about.js";
+import { runBirthdaySweep, upcomingBirthdays } from "../src/birthdays.js";
 
 let mf;
 let bindings;
@@ -78,6 +80,10 @@ test("audience matrix hides fields the viewer cannot see", () => {
   assert.equal(canSeeField("list", stranger, {}), false);
   assert.equal(publicBirthday("sample 1900", false), "sample");
   assert.equal(publicBirthday("sample 1900", true), "sample 1900");
+  assert.equal(publicBirthday("1990-03-14", false), "03-14");
+  assert.equal(publicBirthday("1990-03-14", true), "1990-03-14");
+  assert.equal(daysUntilBirthday({ year: 1990, month: 3, day: 14 }, Date.UTC(2026, 2, 14, 3, 0, 0), "America/New_York"), 1);
+  assert.equal(daysUntilBirthday({ year: 1990, month: 3, day: 14 }, Date.UTC(2026, 2, 14, 15, 0, 0), "UTC"), 0);
 });
 
 test.before(async () => {
@@ -198,4 +204,107 @@ test("the about API enforces each field for the owner, a follower, a stranger, a
   assert.equal(hidden.body.visible, false);
   assert.equal(texts(hidden.body).length, 0);
   assert.equal(JSON.stringify(hidden.body).includes("sample city"), false);
+});
+
+test("birthday reminders honor privacy, the year, opt-out, and the time zone", async () => {
+  const eve = await signup("user_e", "203.0.113.80");
+  const fay = await signup("user_f", "203.0.113.81");
+  const gus = await signup("user_g", "203.0.113.82");
+  const hal = await signup("user_h", "203.0.113.83");
+  const ivy = await signup("user_i", "203.0.113.84");
+
+  const saved = await call("/v1/about", {
+    method: "POST",
+    ip: "203.0.113.85",
+    token: eve.token,
+    body: { section: "personal", kind: "birthday", text: "1990-03-14", audience: "followers", showYear: false, tz: "America/New_York" }
+  });
+  assert.equal(saved.status, 201);
+  await call("/v1/follows", { method: "PUT", ip: "203.0.113.86", token: fay.token, body: { id: "app:" + eve.account.publicId } });
+  await call("/v1/follows", { method: "PUT", ip: "203.0.113.87", token: hal.token, body: { id: "app:" + eve.account.publicId } });
+  const opted = await call("/v1/about/birthday-notes", { method: "PUT", ip: "203.0.113.88", token: hal.token, body: { notes: false } });
+  assert.equal(opted.body.notes, false);
+
+  const early = await runBirthdaySweep(bindings, Date.UTC(2026, 2, 14, 3, 0, 0));
+  assert.equal(early.sent, 0);
+  await call("/v1/about/" + saved.body.id, {
+    method: "PATCH",
+    ip: "203.0.113.89",
+    token: eve.token,
+    body: { tz: "UTC" }
+  });
+  const day = Date.UTC(2026, 2, 14, 15, 0, 0);
+  const sent = await runBirthdaySweep(bindings, day);
+  assert.equal(sent.sent >= 2, true);
+  const source = fs.readFileSync(fileURLToPath(new URL("../src/index.js", import.meta.url)), "utf8");
+  assert.equal(source.includes("runBirthdaySweep(env, at)"), true);
+
+  const fayNotes = await call("/v1/notifications", { ip: "203.0.113.90", token: fay.token });
+  const fayBirthday = (fayNotes.body.items || []).filter((item) => item.kind === "birthday");
+  assert.equal(fayBirthday.length, 1);
+  assert.equal(fayBirthday[0].handle, "user_e");
+  assert.equal(JSON.stringify(fayNotes.body).includes("1990"), false);
+
+  const gusNotes = await call("/v1/notifications", { ip: "203.0.113.91", token: gus.token });
+  assert.equal((gusNotes.body.items || []).some((item) => item.kind === "birthday" || item.kind === "birthday_self"), false);
+  const halNotes = await call("/v1/notifications", { ip: "203.0.113.92", token: hal.token });
+  assert.equal((halNotes.body.items || []).some((item) => item.kind === "birthday"), false);
+  const eveNotes = await call("/v1/notifications", { ip: "203.0.113.93", token: eve.token });
+  assert.equal((eveNotes.body.items || []).some((item) => item.kind === "birthday_self"), true);
+  assert.equal(JSON.stringify(eveNotes.body).includes("1990"), false);
+
+  const list = await upcomingBirthdays(bindings, { public_id: fay.account.publicId }, day);
+  assert.equal(list.upcoming.some((item) => item.handle === "user_e" && item.inDays === 0), true);
+  assert.equal(JSON.stringify(list).includes("1990"), false);
+  const strangerList = await upcomingBirthdays(bindings, { public_id: gus.account.publicId }, day);
+  assert.equal(strangerList.upcoming.some((item) => item.handle === "user_e"), false);
+
+  await call("/v1/about/" + saved.body.id, {
+    method: "PATCH",
+    ip: "203.0.113.94",
+    token: eve.token,
+    body: { audience: "only" }
+  });
+  const hiddenList = await upcomingBirthdays(bindings, { public_id: fay.account.publicId }, day);
+  assert.equal(hiddenList.upcoming.some((item) => item.handle === "user_e"), false);
+  await call("/v1/follows", { method: "PUT", ip: "203.0.113.95", token: ivy.token, body: { id: "app:" + eve.account.publicId } });
+  await runBirthdaySweep(bindings, day);
+  const ivyNotes = await call("/v1/notifications", { ip: "203.0.113.96", token: ivy.token });
+  assert.equal((ivyNotes.body.items || []).some((item) => item.kind === "birthday"), false);
+
+  await call("/v1/about/" + saved.body.id, {
+    method: "PATCH",
+    ip: "203.0.113.97",
+    token: eve.token,
+    body: { audience: "friends" }
+  });
+  const notMutual = await upcomingBirthdays(bindings, { public_id: fay.account.publicId }, day);
+  assert.equal(notMutual.upcoming.some((item) => item.handle === "user_e"), false);
+  await bindings.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?)").bind(fay.account.publicId, eve.account.publicId, Date.now()).run();
+  const mutual = await upcomingBirthdays(bindings, { public_id: fay.account.publicId }, day);
+  assert.equal(mutual.upcoming.some((item) => item.handle === "user_e" && item.year == null), true);
+
+  const now = new Date();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const date = String(now.getUTCDate()).padStart(2, "0");
+  await call("/v1/about/" + saved.body.id, {
+    method: "PATCH",
+    ip: "203.0.113.98",
+    token: eve.token,
+    body: { audience: "followers", text: "1990-" + month + "-" + date, tz: "UTC", showYear: false }
+  });
+  const today = await call("/v1/about?handle=user_e", { ip: "203.0.113.99", token: fay.token });
+  assert.equal(today.body.birthdayToday, true);
+  assert.equal(JSON.stringify(today.body).includes("1990"), false);
+  const closed = await call("/v1/about?handle=user_e", { ip: "203.0.113.100", token: gus.token });
+  assert.equal(closed.body.birthdayToday, false);
+  assert.equal(JSON.stringify(closed.body).includes(month + "-" + date), false);
+
+  bindings.BIRTHDAY_NOTES = "off";
+  const paused = await runBirthdaySweep(bindings, day);
+  assert.equal(paused.sent, 0);
+  const pausedList = await upcomingBirthdays(bindings, { public_id: fay.account.publicId }, day);
+  assert.equal(pausedList.enabled, false);
+  assert.equal(pausedList.upcoming.length, 0);
+  delete bindings.BIRTHDAY_NOTES;
 });
