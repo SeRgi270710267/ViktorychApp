@@ -2357,6 +2357,9 @@ SI18n.addPack("es", {
   "Picture of badges": "Imagen de las insignias",
   "Picture of installing the app": "Imagen de instalar la app",
   "Picture of Safari install steps": "Imagen de los pasos para instalar en Safari",
+  "Live pills row": "Fila de píldoras en vivo",
+  "Weather, scores and live spaces above the timeline. Off loads nothing for it.": "Clima, marcadores y espacios en vivo sobre la cronología. Si está desactivada, no se carga nada para ella.",
+  "The stories tray and viewer. Off loads nothing for it.": "La bandeja y el visor de historias. Si está desactivado, no se carga nada para ellos.",
   "Sort replies": "Ordenar respuestas",
   "Follow {handle}": "Seguir a {handle}",
   "Unfollow {handle}": "Dejar de seguir a {handle}"
