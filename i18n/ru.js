@@ -2059,5 +2059,10 @@ SI18n.addPack("ru", {
   "Who can send you gifts": "Кто может присылать подарки",
   "Hide the Gifts tab": "Скрыть вкладку Подарки",
   "You received a gift": "Вам прислали подарок",
-  "{name} sent you a gift": "{name} прислал вам подарок"
+  "{name} sent you a gift": "{name} прислал вам подарок",
+  "Edit menu": "Изменить меню",
+  "Add section": "Добавить раздел",
+  "Section name": "Название раздела",
+  "Main list": "Основной список",
+  "This item always stays available": "Этот пункт всегда остаётся в меню"
 });
