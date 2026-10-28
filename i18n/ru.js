@@ -1979,5 +1979,8 @@ SI18n.addPack("ru", {
   "Account unblocked": "Аккаунт разблокирован",
   "Account muted": "Аккаунт скрыт",
   "Account unmuted": "Аккаунт снова виден",
-  "Search mutuals": "Искать взаимные"
+  "Search mutuals": "Искать взаимные",
+  "Not interested": "Не интересно",
+  "Show less often": "Показывать реже",
+  "We'll show you less of this.": "Мы будем показывать меньше такого."
 });

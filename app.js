@@ -6944,7 +6944,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 const here = parseRoute();
     const histItem = here.name === "history" ? `<button data-act="hist-remove" data-id="${esc(post.id)}" data-tab="${esc(here.tab || "bookmarks")}">${tr("Remove from History")}</button>` : "";
     const quoteDelete = post.ownQuote ? `<button data-act="quote-delete" data-id="${esc(post.id)}">${tr("Delete")}</button>` : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
+    const forYouItem = here.name === "home" && (here.tab || "foryou") === "foryou"
+      ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
+      : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${forYouItem}${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -7980,9 +7983,77 @@ const here = parseRoute();
 
   const FEED_PAGE = 25;
 
+  function forYouMemory() {
+    if (!window.ForYou) return null;
+    if (!STATE.forYouMemory) STATE.forYouMemory = window.ForYou.load();
+    return STATE.forYouMemory;
+  }
+
+  function forYouContext() {
+    const likes = (STATE.settings && STATE.settings.likes) || {};
+    return {
+      now: Date.now(),
+      weights: window.ForYouWeights,
+      memory: forYouMemory() || (window.ForYou && window.ForYou.emptyMemory()),
+      followed: (post) => followedPost(post),
+      liked: (post) => !!(post && likes[post.id]),
+      read: (post) => !!(STATE.openedPosts && post && STATE.openedPosts[post.id]),
+      skip: (post) => hiddenPost(post)
+    };
+  }
+
+  function forYouTimeline(list) {
+    if (!window.ForYou || !window.ForYou.rank) {
+      const copy = list.slice();
+      copy.sort(byStamp);
+      return copy;
+    }
+    const idOf = (post) => String((post && post.id) || "");
+    const by = {};
+    list.forEach((post) => {
+      const id = idOf(post);
+      if (id && !by[id]) by[id] = post;
+    });
+    const remember = (ids) => {
+      STATE.forYouSnap = ids.filter(Boolean);
+      const memory = forYouMemory();
+      if (memory) {
+        memory.nextServed = STATE.forYouSnap.slice(-400);
+        window.ForYou.save(memory);
+      }
+    };
+    if (!STATE.forYouSnap) {
+      const ranked = window.ForYou.rank(list, forYouContext());
+      remember(ranked.map(idOf));
+      return ranked;
+    }
+    const kept = [];
+    const seen = {};
+    STATE.forYouSnap.forEach((id) => {
+      if (by[id] && !seen[id]) {
+        kept.push(by[id]);
+        seen[id] = true;
+      }
+    });
+    const fresh = list.filter((post) => {
+      const id = idOf(post);
+      return id && !seen[id];
+    });
+    const atTop = window.scrollY < 40 && !homeRead;
+    if (fresh.length && (STATE.forYouAcceptNew || atTop)) {
+      const ranked = window.ForYou.rank(fresh, forYouContext());
+      const next = ranked.concat(kept);
+      remember(next.map(idOf));
+      STATE.forYouAcceptNew = false;
+      return next;
+    }
+    return kept;
+  }
+
   function homeSorted(route) {
     const tab = route.tab || "foryou";
     let list = posts().filter((post) => homeShows(post, route));
+    if (tab === "foryou") return forYouTimeline(list);
     if (tabView(tab) === "reposts") list.sort(byRepostTime);
     else {
       list.sort(byStamp);
@@ -12290,6 +12361,13 @@ if (STATE.histClear) {
         histUpsert("likes", likedPost, { id: id });
         queueLikeNote(likedPost, id);
       }
+      if ((act === "like" || act === "repost") && likedPost && window.ForYou) {
+        const memory = forYouMemory();
+        if (memory) {
+          window.ForYou.note(memory, likedPost, act);
+          window.ForYou.save(memory);
+        }
+      }
     }
     saveSettings();
     if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
@@ -15305,9 +15383,24 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render({ y: 0 });
       return;
     }
+    if (act === "foryou-hide" || act === "foryou-less") {
+      const post = findAnyPost(el.dataset.id);
+      const memory = forYouMemory();
+      if (post && memory && window.ForYou) {
+        window.ForYou.note(memory, post, act === "foryou-hide" ? "hide" : "less");
+        window.ForYou.save(memory);
+        const id = String(post.id || "");
+        if (STATE.forYouSnap) STATE.forYouSnap = STATE.forYouSnap.filter((item) => item !== id);
+      }
+      STATE.menu = null;
+      toast(tr("We'll show you less of this."));
+      render();
+      return;
+    }
     if (act === "foryou-toggle") {
       const key = el.dataset.key === "replies" ? "forYouReplies" : "forYouReposts";
       STATE.settings[key] = STATE.settings[key] === false;
+      STATE.forYouSnap = null;
       saveSettings();
       const next = homeHash("foryou");
       if ((location.hash || "#/") !== next) history.replaceState(null, "", next);
@@ -20130,6 +20223,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     document.getElementById("new-posts").addEventListener("click", () => {
       if (parseRoute().name !== "home") { showPill(pendingPillPosts()); return; }
+      STATE.forYouAcceptNew = true;
       const pending = STATE.pendingLive || [];
       if (!STATE.pendingFeed && !pending.length) { showPill([]); return; }
       const y = window.scrollY;
@@ -20207,6 +20301,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") {
+        if (window.ForYou && STATE.forYouMemory) window.ForYou.commitServed(STATE.forYouMemory);
         stopHub();
         return;
       }

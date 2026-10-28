@@ -1979,5 +1979,8 @@ SI18n.addPack("es", {
   "Account unblocked": "Cuenta desbloqueada",
   "Account muted": "Cuenta silenciada",
   "Account unmuted": "Cuenta no silenciada",
-  "Search mutuals": "Buscar mutuos"
+  "Search mutuals": "Buscar mutuos",
+  "Not interested": "No me interesa",
+  "Show less often": "Mostrar con menos frecuencia",
+  "We'll show you less of this.": "Te mostraremos menos de esto."
 });

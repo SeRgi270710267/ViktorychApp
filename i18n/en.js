@@ -1979,5 +1979,8 @@ SI18n.addPack("en", {
   "Account unblocked": "Account unblocked",
   "Account muted": "Account muted",
   "Account unmuted": "Account unmuted",
-  "Search mutuals": "Search mutuals"
+  "Search mutuals": "Search mutuals",
+  "Not interested": "Not interested",
+  "Show less often": "Show less often",
+  "We'll show you less of this.": "We'll show you less of this."
 });
