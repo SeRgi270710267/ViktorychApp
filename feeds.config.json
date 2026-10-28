@@ -101,15 +101,9 @@
       "handle": "birchlane",
       "adapter": "rsshub_instagram",
       "source_urls": [
-        "{rsshubBase}/instagram/user/{handle}"
-      ],
-      "fallbacks": [
-        {
-          "adapter": "generic_rss",
-          "source_urls": [
-            "http://localhost:8080/?action=display&bridge=InstagramBridge&context=Username&u={handle}&format=Atom"
-          ]
-        }
+        "{rsshubBase}/instagram/user/{handle}",
+        "http://localhost:8080/?action=display&bridge=InstagramBridge&context=Username&u={handle}&format=Atom",
+        "https://rss-bridge.org/bridge01/?action=display&bridge=InstagramBridge&context=Username&u={handle}&format=Atom"
       ],
       "fixture": "scripts/fixtures/rsshub_instagram_birchlane.xml",
       "fixtureAdapter": "rsshub_instagram",
@@ -125,15 +119,9 @@
       "handle": "birchlane",
       "adapter": "rsshub_threads",
       "source_urls": [
-        "{rsshubBase}/threads/{handle}"
-      ],
-      "fallbacks": [
-        {
-          "adapter": "generic_rss",
-          "source_urls": [
-            "http://localhost:8080/?action=display&bridge=ThreadsBridge&context=Username&u={handle}&format=Atom"
-          ]
-        }
+        "{rsshubBase}/threads/{handle}",
+        "http://localhost:8080/?action=display&bridge=ThreadsBridge&context=Username&u={handle}&format=Atom",
+        "https://rss-bridge.org/bridge01/?action=display&bridge=ThreadsBridge&context=Username&u={handle}&format=Atom"
       ],
       "fixture": "scripts/fixtures/rsshub_threads_birchlane.xml",
       "fixtureAdapter": "rsshub_threads",

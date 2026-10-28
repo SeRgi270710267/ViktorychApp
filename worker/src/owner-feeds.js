@@ -125,6 +125,15 @@ function mergeProfile(have, next) {
   return row;
 }
 
+function metaCode(platform, guid, link) {
+  const blob = String(link || "") + " " + String(guid || "");
+  let match = null;
+  if (platform === "instagram") match = blob.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
+  if (platform === "threads") match = blob.match(/threads\.(?:com|net)\/(?:@[^/\s]+\/)?(?:post|t)\/([A-Za-z0-9_-]+)/);
+  if (match) return match[1];
+  return "";
+}
+
 function parseRss(xml, spec) {
   const text = String(xml || "");
   if (!/<(rss|feed|rdf)\b/i.test(text)) return null;
@@ -140,8 +149,10 @@ function parseRss(xml, spec) {
     const date = (chunk.match(/<(?:pubDate|published|updated)[^>]*>([^<]+)</i) || [])[1] || "";
     const id = (chunk.match(/<(?:guid|id)[^>]*>([^<]+)</i) || [])[1] || link || itemTitle;
     const body = clip(stripTags(desc || itemTitle), 180);
-    if (!body) return;
-    posts.push({ id: clip(stripTags(id), 120) || String(posts.length + 1), text: body, date: clip(date, 40), url: httpsOnly(link) });
+    const page = httpsOnly(link);
+    const ident = metaCode(spec.platform, stripTags(id), page) || clip(stripTags(id), 120) || page;
+    if (!body && !page) return;
+    posts.push({ id: clip(ident, 120) || String(posts.length + 1), text: body, date: clip(date, 40), url: page });
   });
   return {
     profile: {
@@ -424,8 +435,9 @@ function cleanPosts(value) {
     if (!post || out.length >= 3) return;
     const text = clip(post.text, 180);
     const id = clip(post.id, 120);
-    if (!text || !id) return;
-    out.push({ id, text, date: clip(post.date, 40), url: httpsOnly(post.url) });
+    const url = httpsOnly(post.url);
+    if (!id || (!text && !url)) return;
+    out.push({ id, text, date: clip(post.date, 40), url });
   });
   return out;
 }
@@ -440,6 +452,7 @@ function healthOf(status, code, prev, now, retryAfter) {
     code: code || "",
     text: ERROR_TEXT[code] || "",
     lastOk: status === "ok" || status === "slow" ? new Date(now).toISOString() : (prev && prev.lastOk) || "",
+    updatedAt: new Date(now).toISOString(),
     nextAt,
     attempt
   };
@@ -469,6 +482,7 @@ function publicAccount(row) {
       code: row.paused ? "paused" : (health.code || ""),
       text: row.paused ? ERROR_TEXT.paused : (health.text || ERROR_TEXT[health.code] || ""),
       lastOk: health.lastOk || "",
+      updatedAt: health.updatedAt || health.lastOk || "",
       nextAt: Number(health.nextAt) || 0
     }
   };
