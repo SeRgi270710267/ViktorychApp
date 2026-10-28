@@ -105,4 +105,29 @@ Stories.apply({ accounts: [] });
 assert.strictEqual(Stories.homeTray(), "");
 assert.strictEqual(Stories.trayExtra(), 0);
 assert.ok(rendered >= 2);
+store["viktorych-stories-bar-v1"] = "hidden";
+Stories.apply(doc);
+assert.strictEqual(Stories.barState(), "hidden");
+assert.strictEqual(Stories.trayExtra(), 28);
+assert.ok(Stories.homeTray().includes('data-state="hidden"'));
+assert.ok(Stories.homeTray().includes('data-id="telegram:laneharbor"'));
+Stories.applyBar("slim");
+assert.strictEqual(Stories.barState(), "slim");
+assert.strictEqual(Stories.trayExtra(), 52);
+Stories.applyBar("expanded");
+assert.strictEqual(Stories.trayExtra(), 118);
+Stories.bind({
+  icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
+  follows() { return follows; },
+  owner() { return true; },
+  account() { return null; },
+  render() { rendered += 1; }
+});
+Stories.apply({ accounts: [], telegramConnected: false });
+const setup = Stories.homeTray();
+assert.ok(setup.includes("Connect Telegram"));
+assert.ok(setup.includes("story-connect"));
+assert.ok(!setup.includes("unseen"));
+Stories.apply({ accounts: [], telegramConnected: true });
+assert.strictEqual(Stories.homeTray(), "");
 console.log("ok stories tray orders unseen accounts across platforms, then newest");

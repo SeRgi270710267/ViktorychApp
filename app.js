@@ -7904,6 +7904,7 @@ const here = parseRoute();
         <a class="m-logo" href="#/" aria-label="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}</a>
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
+      ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       <div class="tabs-bar">
         <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button>
         <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
@@ -7915,7 +7916,6 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
-      ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${homeLivePillsRow()}
     </div>`;
   }
@@ -20489,7 +20489,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       if (event.touches.length !== 1) return;
-      if (event.target.closest && event.target.closest(".story-tray, #stories")) return;
+      if (event.target.closest && event.target.closest(".story-tray, .story-shell, #stories")) return;
       /* A sideways drag on a tab row or pill row scrolls that row. It must
          not switch Home tabs or refresh the feed. */
       if (hscrollFromTarget(event.target) || (event.target.closest && event.target.closest(".sp-row-wrap, .sp-row, .tabs, .tabs-bar"))) { swipe = null; return; }
@@ -21069,7 +21069,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         icon: icon,
         render: render,
         follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
-        dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
+        dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json",
+        account: function () { return window.ViktorychAccounts && window.ViktorychAccounts.account ? window.ViktorychAccounts.account() : null; },
+        token: accountToken,
+        owner: signedOwner,
+        api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+        apiRoot: accountsApi,
+        toast: toast
       });
     }
     if (window.Spaces && !window.Spaces.__shell) {
