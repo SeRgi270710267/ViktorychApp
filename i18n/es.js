@@ -1994,5 +1994,10 @@ SI18n.addPack("es", {
   "Notification filters": "Filtros de notificaciones",
   "Notification options": "Opciones de notificaciones",
   "No Spaces right now": "No hay Espacios ahora",
-  "Live audio shows up here.": "El audio en directo aparece aquí."
+  "Live audio shows up here.": "El audio en directo aparece aquí.",
+  "Edit menu": "Editar menú",
+  "Add section": "Añadir sección",
+  "Section name": "Nombre de la sección",
+  "Main list": "Lista principal",
+  "This item always stays available": "Este elemento siempre permanece disponible"
 });
