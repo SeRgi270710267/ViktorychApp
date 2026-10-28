@@ -6,6 +6,60 @@
 }
 .xc-inline { border-bottom: 1px solid var(--line); }
 .xc-inline-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.xc-slim {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 17px;
+  line-height: 22px;
+  text-align: start;
+}
+.xc-slim .ava, .xc-slim img, .xc-slim .initials { width: 36px; height: 36px; flex: none; }
+.xc-slim-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xc-inline.is-collapsed { align-items: center; padding-top: 6px; padding-bottom: 6px; }
+.xc-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  margin-top: 4px;
+}
+.xc-fold {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+.xc-fold svg { width: 16px; height: 16px; }
+.xc-bar .xc-aud-wrap { min-width: 0; max-width: 38%; flex: 0 1 auto; }
+.xc-bar .xc-audience {
+  margin: 0;
+  height: 28px;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.xc-bar .xc-end { margin-inline-start: auto; }
+.xc-inline .xc-note { margin: 2px 0 0; font-size: 12px; line-height: 16px; }
+.xc-inline .xc-text, .xc-inline .xc-highlight { min-height: 24px; font-size: 17px; line-height: 22px; }
+.xc-inline .xc-tools { min-height: 34px; padding: 0; flex-wrap: nowrap; }
+.xc-inline .xc-iconrow { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.xc-inline .xc-iconrow::-webkit-scrollbar { display: none; }
+.xc-inline .xc-tool { width: 32px; height: 32px; }
 .xc-main { flex: 1; min-width: 0; }
 .xc-context { margin: 4px 0 8px; color: var(--muted); font-size: 15px; line-height: 20px; }
 .xc-audience {
@@ -216,7 +270,7 @@
   min-height: 48px;
   padding: 0 4px;
 }
-.xc-inline .xc-iconrow { flex-wrap: wrap; }
+.xc-inline .xc-iconrow { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .xc-foot { background: var(--bg); padding-bottom: env(safe-area-inset-bottom); }
 .xc-iconrow { display: flex; align-items: center; min-width: 0; }
 .xc-tool {

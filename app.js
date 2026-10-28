@@ -577,6 +577,28 @@
     return true;
   }
 
+  function tryMetaEmbed(img) {
+    if (!img || img.dataset.metaEmbed === "1") return false;
+    const tile = img.closest(".tile");
+    if (!tile) return false;
+    const id = String(tile.dataset.id || "");
+    const post = id ? posts().find((row) => String(row.id) === id || String(row.statusId) === id || canonicalId(row) === id) : null;
+    if (!post || (post.platform !== "instagram" && post.platform !== "threads")) return false;
+    const src = metaEmbedSrc(post);
+    if (!src) return false;
+    const frame = document.createElement("iframe");
+    frame.src = src;
+    frame.title = post.platform === "threads" ? "Threads" : "Instagram";
+    frame.loading = "lazy";
+    frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    tile.classList.add("embed-tile");
+    tile.classList.remove("broken");
+    tile.textContent = "";
+    tile.appendChild(frame);
+    img.dataset.metaEmbed = "1";
+    return true;
+  }
+
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
     if (tryDeviceRelay(img)) return;
@@ -589,6 +611,7 @@
       img.replaceWith(span);
       return;
     }
+    if (tryMetaEmbed(img)) return;
     const tile = img.closest(".tile") || img.closest(".media") || img.closest(".yt-thumb");
     if (tile) tile.classList.add("broken");
     img.remove();
@@ -2661,10 +2684,41 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
   }
 
+  function metaEmbedSrc(post) {
+    const code = metaCode(post);
+    if (!code) return "";
+    const url = String((post && post.url) || "");
+    if ((post && post.platform) === "threads" || /threads\.(?:com|net)\//.test(url)) {
+      return "https://www.threads.net/t/" + code + "/embed";
+    }
+    if (/instagram\.com\/reel\//.test(url)) return "https://www.instagram.com/reel/" + code + "/embed/captioned/";
+    return "https://www.instagram.com/p/" + code + "/embed/captioned/";
+  }
+
+  function metaNeedsEmbed(post, media) {
+    if (!post || (post.platform !== "instagram" && post.platform !== "threads")) return false;
+    const url = String((media && (media.url || media.poster)) || "");
+    if (!url || deadMediaUrl(url)) return true;
+    if (oePast(url) || oePast(media && media.poster)) return true;
+    return false;
+  }
+
+  function metaEmbedHtml(post) {
+    const src = metaEmbedSrc(post);
+    if (!src) return "";
+    const open = post.url ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("Open original")}</a>` : "";
+    const title = post.platform === "threads" ? "Threads" : "Instagram";
+    return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(src)}" title="${esc(title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>${open}</div></div>`;
+  }
+
   function mediaHtml(items, eager, post) {
     const files = attachmentHtml(items);
     const list = (items || []).filter((m) => m && m.type !== "file" && m.type !== "audio" && (m.url || m.poster || m.videoId || m.type === "embed" || m.type === "placeholder" || m.type === "video" || m.type === "animated_gif")).slice(0, 4);
     if (!list.length) return files;
+    if (post && list.length && list.every((item) => metaNeedsEmbed(post, item))) {
+      const embed = metaEmbedHtml(post);
+      if (embed) return embed + files;
+    }
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
       let src = String(embed.url || "");
@@ -7358,6 +7412,7 @@ const here = parseRoute();
     const custom = getNavCustom();
     const openFolders = getNavOpenFolders();
     const hiddenSet = new Set(custom.hidden || []);
+    const popupIds = typeof getDrawerMenu === "function" ? new Set((getDrawerMenu().popup) || []) : new Set();
     const folderMap = new Map();
     custom.folders.forEach((f) => folderMap.set(f.id, f));
 
@@ -7368,7 +7423,7 @@ const here = parseRoute();
         const folder = folderMap.get(fId);
         if (!folder) return;
         const visibleItems = (folder.items || []).filter((itId) => {
-          if (hiddenSet.has(itId)) return false;
+          if (hiddenSet.has(itId) || popupIds.has(itId)) return false;
           const def = navItemDef(itId);
           if (!def) return false;
           if (def.visible && !def.visible()) return false;
@@ -7421,7 +7476,7 @@ const here = parseRoute();
           </div>
         </div>`;
       } else {
-        if (hiddenSet.has(entry)) return;
+        if (hiddenSet.has(entry) || popupIds.has(entry)) return;
         const def = navItemDef(entry);
         if (!def) return;
         if (def.visible && !def.visible()) return;
@@ -7431,10 +7486,12 @@ const here = parseRoute();
     });
 
     html += sidebarDrawerLinks(route);
-    html += `<button type="button" class="nav-item" data-act="go-live" aria-label="${esc(tr("Go live"))}" data-tooltip="${esc(tr("Go live"))}">
-      <span class="nav-ico">${icon("video")}</span>
-      <span class="nav-label">${esc(tr("Go live"))}</span>
-    </button>`;
+    if (typeof isStandalone !== "function" || !isStandalone()) {
+      html += `<button type="button" class="nav-item" data-act="install" aria-label="${esc(tr("Install app"))}" data-tooltip="${esc(tr("Install app"))}">
+        <span class="nav-ico">${icon("plus")}</span>
+        <span class="nav-label">${esc(tr("Install app"))}</span>
+      </button>`;
+    }
     html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
       <span class="nav-ico">${icon("sliders")}</span>
       <span class="nav-label">${tr("Customize sidebar")}</span>
@@ -7451,7 +7508,7 @@ const here = parseRoute();
     const row = (id) => {
       if (!id || seen.has(id)) return "";
       seen.add(id);
-      if (id === "logout") return "";
+      if (id === "logout" || (menu.popup || []).indexOf(id) >= 0) return "";
       if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
       const navId = DRAWER_NAV[id];
       if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
@@ -7470,7 +7527,20 @@ const here = parseRoute();
         if (!section) return;
         const inner = (section.items || []).map(row).join("");
         if (!inner) return;
-        html += `<div class="nav-section">${esc(section.name)}</div>${inner}`;
+        const folderId = "menu-" + section.id;
+        const openMap = getNavOpenFolders();
+        const isOpen = !!openMap[folderId];
+        const mark = section.emoji
+          ? `<span class="nav-folder-emoji">${esc(section.emoji)}</span>`
+          : icon(isOpen ? "folderOpen" : "folder");
+        html += `<div class="nav-folder-wrapper${isOpen ? " open" : ""}" data-folder-id="${esc(folderId)}">
+          <button type="button" class="nav-item nav-folder-btn${isOpen ? " open" : ""}" data-act="toggle-nav-folder" data-folder-id="${esc(folderId)}" aria-expanded="${isOpen ? "true" : "false"}" aria-label="${esc(section.name)}" data-tooltip="${esc(section.name)}">
+            <span class="nav-ico">${mark}</span>
+            <span class="nav-label">${esc(section.name)}</span>
+            <span class="nav-folder-caret">${icon("caret")}</span>
+          </button>
+          <div class="nav-folder-children${isOpen ? " open" : ""}">${inner}</div>
+        </div>`;
         return;
       }
       html += row(entry);
@@ -8324,6 +8394,53 @@ const here = parseRoute();
       body = `<h2>${esc(tr("Notifications can wait until you ask"))}</h2><button class="save" type="button" data-act="welcome-notify">${esc(tr("Notify me about new posts"))}</button>`;
     }
     return `<section class="welcome-sheet" data-welcome>${body}<div class="welcome-actions"><button type="button" data-act="welcome-skip">${esc(tr("Not now"))}</button><button class="save" type="button" data-act="welcome-next">${esc(tr("Next"))}</button></div></section>`;
+  }
+
+  function installChoice() {
+    const api = window.ViktorychNative;
+    if (api && api.readInstallChoice) return api.readInstallChoice();
+    return { mode: "", at: 0 };
+  }
+
+  function installKindNow() {
+    const api = window.ViktorychNative;
+    const ua = navigator.userAgent || "";
+    const extra = { touchMac: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 };
+    if (api && api.installKind) return api.installKind(ua, extra);
+    return "hint";
+  }
+
+  function canAutoInstall(reason) {
+    if (isStandalone()) return false;
+    const choice = installChoice();
+    const api = window.ViktorychNative;
+    const dismissed = choice.mode === "never" ? true : choice.mode;
+    if (api && api.shouldOfferInstall) {
+      return api.shouldOfferInstall({
+        standalone: false,
+        dismissed: dismissed,
+        dismissedAt: choice.at,
+        now: Date.now(),
+        afterSignup: reason === "signup",
+        prompt: reason !== "signup" && !!STATE.installPrompt,
+        ios: /iphone|ipad|ipod/i.test(navigator.userAgent || "")
+      });
+    }
+    return reason === "signup" && choice.mode !== "never";
+  }
+
+  function offerInstall(reason) {
+    if (reason !== "manual" && !canAutoInstall(reason)) return false;
+    if (isStandalone()) return false;
+    STATE.modal = "install";
+    return true;
+  }
+
+  function finishWelcome(notify, offer) {
+    writeWelcome({ step: 2, done: true });
+    if (offer !== false) offerInstall("signup");
+    render();
+    if (notify) enableNotifications();
   }
 
   function deviceScheduleKey() { return "viktorychapp-x-schedule-v1"; }
@@ -12113,6 +12230,37 @@ const here = parseRoute();
     return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
   }
 
+  function installOfferHtml() {
+    const kind = installKindNow();
+    const api = window.ViktorychNative;
+    const ua = navigator.userAgent || "";
+    const extra = { touchMac: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 };
+    const arrow = api && api.installArrow ? api.installArrow(kind, ua, extra) : (kind === "ios-safari" ? "down" : "");
+    const benefit = (glyph, text) => `<li class="install-benefit"><span aria-hidden="true">${icon(glyph)}</span><span>${esc(text)}</span></li>`;
+    const benefits = `<ul class="install-benefits">${benefit("home", tr("It opens full screen and loads faster."))}${benefit("check", tr("Posts you already opened stay available offline."))}${benefit("plus", tr("It stays on your Home Screen or desktop."))}</ul>`;
+    let body = "";
+    if (kind === "ios-browser") {
+      body = `<p>${esc(tr("This browser can’t add the app to your Home Screen. Open the page in Safari, then use the Share button."))}</p>`;
+    } else if (kind === "ios-safari") {
+      body = `${benefits}<ol class="install-steps"><li>${esc(tr("Tap Share in Safari"))}</li><li>${esc(tr("Choose Add to Home Screen"))}</li><li>${esc(tr("Tap Add"))}</li></ol>`;
+    } else if (kind === "native" || STATE.installPrompt) {
+      body = `${benefits}<button class="install-go" type="button" data-act="install-go">${esc(tr("Install"))}</button>`;
+    } else {
+      body = `<p>${esc(tr("In Safari, use Share or File, then Add to Dock. In Firefox, use the install icon in the address bar."))}</p>`;
+    }
+    const pointer = arrow ? `<div class="install-arrow is-${arrow}" aria-hidden="true">${icon(arrow === "up" ? "arrowUp" : "arrowDown")}</div>` : "";
+    return `<div class="install-offer" data-act="stop"><div class="install-panel" role="dialog" aria-modal="true" aria-label="${esc(tr("Install app"))}">
+      <div class="install-grab" aria-hidden="true"></div>
+      <h2>${esc(tr("Install app"))}</h2>
+      ${body}
+      ${pointer}
+      <div class="install-actions">
+        <button type="button" data-act="install-later">${esc(tr("Later"))}</button>
+        <button type="button" data-act="install-never">${esc(tr("Don't show again"))}</button>
+      </div>
+    </div></div>`;
+  }
+
   function installControl() {
     if (isStandalone()) return "";
     return `<button class="primary" type="button" data-act="install">${tr("Install app")}</button>`;
@@ -12472,15 +12620,18 @@ const here = parseRoute();
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
+      ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
     </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
     home: "home",
+    explore: "explore",
+    notifications: "notifications",
     communities: "communities",
     lists: "lists",
     studio: "feeds",
@@ -12498,7 +12649,7 @@ const here = parseRoute();
   };
 
   function defaultDrawerMenu() {
-    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA), hidden: [], at: 0 };
+    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA).filter((id) => id !== "settings" && id !== "logout"), hidden: [], popup: ["settings", "logout"], at: 0 };
   }
 
   function cleanDrawerMenu(raw) {
@@ -12511,13 +12662,28 @@ const here = parseRoute();
       const id = String(section.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
       if (!id || sectionIds.has(id)) return;
       sectionIds.add(id);
-      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
+      const emoji = String(section.emoji || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
       const items = [];
       (Array.isArray(section.items) ? section.items : []).forEach((item) => {
         if (DRAWER_IDS.indexOf(item) < 0 || items.indexOf(item) >= 0) return;
         items.push(item);
       });
-      sections.push({ id: id, name: name, items: items });
+      sections.push({ id: id, name: name, emoji: emoji, items: items });
+    });
+    const popup = [];
+    const popupSeen = new Set();
+    const takePopup = (id) => {
+      if (!id || popupSeen.has(id) || DRAWER_IDS.indexOf(id) < 0) return;
+      if (id === "home" || id === "customize") return;
+      popupSeen.add(id);
+      popup.push(id);
+    };
+    (Array.isArray(raw.popup) ? raw.popup : ["settings", "logout"]).forEach(takePopup);
+    ["settings", "logout"].forEach(takePopup);
+    const popupSet = new Set(popup);
+    sections.forEach((section) => {
+      section.items = section.items.filter((item) => !popupSet.has(item));
     });
     const inSection = new Set();
     sections.forEach((section) => section.items.forEach((item) => inSection.add(item)));
@@ -12525,7 +12691,7 @@ const here = parseRoute();
     const seen = new Set();
     (Array.isArray(raw.order) ? raw.order : []).forEach((entry) => {
       const text = String(entry || "");
-      if (!text || seen.has(text)) return;
+      if (!text || seen.has(text) || popupSet.has(text)) return;
       if (text.indexOf("section:") === 0) {
         const id = text.slice(8);
         if (!sectionIds.has(id)) return;
@@ -12542,7 +12708,7 @@ const here = parseRoute();
       if (order.indexOf(key) < 0) order.push(key);
     });
     DRAWER_IDS.forEach((id) => {
-      if (seen.has(id) || inSection.has(id)) return;
+      if (seen.has(id) || inSection.has(id) || popupSet.has(id)) return;
       order.push(id);
     });
     const hidden = [];
@@ -12550,7 +12716,7 @@ const here = parseRoute();
       if (DRAWER_IDS.indexOf(id) < 0 || DRAWER_LOCKED.indexOf(id) >= 0 || hidden.indexOf(id) >= 0) return;
       hidden.push(id);
     });
-    return { sections: sections, order: order, hidden: hidden, at: Number(raw.at) || 0 };
+    return { sections: sections, order: order, hidden: hidden, popup: popup, at: Number(raw.at) || 0 };
   }
 
   function getDrawerMenu() {
@@ -12637,6 +12803,8 @@ const here = parseRoute();
   function drawerItem(id) {
     const mine = signedAccount();
     if (id === "home") return { id: id, href: "#/", icon: "home", label: tr("Home"), locked: true };
+    if (id === "explore") return { id: id, href: "#/explore", icon: "search", label: tr("Explore") };
+    if (id === "notifications") return { id: id, href: "#/notifications", icon: "bell", label: tr("Notifications") };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
@@ -12671,15 +12839,17 @@ const here = parseRoute();
     const eye = locked
       ? `<span class="drawer-lock" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
       : `<button class="icon-btn drawer-eye" type="button" data-act="drawer-vis" data-id="${esc(item.id)}" aria-pressed="${hidden ? "false" : "true"}" aria-label="${esc(hidden ? tr("Hidden") : tr("Visible"))}">${icon(hidden ? "eyeOff" : "eye")}</button>`;
+    const inPopup = (menu.popup || []).indexOf(item.id) >= 0;
+    const placeLocked = item.id === "home" || item.id === "customize" || item.id === "settings" || item.id === "logout";
+    const placeBtn = placeLocked ? "" : `<button class="outline drawer-place" type="button" data-act="drawer-place" data-id="${esc(item.id)}" data-place="${inPopup ? "sidebar" : "popup"}">${esc(inPopup ? tr("Sidebar") : tr("Profile popup"))}</button>`;
     const sections = (menu.sections || []).map((section) => `<option value="${esc(section.id)}">${esc(section.name)}</option>`).join("");
-    const placed = (menu.sections || []).find((section) => (section.items || []).indexOf(item.id) >= 0);
-    const move = locked ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
+    const move = locked || inPopup ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
     return `<div class="drawer-edit-row${hidden ? " is-hidden" : ""}" data-drawer-key="${esc(item.id)}">
       <button class="drawer-grip" type="button" data-drag-drawer="${esc(item.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
       <span class="drawer-ico">${item.icon === "gear" ? menuIcon("gear") : icon(item.icon)}</span>
       <span class="drawer-label">${esc(item.label)}</span>
       ${move}
-      ${placed ? "" : ""}
+      ${placeBtn}
       ${eye}
     </div>`;
   }
@@ -12700,11 +12870,13 @@ const here = parseRoute();
           return editing ? drawerEditRow(item, menu) : drawerViewRow(item);
         }).join("");
         if (!editing && !inner) return "";
-        if (!editing) return `<div class="drawer-section-label">${esc(section.name)}</div>${inner}`;
+        const folderMark = section.emoji ? esc(section.emoji) + " " : "";
+        if (!editing) return `<details class="drawer-folder"><summary class="drawer-folder-sum">${folderMark}${esc(section.name)}</summary>${inner}</details>`;
         return `<div class="drawer-section" data-drawer-key="section:${esc(section.id)}">
           <div class="drawer-section-head">
             <button class="drawer-grip" type="button" data-drag-drawer="section:${esc(section.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
-            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Section name"))}">
+            <input class="drawer-section-emoji" data-section-id="${esc(section.id)}" value="${esc(section.emoji || "")}" maxlength="8" aria-label="${esc(tr("Emoji"))}" placeholder="${esc(tr("Emoji"))}">
+            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Folder name"))}">
             <button class="icon-btn" type="button" data-act="drawer-drop-section" data-id="${esc(section.id)}" aria-label="${esc(tr("Delete"))}">${icon("trash")}</button>
           </div>
           <div class="drawer-section-items" data-section-items="${esc(section.id)}">${inner}</div>
@@ -12722,13 +12894,27 @@ const here = parseRoute();
     }).join("");
     if (!editing) {
       const open = !!STATE.drawerFold;
-      return blocks + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
+      const popupRows = (menu.popup || []).map((id) => {
+        if (hidden.has(id)) return "";
+        const item = drawerItem(id);
+        if (!item || item.accountMenu) return "";
+        return drawerViewRow(item);
+      }).join("");
+      return blocks + popupRows + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
     }
+    const popupBlocks = (menu.popup || []).map((id) => {
+      const item = drawerItem(id);
+      return item ? drawerEditRow(item, menu) : "";
+    }).join("");
     return `<div class="drawer-edit-bar">
-      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("Add section"))}</button>
+      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("New folder"))}</button>
       <button class="outline" type="button" data-act="drawer-reset">${esc(tr("Reset to default"))}</button>
       <button class="save" type="button" data-act="drawer-edit-done">${esc(tr("Done"))}</button>
-    </div><p class="drawer-edit-note">${esc(tr("This item always stays available"))}</p><div class="drawer-edit-list">${blocks}</div>`;
+    </div><p class="drawer-edit-note">${esc(tr("Home stays in the sidebar. Settings and Log out stay in the profile popup."))}</p>
+      <h3 class="drawer-place-title">${esc(tr("Sidebar"))}</h3>
+      <div class="drawer-edit-list" data-place="sidebar">${blocks}</div>
+      <h3 class="drawer-place-title">${esc(tr("Profile popup"))}</h3>
+      <div class="drawer-edit-list" data-place="popup">${popupBlocks}</div>`;
   }
 
   function drawerRow(href, glyph, label, extra) {
@@ -12793,13 +12979,25 @@ const here = parseRoute();
   function accountPopup() {
     if (!STATE.accountMenu || !sidebarOwnsNav()) return "";
     const mine = signedAccount();
+    const menu = getDrawerMenu();
+    const hidden = new Set(menu.hidden || []);
     const accounts = mine
       ? `<button type="button" data-acct="login">${esc(tr("Add account"))}</button>`
       : "";
-    const leave = mine
-      ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
-      : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
-    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}<a href="#/settings">${esc(tr("Settings"))}</a>${leave}</div></div>`;
+    const rows = (menu.popup || []).map((id) => {
+      if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
+      const item = drawerItem(id);
+      if (!item) return "";
+      if (id === "logout") {
+        return mine
+          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+          : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+      }
+      if (item.act) return `<button type="button" data-act="${esc(item.act)}">${esc(item.label)}</button>`;
+      if (!item.href) return "";
+      return `<a href="${esc(item.href)}">${esc(item.label)}</a>`;
+    }).join("");
+    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${rows}</div></div>`;
   }
 
   function drawerEditModal() {
@@ -12956,16 +13154,7 @@ if (STATE.histClear) {
         <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (!STATE.modal) return "";
-    if (STATE.modal === "install") {
-      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      const steps = ios
-        ? `<div class="install-step"><span>1</span> ${tr("Tap Share in Safari")}</div><div class="install-step"><span>2</span> ${tr("Choose Add to Home Screen")}</div><div class="install-step"><span>3</span> ${tr("Tap Add")}</div>`
-        : `<p>${tr("Use the install icon in the address bar, or open the browser menu and choose Install app.")}</p>`;
-      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Install app"))}" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Install app")}</h2></div>
-        <div class="modal-body install-sheet">${steps}</div>
-      </div></div>`;
-    }
+    if (STATE.modal === "install") return installOfferHtml();
     if (STATE.modal === "compose") {
       if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
         const composed = window.ViktorychXCompose.modalHtml();
@@ -13234,7 +13423,7 @@ if (STATE.histClear) {
     delete pendingReposts[postKey];
   }
 
-  function profilePostsHtml(account) {
+  function profilePostsHtml(account, tab) {
     const lib = repostLib();
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
@@ -13284,7 +13473,11 @@ if (STATE.histClear) {
       });
     }
     postList.sort(byStamp);
-    return { html: postList.map((post) => card(post, "")).join(""), count: postList.length };
+    let shown = postList;
+    if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
+    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
+    else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
+    return { html: shown.map((post) => card(post, "")).join(""), count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -15047,6 +15240,33 @@ if (STATE.histClear) {
     });
   }
 
+  function pillMarqueeHtml(text) {
+    const safe = esc(text || "");
+    return `<span class="sp-marquee" data-sp-marquee><span class="sp-marquee-clip"><span class="sp-marquee-track"><span class="sp-marquee-copy"><span class="sp-marquee-text">${safe}</span></span><span class="sp-marquee-copy" aria-hidden="true"><span class="sp-marquee-text">${safe}</span></span></span></span></span>`;
+  }
+
+  function fitPillLabels(root) {
+    if (!root) return;
+    const nodes = root.querySelectorAll(".story-folder, .cm-chip, .yt-chip > span, .hist-chip, .friends-pill, .gchip, .ptabs .tab > span, .pill > span");
+    nodes.forEach((el) => {
+      if (el.querySelector("[data-sp-marquee]") || el.closest("[data-sp-marquee]")) return;
+      const loose = [];
+      el.childNodes.forEach((node) => {
+        if (node.nodeType === 3 && String(node.textContent || "").trim()) loose.push(node);
+      });
+      if (!el.childElementCount && String(el.textContent || "").trim()) {
+        el.innerHTML = pillMarqueeHtml(el.textContent);
+        return;
+      }
+      loose.forEach((node) => {
+        const span = document.createElement("span");
+        span.className = "pill-fit";
+        span.innerHTML = pillMarqueeHtml(String(node.textContent || "").trim());
+        node.replaceWith(span);
+      });
+    });
+  }
+
   function commitApp(html) {
     const app = document.getElementById("app");
     if (!app) return;
@@ -15059,6 +15279,7 @@ if (STATE.histClear) {
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
     hscrollSettle({ reveal: true });
+    if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
 
   function hscrollRestoreSaved(retry) {
@@ -15472,6 +15693,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       watchHydration();
       scheduleDetect();
       if (window.FeedsTranslate) window.FeedsTranslate.paint();
+      fitPillLabels(document.getElementById("app"));
       if (window.SIntelMusic && window.SIntelMusic.afterRender) window.SIntelMusic.afterRender(route);
       syncMediaSession();
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);
@@ -15780,6 +16002,20 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "drawer-edit-done") { STATE.drawerEdit = false; render(); return; }
     if (act === "drawer-reset") { saveDrawerMenu(null); render(); return; }
+    if (act === "drawer-place") {
+      const id = el.dataset.id || "";
+      const place = el.dataset.place || "";
+      if (!id || id === "home" || id === "customize" || id === "settings" || id === "logout") return;
+      const menu = getDrawerMenu();
+      menu.popup = (menu.popup || []).filter((item) => item !== id);
+      menu.sections.forEach((section) => { section.items = section.items.filter((item) => item !== id); });
+      menu.order = (menu.order || []).filter((entry) => entry !== id);
+      if (place === "popup") menu.popup.push(id);
+      else if (menu.order.indexOf(id) < 0) menu.order.push(id);
+      saveDrawerMenu(menu);
+      render();
+      return;
+    }
     if (act === "drawer-vis") {
       const id = el.dataset.id || "";
       if (DRAWER_LOCKED.indexOf(id) >= 0) return;
@@ -15795,7 +16031,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "drawer-add-section") {
       const menu = getDrawerMenu();
       const id = "s" + Date.now().toString(36);
-      menu.sections.push({ id: id, name: tr("Section name"), items: [] });
+      menu.sections.push({ id: id, name: tr("Folder name"), emoji: "", items: [] });
       menu.order.push("section:" + id);
       saveDrawerMenu(menu);
       render();
@@ -15885,8 +16121,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "open-nav-customize") {
-      STATE.modal = "nav-customize";
+      STATE.drawerEdit = true;
+      STATE.accountMenu = false;
+      STATE.modal = null;
       STATE.navNewFolderOpen = false;
+      STATE.drawer = !sidebarOwnsNav();
       render();
       return;
     }
@@ -16076,8 +16315,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "welcome-skip") {
-      writeWelcome({ step: 0, done: true });
-      render();
+      finishWelcome(false, false);
       return;
     }
     if (act === "welcome-follow") {
@@ -16087,8 +16325,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "welcome-notify") {
-      writeWelcome({ step: 2, done: true });
-      enableNotifications();
+      finishWelcome(true);
       return;
     }
     if (act === "welcome-next") {
@@ -16111,14 +16348,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (step === 1) {
         const ids = Object.keys(welcomeFollows).filter((id) => welcomeFollows[id]);
         if (ids.length) applyFollow(ids, true);
-        writeWelcome({ step: 2, done: false });
-        render();
-        return;
-      }
-      writeWelcome({ step: 2, done: true });
+      writeWelcome({ step: 2, done: false });
       render();
       return;
     }
+    finishWelcome(false);
+    return;
+  }
     if (act === "show-public-spam") {
       if (!STATE.publicSpam) STATE.publicSpam = {};
       STATE.publicSpam[el.dataset.id || ""] = true;
@@ -16591,18 +16827,28 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "install") {
       STATE.drawer = false;
       STATE.drawerEdit = false;
-      if (STATE.installPrompt) {
-        const prompt = STATE.installPrompt;
-        STATE.installPrompt = null;
-        Promise.resolve()
-          .then(() => prompt.prompt())
-          .then(() => prompt.userChoice)
-          .then(() => render())
-          .catch(() => { STATE.modal = "install"; render(); });
-        render();
-        return;
-      }
+      STATE.accountMenu = false;
+      if (isStandalone()) return;
       STATE.modal = "install";
+      render();
+      return;
+    }
+    if (act === "install-go") {
+      const prompt = STATE.installPrompt || window.__VIKTORYCH_INSTALL;
+      if (prompt && prompt.prompt) {
+        STATE.installPrompt = null;
+        window.__VIKTORYCH_INSTALL = null;
+        Promise.resolve().then(() => prompt.prompt()).then(() => prompt.userChoice).then(() => {
+          STATE.modal = null;
+          render();
+        }).catch(() => render());
+      }
+      return;
+    }
+    if (act === "install-later" || act === "install-never") {
+      const api = window.ViktorychNative;
+      if (api && api.writeInstallChoice) api.writeInstallChoice(act === "install-never" ? "never" : "later");
+      STATE.modal = null;
       render();
       return;
     }
@@ -21240,6 +21486,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       });
     }
     bindGestures();
+    setTimeout(() => {
+      if (STATE.modal || isStandalone() || !accountToken()) return;
+      const choice = installChoice();
+      if (choice.mode !== "later") return;
+      if (offerInstall("return")) render();
+    }, 1600);
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       STATE.installPrompt = event;
@@ -22504,16 +22756,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         document.removeEventListener("pointermove", cancel);
       }, { once: true });
     });
+    const drawerLists = () => [...document.querySelectorAll(".drawer-edit-list, .drawer-section-items")];
+    const listAt = (event) => drawerLists().find((list) => {
+      const box = list.getBoundingClientRect();
+      return event.clientY >= box.top && event.clientY <= box.bottom;
+    });
     document.addEventListener("pointermove", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
-      const node = drag.list.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
+      const node = document.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
       if (!node) return;
-      const over = rows.find((el) => {
-        if (el === node) return false;
-        const box = el.getBoundingClientRect();
-        return event.clientY < box.top + box.height / 2;
-      });
+      const sectionKey = String(drag.key).indexOf("section:") === 0;
+      const locked = DRAWER_LOCKED.indexOf(drag.key) >= 0;
+      const hit = listAt(event);
+      if (hit && hit !== drag.list && !sectionKey && !locked && !(hit.classList.contains("drawer-section-items") && locked)) {
+        hit.appendChild(node);
+        drag.list = hit;
+      }
+      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
       const target = rows.find((el) => {
         if (el === node) return false;
         const box = el.getBoundingClientRect();
@@ -22527,19 +22786,49 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     document.addEventListener("pointerup", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const list = drag.list;
-      const keys = [...list.querySelectorAll(":scope > [data-drawer-key]")].map((el) => el.getAttribute("data-drawer-key"));
       drag = null;
-      commitDrawerKeys(list, keys);
+      const sidebar = document.querySelector(".drawer-edit-list[data-place='sidebar']") || document.querySelector(".drawer-edit-list");
+      const popupList = document.querySelector(".drawer-edit-list[data-place='popup']");
+      if (!sidebar) return;
+      const menu = getDrawerMenu();
+      const order = [];
+      const sectionItems = {};
+      const readKey = (el) => el.getAttribute("data-drawer-key") || "";
+      [...sidebar.children].forEach((el) => {
+        const key = readKey(el);
+        if (!key) return;
+        if (key.indexOf("section:") === 0) {
+          order.push(key);
+          const id = key.slice(8);
+          sectionItems[id] = [...el.querySelectorAll(":scope > .drawer-section-items > [data-drawer-key]")].map(readKey).filter((item) => DRAWER_IDS.indexOf(item) >= 0 && item !== "home" && item !== "settings" && item !== "logout" && item !== "customize");
+          return;
+        }
+        if (DRAWER_IDS.indexOf(key) >= 0) order.push(key);
+      });
+      const popup = [];
+      if (popupList) {
+        [...popupList.querySelectorAll(":scope > [data-drawer-key]")].forEach((el) => {
+          const key = readKey(el);
+          if (DRAWER_IDS.indexOf(key) >= 0 && key !== "home" && key !== "customize") popup.push(key);
+        });
+      }
+      menu.order = order;
+      menu.popup = popup;
+      menu.sections.forEach((section) => {
+        if (sectionItems[section.id]) section.items = sectionItems[section.id];
+      });
+      saveDrawerMenu(menu);
+      render();
     });
     document.addEventListener("change", (event) => {
       const el = event.target;
       if (!el) return;
-      if (el.classList && el.classList.contains("drawer-section-name")) {
+      if (el.classList && (el.classList.contains("drawer-section-name") || el.classList.contains("drawer-section-emoji"))) {
         const menu = getDrawerMenu();
         const section = (menu.sections || []).find((item) => item.id === el.dataset.sectionId);
         if (!section) return;
-        section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+        if (el.classList.contains("drawer-section-emoji")) section.emoji = String(el.value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
+        else section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
         saveDrawerMenu(menu);
         return;
       }

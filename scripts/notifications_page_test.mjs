@@ -210,6 +210,7 @@ async function openNotes(browser, port, opts) {
   });
   const page = await context.newPage();
   const mode = { current: opts.api || "empty" };
+  await page.route("**/sw.js", (route) => route.abort());
   await installRoutes(page, mode);
   await page.addInitScript(sessionScript(!!opts.signed));
   const hash = opts.hash || "#/notifications";

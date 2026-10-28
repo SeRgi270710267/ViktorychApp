@@ -7,13 +7,16 @@
 
 import { invalidate } from "./edge-cache.js";
 import { assertNotPaidX } from "./x-guard.js";
+import { pairState } from "./social.js";
+import { canSeeIdentity, cleanIdentityAudience } from "../../shared/identity-audience.js";
 
 export const IDENTITY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS account_identities (id INTEGER PRIMARY KEY AUTOINCREMENT, public_id TEXT NOT NULL, platform TEXT NOT NULL, handle TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '', proof_url TEXT NOT NULL DEFAULT '', verification_type TEXT NOT NULL DEFAULT 'challenge', verified INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, UNIQUE(public_id, platform, handle))",
   "CREATE INDEX IF NOT EXISTS account_identities_pub ON account_identities(public_id, created_at DESC)",
   "CREATE INDEX IF NOT EXISTS account_identities_lookup ON account_identities(platform, handle)",
   "CREATE TABLE IF NOT EXISTS identity_challenges (challenge_id TEXT PRIMARY KEY, public_id TEXT NOT NULL, platform TEXT NOT NULL, handle TEXT NOT NULL, code TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)",
-  "CREATE INDEX IF NOT EXISTS identity_challenges_user ON identity_challenges(public_id, platform, handle)"
+  "CREATE INDEX IF NOT EXISTS identity_challenges_user ON identity_challenges(public_id, platform, handle)",
+  "CREATE TABLE IF NOT EXISTS identity_list_grants (identity_id INTEGER NOT NULL, list_id TEXT NOT NULL, PRIMARY KEY (identity_id, list_id))"
 ];
 
 const SUPPORTED_PLATFORMS = ["x", "telegram", "instagram", "youtube", "threads", "vk"];
@@ -67,13 +70,52 @@ function newId(prefix) {
   return (prefix || "id_") + hex;
 }
 
+let identityColumnsReady = null;
+function ensureIdentityColumns(env) {
+  if (!env || !env.DB) return Promise.resolve();
+  if (identityColumnsReady) return identityColumnsReady;
+  identityColumnsReady = (async () => {
+    const statements = [
+      "ALTER TABLE account_identities ADD COLUMN audience TEXT NOT NULL DEFAULT 'public'",
+      "ALTER TABLE account_identities ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
+      "CREATE TABLE IF NOT EXISTS identity_list_grants (identity_id INTEGER NOT NULL, list_id TEXT NOT NULL, PRIMARY KEY (identity_id, list_id))"
+    ];
+    for (let i = 0; i < statements.length; i++) {
+      try {
+        await env.DB.prepare(statements[i]).run();
+      } catch (err) {
+        const message = String(err && err.message || err);
+        if (!/duplicate column/i.test(message)) throw err;
+      }
+    }
+  })().catch((err) => {
+    identityColumnsReady = null;
+    throw err;
+  });
+  return identityColumnsReady;
+}
+
 export async function listAccountIdentities(env, publicId) {
   if (!env || !env.DB || !publicId) return [];
   try {
+    await ensureIdentityColumns(env);
     const res = await env.DB.prepare(
-      "SELECT id, platform, handle, display_name, avatar, proof_url, verification_type, verified, created_at FROM account_identities WHERE public_id = ? ORDER BY created_at ASC"
+      "SELECT id, platform, handle, display_name, avatar, proof_url, verification_type, verified, created_at, audience, hidden FROM account_identities WHERE public_id = ? ORDER BY created_at ASC"
     ).bind(publicId).all();
-    return (res.results || []).map((row) => ({
+    const rows = res.results || [];
+    const ids = rows.map((row) => Number(row.id)).filter((id) => id > 0);
+    const grants = {};
+    if (ids.length) {
+      const marks = ids.map(() => "?").join(",");
+      const listed = await env.DB.prepare(
+        "SELECT identity_id, list_id FROM identity_list_grants WHERE identity_id IN (" + marks + ")"
+      ).bind(...ids).all();
+      (listed.results || []).forEach((row) => {
+        const bag = grants[row.identity_id] || (grants[row.identity_id] = []);
+        if (row.list_id) bag.push(String(row.list_id));
+      });
+    }
+    return rows.map((row) => ({
       id: row.id,
       platform: row.platform,
       handle: row.handle,
@@ -82,12 +124,65 @@ export async function listAccountIdentities(env, publicId) {
       proofUrl: row.proof_url,
       verificationType: row.verification_type,
       verified: row.verified === 1,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      audience: cleanIdentityAudience(row.audience),
+      hidden: row.hidden === 1,
+      listIds: grants[row.id] || []
     }));
   } catch (err) {
     return [];
   }
 }
+
+async function memberAllowed(env, listIds, viewerId) {
+  const allowed = {};
+  const ids = (listIds || []).map((id) => String(id || "")).filter((id) => /^[A-Za-z0-9_-]{1,40}$/.test(id));
+  if (!ids.length || !viewerId) return allowed;
+  const marks = ids.map(() => "?").join(",");
+  const listed = await env.DB.prepare(
+    "SELECT list_id FROM audience_members WHERE member_id = ? AND list_id IN (" + marks + ")"
+  ).bind(viewerId, ...ids).all();
+  if ((listed.results || []).length) allowed[viewerId] = 1;
+  return allowed;
+}
+
+export async function visibleIdentities(env, ownerId, viewer, own) {
+  const list = await listAccountIdentities(env, ownerId);
+  if (own) return list;
+  const viewerId = viewer && viewer.public_id ? viewer.public_id : "";
+  let relation = { owner: false, follows: false, followsYou: false, friends: false, blocked: false, viewerId: viewerId };
+  if (viewerId && viewerId !== ownerId) {
+    const state = await pairState(env, viewerId, ownerId);
+    relation = {
+      owner: false,
+      follows: !!state.following,
+      followsYou: !!state.followsYou,
+      friends: !!state.friends,
+      blocked: !!(state.viewerBlocks || state.blockedBy),
+      viewerId: viewerId
+    };
+  }
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const item = list[i];
+    const allowed = item.audience === "list" ? await memberAllowed(env, item.listIds, viewerId) : {};
+    if (!canSeeIdentity(item, relation, allowed)) continue;
+    out.push({
+      id: item.id,
+      platform: item.platform,
+      handle: item.handle,
+      displayName: item.displayName,
+      avatar: item.avatar,
+      proofUrl: item.proofUrl,
+      verificationType: item.verificationType,
+      verified: item.verified,
+      createdAt: item.createdAt
+    });
+  }
+  return out;
+}
+
+export { canSeeIdentity };
 
 async function verifyExternalProof(platform, handle, code, proofUrl) {
   // Support testing mock verification
@@ -381,6 +476,40 @@ export async function handleIdentitiesRoute(request, env, path, url, helpers) {
         createdAt: now
       }
     });
+  }
+
+  if (request.method === "PATCH" && /^\/v1\/account\/identities\/\d+$/.test(path)) {
+    const id = Number(path.slice("/v1/account/identities/".length));
+    const body = await readJson(request, 4000);
+    if (!body || body.error) return json(400, { error: "bad_json" });
+    const existing = await env.DB.prepare(
+      "SELECT id FROM account_identities WHERE id = ? AND public_id = ?"
+    ).bind(id, row.public_id).first();
+    if (!existing) return json(404, { error: "not_found" });
+    await ensureIdentityColumns(env);
+    const audience = cleanIdentityAudience(body.audience);
+    const hidden = body.hidden === true ? 1 : 0;
+    const wanted = audience === "list" && Array.isArray(body.listIds) ? body.listIds.map((item) => String(item || "")).filter((item) => /^[A-Za-z0-9_-]{1,40}$/.test(item)) : [];
+    const owned = [];
+    for (let i = 0; i < wanted.length; i++) {
+      const found = await env.DB.prepare(
+        "SELECT id FROM audience_lists WHERE id = ? AND public_id = ?"
+      ).bind(wanted[i], row.public_id).first();
+      if (found) owned.push(wanted[i]);
+    }
+    await env.DB.prepare(
+      "UPDATE account_identities SET audience = ?, hidden = ? WHERE id = ? AND public_id = ?"
+    ).bind(audience, hidden, id, row.public_id).run();
+    await env.DB.prepare("DELETE FROM identity_list_grants WHERE identity_id = ?").bind(id).run();
+    for (let i = 0; i < owned.length; i++) {
+      await env.DB.prepare(
+        "INSERT INTO identity_list_grants (identity_id, list_id) VALUES (?, ?) ON CONFLICT(identity_id, list_id) DO NOTHING"
+      ).bind(id, owned[i]).run();
+    }
+    await invalidate(env, "p:" + row.public_id);
+    const list = await listAccountIdentities(env, row.public_id);
+    const updated = list.find((item) => Number(item.id) === id) || null;
+    return json(200, { ok: true, identity: updated });
   }
 
   // 4. DELETE /v1/account/identities/:id or DELETE /v1/account/identities (with platform/handle or id)
