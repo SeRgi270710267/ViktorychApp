@@ -6123,3 +6123,6 @@ img, video { max-width: 100%; }
 .action-more { gap: 8px; margin-left: 0; }
 .action-more .action { min-width: 34px; justify-content: center; }
 .status-actions .action-stats { margin-right: 16px; }
+
+/* Sticky right rail (see fitRail in app.js). */
+.side { position: sticky; top: var(--rail-top, 0px); align-self: flex-start; }
