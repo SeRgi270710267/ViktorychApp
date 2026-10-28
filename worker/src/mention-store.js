@@ -4,6 +4,7 @@
 
 import { extractMentions } from "../../shared/mentions.js";
 import { resolveName } from "./usernames.js";
+import { canMention } from "./name-rules.js";
 import { ensureNotificationSchema, finishDeliveries, planNotification } from "./notifications.js";
 
 export const MENTION_SCHEMA = [
@@ -120,6 +121,7 @@ export async function planMentions(env, opts) {
     seen[account.public_id] = true;
     if (await blockedOrMuted(env, actor.public_id, account.public_id)) continue;
     if (!(await privateAllows(env, actor.public_id, account))) continue;
+    if (!(await canMention(env, account.public_id, actor.public_id, { replyTo: opts.replyTo || "" }))) continue;
     targets.push(account.public_id);
     statements.push(env.DB.prepare(
       "INSERT INTO mentions (source_id, target_id, source_kind, author_id, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(source_id, target_id) DO NOTHING"
@@ -178,10 +180,18 @@ export async function handleContentRoutes(request, env, path, deps) {
     }
     const parent = clip(body.parentId || "", 80);
     const now = Date.now();
+    let replyTo = "";
+    if (parent) {
+      try {
+        const up = await env.DB.prepare("SELECT author_id FROM account_content WHERE id = ?").bind(parent).first();
+        replyTo = up && up.author_id ? up.author_id : (/^\d{12}$/.test(parent) ? parent : "");
+      } catch (err) { replyTo = ""; }
+    }
     const planned = await planMentions(env, {
       actor: actorOf(row),
       sourceId: id,
       kind,
+      replyTo,
       text,
       at: now,
       hash: "#/" + encodeURIComponent(row.handle || "")

@@ -7,6 +7,7 @@
 
 import { blocksEither } from "./social.js";
 import { resolveName, viewerHandle } from "./usernames.js";
+import { canMention } from "./name-rules.js";
 
 const LIMIT = 8;
 const EDGE_SECONDS = 60;
@@ -98,6 +99,13 @@ export async function mentionSuggest(env, request, url, viewer, deps) {
   }
   const ranked = list.map((row, at) => ({ row, at, s: score(row) })).sort((a, b) => b.s - a.s || a.at - b.at);
   const out = [];
+  let hint = "";
+  let replyTo = "";
+  const reply = url.searchParams.get("reply");
+  if (reply) {
+    const up = await resolveName(env, reply, viewer.public_id);
+    replyTo = up ? up.publicId : "";
+  }
   for (let i = 0; i < ranked.length && out.length < LIMIT; i++) {
     const row = ranked[i].row;
     if (await blocksEither(env, viewer.public_id, row.id)) continue;
@@ -107,8 +115,12 @@ export async function mentionSuggest(env, request, url, viewer, deps) {
     let reachable = via.indexOf("") >= 0;
     for (let v = 0; !reachable && v < via.length; v++) reachable = !!(await resolveName(env, via[v], viewer.public_id));
     if (!reachable) continue;
+    if (!(await canMention(env, row.id, viewer.public_id, { replyTo }))) {
+      if (String(seen.handle || "").toLowerCase() === prefix) hint = "cant_mention";
+      continue;
+    }
     const avatar = row.hide ? "" : deps.mediaUrl(request, row.avatar);
     out.push({ kind: "account", handle: seen.handle, name: row.name || "", avatar: avatar || "", owner: row.owner, follows: follows.has(row.id) });
   }
-  return deps.json(200, { accounts: out }, headers);
+  return deps.json(200, hint ? { accounts: out, hint } : { accounts: out }, headers);
 }
