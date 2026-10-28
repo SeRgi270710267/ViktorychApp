@@ -1,0 +1,87 @@
+.live-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 12px 4px;
+}
+.live-row[hidden] { display: none; }
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line, rgba(127, 127, 127, .35));
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f4212e;
+  flex: none;
+}
+.live-tag { font-weight: 700; }
+.live-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, .45);
+  padding: env(safe-area-inset-bottom) 12px 12px;
+}
+.live-card, .live-stage, .live-page {
+  width: min(520px, 100%);
+  background: var(--bg, Canvas);
+  color: var(--text, CanvasText);
+  border-radius: 16px;
+  padding: 14px;
+}
+.live-card-head, .live-bar, .live-sources, .live-react, .live-chat form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.live-card-head { justify-content: space-between; }
+.live-field, .live-check { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.live-field input, .live-field textarea, .live-field select, .live-chat input {
+  font: inherit;
+  font-size: 16px;
+  padding: 8px;
+  border: 1px solid var(--line, rgba(127, 127, 127, .35));
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+.live-sources button.on { outline: 2px solid currentColor; }
+.live-go, .live-bar button, .live-sources button, .live-react button, .live-chat button, .live-roster button {
+  min-height: 36px;
+  font: inherit;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(127, 127, 127, .35));
+  background: transparent;
+  color: inherit;
+  padding: 0 12px;
+}
+.live-videos { position: relative; background: #111; border-radius: 12px; min-height: 180px; overflow: hidden; }
+.live-main, .live-videos video { width: 100%; max-height: 50vh; background: #111; }
+.live-pip {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 28%;
+  max-height: 28%;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .4);
+}
+.live-note { margin: 8px 0; }
+.live-roster, .live-chat ul { list-style: none; margin: 8px 0; padding: 0; max-height: 140px; overflow: auto; }
+.live-page { margin: 12px auto; }
+#live-layer { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+#live-layer .live-sheet, #live-layer .live-stage { pointer-events: auto; max-height: 100%; overflow: auto; }
