@@ -21,6 +21,7 @@
 
   var DRAFT_KEY = "viktorychapp-x-drafts-v1";
   var PARTIAL_KEY = "viktorychapp-x-partial-v1";
+  var FOLD_KEY = "viktorychapp-composer-fold-v1";
   var MAX_BYTES = 20 * 1024 * 1024;
   var EMOJI = ["😀", "😂", "🥹", "😊", "😍", "😘", "😎", "🤔", "😅", "😭", "😡", "🤯", "😴", "🤝", "👍", "👎", "👏", "🙏", "🔥", "✨", "💯", "❤️", "💙", "🎉", "✅", "❌", "⭐", "📌", "💬", "👀", "🚀", "🌈", "☀️", "🌙", "⚡", "🎵", "📷", "🎬", "🏆", "💡"];
   var DURATIONS = [[5, "5 minutes"], [60, "1 hour"], [1440, "1 day"], [4320, "3 days"], [10080, "7 days"]];
@@ -39,6 +40,7 @@
   var saveTimer = 0;
   var bound = false;
   var aiMenu = "";
+  var menuOpenedAt = 0;
   var aiTones = false;
   var aiBusy = null;
   var aiPreview = null;
@@ -50,6 +52,7 @@
   var recordSlot = "";
   var dragFrom = null;
   var draftMedia = {};
+  var scrollFold = false;
 
   function blank() {
     return {
@@ -99,6 +102,66 @@
   }
   function writeStore(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (err) { /* this device is full */ }
+  }
+  function narrowHome() {
+    try { return !!(window.matchMedia && window.matchMedia("(max-width: 700px)").matches); }
+    catch (err) { return false; }
+  }
+  function readFold() {
+    var doc = readStore(FOLD_KEY);
+    if (!doc || typeof doc.open !== "boolean") return { open: !narrowHome(), auto: true };
+    return { open: doc.open !== false, auto: doc.auto !== false };
+  }
+  function writeFold(prefs) {
+    writeStore(FOLD_KEY, { open: !!prefs.open, auto: prefs.auto !== false });
+  }
+  function composerFocused() {
+    var active = document.activeElement;
+    return !!(active && active.closest && active.closest(".xc-inline[data-home-compose='1']"));
+  }
+  function homeBusy() {
+    if (dirty("post")) return true;
+    if (panel || aiMenu || aiPreview) return true;
+    if (slots.post && slots.post.emoji) return true;
+    if (composerFocused()) return true;
+    return false;
+  }
+  function homeFolded() {
+    var prefs = readFold();
+    if (!prefs.open) return true;
+    if (composerFocused() || dirty("post") || panel || aiMenu || aiPreview || (slots.post && slots.post.emoji)) return false;
+    return !!(prefs.auto && scrollFold);
+  }
+  function expandHome() {
+    var prefs = readFold();
+    writeFold({ open: true, auto: prefs.auto });
+    scrollFold = false;
+    applyFoldDom(false);
+  }
+  function tuneAudience() {
+    var reduced = false;
+    try { reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (err) { reduced = false; }
+    document.querySelectorAll("[data-xc-marquee]").forEach(function (el) {
+      var clip = el.querySelector(".xc-aud-clip");
+      var text = el.querySelector(".xc-aud-text");
+      if (!clip || !text) return;
+      var overflow = text.scrollWidth > clip.clientWidth + 1;
+      if (overflow && !reduced) el.classList.add("is-on");
+      else el.classList.remove("is-on");
+    });
+  }
+  function applyFoldDom(folded) {
+    var node = document.querySelector(".xc-inline[data-home-compose='1']");
+    if (!node) return;
+    if (folded) node.classList.add("xc-folded");
+    else node.classList.remove("xc-folded");
+    node.setAttribute("aria-expanded", folded ? "false" : "true");
+    var area = node.querySelector("textarea[data-xc='text']");
+    if (area) {
+      if (folded) area.style.height = "24px";
+      else grow(area);
+    }
+    if (!folded) tuneAudience();
   }
   function draftDoc() {
     var doc = readStore(DRAFT_KEY);
@@ -341,7 +404,7 @@
   }
   function tools(slotName, withPost) {
     var recording = recorder && recordSlot === slotName;
-    return '<div class="xc-tools"><div class="xc-iconrow">'
+    var icons = '<div class="xc-iconrow">'
       + aiButton(slotName)
       + tool(slotName, "xc-file", tr("Photos"), icon(ICONS.image), ' data-kind="image"')
       + tool(slotName, "xc-file", tr("Camera"), icon(ICONS.camera), ' data-kind="camera"')
@@ -352,7 +415,9 @@
       + tool(slotName, "xc-schedule", tr("Schedule post"), icon(ICONS.cal))
       + tool(slotName, "xc-emoji", tr("Emoji"), icon(ICONS.emoji), ' aria-pressed="' + (slots[slotName].emoji ? "true" : "false") + '"')
       + (slotName === "reply" ? '<button class="xc-tool" type="button" data-gift="reply" data-parent="' + esc(slots.reply.replyTo || slots.reply.targetKey || "") + '" data-handle="' + esc(slots.reply.context || "") + '" aria-label="' + esc(tr("Send a gift")) + '">' + esc(tr("Gift")) + "</button>" : "")
-      + "</div>" + endChrome(slotName, withPost) + "</div>";
+      + "</div>";
+    if (withPost === "icons") return '<div class="xc-tools">' + icons + "</div>";
+    return '<div class="xc-tools">' + icons + endChrome(slotName, withPost) + "</div>";
   }
   function endChrome(slotName, withPost) {
     var info = measure(slots[slotName], 0);
@@ -441,7 +506,21 @@
     var menu = open ? '<div class="xc-menu" role="menu" aria-label="' + esc(tr("Audience")) + '">' + AUDIENCES.map(function (row) {
       return '<button type="button" role="menuitemradio" aria-checked="' + (slot.audience === row[0] ? "true" : "false") + '" data-act="xc-audience" data-slot="' + esc(slotName) + '" data-value="' + row[0] + '">' + esc(tr(row[1])) + "</button>";
     }).join("") + "</div>" : "";
-    return '<span class="xc-aud-wrap">' + '<button class="xc-audience" type="button" data-act="xc-audience-menu" data-slot="' + esc(slotName) + '" aria-haspopup="menu" aria-expanded="' + (open ? "true" : "false") + '" aria-label="' + esc(tr("Audience")) + '">' + esc(tr(labelOf(AUDIENCES, slot.audience))) + icon(ICONS.chev) + "</button>" + menu + "</span>";
+    var label = tr(labelOf(AUDIENCES, slot.audience));
+    return '<span class="xc-aud-wrap"><button class="xc-audience" type="button" data-act="xc-audience-menu" data-slot="' + esc(slotName) + '" aria-haspopup="menu" aria-expanded="' + (open ? "true" : "false") + '" aria-label="' + esc(tr("Audience")) + '">'
+      + '<span class="xc-aud-marquee" data-xc-marquee><span class="xc-aud-clip"><span class="xc-aud-track">'
+      + '<span class="xc-aud-copy"><span class="xc-aud-text">' + esc(label) + "</span></span>"
+      + '<span class="xc-aud-copy" aria-hidden="true"><span class="xc-aud-text">' + esc(label) + "</span></span>"
+      + "</span></span></span>" + icon(ICONS.chev) + "</button>" + menu + "</span>";
+  }
+  function actionRow(slotName) {
+    var post = '<button class="xc-post-btn" type="button" data-act="xc-publish" data-slot="' + esc(slotName) + '"' + (canPost(slots[slotName]) ? "" : " disabled") + ">" + esc(tr("Post")) + "</button>";
+    var plus = '<button class="xc-plus" type="button" data-act="xc-add-post" data-slot="' + esc(slotName) + '" aria-label="' + esc(tr("Add another post")) + '">' + icon(ICONS.plus) + "</button>";
+    var count = '<span data-xc="count" data-slot="' + esc(slotName) + '" data-index="0">' + meter(measure(slots[slotName], 0)) + "</span>";
+    var fold = slotName === "post"
+      ? '<button class="xc-tool xc-fold-btn" type="button" data-act="xc-fold" data-slot="post" aria-label="' + esc(tr("Collapse composer")) + '">' + icon(ICONS.chev) + "</button>"
+      : "";
+    return '<div class="xc-action">' + audienceHtml(slotName) + count + plus + fold + post + "</div>";
   }
   function textBlock(slotName, index, placeholder) {
     var slot = slots[slotName];
@@ -465,16 +544,25 @@
     var slot = slots[slotName];
     var face = host && host.faceHtml ? host.faceHtml() : '<span class="ava initials">Y</span>';
     var placeholder = slotName === "post" ? tr("What's happening?") : tr("Post your reply");
-    var noteText = tr("The draft stays on this device. You press Post on X.");
-    var note = fieldId(slotName, 0) === "compose-text"
-      ? '<p class="xc-note' + (sheet ? " xc-sr" : "") + '" id="compose-note">' + esc(noteText) + "</p>"
-      : (sheet ? "" : '<p class="xc-note">' + esc(tr("You press Post on X.")) + "</p>");
-    var inlinePost = sheet ? "" : '<div class="xc-inline-actions"><button class="xc-post-btn" type="button" data-act="xc-publish" data-slot="' + esc(slotName) + '"' + (canPost(slot) ? "" : " disabled") + ">" + esc(tr("Post")) + "</button></div>";
-    var inlineTools = sheet ? "" : tools(slotName, false) + inlinePost;
-    return '<div class="xc' + (sheet ? "" : " xc-inline") + '" data-slot="' + esc(slotName) + '">' + face + '<div class="xc-main">'
-      + contextHtml(slot) + audienceHtml(slotName) + (slot.audience === "lists" && typeof window !== "undefined" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(slot.listIds || []) : "") + textBlock(slotName, 0, placeholder) + note + aiExtra(slotName)
+    var homeNote = fieldId(slotName, 0) === "compose-text";
+    var noteText = homeNote ? tr("Draft stays on this device.") : tr("You press Post on X.");
+    var autoBtn = "";
+    if (!sheet && slotName === "post") {
+      var prefs = readFold();
+      autoBtn = '<button class="xc-auto" type="button" role="switch" aria-checked="' + (prefs.auto ? "true" : "false") + '" data-act="xc-fold-auto" data-slot="post" aria-label="' + esc(tr("Collapse when scrolling")) + '">' + esc(tr("On scroll")) + "</button>";
+    }
+    var note = homeNote
+      ? '<p class="xc-note' + (sheet ? " xc-sr" : "") + '" id="compose-note"><span class="xc-note-text">' + esc(noteText) + "</span>" + (sheet ? "" : autoBtn) + "</p>"
+      : (sheet ? "" : '<p class="xc-note"><span class="xc-note-text">' + esc(noteText) + "</span></p>");
+    var lists = slot.audience === "lists" && typeof window !== "undefined" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(slot.listIds || []) : "";
+    var inlineTools = sheet ? "" : tools(slotName, "icons");
+    var inlineAction = sheet ? "" : lists + actionRow(slotName);
+    var folded = !sheet && slotName === "post" && homeFolded();
+    var homeAttr = !sheet && slotName === "post" ? ' data-home-compose="1" aria-expanded="' + (folded ? "false" : "true") + '"' : "";
+    return '<div class="xc' + (sheet ? "" : " xc-inline") + (folded ? " xc-folded" : "") + '" data-slot="' + esc(slotName) + '"' + homeAttr + '>' + face + '<div class="xc-main">'
+      + contextHtml(slot) + (sheet ? audienceHtml(slotName) + lists : "") + textBlock(slotName, 0, placeholder) + note + aiExtra(slotName)
       + mediaHtml(slotName) + pollHtml(slotName) + emojiHtml(slotName) + extraBits(slotName) + hiddenFiles(slotName)
-      + inlineTools + threadHtml(slotName) + "</div></div>";
+      + inlineTools + inlineAction + threadHtml(slotName) + "</div></div>";
   }
   function replyRow(slotName) {
     return '<div class="xc-reply-line"><button class="xc-reply-row" type="button" data-act="xc-reply-menu" data-slot="' + esc(slotName) + '" aria-haspopup="menu" aria-expanded="' + (panel === "reply" ? "true" : "false") + '">' + icon(ICONS.globe) + "<span>" + esc(tr(labelOf(REPLIES, slots[slotName].replyControl))) + "</span></button>" + intentLink(slotName, 0) + "</div>";
@@ -606,6 +694,10 @@
   }
   function grow(area) {
     if (!area) return;
+    if (area.closest && area.closest(".xc-folded")) {
+      area.style.height = "24px";
+      return;
+    }
     area.style.height = "auto";
     var next = Math.max(area.scrollHeight, area.classList.contains("xc-next") ? 72 : 52);
     area.style.height = next + "px";
@@ -891,7 +983,39 @@
   function onAct(act, el) {
     var slotName = el.getAttribute("data-slot") || modalSlot;
     var slot = slots[slotName] || slots.post;
-    if (act === "xc-ai") { aiTones = false; aiMenu = aiMenu === slotName ? "" : slotName; panel = ""; paint(); return true; }
+    if (act === "xc-fold") {
+      var foldPrefs = readFold();
+      writeFold({ open: false, auto: foldPrefs.auto });
+      scrollFold = false;
+      var active = document.activeElement;
+      if (active && active.blur && active.closest && active.closest("[data-home-compose='1']")) active.blur();
+      applyFoldDom(true);
+      return true;
+    }
+    if (act === "xc-fold-auto") {
+      var autoPrefs = readFold();
+      var nextAuto = !autoPrefs.auto;
+      writeFold({ open: autoPrefs.open, auto: nextAuto });
+      if (!nextAuto) scrollFold = false;
+      paint();
+      return true;
+    }
+    if (act === "xc-ai") {
+      aiTones = false;
+      aiMenu = aiMenu === slotName ? "" : slotName;
+      panel = "";
+      var aiHost = el.closest ? el.closest(".xc-ai") : null;
+      if (!aiHost) { paint(); return true; }
+      var existingPop = aiHost.querySelector(".xc-ai-pop");
+      if (existingPop) existingPop.remove();
+      var aiBtn = aiHost.querySelector(".xc-ai-btn");
+      if (aiBtn) aiBtn.setAttribute("aria-expanded", aiMenu === slotName ? "true" : "false");
+      if (aiMenu === slotName) {
+        menuOpenedAt = Date.now();
+        aiHost.insertAdjacentHTML("beforeend", aiMenuHtml(slotName));
+      }
+      return true;
+    }
     if (act === "xc-ai-tones") { aiMenu = slotName; aiTones = !aiTones; paint(); return true; }
     if (act === "xc-ai-run") { runAi(slotName, Number(el.getAttribute("data-index") || 0), el.getAttribute("data-kind") || "grammar", el.getAttribute("data-tone") || ""); return true; }
     if (act === "xc-ai-pick") { if (aiPreview && aiPreview.slot === slotName) aiPreview.pick = Number(el.getAttribute("data-i") || 0); paint(); return true; }
@@ -983,7 +1107,12 @@
       return true;
     }
     if (act === "xc-alt") { panel = panel === "alt:" + el.getAttribute("data-index") ? "" : "alt:" + el.getAttribute("data-index"); paint(); return true; }
-    if (act === "xc-audience-menu") { panel = panel === "audience" ? "" : "audience"; paint(); return true; }
+    if (act === "xc-audience-menu") {
+      panel = panel === "audience" ? "" : "audience";
+      if (panel === "audience") menuOpenedAt = Date.now();
+      paint();
+      return true;
+    }
     if (act === "xc-audience") { slot.audience = el.getAttribute("data-value") || "everyone"; panel = ""; paint(); return true; }
     if (act === "xc-reply-menu") { panel = panel === "reply" ? "" : "reply"; paint(); return true; }
     if (act === "xc-reply-pick") { slot.replyControl = el.getAttribute("data-value") || "everyone"; panel = ""; paint(); return true; }
@@ -1104,6 +1233,62 @@
     bound = true;
     document.addEventListener("input", onInput);
     document.addEventListener("change", onChange);
+    function expandFrom(event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      if (!target.closest(".xc-inline.xc-folded[data-home-compose='1']")) return;
+      expandHome();
+    }
+    document.addEventListener("pointerdown", expandFrom, true);
+    document.addEventListener("mousedown", expandFrom, true);
+    document.addEventListener("focusin", function (event) {
+      var target = event.target;
+      if (!target || !target.closest || !target.getAttribute || target.getAttribute("data-xc") !== "text") return;
+      if (!target.closest(".xc-inline.xc-folded[data-home-compose='1']")) return;
+      expandHome();
+    });
+    document.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      var node = target.closest(".xc-inline.xc-folded[data-home-compose='1']");
+      if (!node) return;
+      if (target.closest("button, a, textarea, input, select")) return;
+      var area = node.querySelector("textarea[data-xc='text']");
+      if (area && area.focus) area.focus();
+    });
+    var lastScroll = window.pageYOffset || 0;
+    function onHomeScroll() {
+      var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+      var prefs = readFold();
+      var down = y > lastScroll + 16;
+      var nearTop = y < 16;
+      lastScroll = y;
+      if (!prefs.auto || !prefs.open || homeBusy()) return;
+      if (down && y > 56) {
+        if (!scrollFold) {
+          scrollFold = true;
+          applyFoldDom(true);
+        }
+      } else if (nearTop && scrollFold) {
+        scrollFold = false;
+        applyFoldDom(false);
+      }
+    }
+    try { window.addEventListener("scroll", onHomeScroll, { passive: true }); }
+    catch (err) { window.addEventListener("scroll", onHomeScroll); }
+    if (window.matchMedia) {
+      try {
+        var foldMq = window.matchMedia("(max-width: 700px)");
+        var onFoldMq = function () {
+          var saved = readStore(FOLD_KEY);
+          if (saved && typeof saved.open === "boolean") return;
+          scrollFold = false;
+          applyFoldDom(homeFolded());
+        };
+        if (foldMq.addEventListener) foldMq.addEventListener("change", onFoldMq);
+        else if (foldMq.addListener) foldMq.addListener(onFoldMq);
+      } catch (err2) { /* the first paint keeps the width it opened with */ }
+    }
     document.addEventListener("paste", function (event) {
       var el = event.target;
       if (!el || !el.getAttribute || el.getAttribute("data-xc") !== "text") return;
@@ -1136,6 +1321,7 @@
     }, true);
     document.addEventListener("click", function (event) {
       if (!aiMenu && panel !== "audience") return;
+      if (Date.now() - menuOpenedAt < 350) return;
       var target = event.target;
       if (target && target.closest && (target.closest(".xc-ai") || target.closest(".xc-aud-wrap") || target.closest(".xc-panel"))) return;
       var changed = false;
@@ -1255,11 +1441,13 @@
     bindUi();
     scheduleScan();
     document.querySelectorAll("textarea[data-xc='text']").forEach(grow);
+    tuneAudience();
     if (host && host.flushSchedule) host.flushSchedule();
   }
 
   var saved = draftDoc().items.find(function (item) { return item && item.id === "current:post"; });
-  if (saved) applySnapshot("post", saved);
+  try { if (saved) applySnapshot("post", saved); }
+  catch (err) { /* a damaged draft stays out of the box */ }
 
   globalThis.ViktorychXCompose = {
     inlineHtml: inlineHtml,

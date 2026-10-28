@@ -130,8 +130,129 @@ async function measure(page) {
 
 async function openMenu(page) {
   await page.locator("#compose-text").scrollIntoViewIfNeeded();
-  await page.locator(".xc .xc-ai-btn").click();
+  await page.locator(".xc .xc-ai-btn").evaluate((el) => el.click());
   await page.locator(".xc-ai-pop").waitFor({ timeout: 5000 });
+}
+
+async function ensureComposerOpen(page) {
+  await page.evaluate(() => {
+    localStorage.setItem("viktorychapp-composer-fold-v1", JSON.stringify({ open: true, auto: false }));
+  });
+  if (await page.locator(".xc-inline.xc-folded").count()) {
+    await page.locator(".xc-inline.xc-folded textarea").first().click();
+    await page.waitForFunction(() => !document.querySelector(".xc-inline.xc-folded"), null, { timeout: 5000 });
+  }
+}
+
+async function checkFold(page, vp) {
+  await page.evaluate(() => localStorage.removeItem("viktorychapp-composer-fold-v1"));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#compose-text", { timeout: 20000 });
+  await page.waitForFunction(() => window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml, null, { timeout: 20000 });
+  await page.waitForFunction(() => [...document.styleSheets].some((sheet) => sheet.href && sheet.href.indexOf("x-compose.css") >= 0), null, { timeout: 20000 });
+  const start = await page.evaluate(() => {
+    const node = document.querySelector(".xc-inline[data-home-compose='1']");
+    if (!node) return null;
+    const tools = node.querySelector(".xc-tools");
+    return {
+      folded: node.classList.contains("xc-folded"),
+      h: Math.round(node.getBoundingClientRect().height),
+      tools: tools ? getComputedStyle(tools).display : ""
+    };
+  });
+  if (!start) fail(vp.name + " home composer is missing");
+  if (vp.width <= 700) {
+    if (!start.folded) fail(vp.name + " composer did not start collapsed");
+    if (start.h > 76) fail(vp.name + " collapsed composer is " + start.h + "px");
+    if (start.tools !== "none") fail(vp.name + " collapsed composer still shows the toolbar");
+    await page.locator(".xc-inline.xc-folded textarea").first().click();
+    await page.waitForFunction(() => !document.querySelector(".xc-inline.xc-folded"), null, { timeout: 5000 });
+  } else if (start.folded) {
+    fail(vp.name + " composer started collapsed on a wide screen");
+  }
+  const row = await page.evaluate(() => {
+    const root = document.querySelector(".xc-inline[data-home-compose='1']");
+    const aud = root && root.querySelector(".xc-audience");
+    const post = root && root.querySelector(".xc-post-btn");
+    const plus = root && root.querySelector(".xc-plus");
+    const meter = root && root.querySelector(".xc-meter");
+    if (!aud || !post || !plus || !meter) return null;
+    const tops = [aud, post, plus, meter].map((el) => el.getBoundingClientRect().top);
+    const same = Math.max.apply(null, tops) - Math.min.apply(null, tops) < 18;
+    const postBox = post.getBoundingClientRect();
+    const audBox = aud.getBoundingClientRect();
+    return { same: same, pillH: Math.round(audBox.height), postRight: postBox.right, width: window.innerWidth };
+  });
+  if (!row) fail(vp.name + " composer action row is missing");
+  if (!row.same) fail(vp.name + " audience, counter, and Post are not on one row");
+  if (row.pillH > 28) fail(vp.name + " audience pill is " + row.pillH + "px tall");
+  if (row.postRight > vp.width + 1) fail(vp.name + " Post button sits past the screen");
+  const audienceNow = await page.locator(".xc-inline .xc-aud-text").first().innerText();
+  if (!/follow|sigues|подпис/i.test(audienceNow)) {
+    const opened = await page.locator(".xc-inline .xc-audience").evaluate((el) => {
+      let err = "";
+      try { window.ViktorychXCompose.onAct("xc-audience-menu", el); }
+      catch (e) { err = String(e && e.stack || e); }
+      const live = document.querySelector(".xc-inline .xc-aud-wrap");
+      const btn = live && live.querySelector(".xc-audience");
+      return {
+        err: err,
+        expanded: btn ? btn.getAttribute("aria-expanded") : "",
+        items: live ? live.querySelectorAll("[data-act='xc-audience']").length : 0
+      };
+    });
+    if (!opened.items) fail(vp.name + " audience menu missing after click " + JSON.stringify(opened));
+    await page.locator(".xc-inline [data-act='xc-audience'][data-value='following']").click();
+    await page.waitForFunction(() => {
+      const text = document.querySelector(".xc-inline .xc-aud-text");
+      return text && /Accounts you follow|Cuentas que sigues|Аккаунты/.test(text.textContent || "");
+    });
+  }
+  const pill = await page.evaluate(() => {
+    const btn = document.querySelector(".xc-inline .xc-audience");
+    const clip = btn.querySelector(".xc-aud-clip");
+    const text = btn.querySelector(".xc-aud-text");
+    const box = btn.getBoundingClientRect();
+    return {
+      h: Math.round(box.height),
+      w: Math.round(box.width),
+      overflow: text.scrollWidth > clip.clientWidth + 2,
+      on: btn.querySelector("[data-xc-marquee]").classList.contains("is-on")
+    };
+  });
+  if (pill.h > 28) fail(vp.name + " audience pill grew to " + pill.h + "px");
+  if (pill.w > 220) fail(vp.name + " audience pill grew to " + pill.w + "px wide");
+  if (pill.overflow && !pill.on) fail(vp.name + " long audience label does not scroll");
+  if (vp.width <= 700) {
+    const remembered = await page.evaluate(() => JSON.parse(localStorage.getItem("viktorychapp-composer-fold-v1") || "{}"));
+    if (remembered.open !== true) fail(vp.name + " did not remember the expanded composer");
+    await page.locator("[data-act='xc-fold']").click();
+    await page.waitForFunction(() => !!document.querySelector(".xc-inline.xc-folded"), null, { timeout: 5000 });
+    const collapsed = await page.evaluate(() => JSON.parse(localStorage.getItem("viktorychapp-composer-fold-v1") || "{}"));
+    if (collapsed.open !== false) fail(vp.name + " did not remember the collapsed composer");
+    await page.locator(".xc-inline.xc-folded textarea").first().click();
+    await page.waitForFunction(() => !document.querySelector(".xc-inline.xc-folded"), null, { timeout: 5000 });
+    await page.evaluate(() => {
+      const pad = document.createElement("div");
+      pad.id = "fold-pad";
+      pad.style.height = "1400px";
+      document.body.appendChild(pad);
+      const active = document.activeElement;
+      if (active && active.blur) active.blur();
+      window.scrollTo(0, 0);
+    });
+    await page.evaluate(() => window.scrollTo(0, 480));
+    await page.waitForFunction(() => !!document.querySelector(".xc-inline.xc-folded"), null, { timeout: 3000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForFunction(() => !document.querySelector(".xc-inline.xc-folded"), null, { timeout: 3000 });
+    await page.evaluate(() => {
+      const pad = document.getElementById("fold-pad");
+      if (pad) pad.remove();
+    });
+  }
+  await page.evaluate(() => {
+    localStorage.setItem("viktorychapp-composer-fold-v1", JSON.stringify({ open: true, auto: false }));
+  });
 }
 
 async function layout(page, vp) {
@@ -241,7 +362,11 @@ async function main() {
     args: ["--no-sandbox", "--disable-gpu"]
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.route("**/sw.js", (route) => route.abort());
   await page.addInitScript(() => {
+    try {
+      Object.defineProperty(Location.prototype, "reload", { configurable: true, writable: true, value: function () {} });
+    } catch (err) { /* the browser keeps its reload */ }
     ["Proofreader", "Rewriter", "Writer", "LanguageModel"].forEach((name) => {
       const api = {
         availability() { return Promise.resolve("unavailable"); },
@@ -256,7 +381,9 @@ async function main() {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto(origin + "/#/", { waitUntil: "domcontentloaded" });
       await page.waitForSelector("#compose-text", { timeout: 20000 });
+      await checkFold(page, vp);
       await tune(page, "balanced", "en");
+      await ensureComposerOpen(page);
       await page.locator(".xc .xc-ai-btn").waitFor({ timeout: 10000 });
       await layout(page, vp);
       if (vp.name === "phone") await behavior(page);
