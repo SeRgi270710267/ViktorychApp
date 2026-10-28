@@ -576,6 +576,10 @@
         try {
           if (localStorage.getItem("viktorychapp-off-home-pills") === "1") off.push("shared/pill-data.js", "scores.js", "weather.js", "scores.css", "weather.css");
           if (localStorage.getItem("viktorychapp-off-stories") === "1") off.push("stories.js", "stories.css");
+          /* Features the owner switched off on the server load nothing either. */
+          var server = JSON.parse(localStorage.getItem("viktorychapp-server-off") || "[]") || [];
+          if (server.indexOf("pills") >= 0) off.push("shared/pill-data.js", "scores.js", "weather.js", "scores.css", "weather.css");
+          if (server.indexOf("stories") >= 0) off.push("stories.js", "stories.css");
         } catch (err) { /* storage blocked */ }
         function wanted(node) {
           var ref = (node.getAttribute("src") || node.getAttribute("href") || "").replace(/^\.\//, "").split("?")[0];

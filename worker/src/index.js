@@ -1,5 +1,6 @@
 import { mentionSuggest } from "./mention-suggest.js";
 import { bindOwner, inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
+import { handleFeatures, killedRoute, readFlags } from "./feature-flags.js";
 import { parseRoomId, pickStreams, roomStats, isTopQuality } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
@@ -19,7 +20,8 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
-import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
+import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
 import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
@@ -35,6 +37,7 @@ import { maybeBackupD1 } from "./d1-backup.js";
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
+import { claimedJobs } from "./job-runner.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingRequest, importAllowed, readFollowRows, outgoingRequestIds, requestCount, followsYouSet, handleSocialRoutes, blockedProfile, stripBlockedView, blocksEither, pairState } from "./social.js";
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
@@ -865,6 +868,10 @@ async function handleLogout(request, env, all) {
     await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ?").bind(row.public_id).run();
     await env.DB.prepare("DELETE FROM channel_tickets WHERE public_id = ?").bind(row.public_id).run();
   } else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
+  try {
+    if (all) await env.DB.prepare("DELETE FROM session_devices WHERE public_id = ?").bind(row.public_id).run();
+    else await env.DB.prepare("DELETE FROM session_devices WHERE token_hash = ?").bind(hash).run();
+  } catch (err) { /* the table appears with the first device hello */ }
   return json(200, { ok: true });
 }
 
@@ -1241,6 +1248,8 @@ async function handleSyncGet(request, env) {
   return json(200, { payload, updatedAt: saved.updated_at });
 }
 
+const SYNC_UI_KEYS = ["appearance", "drawerMenu", "navCustom", "navCustomAt", "bottomNav", "bottomNavCustom", "profileTabs", "homePills", "stories", "prefsAt", "showPictures", "showBanners"];
+
 async function handleSyncPut(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
@@ -1301,6 +1310,19 @@ async function handleSyncPut(request, env) {
     delete payload.navLayoutSync;
   }
   delete payload.deviceStats;
+  // A device that keeps its own look sends uiLocal and leaves out the shared
+  // look, so the account's copy stays for the other devices.
+  if (payload.uiLocal === true && previous) {
+    SYNC_UI_KEYS.forEach((key) => {
+      if (payload[key] === undefined && previous[key] !== undefined) payload[key] = previous[key];
+    });
+  }
+  delete payload.uiLocal;
+  if (payload.syncUi != null) payload.syncUi = payload.syncUi !== false;
+  payload.syncUiAt = Math.max(0, Math.min(Number(payload.syncUiAt) || 0, Date.now() + 60000));
+  if (payload.prefsAt != null && (typeof payload.prefsAt !== "object" || Array.isArray(payload.prefsAt))) delete payload.prefsAt;
+  if (payload.homePills != null && typeof payload.homePills !== "boolean") delete payload.homePills;
+  if (payload.stories != null && typeof payload.stories !== "boolean") delete payload.stories;
   if (payload.storyNotes === true || payload.storyNotes === false) payload.storyNotes = payload.storyNotes === true;
   else if (previous && (previous.storyNotes === true || previous.storyNotes === false)) payload.storyNotes = previous.storyNotes === true;
   if (payload.devicePerf != null) {
@@ -1318,6 +1340,12 @@ async function handleSyncPut(request, env) {
   }
   const now = Date.now();
   await env.DB.prepare("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").bind(row.public_id, text, now).run();
+  // Other signed-in devices hear about a real change and pull it.
+  if (!current || current.payload !== text) {
+    const device = String(body.device || "").replace(/[^a-z0-9]/gi, "").slice(0, 24);
+    try { await publishToAccount(env, row.public_id, "sync", { updatedAt: now, device }, row.public_id); }
+    catch (err) { /* devices also check when they come back */ }
+  }
   return json(200, { payload: body.payload, updatedAt: now });
 }
 
@@ -5120,6 +5148,9 @@ async function route(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+  // Owner kill switches answer before any other work for an off feature.
+  const killed = await killedRoute(env, request, path);
+  if (killed) return killed;
   if (path === "/robots.txt" && (request.method === "GET" || request.method === "HEAD")) {
     return new Response(request.method === "HEAD" ? null : "User-agent: *\nDisallow: /\n", {
       status: 200,
@@ -5172,6 +5203,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
+  if (path === "/v1/features" || path === "/v1/owner/features") return handleFeatures(request, env, { json, requireOwner });
   if (path === "/v1/owner/tiktok/unlocked" && request.method === "GET") return handleTikTokUnlocked(request, env);
   if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
@@ -5244,6 +5276,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/account/deletions" && request.method === "GET") {
     return handleDeletionList(request, env, { json, rateHit, limited });
   }
+  if (path === "/v1/devices" || path.startsWith("/v1/devices/")) return handleDevices(request, env, { json, bearer, sha256Hex });
   if (path === "/v1/logout" && request.method === "POST") return handleLogout(request, env, false);
   if (path === "/v1/logout-all" && request.method === "POST") return handleLogout(request, env, true);
   if (path === "/v1/session" && request.method === "GET") return handleSession(request, env);
@@ -5390,6 +5423,29 @@ function bindRequestOwner(env) {
 
 export { AccountChannel };
 
+/* Render's job loop: the offloaded jobs, all at once, against the same D1/R2.
+   Each job keeps its own inner pool limits. */
+export async function runBackgroundJobs(env, at, only) {
+  bindRequestOwner(env);
+  const now = Number(at) || Date.now();
+  const off = await readFlags(env, now);
+  const minute = new Date(now).getUTCMinutes();
+  const jobs = { ownerFeeds: () => sweepOwnerFeeds(env, now) };
+  if (!off.shorts && !off.lives) jobs.tiktokLive = () => watchTikTokLive(env, now);
+  if (!off.stories) jobs.storiesSweep = () => sweepExpiredStories(env, now);
+  if (minute === 0) {
+    jobs.birthdays = () => runBirthdaySweep(env, now);
+    jobs.birthdayPoints = () => awardBirthdayBonuses(env, now);
+  }
+  const names = Object.keys(jobs).filter((name) => !only || only.includes(name));
+  const results = await Promise.allSettled(names.map((name) => jobs[name]()));
+  const failed = [];
+  results.forEach((result, i) => {
+    if (result.status === "rejected") { failed.push(names[i]); logError("render-job:" + names[i], result.reason); }
+  });
+  return { ran: names, failed };
+}
+
 export default {
   async fetch(request, env, ctx) {
     let path = "";
@@ -5409,14 +5465,24 @@ export default {
   async scheduled(event, env, ctx) {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at), sweepLive(env, at), publishDuePosts(env, at), sweepExpiredStories(env, at), sweepExpiredNotes(env, at)];
+    // Features the owner turned off do no cron work at all.
+    const off = await readFlags(env, at);
+    // Jobs the Render backup claimed in the last couple of minutes run there.
+    const away = await claimedJobs(env, at);
+    const minute = new Date(at).getUTCMinutes();
+    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
+    const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
+    run("ownerFeeds", () => sweepOwnerFeeds(env, at));
+    if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
+    if (!off.lives) jobs.push(sweepLive(env, at));
+    if (!off.stories) run("storiesSweep", () => sweepExpiredStories(env, at));
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
-    if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
-    if (new Date(at).getUTCMinutes() === 0) jobs.push(runBirthdaySweep(env, at));
+    if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(maybeBackupD1(env, at));
-    if (new Date(at).getUTCMinutes() === 0) jobs.push(awardBirthdayBonuses(env, at));
+    if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") logError("cron", results[i].reason);
