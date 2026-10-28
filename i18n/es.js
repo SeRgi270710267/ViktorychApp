@@ -2366,5 +2366,17 @@ SI18n.addPack("es", {
   "Sync across my devices": "Sincronizar en mis dispositivos",
   "Menu, sidebar and display choices follow your account on every device you sign in on.": "El menú, la barra lateral y las opciones de pantalla siguen a tu cuenta en cada dispositivo donde inicies sesión.",
   "Keep this device's own look": "Mantener el aspecto propio de este dispositivo",
-  "Only this device ignores synced menu and display choices.": "Solo este dispositivo ignora el menú y las opciones de pantalla sincronizados."
+  "Only this device ignores synced menu and display choices.": "Solo este dispositivo ignora el menú y las opciones de pantalla sincronizados.",
+  "Lives": "En vivo",
+  "Telegram ingest": "Ingesta de Telegram",
+  "Pills data": "Datos de las píldoras",
+  "Server features": "Funciones del servidor",
+  "Could not save that setting.": "No se pudo guardar ese ajuste.",
+  "Shorts pages, TikTok live watching and its cron work.": "Páginas de Shorts, seguimiento de directos de TikTok y sus tareas programadas.",
+  "Story uploads, the story bar and expiry sweeps.": "Subida de historias, la barra de historias y la limpieza de caducadas.",
+  "Going live, the live row and live sweeps.": "Emitir en vivo, la fila de directos y su limpieza.",
+  "The Telegram bot webhook and media relay.": "El webhook del bot de Telegram y el reenvío de medios.",
+  "Weather and scores data for every visitor.": "Datos de tiempo y marcadores para cada visitante.",
+  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Solo el propietario. Apagado detiene la función para todos: sin tareas programadas, sus endpoints responden vacío y las apps no cargan nada de ella.",
+  "Turned off for everyone by the owner.": "Desactivado para todos por el propietario."
 });

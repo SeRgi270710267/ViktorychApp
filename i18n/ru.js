@@ -2366,5 +2366,17 @@ SI18n.addPack("ru", {
   "Sync across my devices": "Синхронизировать на моих устройствах",
   "Menu, sidebar and display choices follow your account on every device you sign in on.": "Меню, боковая панель и настройки отображения следуют за вашим аккаунтом на каждом устройстве, где вы вошли.",
   "Keep this device's own look": "Сохранить собственный вид этого устройства",
-  "Only this device ignores synced menu and display choices.": "Только это устройство игнорирует синхронизированные меню и настройки отображения."
+  "Only this device ignores synced menu and display choices.": "Только это устройство игнорирует синхронизированные меню и настройки отображения.",
+  "Lives": "Эфиры",
+  "Telegram ingest": "Приём из Telegram",
+  "Pills data": "Данные плашек",
+  "Server features": "Функции сервера",
+  "Could not save that setting.": "Не удалось сохранить эту настройку.",
+  "Shorts pages, TikTok live watching and its cron work.": "Страницы Shorts, отслеживание эфиров TikTok и их фоновые задачи.",
+  "Story uploads, the story bar and expiry sweeps.": "Загрузка историй, панель историй и очистка истёкших.",
+  "Going live, the live row and live sweeps.": "Запуск эфиров, строка эфиров и их очистка.",
+  "The Telegram bot webhook and media relay.": "Вебхук Telegram-бота и пересылка медиа.",
+  "Weather and scores data for every visitor.": "Данные погоды и счёта для всех посетителей.",
+  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Только для владельца. Выключение останавливает функцию для всех: без фоновых задач, её эндпоинты отвечают пусто, а приложения ничего для неё не загружают.",
+  "Turned off for everyone by the owner.": "Отключено владельцем для всех."
 });
