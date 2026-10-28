@@ -33,7 +33,7 @@ function staticChecks() {
   const tabsAt = header.indexOf('class="tabs-bar"');
   if (trayAt < 0 || tabsAt < 0 || trayAt > tabsAt) fail("stories must sit above For you and Following");
   if (!app.includes('getElementById("new-posts")')) fail("new posts pill hook missing");
-  if (!read("sw.js").includes('VERSION = "viktorych-a41-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a44-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok story bar layout rules");
 }
 
@@ -130,6 +130,26 @@ async function browserChecks() {
       if (before.blur && before.blur !== "none") fail(width + " shell blurs the feed");
       if (before.overlap > 1) fail(width + " shell overlaps the post");
       if (before.height < 100) fail(width + " expanded bar is too short");
+      const note = await page.evaluate(() => {
+        const slot = document.querySelector(".note-slot");
+        const bubble = slot && slot.querySelector(".note-bubble");
+        const ring = slot && slot.querySelector(".story-ring");
+        const shell = document.querySelector(".story-shell");
+        if (!bubble || !ring || !shell) return null;
+        const b = bubble.getBoundingClientRect();
+        const r = ring.getBoundingClientRect();
+        const style = getComputedStyle(bubble);
+        return {
+          overlap: Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top),
+          above: b.bottom <= r.top + 1,
+          shell: Math.round(shell.getBoundingClientRect().height),
+          blur: style.backdropFilter || style.webkitBackdropFilter || "none"
+        };
+      });
+      if (!note) fail(width + " note bubble missing");
+      if (note.above || note.overlap < 8) fail(width + " note bubble does not sit on the avatar");
+      if (!note.blur || note.blur === "none") fail(width + " note bubble is not translucent");
+      if (note.shell !== 112) fail(width + " story row height changed " + note.shell);
       await page.click(".story-fold");
       await page.waitForTimeout(320);
       const after = await page.evaluate(() => {

@@ -9,7 +9,7 @@
   max-width: 100%;
   min-width: 0;
   width: max-content;
-  padding: 0 10px 0 4px;
+  padding: 0 8px 0 4px;
   border-radius: 999px;
   color: #fff;
   text-decoration: none;
@@ -24,6 +24,7 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+  overflow: hidden;
 }
 .sc-pill:hover,
 .sc-pill:focus-visible {
@@ -79,8 +80,8 @@
 
 /* Crest Badge */
 .sc-crest-ring {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid #fff;
   display: flex;
@@ -102,55 +103,71 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  line-height: 1.15;
+  max-height: 32px;
+  line-height: 1;
+  overflow: hidden;
+  gap: 0;
 }
 .sc-pill-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
+  height: 16px;
+  overflow: hidden;
 }
 .sc-pill-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 16px;
   white-space: nowrap;
   color: #fff;
   max-width: min(180px, 46vw);
+  min-width: 0;
+  overflow: hidden;
 }
 .sc-pill-bottom {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
+  height: 16px;
+  overflow: hidden;
 }
 .sc-pill-score {
-  font-size: 14px;
+  font-size: 11px;
+  line-height: 16px;
   font-weight: 800;
   letter-spacing: 0.03em;
   white-space: nowrap;
   color: #fff;
 }
 .sc-pill-opp {
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 16px;
   font-weight: 500;
   opacity: 0.88;
   white-space: nowrap;
   color: rgba(255, 255, 255, 0.9);
   max-width: min(140px, 36vw);
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Live / FT Badges inside Pill */
 .sc-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
+  gap: 3px;
+  font-size: 9px;
   font-weight: 800;
-  line-height: 1;
-  letter-spacing: 0.05em;
-  padding: 2px 6px;
+  line-height: 12px;
+  letter-spacing: 0.04em;
+  padding: 0 4px;
+  height: 14px;
   border-radius: 4px;
   text-transform: uppercase;
+  flex: none;
 }
 .sc-badge.is-live {
   background: rgba(244, 33, 46, 0.28);
