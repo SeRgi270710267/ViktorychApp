@@ -21,6 +21,7 @@ import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
+import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
 import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
@@ -867,6 +868,10 @@ async function handleLogout(request, env, all) {
     await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ?").bind(row.public_id).run();
     await env.DB.prepare("DELETE FROM channel_tickets WHERE public_id = ?").bind(row.public_id).run();
   } else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
+  try {
+    if (all) await env.DB.prepare("DELETE FROM session_devices WHERE public_id = ?").bind(row.public_id).run();
+    else await env.DB.prepare("DELETE FROM session_devices WHERE token_hash = ?").bind(hash).run();
+  } catch (err) { /* the table appears with the first device hello */ }
   return json(200, { ok: true });
 }
 
@@ -5271,6 +5276,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/account/deletions" && request.method === "GET") {
     return handleDeletionList(request, env, { json, rateHit, limited });
   }
+  if (path === "/v1/devices" || path.startsWith("/v1/devices/")) return handleDevices(request, env, { json, bearer, sha256Hex });
   if (path === "/v1/logout" && request.method === "POST") return handleLogout(request, env, false);
   if (path === "/v1/logout-all" && request.method === "POST") return handleLogout(request, env, true);
   if (path === "/v1/session" && request.method === "GET") return handleSession(request, env);
