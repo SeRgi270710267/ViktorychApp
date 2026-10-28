@@ -737,6 +737,15 @@ html.is-split-drag * {
 }
 .tab-manage:hover { background: var(--hover); }
 .tab-manage svg { width: 20px; height: 20px; fill: currentColor; }
+.tabs-bar,
+.tabs-bar .tabs,
+.tabs-bar .tab,
+.tabs-bar .tab-pair,
+.tabs-bar .tab-manage { height: 44px; }
+.tabs-bar .tab { padding: 0 12px; }
+.tabs-bar .tab.on span:not(.tab-grip)::after { bottom: -12px; }
+.tabs-bar .tab span { overflow: visible; text-overflow: clip; max-width: none; }
+.tab-emoji { margin-right: 4px; }
 .tabs-bar::before,
 .tabs-bar::after {
   content: "";
@@ -1691,6 +1700,93 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   object-fit: cover;
   display: block;
 }
+.profile-top { position: relative; }
+.profile-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  height: calc(53px + env(safe-area-inset-top, 0px));
+  margin-bottom: 0;
+  padding: env(safe-area-inset-top, 0px) calc(12px + env(safe-area-inset-right, 0px)) 0 calc(12px + env(safe-area-inset-left, 0px));
+  background: transparent;
+  pointer-events: none;
+}
+.profile-top.has-banner .profile-chrome {
+  margin-bottom: calc(-53px - env(safe-area-inset-top, 0px));
+}
+.profile-chrome-actions { display: flex; gap: 8px; pointer-events: auto; }
+.profile-chrome-copy {
+  position: absolute;
+  left: 64px;
+  right: 146px;
+  top: env(safe-area-inset-top, 0px);
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  pointer-events: none;
+}
+.profile-chrome-copy[hidden] { display: none; }
+.profile-chrome-name {
+  max-width: 100%;
+  font-size: 17px;
+  line-height: 20px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-chrome-count {
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-chrome.is-solid {
+  z-index: 9;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(12px);
+}
+.profile-chrome.is-solid .pfloat-btn { background: transparent; }
+.pfloat-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 20, 25, 0.6);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+.pfloat-btn svg { width: 20px; height: 20px; fill: #fff; }
+.profile-search {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 12px;
+  right: 12px;
+  z-index: 6;
+  margin: 0;
+  padding: 0;
+}
+.profile-search .search { width: 100%; }
+.profile-top ~ .ptabs { top: calc(53px + env(safe-area-inset-top, 0px)); }
+.profile-top.no-banner + .pinfo .pava-row { margin-top: 0; min-height: 0; }
+.center:has(.profile-top) { padding-top: 0; }
 .pinfo { padding: 12px 16px 0; position: relative; }
 .pava-row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: -67px; min-height: 67px; }
 .pactions { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; justify-content: flex-end; }
@@ -2551,6 +2647,10 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   }
   .fab svg { width: 24px; height: 24px; fill: #fff; }
   .pava-row { margin-top: -40px; }
+  .profile-top.has-banner + .pinfo .pava-row {
+    margin-top: max(-40px, calc(env(safe-area-inset-top, 0px) + 50px - 100vw / 3));
+  }
+  .profile-top.no-banner + .pinfo .pava-row { margin-top: 0; min-height: 0; }
   .pactions { margin-bottom: 4px; }
   .pava, .pava img { width: 80px; height: 80px; }
   .pava.initials { font-size: 28px; }
@@ -3046,6 +3146,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
     background: var(--bg);
     pointer-events: none;
   }
+  body:has(.profile-top)::before { background: transparent; }
   .topbar {
     background:
       linear-gradient(var(--bg), var(--bg)) 0 0 / 100% calc(env(safe-area-inset-top, 0px) + 1px) no-repeat,
@@ -5185,6 +5286,10 @@ header.nav.nav-land { display: none; }
     min-width: 0;
     padding-top: calc(var(--top) + env(safe-area-inset-top));
     padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+  html[data-nav-layout="bar"] .center:has(.profile-top),
+  html[data-nav-layout="bar"] .app.wide .center:has(.profile-top) {
+    padding-top: 0;
   }
   html[data-nav-layout="bar"] .topbar {
     position: fixed;
