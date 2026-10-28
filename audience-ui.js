@@ -6,6 +6,7 @@
   var lists = [];
   var people = [];
   var openId = "";
+  var asked = false;
 
   function tr(key, vars) {
     var fn = root.t || (typeof window !== "undefined" && window.t);
@@ -44,7 +45,10 @@
   }
 
   function settingsHtml() {
-    if (!lists.length && !people.length) load();
+    if (!asked) {
+      asked = true;
+      load();
+    }
     var cards = lists.map(function (list) {
       var members = (list.members || []).map(function (member) {
         return '<span>' + esc(member.name || member.handle) + ' <button type="button" data-aud="remove" data-id="' + esc(list.id) + '" data-handle="' + esc(member.handle) + '">' + esc(tr("Remove")) + "</button></span>";
