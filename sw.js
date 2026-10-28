@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a39-__SW_VERSION__";
+const VERSION = "viktorych-a40-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-28T08:20:00Z-merge-stories
+// cache-bust: 2026-10-28T08:35:00Z-merge-ios
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -40,7 +40,8 @@ const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
 const LIVE = "live-" + VERSION;
 const OFFLINE_MUSIC = "sintel-music-offline";
-const MEDIA_LIMIT = 150 * 1024 * 1024;
+const MEDIA_LIMIT_FULL = 150 * 1024 * 1024;
+const MEDIA_LIMIT = /iPhone|iPad|iPod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "") ? 48 * 1024 * 1024 : MEDIA_LIMIT_FULL;
 const MEDIA_TTL = 7 * 24 * 60 * 60 * 1000;
 const SHELL_FILES = [
   "./",
@@ -106,6 +107,7 @@ const SHELL_FILES = [
   "./privacy-screen.js",
   "./shared/webauthn.js",
   "./shared/app-lock-crypto.js",
+  "./shared/ios.js",
   "./owner-keys.js",
   "./accounts.css",
   "./accounts.config.js",
@@ -176,7 +178,7 @@ const PRECACHE_TRIES = 4;
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a39-";
+  const prefix = "viktorych-a40-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";

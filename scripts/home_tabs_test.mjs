@@ -113,18 +113,26 @@ async function check(page, label, reduced) {
   if (!box.scrolls) fail(label + " tab row does not scroll");
   if (box.icons) fail(label + " placeholder icon");
   if (box.clip === "ellipsis") fail(label + " ellipsis on the tab");
-  await page.evaluate(() => {
-    document.querySelectorAll(".sp-marquee-text").forEach((node) => {
-      node.textContent = "A long pill title that should travel instead of being cut off at the edge of the pill";
+  const longPill = "A long pill title that should travel instead of being cut off at the edge of the pill";
+  // The live row is rebuilt when Spaces or weather finish loading. Put the
+  // long title back on each rebuild until the marquee actually starts.
+  await page.waitForFunction((spec) => {
+    const title = spec.title;
+    document.querySelectorAll(".sp-pill .sp-marquee-text, .sc-pill .sp-marquee-text, .wx-pill .sp-marquee-text").forEach((node) => {
+      if ((node.textContent || "").length < 40) node.textContent = title;
     });
-  });
-  await page.waitForFunction((wantOff) => {
-    const el = document.querySelector("[data-sp-marquee]");
-    const text = el && el.querySelector(".sp-marquee-text");
-    if (!text || text.textContent.length < 40) return false;
-    const on = el.classList.contains("is-on");
-    return wantOff ? !on : on;
-  }, reduced, { timeout: 4000 });
+    const nodes = [...document.querySelectorAll(".sp-pill [data-sp-marquee], .sc-pill [data-sp-marquee], .wx-pill [data-sp-marquee]")].filter((el) => {
+      const box = el.getBoundingClientRect();
+      return box.width > 8 && box.height > 8;
+    });
+    if (!nodes.length) return false;
+    return nodes.every((el) => {
+      const text = el.querySelector(".sp-marquee-text");
+      if (!text || text.textContent.length < 40) return false;
+      const on = el.classList.contains("is-on");
+      return spec.wantOff ? !on : on;
+    });
+  }, { title: longPill, wantOff: reduced }, { timeout: 8000 });
   if (!reduced) {
     await page.dispatchEvent(".sp-pill", "pointerdown");
     const held = await page.evaluate(() => document.querySelector("[data-sp-marquee]").classList.contains("is-held"));
