@@ -89,6 +89,14 @@ test("the whole friend flow notifies, lists and clears on both sides", async () 
   assert.match(req[0].hash, /^#\/@flow_kit\/requests\?kind=friends$/);
   assert.ok(Number(kitNotes.unread) >= 1, "the bell badge counts it");
 
+  // The sender's view of the receiver keeps "sent" from the server: profile and friends tab.
+  const theirProfile = await call("/v1/profile/flow_kit", { token: sam.token, ip: "203.0.113.123" });
+  assert.equal(theirProfile.status, 200, theirProfile.text);
+  assert.equal(theirProfile.body.account.viewerFriendStatus, "sent");
+  const theirFriends = await call("/v1/friends?id=" + encodeURIComponent(kitId) + "&tab=friends", { token: sam.token, ip: "203.0.113.123" });
+  assert.equal(theirFriends.status, 200, theirFriends.text);
+  assert.equal(theirFriends.body.status, "sent");
+
   // Requests tab on both sides.
   let kitReq = await call("/v1/friends?tab=requests", { token: kit.token, ip: "203.0.113.124" });
   assert.equal(kitReq.body.incoming.length, 1);

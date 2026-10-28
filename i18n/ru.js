@@ -2356,5 +2356,8 @@ SI18n.addPack("ru", {
   "Picture of an emoji status": "Изображение статуса с эмодзи",
   "Picture of badges": "Изображение значков",
   "Picture of installing the app": "Изображение установки приложения",
-  "Picture of Safari install steps": "Изображение шагов установки в Safari"
+  "Picture of Safari install steps": "Изображение шагов установки в Safari",
+  "Sort replies": "Сортировка ответов",
+  "Follow {handle}": "Читать {handle}",
+  "Unfollow {handle}": "Отписаться от {handle}"
 });
