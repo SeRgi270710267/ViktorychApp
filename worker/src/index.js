@@ -1029,6 +1029,43 @@ async function handleProfilePatch(request, env) {
 
 const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
 
+function cleanDrawerMenuSync(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const ids = ["profile", "premium", "communities", "bookmarks", "lists", "spaces", "requests", "studio", "tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music", "settings", "help", "logout", "customize"];
+  const locked = { settings: true, logout: true, customize: true };
+  const order = [];
+  const seen = {};
+  (Array.isArray(raw.order) ? raw.order : []).slice(0, 40).forEach((entry) => {
+    const text = String(entry || "").slice(0, 48);
+    if (!text || seen[text]) return;
+    if (text.indexOf("section:") === 0) {
+      seen[text] = true;
+      order.push(text);
+      return;
+    }
+    if (ids.indexOf(text) < 0) return;
+    seen[text] = true;
+    order.push(text);
+  });
+  const hidden = [];
+  (Array.isArray(raw.hidden) ? raw.hidden : []).forEach((id) => {
+    if (ids.indexOf(id) >= 0 && !locked[id] && hidden.indexOf(id) < 0) hidden.push(id);
+  });
+  const sections = [];
+  (Array.isArray(raw.sections) ? raw.sections : []).slice(0, 12).forEach((section) => {
+    if (!section || typeof section !== "object") return;
+    const id = String(section.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
+    if (!id) return;
+    const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40) || "Section";
+    const items = [];
+    (Array.isArray(section.items) ? section.items : []).slice(0, 24).forEach((item) => {
+      if (ids.indexOf(item) >= 0 && items.indexOf(item) < 0) items.push(item);
+    });
+    sections.push({ id: id, name: name, items: items });
+  });
+  return { order: order, hidden: hidden, sections: sections, at: Number(raw.at) || 0 };
+}
+
 function cleanBottomNavSync(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const order = [];
@@ -1138,6 +1175,12 @@ async function handleSyncPut(request, env) {
   payload.history = cleanHistoryList(rows, payload.historyCut);
   payload.showPictures = cleanFaceChoice(payload.showPictures, previous && previous.showPictures);
   payload.showBanners = cleanFaceChoice(payload.showBanners, previous && previous.showBanners);
+  if (payload.drawerMenu != null) {
+    const cleanedMenu = cleanDrawerMenuSync(payload.drawerMenu);
+    if (cleanedMenu) payload.drawerMenu = cleanedMenu;
+    else delete payload.drawerMenu;
+  }
+  if (payload.navCustom != null && (typeof payload.navCustom !== "object" || Array.isArray(payload.navCustom))) delete payload.navCustom;
   if (payload.bottomNav != null) {
     const cleanedNav = cleanBottomNavSync(payload.bottomNav);
     if (cleanedNav) payload.bottomNav = cleanedNav;
@@ -4502,7 +4545,8 @@ function followFeedCard(targetId, snapshot) {
     id: targetId,
     kind: "feed",
     handle: typeof snap.handle === "string" ? snap.handle : "",
-    name: typeof snap.name === "string" ? snap.name : "",
+    name: typeof snap.name === "string" && snap.name ? snap.name : (typeof snap.displayName === "string" ? snap.displayName : ""),
+    displayName: typeof snap.displayName === "string" ? snap.displayName : "",
     avatar: typeof snap.avatar === "string" ? snap.avatar : "",
     bio: typeof snap.bio === "string" ? snap.bio : "",
     platform: typeof snap.platform === "string" ? snap.platform : ""
