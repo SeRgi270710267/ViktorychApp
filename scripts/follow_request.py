@@ -318,30 +318,26 @@ def entry_for(spec: dict) -> dict:
             "profile": profile,
         }
     if platform == "threads":
+        from meta_sources import feed_urls
+
         return {
             "id": feed_id,
             "platform": "threads",
             "handle": handle,
             "adapter": "rsshub_threads",
-            "source_urls": ["{rsshubBase}/threads/{handle}"],
-            "fallbacks": [{
-                "adapter": "generic_rss",
-                "source_urls": ["http://localhost:8080/?action=display&bridge=ThreadsBridge&context=Username&u={handle}&format=Atom"],
-            }],
+            "source_urls": feed_urls("threads"),
             "limit": 8,
             "profile": profile,
         }
     if platform == "instagram":
+        from meta_sources import feed_urls
+
         return {
             "id": feed_id,
             "platform": "instagram",
             "handle": handle,
             "adapter": "rsshub_instagram",
-            "source_urls": ["{rsshubBase}/instagram/user/{handle}"],
-            "fallbacks": [{
-                "adapter": "generic_rss",
-                "source_urls": ["http://localhost:8080/?action=display&bridge=InstagramBridge&context=Username&u={handle}&format=Atom"],
-            }],
+            "source_urls": feed_urls("instagram"),
             "limit": 8,
             "profile": profile,
         }

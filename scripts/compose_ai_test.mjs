@@ -255,7 +255,12 @@ async function main() {
     for (const vp of widths) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto(origin + "/#/", { waitUntil: "domcontentloaded" });
-      await page.waitForSelector("#compose-text", { timeout: 20000 });
+      await page.waitForSelector("#compose-text, [data-act='xc-expand']", { timeout: 20000 });
+      const slim = page.locator("[data-act='xc-expand']");
+      if (await slim.count()) {
+        await slim.first().click();
+        await page.waitForSelector("#compose-text", { timeout: 20000 });
+      }
       await tune(page, "balanced", "en");
       await page.locator(".xc .xc-ai-btn").waitFor({ timeout: 10000 });
       await layout(page, vp);

@@ -530,10 +530,12 @@ def _fetch_one(url: str, adapter_name: str, feed: dict, errors: list, attempts: 
 
 def _fetch_sources(urls, adapter_name, feed, config, errors):
     """Try each mirror. A bridge error falls through to the next URL."""
+    seen = set()
     for source in urls or []:
         url = expand(source, config, feed)
-        if not url:
+        if not url or url in seen:
             continue
+        seen.add(url)
         payload, result = _fetch_one(url, adapter_name, feed, errors)
         if result is not None:
             return payload, url, adapter_name, result
