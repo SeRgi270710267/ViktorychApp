@@ -36,6 +36,7 @@ import { maybeBackupD1 } from "./d1-backup.js";
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
+import { claimedJobs } from "./job-runner.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingRequest, importAllowed, readFollowRows, outgoingRequestIds, requestCount, followsYouSet, handleSocialRoutes, blockedProfile, stripBlockedView, blocksEither, pairState } from "./social.js";
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
@@ -5443,6 +5444,29 @@ export async function withEtag(request, response) {
   return new Response(text, { status: 200, statusText: response.statusText, headers });
 }
 
+/* Render's job loop: the offloaded jobs, all at once, against the same D1/R2.
+   Each job keeps its own inner pool limits. */
+export async function runBackgroundJobs(env, at, only) {
+  bindRequestOwner(env);
+  const now = Number(at) || Date.now();
+  const off = await readFlags(env, now);
+  const minute = new Date(now).getUTCMinutes();
+  const jobs = { ownerFeeds: () => sweepOwnerFeeds(env, now) };
+  if (!off.shorts && !off.lives) jobs.tiktokLive = () => watchTikTokLive(env, now);
+  if (!off.stories) jobs.storiesSweep = () => sweepExpiredStories(env, now);
+  if (minute === 0) {
+    jobs.birthdays = () => runBirthdaySweep(env, now);
+    jobs.birthdayPoints = () => awardBirthdayBonuses(env, now);
+  }
+  const names = Object.keys(jobs).filter((name) => !only || only.includes(name));
+  const results = await Promise.allSettled(names.map((name) => jobs[name]()));
+  const failed = [];
+  results.forEach((result, i) => {
+    if (result.status === "rejected") { failed.push(names[i]); logError("render-job:" + names[i], result.reason); }
+  });
+  return { ran: names, failed };
+}
+
 export default {
   async fetch(request, env, ctx) {
     let path = "";
@@ -5464,17 +5488,22 @@ export default {
     const at = Number(event && event.scheduledTime) || Date.now();
     // Features the owner turned off do no cron work at all.
     const off = await readFlags(env, at);
-    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
-    if (!off.shorts && !off.lives) jobs.push(watchTikTokLive(env, at));
+    // Jobs the Render backup claimed in the last couple of minutes run there.
+    const away = await claimedJobs(env, at);
+    const minute = new Date(at).getUTCMinutes();
+    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
+    const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
+    run("ownerFeeds", () => sweepOwnerFeeds(env, at));
+    if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
     if (!off.lives) jobs.push(sweepLive(env, at));
-    if (!off.stories) jobs.push(sweepExpiredStories(env, at));
+    if (!off.stories) run("storiesSweep", () => sweepExpiredStories(env, at));
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
-    if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
-    if (new Date(at).getUTCMinutes() === 0) jobs.push(runBirthdaySweep(env, at));
+    if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(maybeBackupD1(env, at));
-    if (new Date(at).getUTCMinutes() === 0) jobs.push(awardBirthdayBonuses(env, at));
+    if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") logError("cron", results[i].reason);
