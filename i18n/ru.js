@@ -1,5 +1,16 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("ru", {
+  "Technology": "Технологии",
+  "News": "Новости",
+  "Gaming": "Игры",
+  "Sports": "Спорт",
+  "Entertainment": "Развлечения",
+  "Science": "Наука",
+  "Business": "Бизнес",
+  "See all communities": "Все сообщества",
+  "Recorded {date}": "Запись {date}",
+  "Switch community": "Сменить сообщество",
+  "Popular communities": "Популярные сообщества",
   "Delete post?": "Удалить пост?",
   "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.": "Это действие нельзя отменить. Пост исчезнет из вашего профиля, из ленты ваших подписчиков и из результатов поиска.",
   "{count} votes": "Голосов: {count}",
