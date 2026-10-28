@@ -2025,6 +2025,8 @@ SI18n.addPack("ru", {
   "Notification options": "Параметры уведомлений",
   "No Spaces right now": "Сейчас нет пространств",
   "Live audio shows up here.": "Прямой эфир появится здесь.",
+  "Add to Home Screen to keep data on this device. Safari can clear site data after 7 days away.": "Добавьте приложение на экран Домой, чтобы данные остались на устройстве. Safari может стереть данные сайта через 7 дней без визитов.",
+  "Notifications on iPhone need the installed app.": "Уведомления на iPhone работают только в установленном приложении.",
   "Personal details": "Личные данные",
   "Interests": "Интересы",
   "Work and education": "Работа и учёба",

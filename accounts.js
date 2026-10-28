@@ -1636,6 +1636,11 @@ function signupPayload() {
   function fitImage(file, edge, maxChars) {
     return new Promise(function (resolve) {
       if (!file) { resolve(""); return; }
+      var ios = window.ViktorychIos;
+      if (ios && ios.isHeic && ios.isHeic(file) && ios.readOriginal) {
+        ios.readOriginal(file).then(resolve);
+        return;
+      }
       var img = new Image();
       var url = URL.createObjectURL(file);
       img.onload = function () {
