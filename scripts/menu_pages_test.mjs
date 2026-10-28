@@ -387,10 +387,23 @@ async function assertTappable(page, selector, label) {
 }
 
 async function clickSelector(page, selector, label) {
-  try {
-    await page.locator(selector).locator("visible=true").first().click({ timeout: 6000 });
-  } catch (err) {
-    fail(label + " is not tappable " + reasonOf(err));
+  let last = "";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.locator(selector).locator("visible=true").first().click({ timeout: 6000 });
+      return;
+    } catch (err) {
+      last = reasonOf(err);
+      if (last !== "unstable" || attempt === 2) fail(label + " is not tappable " + last);
+      await page.evaluate(() => new Promise((resolve) => {
+        const pending = typeof document.getAnimations === "function" ? document.getAnimations() : [];
+        const done = Promise.all(pending.map((anim) => anim.finished.catch(() => {})));
+        const cap = new Promise((finish) => setTimeout(finish, 700));
+        Promise.race([done, cap]).then(() => {
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        });
+      }));
+    }
   }
 }
 
@@ -543,20 +556,24 @@ async function settleTop(page) {
 }
 
 async function openMenuAndEscape(page, opener, item, label) {
-  const has = await page.evaluate((sel) => {
-    const nodes = document.querySelectorAll(sel);
-    for (let i = 0; i < nodes.length; i += 1) {
-      const el = nodes[i];
-      const style = getComputedStyle(el);
-      if (style.display === "none" || style.visibility === "hidden") continue;
-      const rect = el.getBoundingClientRect();
-      if (rect.width < 8 || rect.height < 8) continue;
-      if (rect.bottom < 0 || rect.top > window.innerHeight - 8) el.scrollIntoView({ block: "center" });
-      const box = el.getBoundingClientRect();
-      if (box.width > 8 && box.height > 8 && box.bottom > 0 && box.top < window.innerHeight) return true;
-    }
-    return false;
-  }, opener);
+  let has = false;
+  for (let attempt = 0; attempt < 6 && !has; attempt += 1) {
+    has = await page.evaluate((sel) => {
+      const nodes = document.querySelectorAll(sel);
+      for (let i = 0; i < nodes.length; i += 1) {
+        const el = nodes[i];
+        const style = getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 8 || rect.height < 8) continue;
+        if (rect.bottom < 0 || rect.top > window.innerHeight - 8) el.scrollIntoView({ block: "center" });
+        const box = el.getBoundingClientRect();
+        if (box.width > 8 && box.height > 8 && box.bottom > 0 && box.top < window.innerHeight) return true;
+      }
+      return false;
+    }, opener);
+    if (!has) await sleep(200);
+  }
   if (!has) return false;
   await page.locator(opener).locator("visible=true").first().evaluate((el) => {
     if (el.closest(".topbar, .tabs-bar, .mhead, .dmsgs-head")) return;
@@ -636,6 +653,7 @@ async function pass(page, size) {
       await checkView(page, profileSize, { id: "profile" });
       await go(page, "#/", "home");
       await settleTop(page);
+      await sleep(350);
       const tab = await openMenuAndEscape(page, "button.tab-caret", ".menu.tab-menu button", size.id + " home tab menu");
       if (!tab) fail(size.id + " home tab menu is missing");
       const more = await openMenuAndEscape(page, "button.more-btn", "article .menu button", size.id + " post menu");
