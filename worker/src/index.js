@@ -1,5 +1,6 @@
 import { mentionSuggest } from "./mention-suggest.js";
 import { bindOwner, inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
+import { handleFeatures, killedRoute, readFlags } from "./feature-flags.js";
 import { parseRoomId, pickStreams, roomStats, isTopQuality } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
@@ -5120,6 +5121,9 @@ async function route(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+  // Owner kill switches answer before any other work for an off feature.
+  const killed = await killedRoute(env, request, path);
+  if (killed) return killed;
   if (path === "/robots.txt" && (request.method === "GET" || request.method === "HEAD")) {
     return new Response(request.method === "HEAD" ? null : "User-agent: *\nDisallow: /\n", {
       status: 200,
@@ -5172,6 +5176,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
+  if (path === "/v1/features" || path === "/v1/owner/features") return handleFeatures(request, env, { json, requireOwner });
   if (path === "/v1/owner/tiktok/unlocked" && request.method === "GET") return handleTikTokUnlocked(request, env);
   if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
@@ -5409,7 +5414,12 @@ export default {
   async scheduled(event, env, ctx) {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at), sweepLive(env, at), publishDuePosts(env, at), sweepExpiredStories(env, at), sweepExpiredNotes(env, at)];
+    // Features the owner turned off do no cron work at all.
+    const off = await readFlags(env, at);
+    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
+    if (!off.shorts && !off.lives) jobs.push(watchTikTokLive(env, at));
+    if (!off.lives) jobs.push(sweepLive(env, at));
+    if (!off.stories) jobs.push(sweepExpiredStories(env, at));
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
