@@ -293,6 +293,124 @@
 .online-row .online-emoji { position: static; margin-left: 6px; font-size: 16px; line-height: 20px; text-shadow: none; }
 .online-row .ava-presence { flex: none; }
 .friends-pill { text-decoration: none; }
+.friends-rail-head {
+  display: flex;
+  align-items: center;
+}
+.friends-rail-head h2 { flex: 1; min-width: 0; }
+.friends-rail-fold {
+  flex: none;
+  margin-right: 8px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+.friends-rail.is-collapsed .friends-rail-body { display: none; }
+.friends-rail-search input {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 0 16px 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  border-radius: 9999px;
+  font: inherit;
+  font-size: 15px;
+  padding: 8px 14px;
+}
+.friends-rail-list {
+  max-height: 280px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.friends-rail-row {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 4px 12px 4px 16px;
+}
+.friends-rail-main {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.friends-rail-main .online-emoji {
+  position: static;
+  margin-left: 6px;
+  font-size: 16px;
+  line-height: 20px;
+  text-shadow: none;
+}
+.friends-rail-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-left: 10px;
+}
+.friends-rail-copy b,
+.friends-rail-copy span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.friends-rail-copy span { color: var(--muted); font-size: 13px; line-height: 16px; }
+.friends-rail-msg {
+  flex: none;
+  margin-left: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 9999px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  padding: 4px 10px;
+}
+.friends-rail-compose { padding: 0 16px 10px; }
+.friends-rail-compose textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 8px;
+}
+.friends-rail-compose button {
+  border: 0;
+  border-radius: 9999px;
+  background: var(--text);
+  color: var(--bg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 14px;
+}
+.friends-rail-empty,
+.friends-rail-note {
+  margin: 0;
+  padding: 4px 16px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+@media (max-width: 999px) {
+  .friends-rail { display: none; }
+}
 .presence-set {
   width: 100%;
   margin-top: 8px;

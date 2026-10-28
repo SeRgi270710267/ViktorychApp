@@ -7533,6 +7533,7 @@ const here = parseRoute();
       <form class="side-search" data-act="search-form">
         <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="${tr("Search")}" aria-label="${tr("Search")}"></label>
       </form>
+      ${(!STATE.settings || STATE.settings.friendsRail !== false) && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
       ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
@@ -12371,6 +12372,7 @@ const here = parseRoute();
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${notesSwitch}
         ${presenceBlock}
+        ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
