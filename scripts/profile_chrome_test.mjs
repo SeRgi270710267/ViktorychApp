@@ -96,22 +96,16 @@ async function check(page, label) {
   if (bare.buttons !== 4) fail(label + " button count " + bare.buttons);
   if (!bare.nameHidden) fail(label + " shows the name before scrolling");
   if (!bare.clear) fail(label + " buttons overlap the profile");
-  await page.evaluate(() => {
+  const laid = await page.evaluate(() => {
     const top = document.querySelector(".profile-top");
     top.classList.remove("no-banner");
     top.classList.add("has-banner");
     const img = document.createElement("img");
     img.className = "pbanner";
     img.alt = "";
-    img.src = "icons/icon-512.png";
+    img.src = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100"></svg>');
     top.appendChild(img);
-  });
-  await page.waitForFunction(() => {
-    const banner = document.querySelector(".pbanner");
-    return !!(banner && banner.getBoundingClientRect().height > 40);
-  });
-  const laid = await page.evaluate(() => {
-    const banner = document.querySelector(".pbanner").getBoundingClientRect();
+    const banner = img.getBoundingClientRect();
     const buttons = [...document.querySelectorAll(".profile-chrome .pfloat-btn")].map((btn) => btn.getBoundingClientRect());
     const ratio = banner.height / banner.width;
     return {
@@ -144,8 +138,9 @@ async function check(page, label) {
     return { report: report, block: block };
   });
   if (more.report || more.block) fail(label + " unpaid actions are visible");
+  await page.click("[data-act='close-profile-menu']");
   await page.evaluate(() => {
-    document.querySelector("main").style.minHeight = "2400px";
+    document.body.style.minHeight = "3000px";
     window.scrollTo(0, 500);
   });
   await page.waitForFunction(() => {
