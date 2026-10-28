@@ -2213,6 +2213,126 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 }
 .drawer a:hover, .drawer button.linky:hover { background: var(--hover); }
 .drawer a svg, .drawer button svg { width: 24px; height: 24px; fill: currentColor; }
+.drawer.drawer-x {
+  display: flex;
+  flex-direction: column;
+  width: min(320px, 84vw);
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+.drawer-x .drawer-scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 0 8px; }
+.drawer-id { padding: 12px 16px 8px; }
+.drawer-id-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.drawer-ava {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+.drawer-ava .ava, .drawer-ava .initials, .drawer-ava img { width: 40px; height: 40px; border-radius: 999px; font-size: 16px; }
+.drawer-id-tools { display: flex; gap: 4px; }
+.drawer-id-tools .icon-btn { width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 0; }
+.drawer-id-tools svg { width: 20px; height: 20px; fill: currentColor; }
+.drawer-x .drawer-name, .drawer-x .drawer-handle, .drawer-x .drawer-counts a, .drawer-x .drawer-ava {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  font-weight: 400;
+  font-size: inherit;
+  text-decoration: none;
+  color: inherit;
+}
+.drawer-x .drawer-ava { width: 40px; height: 40px; flex: none; }
+.drawer-x .drawer-name { margin-top: 12px; font-size: 20px; line-height: 24px; }
+.drawer-x .drawer-name b { font-weight: 800; }
+.drawer-lock { display: inline-flex; color: var(--text); }
+.drawer-lock svg { width: 16px; height: 16px; }
+.drawer-x .drawer-handle { margin-top: 2px; color: var(--muted); font-size: 15px; line-height: 20px; }
+.drawer-x .drawer-counts { display: flex; gap: 16px; margin-top: 12px; font-size: 14px; color: var(--muted); }
+.drawer-x .drawer-counts b { color: var(--text); font-weight: 700; }
+.drawer-x .drawer-row, .drawer-x .drawer-fold, .drawer-x button.linky {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 16px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 19px;
+  font-weight: 400;
+  text-align: left;
+  text-decoration: none;
+}
+.drawer-x .drawer-row:hover, .drawer-x .drawer-fold:hover, .drawer-x button.linky:hover { background: var(--hover); }
+.drawer-ico { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.drawer-ico svg { width: 26px; height: 26px; fill: currentColor; }
+.drawer-ico svg.tab-ico { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.drawer-label { flex: 1; min-width: 0; }
+.drawer-pill {
+  flex: none;
+  background: var(--blue);
+  color: #fff;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+}
+.drawer-rule { height: 1px; margin: 6px 16px; background: var(--line); }
+.drawer-fold-body .drawer-row, .drawer-fold-body a, .drawer-fold-body button.linky { font-weight: 400; font-size: 19px; }
+.drawer-foot { flex: none; padding: 4px 8px calc(12px + env(safe-area-inset-bottom)); }
+.drawer-theme {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.drawer-theme:hover { background: var(--hover); }
+.drawer-theme svg { width: 24px; height: 24px; fill: currentColor; }
+.drawer-pop {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  z-index: 4;
+  min-width: 220px;
+  max-width: calc(100% - 24px);
+  background: var(--sheet);
+  color: var(--text);
+  border-radius: 12px;
+  box-shadow: 0 0 15px var(--shadow), 0 0 3px 1px var(--shadow-tight);
+  padding: 8px 0;
+}
+.drawer-pop button {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 400;
+  padding: 12px 16px;
+}
+.drawer-pop button:hover { background: var(--hover); }
+.drawer-pop-current { display: flex; flex-direction: column; gap: 2px; padding: 8px 16px 12px; }
+.drawer-pop-current span { color: var(--muted); font-size: 13px; }
 
 #toast {
   position: fixed;
@@ -3333,17 +3453,79 @@ html.tv-on #new-posts { display: none; }
 .bell-choice-label { flex: 1; min-width: 0; }
 .bell-mark { color: var(--blue); }
 .bell-note { margin: 4px 16px 12px; color: var(--muted); font-size: 13px; line-height: 16px; }
-.note-row { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.note-ico { width: 32px; flex: none; color: var(--blue); padding-top: 2px; }
-.note-ico svg { width: 24px; height: 24px; fill: currentColor; }
+.note-row { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.note-row.is-unread { background: color-mix(in srgb, var(--blue) 16%, var(--bg)); }
+.note-ico { width: 32px; flex: none; color: var(--blue); padding-top: 8px; }
+.note-ico svg { width: 26px; height: 26px; fill: currentColor; }
 .note-main { color: inherit; min-width: 0; flex: 1; }
 .note-main:hover { text-decoration: none; }
+.note-faces { display: flex; align-items: center; min-height: 36px; margin-bottom: 4px; }
+.note-face-wrap { display: inline-flex; margin-left: -12px; }
+.note-face-wrap:first-child { margin-left: 0; }
+.note-face-wrap .ava, .note-face-wrap .note-face, .note-face-wrap img {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--bg);
+  font-size: 13px;
+}
+.note-row.is-unread .note-face-wrap .ava,
+.note-row.is-unread .note-face-wrap .note-face,
+.note-row.is-unread .note-face-wrap img { box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 16%, var(--bg)); }
+.note-line { margin: 0; font-size: 15px; line-height: 20px; font-weight: 400; }
+.note-line b { font-weight: 800; }
+.note-time { color: var(--muted); font-weight: 400; }
 .note-title { font-weight: 700; font-size: 15px; line-height: 20px; }
 .note-post { display: flex; gap: 10px; margin-top: 8px; min-width: 0; }
-.note-copy { min-width: 0; flex: 1; }
+.note-copy { min-width: 0; flex: 1; margin: 2px 0 0; color: var(--text); font-size: 15px; line-height: 20px; }
 .note-copy b { font-size: 15px; }
 .note-copy p { margin: 4px 0 0; font-size: 15px; line-height: 20px; }
 .note-img { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px; margin-top: 8px; }
+.notes-bar {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  height: 53px;
+  padding: 0 8px;
+}
+.notes-bar h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notes-bar .m-ava {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.notes-bar .m-ava .ava, .notes-bar .m-ava .initials { width: 32px; height: 32px; font-size: 14px; }
+.ava-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--blue);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.notes-top .tabs { display: flex; width: 100%; }
+.notes-top .tab { flex: 1 1 0; }
+.notes-top .tab .tab-bell { display: inline-flex; width: 16px; height: 16px; margin-right: 6px; vertical-align: -2px; }
+.notes-top .tab .tab-bell svg { width: 16px; height: 16px; fill: currentColor; }
+.notes-top .note-gear { border: 0; background: transparent; color: var(--text); }
+a.bell-choice { text-decoration: none; color: inherit; }
 @media (max-width: 499px) {
   .bell-sheet { background: rgba(91, 112, 131, 0.4); }
   .menu.bell-menu {
@@ -3826,6 +4008,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 .tabs-bar.notes-tabs::after { right: 0; }
 .tabs-bar.notes-tabs .tab-arrow.right { right: 8px; }
 .notes-top .page-head { border-bottom: 0; }
+.notes-top .note-gear { width: 40px; height: 40px; min-width: 40px; justify-self: end; }
 .tab-grip {
   display: inline-flex;
   width: 14px;

@@ -2218,6 +2218,7 @@
     profileCard: profileCard,
     avatar: avatar,
     page: page,
+    models: models,
     afterRender: afterRender,
     noteLive: noteLive,
     playing: playing,
