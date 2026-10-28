@@ -94,6 +94,24 @@ function installRoutes(page, mode) {
       await route.fulfill({ status: 500, contentType: "text/plain", body: "nope" });
       return;
     }
+    if (current === "posts") {
+      const now = Date.now();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [
+            { id: "p1", at: now, kind: "post", handle: "user_a", name: "User A", text: "one", hash: "#/", verified: true, read: false },
+            { id: "p2", at: now - 1000, kind: "post", handle: "user_b", name: "User B", text: "two", hash: "#/", read: false }
+          ],
+          unread: 2,
+          readUntil: 0,
+          cursor: 2,
+          tabs: []
+        })
+      });
+      return;
+    }
     if (current === "items") {
       await route.fulfill({
         status: 200,
@@ -138,8 +156,18 @@ const INSPECT = `(() => {
     cover: document.documentElement.getAttribute("data-privacy-cover") || "",
     focus: !!(document.hasFocus && document.hasFocus()),
     catchUp: !!document.querySelector("[data-act='odai-catch']"),
-    gear: !!document.querySelector(".notes-top [data-act='manage-tabs']"),
-    mark: !!document.querySelector(".notes-top [data-act='note-mark-all']"),
+    gear: !!document.querySelector(".notes-top .note-gear"),
+    mark: !!document.querySelector(".notes-top .note-read-all"),
+    spark: !!document.querySelector(".notes-top a.m-icon"),
+    title: (document.querySelector(".notes-top h1") || {}).textContent || "",
+    titleCut: (() => {
+      const h1 = document.querySelector(".notes-top h1");
+      return !!(h1 && h1.scrollWidth > h1.clientWidth + 2);
+    })(),
+    tabCount: document.querySelectorAll(".notes-tabs [role='tab']").length,
+    allOn: (document.querySelector(".notes-tabs [data-tab='all']") || {}).getAttribute ? document.querySelector(".notes-tabs [data-tab='all']").getAttribute("aria-selected") === "true" : false,
+    bell: !!document.querySelector(".notes-tabs .tab.on .tab-bell"),
+    avatar: !!document.querySelector(".notes-top button.m-ava"),
     retry: !!el.querySelector("[data-act='notes-retry']"),
     skel: el.querySelectorAll(".skel").length,
     text: String(el.innerText || "").replace(/\\s+/g, " ").trim().slice(0, 180),
@@ -160,7 +188,12 @@ function assertVisible(info, allowed, label) {
   if (!info.hitInside) fail(label + " list is covered " + info.kind + " top=" + Math.round(info.top) + " bottom=" + Math.round(info.bottom) + " tabs=" + Math.round(info.tabsBottom) + " hit=" + info.hitTag + " cover=" + info.cover + " focus=" + info.focus);
   if (info.cover === "dms" || info.cover === "app") fail(label + " privacy cover is on");
   if (info.catchUp) fail(label + " catch-up link is still in the header");
-  if (!info.gear || !info.mark) fail(label + " header controls missing");
+  if (!info.gear || !info.avatar) fail(label + " header controls missing");
+  if (info.mark || info.spark) fail(label + " old header controls are still in the bar");
+  if (info.title !== "Notificaciones") fail(label + " title");
+  if (info.titleCut) fail(label + " title is cut off");
+  if (info.tabCount !== 3) fail(label + " tab count " + info.tabCount);
+  if (info.allOn !== info.bell) fail(label + " bell on the selected All tab");
   if (info.kind === "loading") {
     if (info.skel < 1) fail(label + " skeleton missing");
   } else if (!info.text) fail(label + " list has no text");
@@ -184,6 +217,50 @@ async function openNotes(browser, port, opts) {
   return { context, page, mode };
 }
 
+const DRAWER_LABELS = [
+  "Perfil",
+  "Premium",
+  "Comunidades",
+  "Guardados",
+  "Listas",
+  "Espacios",
+  "Solicitudes de seguimiento",
+  "Estudio de creadores",
+  "Configuración y privacidad",
+  "Centro de ayuda"
+];
+
+async function checkDrawer(page, label) {
+  await page.click("button.m-ava");
+  await page.waitForSelector(".drawer-x .drawer-row", { timeout: 5000 });
+  const info = await page.evaluate((wanted) => {
+    const drawer = document.querySelector(".drawer-x");
+    const labels = Array.from(drawer.querySelectorAll(".drawer-row .drawer-label")).map((el) => (el.textContent || "").trim());
+    const missing = wanted.filter((name) => labels.indexOf(name) < 0);
+    return {
+      missing: missing,
+      status: !!drawer.querySelector("[data-acct='presence-open']"),
+      logout: !!drawer.querySelector("[data-acct='logout']"),
+      theme: !!drawer.querySelector("[data-act='explore-theme']"),
+      fold: !!drawer.querySelector("[data-act='drawer-fold']"),
+      pill: !!drawer.querySelector(".drawer-pill"),
+      tools: drawer.querySelectorAll(".drawer-id-tools button").length
+    };
+  }, DRAWER_LABELS);
+  if (info.missing.length) fail(label + " drawer rows");
+  if (info.status || info.logout) fail(label + " account actions are still in the drawer body");
+  if (!info.theme || !info.fold || !info.pill || info.tools < 2) fail(label + " drawer chrome");
+  await page.click("[data-act='drawer-more']");
+  await page.waitForSelector(".drawer-pop [data-acct='login']", { timeout: 5000 });
+  const still = await page.evaluate(() => ({
+    status: !!document.querySelector(".drawer-pop [data-acct='presence-open']"),
+    logout: !!document.querySelector(".drawer-pop [data-acct='logout']")
+  }));
+  if (still.status || still.logout) fail(label + " signed-out account menu");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".drawer-x", { state: "detached", timeout: 5000 });
+}
+
 async function main() {
   const chromium = await loadPlaywright();
   const server = await startServer();
@@ -196,6 +273,7 @@ async function main() {
         const info = await readState(opened.page);
         assertVisible(info, ["empty"], viewport.name + " signed out");
         if (!info.text.includes("Nada que ver")) fail(viewport.name + " empty copy");
+        if (viewport.name !== "tablet") await checkDrawer(opened.page, viewport.name);
       } finally {
         await opened.context.close();
       }
@@ -254,6 +332,51 @@ async function main() {
       if (!info.text.includes("hello")) fail("retry items");
     } finally {
       await failed.context.close();
+    }
+    const grouped = await openNotes(browser, port, { width: 1280, height: 800, mobile: false, signed: true, api: "posts" });
+    try {
+      const info = await (await grouped.page.waitForFunction(() => {
+        const group = document.querySelector(".note-group");
+        if (!group) return null;
+        const line = (group.querySelector(".note-line") || {}).textContent || "";
+        if (!line) return null;
+        return {
+          rows: document.querySelectorAll(".note-row").length,
+          unread: group.classList.contains("is-unread"),
+          faces: group.querySelectorAll(".note-face-wrap").length,
+          named: line.indexOf("User A") >= 0 && line.indexOf("1") >= 0,
+          dot: !!document.querySelector(".notes-top .ava-dot")
+        };
+      }, null, { timeout: 15000 })).jsonValue();
+      if (info.rows !== 1 || info.faces < 2) fail("grouped post row");
+      if (!info.unread || !info.dot) fail("unread highlight");
+      if (!info.named) fail("grouped sentence");
+      await grouped.page.click(".note-gear");
+      await grouped.page.waitForSelector("[data-act='note-mark-all']", { timeout: 5000 });
+      const menu = await grouped.page.evaluate(() => ({
+        mark: !!document.querySelector("[data-act='note-mark-all']"),
+        filter: Array.from(document.querySelectorAll(".note-gear-menu .bell-choice-label")).some((el) => (el.textContent || "").trim() === "Tab A")
+      }));
+      if (!menu.mark || !menu.filter) fail("gear menu");
+      await grouped.page.keyboard.press("Escape");
+      await grouped.page.waitForSelector(".note-gear-menu", { state: "detached", timeout: 5000 });
+      await grouped.page.click("button.m-ava");
+      await grouped.page.waitForSelector(".drawer-x .drawer-counts", { timeout: 5000 });
+      const signed = await grouped.page.evaluate(() => {
+        const drawer = document.querySelector(".drawer-x");
+        return {
+          counts: !!drawer.querySelector(".drawer-counts"),
+          status: !!drawer.querySelector("[data-acct='presence-open']"),
+          logout: !!drawer.querySelector("[data-acct='logout']")
+        };
+      });
+      if (!signed.counts || signed.status || signed.logout) fail("signed-in drawer");
+      await grouped.page.click("[data-act='drawer-more']");
+      await grouped.page.waitForSelector(".drawer-pop [data-acct='presence-open']", { timeout: 5000 });
+      const moved = await grouped.page.evaluate(() => !!document.querySelector(".drawer-pop [data-acct='logout']"));
+      if (!moved) fail("account menu");
+    } finally {
+      await grouped.context.close();
     }
     console.log("notifications page check passed");
   } finally {
