@@ -1714,6 +1714,7 @@ SI18n.addPack("en", {
   "Feed failing": "Feed failing",
   "Feed paused": "Feed paused",
   "Last fetch": "Last fetch",
+  "Last updated": "Last updated",
   "Search feeds": "Search feeds",
   "All platforms": "All platforms",
   "All groups": "All groups",
