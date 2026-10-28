@@ -1935,6 +1935,7 @@ SI18n.addPack("es", {
   "Partial. Replies on recent public posts, not X's mention inbox.": "Parcial. Respuestas en publicaciones públicas recientes, no la bandeja de menciones de X.",
   "Saved on this device. X opened in a new tab": "Guardado en este dispositivo. X se abrió en una pestaña nueva",
   "The draft stays on this device. You press Post on X.": "El borrador se queda en este dispositivo. Tú pulsas Publicar en X.",
+  "Draft stays on this device.": "El borrador se queda en este dispositivo.",
   "Follows you": "Te sigue",
   "You're blocked": "Te han bloqueado",
   "You blocked this account": "Bloqueaste esta cuenta",
