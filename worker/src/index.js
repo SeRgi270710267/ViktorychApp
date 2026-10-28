@@ -1219,6 +1219,8 @@ async function handleSyncPut(request, env) {
     delete payload.navLayoutSync;
   }
   delete payload.deviceStats;
+  if (payload.storyNotes === true || payload.storyNotes === false) payload.storyNotes = payload.storyNotes === true;
+  else if (previous && (previous.storyNotes === true || previous.storyNotes === false)) payload.storyNotes = previous.storyNotes === true;
   if (payload.devicePerf != null) {
     const cleanedPerf = cleanDevicePerf(payload.devicePerf);
     if (cleanedPerf) payload.devicePerf = cleanedPerf;

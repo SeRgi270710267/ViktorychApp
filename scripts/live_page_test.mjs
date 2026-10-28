@@ -72,7 +72,9 @@ async function loadPlaywright() {
 }
 
 async function openSheet(page) {
-  await page.waitForSelector("[data-act='go-live']", { timeout: 20000 });
+  await page.waitForSelector("button.m-ava", { timeout: 20000 });
+  await page.click("button.m-ava");
+  await page.waitForSelector(".drawer [data-act='go-live']", { timeout: 20000 });
   await page.evaluate(() => {
     const api = window.ViktorychAccounts || {};
     api.token = () => "tok";
@@ -84,7 +86,7 @@ async function openSheet(page) {
     }).then((res) => res.json().then((body) => Object.assign(body || {}, { status: res.status })).catch(() => ({ status: res.status })));
     window.ViktorychAccounts = api;
   });
-  await page.click("[data-act='go-live']");
+  await page.click(".drawer [data-act='go-live']");
   await page.waitForSelector(".live-sheet");
 }
 

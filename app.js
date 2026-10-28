@@ -7431,6 +7431,10 @@ const here = parseRoute();
     });
 
     html += sidebarDrawerLinks(route);
+    html += `<button type="button" class="nav-item" data-act="go-live" aria-label="${esc(tr("Go live"))}" data-tooltip="${esc(tr("Go live"))}">
+      <span class="nav-ico">${icon("video")}</span>
+      <span class="nav-label">${esc(tr("Go live"))}</span>
+    </button>`;
     html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
       <span class="nav-ico">${icon("sliders")}</span>
       <span class="nav-label">${tr("Customize sidebar")}</span>
@@ -7948,7 +7952,6 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
-      ${window.ViktorychLive && window.ViktorychLive.homeHtml ? window.ViktorychLive.homeHtml() : ""}
       ${homeLivePillsRow()}
     </div>`;
   }
@@ -12320,7 +12323,12 @@ const here = parseRoute();
         <p class="phandle set-desc">${esc(desc)}</p>`;
       };
       const presenceBlock = window.ViktorychPresence ? window.ViktorychPresence.settingsHtml() : "";
+      const notesOn = !STATE.settings || STATE.settings.storyNotes !== false;
+      const notesSwitch = `<h2>${esc(tr("Notes"))}</h2>
+        <button class="tab-switch${notesOn ? " on" : ""}" type="button" role="switch" aria-checked="${notesOn ? "true" : "false"}" data-act="story-notes"><span>${esc(tr("Show notes"))}</span><i></i></button>
+        <p class="phandle">${esc(tr("Notes sit above stories. Turn this off to hide them."))}</p>`;
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
+        ${notesSwitch}
         ${presenceBlock}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
@@ -12419,7 +12427,7 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
@@ -12587,6 +12595,7 @@ const here = parseRoute();
     if (id === "points") return { id: id, href: "#/points", icon: "spark", label: tr("Viktorychs"), extra: `<span class="points-pill" data-points-balance></span>` };
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
+    if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
     if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Follow requests") };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
@@ -12788,6 +12797,7 @@ const here = parseRoute();
       ${drawerSheet()}
       <div class="drawer-scroll">
         ${rows}
+        ${STATE.drawerEdit ? "" : '<div class="live-row drawer-lives" data-live-row hidden></div>'}
         ${install}
       </div>
       <div class="drawer-foot"><button class="drawer-theme" type="button" data-act="explore-theme" aria-label="${esc(tr("Theme"))}">${icon("moon")}</button></div>
@@ -16267,6 +16277,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }
       return;
     }
+    if (act === "story-notes") {
+      if (STATE.settings) {
+        STATE.settings.storyNotes = STATE.settings.storyNotes === false;
+        saveSettings();
+        render();
+      }
+      return;
+    }
     if (act === "toggle-privacy-pref") {
       const key = el.dataset.key;
       if (key && STATE.settings) {
@@ -18158,8 +18176,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
   window.addEventListener("scroll", () => {
     paintProfileChrome();
-    if (window.innerWidth >= 500) {
+    const homeStories = parseRoute().name === "home" && document.querySelector(".story-shell");
+    if (window.innerWidth >= 500 || homeStories) {
       STATE.headerHidden = false;
+      if (homeStories) document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
       return;
     }
     const y = window.scrollY;
@@ -21934,7 +21954,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         owner: signedOwner,
         api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
         apiRoot: accountsApi,
-        toast: toast
+        toast: toast,
+        notesOn: function () { return !STATE.settings || STATE.settings.storyNotes !== false; }
       });
       if (window.AudienceLists) {
         window.AudienceLists.bind({
@@ -22486,6 +22507,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("viktorych-settings-applied", () => {
     if (!STATE.settings) return;
     const next = loadSettings();
+    if ((next.storyNotes === true || next.storyNotes === false) && STATE.settings.storyNotes !== next.storyNotes) {
+      STATE.settings.storyNotes = next.storyNotes;
+      render();
+    }
     if (next.navLayoutSync || STATE.settings.navLayoutSync) {
       STATE.settings.navLayout = next.navLayout;
       STATE.settings.navLayoutLand = next.navLayoutLand;
