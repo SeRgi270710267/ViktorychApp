@@ -68,8 +68,17 @@ def _parse_expiry(value: str | None) -> datetime | None:
         return None
 
 
+def is_media_redirect(url: str) -> bool:
+    """Instagram's /media redirect is a JPEG the browser is not allowed to show."""
+    parsed = urllib.parse.urlparse(url or "")
+    host = (parsed.hostname or "").lower()
+    return host.endswith("instagram.com") and "/media" in (parsed.path or "")
+
+
 def needs_refresh(url: str, expires: str | None = None, now: datetime | None = None) -> bool:
     if not url or is_local(url):
+        return True
+    if is_media_redirect(url):
         return True
     if not is_meta_cdn(url):
         return False
@@ -165,32 +174,68 @@ def _unique(urls: list[str]) -> list[str]:
 
 
 def _shortcode(post: dict) -> str:
-    match = re.search(r"/(?:p|reel|tv)/([A-Za-z0-9_-]+)", post.get("url") or "")
-    return match.group(1) if match else ""
+    from adapters.common import meta_status_id
+
+    return meta_status_id("instagram", str((post or {}).get("statusId") or (post or {}).get("id") or ""), str((post or {}).get("url") or ""))
+
+
+def instagram_pages(shortcode: str) -> list[str]:
+    if not shortcode:
+        return []
+    return [
+        f"https://www.instagram.com/reel/{shortcode}/embed/captioned/",
+        f"https://www.instagram.com/p/{shortcode}/embed/captioned/",
+        f"https://www.instagram.com/p/{shortcode}/embed/",
+        f"https://www.instagram.com/reel/{shortcode}/embed/",
+    ]
+
+
+def threads_pages(post: dict) -> list[str]:
+    handle = (post or {}).get("handle") or ""
+    code = str((post or {}).get("statusId") or (post or {}).get("id") or "")
+    if not code or code.startswith("http"):
+        match = re.search(r"threads\.(?:com|net)/(?:@[^/]+/)?(?:post|t)/([A-Za-z0-9_-]+)", str((post or {}).get("url") or ""))
+        code = match.group(1) if match else ""
+    if not code:
+        return []
+    pages = [
+        f"https://www.threads.net/t/{code}/embed",
+        f"https://www.threads.com/t/{code}/embed",
+    ]
+    if handle:
+        pages.append(f"https://www.threads.net/@{handle}/post/{code}")
+        pages.append(f"https://www.threads.com/@{handle}/post/{code}")
+    pages.append(f"https://www.threads.net/t/{code}")
+    pages.append(f"https://www.threads.com/t/{code}")
+    return pages
+
+
+def thumbnail_from_oembed(body: str) -> str:
+    if not body or not str(body).lstrip().startswith("{"):
+        return ""
+    try:
+        thumb = json.loads(body).get("thumbnail_url") or ""
+    except json.JSONDecodeError:
+        return ""
+    return thumb if str(thumb).startswith("https://") else ""
 
 
 def instagram_media_urls(shortcode: str) -> list[str]:
     if not shortcode:
         return []
     found = []
-    for page in (
-        f"https://www.instagram.com/p/{shortcode}/embed/captioned/",
-        f"https://www.instagram.com/p/{shortcode}/embed/",
-    ):
+    for page in instagram_pages(shortcode):
         body, _final = _fetch(page)
         if not body or '"pageID":"httpErrorPage"' in body:
             continue
         found.extend(extract_cdn_urls(body))
     if found:
         return _unique(found)
-    body, _final = _fetch(f"https://www.instagram.com/api/v1/oembed/?url=https://www.instagram.com/p/{shortcode}/")
-    if body.lstrip().startswith("{"):
-        try:
-            thumb = json.loads(body).get("thumbnail_url") or ""
-        except json.JSONDecodeError:
-            thumb = ""
-        if thumb:
-            found.append(thumb)
+    quoted = urllib.parse.quote(f"https://www.instagram.com/p/{shortcode}/", safe="")
+    body, _final = _fetch(f"https://www.instagram.com/api/v1/oembed/?url={quoted}")
+    thumb = thumbnail_from_oembed(body)
+    if thumb:
+        found.append(thumb)
     _body, final = _fetch(f"https://www.instagram.com/p/{shortcode}/media/?size=l", sniff_redirect=True)
     if is_meta_cdn(final):
         found.insert(0, final)
@@ -198,16 +243,10 @@ def instagram_media_urls(shortcode: str) -> list[str]:
 
 
 def threads_media_urls(post: dict) -> list[str]:
-    handle = post.get("handle") or ""
-    code = str(post.get("statusId") or post.get("id") or "")
-    if not code:
+    pages = threads_pages(post)
+    if not pages:
         return []
-    pages = [
-        f"https://www.threads.net/@{handle}/post/{code}" if handle else "",
-        f"https://www.threads.net/t/{code}",
-        f"https://www.threads.com/@{handle}/post/{code}" if handle else "",
-        f"https://www.threads.com/t/{code}",
-    ]
+    code = pages[0].rstrip("/").rsplit("/", 2)[-2] if "/embed" in pages[0] else ""
     for page in pages:
         if not page:
             continue
@@ -217,6 +256,16 @@ def threads_media_urls(post: dict) -> list[str]:
             found.insert(0, final)
         if found:
             return _unique(found)
+    if code:
+        target = urllib.parse.quote(f"https://www.threads.net/t/{code}", safe="")
+        for endpoint in (
+            f"https://graph.threads.net/v1.0/oembed?url={target}",
+            f"https://www.threads.net/oembed?url={target}",
+        ):
+            body, _final = _fetch(endpoint)
+            thumb = thumbnail_from_oembed(body)
+            if thumb:
+                return [thumb]
     return []
 
 
@@ -305,8 +354,9 @@ def refresh_post(post: dict, urls: list[str], now: datetime | None = None) -> No
 
 
 def refresh_saved(posts: list, profiles: list, fresh_ids: set[tuple[str, str]], now: datetime | None = None) -> None:
-    """Stamp every Meta URL. Refresh posts that were not in this fetch and are near expiry."""
+    """Stamp every Meta URL. Refresh expired or unreadable media, including posts from this fetch."""
     by_feed: dict[str, dict] = {}
+    refreshed = 0
     for post in posts:
         stamp_post(post)
         feed_id = post.get("feedId") or ""
@@ -314,10 +364,16 @@ def refresh_saved(posts: list, profiles: list, fresh_ids: set[tuple[str, str]], 
         key = (feed_id, str(post.get("id") or ""))
         if post.get("platform") not in ("instagram", "threads"):
             continue
-        if key in fresh_ids and not _has_local(post):
+        if refreshed >= 12:
             continue
-        if not _item_needs_any(post, now) and not needs_refresh(post.get("avatar") or "", post.get("avatarExpires"), now):
+        needs_media = _item_needs_any(post, now)
+        avatar = post.get("avatar") or ""
+        needs_avatar = bool(avatar) and needs_refresh(avatar, post.get("avatarExpires"), now)
+        if key in fresh_ids and not _has_local(post) and not needs_media:
             continue
+        if not needs_media and not needs_avatar:
+            continue
+        refreshed += 1
         urls = instagram_media_urls(_shortcode(post)) if post.get("platform") == "instagram" else threads_media_urls(post)
         if not urls:
             print(f"[media] {post.get('platform')}:{post.get('id')} no fresh CDN url")

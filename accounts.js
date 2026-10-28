@@ -15,6 +15,8 @@
   var entered = false;
   var view = "";
   var gallery = { open: false, kind: "photo", index: 0 };
+  var profileTabEdit = false;
+  var profileTabDrag = null;
   var mediaManagerLoaded = false;
   var idCopied = false;
   var step = 0;
@@ -912,7 +914,8 @@ var numberNote = form.passkey
       bottomNavCustom: settings.bottomNavCustom === true,
       drawerMenu: settings.drawerMenu && typeof settings.drawerMenu === "object" ? settings.drawerMenu : null,
       navCustom: settings.navCustom && typeof settings.navCustom === "object" ? settings.navCustom : null,
-      navCustomAt: Number(settings.navCustomAt) || 0
+      navCustomAt: Number(settings.navCustomAt) || 0,
+      profileTabs: cleanProfileTabs(settings.profileTabs)
     };
     if (settings.storyNotes === true || settings.storyNotes === false) snap.storyNotes = settings.storyNotes;
     if (settings.bottomNav && typeof settings.bottomNav === "object") snap.bottomNav = settings.bottomNav;
@@ -1102,7 +1105,8 @@ var numberNote = form.passkey
       bottomNavCustom: pickedNav.bottomNavCustom,
       drawerMenu: (Number(local.drawerMenu && local.drawerMenu.at) || 0) >= (Number(remote.drawerMenu && remote.drawerMenu.at) || 0) ? (local.drawerMenu || remote.drawerMenu || null) : (remote.drawerMenu || local.drawerMenu || null),
       navCustom: (Number(local.navCustomAt) || 0) >= (Number(remote.navCustomAt) || 0) ? (local.navCustom || remote.navCustom || null) : (remote.navCustom || local.navCustom || null),
-      navCustomAt: Math.max(Number(local.navCustomAt) || 0, Number(remote.navCustomAt) || 0)
+      navCustomAt: Math.max(Number(local.navCustomAt) || 0, Number(remote.navCustomAt) || 0),
+      profileTabs: (Number(local.profileTabs && local.profileTabs.at) || 0) >= (Number(remote.profileTabs && remote.profileTabs.at) || 0) ? cleanProfileTabs(local.profileTabs || remote.profileTabs) : cleanProfileTabs(remote.profileTabs || local.profileTabs)
     };
     if (local.storyNotes === true || local.storyNotes === false) merged.storyNotes = local.storyNotes;
     else if (remote.storyNotes === true || remote.storyNotes === false) merged.storyNotes = remote.storyNotes;
@@ -2575,7 +2579,7 @@ function signupPayload() {
       var handle = item.handle || "";
       var href = "#/u/" + encodeURIComponent(platform) + "/" + encodeURIComponent(handle);
       var iconHtml = platformIcon(platform);
-      return '<a class="acct-ident-chip" href="' + esc(href) + '" title="' + esc(tr("Verified Identity")) + '">' +
+      return '<a class="acct-ident-chip' + (item.hidden ? " is-hidden" : "") + '" href="' + esc(href) + '" title="' + esc(tr("Verified Identity")) + '">' +
         iconHtml +
         '<span class="acct-ident-handle">@' + esc(handle) + '</span>' +
         verifiedSvg() +
@@ -2593,12 +2597,28 @@ function signupPayload() {
     } else {
       itemsHtml = '<div class="acct-ident-settings-list">' + list.map(function (item) {
         var plat = (item.platform || "x").toUpperCase();
-        return '<div class="acct-ident-item">' +
+        var audience = item.audience || "public";
+        var options = [
+          ["public", tr("Everyone")],
+          ["followers", tr("Followers")],
+          ["friends", tr("Mutuals")],
+          ["only", tr("Only me")],
+          ["list", tr("Custom list")]
+        ];
+        var choices = options.map(function (pair) {
+          return '<option value="' + esc(pair[0]) + '"' + (audience === pair[0] ? " selected" : "") + ">" + esc(pair[1]) + "</option>";
+        }).join("");
+        var checks = audience === "list" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(item.listIds || []) : "";
+        var shown = item.hidden !== true;
+        return '<div class="acct-ident-item" data-ident-id="' + esc(String(item.id || "")) + '">' +
           '<div class="acct-ident-item-left">' +
             platformIcon(item.platform) +
             '<span class="acct-ident-item-name"><b>' + esc(plat) + '</b> @' + esc(item.handle) + '</span>' +
             verifiedSvg() +
           '</div>' +
+          '<label class="acct-ident-aud"><span>' + esc(tr("Who can see this")) + '</span><select data-acct="identity-audience" data-id="' + esc(String(item.id || "")) + '" aria-label="' + esc(tr("Who can see this")) + '">' + choices + "</select></label>" +
+          checks +
+          '<button class="tab-switch' + (shown ? " on" : "") + '" type="button" role="switch" aria-checked="' + (shown ? "true" : "false") + '" data-acct="identity-show" data-id="' + esc(String(item.id || "")) + '"><span>' + esc(tr("Show on profile")) + "</span><i></i></button>" +
           '<button class="outline acct-ident-unlink" type="button" data-acct="unlink-identity" data-platform="' + esc(item.platform) + '" data-handle="' + esc(item.handle) + '" data-id="' + esc(String(item.id || "")) + '">' + esc(tr("Unlink")) + '</button>' +
         '</div>';
       }).join("") + '</div>';
@@ -2714,6 +2734,201 @@ function signupPayload() {
       (items.length > 1 ? '<button class="photo-gallery-nav next" type="button" data-acct="gallery-next" aria-label="' + esc(tr("Next")) + '">›</button>' : "") +
       "</div>";
   }
+  var PROFILE_TAB_IDS = ["posts", "replies", "media", "highlights", "friends", "about", "gifts"];
+  function profileTabLabel(id) {
+    if (id === "posts") return tr("Posts");
+    if (id === "replies") return tr("Replies");
+    if (id === "media") return tr("Media");
+    if (id === "highlights") return tr("Highlights");
+    if (id === "friends") return tr("Friends");
+    if (id === "about") return tr("About");
+    if (id === "gifts") return tr("Gifts");
+    return id;
+  }
+  function cleanProfileTabs(raw) {
+    var order = [];
+    var seen = {};
+    var src = raw && Array.isArray(raw.order) ? raw.order : PROFILE_TAB_IDS;
+    src.forEach(function (id) {
+      if (PROFILE_TAB_IDS.indexOf(id) < 0 || seen[id]) return;
+      seen[id] = true;
+      order.push(id);
+    });
+    PROFILE_TAB_IDS.forEach(function (id) { if (!seen[id]) order.push(id); });
+    var hidden = [];
+    (raw && Array.isArray(raw.hidden) ? raw.hidden : []).forEach(function (id) {
+      if (PROFILE_TAB_IDS.indexOf(id) < 0 || id === "posts" || hidden.indexOf(id) >= 0) return;
+      hidden.push(id);
+    });
+    return { order: order, hidden: hidden, share: !!(raw && raw.share), at: Number(raw && raw.at) || 0 };
+  }
+  function readProfileTabs() {
+    var settings = {};
+    try { settings = JSON.parse(readStored("settings-v1") || "{}"); } catch (err) { settings = {}; }
+    return cleanProfileTabs(settings.profileTabs);
+  }
+  function publishProfileTabs(cleaned) {
+    var session = readSession();
+    if (!session || !session.token || !hasApi()) return;
+    api("/v1/profile", { method: "PATCH", token: session.token, body: { profileTabs: cleaned } }).catch(function () {});
+  }
+  function saveProfileTabs(next) {
+    var cleaned = cleanProfileTabs(next);
+    cleaned.at = Date.now();
+    var settings = {};
+    try { settings = JSON.parse(readStored("settings-v1") || "{}"); } catch (err) { settings = {}; }
+    settings.profileTabs = cleaned;
+    writeStored("settings-v1", JSON.stringify(settings));
+    onLocalChange();
+    publishProfileTabs(cleaned);
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function profileTabPlan(account, mine) {
+    var local = readProfileTabs();
+    var remote = account && account.profileTabs ? cleanProfileTabs(account.profileTabs) : null;
+    var layout = local;
+    if (mine && remote && Number(remote.at) > Number(local.at)) layout = remote;
+    if (!mine) layout = remote && remote.share ? remote : cleanProfileTabs(null);
+    return layout;
+  }
+  function tabMarquee(text) {
+    var safe = esc(text);
+    return '<span class="ptab-marquee" data-ptab-marquee><span class="ptab-marquee-clip"><span class="ptab-marquee-track"><span class="ptab-marquee-copy"><span class="ptab-marquee-text">' + safe + '</span></span><span class="ptab-marquee-copy" aria-hidden="true"><span class="ptab-marquee-text">' + safe + '</span></span></span></span></span>';
+  }
+  function profileTabBar(account, mine, requested, profileHref) {
+    if (!mine) profileTabEdit = false;
+    var showAbout = window.ProfileAbout && window.ProfileAbout.showTab(account);
+    var showGifts = window.ProfileGifts && window.ProfileGifts.showTab(account);
+    var highlightHtml = window.Highlights && window.Highlights.row ? window.Highlights.row(account, mine) : "";
+    var layout = profileTabPlan(account, mine);
+    var hidden = {};
+    layout.hidden.forEach(function (id) { hidden[id] = true; });
+    function available(id) {
+      if (id === "about") return !!showAbout;
+      if (id === "gifts") return !!showGifts;
+      if (id === "highlights") return !!(mine || highlightHtml);
+      return true;
+    }
+    var editing = !!(mine && profileTabEdit);
+    var ids = layout.order.filter(function (id) {
+      if (!available(id)) return false;
+      if (!editing && hidden[id]) return false;
+      return true;
+    });
+    if (!ids.length) ids = ["posts"];
+    var visible = ids.filter(function (id) { return !hidden[id]; });
+    if (!visible.length) visible = ["posts"];
+    var active = visible.indexOf(requested) >= 0 ? requested : visible[0];
+    var html = ids.map(function (id) {
+      var label = profileTabLabel(id);
+      if (id === "friends" && accountStat(account, "friends") > 0) label += " (" + formatNum(accountStat(account, "friends")) + ")";
+      if (editing) {
+        var eye = id === "posts"
+          ? '<span class="ptab-lock" title="' + esc(tr("This item always stays available")) + '" aria-label="' + esc(tr("This item always stays available")) + '">' + lockIcon(16) + "</span>"
+          : '<button type="button" class="ptab-eye" data-ptab="vis" data-id="' + esc(id) + '" aria-pressed="' + (hidden[id] ? "false" : "true") + '" aria-label="' + esc(hidden[id] ? tr("Hidden") : tr("Visible")) + '">' + esc(hidden[id] ? tr("Hidden") : tr("Visible")) + "</button>";
+        return '<div class="ptab-edit' + (hidden[id] ? " is-hidden" : "") + (active === id ? " on" : "") + '" data-ptab-id="' + esc(id) + '" data-ptab-drag="' + esc(id) + '"><button type="button" class="ptab-grip" data-ptab-drag="' + esc(id) + '" aria-label="' + esc(tr("Drag to reorder")) + '">⋮⋮</button>' + tabMarquee(label) + eye + "</div>";
+      }
+      var href = id === "posts" ? profileHref : profileHref + "?tab=" + encodeURIComponent(id);
+      return '<a class="tab' + (active === id ? " on" : "") + '" role="tab" aria-selected="' + (active === id ? "true" : "false") + '" href="' + esc(href) + '" data-ptab-id="' + esc(id) + '">' + tabMarquee(label) + "</a>";
+    }).join("");
+    var tools = "";
+    if (mine) {
+      tools = editing
+        ? '<div class="ptabs-tools"><button type="button" class="outline" data-ptab="reset">' + esc(tr("Reset to default")) + '</button><button type="button" class="outline ptabs-share' + (layout.share ? " on" : "") + '" data-ptab="share" aria-pressed="' + (layout.share ? "true" : "false") + '">' + esc(tr("Show this order to visitors")) + '</button><button type="button" class="outline" data-ptab="done">' + esc(tr("Done")) + "</button></div>"
+        : '<div class="ptabs-tools"><button type="button" class="outline ptabs-edit" data-ptab="edit">' + esc(tr("Edit tabs")) + "</button></div>";
+    }
+    return {
+      active: active,
+      highlightHtml: highlightHtml,
+      html: '<div class="ptabs-wrap' + (editing ? " is-editing" : "") + '"><div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '">' + html + "</div>" + tools + "</div>"
+    };
+  }
+  function onProfileTabAct(node) {
+    var act = node.getAttribute("data-ptab") || "";
+    var current = readProfileTabs();
+    if (act === "edit") { profileTabEdit = true; if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender(); return; }
+    if (act === "done") { profileTabEdit = false; if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender(); return; }
+    if (act === "reset") {
+      profileTabEdit = true;
+      saveProfileTabs({ order: PROFILE_TAB_IDS.slice(), hidden: [], share: current.share });
+      return;
+    }
+    if (act === "share") {
+      saveProfileTabs({ order: current.order, hidden: current.hidden, share: !current.share });
+      return;
+    }
+    if (act === "vis") {
+      var id = node.getAttribute("data-id") || "";
+      if (!id || id === "posts") return;
+      var hidden = current.hidden.slice();
+      var at = hidden.indexOf(id);
+      if (at >= 0) hidden.splice(at, 1);
+      else hidden.push(id);
+      saveProfileTabs({ order: current.order, hidden: hidden, share: current.share });
+    }
+  }
+  function bindProfileTabDrag() {
+    document.addEventListener("pointerdown", function (event) {
+      if (!profileTabEdit) return;
+      var handle = event.target.closest && event.target.closest("[data-ptab-drag]");
+      if (!handle || (event.target.closest && event.target.closest("[data-ptab='vis']"))) return;
+      var row = handle.closest("[data-ptab-id]");
+      var list = row && row.parentElement;
+      if (!row || !list || !list.classList.contains("ptabs")) return;
+      event.preventDefault();
+      profileTabDrag = { pointer: event.pointerId, id: row.getAttribute("data-ptab-id"), list: list, moved: false };
+      row.classList.add("is-dragging");
+    }, true);
+    document.addEventListener("pointermove", function (event) {
+      if (!profileTabDrag || event.pointerId !== profileTabDrag.pointer) return;
+      var rows = Array.prototype.slice.call(profileTabDrag.list.querySelectorAll("[data-ptab-id]"));
+      var node = null;
+      rows.forEach(function (row) { if (row.getAttribute("data-ptab-id") === profileTabDrag.id) node = row; });
+      if (!node) return;
+      var target = null;
+      rows.forEach(function (row) {
+        if (row === node) return;
+        var box = row.getBoundingClientRect();
+        if (event.clientX >= box.left && event.clientX <= box.right) target = row;
+      });
+      if (!target) return;
+      var box = target.getBoundingClientRect();
+      if (event.clientX < box.left + box.width / 2) profileTabDrag.list.insertBefore(node, target);
+      else profileTabDrag.list.insertBefore(node, target.nextSibling);
+      profileTabDrag.moved = true;
+    }, true);
+    document.addEventListener("pointerup", function (event) {
+      if (!profileTabDrag || event.pointerId !== profileTabDrag.pointer) return;
+      var list = profileTabDrag.list;
+      var moved = profileTabDrag.moved;
+      list.querySelectorAll(".is-dragging").forEach(function (row) { row.classList.remove("is-dragging"); });
+      var order = Array.prototype.slice.call(list.querySelectorAll("[data-ptab-id]")).map(function (row) { return row.getAttribute("data-ptab-id"); });
+      profileTabDrag = null;
+      if (!moved) return;
+      var current = readProfileTabs();
+      current.order.forEach(function (id) { if (order.indexOf(id) < 0) order.push(id); });
+      saveProfileTabs({ order: order, hidden: current.hidden, share: current.share });
+    }, true);
+    document.addEventListener("pointercancel", function () { profileTabDrag = null; }, true);
+  }
+  function bindProfileTabs() {
+    var reduced = false;
+    try { reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (err) { reduced = false; }
+    document.querySelectorAll("[data-ptab-marquee]").forEach(function (el) {
+      var clip = el.querySelector(".ptab-marquee-clip");
+      var text = el.querySelector(".ptab-marquee-text");
+      var overflow = !!(clip && text && text.scrollWidth > clip.clientWidth + 2);
+      el.classList.toggle("is-on", overflow && !reduced);
+      if (el.dataset.ptabHold) return;
+      el.dataset.ptabHold = "1";
+      var hold = function (on) { el.classList.toggle("is-held", on); };
+      el.addEventListener("pointerdown", function () { hold(true); });
+      el.addEventListener("pointerup", function () { hold(false); });
+      el.addEventListener("pointercancel", function () { hold(false); });
+      el.addEventListener("pointerleave", function () { hold(false); });
+    });
+  }
+  bindProfileTabDrag();
   function accountPage(account, route) {
     var mine = profileMine(account);
     var ref = accountRef(account);
@@ -2739,40 +2954,35 @@ function signupPayload() {
     var birthdayBanner = window.ProfileGifts && window.ProfileGifts.banner ? window.ProfileGifts.banner(account) : "";
     var followBtn = !mine && ref && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(ref, true) || "") : "";
     var friendBtn = !mine && ref ? friendButtonHtml(account) : "";
-    var activeTab = (route && route.query && route.query.get("tab")) || (route && route.tab) || "posts";
-    if (activeTab !== "friends" && activeTab !== "about" && activeTab !== "gifts") activeTab = "posts";
+    var requested = (route && route.query && route.query.get("tab")) || (route && route.tab) || "posts";
     if (window.ProfileAbout) window.ProfileAbout.ensure(account, account.aboutPreview || "");
     if (window.ProfileGifts) window.ProfileGifts.ensure(account);
-    var showAbout = window.ProfileAbout && window.ProfileAbout.showTab(account);
-    var showGifts = window.ProfileGifts && window.ProfileGifts.showTab(account);
-    if (activeTab === "about" && !showAbout) activeTab = "posts";
-    if (activeTab === "gifts" && !showGifts) activeTab = "posts";
+    var profileHref = "#/@" + encodeURIComponent(account.handle || "");
+    var bar = profileTabBar(account, mine, requested, profileHref);
+    var activeTab = bar.active;
 
     var pack = { html: "", count: 0 };
-    if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account) || pack;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account, activeTab) || pack;
     var count = String(pack.count || 0);
 
-    var postsBody = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(mine ? tr("Add a photo and bio from Edit profile. Posts here come from feeds you follow.") : tr("Posts from this account will show up here.")) + "</p></div>");
+    var postsEmpty = activeTab === "replies"
+      ? '<div class="empty"><h2>' + esc(tr("No replies yet")) + "</h2><p>" + esc(tr("Replies from this account will show up here.")) + "</p></div>"
+      : activeTab === "media"
+        ? '<div class="empty"><h2>' + esc(tr("No media yet")) + "</h2><p>" + esc(tr("Photos and videos from this account will show up here.")) + "</p></div>"
+        : '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(mine ? tr("Add a photo and bio from Edit profile. Posts here come from feeds you follow.") : tr("Posts from this account will show up here.")) + "</p></div>";
+    var postsBody = pack.html || postsEmpty;
     if (!mine && account.viewerBlocks) postsBody = '<div class="empty"><h2>' + esc(tr("You blocked this account")) + '</h2><p>' + esc(tr("Posts from this account stay hidden.")) + '</p></div>';
     else if (!mine && account.locked) postsBody = '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
     var friendsBody = friendsSectionHtml(account);
     var aboutBody = activeTab === "about" && window.ProfileAbout ? window.ProfileAbout.html(account) : "";
     var giftsBody = activeTab === "gifts" && window.ProfileGifts ? window.ProfileGifts.giftsHtml(account.gifts, mine) : "";
-    var body = activeTab === "about" ? aboutBody : (activeTab === "gifts" ? giftsBody : (activeTab === "friends" ? friendsBody : postsBody));
-
-    var profileHref = "#/@" + encodeURIComponent(account.handle || "");
-    var friendsHref = "#/@" + encodeURIComponent(account.handle || "") + "?tab=friends";
+    var highlightsBody = bar.highlightHtml || '<div class="empty"><h2>' + esc(tr("Highlights")) + "</h2></div>";
+    var body = activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
 
     var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
     var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tr("{count} mutual friends", { count: mutualCount })) + '</div>' : '';
 
-    var highlightRow = window.Highlights && window.Highlights.row ? window.Highlights.row(account, mine) : "";
-    var tabs = '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '">' +
-      '<a class="tab' + (activeTab === "posts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "posts" ? "true" : "false") + '" href="' + esc(profileHref) + '"><span>' + esc(tr("Posts")) + '</span></a>' +
-      '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
-      (showAbout ? '<a class="tab' + (activeTab === "about" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "about" ? "true" : "false") + '" href="' + esc(profileHref + "?tab=about") + '"><span>' + esc(tr("About")) + "</span></a>" : "") +
-      (showGifts ? '<a class="tab' + (activeTab === "gifts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "gifts" ? "true" : "false") + '" href="' + esc(profileHref + "?tab=gifts") + '"><span>' + esc(tr("Gifts")) + "</span></a>" : "") +
-    '</div>';
+    var tabs = bar.html;
 
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
     var lock = account.privateFollows ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
@@ -2786,7 +2996,7 @@ function signupPayload() {
       count: tr("{count} posts", { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
-    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + highlightRow + tabs + body + galleryHtml(account);
+    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -3342,6 +3552,13 @@ function signupPayload() {
         return;
       }
     }
+    var ptab = event.target && event.target.closest ? event.target.closest("[data-ptab]") : null;
+    if (ptab) {
+      event.preventDefault();
+      event.stopPropagation();
+      onProfileTabAct(ptab);
+      return;
+    }
     var acct = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
     if (!acct) return;
     var act = acct.dataset.acct;
@@ -3443,6 +3660,14 @@ function signupPayload() {
       linkIdentityForm.step = 0;
       errorText = "";
       paint();
+    }
+    else if (act === "identity-show") {
+      var showId = acct.dataset.id || "";
+      var nextShown = acct.getAttribute("aria-checked") !== "true";
+      acct.setAttribute("aria-checked", nextShown ? "true" : "false");
+      acct.classList.toggle("on", nextShown);
+      saveIdentityPrivacy(showId);
+      return;
     }
     else if (act === "unlink-identity") {
       var session = readSession();
@@ -3807,6 +4032,42 @@ else if (act === "copy-id") copyAccountId();
   }, true);
   document.addEventListener("click", onClick, true);
   document.addEventListener("change", function (event) {
+    var node = event.target;
+    if (!node || !node.getAttribute || node.getAttribute("data-acct") !== "identity-audience") return;
+    saveIdentityPrivacy(node.getAttribute("data-id") || "");
+  }, true);
+
+  function saveIdentityPrivacy(id) {
+    var session = readSession();
+    if (!session || !session.token || !id) return;
+    var row = document.querySelector('.acct-ident-item[data-ident-id="' + id + '"]');
+    if (!row) return;
+    var select = row.querySelector("[data-acct='identity-audience']");
+    var shown = row.querySelector("[data-acct='identity-show']");
+    var value = select ? select.value : "public";
+    var audience = value.indexOf("list:") === 0 ? "list" : value;
+    var listIds = [];
+    if (audience === "list") {
+      if (value.indexOf("list:") === 0) listIds.push(value.slice(5));
+      row.querySelectorAll("[data-aud-list]").forEach(function (box) {
+        if (box.checked && listIds.indexOf(box.getAttribute("data-aud-list")) < 0) listIds.push(box.getAttribute("data-aud-list"));
+      });
+    }
+    var hidden = !(shown && shown.getAttribute("aria-checked") === "true");
+    api("/v1/account/identities/" + encodeURIComponent(id), {
+      method: "PATCH",
+      token: session.token,
+      body: { audience: audience, hidden: hidden, listIds: listIds }
+    }).then(function (res) {
+      if (!res || !res.ok || !res.identity || !session.account) return;
+      session.account.identities = (session.account.identities || []).map(function (item) {
+        return String(item.id) === String(id) ? res.identity : item;
+      });
+      writeSession(session);
+      if (profiles[skel(session.account.handle)]) profiles[skel(session.account.handle)].identities = session.account.identities;
+    });
+  }
+  document.addEventListener("change", function (event) {
     var el = event.target;
     if (!el || el.getAttribute("data-acct") !== "media-vis") return;
     saveMedia({ id: el.getAttribute("data-id"), visibility: el.value });
@@ -4014,6 +4275,8 @@ else if (act === "copy-id") copyAccountId();
     deleteAccountHtml: deleteAccountHtml,
     showDeletedIfNeeded: showDeletedIfNeeded,
     onLocalChange: onLocalChange,
+    bindProfileTabs: bindProfileTabs,
+    profileTabPlan: profileTabPlan,
     onHistoryReady: onHistoryReady,
     requestRender: null,
     profilePostsHtml: null,
