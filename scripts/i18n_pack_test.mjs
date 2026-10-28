@@ -53,6 +53,8 @@ try {
 
   const ru = await visit("ru");
   if (ru.packs.sort().join(",") !== "en,ru") fail("Russian boot downloaded " + ru.packs.join(","));
+  /* The pack is a late script, so the first posts can draw before it lands. */
+  await ru.page.waitForFunction(() => window.SI18n.t("Home") !== "Home", null, { timeout: 10000 }).catch(() => {});
   const home = await ru.page.evaluate(() => window.SI18n.t("Home"));
   if (home === "Home") fail("Russian pack not applied");
   await ru.ctx.close();
