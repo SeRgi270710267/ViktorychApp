@@ -24,4 +24,4 @@ CREATE TABLE IF NOT EXISTS audience_grants (
   PRIMARY KEY (subject, subject_id, list_id)
 );
 
-ALTER TABLE app_stories ADD COLUMN audience TEXT NOT NULL DEFAULT 'public';
+-- Added at runtime (duplicate columns would stop every later migration): ALTER TABLE app_stories ADD COLUMN audience TEXT NOT NULL DEFAULT 'public';
