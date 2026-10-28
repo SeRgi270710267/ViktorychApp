@@ -8021,7 +8021,7 @@ const here = parseRoute();
     if (which === "foryou") {
       label = tr("For you options");
       const box = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="foryou-toggle" data-key="${key}"`, text, on, glyph, "check");
-      body = box("reposts", tr("Show reposts"), STATE.settings.forYouReposts !== false, "repost") + box("replies", tr("Show replies in tab"), STATE.settings.forYouReplies !== false, "reply") + viewItems("foryou");
+      body = box("reposts", tr("Show reposts"), STATE.settings.forYouReposts !== false, "repost") + box("replies", tr("Show replies in tab"), STATE.settings.forYouReplies !== false, "reply") + box("communities", tr("Communities in Home"), STATE.settings.communitiesHome !== false, "posts") + viewItems("foryou");
     } else if (cat) {
       label = tr("{label} options", { label: cat.name });
       const sort = cat.sort === "popular" ? "popular" : "recent";
@@ -8236,6 +8236,7 @@ const here = parseRoute();
     publicStamp = now;
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
       if (samePublicPosts(res.posts)) return;
       publicPosts = res.posts;
       render();
@@ -8246,6 +8247,11 @@ const here = parseRoute();
     const token = accountToken();
     const root = accountsApi();
     if (!token || !root) return;
+    document.querySelectorAll(".pub-cm").forEach((el) => {
+      const text = el.querySelector("[data-pub-cm]");
+      const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.classList.toggle("is-on", !!(text && !reduced && text.scrollWidth > el.clientWidth + 1));
+    });
     document.querySelectorAll("[data-public-media]").forEach((el) => {
       if (el.getAttribute("data-public-tried")) return;
       const path = el.getAttribute("data-public-media") || "";
@@ -8289,8 +8295,12 @@ const here = parseRoute();
     const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
     const mine = signedAccount();
     const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
-    const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
-    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
+    const community = post.community && post.community.name ? post.community : null;
+    const chip = community ? `<a class="pub-cm" href="#/communities/${encodeURIComponent(community.name)}/${encodeURIComponent(community.rootId || post.id)}" aria-label="${esc(tr("Community"))}"><span class="pub-cm-track"><span class="pub-cm-text" data-pub-cm>${esc(community.name)}</span><span class="pub-cm-text" aria-hidden="true">${esc(community.name)}</span></span></a>` : "";
+    const counts = community ? `<span class="pub-counts">${esc(String(post.replyCount || 0))} ${esc(tr("Replies"))} · ${esc(String(post.likes || 0))} ${esc(tr("Likes"))}</span>` : "";
+    const muteCommunity = community ? `<button type="button" data-act="mute-community" data-name="${esc(community.name)}">${esc(tr("Mute community"))}</button>` : "";
+    const tools = self ? muteCommunity : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>${muteCommunity}`;
+    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="pub-head"><div class="name">${esc(post.authorName || "")}</div>${chip}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}${counts}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button>${community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`}${tools}</div></article>`;
   }
 
   function welcomeHtml(route) {
@@ -8368,6 +8378,7 @@ const here = parseRoute();
       const done = (res) => {
         if (res && res.status === 201 && res.post) {
           if (!(res.scheduled || part.scheduleAt) && res.post.id) publicPosts = [res.post].concat(publicPosts.filter((item) => item.id !== res.post.id));
+          if (res.post.community && res.post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(res.post.community.name);
           publicStamp = Date.now();
           sendAt(index + 1, res.post.id);
           return;
@@ -8428,6 +8439,7 @@ const here = parseRoute();
     const finishOk = (post) => {
       if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
       if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      if (post && post.community && post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(post.community.name);
       publicStamp = Date.now();
       toast(tr("Your post was sent."));
       render();
@@ -16145,6 +16157,15 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }).catch(() => {});
       return;
     }
+    if (act === "mute-community") {
+      const name = el.dataset.name || "";
+      accountCall("/v1/communities/" + encodeURIComponent(name) + "/feed", { method: "POST", body: { muted: true } }).then(() => {
+        publicPosts = publicPosts.filter((item) => !(item.community && item.community.name === name));
+        toast(tr("Mute community"));
+        render();
+      }).catch(() => {});
+      return;
+    }
     if (act === "compose-x") {
       STATE.composeVia = "x";
       if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
@@ -16260,6 +16281,17 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "foryou-toggle") {
+      if (el.dataset.key === "communities") {
+        STATE.settings.communitiesHome = STATE.settings.communitiesHome === false;
+        saveSettings();
+        accountCall("/v1/communities/home", { method: "POST", body: { showHome: STATE.settings.communitiesHome !== false } }).then(() => {
+          publicStamp = 0;
+          schedulePublicPosts();
+        }).catch(() => {});
+        STATE.tabMenu = "foryou";
+        render();
+        return;
+      }
       const key = el.dataset.key === "replies" ? "forYouReplies" : "forYouReposts";
       STATE.settings[key] = STATE.settings[key] === false;
       STATE.forYouSnap = null;
