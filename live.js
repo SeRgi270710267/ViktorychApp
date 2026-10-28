@@ -120,13 +120,10 @@
       return;
     }
     call("/v1/live").then(function (body) {
-      var next = body && body.status === 200 && Array.isArray(body.lives) ? body.lives : [];
-      var stamp = next.map(function (item) { return item.id; }).join(",");
-      if (stamp !== state.rowStamp) {
-        state.lives = next;
-        state.rowStamp = stamp || "empty";
-      }
-      paintRow();
+      var ok = body && body.status === 200 && Array.isArray(body.lives);
+      var next = ok ? body.lives : [];
+      takeRow(next);
+      if (ok && rowChannel) { try { rowChannel.postMessage({ lives: next }); } catch (err) { /* other tabs poll later */ } }
     }).catch(function () { paintRow(); });
   }
 
@@ -928,6 +925,35 @@
     try { return (JSON.parse(localStorage.getItem("viktorychapp-server-off") || "[]") || []).indexOf("lives") !== -1; }
     catch (err) { return false; }
   }
+  /* With several tabs open, one tab reads /v1/live per round and shares the
+     answer with the others over a BroadcastChannel. */
+  var ROW_CLAIM = "viktorych-poll-live-row";
+  var rowChannel = null;
+  try { rowChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("viktorych-live-row") : null; } catch (err) { rowChannel = null; }
+  function claimRow(now, force) {
+    try {
+      var last = Number(localStorage.getItem(ROW_CLAIM)) || 0;
+      if (!force && now >= last && now - last < 24000) return false;
+      localStorage.setItem(ROW_CLAIM, String(now));
+    } catch (err) { /* no storage: this tab polls on its own */ }
+    return true;
+  }
+  function takeRow(next) {
+    var stamp = next.map(function (item) { return item.id; }).join(",");
+    if (stamp !== state.rowStamp) {
+      state.lives = next;
+      state.rowStamp = stamp || "empty";
+    }
+    paintRow();
+  }
+  if (rowChannel) {
+    rowChannel.onmessage = function (event) {
+      var data = event && event.data;
+      if (!data || !Array.isArray(data.lives) || !token() || livesOff()) return;
+      rowAt = Date.now();
+      takeRow(data.lives);
+    };
+  }
   function pollRow(force) {
     if (livesOff()) {
       if (state.lives.length) { state.lives = []; state.rowStamp = "off"; paintRow(); }
@@ -935,6 +961,7 @@
     }
     if (document.visibilityState === "hidden") return;
     if (!force && Date.now() - rowAt < 15000) return;
+    if (!claimRow(Date.now(), force)) return;
     rowAt = Date.now();
     refreshRow();
   }
