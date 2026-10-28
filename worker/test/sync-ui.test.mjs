@@ -89,3 +89,25 @@ test("a device that keeps its own look leaves the account's look in place", asyn
   assert.equal(after.body.payload.homePills, undefined);
   assert.equal(after.body.payload.prefsAt, undefined);
 });
+
+test("sensitive settings are sealed in D1 and device-only keys keep the account copy", async () => {
+  const me = await signup(72, "Device User", "device_user");
+  let put = await call("/v1/sync", { method: "PUT", token: me.token, body: { payload: { mutedWords: ["spoilerword"], privacyWebRTC: true, livePreview: false, prefsAt: { livePreview: 9 } }, baseUpdatedAt: 0, device: "phone1" } });
+  assert.equal(put.status, 200, JSON.stringify(put.body));
+  const db = await mf.getD1Database("DB");
+  const raw = await db.prepare("SELECT payload FROM sync_state WHERE public_id = ?").bind(me.account.publicId).first();
+  assert.ok(raw.payload.indexOf("spoilerword") < 0, "muted words are not stored in the clear");
+  assert.ok(raw.payload.indexOf("\"sealed\":\"v1:") >= 0);
+  assert.ok(raw.payload.indexOf("livePreview") >= 0, "plain preferences stay readable");
+  put = await call("/v1/sync", { method: "PUT", token: me.token, body: { payload: { livePreview: true, localKeys: ["mutedWords", "privacyWebRTC"], prefsAt: { livePreview: 11 } }, baseUpdatedAt: put.body.updatedAt, device: "laptop1" } });
+  assert.equal(put.status, 200, JSON.stringify(put.body));
+  const got = await call("/v1/sync", { token: me.token });
+  assert.deepEqual(got.body.payload.mutedWords, ["spoilerword"], "the device-only key keeps the account's value");
+  assert.equal(got.body.payload.privacyWebRTC, true);
+  assert.equal(got.body.payload.livePreview, true);
+  assert.equal(got.body.payload.localKeys, undefined);
+  assert.equal(got.body.payload.sealed, undefined, "the client never sees the sealed blob");
+  const stale = await call("/v1/sync", { method: "PUT", token: me.token, body: { payload: { livePreview: false }, baseUpdatedAt: 1, device: "phone1" } });
+  assert.equal(stale.status, 409);
+  assert.deepEqual(stale.body.payload.mutedWords, ["spoilerword"], "a conflict reply is opened too");
+});
