@@ -1513,6 +1513,10 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 }
 .action.like:hover, .action.like.on { color: var(--pink); }
 .action.like:hover .ic::after { background: var(--pink-dim); }
+.vote-wrap { display: inline-flex; align-items: center; }
+.vote-wrap .vote-score { font-size: 13px; color: var(--muted, inherit); min-width: 1.5em; text-align: center; }
+.action.vote.up:hover, .action.vote.up.on { color: #ff4500; }
+.action.vote.down:hover, .action.vote.down.on { color: #7193ff; }
 .action.views:hover, .action.bookmark:hover, .action.share:hover { color: var(--blue); }
 .action.views:hover .ic::after, .action.bookmark:hover .ic::after, .action.share:hover .ic::after { background: var(--blue-dim); }
 .action.bookmark.on { color: var(--blue); }
@@ -5953,3 +5957,4 @@ img, video { max-width: 100%; }
 .mention-copy { display: flex; flex-direction: column; min-width: 0; }
 .mention-name { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 2px; }
 .mention-handle { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#toast .toast-link { color: #fff; text-decoration: underline; margin-left: 8px; }

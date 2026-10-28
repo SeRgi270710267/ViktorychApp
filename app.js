@@ -91,6 +91,8 @@
     more: "M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z",
     reply: "M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z",
     repost: "M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z",
+    upvote: "M12 3.6 3.4 12.2h5.1V20h7V12.2h5.1L12 3.6zm0 2.8 4.3 4.3h-2.3v7.8h-4v-7.8H7.7L12 6.4z",
+    downvote: "M12 20.4l8.6-8.6h-5.1V4h-7v7.8H3.4l8.6 8.6zm0-2.8-4.3-4.3h2.3V5.5h4v7.8h2.3L12 17.6z",
     heart: "M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z",
     heartOn: "M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z",
     views: "M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z",
@@ -4757,6 +4759,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0), tr("Repost"))}${repostMenu}</span>`;
     return `<div class="actions">
       <div class="action-stats">
+        ${redditVotes(post)}
         ${replyLink}
         ${repostBtn}
         ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0), tr("Like"))}
@@ -7059,6 +7062,34 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return found;
   }
 
+  // Subreddit mirrors read "r/name"; internal communities and forums keep their own name.
+  function communityName(name) {
+    const lib = window.ViktorychCommunities;
+    if (lib && lib.label) return lib.label(name);
+    return "r/" + name;
+  }
+
+  function redditSub(post) {
+    if (!post || post.platform !== "reddit") return "";
+    if (post.subreddit) return String(post.subreddit).replace(/^r\//i, "");
+    const feed = feedOf(post);
+    return feed && feed.redditKind === "r" && feed.handle ? String(feed.handle) : "";
+  }
+
+  // Reddit posts on Home get up and down votes with the score; internal posts do not.
+  function redditVotes(post) {
+    if (!post || post.platform !== "reddit" || post.appPost || parseRoute().name !== "home") return "";
+    const votes = STATE.settings.redditVotes || {};
+    const mine = Number(votes[post.id]) || 0;
+    const base = Number(post.score != null ? post.score : (post.stats || {}).score) || 0;
+    const score = base + mine;
+    return `<span class="vote-wrap" data-act="stop">
+        <button class="action vote up${mine > 0 ? " on" : ""}" type="button" data-act="reddit-vote" data-dir="1" data-id="${esc(post.id)}" aria-label="${esc(tr("Upvote"))}" data-tooltip="${esc(tr("Upvote"))}"><span class="ic">${icon("upvote")}</span></button>
+        <span class="count vote-score">${esc(score < 0 ? "-" + formatCount(-score) : (score ? formatCount(score) : "0"))}</span>
+        <button class="action vote down${mine < 0 ? " on" : ""}" type="button" data-act="reddit-vote" data-dir="-1" data-id="${esc(post.id)}" aria-label="${esc(tr("Downvote"))}" data-tooltip="${esc(tr("Downvote"))}"><span class="ic">${icon("downvote")}</span></button>
+      </span>`;
+  }
+
   function threadPair(parent, child, mode, opts) {
     const parentHtml = card(parent, mode, Object.assign({}, opts, { inThread: true, continues: true, parentShown: false }));
     const childHtml = card(child, mode, Object.assign({}, opts, { inThread: true, continues: false, parentShown: true, eager: false }));
@@ -7090,7 +7121,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const repost = repostBanner(post, hideRepost ? "author" : "");
     const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
-    const showReply = opts.parentShown ? false : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
+    const showReply = opts.parentShown ? (mode !== "status" && !!(post.replyingTo && post.replyingTo.handle)) : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
     const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
     const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
     const repostFeed = feedOf(post);
@@ -7125,8 +7156,10 @@ const here = parseRoute();
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     const community = post.community && post.community.name && !opts.parentShown
-      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(post.community.name)}</a></div>`
-      : "";
+      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(communityName(post.community.name))}</a></div>`
+      : (redditSub(post) && !opts.parentShown
+        ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(redditSub(post))}">${esc("r/" + redditSub(post))}</a></div>`
+        : "");
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
       ${community}
       ${repost}
@@ -8410,10 +8443,94 @@ const here = parseRoute();
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
       if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
-      if (samePublicPosts(res.posts)) return;
-      publicPosts = res.posts;
+      const merged = keepOwnPosts(res.posts);
+      if (samePublicPosts(merged)) return;
+      publicPosts = merged;
       render();
     }).catch(() => {});
+  }
+
+  /* Posts this device just sent. A /v1/posts reply that left before the post
+     landed (or came from a lagging read) used to replace the whole list and
+     drop the new post, so it vanished from Home and its profile. Own posts are
+     kept until the server lists them, for ten minutes at most. */
+  const ownSent = {};
+  function rememberOwnPost(post) {
+    if (!post || !post.id) return;
+    ownSent[post.id] = { post: post, at: Date.now() };
+    publicPosts = [post].concat(publicPosts.filter((item) => item && item.id !== post.id));
+    const mine = signedAccount();
+    const cache = mine && mine.publicId ? authorPostCache[String(mine.publicId)] : null;
+    if (cache) cache.posts = [post].concat(cache.posts.filter((item) => item && item.id !== post.id));
+  }
+  function forgetOwnPost(id) {
+    delete ownSent[id];
+    publicPosts = publicPosts.filter((item) => item && item.id !== id);
+    Object.keys(authorPostCache).forEach((key) => {
+      authorPostCache[key].posts = authorPostCache[key].posts.filter((item) => item && item.id !== id);
+    });
+  }
+  function keepOwnPosts(list) {
+    const next = list.slice();
+    const ids = new Set(next.map((item) => item && item.id));
+    const now = Date.now();
+    Object.keys(ownSent).forEach((id) => {
+      const entry = ownSent[id];
+      if (ids.has(id) || now - entry.at > 600000) { delete ownSent[id]; return; }
+      if (String(id).indexOf("tmp-") === 0) return;
+      next.unshift(entry.post);
+    });
+    Object.keys(ownSent).forEach((id) => {
+      if (String(id).indexOf("tmp-") === 0) next.unshift(ownSent[id].post);
+    });
+    return next.sort((a, b) => (Number(b && b.createdAt) || 0) - (Number(a && a.createdAt) || 0));
+  }
+  function optimisticOwnPost(text, parentId, quoteId) {
+    const mine = signedAccount();
+    if (!mine || !mine.publicId) return "";
+    const id = "tmp-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    rememberOwnPost({
+      id: id, body: String(text || ""), parentId: parentId || "", quoteId: quoteId || "", createdAt: Date.now(),
+      authorId: String(mine.publicId), authorHandle: String(mine.handle || ""), authorName: String(mine.displayName || mine.handle || ""),
+      authorAvatar: String(mine.avatar || ""), pending: true, likes: 0, replyCount: 0, media: []
+    });
+    return id;
+  }
+  function sentToast(post) {
+    const el = document.getElementById("toast");
+    if (!el || !post || !post.id) { toast(tr("Your post was sent.")); return; }
+    const handle = String(post.authorHandle || "_");
+    el.hidden = false;
+    el.innerHTML = `${esc(tr("Your post was sent."))} <a class="toast-link" href="#/app/${encodeURIComponent(handle)}/status/${encodeURIComponent(post.id)}">${esc(tr("View"))}</a>`;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, 4000);
+  }
+
+  /* One account's own posts for its profile: ?by= on /v1/posts. */
+  const authorPostCache = {};
+  function authorPosts(publicId) {
+    const key = String(publicId || "");
+    if (!/^\d{12}$/.test(key)) return [];
+    const cache = authorPostCache[key];
+    const now = Date.now();
+    if ((!cache || now - cache.at > 30000) && accountToken() && !(cache && cache.loading)) {
+      const entry = authorPostCache[key] = cache || { at: 0, posts: [] };
+      entry.loading = true;
+      entry.at = now;
+      accountCall("/v1/posts?by=" + key).then((res) => {
+        entry.loading = false;
+        if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+        const mine = signedAccount();
+        const next = mine && String(mine.publicId) === key ? keepOwnPosts(res.posts).filter((item) => String(item.authorId) === key) : res.posts;
+        const before = entry.posts.map((item) => item.id).join(",");
+        entry.posts = next;
+        if (before !== next.map((item) => item.id).join(",")) render();
+      }).catch(() => { entry.loading = false; });
+    }
+    const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
+    const ids = new Set(have.map((item) => item.id));
+    const extra = publicPosts.filter((item) => item && String(item.authorId) === key && !ids.has(item.id));
+    return have.concat(extra);
   }
 
   function hydratePublicMedia() {
@@ -8566,19 +8683,28 @@ const here = parseRoute();
       toast(navigator.onLine && !token ? tr("Saved on this device. This reader doesn’t publish.") : tr("Could not send that post. It is still saved on this device."));
       return;
     }
+    let firstSent = null;
     const sendAt = (index, parentId) => {
       if (index >= posts.length) {
         if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
-        toast(scheduled ? tr("Scheduled. It will publish when it’s due.") : tr("Your post was sent."));
+        if (scheduled) toast(tr("Scheduled. It will publish when it’s due."));
+        else sentToast(firstSent);
         render();
         return;
       }
       const part = posts[index];
       const parent = index === 0 ? (payload.parentId || "") : parentId;
       const quote = index === 0 ? (payload.quoteId || "") : "";
+      const later = !!part.scheduleAt;
+      const tempId = later ? "" : optimisticOwnPost(part.text, parent, quote);
+      if (tempId) render();
       const done = (res) => {
+        if (tempId) forgetOwnPost(tempId);
         if (res && res.status === 201 && res.post) {
-          if (!(res.scheduled || part.scheduleAt) && res.post.id) publicPosts = [res.post].concat(publicPosts.filter((item) => item.id !== res.post.id));
+          if (!(res.scheduled || part.scheduleAt) && res.post.id) {
+            rememberOwnPost(res.post);
+            if (!firstSent) firstSent = res.post;
+          }
           if (res.post.community && res.post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(res.post.community.name);
           publicStamp = Date.now();
           sendAt(index + 1, res.post.id);
@@ -8587,6 +8713,7 @@ const here = parseRoute();
         const text = posts.slice(index).map((item) => item.text).filter(Boolean).join("\n\n");
         if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
         toast(res && res.error === "reply_limited" ? tr("Replies are limited on that post.") : tr("Could not send that post. It is still saved on this device."));
+        if (tempId) render();
       };
       const files = (part.media || []).map((item) => item.file).filter(Boolean);
       if (files.length) {
@@ -8639,13 +8766,17 @@ const here = parseRoute();
     const root = accountsApi();
     const finishOk = (post) => {
       if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
-      if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      if (tempId) forgetOwnPost(tempId);
+      if (post && post.id) rememberOwnPost(post);
       if (post && post.community && post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(post.community.name);
       publicStamp = Date.now();
-      toast(tr("Your post was sent."));
+      sentToast(post);
       render();
     };
+    const tempId = optimisticOwnPost(text, parentId, quoteId);
+    if (tempId) render();
     const finishFail = () => {
+      if (tempId) { forgetOwnPost(tempId); render(); }
       if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
       toast(tr("Could not send that post. It is still saved on this device."));
     };
@@ -8706,6 +8837,12 @@ const here = parseRoute();
       parentId: String(item.parentId || ""),
       url: ""
     };
+    if (item.parent && item.parent.id) {
+      // The server sends the parent chain so feeds show the parent above the reply
+      // and the post page shows every ancestor, like X.
+      post.replyParent = appCardPost(item.parent);
+      post.replyingTo = { id: post.parentId, handle: post.replyParent.handle };
+    } else if (post.parentId) post.replyingTo = { id: post.parentId, handle: String(item.parentHandle || "") };
     if (item.quote) post.quoted = { platform: "app", id: String(item.quote.id || item.quoteId || ""), handle: String(item.quote.authorHandle || ""), author: String(item.quote.authorName || ""), text: String(item.quote.body || "") };
     return post;
   }
@@ -8728,7 +8865,7 @@ const here = parseRoute();
     list.forEach((post) => {
       if (!post.parentId) return;
       const parent = byId[post.parentId];
-      post.replyingTo = { id: post.parentId, handle: parent ? parent.handle : "" };
+      post.replyingTo = { id: post.parentId, handle: parent ? parent.handle : ((post.replyingTo && post.replyingTo.handle) || "") };
     });
     // A parent shown above its reply (as a thread) is not listed again on its own.
     const threaded = {};
@@ -10215,6 +10352,12 @@ const here = parseRoute();
   }
 
   function statusView(route) {
+    if (route.platform === "app" && !STATE.shared[String(route.id)]) {
+      const sameId = (item) => item && String(item.id) === String(route.id);
+      let sent = publicPosts.find(sameId);
+      if (!sent) Object.keys(authorPostCache).some((key) => { sent = (authorPostCache[key].posts || []).find(sameId); return !!sent; });
+      if (sent) STATE.shared[String(route.id)] = appCardPost(sent);
+    }
     if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
       return pageHead(tr("Post noun"), "", true) + emptyBlock(tr("Post unavailable"), tr("This post isn’t in the current snapshot."));
     }
@@ -13595,7 +13738,8 @@ if (STATE.histClear) {
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
     const identities = (account && account.identities) || [];
-    if (!account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
+    const ownApp = account.publicId ? authorPosts(account.publicId).map(appCardPost) : [];
+    if (!ownApp.length && !account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
       return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: 0 };
     }
     const rows = rowsForAccount(account);
@@ -13639,6 +13783,10 @@ if (STATE.histClear) {
         });
       });
     }
+    ownApp.forEach((post) => {
+      STATE.shared[post.id] = post;
+      addPost(post);
+    });
     postList.sort(byStamp);
     let shown = postList;
     if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
@@ -16683,6 +16831,17 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }
       STATE.menu = null;
       toast(tr("We'll show you less of this."));
+      render();
+      return;
+    }
+    if (act === "reddit-vote") {
+      const votes = STATE.settings.redditVotes || (STATE.settings.redditVotes = {});
+      const dir = Number(el.dataset.dir) > 0 ? 1 : -1;
+      const id = String(el.dataset.id || "");
+      if (!id) return;
+      if (Number(votes[id]) === dir) delete votes[id];
+      else votes[id] = dir;
+      saveSettings();
       render();
       return;
     }
