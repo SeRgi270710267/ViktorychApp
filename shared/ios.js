@@ -205,8 +205,11 @@
   }
 
   function persistInstalled() {
-    if (!standalone() || !navigator.storage || typeof navigator.storage.persist !== "function") return;
-    navigator.storage.persist().catch(function () { /* the installed app already keeps its own store */ });
+    if (!ios || !standalone() || !navigator.storage || typeof navigator.storage.persist !== "function") return;
+    try {
+      var pending = navigator.storage.persist();
+      if (pending && typeof pending.catch === "function") pending.catch(function () { /* the installed app already keeps its own store */ });
+    } catch (err) { /* persistence is optional */ }
   }
 
   function boot() {
