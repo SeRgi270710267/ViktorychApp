@@ -15,6 +15,7 @@ export const WATCH_LIMIT = 30;
 const PREFERENCES = ["online", "idle", "dnd", "invisible"];
 const ACTIVITIES = ["active", "idle", "hidden"];
 const PRIVACY = ["everyone", "follows", "nobody"];
+const STATUS_AUDIENCE = ["everyone", "followers", "following", "friends", "nobody", "list"];
 const CLEARS = ["30m", "1h", "4h", "today", "week", "never"];
 
 export function normalizePreference(value) {
@@ -30,6 +31,19 @@ export function normalizeActivity(value) {
 export function normalizePrivacy(value) {
   const text = String(value || "");
   return PRIVACY.indexOf(text) >= 0 ? text : "everyone";
+}
+
+export function normalizeStatusAudience(value) {
+  const text = String(value || "");
+  return STATUS_AUDIENCE.indexOf(text) >= 0 ? text : "everyone";
+}
+
+/* Corner badge when the person has no custom emoji, or the viewer cannot see it. */
+export function presenceEmoji(state) {
+  if (state === "online") return "🟢";
+  if (state === "idle") return "🟠";
+  if (state === "dnd") return "🔴";
+  return "🌙";
 }
 
 export function normalizeClear(value) {
@@ -211,6 +225,8 @@ const api = {
   normalizePreference,
   normalizeActivity,
   normalizePrivacy,
+  normalizeStatusAudience,
+  presenceEmoji,
   cleanStatusText,
   cleanEmoji,
   clearAtFrom,
