@@ -1774,10 +1774,10 @@ SI18n.addPack("ru", {
   "Add a passkey": "Добавить ключ доступа",
   "Covered": "Скрыто",
   "Privacy screen": "Экран конфиденциальности",
-  "Cover messages when this window is in the background, split screen, picture-in-picture, or print.": "Скрывайте сообщения, когда это окно на заднем плане, в разделённом экране, в картинке в картинке или при печати.",
+  "Cover the app when this window is hidden, in the background, or locked.": "Закрывать приложение, когда это окно скрыто, на заднем плане или заблокировано.",
   "Messages only": "Только сообщения",
   "Whole app": "Всё приложение",
-  "Browsers cannot block operating-system screenshots. The cover hides messages from the app switcher, split screen, picture-in-picture, and print preview. A screenshot taken while this window is open and focused can still capture it.": "Браузеры не могут запретить снимки экрана системы. Шторка скрывает сообщения в переключателе приложений, в разделённом экране, в картинке в картинке и в предпросмотре печати. Снимок, сделанный пока это окно открыто и в фокусе, всё ещё может его захватить.",
+  "The cover is one layer. It does not blur, hide, or restyle the page, and it goes away when this window is in front.": "Это один слой. Он не размывает, не прячет и не меняет страницу и исчезает, когда окно снова на переднем плане.",
   "Android can block screenshots only in a wrapper that sets FLAG_SECURE. This site does not include that wrapper.": "Android может запретить снимки только в оболочке с флагом FLAG_SECURE. Этот сайт такую оболочку не включает.",
   "Stop text selection in messages": "Запретить выделение текста в сообщениях",
   "Unlock to open the app": "Разблокируйте, чтобы открыть приложение",
@@ -2047,5 +2047,10 @@ SI18n.addPack("ru", {
   "Website label": "Название сайта",
   "Link label": "Название ссылки",
   "Couldn’t save that detail.": "Не удалось сохранить эти сведения.",
-  "Custom list": "Свой список"
+  "Custom list": "Свой список",
+  "Edit menu": "Изменить меню",
+  "Add section": "Добавить раздел",
+  "Section name": "Название раздела",
+  "Main list": "Основной список",
+  "This item always stays available": "Этот пункт всегда остаётся в меню"
 });

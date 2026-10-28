@@ -1774,10 +1774,10 @@ SI18n.addPack("en", {
   "Add a passkey": "Add a passkey",
   "Covered": "Covered",
   "Privacy screen": "Privacy screen",
-  "Cover messages when this window is in the background, split screen, picture-in-picture, or print.": "Cover messages when this window is in the background, split screen, picture-in-picture, or print.",
+  "Cover the app when this window is hidden, in the background, or locked.": "Cover the app when this window is hidden, in the background, or locked.",
   "Messages only": "Messages only",
   "Whole app": "Whole app",
-  "Browsers cannot block operating-system screenshots. The cover hides messages from the app switcher, split screen, picture-in-picture, and print preview. A screenshot taken while this window is open and focused can still capture it.": "Browsers cannot block operating-system screenshots. The cover hides messages from the app switcher, split screen, picture-in-picture, and print preview. A screenshot taken while this window is open and focused can still capture it.",
+  "The cover is one layer. It does not blur, hide, or restyle the page, and it goes away when this window is in front.": "The cover is one layer. It does not blur, hide, or restyle the page, and it goes away when this window is in front.",
   "Android can block screenshots only in a wrapper that sets FLAG_SECURE. This site does not include that wrapper.": "Android can block screenshots only in a wrapper that sets FLAG_SECURE. This site does not include that wrapper.",
   "Stop text selection in messages": "Stop text selection in messages",
   "Unlock to open the app": "Unlock to open the app",
@@ -2047,5 +2047,10 @@ SI18n.addPack("en", {
   "Website label": "Website label",
   "Link label": "Link label",
   "Couldn’t save that detail.": "Couldn’t save that detail.",
-  "Custom list": "Custom list"
+  "Custom list": "Custom list",
+  "Edit menu": "Edit menu",
+  "Add section": "Add section",
+  "Section name": "Section name",
+  "Main list": "Main list",
+  "This item always stays available": "This item always stays available"
 });
