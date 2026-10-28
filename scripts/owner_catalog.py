@@ -97,23 +97,19 @@ def _feed(account: dict, ident: str, platform: str, handle: str) -> dict | None:
             base["permanentId"] = str(account["permanentId"])
         return base
     if platform == "threads":
+        from meta_sources import feed_urls
+
         base.update({
             "adapter": "rsshub_threads",
-            "source_urls": ["https://rsshub.app/threads/{handle}"],
-            "fallbacks": [{
-                "adapter": "generic_rss",
-                "source_urls": ["https://rss-bridge.org/bridge01/?action=display&bridge=ThreadsBridge&context=Username&u={handle}&format=Atom"],
-            }],
+            "source_urls": feed_urls("threads"),
         })
         return base
     if platform == "instagram":
+        from meta_sources import feed_urls
+
         base.update({
             "adapter": "rsshub_instagram",
-            "source_urls": ["https://rsshub.app/instagram/user/{handle}"],
-            "fallbacks": [{
-                "adapter": "generic_rss",
-                "source_urls": ["https://rss-bridge.org/bridge01/?action=display&bridge=InstagramBridge&context=Username&u={handle}&format=Atom"],
-            }],
+            "source_urls": feed_urls("instagram"),
         })
         return base
     if platform == "youtube":
@@ -211,11 +207,13 @@ def sink_private_health(doc: dict, ids: list) -> None:
             continue
         ok = bool(row.get("ok")) and not row.get("emptySince")
         status, text = _plain(str(row.get("detail") or ""), ok)
+        previous = account.get("health") if isinstance(account.get("health"), dict) else {}
         account["health"] = {
             "status": status,
             "code": "" if ok else ("rate" if "slow down" in text else "down"),
             "text": text,
-            "lastOk": row.get("ok") or (account.get("health") or {}).get("lastOk") or "",
+            "lastOk": row.get("ok") or previous.get("lastOk") or "",
+            "updatedAt": row.get("checked") or row.get("ok") or previous.get("updatedAt") or "",
         }
         changed = True
     if not changed:
@@ -241,6 +239,8 @@ def _selftest() -> None:
     doc = {
         "accounts": [
             {"id": "x:northwind", "platform": "x", "handle": "northwind", "name": "North"},
+            {"id": "instagram:orbitfox", "platform": "instagram", "handle": "orbitfox", "name": "Orbit"},
+            {"id": "threads:orbitfox", "platform": "threads", "handle": "orbitfox", "name": "Orbit"},
             {"id": "tiktok:laneharbor", "platform": "tiktok", "handle": "laneharbor"},
             {"id": "rss:samplefeed", "platform": "rss", "handle": "samplefeed", "url": "https://feeds.example/sample.xml"},
             {"id": "x:slowwind", "platform": "x", "handle": "slowwind", "paused": True},
@@ -249,6 +249,13 @@ def _selftest() -> None:
     }
     rows, ids = feed_rows(doc)
     assert any(row["id"] == "x:northwind" and row["adapter"] == "fxtwitter" and row["_catalogPrivate"] for row in rows)
+    ig = next(row for row in rows if row["id"] == "instagram:orbitfox")
+    th = next(row for row in rows if row["id"] == "threads:orbitfox")
+    assert ig["adapter"] == "rsshub_instagram" and ig["source_urls"][0].startswith("{rsshubBase}/instagram/user/")
+    assert any("rss-bridge.org" in url and "InstagramBridge" in url for url in ig["source_urls"])
+    assert any("localhost:8080" in url for url in ig["source_urls"])
+    assert th["adapter"] == "rsshub_threads" and any("ThreadsBridge" in url for url in th["source_urls"])
+    assert "generic_rss" not in str(ig.get("fallbacks") or "")
     assert "tiktok:laneharbor" in ids and all(row["platform"] != "tiktok" for row in rows)
     assert "x:slowwind" not in ids
     assert any(row["id"] == "rss:samplefeed" and row["source_urls"] == ["https://feeds.example/sample.xml"] for row in rows)

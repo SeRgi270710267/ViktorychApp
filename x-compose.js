@@ -339,8 +339,9 @@
   function tool(slotName, act, label, glyph, extra) {
     return '<button class="xc-tool" type="button" data-act="' + act + '" data-slot="' + esc(slotName) + '"' + (extra || "") + ' aria-label="' + esc(label) + '">' + glyph + "</button>";
   }
-  function tools(slotName, withPost) {
+  function tools(slotName, withPost, showEnd) {
     var recording = recorder && recordSlot === slotName;
+    var end = showEnd === false ? "" : endChrome(slotName, !!withPost);
     return '<div class="xc-tools"><div class="xc-iconrow">'
       + aiButton(slotName)
       + tool(slotName, "xc-file", tr("Photos"), icon(ICONS.image), ' data-kind="image"')
@@ -352,7 +353,7 @@
       + tool(slotName, "xc-schedule", tr("Schedule post"), icon(ICONS.cal))
       + tool(slotName, "xc-emoji", tr("Emoji"), icon(ICONS.emoji), ' aria-pressed="' + (slots[slotName].emoji ? "true" : "false") + '"')
       + (slotName === "reply" ? '<button class="xc-tool" type="button" data-gift="reply" data-parent="' + esc(slots.reply.replyTo || slots.reply.targetKey || "") + '" data-handle="' + esc(slots.reply.context || "") + '" aria-label="' + esc(tr("Send a gift")) + '">' + esc(tr("Gift")) + "</button>" : "")
-      + "</div>" + endChrome(slotName, withPost) + "</div>";
+      + "</div>" + end + "</div>";
   }
   function endChrome(slotName, withPost) {
     var info = measure(slots[slotName], 0);
@@ -461,18 +462,42 @@
     var place = slot.location ? '<p class="xc-loc">' + esc(slot.location) + "</p>" : "";
     return place + when + cardHtml(slot.posts[0].text || "") + (slot.scheduleAt && slot.posts.length > 1 ? '<p class="xc-note">' + esc(tr("A scheduled post is one post.")) + "</p>" : "");
   }
+  var OPEN_KEY = "viktorychapp-compose-open";
+  function composeSaved() {
+    try {
+      var saved = localStorage.getItem(OPEN_KEY);
+      if (saved === "1" || saved === "0") return saved === "1";
+    } catch (err) { /* this device keeps the default */ }
+    return typeof window !== "undefined" && window.innerWidth >= 500;
+  }
+  function composeOpen() { return composeSaved(); }
+  function setComposeOpen(on) {
+    try { localStorage.setItem(OPEN_KEY, on ? "1" : "0"); } catch (err) { /* the sheet still toggles */ }
+  }
+  function homeDirty() {
+    var slot = slots.post;
+    if (!slot) return false;
+    if (slot.media && slot.media.length) return true;
+    if (slot.poll || slot.scheduleAt || slot.location) return true;
+    return (slot.posts || []).some(function (post) { return post && String(post.text || "").trim(); });
+  }
   function box(slotName, sheet) {
     var slot = slots[slotName];
     var face = host && host.faceHtml ? host.faceHtml() : '<span class="ava initials">Y</span>';
     var placeholder = slotName === "post" ? tr("What's happening?") : tr("Post your reply");
-    var noteText = tr("The draft stays on this device. You press Post on X.");
+    var homeInline = !sheet && slotName === "post";
+    if (homeInline && !homeDirty() && !composeOpen()) {
+      return '<div class="xc xc-inline is-collapsed" data-slot="post"><button type="button" class="xc-slim" data-act="xc-expand" aria-label="' + esc(placeholder) + '">' + face + '<span class="xc-slim-text">' + esc(placeholder) + "</span></button></div>";
+    }
+    var noteText = homeInline ? tr("Draft stays on this device.") : tr("The draft stays on this device. You press Post on X.");
     var note = fieldId(slotName, 0) === "compose-text"
       ? '<p class="xc-note' + (sheet ? " xc-sr" : "") + '" id="compose-note">' + esc(noteText) + "</p>"
       : (sheet ? "" : '<p class="xc-note">' + esc(tr("You press Post on X.")) + "</p>");
-    var inlinePost = sheet ? "" : '<div class="xc-inline-actions"><button class="xc-post-btn" type="button" data-act="xc-publish" data-slot="' + esc(slotName) + '"' + (canPost(slot) ? "" : " disabled") + ">" + esc(tr("Post")) + "</button></div>";
-    var inlineTools = sheet ? "" : tools(slotName, false) + inlinePost;
+    var fold = homeInline ? '<button class="xc-fold" type="button" data-act="xc-collapse" aria-label="' + esc(tr("Collapse")) + '">' + icon(ICONS.chev) + "</button>" : "";
+    var bar = sheet ? "" : '<div class="xc-bar">' + fold + audienceHtml(slotName) + endChrome(slotName, true) + "</div>";
+    var inlineTools = sheet ? "" : tools(slotName, false, false) + bar;
     return '<div class="xc' + (sheet ? "" : " xc-inline") + '" data-slot="' + esc(slotName) + '">' + face + '<div class="xc-main">'
-      + contextHtml(slot) + audienceHtml(slotName) + (slot.audience === "lists" && typeof window !== "undefined" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(slot.listIds || []) : "") + textBlock(slotName, 0, placeholder) + note + aiExtra(slotName)
+      + contextHtml(slot) + (sheet ? audienceHtml(slotName) : "") + (slot.audience === "lists" && typeof window !== "undefined" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(slot.listIds || []) : "") + textBlock(slotName, 0, placeholder) + note + aiExtra(slotName)
       + mediaHtml(slotName) + pollHtml(slotName) + emojiHtml(slotName) + extraBits(slotName) + hiddenFiles(slotName)
       + inlineTools + threadHtml(slotName) + "</div></div>";
   }
@@ -807,7 +832,7 @@
   function seedReply(post) {
     var id = String((post && (post.statusId || post.id)) || "");
     if (/^\d{5,22}$/.test(id) && !slots.reply.replyTo) slots.reply.replyTo = id;
-    if (/^[a-f0-9]{32}$/.test(id)) slots.reply.appParent = id;
+    if (/^[a-f0-9]{32}$/.test(id) || /^va_[a-f0-9]{16}$/.test(id)) slots.reply.appParent = id;
     if (!slots.reply.context) slots.reply.context = String((post && post.handle) || "").replace(/^@/, "");
     if (!slots.reply.targetKey) slots.reply.targetKey = String((post && post.id) || "");
     if (post && (post.text || post.body)) slots.reply.sourceText = String(post.text || post.body).slice(0, 2000);
@@ -983,6 +1008,8 @@
       return true;
     }
     if (act === "xc-alt") { panel = panel === "alt:" + el.getAttribute("data-index") ? "" : "alt:" + el.getAttribute("data-index"); paint(); return true; }
+    if (act === "xc-expand") { setComposeOpen(true); paint(); setTimeout(function () { var field = document.getElementById("compose-text"); if (field) field.focus(); }, 0); return true; }
+    if (act === "xc-collapse") { setComposeOpen(false); paint(); return true; }
     if (act === "xc-audience-menu") { panel = panel === "audience" ? "" : "audience"; paint(); return true; }
     if (act === "xc-audience") { slot.audience = el.getAttribute("data-value") || "everyone"; panel = ""; paint(); return true; }
     if (act === "xc-reply-menu") { panel = panel === "reply" ? "" : "reply"; paint(); return true; }
@@ -1104,6 +1131,16 @@
     bound = true;
     document.addEventListener("input", onInput);
     document.addEventListener("change", onChange);
+    var lastScroll = 0;
+    window.addEventListener("scroll", function () {
+      var y = window.scrollY || document.documentElement.scrollTop || 0;
+      var down = y > lastScroll + 24;
+      lastScroll = y;
+      if (!down || y < 80 || !composeOpen() || homeDirty()) return;
+      if (!document.querySelector(".xc-inline[data-slot='post']")) return;
+      setComposeOpen(false);
+      paint();
+    }, { passive: true });
     document.addEventListener("paste", function (event) {
       var el = event.target;
       if (!el || !el.getAttribute || el.getAttribute("data-xc") !== "text") return;

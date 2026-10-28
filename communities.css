@@ -67,7 +67,7 @@
 .cm-hero-body { padding: 0 16px 16px; }
 .cm-hero-bar { display: flex; justify-content: space-between; align-items: flex-end; margin-top: -42px; margin-bottom: 12px; }
 .cm-hero-avatar { width: 84px; height: 84px; border-radius: 20px; border: 4px solid var(--bg, #000); background: #1a1a1b; object-fit: cover; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.5); flex: none; }
-.cm-hero-actions { display: flex; align-items: center; gap: 8px; }
+.cm-hero-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 100%; }
 .cm-icon-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background .15s ease; }
 .cm-icon-btn:hover { background: var(--hover); }
 .cm-icon-btn svg { width: 18px; height: 18px; fill: currentColor; }
@@ -89,7 +89,7 @@
 
 /* Filter Chips (All / Reddit / ViktorychApp) */
 .cm-filter-bar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--bg); }
-.cm-chip { padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s ease; font-family: var(--font); white-space: nowrap; flex: none; }
+.cm-chip { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 9999px; font-size: 13px; font-weight: 600; line-height: 16px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s ease; font-family: var(--font); white-space: nowrap; flex: none; max-width: 220px; overflow: hidden; box-sizing: border-box; }
 .cm-chip:hover { background: var(--hover); color: var(--text); }
 .cm-chip.on { background: var(--text, #eff3f4); color: var(--bg, #000); border-color: transparent; }
 
