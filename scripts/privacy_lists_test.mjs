@@ -245,6 +245,19 @@ async function checkLists(page, label) {
   await page.waitForSelector(".note-line", { timeout: 15000 });
   assertShown(await readBox(page, ".note-line"), label + " notifications", "User B");
 
+  const wide = await page.evaluate(() => window.innerWidth >= 500);
+  if (wide) {
+    assertShown(await readBox(page, "header.nav:not(.nav-land) button.account-pill"), label + " sidebar account", "User A");
+    const handle = await page.locator("header.nav:not(.nav-land) button.account-pill").innerText();
+    if (!handle.includes("@user_a")) fail(label + " sidebar handle");
+    if (!(await page.locator("header.nav a.nav-item[href='#/bookmarks']").count())) fail(label + " sidebar bookmarks");
+    await page.locator("header.nav:not(.nav-land) button.account-pill").click();
+    await page.waitForSelector(".acct-menu a[href='#/settings']", { timeout: 5000 });
+    if (await page.locator(".drawer-x").count()) fail(label + " desktop drawer");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".acct-menu", { state: "detached", timeout: 5000 });
+    return;
+  }
   await page.locator("[data-act='drawer']").locator("visible=true").first().click();
   await page.waitForSelector(".drawer-x .drawer-name", { timeout: 5000 });
   assertShown(await readBox(page, ".drawer-x .drawer-name"), label + " menu name", "User A");
