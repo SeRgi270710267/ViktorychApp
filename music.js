@@ -429,6 +429,8 @@
      then shows as a mini player across the whole app. */
   var docked = false;
   var NOW_STORE = "viktorych-music-now-v1";
+  var CORNER_STORE = "viktorych-music-corner";
+  var CORNERS = ["br", "bl", "tr", "tl"];
   var resume = { id: "", at: 0 };
   var savedAt = 0;
   var poll = 0;
@@ -472,6 +474,84 @@
     document.documentElement.classList.toggle("music-mini", docked);
     var dock = document.getElementById("mu-dock");
     if (dock) dock.hidden = !live();
+    if (dock && docked) {
+      dock.setAttribute("data-corner", readCorner());
+      root.setTimeout(fitMarquee, 0);
+    }
+  }
+
+  function readCorner() {
+    var value = "";
+    try { value = localStorage.getItem(CORNER_STORE) || ""; } catch (err) { value = ""; }
+    return CORNERS.indexOf(value) >= 0 ? value : "br";
+  }
+
+  /* A title too long for the popout scrolls slowly instead of being cut. */
+  function fitMarquee() {
+    if (typeof document === "undefined") return;
+    ["mu-dock-title", "mu-dock-artist"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el || !el.parentNode) return;
+      el.classList.remove("mu-marq");
+      el.style.removeProperty("--mq");
+      if (!docked) return;
+      var room = el.parentNode.clientWidth;
+      var over = el.scrollWidth - room;
+      if (room > 0 && over > 2) {
+        el.style.setProperty("--mq", "-" + Math.ceil(over + 8) + "px");
+        el.style.setProperty("--mq-time", Math.max(6, Math.round((over + 8) / 18) + 4) + "s");
+        el.classList.add("mu-marq");
+      }
+    });
+  }
+
+  /* With a mouse, the popout can be dragged and lets go into the nearest
+     corner. Touch screens keep it above the bottom bar. */
+  function wireDrag(dock) {
+    var drag = null;
+    var swallow = false;
+    var fine = function () { return !!(root.matchMedia && root.matchMedia("(pointer: fine)").matches); };
+    dock.addEventListener("pointerdown", function (event) {
+      if (!docked || !fine() || event.button !== 0) return;
+      var hit = event.target && event.target.closest ? event.target.closest("button, input") : null;
+      if (hit && !hit.classList.contains("mu-id")) return;
+      var box = dock.getBoundingClientRect();
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, box: box, moved: false };
+    });
+    root.addEventListener("pointermove", function (event) {
+      if (!drag || event.pointerId !== drag.id) return;
+      var dx = event.clientX - drag.x;
+      var dy = event.clientY - drag.y;
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 6) return;
+      if (!drag.moved) {
+        drag.moved = true;
+        dock.classList.add("is-dragging");
+      }
+      dock.style.transform = "translate(" + dx + "px, " + dy + "px)";
+    });
+    var end = function (event) {
+      if (!drag || event.pointerId !== drag.id) return;
+      var was = drag;
+      drag = null;
+      dock.classList.remove("is-dragging");
+      dock.style.transform = "";
+      if (!was.moved) return;
+      swallow = true;
+      root.setTimeout(function () { swallow = false; }, 0);
+      var cx = was.box.left + was.box.width / 2 + (event.clientX - was.x);
+      var cy = was.box.top + was.box.height / 2 + (event.clientY - was.y);
+      var corner = (cy < root.innerHeight / 2 ? "t" : "b") + (cx < root.innerWidth / 2 ? "l" : "r");
+      dock.setAttribute("data-corner", corner);
+      try { localStorage.setItem(CORNER_STORE, corner); } catch (err) { /* private mode */ }
+    };
+    root.addEventListener("pointerup", end);
+    root.addEventListener("pointercancel", end);
+    dock.addEventListener("click", function (event) {
+      if (!swallow) return;
+      swallow = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
   }
 
   /* Other sound in the app wins: a video or live that plays with sound
@@ -1588,6 +1668,8 @@
     var pos = position();
     var seek = document.getElementById("mu-seek");
     var nowSeek = document.getElementById("mu-now-seek");
+    var fill = document.getElementById("mu-pop-fill");
+    if (fill) fill.style.width = (pos.dur ? Math.min(100, Math.max(0, (pos.cur / pos.dur) * 100)) : 0).toFixed(2) + "%";
     if (seek && document.activeElement !== seek) {
       seek.max = String(pos.dur || 0);
       seek.value = String(pos.cur || 0);
@@ -1629,6 +1711,7 @@
       paintedId = artId;
       paintArt("mu-dock-art", song);
       paintArt("mu-now-art", song);
+      fitMarquee();
       var pills = document.getElementById("mu-now-pills");
       if (pills) pills.innerHTML = song && song.lossless ? '<span class="mu-badge">' + tr("Lossless") + "</span>" : "";
     }
@@ -1674,7 +1757,7 @@
     dock.innerHTML = ("<div class=\"mu-bar\"><button class=\"mu-id\" type=\"button\" data-act=\"music-now\" " + "aria-label=\"" + tr("Now playing") + "\"" + "><span id=\"mu-dock-art\"></span><span class=\"mu-copy\"><b id=\"mu-dock-title\"" + ">" + tr("Not playing") + "<" + "/b><span id=\"mu-dock-artist\">") + productName("musicShort") + '</span></span></button>' +
       ("<div class=\"mu-transport\"><button type=\"button\" class=\"mu-shuffle\" data-act=\"music-shuffle\" " + "aria-label=\"" + tr("Shuffle") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.shuffle) + ("</button><button type=\"button\" data-act=\"music-prev\" " + "aria-label=\"" + tr("Previous") + "\"" + ">") + svg(CTRL.prev) + ("</button><button id=\"mu-play\" class=\"mu-play\" type=\"button\" data-act=\"music-toggle\" " + "aria-label=\"" + tr("Play") + "\"" + ">") + svg(CTRL.play) + ("</button><button type=\"button\" data-act=\"music-next\" " + "aria-label=\"" + tr("Next") + "\"" + ">") + svg(CTRL.next) + ("</button><button type=\"button\" class=\"mu-rep\" data-act=\"music-repeat\" " + "aria-label=\"" + tr("Repeat") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.repeat) + '<i></i></button></div>' +
       ("<div class=\"mu-seek\"><span class=\"mu-time\" id=\"mu-time\">0:00</span><input id=\"mu-seek\" class=\"mu-range\" type=\"range\" min=\"0\" max=\"0\" value=\"0\" step=\"0.1\" " + "aria-label=\"" + tr("Seek") + "\"" + "><span class=\"mu-time\" id=\"mu-end\">0:00</span></div>") +
-      ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div>") + '<button type="button" class="mu-mini-x" data-act="music-stop" aria-label="' + tr("Close player") + '">' + svg(CTRL.close) + "</button></div>";
+      ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div>") + '<i class="mu-pop-bar" aria-hidden="true"><b id="mu-pop-fill"></b></i><button type="button" class="mu-mini-x" data-act="music-stop" aria-label="' + tr("Close player") + '">' + svg(CTRL.close) + "</button></div>";
     var now = document.createElement("div");
     now.id = "mu-now";
     now.className = "mu-now";
@@ -1691,6 +1774,7 @@
     audio.setAttribute("playsinline", "");
     audio.addEventListener("contextmenu", function (event) { event.preventDefault(); });
     document.body.appendChild(dock);
+    wireDrag(dock);
     document.body.appendChild(now);
     document.body.appendChild(host);
     document.body.appendChild(audio);
