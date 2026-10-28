@@ -4677,7 +4677,8 @@ async function handleFollowGet(request, env, url) {
   };
   if (account) {
     body.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", account.public_id);
-    body.isPrivate = isPrivate;
+    // The profile setting stays privateFollows. isPrivate here means this viewer is denied.
+    body.isPrivate = !!(isPrivate && !isOwner);
   }
   if (!tab && stored === "app:" + gate.row.public_id) {
     body.ids = await presentFollowIds(env, await listFollowIds(env, gate.row.public_id));

@@ -31,6 +31,20 @@ const windowMock = {
     if (path.indexOf("/v1/follows") >= 0 && method === "DELETE") {
       return reply(200, { ok: true, viewerFollows: false, followersCount: 0, followingCount: 0 });
     }
+    if (path.indexOf("/v1/follows") >= 0 && path.indexOf("tab=") >= 0 && (path.indexOf("300000000001") >= 0 || path.indexOf("User_A") >= 0 || path.indexOf("user_a") >= 0)) {
+      if (path.indexOf("tab=followers") >= 0) {
+        return reply(200, { isPrivate: true, accounts: [], followersCount: 0, cursor: "" });
+      }
+      return reply(200, {
+        isPrivate: true,
+        accounts: [{ id: "app:@user_b", handle: "user_b", name: "User B" }],
+        followingCount: 1,
+        cursor: ""
+      });
+    }
+    if (path.indexOf("/v1/follows") >= 0 && path.indexOf("tab=") >= 0 && (path.indexOf("300000000002") >= 0 || path.indexOf("user_b") >= 0)) {
+      return reply(200, { isPrivate: true, accounts: [], cursor: "" });
+    }
     if (path.indexOf("/v1/follows") >= 0 && path.indexOf("tab=followers") >= 0) {
       return reply(200, {
         accounts: [{ id: "app:200000000002", handle: "south_sg", name: "South Dock", followsYou: true, removable: true }],
@@ -40,6 +54,12 @@ const windowMock = {
     }
     if (path.indexOf("/v1/blocks") >= 0) return reply(200, { accounts: [{ id: "app:200000000003", handle: "quiet_sg", name: "Quiet South" }] });
     if (path.indexOf("/v1/mutes") >= 0) return reply(200, { accounts: [] });
+    if (path.indexOf("/v1/profile/") >= 0 && (path.indexOf("user_a") >= 0 || path.indexOf("User_A") >= 0)) {
+      return reply(200, {
+        account: { handle: "user_a", displayName: "User A", privateFollows: true },
+        reposts: []
+      });
+    }
     if (path.indexOf("/v1/profile/") >= 0) {
       return reply(200, {
         account: {
@@ -58,7 +78,11 @@ const windowMock = {
   removeEventListener: () => {},
   setTimeout: (fn) => { fn(); return 0; },
   clearTimeout: () => {},
-  t: (key) => String(key),
+  t: (key, vars) => {
+    let text = String(key);
+    if (vars) Object.keys(vars).forEach((name) => { text = text.split("{" + name + "}").join(String(vars[name])); });
+    return text;
+  },
   SI18n: { productName: () => "ViktorychApp" },
   VIKTORYCH_ACCOUNTS: { api: "https://accounts.test", gate: false },
   localStorage: {
@@ -138,6 +162,39 @@ assert.ok(settingsAfter.indexOf("Protect your posts") >= 0);
 assert.ok(settingsAfter.indexOf("Blocked accounts") >= 0);
 assert.ok(settingsAfter.indexOf("quiet_sg") >= 0);
 assert.ok(settings.indexOf("Your account") >= 0);
+
+localStorageStore["viktorychapp-account-v1"] = JSON.stringify({
+  token: "session-token",
+  account: { publicId: "300000000001", handle: "user_a", displayName: "User A", privateFollows: true }
+});
+accounts.ensureProfile("User_A");
+await new Promise((resolve) => setTimeout(resolve, 0));
+const subject = accounts.subjectForHandle("User_A", "x");
+assert.equal(subject && subject.id, "app:300000000001");
+assert.equal(accounts.ownsSubject("app:@User_A", "User_A"), true);
+assert.equal(accounts.ownsSubject("app:300000000002", "user_b"), false);
+assert.equal(accounts.ownsSubject("app:@user_b", "user_b"), false);
+accounts.graphListHtml("app:300000000001", "following", "user_a");
+accounts.graphListHtml("app:300000000001", "followers", "User_A");
+accounts.graphListHtml("app:@User_A", "following", "User_A");
+accounts.graphListHtml("app:300000000002", "following", "user_b");
+accounts.graphListHtml("app:@user_b", "followers", "user_b");
+await new Promise((resolve) => setTimeout(resolve, 0));
+const ownFollowing = accounts.graphListHtml("app:300000000001", "following", "user_a");
+const ownFollowers = accounts.graphListHtml("app:300000000001", "followers", "User_A");
+const ownByHandle = accounts.graphListHtml("app:@User_A", "following", "User_A");
+const other = accounts.graphListHtml("app:300000000002", "following", "user_b");
+const otherByHandle = accounts.graphListHtml("app:@user_b", "followers", "user_b");
+assert.equal(ownFollowing.indexOf("These lists are private"), -1);
+assert.ok(ownFollowing.indexOf("User B") >= 0, "owner sees the following list");
+assert.equal(ownFollowers.indexOf("These lists are private"), -1);
+assert.ok(ownFollowers.indexOf("No followers yet") >= 0, "owner sees an empty followers list");
+assert.equal(ownByHandle.indexOf("These lists are private"), -1);
+assert.ok(ownByHandle.indexOf("User B") >= 0, "owner handle still opens the list");
+assert.ok(other.indexOf("These lists are private") >= 0, "another account sees the private message");
+assert.ok(other.indexOf("Only @user_b") >= 0);
+assert.equal(other.indexOf("User B"), -1);
+assert.ok(otherByHandle.indexOf("These lists are private") >= 0);
 
 console.log("ok social ui");
 }

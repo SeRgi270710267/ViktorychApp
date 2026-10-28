@@ -9409,7 +9409,7 @@ const here = parseRoute();
     const name = subject.name || subject.handle || route.handle || "";
     const sub = subject.handle ? "@" + subject.handle : "";
     const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
-    const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.account && subject.id === "app:" + (window.ViktorychAccounts.account() || {}).publicId;
+    const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.ownsSubject ? window.ViktorychAccounts.ownsSubject(subject.id, subject.handle) : false;
     const requestN = mineGraph && window.ViktorychAccounts.listPack ? (window.ViktorychAccounts.listPack(subject.id, "requests").accounts ? window.ViktorychAccounts.listPack(subject.id, "requests").accounts.length : 0) : 0;
     const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
     const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Follow requests"))}${requestBadge}</span></a>` : ""}` : "";
@@ -9439,7 +9439,7 @@ const here = parseRoute();
     const pack = window.ViktorychAccounts.listPack(subject.id, tab);
     if (pack.loading && !pack.accounts) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
     if (pack.error) return head + tabs + emptyBlock(tr("Followers"), tr("Couldn’t load this list."));
-    if (pack.isPrivate) {
+    if (pack.isPrivate && !mineGraph) {
       const handleName = subject.handle || name;
       return head + tabs + `<div class="empty private-connections">
         <div class="empty-icon private-lock-icon">${icon("lock")}</div>
