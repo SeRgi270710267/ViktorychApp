@@ -4495,7 +4495,8 @@ function followFeedCard(targetId, snapshot) {
     id: targetId,
     kind: "feed",
     handle: typeof snap.handle === "string" ? snap.handle : "",
-    name: typeof snap.name === "string" ? snap.name : "",
+    name: typeof snap.name === "string" && snap.name ? snap.name : (typeof snap.displayName === "string" ? snap.displayName : ""),
+    displayName: typeof snap.displayName === "string" ? snap.displayName : "",
     avatar: typeof snap.avatar === "string" ? snap.avatar : "",
     bio: typeof snap.bio === "string" ? snap.bio : "",
     platform: typeof snap.platform === "string" ? snap.platform : ""
