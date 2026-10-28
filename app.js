@@ -7913,6 +7913,7 @@ const here = parseRoute();
         <a class="m-logo" href="#/" aria-label="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}</a>
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
+      ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       <div class="tabs-bar">
         <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button>
         <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
@@ -7924,7 +7925,6 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
-      ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${window.ViktorychLive && window.ViktorychLive.homeHtml ? window.ViktorychLive.homeHtml() : ""}
       ${homeLivePillsRow()}
     </div>`;
@@ -8321,6 +8321,7 @@ const here = parseRoute();
         if (parent) data.set("parentId", parent);
         if (quote) data.set("quoteId", quote);
         if (part.audience) data.set("audience", part.audience);
+        if (part.listIds && part.listIds.length) data.set("listIds", JSON.stringify(part.listIds));
         if (part.replyControl) data.set("replyControl", part.replyControl);
         if (part.location) data.set("location", part.location);
         if (part.scheduleAt) data.set("scheduledAt", String(part.scheduleAt));
@@ -8338,6 +8339,7 @@ const here = parseRoute();
       if (parent) body.parentId = parent;
       if (quote) body.quoteId = quote;
       if (part.audience) body.audience = part.audience;
+      if (part.listIds && part.listIds.length) body.listIds = part.listIds;
       if (part.replyControl) body.replyControl = part.replyControl;
       if (part.location) body.location = part.location;
       if (part.poll) body.poll = part.poll;
@@ -12287,6 +12289,7 @@ const here = parseRoute();
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${presenceBlock}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
+        ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
@@ -21213,7 +21216,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       if (event.touches.length !== 1) return;
-      if (event.target.closest && event.target.closest(".story-tray, #stories")) return;
+      if (event.target.closest && event.target.closest(".story-tray, .story-shell, #stories")) return;
       /* A sideways drag on a tab row or pill row scrolls that row. It must
          not switch Home tabs or refresh the feed. */
       if (hscrollFromTarget(event.target) || (event.target.closest && event.target.closest(".sp-row-wrap, .sp-row, .tabs, .tabs-bar"))) { swipe = null; return; }
@@ -21793,8 +21796,44 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         icon: icon,
         render: render,
         follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
-        dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
+        dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json",
+        account: function () { return window.ViktorychAccounts && window.ViktorychAccounts.account ? window.ViktorychAccounts.account() : null; },
+        token: accountToken,
+        owner: signedOwner,
+        api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+        apiRoot: accountsApi,
+        toast: toast
       });
+      if (window.AudienceLists) {
+        window.AudienceLists.bind({
+          token: accountToken,
+          api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+          render: render
+        });
+      }
+      if (window.Highlights) {
+        window.Highlights.bind({
+          token: accountToken,
+          api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+          render: render,
+          localMedia: function () {
+            const mine = window.ViktorychAccounts && window.ViktorychAccounts.account ? window.ViktorychAccounts.account() : null;
+            const handle = String((mine && mine.handle) || "").toLowerCase();
+            const saved = (STATE.settings && STATE.settings.savedPosts) || {};
+            const out = [];
+            Object.keys(saved).forEach((id) => {
+              const post = saved[id];
+              if (!post || !Array.isArray(post.media)) return;
+              const own = handle && String(post.handle || "").replace(/^@/, "").toLowerCase() === handle;
+              post.media.forEach((item, index) => {
+                if (!item || !item.url) return;
+                out.push({ source: own ? "post" : "saved", url: item.url, type: item.type || "photo", id: id + ":" + index });
+              });
+            });
+            return out;
+          }
+        });
+      }
     }
     if (window.Spaces && !window.Spaces.__shell) {
       window.Spaces.__shell = true;
