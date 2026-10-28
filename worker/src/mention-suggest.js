@@ -6,6 +6,7 @@
    shared. */
 
 import { blocksEither } from "./social.js";
+import { resolveName, viewerHandle } from "./usernames.js";
 
 const LIMIT = 8;
 const EDGE_SECONDS = 60;
@@ -32,7 +33,7 @@ async function rows(env, sql, args) {
 
 async function candidates(env, prefix) {
   const cache = typeof caches !== "undefined" && caches.default ? caches.default : null;
-  const key = new Request("https://viktorych-edge.internal/mention-suggest/" + encodeURIComponent(prefix));
+  const key = new Request("https://viktorych-edge.internal/mention-suggest-v2/" + encodeURIComponent(prefix));
   if (cache) {
     try {
       const hit = await cache.match(key);
@@ -42,23 +43,25 @@ async function candidates(env, prefix) {
   const [lo, hi] = prefixRange(prefix);
   const found = {};
   const order = [];
-  function add(list, alias) {
+  /* via: the handle that matched, or "" for a display-name match. Which
+     names a viewer may see is decided per viewer, never here. */
+  function add(list, via) {
     list.forEach((row) => {
       if (!row || !row.public_id) return;
-      const hit = found[row.public_id];
-      if (hit) {
-        if (alias && hit.aliases.indexOf(alias) < 0) hit.aliases.push(alias);
-        return;
+      const tag = via == null ? row.handle : via;
+      let hit = found[row.public_id];
+      if (!hit) {
+        hit = found[row.public_id] = { id: row.public_id, handle: row.handle, name: row.display_name, avatar: row.avatar, hide: row.hide_avatar, empty: row.avatar_empty, owner: row.owner === 1, via: [] };
+        order.push(row.public_id);
       }
-      found[row.public_id] = { id: row.public_id, handle: row.handle, name: row.display_name, avatar: row.avatar, hide: row.hide_avatar, empty: row.avatar_empty, owner: row.owner === 1, aliases: alias ? [alias] : [] };
-      order.push(row.public_id);
+      if (hit.via.indexOf(tag) < 0) hit.via.push(tag);
     });
   }
   const cols = "a.public_id, a.handle, a.display_name, a.avatar, a.hide_avatar, a.avatar_empty, a.owner";
   add(await rows(env, "SELECT " + cols + " FROM accounts a WHERE lower(a.handle) >= ? AND lower(a.handle) < ? AND a.profile_less = 0 ORDER BY lower(a.handle) LIMIT 40", [lo, hi]));
   const aliases = await rows(env, "SELECT " + cols + ", h.handle AS alias FROM account_handles h JOIN accounts a ON a.public_id = h.public_id WHERE lower(h.handle) >= ? AND lower(h.handle) < ? AND a.profile_less = 0 ORDER BY lower(h.handle) LIMIT 40", [lo, hi]);
-  aliases.forEach((row) => add([row], String(row.alias || "").toLowerCase() === String(row.handle || "").toLowerCase() ? "" : row.alias));
-  add(await rows(env, "SELECT " + cols + " FROM accounts a WHERE lower(a.display_name) >= ? AND lower(a.display_name) < ? AND a.profile_less = 0 ORDER BY lower(a.display_name) LIMIT 40", [lo, hi]));
+  aliases.forEach((row) => add([row], String(row.alias || "")));
+  add(await rows(env, "SELECT " + cols + " FROM accounts a WHERE lower(a.display_name) >= ? AND lower(a.display_name) < ? AND a.profile_less = 0 ORDER BY lower(a.display_name) LIMIT 40", [lo, hi]), "");
   const list = order.slice(0, 60).map((id) => found[id]);
   if (cache) {
     try {
@@ -98,10 +101,14 @@ export async function mentionSuggest(env, request, url, viewer, deps) {
   for (let i = 0; i < ranked.length && out.length < LIMIT; i++) {
     const row = ranked[i].row;
     if (await blocksEither(env, viewer.public_id, row.id)) continue;
+    const seen = await viewerHandle(env, request, row.id, viewer.public_id);
+    if (seen.hidden) continue;
+    const via = Array.isArray(row.via) ? row.via : [];
+    let reachable = via.indexOf("") >= 0;
+    for (let v = 0; !reachable && v < via.length; v++) reachable = !!(await resolveName(env, via[v], viewer.public_id));
+    if (!reachable) continue;
     const avatar = row.hide ? "" : deps.mediaUrl(request, row.avatar);
-    const card = { kind: "account", handle: row.handle, name: row.name || "", avatar: avatar || "", owner: row.owner, follows: follows.has(row.id) };
-    if (row.aliases.length) card.aliases = row.aliases.slice(0, 3);
-    out.push(card);
+    out.push({ kind: "account", handle: seen.handle, name: row.name || "", avatar: avatar || "", owner: row.owner, follows: follows.has(row.id) });
   }
   return deps.json(200, { accounts: out }, headers);
 }

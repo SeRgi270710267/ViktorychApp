@@ -3,6 +3,7 @@
    losing the mention. Bios never come through here. */
 
 import { extractMentions } from "../../shared/mentions.js";
+import { resolveName } from "./usernames.js";
 import { ensureNotificationSchema, finishDeliveries, planNotification } from "./notifications.js";
 
 export const MENTION_SCHEMA = [
@@ -111,9 +112,10 @@ export async function planMentions(env, opts) {
   const targets = [];
   const now = opts.at || Date.now();
   for (let i = 0; i < found.length; i++) {
-    const account = await env.DB.prepare(
-      "SELECT public_id, handle, protected_account FROM accounts WHERE skeleton = ?"
-    ).bind(found[i].skeleton).first();
+    const named = await resolveName(env, found[i].handle, actor.public_id);
+    const account = named ? await env.DB.prepare(
+      "SELECT public_id, handle, protected_account FROM accounts WHERE public_id = ?"
+    ).bind(named.publicId).first() : null;
     if (!account || seen[account.public_id]) continue;
     seen[account.public_id] = true;
     if (await blockedOrMuted(env, actor.public_id, account.public_id)) continue;
