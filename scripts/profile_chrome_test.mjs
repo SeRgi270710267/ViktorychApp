@@ -177,6 +177,8 @@ main().then(async () => {
   const { spawnSync } = await import("node:child_process");
   const mentions = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "mention_suggest_test.mjs")], { stdio: "inherit", env: process.env });
   if (mentions.status !== 0) process.exitCode = 1;
+  const friendState = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), "friend_state_test.mjs")], { stdio: "inherit", env: process.env });
+  if (friendState.status !== 0) process.exitCode = 1;
 }).catch((err) => {
   console.error(err && err.message ? err.message : err);
   process.exitCode = 1;

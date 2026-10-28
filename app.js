@@ -4742,7 +4742,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<button class="notify-bell${on ? " on" : ""}" type="button" data-act="bell" data-id="${esc(id)}" data-handle="${esc(String(handle || "").replace(/^@/, ""))}" title="${tr("Notify")}" aria-label="${tr("Notify")}" aria-haspopup="menu" aria-expanded="${open ? "true" : "false"}"><span class="bell-off">${bellGlyph("off-outline")}</span><span class="bell-add">${bellGlyph("plus")}</span><span class="bell-on">${bellGlyph("on")}</span></button>`;
   }
 
-  function actionBar(post) {
+  function actionBar(post, detail) {
     const id = post.id;
     const stats = post.stats || {};
     const liked = !!STATE.settings.likes[id];
@@ -4763,6 +4763,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const quoteOnX = replyOnX ? `<button type="button" data-act="xc-quote" data-id="${esc(id)}">${tr("Quote on X")}</button>` : "";
     const repostMenu = menuOpen ? `<div class="menu repost-menu" data-act="stop" role="menu" aria-label="${esc(tr("Repost"))}"><button type="button" data-act="repost-do" data-id="${esc(id)}">${reposted ? tr("Undo repost") : tr("Repost")}</button><button type="button" data-act="quote-open" data-id="${esc(id)}">${tr("Quote")}</button>${quoteOnX}</div>` : "";
     const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0), tr("Repost"))}${repostMenu}</span>`;
+    if (detail) {
+      return `<div class="actions status-actions">
+      <div class="action-stats">
+        ${redditVotes(post)}
+        ${replyLink}
+        ${repostBtn}
+        ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0), tr("Like"))}
+        ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), shownCount(stats.bookmarks, booked ? 1 : 0), tr("Bookmark"))}
+        ${btn("share", "share", "share", tr("Share"), "", tr("Share"))}
+      </div>
+    </div>`;
+    }
     return `<div class="actions">
       <div class="action-stats">
         ${redditVotes(post)}
@@ -6918,20 +6930,48 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return fxNum((b.stats || {}).likes) - fxNum((a.stats || {}).likes) || String(b.date || "").localeCompare(String(a.date || ""));
   }
 
-  function replySortTabs() {
+  function replySortTabs(thin) {
     const sort = replySortMode();
     const tab = (id, label) => `<button class="tab${sort === id ? " on" : ""}" type="button" data-act="reply-sort" data-sort="${id}" role="tab" aria-selected="${sort === id ? "true" : "false"}"><span>${label}</span></button>`;
-    return `<div class="tabs reply-tabs" role="tablist">${tab("relevant", tr("Relevant"))}${tab("recent", tr("Recent"))}${tab("liked", tr("Liked"))}</div>`;
+    return `<div class="tabs reply-tabs${thin ? " reply-tabs-thin" : ""}" role="tablist" aria-label="${esc(tr("Sort replies"))}">${tab("relevant", tr("Relevant"))}${tab("recent", tr("Recent"))}${tab("liked", tr("Liked"))}</div>`;
   }
 
-  function replyTools(post) {
+  function statusMeta(post) {
+    const stats = post.stats || {};
+    const when = fullTime(post.date);
+    const parts = [];
+    if (when) parts.push(`<a class="status-when" href="${esc(statusHash(post))}">${esc(when)}</a>`);
+    if (post.edited) parts.push(esc(tr("Edited")));
+    if (stats.views != null) parts.push(`<span class="status-viewcount"><b>${esc(formatCount(stats.views))}</b> ${tr("Views")}</span>`);
+    return `<div class="status-meta">${parts.join(`<span class="dot" aria-hidden="true">·</span>`)}</div>`;
+  }
+
+  function statusMenu(post) {
+    const key = "s:" + post.id;
+    const btn = `<button class="more-btn status-more" type="button" data-act="menu" data-id="${esc(key)}" aria-label="${tr("More")}" aria-haspopup="menu" aria-expanded="${STATE.menu === key ? "true" : "false"}">${icon("more")}</button>`;
+    if (STATE.menu !== key) return `<span class="status-menu-wrap">${btn}</span>`;
+    const followId = post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.handle ? (post.platform || "x") + ":" + post.handle : "");
+    const me = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+    const mine = followId && me && followId === "app:" + me.publicId;
+    const ids = followId && followId.indexOf("app:") !== 0 && window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(followId) : [followId];
+    const on = ids.some((item) => item && isFollowed(item));
+    const who = "@" + internalPostHandle(post.handle || "", post);
+    const follow = followId && !mine ? `<button type="button" data-act="follow" data-id="${esc(ids[0] || followId)}" data-ids="${esc(ids.join(","))}">${esc(on ? tr("Unfollow {handle}", { handle: who }) : tr("Follow {handle}", { handle: who }))}</button>` : "";
+    const shareLink = sharePostUrl(post, "post") || post.url || sitePermalink(statusHash(post));
+    const shareNote = sharePostUrl(post, "post") ? "" : unpublishedNote("post", post.platform, !!post.url);
     const bucket = STATE.replies[postKey(post)] || {};
-    const label = freshLabel(bucket.fetchedAt);
-    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}<button class="show-more odai-btn" type="button" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button></div>${replySortTabs()}`;
+    const fresh = freshLabel(bucket.fetchedAt);
+    const items = follow
+      + `<button type="button" data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button>`
+      + `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`
+      + `<button type="button" class="odai-btn" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button>`
+      + (post.appPost ? appMenuItems(post) : (post.url ? `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""))
+      + (fresh ? `<div class="menu-note reply-fresh">${esc(fresh)}</div>` : "");
+    return `<span class="status-menu-wrap">${btn}<div class="menu status-menu" data-act="stop" role="menu">${items}</div></span>`;
   }
 
   function replyList(post) {
-    const tools = replyTools(post);
+    const tools = "";
     const slice = replySlice(post);
     if (slice.loading) return tools + `<div class="reply-empty">${tr("Loading replies…")}</div>`;
     if (!slice.shown.length && !slice.more && !slice.spam) {
@@ -6975,7 +7015,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
-        <div class="composer-bar"><button class="reply-send" type="button" data-gift="reply" data-parent="${esc((post && post.id) || "")}" data-handle="${esc((post && post.handle) || "")}">${tr("Send a gift")}</button><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
+        <button class="reply-send" type="button" disabled>${tr("Reply")}</button>
       </div>
     </div>`;
   }
@@ -10438,16 +10478,15 @@ const here = parseRoute();
         ${mediaHtml(post.media, false, post)}
         ${postCards(post)}
         ${quoteCard(post.quoted)}
-        <div class="status-time">${esc(fullTime(post.date))}${post.edited ? " · " + tr("Edited") : ""}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""}</div>
-        ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> ${tr("Views")}</div>` : `<div class="status-views"></div>`}
-        ${actionBar(post)}`;
+        ${statusMeta(post)}
+        ${actionBar(post, true)}`;
     const face = authorFace(post);
     const statusHandle = internalPostHandle(post.handle || "", post);
     const names = `<div>
             <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>${affSlot(post)}
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(statusHandle)}</a>
           </div>
-          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
+          <span class="status-end">${sourceBadge(post.platform)}${statusMenu(post)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
       ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
@@ -10456,7 +10495,7 @@ const here = parseRoute();
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
       ${article}
-      ${talk == null ? composer(threaded, post) + replyList(post) : talk}`;
+      ${talk == null ? replySortTabs(true) + composer(threaded, post) + replyList(post) : talk}`;
   }
 
   function telegramTalk(post) {
@@ -18023,6 +18062,15 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   });
 
   window.__VIKTORYCH_CLICK = true;
+  document.addEventListener("click", (event) => {
+    const item = event.target.closest && event.target.closest(".status-menu button, .status-menu a");
+    if (!item) return;
+    setTimeout(() => {
+      if (String(STATE.menu || "").indexOf("s:") !== 0) return;
+      STATE.menu = null;
+      render();
+    }, 0);
+  });
   document.addEventListener("click", (event) => {
     const acct = event.target.closest && event.target.closest(".acct-menu [data-acct]");
     if (!acct) return;
