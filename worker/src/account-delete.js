@@ -34,7 +34,7 @@ const USER_COLUMNS = ["public_id", "follower_id", "target_id", "sender_id", "rec
 const SKIP_TABLES = new Set(["account_deletion_jobs", "account_deletions", "handle_holds", "rate_limits", "telegram_files", "sqlite_sequence"]);
 const ID_FIELDS = ["publicId", "public_id", "userId", "user_id", "authorId", "author_id", "followerId", "follower_id", "accountId", "account_id", "senderId", "sender_id", "recipientId", "recipient_id", "ownerId", "owner_id"];
 const PUBLISH_KEYS = ["people.json", "feeds.json", "feeds.config.json", "suggestions.json", "follows.json", "data/follows.json"];
-const OBJECT_PREFIXES = ["media/avatars/", "media/banners/", "uploads/", "exports/", "users/", "accounts/"];
+const OBJECT_PREFIXES = ["media/avatars/", "media/banners/", "uploads/", "exports/", "users/", "accounts/", "highlights/", "stories/library/", "stories/app/"];
 
 export const DELETION_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS account_deletion_jobs (

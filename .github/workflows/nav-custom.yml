@@ -67,3 +67,4 @@ jobs:
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/profile_layout_test.mjs
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/menu_pages_test.mjs
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/points_layout_test.mjs
+          PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/stories_layout_test.mjs
