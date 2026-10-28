@@ -115,7 +115,7 @@ Stories.applyBar("slim");
 assert.strictEqual(Stories.barState(), "slim");
 assert.strictEqual(Stories.trayExtra(), 52);
 Stories.applyBar("expanded");
-assert.strictEqual(Stories.trayExtra(), 168);
+assert.strictEqual(Stories.trayExtra(), 204);
 Stories.bind({
   icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
   follows() { return follows; },
@@ -133,6 +133,30 @@ assert.ok(noted.indexOf("note-bubble") >= 0);
 Stories.applyBar("slim");
 assert.ok(Stories.homeTray().includes('data-state="slim"'));
 assert.ok(Stories.homeTray().includes("note-bubble"));
+var pinned = Stories.organize([
+  { id: "telegram:laneharbor", platform: "telegram", handle: "laneharbor", name: "Telegram" },
+  { id: "vk:vk", platform: "vk", handle: "vk", name: "VK" }
+], { pins: ["vk:vk"], hidden: [], folders: [], active: "" });
+assert.strictEqual(pinned.map(function (row) { return row.id; }).join(","), "vk:vk,telegram:laneharbor");
+var hidden = Stories.organize(pinned, { pins: [], hidden: [{ id: "telegram:laneharbor", also: [] }], folders: [], active: "" });
+assert.strictEqual(hidden.map(function (row) { return row.id; }).join(","), "vk:vk");
+var folder = Stories.organize([
+  { id: "telegram:laneharbor", platform: "telegram", handle: "laneharbor" },
+  { id: "vk:vk", platform: "vk", handle: "vk" }
+], { pins: [], hidden: [], folders: [{ id: "fld_a", name: "A", icon: "⭐", members: ["telegram:laneharbor"] }], active: "fld_a" });
+assert.strictEqual(folder.map(function (row) { return row.id; }).join(","), "telegram:laneharbor");
+Stories.setOrg({
+  pins: ["vk:vk"],
+  hidden: [{ id: "instagram:birchlane", name: "Mark", platform: "instagram", handle: "birchlane", also: [] }],
+  folders: [],
+  active: "",
+  updatedAt: 5
+});
+Stories.apply(doc);
+var arranged = Stories.homeTray();
+assert.ok(arranged.indexOf('data-id="vk:vk"') < arranged.indexOf('data-id="telegram:laneharbor"'));
+assert.ok(arranged.indexOf("instagram:birchlane") < 0);
+assert.ok(arranged.includes("story-folders"));
 Stories.bind({
   icon(name) { return '<svg data-icon="' + name + '"></svg>'; },
   follows() { return follows; },
