@@ -2294,6 +2294,36 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 }
 .drawer-rule { height: 1px; margin: 6px 16px; background: var(--line); }
 .drawer-fold-body .drawer-row, .drawer-fold-body a, .drawer-fold-body button.linky { font-weight: 400; font-size: 19px; }
+.drawer-edit-bar { display: flex; gap: 8px; align-items: center; padding: 8px 16px; flex-wrap: wrap; }
+.drawer-edit-bar .save, .drawer-edit-bar .outline { height: 32px; padding: 0 12px; }
+.drawer-edit-note { margin: 0 16px 8px; color: var(--muted); font-size: 13px; }
+.drawer-edit-list, .drawer-section-items { display: flex; flex-direction: column; }
+.drawer-edit-row, .drawer-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 12px;
+}
+.drawer-edit-row.is-hidden { opacity: 0.45; }
+.drawer-edit-row.is-dragging, .drawer-section.is-dragging { background: var(--hover); }
+.drawer-grip {
+  width: 32px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  flex: none;
+}
+.drawer-eye, .drawer-lock { width: 36px; height: 36px; flex: none; }
+.drawer-move { max-width: 108px; height: 32px; background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+.drawer-section { border-top: 1px solid var(--line); margin-top: 4px; }
+.drawer-section-name { flex: 1; min-width: 0; height: 36px; border: 0; background: transparent; color: var(--text); font-size: 16px; font-weight: 700; }
+.drawer-section-label { padding: 10px 16px 2px; color: var(--muted); font-size: 13px; font-weight: 700; }
 .drawer-foot { flex: none; padding: 4px 8px calc(12px + env(safe-area-inset-bottom)); }
 .drawer-theme {
   width: 48px;
