@@ -1052,7 +1052,7 @@
   };
 
   const ALL_NAV_IDS = [
-    "home", "explore", "notifications", "messages", "feeds", "lists",
+    "home", "explore", "notifications", "messages", "online", "feeds", "lists",
     "history", "music", "shorts", "games", "tv", "communities",
     "subscriptions", "vault", "settings"
   ];
@@ -7174,10 +7174,16 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
+  function onlineCountHtml() {
+    const count = window.ViktorychPresence && window.ViktorychPresence.onlineCount ? window.ViktorychPresence.onlineCount() : 0;
+    if (!count) return "";
+    return `<span class="online-count">${count > 20 ? "20+" : String(count)}</span>`;
+  }
+
   function navItem(href, name, label, on, aria, tip, extraClass) {
     const onName = name + tr("On");
     const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
-    const badge = name === "bell" ? bellBadgeHtml() : "";
+    const badge = name === "bell" ? bellBadgeHtml() : (href === "#/online" ? onlineCountHtml() : "");
     const accessible = aria || label;
     const tooltipText = tip || (name === "muBack" ? tr("Back") : label);
     const tight = name === "muBack" ? " nav-back" : "";
@@ -7199,6 +7205,8 @@ const here = parseRoute();
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
         return { id: "messages", href: "#/messages", icon: "mail", label: tr("Messages"), active: (r) => r.name === "messages" };
+      case "online":
+        return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
         return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" };
       case "lists":
@@ -7453,6 +7461,7 @@ const here = parseRoute();
       if (!id || seen.has(id)) return "";
       seen.add(id);
       if (id === "logout") return "";
+      if (id === "online") return "";
       if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
       const navId = DRAWER_NAV[id];
       if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
@@ -7543,7 +7552,7 @@ const here = parseRoute();
   const BOTTOM_NAV_MIN = 2;
   const BOTTOM_NAV_MAX = 6;
   const BOTTOM_NAV_IDS = [
-    "home", "explore", "tv", "communities", "notifications", "messages",
+    "home", "explore", "tv", "communities", "notifications", "messages", "online",
     "feeds", "lists", "history", "music", "shorts", "games",
     "subscriptions", "vault", "storage", "settings"
   ];
@@ -7647,7 +7656,7 @@ const here = parseRoute();
 
   function bottomNavLink(def, route) {
     const on = !!(def.active && def.active(route));
-    const badge = def.icon === "bell" ? bellBadgeHtml() : "";
+    const badge = def.icon === "bell" ? bellBadgeHtml() : (def.id === "online" ? onlineCountHtml() : "");
     const label = bottomBarLabel(def);
     return `<a href="${esc(def.href)}" class="${on ? "on" : ""}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(bottomGlyph(def, on))}${badge}</span></a>`;
   }
@@ -8482,10 +8491,7 @@ const here = parseRoute();
     const inline = (tab === "foryou" || tab === "following") && STATE.modal !== "compose" && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
-    const onlineStrip = (tab === "foryou" || tab === "following") && window.ViktorychPresence && window.ViktorychPresence.stripHtml
-      ? window.ViktorychPresence.stripHtml()
-      : "";
-    return homeHeader(tab) + bar + onlineStrip + inline + body + timelineSentinel(list.length, sorted.length);
+    return homeHeader(tab) + bar + inline + body + timelineSentinel(list.length, sorted.length);
   }
 
   function mobileLogo() {
@@ -12632,7 +12638,7 @@ const here = parseRoute();
     const mine = signedAccount();
     if (id === "home") return { id: id, href: "#/", icon: "home", label: tr("Home"), locked: true };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
-    if (id === "online") return { id: id, href: "#/online", icon: "user", label: tr("Friends") };
+    if (id === "online") return { id: id, href: "#/online", icon: "user", label: tr("Friends"), extra: onlineCountHtml() };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
     if (id === "bookmarks") return { id: id, href: "#/bookmarks", icon: "bookmark", label: tr("Bookmarks") };
