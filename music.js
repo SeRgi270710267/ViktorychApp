@@ -489,6 +489,7 @@
   }
 
   function stopPlayer() {
+    playToken += 1;
     pauseAll();
     clearMedia();
     stopYouTube();
@@ -1405,8 +1406,9 @@
   function startAudio(song, fromUser) {
     stopYouTube();
     destroyHls();
+    var token = playToken;
     sourceUrl(song).then(function (url) {
-      if (!audio) return;
+      if (!audio || token !== playToken) return;
       if (audio.getAttribute("data-src") !== url) {
         audio.setAttribute("data-src", url);
         audio.src = url;
