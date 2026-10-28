@@ -378,6 +378,7 @@ async function firstRun(page) {
   if ((await page.locator("#compose-text").getAttribute("aria-describedby")) !== "compose-note") notes.push("composer does not explain that it stays on device");
   await page.locator("#compose-text").fill("A local note from the first run.");
   await page.keyboard.press("Escape");
+  await page.locator("[data-act='xc-save-draft']").click();
   await page.waitForFunction(() => !document.getElementById("compose-text"));
   await page.locator("[data-act='compose']:visible").first().click();
   await page.waitForFunction(() => (document.querySelector("#compose-text") && document.querySelector("#compose-text").value || "").indexOf("local note") >= 0);
