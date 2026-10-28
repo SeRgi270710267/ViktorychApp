@@ -2361,5 +2361,10 @@ SI18n.addPack("en", {
   "The stories tray and viewer. Off loads nothing for it.": "The stories tray and viewer. Off loads nothing for it.",
   "Sort replies": "Sort replies",
   "Follow {handle}": "Follow {handle}",
-  "Unfollow {handle}": "Unfollow {handle}"
+  "Unfollow {handle}": "Unfollow {handle}",
+  "Devices": "Devices",
+  "Sync across my devices": "Sync across my devices",
+  "Menu, sidebar and display choices follow your account on every device you sign in on.": "Menu, sidebar and display choices follow your account on every device you sign in on.",
+  "Keep this device's own look": "Keep this device's own look",
+  "Only this device ignores synced menu and display choices.": "Only this device ignores synced menu and display choices."
 });

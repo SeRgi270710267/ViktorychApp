@@ -2361,5 +2361,10 @@ SI18n.addPack("es", {
   "The stories tray and viewer. Off loads nothing for it.": "La bandeja y el visor de historias. Si está desactivado, no se carga nada para ellos.",
   "Sort replies": "Ordenar respuestas",
   "Follow {handle}": "Seguir a {handle}",
-  "Unfollow {handle}": "Dejar de seguir a {handle}"
+  "Unfollow {handle}": "Dejar de seguir a {handle}",
+  "Devices": "Dispositivos",
+  "Sync across my devices": "Sincronizar en mis dispositivos",
+  "Menu, sidebar and display choices follow your account on every device you sign in on.": "El menú, la barra lateral y las opciones de pantalla siguen a tu cuenta en cada dispositivo donde inicies sesión.",
+  "Keep this device's own look": "Mantener el aspecto propio de este dispositivo",
+  "Only this device ignores synced menu and display choices.": "Solo este dispositivo ignora el menú y las opciones de pantalla sincronizados."
 });
