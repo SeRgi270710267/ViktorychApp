@@ -1243,6 +1243,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       STATE.settings.devicePerf = window.ViktorychDevice.persist(STATE.settings.devicePerf);
     }
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
+    syncFeatureFlags();
     syncWorkerState();
     applyPrivacyProtections();
     if (window.ViktorychAccounts && window.ViktorychAccounts.onLocalChange) window.ViktorychAccounts.onLocalChange();
@@ -8163,7 +8164,33 @@ const here = parseRoute();
     return true;
   }
 
+  /* Home features that Settings can turn fully off. The flags are read by
+     index.html before any script loads, so an off feature downloads nothing.
+     SYNCED_UI_PREFS lists the settings keys that follow the account across
+     devices. */
+  const HOME_FEATURE_FLAGS = { homePills: "viktorychapp-off-home-pills", stories: "viktorychapp-off-stories" };
+  const SYNCED_UI_PREFS = ["homePills", "stories"];
+  window.ViktorychPrefs = Object.assign(window.ViktorychPrefs || {}, { synced: SYNCED_UI_PREFS.slice(), flags: Object.assign({}, HOME_FEATURE_FLAGS) });
+  function featureOn(key) {
+    const value = STATE.settings ? STATE.settings[key] : undefined;
+    if (typeof value === "boolean") return value;
+    // Before settings load (or for an old settings blob) the boot flag decides.
+    try { return localStorage.getItem(HOME_FEATURE_FLAGS[key]) !== "1"; } catch (err) { return true; }
+  }
+  function syncFeatureFlags() {
+    Object.keys(HOME_FEATURE_FLAGS).forEach((key) => {
+      try {
+        if (featureOn(key)) localStorage.removeItem(HOME_FEATURE_FLAGS[key]);
+        else localStorage.setItem(HOME_FEATURE_FLAGS[key], "1");
+      } catch (err) { /* storage blocked */ }
+    });
+  }
+  function featureLoaded(key) {
+    return key === "stories" ? !!window.Stories : !!(window.WeatherPills || window.SoccerScores);
+  }
+
   function homeLivePillsRow() {
+    if (!featureOn("homePills")) return "";
     if (window.WeatherPills && window.WeatherPills.homeRow) {
       return window.WeatherPills.homeRow();
     }
@@ -8189,7 +8216,7 @@ const here = parseRoute();
         ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
-      ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
+      ${featureOn("stories") && window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       <div class="tabs-bar">
         <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button>
         <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
@@ -12697,6 +12724,11 @@ const here = parseRoute();
     return `<a class="set-row" href="${href}"><span class="set-copy"><b>${esc(title)}</b>${sub ? `<span class="set-sub">${esc(sub)}</span>` : ""}</span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
   }
 
+  function homeFeatureSwitch(key, label, note) {
+    const on = featureOn(key);
+    return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="home-feature" data-key="${esc(key)}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(note)}</p>`;
+  }
+
   function settingsView() {
     const route = parseRoute();
     const section = route.section || "";
@@ -12760,6 +12792,9 @@ const here = parseRoute();
           ${faceBtn("pictures", "default", tr("Default"))}
           ${faceBtn("pictures", "none", tr("None"))}
         </div>
+        <h2>${esc(tr("Home"))}</h2>
+        ${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
+        ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
         <h2>${esc(tr("Banners"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Banners"))}">
           ${faceBtn("banners", "show", tr("Show"))}
@@ -13584,6 +13619,7 @@ if (STATE.histClear) {
   }
 
   function homeRowExtra() {
+    if (!featureOn("homePills")) return 0;
     /* The home header always shows the pills row: weather, scores, or the
        live station. The phone header is fixed, so this height has to be
        reserved or the row covers the first card. */
@@ -15873,6 +15909,7 @@ if (STATE.histClear) {
     }
     const gen = (STATE.renderGen = (STATE.renderGen || 0) + 1);
     let route = parseRoute();
+    if (route.name === "spaces" && window.Spaces && window.Spaces.__shell && window.Spaces.start && !(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.Spaces.start();
     if (route.name === "drive") {
       if (window.ViktorychDrive && !window.ViktorychDrive.visible()) {
         route = { name: "home", tab: "foryou", query: route.query || new URLSearchParams() };
@@ -16924,6 +16961,19 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
           location.reload();
         }
       }
+      return;
+    }
+    if (act === "home-feature") {
+      const key = el.dataset.key;
+      if (!Object.prototype.hasOwnProperty.call(HOME_FEATURE_FLAGS, key)) return;
+      const on = !featureOn(key);
+      STATE.settings[key] = on;
+      STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { [key]: Date.now() });
+      saveSettings();
+      render();
+      /* Off has to stop work that already started, and on needs files that
+         were skipped, so reload when the loaded state does not match. */
+      if (featureLoaded(key) !== on) setTimeout(() => location.reload(), 150);
       return;
     }
     if (act === "note-tabs-same") {
@@ -22368,7 +22418,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyTorProtections();
     applyTheme();
     applyPrivacyProtections();
-    if (window.Stories) window.Stories.start();
+    syncFeatureFlags();
+    if (window.Stories && featureOn("stories")) window.Stories.start();
     if (window.AudienceLists) {
       window.AudienceLists.bind({
         token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
@@ -22640,7 +22691,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         shareRoot: shareRoot,
         toast: toast
       });
-      if (!blocked) window.Spaces.start();
+      if (!blocked && (featureOn("homePills") || parseRoute().name === "spaces")) window.Spaces.start();
     }
     if (window.SIntelMusic && window.SIntelMusic.bind && !window.SIntelMusic.__shell && !blocked) {
       window.SIntelMusic.__shell = true;

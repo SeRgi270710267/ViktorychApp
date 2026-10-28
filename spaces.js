@@ -1986,6 +1986,8 @@
   }
 
   function arm(ms) {
+    // Nothing polls until the shell starts Spaces (it stays off when the Home pills row is off).
+    if (!started) return;
     clearTimeout(timer);
     timer = setTimeout(runPoll, ms);
   }

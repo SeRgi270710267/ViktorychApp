@@ -156,6 +156,8 @@ async function main() {
     const { spawnSync } = await import("node:child_process");
     const explore = spawnSync(process.execPath, [path.join(root, "scripts", "explore_nav_test.mjs")], { stdio: "inherit", env: process.env });
     if (explore.status !== 0) throw new Error("explore nav check failed");
+    const features = spawnSync(process.execPath, [path.join(root, "scripts", "home_features_test.mjs")], { stdio: "inherit", env: process.env });
+    if (features.status !== 0) throw new Error("home features check failed");
   } finally {
     await browser.close();
     server.close();
