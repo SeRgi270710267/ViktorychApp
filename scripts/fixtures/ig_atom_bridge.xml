@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Canadian Prepper (@birchlane) - Instagram</title>
+  <subtitle>I build stuff</subtitle>
+  <entry>
+    <title>A real caption</title>
+    <content type="html">&lt;img src="https://scontent.cdninstagram.com/v/photo.jpg?oe=6ADD0001&amp;amp;_nc_ht=scontent.cdninstagram.com" width="1080" height="1350" alt="melon"&gt; Building something new</content>
+    <id>urn:instagram:4006</id>
+    <link rel="alternate" href="https://www.instagram.com/p/Abcd1234/"/>
+    <published>2026-10-20T10:00:00Z</published>
+    <author><name>birchlane</name></author>
+  </entry>
+  <entry>
+    <title>Bridge returned error 302!</title>
+    <content type="html">Type: HttpException File: lib/http.php</content>
+    <id>urn:sha1:dddddddddddddddddddddddddddddddddddddddd</id>
+    <link rel="alternate" href="http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=birchlane&amp;format=Atom"/>
+    <published>2026-10-21T10:00:00Z</published>
+  </entry>
+</feed>

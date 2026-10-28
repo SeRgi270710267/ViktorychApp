@@ -579,7 +579,7 @@
   function previewCard() {
     if (!page.preview || !page.preview.card) return "";
     const card = page.preview.card;
-    const posts = (card.posts || []).slice(0, 3).map((post) => `<li>${esc(post.text || "")}</li>`).join("");
+    const posts = (card.posts || []).slice(0, 3).map((post) => `<li>${esc(post.text || tr("Photo"))}</li>`).join("");
     const face = hooks.avatar ? hooks.avatar(card.avatar, card.name || card.handle) : "";
     return `<section class="feeds-preview" role="dialog" aria-label="${esc(tr("Preview"))}">
       <div class="feeds-preview-who">${face}<span><b>${esc(card.name || card.handle || "")}</b><span>@${esc(card.handle || "")} · ${esc(platformLabel(card.platform))}</span></span></div>
@@ -592,7 +592,7 @@
     const id = row.id;
     const healthClass = healthCode(row);
     const text = (row.health && row.health.text) || "";
-    const last = row.health && row.health.lastOk;
+    const last = row.health && (row.health.updatedAt || row.health.lastOk);
     const when = last && hooks.relTime ? hooks.relTime(last) : (last ? String(last).slice(0, 16) : "");
     const face = hooks.avatar ? hooks.avatar(row.avatar, row.label || row.name || row.handle) : "";
     const tabs = hooks.feedTabs ? hooks.feedTabs() : [];
@@ -619,7 +619,7 @@
     return `<article class="feeds-row${row.pinned ? " is-pinned" : ""}" data-feed-drag="${esc(id)}" data-feed-drop="row" data-id="${esc(id)}" data-group="${esc(row.groupId || "")}" draggable="${ownerOn() ? "true" : "false"}">
       ${controls}
       <a class="who-main" href="${esc(hooks.accountHash ? hooks.accountHash(row.platform, row.channelId || row.handle) : "#/feeds")}">${face}<span class="who-copy"><span class="name">${esc(row.label || row.name || row.handle)}</span><span class="handle">@${esc(row.handle || "")} · ${esc(platformLabel(row.platform))}</span></span></a>
-      <span class="feeds-health is-${esc(healthClass)}"><b>${esc(healthLabel(healthClass))}</b>${when ? `<span>${esc(tr("Last fetch"))} ${esc(when)}</span>` : ""}${text ? `<span>${esc(tr(text))}</span>` : ""}</span>
+      <span class="feeds-health is-${esc(healthClass)}"><b>${esc(healthLabel(healthClass))}</b>${when ? `<span>${esc(tr("Last updated"))} ${esc(when)}</span>` : ""}${text ? `<span>${esc(tr(text))}</span>` : ""}</span>
       ${actions}
       ${ownerOn() ? `<label class="feeds-label">${esc(tr("Account label"))}<input id="feeds-label-${esc(id)}" value="${esc(row.label || "")}" maxlength="80"><button type="button" data-feed-act="label" data-id="${esc(id)}">${esc(tr("Rename"))}</button></label>` : ""}
       ${ownerOn() ? `<label class="feeds-move">${esc(tr("Move to group"))}<select data-feed-act="move-select" data-id="${esc(id)}">${groupOptions}</select></label>` : ""}
