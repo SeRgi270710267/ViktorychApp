@@ -1,0 +1,206 @@
+/* Public landing. Dark, sticky actions, and scroll motion where the browser
+   supports it. Margins stand in for gap so iOS 13 can lay the rows out. */
+.land-page {
+  background: #000;
+  color: #e7e9ea;
+  min-height: 100vh;
+}
+.land-bar {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  background: #000;
+  border-bottom: 1px solid #2f3336;
+  padding: 8px 12px;
+  padding-top: calc(8px + env(safe-area-inset-top));
+}
+.land-brand {
+  display: flex;
+  align-items: center;
+  margin: 4px 8px 4px 4px;
+  color: #e7e9ea;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 18px;
+  line-height: 24px;
+}
+.land-mark {
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  flex: 0 0 auto;
+}
+.land-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 4px;
+}
+.land-langs {
+  display: flex;
+  flex-wrap: wrap;
+  margin-right: 4px;
+}
+.land-lang {
+  background: transparent;
+  color: #e7e9ea;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 6px 8px;
+  margin: 2px;
+  cursor: pointer;
+}
+.land-lang.on { color: #1d9bf0; }
+.land-btn {
+  display: inline-block;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 34px;
+  margin: 4px 0 4px 8px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.land-btn-fill {
+  background: #1d9bf0;
+  color: #fff;
+  border: 1px solid #1d9bf0;
+}
+.land-btn-line {
+  background: transparent;
+  color: #e7e9ea;
+  border: 1px solid #536471;
+}
+.land-hero {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 24px 24px;
+}
+.land-kicker {
+  margin: 0 0 8px;
+  color: #1d9bf0;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 20px;
+}
+.land-hero h1 {
+  margin: 0 0 12px;
+  font-size: 56px;
+  line-height: 64px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.land-tag {
+  margin: 0 0 12px;
+  max-width: 640px;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+}
+.land-lead {
+  margin: 0 0 20px;
+  max-width: 640px;
+  color: #71767b;
+  font-size: 17px;
+  line-height: 24px;
+}
+.land-hero-actions { margin-top: 8px; }
+.land-hero-actions .land-btn { margin: 8px 8px 0 0; }
+.land-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 12px 28px;
+}
+.land-copy,
+.land-frame {
+  margin: 12px;
+  min-width: 0;
+}
+.land-copy { flex: 1 1 260px; }
+.land-frame { flex: 1 1 280px; max-width: 420px; }
+.land-flip { flex-direction: row-reverse; }
+.land-copy h2 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 800;
+}
+.land-copy p {
+  margin: 0;
+  color: #71767b;
+  font-size: 17px;
+  line-height: 24px;
+}
+.land-device {
+  background: #000;
+  border: 1px solid #2f3336;
+  border-radius: 36px;
+  padding: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+.land-device img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 26px;
+  background: #000;
+}
+.land-foot {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 16px 48px;
+}
+.land-foot button,
+.land-foot span {
+  margin: 4px 12px 4px 0;
+}
+.land-hero h1,
+.land-hero .land-tag {
+  animation: land-rise 700ms ease both;
+}
+@supports (animation-timeline: view()) {
+  .land-block {
+    animation-name: land-rise;
+    animation-duration: 1ms;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 34%;
+  }
+}
+@keyframes land-rise {
+  from { opacity: 0; transform: translate3d(0, 28px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@media (max-width: 800px) {
+  .land-hero { padding: 28px 16px 8px; }
+  .land-hero h1 { font-size: 40px; line-height: 46px; }
+  .land-tag { font-size: 20px; line-height: 28px; }
+  .land-copy h2 { font-size: 26px; line-height: 32px; }
+  .land-block,
+  .land-flip { flex-direction: column; }
+  .land-frame { max-width: 420px; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .land-hero h1,
+  .land-hero .land-tag,
+  .land-block {
+    animation: none;
+  }
+}
