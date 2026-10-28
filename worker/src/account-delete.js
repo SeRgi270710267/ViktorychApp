@@ -55,8 +55,111 @@ export const DELETION_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS account_deletions (user_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS handle_holds (skeleton TEXT PRIMARY KEY, held_until INTEGER NOT NULL, user_hash TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS account_reauths (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, expires_at INTEGER NOT NULL)",
-  "CREATE INDEX IF NOT EXISTS account_reauths_account ON account_reauths(public_id, expires_at)"
+  "CREATE INDEX IF NOT EXISTS account_reauths_account ON account_reauths(public_id, expires_at)",
+  "CREATE TABLE IF NOT EXISTS account_inactivity (public_id TEXT PRIMARY KEY, months INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS inactivity_meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL)"
 ];
+
+/* Inactivity auto-delete. Each account picks 1, 3, 6 or 12 months (default 1).
+   The sweep only runs when the INACTIVITY_DELETE var is "on", and the clock
+   never starts before the first armed sweep, so turning it on does not delete
+   anyone retroactively. The owner account is never touched. */
+export const INACTIVITY_MONTHS = [1, 3, 6, 12];
+const MONTH_MS = 30.44 * 24 * 60 * 60 * 1000;
+const INACTIVITY_BATCH = 5;
+
+export function cleanMonths(value) {
+  const n = Number(value);
+  return INACTIVITY_MONTHS.indexOf(n) >= 0 ? n : 0;
+}
+
+export function inactivityArmed(env) {
+  return String((env && env.INACTIVITY_DELETE) || "").trim().toLowerCase() === "on";
+}
+
+export function inactiveDue(lastActive, armedAt, months, now) {
+  const from = Math.max(Number(lastActive) || 0, Number(armedAt) || 0);
+  if (!from || !cleanMonths(months)) return false;
+  return now - from > cleanMonths(months) * MONTH_MS;
+}
+
+async function lastActiveOf(env, publicId) {
+  const row = await env.DB.prepare(
+    `SELECT MAX(
+       COALESCE((SELECT MAX(last_beat, last_seen) FROM account_presence WHERE public_id = ?1), 0),
+       COALESCE((SELECT MAX(created_at) FROM sessions WHERE public_id = ?1), 0),
+       COALESCE((SELECT updated_at FROM sync_state WHERE public_id = ?1), 0),
+       COALESCE((SELECT updated_at FROM account_inactivity WHERE public_id = ?1), 0),
+       COALESCE((SELECT created_at FROM accounts WHERE public_id = ?1), 0)
+     ) AS at`
+  ).bind(publicId).first().catch(() => null);
+  return Number(row && row.at) || 0;
+}
+
+export async function handleInactivity(request, env, deps) {
+  const session = await deps.sessionAccount(env, request);
+  if (!session) return jsonBody(deps, 401, { error: "unauthorized" });
+  const owner = await ownerProtected(env, session);
+  if (request.method === "PUT" || request.method === "POST") {
+    const paced = await deps.rateHit(env, "inactivity:" + session.public_id, 30, 60 * 60 * 1000);
+    if (!paced.ok) return deps.limited(paced);
+    const body = await deps.readJson(request, 1000);
+    if (body.error) return jsonBody(deps, 400, { error: body.error });
+    const months = cleanMonths(body.months);
+    if (!months) return jsonBody(deps, 400, { error: "months" });
+    await env.DB.prepare("INSERT INTO account_inactivity (public_id, months, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET months = excluded.months, updated_at = excluded.updated_at").bind(session.public_id, months, Date.now()).run();
+  } else if (request.method !== "GET") {
+    return jsonBody(deps, 405, { error: "method" });
+  }
+  const row = await env.DB.prepare("SELECT months FROM account_inactivity WHERE public_id = ?").bind(session.public_id).first();
+  return jsonBody(deps, 200, { months: cleanMonths(row && row.months) || 1, options: INACTIVITY_MONTHS, owner: !!owner });
+}
+
+export async function sweepInactive(env, now) {
+  if (!inactivityArmed(env)) return { armed: false, started: 0 };
+  const at = Number(now) || Date.now();
+  let start = await env.DB.prepare("SELECT v FROM inactivity_meta WHERE k = 'armed_at'").first();
+  if (!start) {
+    await env.DB.prepare("INSERT OR IGNORE INTO inactivity_meta (k, v) VALUES ('armed_at', ?)").bind(at).run();
+    return { armed: true, started: 0 };
+  }
+  const armedAt = Number(start.v) || at;
+  if (at - armedAt <= MONTH_MS) return { armed: true, started: 0 };
+  // One page of accounts per hour, walking created_at so every account gets
+  // checked over time without a heavy query on each cron tick.
+  const meta = rowsOf(await env.DB.prepare("SELECT k, v FROM inactivity_meta WHERE k IN ('last_sweep', 'cursor')").all());
+  const metaOf = (key) => Number((meta.find((row) => row.k === key) || {}).v) || 0;
+  if (at - metaOf("last_sweep") < 60 * 60 * 1000) return { armed: true, started: 0 };
+  const cursor = metaOf("cursor");
+  const listed = await env.DB.prepare(
+    `SELECT a.public_id, a.handle, a.skeleton, a.owner, a.created_at, COALESCE(i.months, 1) AS months
+       FROM accounts a LEFT JOIN account_inactivity i ON i.public_id = a.public_id
+      WHERE a.owner = 0 AND a.created_at > ?
+        AND NOT EXISTS (SELECT 1 FROM account_deletion_jobs j WHERE j.public_id = a.public_id)
+      ORDER BY a.created_at ASC LIMIT 100`
+  ).bind(cursor).all();
+  const page = rowsOf(listed);
+  const next = page.length < 100 ? 0 : Number(page[page.length - 1].created_at) || 0;
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO inactivity_meta (k, v) VALUES ('last_sweep', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(at),
+    env.DB.prepare("INSERT INTO inactivity_meta (k, v) VALUES ('cursor', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(next)
+  ]);
+  let started = 0;
+  for (const row of page) {
+    if (started >= INACTIVITY_BATCH) break;
+    if (await ownerProtected(env, row)) continue;
+    const last = await lastActiveOf(env, row.public_id);
+    if (!inactiveDue(last, armedAt, row.months, at)) continue;
+    const hash = await userHash(env, row.public_id);
+    if (!hash) break;
+    const job = await startJob(env, row, hash);
+    if (!job) continue;
+    started += 1;
+    try { await runJob(env, job, {}); }
+    catch (err) { await saveJob(env, job, parseSteps(job.steps), "pending", "retry"); }
+  }
+  return { armed: true, started };
+}
 
 function bytesToB64(bytes) {
   let text = "";

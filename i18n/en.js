@@ -1,5 +1,10 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("en", {
+  "3 months": "3 months",
+  "6 months": "6 months",
+  "12 months": "12 months",
+  "If you’re away for": "If you’re away for",
+  "If you don’t use your account for this long, it and its data are deleted.": "If you don’t use your account for this long, it and its data are deleted.",
   "Delete post?": "Delete post?",
   "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.": "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.",
   "{count} votes": "{count} votes",
