@@ -81,10 +81,10 @@ async function checkSidebar(page, label) {
     drawer: !!document.querySelector(".drawer-x"),
     customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='drawer-edit']"),
     bookmarks: !!document.querySelector("header.nav a[href='#/bookmarks']"),
-    settings: !!document.querySelector("header.nav a[href='#/settings']"),
+    profile: [...document.querySelectorAll("header.nav .nav-label")].some((node) => (node.textContent || "") === "Profile"),
     tv: !!document.querySelector("header.nav a[href='#/tv']")
   }));
-  if (before.drawer || !before.customize || !before.bookmarks || !before.settings || !before.tv) fail(label + " sidebar is missing a core row");
+  if (before.drawer || !before.customize || !before.bookmarks || !before.profile || !before.tv) fail(label + " sidebar is missing a core row");
   await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
   await page.waitForSelector(".nav-customize-modal .drawer-edit-list");
   const listed = await page.evaluate(() => ({
@@ -94,6 +94,14 @@ async function checkSidebar(page, label) {
     homeEye: !!document.querySelector("[data-drawer-key='home'] [data-act='drawer-vis']")
   }));
   if (!listed.profile || !listed.premium || !listed.explore || listed.homeEye) fail(label + " editor is missing a sidebar item");
+  const places = await page.evaluate(() => ({
+    home: !!document.querySelector(".drawer-edit-list[data-place='sidebar'] [data-drawer-key='home']"),
+    settings: !!document.querySelector(".drawer-edit-list[data-place='popup'] [data-drawer-key='settings']"),
+    logout: !!document.querySelector(".drawer-edit-list[data-place='popup'] [data-drawer-key='logout']"),
+    settingsMove: !!document.querySelector("[data-drawer-key='settings'] [data-act='drawer-place']"),
+    homeMove: !!document.querySelector("[data-drawer-key='home'] [data-act='drawer-place']")
+  }));
+  if (!places.home || !places.settings || !places.logout || places.settingsMove || places.homeMove) fail(label + " locked items are in the wrong place");
   if (await page.locator(".drawer-x").count()) fail(label + " edit opened the edge drawer");
   const locked = await page.evaluate(() => {
     const row = (id) => document.querySelector(`[data-drawer-key="${id}"]`);
@@ -112,10 +120,10 @@ async function checkSidebar(page, label) {
   if (hidden) fail(label + " hidden item is still shown");
   const back = await page.evaluate(() => ({
     customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='drawer-edit']"),
-    settings: !!document.querySelector("header.nav a[href='#/settings']"),
+    profile: [...document.querySelectorAll("header.nav .nav-label")].some((node) => (node.textContent || "") === "Profile"),
     drawer: !!document.querySelector(".drawer-x")
   }));
-  if (!back.customize || !back.settings || back.drawer) fail(label + " core items disappeared");
+  if (!back.customize || !back.profile || back.drawer) fail(label + " core items disappeared");
   await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
   await page.click("[data-act='drawer-add-section']");
   await page.waitForSelector(".drawer-section-name");
@@ -124,6 +132,15 @@ async function checkSidebar(page, label) {
   await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
   const restored = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
   if (!restored) fail(label + " reset did not restore the menu");
+  await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
+  await page.click("[data-drawer-key='bookmarks'] [data-act='drawer-place']");
+  await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
+  const moved = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
+  if (moved) fail(label + " popup item stayed in the sidebar");
+  await page.locator("header.nav:not(.nav-land) button.account-pill").click();
+  await page.waitForSelector(".acct-menu");
+  const popupText = await page.locator(".acct-menu").innerText();
+  if (popupText.indexOf("Bookmarks") < 0) fail(label + " popup is missing the moved item");
 }
 
 async function check(page, label) {

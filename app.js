@@ -7358,6 +7358,7 @@ const here = parseRoute();
     const custom = getNavCustom();
     const openFolders = getNavOpenFolders();
     const hiddenSet = new Set(custom.hidden || []);
+    const popupIds = typeof getDrawerMenu === "function" ? new Set((getDrawerMenu().popup) || []) : new Set();
     const folderMap = new Map();
     custom.folders.forEach((f) => folderMap.set(f.id, f));
 
@@ -7368,7 +7369,7 @@ const here = parseRoute();
         const folder = folderMap.get(fId);
         if (!folder) return;
         const visibleItems = (folder.items || []).filter((itId) => {
-          if (hiddenSet.has(itId)) return false;
+          if (hiddenSet.has(itId) || popupIds.has(itId)) return false;
           const def = navItemDef(itId);
           if (!def) return false;
           if (def.visible && !def.visible()) return false;
@@ -7421,7 +7422,7 @@ const here = parseRoute();
           </div>
         </div>`;
       } else {
-        if (hiddenSet.has(entry)) return;
+        if (hiddenSet.has(entry) || popupIds.has(entry)) return;
         const def = navItemDef(entry);
         if (!def) return;
         if (def.visible && !def.visible()) return;
@@ -7447,7 +7448,7 @@ const here = parseRoute();
     const row = (id) => {
       if (!id || seen.has(id)) return "";
       seen.add(id);
-      if (id === "logout") return "";
+      if (id === "logout" || (menu.popup || []).indexOf(id) >= 0) return "";
       if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
       const navId = DRAWER_NAV[id];
       if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
@@ -12497,7 +12498,7 @@ const here = parseRoute();
   };
 
   function defaultDrawerMenu() {
-    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA), hidden: [], at: 0 };
+    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA).filter((id) => id !== "settings" && id !== "logout"), hidden: [], popup: ["settings", "logout"], at: 0 };
   }
 
   function cleanDrawerMenu(raw) {
@@ -12519,13 +12520,27 @@ const here = parseRoute();
       });
       sections.push({ id: id, name: name, emoji: emoji, items: items });
     });
+    const popup = [];
+    const popupSeen = new Set();
+    const takePopup = (id) => {
+      if (!id || popupSeen.has(id) || DRAWER_IDS.indexOf(id) < 0) return;
+      if (id === "home" || id === "customize") return;
+      popupSeen.add(id);
+      popup.push(id);
+    };
+    (Array.isArray(raw.popup) ? raw.popup : ["settings", "logout"]).forEach(takePopup);
+    ["settings", "logout"].forEach(takePopup);
+    const popupSet = new Set(popup);
+    sections.forEach((section) => {
+      section.items = section.items.filter((item) => !popupSet.has(item));
+    });
     const inSection = new Set();
     sections.forEach((section) => section.items.forEach((item) => inSection.add(item)));
     const order = [];
     const seen = new Set();
     (Array.isArray(raw.order) ? raw.order : []).forEach((entry) => {
       const text = String(entry || "");
-      if (!text || seen.has(text)) return;
+      if (!text || seen.has(text) || popupSet.has(text)) return;
       if (text.indexOf("section:") === 0) {
         const id = text.slice(8);
         if (!sectionIds.has(id)) return;
@@ -12542,7 +12557,7 @@ const here = parseRoute();
       if (order.indexOf(key) < 0) order.push(key);
     });
     DRAWER_IDS.forEach((id) => {
-      if (seen.has(id) || inSection.has(id)) return;
+      if (seen.has(id) || inSection.has(id) || popupSet.has(id)) return;
       order.push(id);
     });
     const hidden = [];
@@ -12550,7 +12565,7 @@ const here = parseRoute();
       if (DRAWER_IDS.indexOf(id) < 0 || DRAWER_LOCKED.indexOf(id) >= 0 || hidden.indexOf(id) >= 0) return;
       hidden.push(id);
     });
-    return { sections: sections, order: order, hidden: hidden, at: Number(raw.at) || 0 };
+    return { sections: sections, order: order, hidden: hidden, popup: popup, at: Number(raw.at) || 0 };
   }
 
   function getDrawerMenu() {
@@ -12673,15 +12688,17 @@ const here = parseRoute();
     const eye = locked
       ? `<span class="drawer-lock" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
       : `<button class="icon-btn drawer-eye" type="button" data-act="drawer-vis" data-id="${esc(item.id)}" aria-pressed="${hidden ? "false" : "true"}" aria-label="${esc(hidden ? tr("Hidden") : tr("Visible"))}">${icon(hidden ? "eyeOff" : "eye")}</button>`;
+    const inPopup = (menu.popup || []).indexOf(item.id) >= 0;
+    const placeLocked = item.id === "home" || item.id === "customize" || item.id === "settings" || item.id === "logout";
+    const placeBtn = placeLocked ? "" : `<button class="outline drawer-place" type="button" data-act="drawer-place" data-id="${esc(item.id)}" data-place="${inPopup ? "sidebar" : "popup"}">${esc(inPopup ? tr("Sidebar") : tr("Profile popup"))}</button>`;
     const sections = (menu.sections || []).map((section) => `<option value="${esc(section.id)}">${esc(section.name)}</option>`).join("");
-    const placed = (menu.sections || []).find((section) => (section.items || []).indexOf(item.id) >= 0);
-    const move = locked ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
+    const move = locked || inPopup ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
     return `<div class="drawer-edit-row${hidden ? " is-hidden" : ""}" data-drawer-key="${esc(item.id)}">
       <button class="drawer-grip" type="button" data-drag-drawer="${esc(item.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
       <span class="drawer-ico">${item.icon === "gear" ? menuIcon("gear") : icon(item.icon)}</span>
       <span class="drawer-label">${esc(item.label)}</span>
       ${move}
-      ${placed ? "" : ""}
+      ${placeBtn}
       ${eye}
     </div>`;
   }
@@ -12726,13 +12743,27 @@ const here = parseRoute();
     }).join("");
     if (!editing) {
       const open = !!STATE.drawerFold;
-      return blocks + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
+      const popupRows = (menu.popup || []).map((id) => {
+        if (hidden.has(id)) return "";
+        const item = drawerItem(id);
+        if (!item || item.accountMenu) return "";
+        return drawerViewRow(item);
+      }).join("");
+      return blocks + popupRows + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
     }
+    const popupBlocks = (menu.popup || []).map((id) => {
+      const item = drawerItem(id);
+      return item ? drawerEditRow(item, menu) : "";
+    }).join("");
     return `<div class="drawer-edit-bar">
       <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("New folder"))}</button>
       <button class="outline" type="button" data-act="drawer-reset">${esc(tr("Reset to default"))}</button>
       <button class="save" type="button" data-act="drawer-edit-done">${esc(tr("Done"))}</button>
-    </div><p class="drawer-edit-note">${esc(tr("Home, Settings, and Log out stay put. Folders take a name and an emoji, then collapse in the sidebar."))}</p><div class="drawer-edit-list">${blocks}</div>`;
+    </div><p class="drawer-edit-note">${esc(tr("Home stays in the sidebar. Settings and Log out stay in the profile popup."))}</p>
+      <h3 class="drawer-place-title">${esc(tr("Sidebar"))}</h3>
+      <div class="drawer-edit-list" data-place="sidebar">${blocks}</div>
+      <h3 class="drawer-place-title">${esc(tr("Profile popup"))}</h3>
+      <div class="drawer-edit-list" data-place="popup">${popupBlocks}</div>`;
   }
 
   function drawerRow(href, glyph, label, extra) {
@@ -12797,13 +12828,25 @@ const here = parseRoute();
   function accountPopup() {
     if (!STATE.accountMenu || !sidebarOwnsNav()) return "";
     const mine = signedAccount();
+    const menu = getDrawerMenu();
+    const hidden = new Set(menu.hidden || []);
     const accounts = mine
       ? `<button type="button" data-acct="login">${esc(tr("Add account"))}</button>`
       : "";
-    const leave = mine
-      ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
-      : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
-    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}<a href="#/settings">${esc(tr("Settings"))}</a>${leave}</div></div>`;
+    const rows = (menu.popup || []).map((id) => {
+      if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
+      const item = drawerItem(id);
+      if (!item) return "";
+      if (id === "logout") {
+        return mine
+          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+          : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+      }
+      if (item.act) return `<button type="button" data-act="${esc(item.act)}">${esc(item.label)}</button>`;
+      if (!item.href) return "";
+      return `<a href="${esc(item.href)}">${esc(item.label)}</a>`;
+    }).join("");
+    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${rows}</div></div>`;
   }
 
   function drawerEditModal() {
@@ -15784,6 +15827,20 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "drawer-edit-done") { STATE.drawerEdit = false; render(); return; }
     if (act === "drawer-reset") { saveDrawerMenu(null); render(); return; }
+    if (act === "drawer-place") {
+      const id = el.dataset.id || "";
+      const place = el.dataset.place || "";
+      if (!id || id === "home" || id === "customize" || id === "settings" || id === "logout") return;
+      const menu = getDrawerMenu();
+      menu.popup = (menu.popup || []).filter((item) => item !== id);
+      menu.sections.forEach((section) => { section.items = section.items.filter((item) => item !== id); });
+      menu.order = (menu.order || []).filter((entry) => entry !== id);
+      if (place === "popup") menu.popup.push(id);
+      else if (menu.order.indexOf(id) < 0) menu.order.push(id);
+      saveDrawerMenu(menu);
+      render();
+      return;
+    }
     if (act === "drawer-vis") {
       const id = el.dataset.id || "";
       if (DRAWER_LOCKED.indexOf(id) >= 0) return;
@@ -22522,23 +22579,33 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     document.addEventListener("pointerup", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
       drag = null;
-      const root = document.querySelector(".drawer-edit-list");
-      if (!root) return;
+      const sidebar = document.querySelector(".drawer-edit-list[data-place='sidebar']") || document.querySelector(".drawer-edit-list");
+      const popupList = document.querySelector(".drawer-edit-list[data-place='popup']");
+      if (!sidebar) return;
       const menu = getDrawerMenu();
       const order = [];
       const sectionItems = {};
-      [...root.children].forEach((el) => {
-        const key = el.getAttribute("data-drawer-key") || "";
+      const readKey = (el) => el.getAttribute("data-drawer-key") || "";
+      [...sidebar.children].forEach((el) => {
+        const key = readKey(el);
         if (!key) return;
         if (key.indexOf("section:") === 0) {
           order.push(key);
           const id = key.slice(8);
-          sectionItems[id] = [...el.querySelectorAll(":scope > .drawer-section-items > [data-drawer-key]")].map((row) => row.getAttribute("data-drawer-key")).filter((item) => DRAWER_IDS.indexOf(item) >= 0 && DRAWER_LOCKED.indexOf(item) < 0);
+          sectionItems[id] = [...el.querySelectorAll(":scope > .drawer-section-items > [data-drawer-key]")].map(readKey).filter((item) => DRAWER_IDS.indexOf(item) >= 0 && item !== "home" && item !== "settings" && item !== "logout" && item !== "customize");
           return;
         }
         if (DRAWER_IDS.indexOf(key) >= 0) order.push(key);
       });
+      const popup = [];
+      if (popupList) {
+        [...popupList.querySelectorAll(":scope > [data-drawer-key]")].forEach((el) => {
+          const key = readKey(el);
+          if (DRAWER_IDS.indexOf(key) >= 0 && key !== "home" && key !== "customize") popup.push(key);
+        });
+      }
       menu.order = order;
+      menu.popup = popup;
       menu.sections.forEach((section) => {
         if (sectionItems[section.id]) section.items = sectionItems[section.id];
       });

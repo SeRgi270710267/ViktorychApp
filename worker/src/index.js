@@ -1076,7 +1076,13 @@ function cleanDrawerMenuSync(raw) {
     });
     sections.push({ id: id, name: name, emoji: emoji, items: items });
   });
-  return { order: order, hidden: hidden, sections: sections, at: Number(raw.at) || 0 };
+  const popup = ["settings", "logout"];
+  (Array.isArray(raw.popup) ? raw.popup : []).forEach((id) => {
+    const text = String(id || "");
+    if (ids.indexOf(text) < 0 || text === "home" || text === "customize" || popup.indexOf(text) >= 0) return;
+    popup.push(text);
+  });
+  return { order: order, hidden: hidden, sections: sections, popup: popup, at: Number(raw.at) || 0 };
 }
 
 function cleanBottomNavSync(raw) {
