@@ -1714,6 +1714,7 @@ SI18n.addPack("es", {
   "Feed failing": "Canal con fallos",
   "Feed paused": "Canal en pausa",
   "Last fetch": "Última lectura",
+  "Last updated": "Última actualización",
   "Search feeds": "Buscar canales",
   "All platforms": "Todas las plataformas",
   "All groups": "Todos los grupos",
