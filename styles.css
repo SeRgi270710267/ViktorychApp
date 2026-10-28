@@ -6085,3 +6085,9 @@ img, video { max-width: 100%; }
 .device-actions { display: flex; gap: 8px; flex: none; }
 .device-actions .outline { padding: 4px 12px; min-height: 32px; }
 .device-tag { font-size: 12px; font-weight: 500; color: var(--muted, #71767b); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+
+/* Own post menu: X-style red Delete, and the edit dialog. */
+.menu .menu-danger { color: #f4212e; }
+.menu .menu-danger svg, .menu .menu-danger .ic { color: #f4212e; fill: currentColor; }
+.post-edit-sheet { max-width: 600px; }
+.post-edit-text { width: 100%; min-height: 120px; resize: vertical; border: 0; outline: none; background: transparent; color: inherit; font: inherit; font-size: 20px; line-height: 24px; padding: 4px 0; box-sizing: border-box; }
