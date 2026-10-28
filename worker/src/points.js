@@ -4,6 +4,7 @@
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { blocksEither } from "./social.js";
 import { planNotification } from "./notifications.js";
+import { canSeeAudience, setListGrants } from "./audience.js";
 import { commitBundled } from "./mention-store.js";
 
 export const POINTS_SCHEMA = [
@@ -268,7 +269,7 @@ async function accountByHandle(env, handle) {
 
 async function prefsOf(env, publicId) {
   const row = await env.DB.prepare("SELECT hide_tab, who FROM gift_prefs WHERE public_id = ?").bind(publicId).first();
-  const who = row && (row.who === "followers" || row.who === "nobody") ? row.who : "everyone";
+  const who = row && (row.who === "followers" || row.who === "nobody" || row.who === "list") ? row.who : "everyone";
   return { hideTab: !!(row && row.hide_tab === 1), who: who };
 }
 
@@ -489,13 +490,15 @@ export async function handlePoints(request, env, path, deps) {
     return deps.json(200, { ok: true, awarded: 0, inviterAwarded: paid.awarded || 0 });
   }
   if (path === "/v1/gifts/prefs" && request.method === "PUT") {
-    const body = await deps.readJson(request, 1000);
+    const body = await deps.readJson(request, 8000);
     if (body.error) return deps.json(400, { error: body.error });
-    const who = body.who === "followers" || body.who === "nobody" ? body.who : "everyone";
+    const who = body.who === "followers" || body.who === "nobody" || body.who === "list" ? body.who : "everyone";
     const hide = body.hideTab ? 1 : 0;
     await env.DB.prepare(
       "INSERT INTO gift_prefs (public_id, hide_tab, who, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET hide_tab = excluded.hide_tab, who = excluded.who, updated_at = excluded.updated_at"
     ).bind(viewer.public_id, hide, who, Date.now()).run();
+    if (who === "list") await setListGrants(env, viewer.public_id, "gift", viewer.public_id, body.listIds);
+    else await setListGrants(env, viewer.public_id, "gift", viewer.public_id, []);
     return deps.json(200, { hideTab: !!hide, who: who });
   }
   if (path === "/v1/gifts/send" && request.method === "POST") {
@@ -518,6 +521,16 @@ export async function handlePoints(request, env, path, deps) {
         "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id = ?"
       ).bind(viewer.public_id, "app:" + recipient.public_id).first();
       if (!follow) return deps.json(403, { error: "followers" });
+    }
+    if (prefs.who === "list") {
+      const allowed = await canSeeAudience(env, {
+        viewerId: viewer.public_id,
+        ownerId: recipient.public_id,
+        audience: "list",
+        subject: "gift",
+        subjectId: recipient.public_id
+      });
+      if (!allowed) return deps.json(403, { error: "closed" });
     }
     const privacy = body.privacy === "private" || body.privacy === "anonymous" ? body.privacy : "public";
     const mode = body.mode === "reply" || body.mode === "dm" ? body.mode : "direct";

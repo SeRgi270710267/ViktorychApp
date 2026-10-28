@@ -3434,6 +3434,9 @@ html.tv-on #new-posts { display: none; }
   box-shadow: 0 0 15px var(--shadow), 0 0 3px 1px var(--shadow-tight);
   padding: 8px 0 4px;
 }
+@media (max-width: 499px) {
+  .menu.bell-menu { border-radius: 16px 16px 0 0; }
+}
 .bell-grab { display: none; }
 .bell-choice {
   display: flex;

@@ -282,3 +282,60 @@ test("points ledger, caps, clawback, and gift privacy", async () => {
   const free = await call("/v1/gifts/daily", { ip: "203.0.113.109" });
   assert.equal(free.body.enabled, false);
 });
+
+test("gift sending honors a private audience list", async () => {
+  const ada = await signup("user_e", "203.0.113.130");
+  const bea = await signup("user_f", "203.0.113.131");
+  const cam = await signup("user_g", "203.0.113.132");
+  await call("/v1/follows", { method: "PUT", ip: "203.0.113.133", token: bea.token, body: { id: "app:" + ada.account.publicId } });
+  await call("/v1/follows", { method: "PUT", ip: "203.0.113.134", token: cam.token, body: { id: "app:" + ada.account.publicId } });
+  const list = await call("/v1/audience-lists", {
+    method: "POST",
+    ip: "203.0.113.135",
+    token: ada.token,
+    body: { name: "gifters", icon: "🎁" }
+  });
+  assert.equal(list.status, 201);
+  await call("/v1/audience-lists/" + list.body.id + "/members", {
+    method: "POST",
+    ip: "203.0.113.136",
+    token: ada.token,
+    body: { handle: "user_f" }
+  });
+  const prefs = await call("/v1/gifts/prefs", {
+    method: "PUT",
+    ip: "203.0.113.137",
+    token: ada.token,
+    body: { who: "list", listIds: [list.body.id] }
+  });
+  assert.equal(prefs.status, 200);
+  const member = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.138",
+    token: bea.token,
+    body: { giftId: "heart", handle: "user_e", privacy: "public" }
+  });
+  assert.equal(member.status, 201);
+  const outsider = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.139",
+    token: cam.token,
+    body: { giftId: "heart", handle: "user_e", privacy: "public" }
+  });
+  assert.equal(outsider.status, 403);
+  await call("/v1/audience-lists/" + list.body.id + "/members", {
+    method: "DELETE",
+    ip: "203.0.113.140",
+    token: ada.token,
+    body: { handle: "user_f" }
+  });
+  const removed = await call("/v1/gifts/send", {
+    method: "POST",
+    ip: "203.0.113.141",
+    token: bea.token,
+    body: { giftId: "heart", handle: "user_e", privacy: "public" }
+  });
+  assert.equal(removed.status, 403);
+  const hidden = await call("/v1/audience-lists", { ip: "203.0.113.142", token: bea.token });
+  assert.equal(JSON.stringify(hidden.body).includes("gifters"), false);
+});
