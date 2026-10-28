@@ -24,7 +24,7 @@
   var MAX_BYTES = 20 * 1024 * 1024;
   var EMOJI = ["😀", "😂", "🥹", "😊", "😍", "😘", "😎", "🤔", "😅", "😭", "😡", "🤯", "😴", "🤝", "👍", "👎", "👏", "🙏", "🔥", "✨", "💯", "❤️", "💙", "🎉", "✅", "❌", "⭐", "📌", "💬", "👀", "🚀", "🌈", "☀️", "🌙", "⚡", "🎵", "📷", "🎬", "🏆", "💡"];
   var DURATIONS = [[5, "5 minutes"], [60, "1 hour"], [1440, "1 day"], [4320, "3 days"], [10080, "7 days"]];
-  var AUDIENCES = [["everyone", "Everyone"], ["following", "Accounts you follow"], ["friends", "Friends"]];
+  var AUDIENCES = [["everyone", "Everyone"], ["following", "Accounts you follow"], ["friends", "Friends"], ["lists", "Custom lists"]];
   var REPLIES = [["everyone", "Everyone can reply"], ["following", "Accounts you follow"], ["verified", "Verified accounts"], ["mentioned", "Only accounts you mention"]];
   var host = null;
   var modalSlot = "post";
@@ -472,7 +472,7 @@
     var inlinePost = sheet ? "" : '<div class="xc-inline-actions"><button class="xc-post-btn" type="button" data-act="xc-publish" data-slot="' + esc(slotName) + '"' + (canPost(slot) ? "" : " disabled") + ">" + esc(tr("Post")) + "</button></div>";
     var inlineTools = sheet ? "" : tools(slotName, false) + inlinePost;
     return '<div class="xc' + (sheet ? "" : " xc-inline") + '" data-slot="' + esc(slotName) + '">' + face + '<div class="xc-main">'
-      + contextHtml(slot) + audienceHtml(slotName) + textBlock(slotName, 0, placeholder) + note + aiExtra(slotName)
+      + contextHtml(slot) + audienceHtml(slotName) + (slot.audience === "lists" && typeof window !== "undefined" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(slot.listIds || []) : "") + textBlock(slotName, 0, placeholder) + note + aiExtra(slotName)
       + mediaHtml(slotName) + pollHtml(slotName) + emojiHtml(slotName) + extraBits(slotName) + hiddenFiles(slotName)
       + inlineTools + threadHtml(slotName) + "</div></div>";
   }
@@ -520,7 +520,6 @@
       return '<div class="xc-draft"><button class="xc-draft-open" type="button" data-act="xc-open-draft" data-id="' + esc(item.id) + '" data-slot="' + esc(item.slot || slotName) + '">' + esc(line || tr("Drafts")) + '</button><button type="button" data-act="xc-delete-draft" data-id="' + esc(item.id) + '">' + esc(tr("Delete draft")) + "</button></div>";
     }).join("");
   }
-
   function header(slotName) {
     return '<div class="xc-top"><button class="xc-tool xc-close" type="button" data-act="close-modal" aria-label="' + esc(tr("Close")) + '">' + icon(ICONS.close) + '</button><div class="grow"></div><button class="xc-drafts-link" type="button" data-act="xc-drafts" data-slot="' + esc(slotName) + '">' + esc(tr("Drafts")) + "</button>" + postButton(slotName) + "</div>";
   }
@@ -711,6 +710,7 @@
           poll: index === 0 && pollReady(slot) ? { options: slot.poll.options.map(function (item) { return String(item || "").trim(); }).filter(Boolean), minutes: slot.poll.minutes } : null,
           location: index === 0 ? slot.location : "",
           audience: slot.audience,
+          listIds: slot.audience === "lists" && typeof window !== "undefined" && window.AudienceLists && window.AudienceLists.selectedLists ? window.AudienceLists.selectedLists(document) : [],
           replyControl: slot.replyControl,
           scheduleAt: index === 0 ? (slot.scheduleAt || 0) : 0
         };

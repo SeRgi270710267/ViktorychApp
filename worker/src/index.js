@@ -42,6 +42,10 @@ import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
+import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
+import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
+import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
+import { HIGHLIGHT_SCHEMA, handleHighlights } from "./highlights.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -94,6 +98,8 @@ function areaFor(path, method) {
   if (text === "/v1/owner/keys" || text.startsWith("/v1/owner/keys/")) return "owner-keys";
   if (text.startsWith("/v1/media/") || (text === "/v1/profile" && method === "PATCH")) return "upload";
   if (text === "/v1/profile" || text.startsWith("/v1/profile/") || text === "/v1/about" || text.startsWith("/v1/about/")) return "profile";
+  if (text.startsWith("/v1/stories")) return "upload";
+  if (text === "/v1/notes" || text.startsWith("/v1/notes/") || text === "/v1/story-bar" || text === "/v1/highlights" || text.startsWith("/v1/highlights/") || text === "/v1/audience-lists" || text.startsWith("/v1/audience-lists/")) return "profile";
   if (text.startsWith("/v1/communities")) return "feed";
   return "worker";
 }
@@ -229,7 +235,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -5206,6 +5212,26 @@ async function route(request, env, ctx) {
     const handled = await handleDiscordAlertRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
     if (handled) return handled;
   }
+  if (path === "/v1/audience-lists" || path.startsWith("/v1/audience-lists/")) {
+    const listed = await handleAudienceLists(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (listed) return listed;
+  }
+  if (path === "/v1/highlights" || path.startsWith("/v1/highlights/")) {
+    const shown = await handleHighlights(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (shown) return shown;
+  }
+  if (path === "/v1/story-bar") {
+    const bar = await handleStoryBar(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (bar) return bar;
+  }
+  if (path === "/v1/notes" || path.startsWith("/v1/notes/")) {
+    const noted = await handleNotes(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (noted) return noted;
+  }
+  if (path === "/v1/stories" || path.startsWith("/v1/stories/")) {
+    const told = await handleAppStories(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (told) return told;
+  }
   if (path === "/v1/notifications" || path === "/v1/notifications/read" || path === "/v1/push/vapid" || path === "/v1/push/subscribe") {
     const handled = await handleNotificationRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
     if (handled) return handled;
@@ -5238,7 +5264,7 @@ export default {
   async scheduled(event, env, ctx) {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at), sweepLive(env, at), publishDuePosts(env, at)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at), sweepLive(env, at), publishDuePosts(env, at), sweepExpiredStories(env, at), sweepExpiredNotes(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
