@@ -2521,7 +2521,7 @@ function signupPayload() {
       var handle = item.handle || "";
       var href = "#/u/" + encodeURIComponent(platform) + "/" + encodeURIComponent(handle);
       var iconHtml = platformIcon(platform);
-      return '<a class="acct-ident-chip" href="' + esc(href) + '" title="' + esc(tr("Verified Identity")) + '">' +
+      return '<a class="acct-ident-chip' + (item.hidden ? " is-hidden" : "") + '" href="' + esc(href) + '" title="' + esc(tr("Verified Identity")) + '">' +
         iconHtml +
         '<span class="acct-ident-handle">@' + esc(handle) + '</span>' +
         verifiedSvg() +
@@ -2539,12 +2539,28 @@ function signupPayload() {
     } else {
       itemsHtml = '<div class="acct-ident-settings-list">' + list.map(function (item) {
         var plat = (item.platform || "x").toUpperCase();
-        return '<div class="acct-ident-item">' +
+        var audience = item.audience || "public";
+        var options = [
+          ["public", tr("Everyone")],
+          ["followers", tr("Followers")],
+          ["friends", tr("Mutuals")],
+          ["only", tr("Only me")],
+          ["list", tr("Custom list")]
+        ];
+        var choices = options.map(function (pair) {
+          return '<option value="' + esc(pair[0]) + '"' + (audience === pair[0] ? " selected" : "") + ">" + esc(pair[1]) + "</option>";
+        }).join("");
+        var checks = audience === "list" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(item.listIds || []) : "";
+        var shown = item.hidden !== true;
+        return '<div class="acct-ident-item" data-ident-id="' + esc(String(item.id || "")) + '">' +
           '<div class="acct-ident-item-left">' +
             platformIcon(item.platform) +
             '<span class="acct-ident-item-name"><b>' + esc(plat) + '</b> @' + esc(item.handle) + '</span>' +
             verifiedSvg() +
           '</div>' +
+          '<label class="acct-ident-aud"><span>' + esc(tr("Who can see this")) + '</span><select data-acct="identity-audience" data-id="' + esc(String(item.id || "")) + '" aria-label="' + esc(tr("Who can see this")) + '">' + choices + "</select></label>" +
+          checks +
+          '<button class="tab-switch' + (shown ? " on" : "") + '" type="button" role="switch" aria-checked="' + (shown ? "true" : "false") + '" data-acct="identity-show" data-id="' + esc(String(item.id || "")) + '"><span>' + esc(tr("Show on profile")) + "</span><i></i></button>" +
           '<button class="outline acct-ident-unlink" type="button" data-acct="unlink-identity" data-platform="' + esc(item.platform) + '" data-handle="' + esc(item.handle) + '" data-id="' + esc(String(item.id || "")) + '">' + esc(tr("Unlink")) + '</button>' +
         '</div>';
       }).join("") + '</div>';
@@ -3587,6 +3603,14 @@ function signupPayload() {
       errorText = "";
       paint();
     }
+    else if (act === "identity-show") {
+      var showId = acct.dataset.id || "";
+      var nextShown = acct.getAttribute("aria-checked") !== "true";
+      acct.setAttribute("aria-checked", nextShown ? "true" : "false");
+      acct.classList.toggle("on", nextShown);
+      saveIdentityPrivacy(showId);
+      return;
+    }
     else if (act === "unlink-identity") {
       var session = readSession();
       if (!session) return;
@@ -3949,6 +3973,42 @@ else if (act === "copy-id") copyAccountId();
     loadPhoto(url).then(function (objectUrl) { if (objectUrl) img.src = objectUrl; });
   }, true);
   document.addEventListener("click", onClick, true);
+  document.addEventListener("change", function (event) {
+    var node = event.target;
+    if (!node || !node.getAttribute || node.getAttribute("data-acct") !== "identity-audience") return;
+    saveIdentityPrivacy(node.getAttribute("data-id") || "");
+  }, true);
+
+  function saveIdentityPrivacy(id) {
+    var session = readSession();
+    if (!session || !session.token || !id) return;
+    var row = document.querySelector('.acct-ident-item[data-ident-id="' + id + '"]');
+    if (!row) return;
+    var select = row.querySelector("[data-acct='identity-audience']");
+    var shown = row.querySelector("[data-acct='identity-show']");
+    var value = select ? select.value : "public";
+    var audience = value.indexOf("list:") === 0 ? "list" : value;
+    var listIds = [];
+    if (audience === "list") {
+      if (value.indexOf("list:") === 0) listIds.push(value.slice(5));
+      row.querySelectorAll("[data-aud-list]").forEach(function (box) {
+        if (box.checked && listIds.indexOf(box.getAttribute("data-aud-list")) < 0) listIds.push(box.getAttribute("data-aud-list"));
+      });
+    }
+    var hidden = !(shown && shown.getAttribute("aria-checked") === "true");
+    api("/v1/account/identities/" + encodeURIComponent(id), {
+      method: "PATCH",
+      token: session.token,
+      body: { audience: audience, hidden: hidden, listIds: listIds }
+    }).then(function (res) {
+      if (!res || !res.ok || !res.identity || !session.account) return;
+      session.account.identities = (session.account.identities || []).map(function (item) {
+        return String(item.id) === String(id) ? res.identity : item;
+      });
+      writeSession(session);
+      if (profiles[skel(session.account.handle)]) profiles[skel(session.account.handle)].identities = session.account.identities;
+    });
+  }
   document.addEventListener("change", function (event) {
     var el = event.target;
     if (!el || el.getAttribute("data-acct") !== "media-vis") return;
