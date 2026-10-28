@@ -577,6 +577,28 @@
     return true;
   }
 
+  function tryMetaEmbed(img) {
+    if (!img || img.dataset.metaEmbed === "1") return false;
+    const tile = img.closest(".tile");
+    if (!tile) return false;
+    const id = String(tile.dataset.id || "");
+    const post = id ? posts().find((row) => String(row.id) === id || String(row.statusId) === id || canonicalId(row) === id) : null;
+    if (!post || (post.platform !== "instagram" && post.platform !== "threads")) return false;
+    const src = metaEmbedSrc(post);
+    if (!src) return false;
+    const frame = document.createElement("iframe");
+    frame.src = src;
+    frame.title = post.platform === "threads" ? "Threads" : "Instagram";
+    frame.loading = "lazy";
+    frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    tile.classList.add("embed-tile");
+    tile.classList.remove("broken");
+    tile.textContent = "";
+    tile.appendChild(frame);
+    img.dataset.metaEmbed = "1";
+    return true;
+  }
+
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
     if (tryDeviceRelay(img)) return;
@@ -589,6 +611,7 @@
       img.replaceWith(span);
       return;
     }
+    if (tryMetaEmbed(img)) return;
     const tile = img.closest(".tile") || img.closest(".media") || img.closest(".yt-thumb");
     if (tile) tile.classList.add("broken");
     img.remove();
@@ -1052,7 +1075,7 @@
   };
 
   const ALL_NAV_IDS = [
-    "home", "explore", "notifications", "messages", "feeds", "lists",
+    "home", "explore", "notifications", "messages", "online", "feeds", "lists",
     "history", "music", "shorts", "games", "tv", "communities",
     "subscriptions", "vault", "settings"
   ];
@@ -2026,6 +2049,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<img class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
   }
 
+  function affSlot(source) {
+    if (!window.ViktorychAffiliations) return "";
+    const direct = source && (source.authorId || source.publicId);
+    if (/^\d{12}$/.test(String(direct || ""))) return window.ViktorychAffiliations.slot(direct);
+    const raw = source && source.id;
+    if (typeof raw === "string" && /^app:\d{12}$/.test(raw)) return window.ViktorychAffiliations.slot(raw.slice(4));
+    return "";
+  }
+
   function badge(type) {
     if (!type || type === "none") return "";
     const cls = type === "business" ? "business" : type === "government" ? "government" : "blue";
@@ -2693,10 +2725,41 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
   }
 
+  function metaEmbedSrc(post) {
+    const code = metaCode(post);
+    if (!code) return "";
+    const url = String((post && post.url) || "");
+    if ((post && post.platform) === "threads" || /threads\.(?:com|net)\//.test(url)) {
+      return "https://www.threads.net/t/" + code + "/embed";
+    }
+    if (/instagram\.com\/reel\//.test(url)) return "https://www.instagram.com/reel/" + code + "/embed/captioned/";
+    return "https://www.instagram.com/p/" + code + "/embed/captioned/";
+  }
+
+  function metaNeedsEmbed(post, media) {
+    if (!post || (post.platform !== "instagram" && post.platform !== "threads")) return false;
+    const url = String((media && (media.url || media.poster)) || "");
+    if (!url || deadMediaUrl(url)) return true;
+    if (oePast(url) || oePast(media && media.poster)) return true;
+    return false;
+  }
+
+  function metaEmbedHtml(post) {
+    const src = metaEmbedSrc(post);
+    if (!src) return "";
+    const open = post.url ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("Open original")}</a>` : "";
+    const title = post.platform === "threads" ? "Threads" : "Instagram";
+    return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(src)}" title="${esc(title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>${open}</div></div>`;
+  }
+
   function mediaHtml(items, eager, post) {
     const files = attachmentHtml(items);
     const list = (items || []).filter((m) => m && m.type !== "file" && m.type !== "audio" && (m.url || m.poster || m.videoId || m.type === "embed" || m.type === "placeholder" || m.type === "video" || m.type === "animated_gif")).slice(0, 4);
     if (!list.length) return files;
+    if (post && list.length && list.every((item) => metaNeedsEmbed(post, item))) {
+      const embed = metaEmbedHtml(post);
+      if (embed) return embed + files;
+    }
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
       let src = String(embed.url || "");
@@ -6887,7 +6950,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${avatar(face.avatar, post.author || post.handle)}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || tr("Post noun"))}${badge(face.verified)}</a>
+            <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || tr("Post noun"))}${badge(face.verified)}</a>${affSlot(post)}
             ${tombHandle ? `<a class="handle" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + post.handle)}">@${esc(tombHandle)}</a>` : ""}
             ${when}
             ${sourceBadge(post.platform)}
@@ -7027,7 +7090,7 @@ const here = parseRoute();
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>
+            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
             ${displayHandle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(displayHandle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
@@ -7117,6 +7180,7 @@ const here = parseRoute();
     }
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "points") return { name: "points", query };
+    if (parts[0] === "online") return { name: "online", query };
     if (parts[0] === "store") return { name: "store", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
@@ -7205,10 +7269,16 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
+  function onlineCountHtml() {
+    const count = window.ViktorychPresence && window.ViktorychPresence.onlineCount ? window.ViktorychPresence.onlineCount() : 0;
+    if (!count) return "";
+    return `<span class="online-count">${count > 20 ? "20+" : String(count)}</span>`;
+  }
+
   function navItem(href, name, label, on, aria, tip, extraClass) {
     const onName = name + tr("On");
     const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
-    const badge = name === "bell" ? bellBadgeHtml() : "";
+    const badge = name === "bell" ? bellBadgeHtml() : (href === "#/online" ? onlineCountHtml() : "");
     const accessible = aria || label;
     const tooltipText = tip || (name === "muBack" ? tr("Back") : label);
     const tight = name === "muBack" ? " nav-back" : "";
@@ -7230,6 +7300,8 @@ const here = parseRoute();
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
         return { id: "messages", href: "#/messages", icon: "mail", label: tr("Messages"), active: (r) => r.name === "messages" };
+      case "online":
+        return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
         return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" };
       case "lists":
@@ -7390,6 +7462,7 @@ const here = parseRoute();
     const custom = getNavCustom();
     const openFolders = getNavOpenFolders();
     const hiddenSet = new Set(custom.hidden || []);
+    const popupIds = typeof getDrawerMenu === "function" ? new Set((getDrawerMenu().popup) || []) : new Set();
     const folderMap = new Map();
     custom.folders.forEach((f) => folderMap.set(f.id, f));
 
@@ -7400,7 +7473,7 @@ const here = parseRoute();
         const folder = folderMap.get(fId);
         if (!folder) return;
         const visibleItems = (folder.items || []).filter((itId) => {
-          if (hiddenSet.has(itId)) return false;
+          if (hiddenSet.has(itId) || popupIds.has(itId)) return false;
           const def = navItemDef(itId);
           if (!def) return false;
           if (def.visible && !def.visible()) return false;
@@ -7453,7 +7526,7 @@ const here = parseRoute();
           </div>
         </div>`;
       } else {
-        if (hiddenSet.has(entry)) return;
+        if (hiddenSet.has(entry) || popupIds.has(entry)) return;
         const def = navItemDef(entry);
         if (!def) return;
         if (def.visible && !def.visible()) return;
@@ -7463,10 +7536,12 @@ const here = parseRoute();
     });
 
     html += sidebarDrawerLinks(route);
-    html += `<button type="button" class="nav-item" data-act="go-live" aria-label="${esc(tr("Go live"))}" data-tooltip="${esc(tr("Go live"))}">
-      <span class="nav-ico">${icon("video")}</span>
-      <span class="nav-label">${esc(tr("Go live"))}</span>
-    </button>`;
+    if (typeof isStandalone !== "function" || !isStandalone()) {
+      html += `<button type="button" class="nav-item" data-act="install" aria-label="${esc(tr("Install app"))}" data-tooltip="${esc(tr("Install app"))}">
+        <span class="nav-ico">${icon("plus")}</span>
+        <span class="nav-label">${esc(tr("Install app"))}</span>
+      </button>`;
+    }
     html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
       <span class="nav-ico">${icon("sliders")}</span>
       <span class="nav-label">${tr("Customize sidebar")}</span>
@@ -7483,7 +7558,8 @@ const here = parseRoute();
     const row = (id) => {
       if (!id || seen.has(id)) return "";
       seen.add(id);
-      if (id === "logout") return "";
+      if (id === "logout" || (menu.popup || []).indexOf(id) >= 0) return "";
+      if (id === "online") return "";
       if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
       const navId = DRAWER_NAV[id];
       if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
@@ -7502,7 +7578,20 @@ const here = parseRoute();
         if (!section) return;
         const inner = (section.items || []).map(row).join("");
         if (!inner) return;
-        html += `<div class="nav-section">${esc(section.name)}</div>${inner}`;
+        const folderId = "menu-" + section.id;
+        const openMap = getNavOpenFolders();
+        const isOpen = !!openMap[folderId];
+        const mark = section.emoji
+          ? `<span class="nav-folder-emoji">${esc(section.emoji)}</span>`
+          : icon(isOpen ? "folderOpen" : "folder");
+        html += `<div class="nav-folder-wrapper${isOpen ? " open" : ""}" data-folder-id="${esc(folderId)}">
+          <button type="button" class="nav-item nav-folder-btn${isOpen ? " open" : ""}" data-act="toggle-nav-folder" data-folder-id="${esc(folderId)}" aria-expanded="${isOpen ? "true" : "false"}" aria-label="${esc(section.name)}" data-tooltip="${esc(section.name)}">
+            <span class="nav-ico">${mark}</span>
+            <span class="nav-label">${esc(section.name)}</span>
+            <span class="nav-folder-caret">${icon("caret")}</span>
+          </button>
+          <div class="nav-folder-children${isOpen ? " open" : ""}">${inner}</div>
+        </div>`;
         return;
       }
       html += row(entry);
@@ -7564,6 +7653,7 @@ const here = parseRoute();
       <form class="side-search" data-act="search-form">
         <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="${tr("Search")}" aria-label="${tr("Search")}"></label>
       </form>
+      ${(!STATE.settings || STATE.settings.friendsRail !== false) && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
       ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
@@ -7573,7 +7663,7 @@ const here = parseRoute();
   const BOTTOM_NAV_MIN = 2;
   const BOTTOM_NAV_MAX = 6;
   const BOTTOM_NAV_IDS = [
-    "home", "explore", "tv", "communities", "notifications", "messages",
+    "home", "explore", "tv", "communities", "notifications", "messages", "online",
     "feeds", "lists", "history", "music", "shorts", "games",
     "subscriptions", "vault", "storage", "settings"
   ];
@@ -7604,6 +7694,10 @@ const here = parseRoute();
       ? raw.hidden
       : BOTTOM_NAV_IDS.filter((id) => !BOTTOM_NAV_DEFAULT_ON.includes(id));
     const hiddenSet = new Set(hiddenSrc.filter((id) => id !== "home" && BOTTOM_NAV_IDS.includes(id)));
+    // A saved bar from before an item existed keeps that new item hidden.
+    if (raw && Array.isArray(raw.order) && Array.isArray(raw.hidden)) {
+      BOTTOM_NAV_IDS.forEach((id) => { if (id !== "home" && raw.order.indexOf(id) < 0) hiddenSet.add(id); });
+    }
     if (order.indexOf("home") < 0) order.unshift("home");
     const visibleIds = () => order.filter((id) => !hiddenSet.has(id) && (id === "home" || bottomNavAvailable(id)));
     let visibleNow = visibleIds();
@@ -7677,7 +7771,7 @@ const here = parseRoute();
 
   function bottomNavLink(def, route) {
     const on = !!(def.active && def.active(route));
-    const badge = def.icon === "bell" ? bellBadgeHtml() : "";
+    const badge = def.icon === "bell" ? bellBadgeHtml() : (def.id === "online" ? onlineCountHtml() : "");
     const label = bottomBarLabel(def);
     return `<a href="${esc(def.href)}" class="${on ? "on" : ""}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(bottomGlyph(def, on))}${badge}</span></a>`;
   }
@@ -8053,7 +8147,7 @@ const here = parseRoute();
     if (which === "foryou") {
       label = tr("For you options");
       const box = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="foryou-toggle" data-key="${key}"`, text, on, glyph, "check");
-      body = box("reposts", tr("Show reposts"), STATE.settings.forYouReposts !== false, "repost") + box("replies", tr("Show replies in tab"), STATE.settings.forYouReplies !== false, "reply") + viewItems("foryou");
+      body = box("reposts", tr("Show reposts"), STATE.settings.forYouReposts !== false, "repost") + box("replies", tr("Show replies in tab"), STATE.settings.forYouReplies !== false, "reply") + box("communities", tr("Communities in Home"), STATE.settings.communitiesHome !== false, "posts") + viewItems("foryou");
     } else if (cat) {
       label = tr("{label} options", { label: cat.name });
       const sort = cat.sort === "popular" ? "popular" : "recent";
@@ -8268,6 +8362,7 @@ const here = parseRoute();
     publicStamp = now;
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
       if (samePublicPosts(res.posts)) return;
       publicPosts = res.posts;
       render();
@@ -8278,6 +8373,11 @@ const here = parseRoute();
     const token = accountToken();
     const root = accountsApi();
     if (!token || !root) return;
+    document.querySelectorAll(".pub-cm").forEach((el) => {
+      const text = el.querySelector("[data-pub-cm]");
+      const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.classList.toggle("is-on", !!(text && !reduced && text.scrollWidth > el.clientWidth + 1));
+    });
     document.querySelectorAll("[data-public-media]").forEach((el) => {
       if (el.getAttribute("data-public-tried")) return;
       const path = el.getAttribute("data-public-media") || "";
@@ -8321,8 +8421,12 @@ const here = parseRoute();
     const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
     const mine = signedAccount();
     const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
-    const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
-    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
+    const community = post.community && post.community.name ? post.community : null;
+    const chip = community ? `<a class="pub-cm" href="#/communities/${encodeURIComponent(community.name)}/${encodeURIComponent(community.rootId || post.id)}" aria-label="${esc(tr("Community"))}"><span class="pub-cm-track"><span class="pub-cm-text" data-pub-cm>${esc(community.name)}</span><span class="pub-cm-text" aria-hidden="true">${esc(community.name)}</span></span></a>` : "";
+    const counts = community ? `<span class="pub-counts">${esc(String(post.replyCount || 0))} ${esc(tr("Replies"))} · ${esc(String(post.likes || 0))} ${esc(tr("Likes"))}</span>` : "";
+    const muteCommunity = community ? `<button type="button" data-act="mute-community" data-name="${esc(community.name)}">${esc(tr("Mute community"))}</button>` : "";
+    const tools = self ? muteCommunity : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>${muteCommunity}`;
+    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="pub-head"><div class="name">${esc(post.authorName || "")}${affSlot(post)}</div>${chip}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}${counts}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button>${community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`}${tools}</div></article>`;
   }
 
   function welcomeHtml(route) {
@@ -8346,6 +8450,53 @@ const here = parseRoute();
       body = `<h2>${esc(tr("Notifications can wait until you ask"))}</h2><button class="save" type="button" data-act="welcome-notify">${esc(tr("Notify me about new posts"))}</button>`;
     }
     return `<section class="welcome-sheet" data-welcome>${body}<div class="welcome-actions"><button type="button" data-act="welcome-skip">${esc(tr("Not now"))}</button><button class="save" type="button" data-act="welcome-next">${esc(tr("Next"))}</button></div></section>`;
+  }
+
+  function installChoice() {
+    const api = window.ViktorychNative;
+    if (api && api.readInstallChoice) return api.readInstallChoice();
+    return { mode: "", at: 0 };
+  }
+
+  function installKindNow() {
+    const api = window.ViktorychNative;
+    const ua = navigator.userAgent || "";
+    const extra = { touchMac: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 };
+    if (api && api.installKind) return api.installKind(ua, extra);
+    return "hint";
+  }
+
+  function canAutoInstall(reason) {
+    if (isStandalone()) return false;
+    const choice = installChoice();
+    const api = window.ViktorychNative;
+    const dismissed = choice.mode === "never" ? true : choice.mode;
+    if (api && api.shouldOfferInstall) {
+      return api.shouldOfferInstall({
+        standalone: false,
+        dismissed: dismissed,
+        dismissedAt: choice.at,
+        now: Date.now(),
+        afterSignup: reason === "signup",
+        prompt: reason !== "signup" && !!STATE.installPrompt,
+        ios: /iphone|ipad|ipod/i.test(navigator.userAgent || "")
+      });
+    }
+    return reason === "signup" && choice.mode !== "never";
+  }
+
+  function offerInstall(reason) {
+    if (reason !== "manual" && !canAutoInstall(reason)) return false;
+    if (isStandalone()) return false;
+    STATE.modal = "install";
+    return true;
+  }
+
+  function finishWelcome(notify, offer) {
+    writeWelcome({ step: 2, done: true });
+    if (offer !== false) offerInstall("signup");
+    render();
+    if (notify) enableNotifications();
   }
 
   function deviceScheduleKey() { return "viktorychapp-x-schedule-v1"; }
@@ -8400,6 +8551,7 @@ const here = parseRoute();
       const done = (res) => {
         if (res && res.status === 201 && res.post) {
           if (!(res.scheduled || part.scheduleAt) && res.post.id) publicPosts = [res.post].concat(publicPosts.filter((item) => item.id !== res.post.id));
+          if (res.post.community && res.post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(res.post.community.name);
           publicStamp = Date.now();
           sendAt(index + 1, res.post.id);
           return;
@@ -8460,6 +8612,7 @@ const here = parseRoute();
     const finishOk = (post) => {
       if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
       if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      if (post && post.community && post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(post.community.name);
       publicStamp = Date.now();
       toast(tr("Your post was sent."));
       render();
@@ -9764,7 +9917,7 @@ const here = parseRoute();
     const appId = String(row.id || "").startsWith("app:") ? String(row.id).slice(4) : "";
     let face = avatar(row.avatar, row.name || row.handle, "", row.avatarFace);
     if (/^\d{12}$/.test(appId) && window.ViktorychPresence) face = window.ViktorychPresence.wrap(appId, face);
-    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${face}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span><span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
+    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${face}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span>${affSlot(row)}<span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
   }
 
   function connectionsHash(route, tab) {
@@ -9801,9 +9954,12 @@ const here = parseRoute();
     const sub = subject.handle ? "@" + subject.handle : "";
     const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
     const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.ownsSubject ? window.ViktorychAccounts.ownsSubject(subject.id, subject.handle) : false;
-    const requestN = mineGraph && window.ViktorychAccounts.listPack ? (window.ViktorychAccounts.listPack(subject.id, "requests").accounts ? window.ViktorychAccounts.listPack(subject.id, "requests").accounts.length : 0) : 0;
+    if (mineGraph && window.ViktorychAccounts.ensureFriendRequests) window.ViktorychAccounts.ensureFriendRequests();
+    const followN = mineGraph && window.ViktorychAccounts.listPack ? ((window.ViktorychAccounts.listPack(subject.id, "requests").accounts || []).length) : 0;
+    const friendN = mineGraph && window.ViktorychAccounts.pendingFriendRequests ? window.ViktorychAccounts.pendingFriendRequests() : 0;
+    const requestN = followN + friendN;
     const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Follow requests"))}${requestBadge}</span></a>` : ""}` : "";
+    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -10026,7 +10182,7 @@ const here = parseRoute();
     const face = authorFace(post);
     const statusHandle = internalPostHandle(post.handle || "", post);
     const names = `<div>
-            <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
+            <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>${affSlot(post)}
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(statusHandle)}</a>
           </div>
           <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
@@ -11437,7 +11593,7 @@ const here = parseRoute();
       <div class="xa-author">
         <a href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}" aria-label="${esc(post.author || who || tr("Profile"))}">${avatar(face.avatar || post.avatar, post.author)}</a>
         <div class="who">
-          <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}">${esc(post.author || who)}${badge(face.verified || post.verifiedType)}</a>
+          <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}">${esc(post.author || who)}${badge(face.verified || post.verifiedType)}</a>${affSlot(post)}
           ${who ? `<a class="handle" href="${esc(accountHash(post.platform, who))}">@${esc(who)}</a>` : ""}
         </div>
         ${who ? followButtonClean(followId) : ""}
@@ -12133,6 +12289,37 @@ const here = parseRoute();
     return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
   }
 
+  function installOfferHtml() {
+    const kind = installKindNow();
+    const api = window.ViktorychNative;
+    const ua = navigator.userAgent || "";
+    const extra = { touchMac: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 };
+    const arrow = api && api.installArrow ? api.installArrow(kind, ua, extra) : (kind === "ios-safari" ? "down" : "");
+    const benefit = (glyph, text) => `<li class="install-benefit"><span aria-hidden="true">${icon(glyph)}</span><span>${esc(text)}</span></li>`;
+    const benefits = `<ul class="install-benefits">${benefit("home", tr("It opens full screen and loads faster."))}${benefit("check", tr("Posts you already opened stay available offline."))}${benefit("plus", tr("It stays on your Home Screen or desktop."))}</ul>`;
+    let body = "";
+    if (kind === "ios-browser") {
+      body = `<p>${esc(tr("This browser can’t add the app to your Home Screen. Open the page in Safari, then use the Share button."))}</p>`;
+    } else if (kind === "ios-safari") {
+      body = `${benefits}<ol class="install-steps"><li>${esc(tr("Tap Share in Safari"))}</li><li>${esc(tr("Choose Add to Home Screen"))}</li><li>${esc(tr("Tap Add"))}</li></ol>`;
+    } else if (kind === "native" || STATE.installPrompt) {
+      body = `${benefits}<button class="install-go" type="button" data-act="install-go">${esc(tr("Install"))}</button>`;
+    } else {
+      body = `<p>${esc(tr("In Safari, use Share or File, then Add to Dock. In Firefox, use the install icon in the address bar."))}</p>`;
+    }
+    const pointer = arrow ? `<div class="install-arrow is-${arrow}" aria-hidden="true">${icon(arrow === "up" ? "arrowUp" : "arrowDown")}</div>` : "";
+    return `<div class="install-offer" data-act="stop"><div class="install-panel" role="dialog" aria-modal="true" aria-label="${esc(tr("Install app"))}">
+      <div class="install-grab" aria-hidden="true"></div>
+      <h2>${esc(tr("Install app"))}</h2>
+      ${body}
+      ${pointer}
+      <div class="install-actions">
+        <button type="button" data-act="install-later">${esc(tr("Later"))}</button>
+        <button type="button" data-act="install-never">${esc(tr("Don't show again"))}</button>
+      </div>
+    </div></div>`;
+  }
+
   function installControl() {
     if (isStandalone()) return "";
     return `<button class="primary" type="button" data-act="install">${tr("Install app")}</button>`;
@@ -12399,6 +12586,7 @@ const here = parseRoute();
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${notesSwitch}
         ${presenceBlock}
+        ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
@@ -12492,16 +12680,18 @@ const here = parseRoute();
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
+      ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
     </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "explore", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
     home: "home",
     explore: "explore",
+    notifications: "notifications",
     communities: "communities",
     lists: "lists",
     studio: "feeds",
@@ -12519,7 +12709,7 @@ const here = parseRoute();
   };
 
   function defaultDrawerMenu() {
-    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA), hidden: [], at: 0 };
+    return { sections: [], order: DRAWER_PRIMARY.concat(DRAWER_EXTRA).filter((id) => id !== "settings" && id !== "logout"), hidden: [], popup: ["settings", "logout"], at: 0 };
   }
 
   function cleanDrawerMenu(raw) {
@@ -12532,13 +12722,28 @@ const here = parseRoute();
       const id = String(section.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
       if (!id || sectionIds.has(id)) return;
       sectionIds.add(id);
-      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+      const name = String(section.name || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
+      const emoji = String(section.emoji || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
       const items = [];
       (Array.isArray(section.items) ? section.items : []).forEach((item) => {
         if (DRAWER_IDS.indexOf(item) < 0 || items.indexOf(item) >= 0) return;
         items.push(item);
       });
-      sections.push({ id: id, name: name, items: items });
+      sections.push({ id: id, name: name, emoji: emoji, items: items });
+    });
+    const popup = [];
+    const popupSeen = new Set();
+    const takePopup = (id) => {
+      if (!id || popupSeen.has(id) || DRAWER_IDS.indexOf(id) < 0) return;
+      if (id === "home" || id === "customize") return;
+      popupSeen.add(id);
+      popup.push(id);
+    };
+    (Array.isArray(raw.popup) ? raw.popup : ["settings", "logout"]).forEach(takePopup);
+    ["settings", "logout"].forEach(takePopup);
+    const popupSet = new Set(popup);
+    sections.forEach((section) => {
+      section.items = section.items.filter((item) => !popupSet.has(item));
     });
     const inSection = new Set();
     sections.forEach((section) => section.items.forEach((item) => inSection.add(item)));
@@ -12546,7 +12751,7 @@ const here = parseRoute();
     const seen = new Set();
     (Array.isArray(raw.order) ? raw.order : []).forEach((entry) => {
       const text = String(entry || "");
-      if (!text || seen.has(text)) return;
+      if (!text || seen.has(text) || popupSet.has(text)) return;
       if (text.indexOf("section:") === 0) {
         const id = text.slice(8);
         if (!sectionIds.has(id)) return;
@@ -12563,7 +12768,7 @@ const here = parseRoute();
       if (order.indexOf(key) < 0) order.push(key);
     });
     DRAWER_IDS.forEach((id) => {
-      if (seen.has(id) || inSection.has(id)) return;
+      if (seen.has(id) || inSection.has(id) || popupSet.has(id)) return;
       order.push(id);
     });
     const hidden = [];
@@ -12571,7 +12776,7 @@ const here = parseRoute();
       if (DRAWER_IDS.indexOf(id) < 0 || DRAWER_LOCKED.indexOf(id) >= 0 || hidden.indexOf(id) >= 0) return;
       hidden.push(id);
     });
-    return { sections: sections, order: order, hidden: hidden, at: Number(raw.at) || 0 };
+    return { sections: sections, order: order, hidden: hidden, popup: popup, at: Number(raw.at) || 0 };
   }
 
   function getDrawerMenu() {
@@ -12658,7 +12863,10 @@ const here = parseRoute();
   function drawerItem(id) {
     const mine = signedAccount();
     if (id === "home") return { id: id, href: "#/", icon: "home", label: tr("Home"), locked: true };
+    if (id === "explore") return { id: id, href: "#/explore", icon: "search", label: tr("Explore") };
+    if (id === "notifications") return { id: id, href: "#/notifications", icon: "bell", label: tr("Notifications") };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
+    if (id === "online") return { id: id, href: "#/online", icon: "user", label: tr("Friends"), extra: onlineCountHtml() };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
     if (id === "bookmarks") return { id: id, href: "#/bookmarks", icon: "bookmark", label: tr("Bookmarks") };
@@ -12666,7 +12874,7 @@ const here = parseRoute();
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
     if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
-    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Follow requests") };
+    if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests") };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
@@ -12692,15 +12900,17 @@ const here = parseRoute();
     const eye = locked
       ? `<span class="drawer-lock" title="${esc(tr("This item always stays available"))}" aria-label="${esc(tr("This item always stays available"))}">${icon("lock")}</span>`
       : `<button class="icon-btn drawer-eye" type="button" data-act="drawer-vis" data-id="${esc(item.id)}" aria-pressed="${hidden ? "false" : "true"}" aria-label="${esc(hidden ? tr("Hidden") : tr("Visible"))}">${icon(hidden ? "eyeOff" : "eye")}</button>`;
+    const inPopup = (menu.popup || []).indexOf(item.id) >= 0;
+    const placeLocked = item.id === "home" || item.id === "customize" || item.id === "settings" || item.id === "logout";
+    const placeBtn = placeLocked ? "" : `<button class="outline drawer-place" type="button" data-act="drawer-place" data-id="${esc(item.id)}" data-place="${inPopup ? "sidebar" : "popup"}">${esc(inPopup ? tr("Sidebar") : tr("Profile popup"))}</button>`;
     const sections = (menu.sections || []).map((section) => `<option value="${esc(section.id)}">${esc(section.name)}</option>`).join("");
-    const placed = (menu.sections || []).find((section) => (section.items || []).indexOf(item.id) >= 0);
-    const move = locked ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
+    const move = locked || inPopup ? "" : `<select class="drawer-move" data-drawer-move="${esc(item.id)}" aria-label="${esc(tr("Add section"))}"><option value="">${esc(tr("Main list"))}</option>${sections}</select>`;
     return `<div class="drawer-edit-row${hidden ? " is-hidden" : ""}" data-drawer-key="${esc(item.id)}">
       <button class="drawer-grip" type="button" data-drag-drawer="${esc(item.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
       <span class="drawer-ico">${item.icon === "gear" ? menuIcon("gear") : icon(item.icon)}</span>
       <span class="drawer-label">${esc(item.label)}</span>
       ${move}
-      ${placed ? "" : ""}
+      ${placeBtn}
       ${eye}
     </div>`;
   }
@@ -12721,11 +12931,13 @@ const here = parseRoute();
           return editing ? drawerEditRow(item, menu) : drawerViewRow(item);
         }).join("");
         if (!editing && !inner) return "";
-        if (!editing) return `<div class="drawer-section-label">${esc(section.name)}</div>${inner}`;
+        const folderMark = section.emoji ? esc(section.emoji) + " " : "";
+        if (!editing) return `<details class="drawer-folder"><summary class="drawer-folder-sum">${folderMark}${esc(section.name)}</summary>${inner}</details>`;
         return `<div class="drawer-section" data-drawer-key="section:${esc(section.id)}">
           <div class="drawer-section-head">
             <button class="drawer-grip" type="button" data-drag-drawer="section:${esc(section.id)}" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
-            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Section name"))}">
+            <input class="drawer-section-emoji" data-section-id="${esc(section.id)}" value="${esc(section.emoji || "")}" maxlength="8" aria-label="${esc(tr("Emoji"))}" placeholder="${esc(tr("Emoji"))}">
+            <input class="drawer-section-name" data-section-id="${esc(section.id)}" value="${esc(section.name)}" maxlength="40" aria-label="${esc(tr("Folder name"))}">
             <button class="icon-btn" type="button" data-act="drawer-drop-section" data-id="${esc(section.id)}" aria-label="${esc(tr("Delete"))}">${icon("trash")}</button>
           </div>
           <div class="drawer-section-items" data-section-items="${esc(section.id)}">${inner}</div>
@@ -12743,13 +12955,27 @@ const here = parseRoute();
     }).join("");
     if (!editing) {
       const open = !!STATE.drawerFold;
-      return blocks + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
+      const popupRows = (menu.popup || []).map((id) => {
+        if (hidden.has(id)) return "";
+        const item = drawerItem(id);
+        if (!item || item.accountMenu) return "";
+        return drawerViewRow(item);
+      }).join("");
+      return blocks + popupRows + `<button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button><div class="drawer-fold-body"${open ? "" : " hidden"}>${more.join("")}</div>`;
     }
+    const popupBlocks = (menu.popup || []).map((id) => {
+      const item = drawerItem(id);
+      return item ? drawerEditRow(item, menu) : "";
+    }).join("");
     return `<div class="drawer-edit-bar">
-      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("Add section"))}</button>
+      <button class="outline" type="button" data-act="drawer-add-section">${esc(tr("New folder"))}</button>
       <button class="outline" type="button" data-act="drawer-reset">${esc(tr("Reset to default"))}</button>
       <button class="save" type="button" data-act="drawer-edit-done">${esc(tr("Done"))}</button>
-    </div><p class="drawer-edit-note">${esc(tr("This item always stays available"))}</p><div class="drawer-edit-list">${blocks}</div>`;
+    </div><p class="drawer-edit-note">${esc(tr("Home stays in the sidebar. Settings and Log out stay in the profile popup."))}</p>
+      <h3 class="drawer-place-title">${esc(tr("Sidebar"))}</h3>
+      <div class="drawer-edit-list" data-place="sidebar">${blocks}</div>
+      <h3 class="drawer-place-title">${esc(tr("Profile popup"))}</h3>
+      <div class="drawer-edit-list" data-place="popup">${popupBlocks}</div>`;
   }
 
   function drawerRow(href, glyph, label, extra) {
@@ -12814,13 +13040,25 @@ const here = parseRoute();
   function accountPopup() {
     if (!STATE.accountMenu || !sidebarOwnsNav()) return "";
     const mine = signedAccount();
+    const menu = getDrawerMenu();
+    const hidden = new Set(menu.hidden || []);
     const accounts = mine
       ? `<button type="button" data-acct="login">${esc(tr("Add account"))}</button>`
       : "";
-    const leave = mine
-      ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
-      : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
-    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}<a href="#/settings">${esc(tr("Settings"))}</a>${leave}</div></div>`;
+    const rows = (menu.popup || []).map((id) => {
+      if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
+      const item = drawerItem(id);
+      if (!item) return "";
+      if (id === "logout") {
+        return mine
+          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+          : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+      }
+      if (item.act) return `<button type="button" data-act="${esc(item.act)}">${esc(item.label)}</button>`;
+      if (!item.href) return "";
+      return `<a href="${esc(item.href)}">${esc(item.label)}</a>`;
+    }).join("");
+    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${rows}</div></div>`;
   }
 
   function drawerEditModal() {
@@ -12977,16 +13215,7 @@ if (STATE.histClear) {
         <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (!STATE.modal) return "";
-    if (STATE.modal === "install") {
-      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      const steps = ios
-        ? `<div class="install-step"><span>1</span> ${tr("Tap Share in Safari")}</div><div class="install-step"><span>2</span> ${tr("Choose Add to Home Screen")}</div><div class="install-step"><span>3</span> ${tr("Tap Add")}</div>`
-        : `<p>${tr("Use the install icon in the address bar, or open the browser menu and choose Install app.")}</p>`;
-      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Install app"))}" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Install app")}</h2></div>
-        <div class="modal-body install-sheet">${steps}</div>
-      </div></div>`;
-    }
+    if (STATE.modal === "install") return installOfferHtml();
     if (STATE.modal === "compose") {
       if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
         const composed = window.ViktorychXCompose.modalHtml();
@@ -13030,7 +13259,7 @@ if (STATE.histClear) {
       const q = (STATE.draft.q || "").toLowerCase();
       const rows = feeds().filter((f) => !q || (f.name + " " + f.handle).toLowerCase().includes(q)).map((f) => {
         const on = (list.members || []).includes(f.id);
-        return `<div class="acct-row">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}</span><span class="handle">@${esc(f.handle)}</span></span><button class="follow${on ? " following" : ""}" data-act="${on ? "member-remove" : "member-add"}" data-id="${esc(f.id)}">${on ? ("<span class='f'" + ">" + tr("Member") + "<" + "/span><span class='u'" + ">" + tr("Remove") + "<" + "/span>") : tr("Add")}</button></div>`;
+        return `<div class="acct-row">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${affSlot(f)}</span><span class="handle">@${esc(f.handle)}</span></span><button class="follow${on ? " following" : ""}" data-act="${on ? "member-remove" : "member-add"}" data-id="${esc(f.id)}">${on ? ("<span class='f'" + ">" + tr("Member") + "<" + "/span><span class='u'" + ">" + tr("Remove") + "<" + "/span>") : tr("Add")}</button></div>`;
       }).join("");
       return `<div class="modal-back"><div class="modal" role="dialog">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Manage members")}</h2></div>
@@ -13255,7 +13484,7 @@ if (STATE.histClear) {
     delete pendingReposts[postKey];
   }
 
-  function profilePostsHtml(account) {
+  function profilePostsHtml(account, tab) {
     const lib = repostLib();
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
@@ -13305,7 +13534,11 @@ if (STATE.histClear) {
       });
     }
     postList.sort(byStamp);
-    return { html: postList.map((post) => card(post, "")).join(""), count: postList.length };
+    let shown = postList;
+    if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
+    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
+    else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
+    return { html: shown.map((post) => card(post, "")).join(""), count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -14670,6 +14903,7 @@ if (STATE.histClear) {
     const params = new URLSearchParams(location.search);
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
+    if (route.name === "online") return pageHead(tr("Friends")) + ((window.ViktorychPresence && window.ViktorychPresence.pageHtml && window.ViktorychPresence.pageHtml()) || "");
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces" && !route.id) {
       const models = window.Spaces && window.Spaces.models ? window.Spaces.models() : [];
@@ -15068,6 +15302,33 @@ if (STATE.histClear) {
     });
   }
 
+  function pillMarqueeHtml(text) {
+    const safe = esc(text || "");
+    return `<span class="sp-marquee" data-sp-marquee><span class="sp-marquee-clip"><span class="sp-marquee-track"><span class="sp-marquee-copy"><span class="sp-marquee-text">${safe}</span></span><span class="sp-marquee-copy" aria-hidden="true"><span class="sp-marquee-text">${safe}</span></span></span></span></span>`;
+  }
+
+  function fitPillLabels(root) {
+    if (!root) return;
+    const nodes = root.querySelectorAll(".story-folder, .cm-chip, .yt-chip > span, .hist-chip, .friends-pill, .gchip, .ptabs .tab > span, .pill > span");
+    nodes.forEach((el) => {
+      if (el.querySelector("[data-sp-marquee]") || el.closest("[data-sp-marquee]")) return;
+      const loose = [];
+      el.childNodes.forEach((node) => {
+        if (node.nodeType === 3 && String(node.textContent || "").trim()) loose.push(node);
+      });
+      if (!el.childElementCount && String(el.textContent || "").trim()) {
+        el.innerHTML = pillMarqueeHtml(el.textContent);
+        return;
+      }
+      loose.forEach((node) => {
+        const span = document.createElement("span");
+        span.className = "pill-fit";
+        span.innerHTML = pillMarqueeHtml(String(node.textContent || "").trim());
+        node.replaceWith(span);
+      });
+    });
+  }
+
   function commitApp(html) {
     const app = document.getElementById("app");
     if (!app) return;
@@ -15080,6 +15341,7 @@ if (STATE.histClear) {
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
     hscrollSettle({ reveal: true });
+    if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
 
   function hscrollRestoreSaved(retry) {
@@ -15107,6 +15369,8 @@ if (STATE.histClear) {
   }
 
   function hscrollSettle(opts) {
+    if (window.ViktorychAffiliations && window.ViktorychAffiliations.paint) window.ViktorychAffiliations.paint();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.fitRequestPills) window.ViktorychAccounts.fitRequestPills();
     const reveal = !!(opts && opts.reveal && hscrollNav);
     const root = document.getElementById("app") || document.body;
     const store = hscrollStore();
@@ -15493,6 +15757,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       watchHydration();
       scheduleDetect();
       if (window.FeedsTranslate) window.FeedsTranslate.paint();
+      fitPillLabels(document.getElementById("app"));
       if (window.SIntelMusic && window.SIntelMusic.afterRender) window.SIntelMusic.afterRender(route);
       syncMediaSession();
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);
@@ -15801,6 +16066,20 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "drawer-edit-done") { STATE.drawerEdit = false; render(); return; }
     if (act === "drawer-reset") { saveDrawerMenu(null); render(); return; }
+    if (act === "drawer-place") {
+      const id = el.dataset.id || "";
+      const place = el.dataset.place || "";
+      if (!id || id === "home" || id === "customize" || id === "settings" || id === "logout") return;
+      const menu = getDrawerMenu();
+      menu.popup = (menu.popup || []).filter((item) => item !== id);
+      menu.sections.forEach((section) => { section.items = section.items.filter((item) => item !== id); });
+      menu.order = (menu.order || []).filter((entry) => entry !== id);
+      if (place === "popup") menu.popup.push(id);
+      else if (menu.order.indexOf(id) < 0) menu.order.push(id);
+      saveDrawerMenu(menu);
+      render();
+      return;
+    }
     if (act === "drawer-vis") {
       const id = el.dataset.id || "";
       if (DRAWER_LOCKED.indexOf(id) >= 0) return;
@@ -15816,7 +16095,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "drawer-add-section") {
       const menu = getDrawerMenu();
       const id = "s" + Date.now().toString(36);
-      menu.sections.push({ id: id, name: tr("Section name"), items: [] });
+      menu.sections.push({ id: id, name: tr("Folder name"), emoji: "", items: [] });
       menu.order.push("section:" + id);
       saveDrawerMenu(menu);
       render();
@@ -15906,8 +16185,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "open-nav-customize") {
-      STATE.modal = "nav-customize";
+      STATE.drawerEdit = true;
+      STATE.accountMenu = false;
+      STATE.modal = null;
       STATE.navNewFolderOpen = false;
+      STATE.drawer = !sidebarOwnsNav();
       render();
       return;
     }
@@ -16097,8 +16379,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "welcome-skip") {
-      writeWelcome({ step: 0, done: true });
-      render();
+      finishWelcome(false, false);
       return;
     }
     if (act === "welcome-follow") {
@@ -16108,8 +16389,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "welcome-notify") {
-      writeWelcome({ step: 2, done: true });
-      enableNotifications();
+      finishWelcome(true);
       return;
     }
     if (act === "welcome-next") {
@@ -16132,14 +16412,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (step === 1) {
         const ids = Object.keys(welcomeFollows).filter((id) => welcomeFollows[id]);
         if (ids.length) applyFollow(ids, true);
-        writeWelcome({ step: 2, done: false });
-        render();
-        return;
-      }
-      writeWelcome({ step: 2, done: true });
+      writeWelcome({ step: 2, done: false });
       render();
       return;
     }
+    finishWelcome(false);
+    return;
+  }
     if (act === "show-public-spam") {
       if (!STATE.publicSpam) STATE.publicSpam = {};
       STATE.publicSpam[el.dataset.id || ""] = true;
@@ -16175,6 +16454,15 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       accountCall(path, { method: "POST", body: { accountId: el.dataset.id || "" } }).then(() => {
         publicStamp = 0;
         schedulePublicPosts();
+      }).catch(() => {});
+      return;
+    }
+    if (act === "mute-community") {
+      const name = el.dataset.name || "";
+      accountCall("/v1/communities/" + encodeURIComponent(name) + "/feed", { method: "POST", body: { muted: true } }).then(() => {
+        publicPosts = publicPosts.filter((item) => !(item.community && item.community.name === name));
+        toast(tr("Mute community"));
+        render();
       }).catch(() => {});
       return;
     }
@@ -16293,6 +16581,17 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "foryou-toggle") {
+      if (el.dataset.key === "communities") {
+        STATE.settings.communitiesHome = STATE.settings.communitiesHome === false;
+        saveSettings();
+        accountCall("/v1/communities/home", { method: "POST", body: { showHome: STATE.settings.communitiesHome !== false } }).then(() => {
+          publicStamp = 0;
+          schedulePublicPosts();
+        }).catch(() => {});
+        STATE.tabMenu = "foryou";
+        render();
+        return;
+      }
       const key = el.dataset.key === "replies" ? "forYouReplies" : "forYouReposts";
       STATE.settings[key] = STATE.settings[key] === false;
       STATE.forYouSnap = null;
@@ -16592,18 +16891,28 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "install") {
       STATE.drawer = false;
       STATE.drawerEdit = false;
-      if (STATE.installPrompt) {
-        const prompt = STATE.installPrompt;
-        STATE.installPrompt = null;
-        Promise.resolve()
-          .then(() => prompt.prompt())
-          .then(() => prompt.userChoice)
-          .then(() => render())
-          .catch(() => { STATE.modal = "install"; render(); });
-        render();
-        return;
-      }
+      STATE.accountMenu = false;
+      if (isStandalone()) return;
       STATE.modal = "install";
+      render();
+      return;
+    }
+    if (act === "install-go") {
+      const prompt = STATE.installPrompt || window.__VIKTORYCH_INSTALL;
+      if (prompt && prompt.prompt) {
+        STATE.installPrompt = null;
+        window.__VIKTORYCH_INSTALL = null;
+        Promise.resolve().then(() => prompt.prompt()).then(() => prompt.userChoice).then(() => {
+          STATE.modal = null;
+          render();
+        }).catch(() => render());
+      }
+      return;
+    }
+    if (act === "install-later" || act === "install-never") {
+      const api = window.ViktorychNative;
+      if (api && api.writeInstallChoice) api.writeInstallChoice(act === "install-never" ? "never" : "later");
+      STATE.modal = null;
       render();
       return;
     }
@@ -21241,6 +21550,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       });
     }
     bindGestures();
+    setTimeout(() => {
+      if (STATE.modal || isStandalone() || !accountToken()) return;
+      const choice = installChoice();
+      if (choice.mode !== "later") return;
+      if (offerInstall("return")) render();
+    }, 1600);
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       STATE.installPrompt = event;
@@ -22505,16 +22820,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         document.removeEventListener("pointermove", cancel);
       }, { once: true });
     });
+    const drawerLists = () => [...document.querySelectorAll(".drawer-edit-list, .drawer-section-items")];
+    const listAt = (event) => drawerLists().find((list) => {
+      const box = list.getBoundingClientRect();
+      return event.clientY >= box.top && event.clientY <= box.bottom;
+    });
     document.addEventListener("pointermove", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
-      const node = drag.list.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
+      const node = document.querySelector(`[data-drawer-key="${CSS.escape(drag.key)}"]`);
       if (!node) return;
-      const over = rows.find((el) => {
-        if (el === node) return false;
-        const box = el.getBoundingClientRect();
-        return event.clientY < box.top + box.height / 2;
-      });
+      const sectionKey = String(drag.key).indexOf("section:") === 0;
+      const locked = DRAWER_LOCKED.indexOf(drag.key) >= 0;
+      const hit = listAt(event);
+      if (hit && hit !== drag.list && !sectionKey && !locked && !(hit.classList.contains("drawer-section-items") && locked)) {
+        hit.appendChild(node);
+        drag.list = hit;
+      }
+      const rows = [...drag.list.querySelectorAll(":scope > [data-drawer-key]")];
       const target = rows.find((el) => {
         if (el === node) return false;
         const box = el.getBoundingClientRect();
@@ -22528,19 +22850,49 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     document.addEventListener("pointerup", (event) => {
       if (!drag || event.pointerId !== drag.pointer) return;
-      const list = drag.list;
-      const keys = [...list.querySelectorAll(":scope > [data-drawer-key]")].map((el) => el.getAttribute("data-drawer-key"));
       drag = null;
-      commitDrawerKeys(list, keys);
+      const sidebar = document.querySelector(".drawer-edit-list[data-place='sidebar']") || document.querySelector(".drawer-edit-list");
+      const popupList = document.querySelector(".drawer-edit-list[data-place='popup']");
+      if (!sidebar) return;
+      const menu = getDrawerMenu();
+      const order = [];
+      const sectionItems = {};
+      const readKey = (el) => el.getAttribute("data-drawer-key") || "";
+      [...sidebar.children].forEach((el) => {
+        const key = readKey(el);
+        if (!key) return;
+        if (key.indexOf("section:") === 0) {
+          order.push(key);
+          const id = key.slice(8);
+          sectionItems[id] = [...el.querySelectorAll(":scope > .drawer-section-items > [data-drawer-key]")].map(readKey).filter((item) => DRAWER_IDS.indexOf(item) >= 0 && item !== "home" && item !== "settings" && item !== "logout" && item !== "customize");
+          return;
+        }
+        if (DRAWER_IDS.indexOf(key) >= 0) order.push(key);
+      });
+      const popup = [];
+      if (popupList) {
+        [...popupList.querySelectorAll(":scope > [data-drawer-key]")].forEach((el) => {
+          const key = readKey(el);
+          if (DRAWER_IDS.indexOf(key) >= 0 && key !== "home" && key !== "customize") popup.push(key);
+        });
+      }
+      menu.order = order;
+      menu.popup = popup;
+      menu.sections.forEach((section) => {
+        if (sectionItems[section.id]) section.items = sectionItems[section.id];
+      });
+      saveDrawerMenu(menu);
+      render();
     });
     document.addEventListener("change", (event) => {
       const el = event.target;
       if (!el) return;
-      if (el.classList && el.classList.contains("drawer-section-name")) {
+      if (el.classList && (el.classList.contains("drawer-section-name") || el.classList.contains("drawer-section-emoji"))) {
         const menu = getDrawerMenu();
         const section = (menu.sections || []).find((item) => item.id === el.dataset.sectionId);
         if (!section) return;
-        section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Section name");
+        if (el.classList.contains("drawer-section-emoji")) section.emoji = String(el.value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 8);
+        else section.name = String(el.value || "").replace(/\s+/g, " ").trim().slice(0, 40) || tr("Folder name");
         saveDrawerMenu(menu);
         return;
       }

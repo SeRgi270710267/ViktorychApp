@@ -1,0 +1,74 @@
+.aff-slot { display: inline-flex; vertical-align: middle; margin-left: 4px; padding: 0; border: 0; background: transparent; }
+.aff-slot[hidden] { display: none; }
+.aff-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: #2f3336;
+  vertical-align: middle;
+  line-height: 0;
+}
+.aff-badge img { width: 14px; height: 14px; display: block; }
+.name .aff-badge, .pname .aff-badge { margin-left: 4px; }
+.aff-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.4);
+}
+.aff-sheet-card {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  width: 280px;
+  max-width: calc(100% - 32px);
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--sheet, #000);
+  color: var(--text, #e7e9ea);
+  border: 1px solid var(--line, #2f3336);
+  text-align: center;
+}
+.aff-sheet-card img {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+}
+.aff-sheet-card b { display: block; margin-top: 8px; font-size: 17px; }
+.aff-sheet-card a { display: inline-block; margin-top: 8px; color: var(--blue, #1d9bf0); }
+.aff-sheet-card button[data-aff-close] {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 20px;
+}
+.aff-about-row { display: flex; align-items: center; margin: 0 16px 8px; }
+.aff-about-row span { margin-left: 8px; }
+.aff-pills { display: flex; flex-wrap: nowrap; overflow-x: auto; margin: 0 16px 8px; }
+.aff-pill {
+  flex: none;
+  height: 32px;
+  margin-right: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+.aff-pill.on { background: var(--text, #e7e9ea); color: var(--bg, #000); }

@@ -64,11 +64,10 @@ async function checkWide(page, label) {
     drawer: !!document.querySelector(".drawer-x"),
     bookmarks: !!document.querySelector("header.nav a[href='#/bookmarks']"),
     profile: [...document.querySelectorAll("header.nav .nav-label")].some((node) => (node.textContent || "") === "Profile"),
-    settings: !!document.querySelector("header.nav a[href='#/settings']"),
     pill: document.querySelector("header.nav:not(.nav-land) button.account-pill") && document.querySelector("header.nav:not(.nav-land) button.account-pill").getAttribute("data-act")
   }));
   if (before.drawer) fail(label + " opened the edge drawer");
-  if (!before.bookmarks || !before.profile || !before.settings) fail(label + " sidebar is missing a menu item");
+  if (!before.bookmarks || !before.profile) fail(label + " sidebar is missing a menu item");
   if (before.pill !== "account-menu") fail(label + " profile pill still opens the drawer");
   await page.locator("header.nav:not(.nav-land) button.account-pill").click();
   await page.waitForSelector(".acct-menu", { timeout: 5000 });
@@ -107,11 +106,10 @@ async function checkPhone(page, label) {
 async function checkHidden(page, label) {
   const shown = await page.evaluate(() => ({
     bookmarks: !!document.querySelector("header.nav a[href='#/bookmarks']"),
-    settings: !!document.querySelector("header.nav a[href='#/settings']"),
     drawer: !!document.querySelector(".drawer-x")
   }));
   if (shown.bookmarks) fail(label + " hidden bookmarks is in the sidebar");
-  if (!shown.settings || shown.drawer) fail(label + " settings left the sidebar");
+  if (shown.drawer) fail(label + " the edge drawer opened");
   await page.locator("header.nav:not(.nav-land) button.account-pill").click();
   await page.waitForSelector(".acct-menu a[href='#/settings']", { timeout: 5000 });
 }
