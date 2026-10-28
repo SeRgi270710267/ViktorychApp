@@ -2187,6 +2187,8 @@ SI18n.addPack("en", {
   "Hide in For You": "Hide in For You",
   "View in Feeds": "View in Feeds",
   "Edit menu": "Edit menu",
+  "Edit tabs": "Edit tabs",
+  "Show this order to visitors": "Show this order to visitors",
   "Add section": "Add section",
   "Section name": "Section name",
   "Main list": "Main list",

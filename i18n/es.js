@@ -2187,6 +2187,8 @@ SI18n.addPack("es", {
   "Hide in For You": "Ocultar en Para ti",
   "View in Feeds": "Ver en Feeds",
   "Edit menu": "Editar menú",
+  "Edit tabs": "Editar pestañas",
+  "Show this order to visitors": "Mostrar este orden a quienes visitan el perfil",
   "Add section": "Añadir sección",
   "Section name": "Nombre de la sección",
   "Main list": "Lista principal",
