@@ -339,3 +339,71 @@ test("gift sending honors a private audience list", async () => {
   const hidden = await call("/v1/audience-lists", { ip: "203.0.113.142", token: bea.token });
   assert.equal(JSON.stringify(hidden.body).includes("gifters"), false);
 });
+
+test("status emojis charge the catalog price and join the receiver collection", async () => {
+  const ada = await signup("user_h", "203.0.113.160");
+  const bea = await signup("user_i", "203.0.113.161");
+  const broke = await call("/v1/status-emoji/buy", {
+    method: "POST",
+    ip: "203.0.113.162",
+    token: bea.token,
+    body: { emojiId: "regal", price: 1 }
+  });
+  assert.equal(broke.status, 402);
+  const bought = await call("/v1/status-emoji/buy", {
+    method: "POST",
+    ip: "203.0.113.163",
+    token: ada.token,
+    body: { emojiId: "flame", price: 1 }
+  });
+  assert.equal(bought.status, 201, JSON.stringify(bought.body));
+  assert.equal(bought.body.balance, 5);
+  assert.equal(bought.body.emoji, "🔥");
+  const again = await call("/v1/status-emoji/buy", {
+    method: "POST",
+    ip: "203.0.113.164",
+    token: ada.token,
+    body: { emojiId: "flame", price: 1 }
+  });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.already, true);
+  const held = await call("/v1/points", { ip: "203.0.113.165", token: ada.token });
+  assert.equal(held.body.balance, 5);
+  const self = await call("/v1/status-emoji/gift", {
+    method: "POST",
+    ip: "203.0.113.166",
+    token: ada.token,
+    body: { emojiId: "party", handle: "user_h", price: 1 }
+  });
+  assert.equal(self.status, 400);
+  await bindings.DB.prepare("UPDATE point_balances SET balance = 100 WHERE public_id = ?").bind(ada.account.publicId).run();
+  const gift = await call("/v1/status-emoji/gift", {
+    method: "POST",
+    ip: "203.0.113.167",
+    token: ada.token,
+    body: { emojiId: "party", handle: "user_i", price: 1, message: "for you", privacy: "public" }
+  });
+  assert.equal(gift.status, 201, JSON.stringify(gift.body));
+  assert.equal(gift.body.balance, 75);
+  const mine = await call("/v1/status-emoji", { ip: "203.0.113.168", token: bea.token });
+  const party = mine.body.emojis.find((item) => item.id === "party");
+  assert.equal(party.owned, true);
+  const gifts = await call("/v1/gifts?handle=user_i", { ip: "203.0.113.169", token: bea.token });
+  assert.equal(gifts.body.gifts.some((item) => item.emoji === "🎉"), true);
+  const set = await call("/v1/presence", {
+    method: "PATCH",
+    ip: "203.0.113.170",
+    token: bea.token,
+    body: { status: { emoji: "🎉", clear: "never", audience: "everyone" } }
+  });
+  assert.equal(set.status, 200, JSON.stringify(set.body));
+  assert.equal(set.body.emoji, "🎉");
+  const denied = await call("/v1/presence", {
+    method: "PATCH",
+    ip: "203.0.113.171",
+    token: ada.token,
+    body: { status: { emoji: "🐉", clear: "never" } }
+  });
+  assert.equal(denied.status, 403);
+  assert.equal(JSON.stringify(denied.body).includes(ada.account.publicId), false);
+});

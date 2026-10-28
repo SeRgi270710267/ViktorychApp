@@ -301,58 +301,41 @@ async function main() {
     const colors = await evaluate(`(function(){
       var host = document.getElementById("card");
       host.innerHTML = window.ViktorychPresence.wrap("123456789012", '<span class="ava"></span>');
-      var dot = host.querySelector(".presence-dot");
-      function sample(theme, state) {
-        if (theme) document.documentElement.setAttribute("data-theme", theme);
-        else document.documentElement.removeAttribute("data-theme");
-        dot.parentNode.setAttribute("data-presence", state);
-        var style = getComputedStyle(dot);
-        return { bg: style.backgroundColor, ring: style.borderTopColor };
-      }
-      return {
-        online: sample("", "online"),
-        idle: sample("dim", "idle"),
-        dnd: sample("default", "dnd"),
-        off: sample("", "offline"),
-        dimOff: sample("dim", "offline"),
-        lightOff: sample("default", "offline")
-      };
+      var badge = host.querySelector(".status-badge");
+      return { text: badge ? badge.textContent : "", dot: !!host.querySelector(".presence-dot") };
     })()`);
-    assert.equal(colors.online.bg, "rgb(0, 186, 124)");
-    assert.equal(colors.online.ring, "rgb(0, 0, 0)");
-    assert.equal(colors.idle.bg, "rgb(245, 166, 35)");
-    assert.equal(colors.idle.ring, "rgb(21, 32, 43)");
-    assert.equal(colors.dnd.bg, "rgb(244, 33, 46)");
-    assert.equal(colors.dnd.ring, "rgb(255, 255, 255)");
-    assert.equal(colors.off.bg, "rgb(113, 118, 123)");
-    assert.equal(colors.dimOff.bg, "rgb(139, 152, 165)");
-    assert.equal(colors.lightOff.bg, "rgb(83, 100, 113)");
+    assert.equal(colors.dot, false);
+    assert.equal(colors.text, "🟢");
     const sheet = await evaluate(`(function(){
       window.ViktorychPresence.open(document.body);
-      document.querySelector('[data-value="dnd"]').click();
-      var muted = window.ViktorychPresence.mutesNotices();
-      document.querySelector("[data-presence-emoji]").value = "✨";
-      document.querySelector("[data-presence-text]").value = "reading";
-      document.querySelector('[data-presence="save"]').click();
       return new Promise(function(resolve){
         setTimeout(function(){
-          var line = window.ViktorychPresence.linesHtml("123456789012");
-          var noon = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
-          var spoken = window.PresenceRules.lastSeenPhrase(noon - 5 * 60 * 1000, noon, true, "offline");
-          resolve({
-            muted: muted,
-            chime: window.ViktorychPresence.chime() === undefined,
-            line: line,
-            phrase: window.t(spoken.key, spoken.vars),
-            sheet: !document.querySelector(".presence-sheet").hidden,
-            wide: document.querySelector(".presence-sheet").className
-          });
-        }, 80);
+          document.querySelector('[data-value="dnd"]').click();
+          var muted = window.ViktorychPresence.mutesNotices();
+          document.querySelector("[data-presence-emoji]").value = "✨";
+          document.querySelector('[data-presence="save"]').click();
+          setTimeout(function(){
+            var line = window.ViktorychPresence.linesHtml("123456789012");
+            var badge = document.querySelector("#card .status-badge");
+            var noon = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
+            var spoken = window.PresenceRules.lastSeenPhrase(noon - 5 * 60 * 1000, noon, true, "offline");
+            resolve({
+              muted: muted,
+              chime: window.ViktorychPresence.chime() === undefined,
+              line: line,
+              badge: badge ? badge.textContent : "",
+              phrase: window.t(spoken.key, spoken.vars),
+              sheet: !document.querySelector(".presence-sheet").hidden,
+              wide: document.querySelector(".presence-sheet").className
+            });
+          }, 80);
+        }, 60);
       });
     })()`);
     assert.equal(sheet.muted, true);
     assert.equal(sheet.chime, true);
-    assert.ok(sheet.line.includes("reading"));
+    assert.equal(sheet.badge, "✨");
+    assert.equal(sheet.line.includes("reading"), false);
     assert.equal(sheet.phrase, "last seen 5 min ago");
     assert.equal(sheet.sheet, true);
     const hiddenAgain = await evaluate("var n=window.__sockets.length;window.__vis='hidden';document.dispatchEvent(new Event('visibilitychange'));n");

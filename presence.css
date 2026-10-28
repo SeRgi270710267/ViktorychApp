@@ -6,23 +6,46 @@
   vertical-align: middle;
   line-height: 0;
 }
-.presence-dot {
+.status-badge {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: clamp(8px, 22%, 18px);
-  height: clamp(8px, 22%, 18px);
-  border-radius: 9999px;
-  box-sizing: border-box;
-  border: 2px solid var(--presence-ring, var(--bg));
-  background: var(--muted);
+  right: -1px;
+  bottom: -1px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--presence-ring, var(--bg));
+  box-shadow: 0 0 0 2px var(--presence-ring, var(--bg));
+  font-size: 13px;
+  font-style: normal;
+  line-height: 18px;
   pointer-events: none;
+  overflow: visible;
 }
-.ava-presence[data-presence="online"] .presence-dot { background: var(--green); }
-.ava-presence[data-presence="idle"] .presence-dot { background: #f5a623; }
-.ava-presence[data-presence="dnd"] .presence-dot { background: var(--red); }
-.ava-presence[data-presence="offline"] .presence-dot,
-.ava-presence[data-presence="invisible"] .presence-dot { background: var(--muted); }
+.ava-presence .pava ~ .status-badge {
+  width: 36px;
+  height: 36px;
+  right: 6px;
+  bottom: 6px;
+  font-size: 22px;
+  line-height: 36px;
+}
+.presence-emojis { display: flex; flex-wrap: wrap; }
+.presence-emoji {
+  width: 40px;
+  height: 40px;
+  margin: 0 8px 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 20px;
+  line-height: 38px;
+  padding: 0;
+}
+.presence-emoji.on { background: var(--blue-dim); border-color: var(--blue); }
 .hcard,
 .drawer { --presence-ring: var(--sheet); }
 .friend-card { --presence-ring: var(--card); }

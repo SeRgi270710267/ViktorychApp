@@ -337,3 +337,53 @@ test("live presence reaches watchers and skips coalesced beats", async () => {
   watcher.ws.close();
   stranger.ws.close();
 });
+
+test("status emoji audience lists are enforced on the server", async () => {
+  const ada = await signup("user_s", "203.0.113.140");
+  const bee = await signup("user_t", "203.0.113.141");
+  const cay = await signup("user_u", "203.0.113.142");
+  await call("/v1/follows", { method: "PUT", ip: "203.0.113.143", token: ada.token, body: { id: "app:" + bee.account.publicId } });
+  const list = await call("/v1/audience-lists", {
+    method: "POST",
+    ip: "203.0.113.144",
+    token: bee.token,
+    body: { name: "close", icon: "" }
+  });
+  assert.equal(list.status, 201, JSON.stringify(list.body));
+  const added = await call("/v1/audience-lists/" + list.body.id + "/members", {
+    method: "POST",
+    ip: "203.0.113.145",
+    token: bee.token,
+    body: { handle: "user_s" }
+  });
+  assert.equal(added.status, 200, JSON.stringify(added.body));
+  const closed = await call("/v1/presence", {
+    method: "PATCH",
+    ip: "203.0.113.146",
+    token: bee.token,
+    body: { status: { emoji: "🌙", text: "secret", clear: "never", audience: "list", listIds: [] } }
+  });
+  assert.equal(closed.status, 200, JSON.stringify(closed.body));
+  const outsider = await call("/v1/presence?ids=" + bee.account.publicId, { token: cay.token, ip: "203.0.113.147" });
+  assert.equal(outsider.body.presence[0].emoji, "");
+  assert.equal(outsider.body.presence[0].text, "");
+  const opened = await call("/v1/presence", {
+    method: "PATCH",
+    ip: "203.0.113.148",
+    token: bee.token,
+    body: { status: { emoji: "🌙", text: "", clear: "never", audience: "list", listIds: [list.body.id] } }
+  });
+  assert.equal(opened.status, 200, JSON.stringify(opened.body));
+  const friend = await call("/v1/presence?ids=" + bee.account.publicId, { token: ada.token, ip: "203.0.113.149" });
+  assert.equal(friend.body.presence[0].emoji, "🌙");
+  const still = await call("/v1/presence?ids=" + bee.account.publicId, { token: cay.token, ip: "203.0.113.150" });
+  assert.equal(still.body.presence[0].emoji, "");
+  const premium = await call("/v1/presence", {
+    method: "PATCH",
+    ip: "203.0.113.151",
+    token: bee.token,
+    body: { status: { emoji: "🔥", clear: "never", audience: "everyone" } }
+  });
+  assert.equal(premium.status, 403);
+  assert.equal(JSON.stringify(premium.body).includes(bee.account.publicId), false);
+});

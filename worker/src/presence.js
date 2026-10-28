@@ -19,10 +19,13 @@ import {
   normalizeClear,
   normalizePreference,
   normalizePrivacy,
+  normalizeStatusAudience,
   publicPresence,
   shouldWriteBeat
 } from "../../shared/presence.js";
+import { canSeeAudience, grantsFor, setListGrants } from "./audience.js";
 import { deliverToAccount, listWatchers, publishToAccount } from "./channel.js";
+import { emojiAllowed } from "./points.js";
 
 const READ_LIMIT = 40;
 const CACHE_PREFIX = "https://presence.internal/v1/";
@@ -46,6 +49,7 @@ export const PRESENCE_SCHEMA = [
     emoji TEXT NOT NULL DEFAULT '',
     text TEXT NOT NULL DEFAULT '',
     clear_at INTEGER NOT NULL DEFAULT 0,
+    audience TEXT NOT NULL DEFAULT 'everyone',
     updated_at INTEGER NOT NULL DEFAULT 0
   )`,
   "CREATE INDEX IF NOT EXISTS account_status_clear ON account_status(clear_at)"
@@ -94,7 +98,7 @@ async function readRaw(env, id) {
     }
   } catch (err) { /* a cache miss reads D1 */ }
   const presence = await env.DB.prepare("SELECT public_id, preference, activity, seen_privacy, last_seen, last_beat, updated_at FROM account_presence WHERE public_id = ?").bind(id).first();
-  const status = await env.DB.prepare("SELECT public_id, emoji, text, clear_at, updated_at FROM account_status WHERE public_id = ?").bind(id).first();
+  const status = await env.DB.prepare("SELECT public_id, emoji, text, clear_at, audience, updated_at FROM account_status WHERE public_id = ?").bind(id).first();
   const bundle = { presence: presence || null, status: status || null };
   try {
     await caches.default.put(new Request(url), new Response(JSON.stringify(bundle), {
@@ -137,6 +141,7 @@ async function followersAmong(env, targetId, ids) {
 function viewOf(presence, status, exact, now, self, id) {
   const view = publicPresence(presence, status, exact, now, self);
   view.id = id;
+  if (self) view.audience = normalizeStatusAudience(status && status.audience);
   return view;
 }
 
@@ -158,14 +163,37 @@ async function decorate(env, viewerId, ids, now) {
       followsMe.has(id),
       same
     );
-    out.push(viewOf(bundle.presence, bundle.status, exact, now, same, id));
+    const view = viewOf(bundle.presence, bundle.status, exact, now, same, id);
+    if (same) {
+      view.audience = normalizeStatusAudience(bundle.status && bundle.status.audience);
+      view.listIds = await grantsFor(env, id, "status", id);
+    } else if (!(await statusVisible(env, viewerId, id, bundle.status))) {
+      view.emoji = "";
+      view.text = "";
+    }
+    out.push(view);
   }
   return out;
 }
 
+async function statusVisible(env, viewerId, ownerId, status) {
+  const custom = activeStatus(status, Date.now());
+  if (!custom.emoji && !custom.text) return true;
+  const audience = normalizeStatusAudience(status && status.audience);
+  if (audience === "everyone") return true;
+  if (audience === "nobody") return false;
+  return canSeeAudience(env, {
+    viewerId: viewerId,
+    ownerId: ownerId,
+    audience: audience,
+    subject: "status",
+    subjectId: ownerId
+  });
+}
+
 async function loadFresh(env, id) {
   const presence = await env.DB.prepare("SELECT public_id, preference, activity, seen_privacy, last_seen, last_beat, updated_at FROM account_presence WHERE public_id = ?").bind(id).first();
-  const status = await env.DB.prepare("SELECT public_id, emoji, text, clear_at, updated_at FROM account_status WHERE public_id = ?").bind(id).first();
+  const status = await env.DB.prepare("SELECT public_id, emoji, text, clear_at, audience, updated_at FROM account_status WHERE public_id = ?").bind(id).first();
   return { presence: presence || null, status: status || null };
 }
 
@@ -176,7 +204,8 @@ function classify(prev, next, prevStatus, nextStatus, now) {
   const privacy = normalizePrivacy(prev && (prev.seen_privacy || prev.seenPrivacy)) !== normalizePrivacy(next && (next.seen_privacy || next.seenPrivacy));
   const prevCustom = activeStatus(prevStatus, now);
   const nextCustom = activeStatus(nextStatus, now);
-  const status = prevCustom.emoji !== nextCustom.emoji || prevCustom.text !== nextCustom.text || prevCustom.clearAt !== nextCustom.clearAt;
+  const audience = normalizeStatusAudience(prevStatus && prevStatus.audience) !== normalizeStatusAudience(nextStatus && nextStatus.audience);
+  const status = prevCustom.emoji !== nextCustom.emoji || prevCustom.text !== nextCustom.text || prevCustom.clearAt !== nextCustom.clearAt || audience;
   const state = before.state !== after.state;
   if (!preference && !privacy && !status && !state) return null;
   return { preference: preference, privacy: privacy, status: status, activity: state && !preference && !privacy && !status };
@@ -209,6 +238,10 @@ async function fanout(env, publicId, prev, next, prevStatus, nextStatus, now) {
     if (!exact && change.activity) continue;
     if (!exact && !change.preference && !change.privacy && !change.status) continue;
     const view = viewOf(next, nextStatus, exact, now, false, publicId);
+    if (!(await statusVisible(env, viewerId, publicId, nextStatus))) {
+      view.emoji = "";
+      view.text = "";
+    }
     await deliverToAccount(env, viewerId, "presence", view, publicId);
   }
 }
@@ -229,14 +262,15 @@ async function savePresence(env, row) {
 
 async function saveStatus(env, row) {
   await env.DB.prepare(
-    `INSERT INTO account_status (public_id, emoji, text, clear_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO account_status (public_id, emoji, text, clear_at, audience, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(public_id) DO UPDATE SET
        emoji = excluded.emoji,
        text = excluded.text,
        clear_at = excluded.clear_at,
+       audience = excluded.audience,
        updated_at = excluded.updated_at`
-  ).bind(row.public_id, row.emoji, row.text, row.clear_at, row.updated_at).run();
+  ).bind(row.public_id, row.emoji, row.text, row.clear_at, row.audience, row.updated_at).run();
 }
 
 export async function handlePresence(request, env, url, deps) {
@@ -292,7 +326,7 @@ export async function handlePresence(request, env, url, deps) {
     if (body.preference != null && !known(PREFERENCES, body.preference)) return deps.json(400, { error: "preference" });
     if (body.seenPrivacy != null && !known(PRIVACY, body.seenPrivacy)) return deps.json(400, { error: "privacy" });
     const current = await env.DB.prepare("SELECT public_id, preference, activity, seen_privacy, last_seen, last_beat, updated_at FROM account_presence WHERE public_id = ?").bind(account.public_id).first();
-    const prevStatus = await env.DB.prepare("SELECT emoji, text, clear_at FROM account_status WHERE public_id = ?").bind(account.public_id).first();
+    const prevStatus = await env.DB.prepare("SELECT emoji, text, clear_at, audience FROM account_status WHERE public_id = ?").bind(account.public_id).first();
     const next = {
       public_id: account.public_id,
       preference: body.preference != null ? normalizePreference(body.preference) : normalizePreference(current && current.preference),
@@ -305,18 +339,22 @@ export async function handlePresence(request, env, url, deps) {
     if (next.preference === "invisible" && current && normalizePreference(current.preference) !== "invisible") {
       /* last_seen stays where the last visible beat left it */
     }
-    let nextStatus = prevStatus || { emoji: "", text: "", clear_at: 0 };
+    let nextStatus = prevStatus || { emoji: "", text: "", clear_at: 0, audience: "everyone" };
     if (Object.prototype.hasOwnProperty.call(body, "status")) {
-      if (body.status == null) nextStatus = { emoji: "", text: "", clear_at: 0 };
+      if (body.status == null) nextStatus = { emoji: "", text: "", clear_at: 0, audience: "everyone" };
       else if (typeof body.status !== "object") return deps.json(400, { error: "status" });
       else {
         const clear = body.status.clear != null ? body.status.clear : "never";
         if (clear && !known(CLEARS, clear) && clear !== "") return deps.json(400, { error: "clear" });
         const mode = normalizeClear(clear) || "never";
+        const emoji = cleanEmoji(body.status.emoji);
+        const allowed = await emojiAllowed(env, account.public_id, emoji);
+        if (!allowed.ok) return deps.json(403, { error: allowed.error || "owned" });
         nextStatus = {
-          emoji: cleanEmoji(body.status.emoji),
+          emoji: emoji,
           text: cleanStatusText(body.status.text),
-          clear_at: clearAtFrom(mode, now, body.status.clearAt)
+          clear_at: clearAtFrom(mode, now, body.status.clearAt),
+          audience: body.status.audience != null ? normalizeStatusAudience(body.status.audience) : normalizeStatusAudience(prevStatus && prevStatus.audience)
         };
       }
       await saveStatus(env, {
@@ -324,14 +362,20 @@ export async function handlePresence(request, env, url, deps) {
         emoji: nextStatus.emoji,
         text: nextStatus.text,
         clear_at: Number(nextStatus.clear_at) || 0,
+        audience: normalizeStatusAudience(nextStatus.audience),
         updated_at: now
       });
+      const audience = normalizeStatusAudience(nextStatus.audience);
+      if (audience === "list") await setListGrants(env, account.public_id, "status", account.public_id, body.status && body.status.listIds);
+      else await setListGrants(env, account.public_id, "status", account.public_id, []);
     }
     await savePresence(env, next);
     await dropRaw(account.public_id);
     try { await fanout(env, account.public_id, current, next, prevStatus, nextStatus, now); }
     catch (err) { /* the row is saved; the next change pushes again */ }
-    return deps.json(200, Object.assign({ ok: true }, viewOf(next, nextStatus, true, now, true, account.public_id)));
+    const saved = viewOf(next, nextStatus, true, now, true, account.public_id);
+    saved.listIds = await grantsFor(env, account.public_id, "status", account.public_id);
+    return deps.json(200, Object.assign({ ok: true }, saved));
   }
   return deps.json(405, { error: "method" });
 }

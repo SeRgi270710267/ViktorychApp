@@ -11,12 +11,15 @@ import {
   WATCH_LIMIT,
   isAccountId,
   lastSeenPhrase,
+  presenceEmoji,
   shouldConnect
 } from "./shared/presence.js";
 
 const CHOICE_IDS = ["online", "idle", "dnd", "invisible"];
 const PRIVACY_IDS = ["everyone", "follows", "nobody"];
 const CLEAR_IDS = ["30m", "1h", "4h", "today", "week", "never"];
+const FREE_EMOJI = ["🟢", "🟠", "🔴", "🌙"];
+const STATUS_AUDIENCE = ["everyone", "followers", "following", "friends", "nobody", "list"];
 
 const cache = new Map();
 let mine = null;
@@ -37,6 +40,7 @@ let polledAt = 0;
 let sheet = null;
 let sheetAnchor = null;
 let audioCtx = null;
+let ownedSpecials = [];
 const noteListeners = [];
 
 function tr(key, vars) {
@@ -95,6 +99,8 @@ function applyMine(body) {
     text: body.text != null ? body.text : (prev.text || ""),
     preference: body.preference || prev.preference || "online",
     seenPrivacy: body.seenPrivacy || prev.seenPrivacy || "everyone",
+    audience: body.audience || prev.audience || "everyone",
+    listIds: Array.isArray(body.listIds) ? body.listIds : (prev.listIds || []),
     clearAt: body.clearAt != null ? Number(body.clearAt) || 0 : (prev.clearAt || 0)
   };
   cache.set(id, { view: mine, at: Date.now() });
@@ -130,16 +136,13 @@ function phrase(view) {
   return tr(spoken.key, spoken.vars || undefined);
 }
 
-function statusText(view) {
-  if (!view) return "";
-  return [view.emoji, view.text].filter(Boolean).join(" ");
+function lineText(view) {
+  return phrase(view);
 }
 
-function lineText(view) {
-  const status = statusText(view);
-  const seen = phrase(view);
-  if (status && seen) return status + " · " + seen;
-  return status || seen;
+function badgeChar(view) {
+  if (view && view.emoji) return view.emoji;
+  return presenceEmoji(view && view.state);
 }
 
 function activityNow() {
@@ -350,7 +353,9 @@ function paint(root) {
     const view = cached(id);
     const state = view && view.state ? view.state : "";
     if (el.getAttribute("data-presence") !== state) el.setAttribute("data-presence", state);
-    const label = lineText(view);
+    const badge = el.querySelector(".status-badge");
+    if (badge) badge.textContent = badgeChar(view);
+    const label = [view && view.emoji, lineText(view)].filter(Boolean).join(" ");
     if (label) el.setAttribute("title", label);
   });
   scope.querySelectorAll("[data-pid-line]").forEach(function (el) {
@@ -360,7 +365,7 @@ function paint(root) {
   scope.querySelectorAll("[data-pid-status]").forEach(function (el) {
     const view = cached(el.getAttribute("data-pid-status") || "");
     const fallback = el.getAttribute("data-fallback") || "";
-    el.textContent = (view && (statusText(view) || phrase(view))) || fallback;
+    el.textContent = (view && phrase(view)) || fallback;
   });
 }
 
@@ -407,23 +412,72 @@ function privacyRows(selected) {
   }).join("");
 }
 
+function audienceCopy(id) {
+  if (id === "followers") return tr("Followers");
+  if (id === "following") return tr("Accounts you follow");
+  if (id === "friends") return tr("Friends");
+  if (id === "nobody") return tr("Nobody");
+  if (id === "list") return tr("Custom lists");
+  return tr("Everyone");
+}
+
+function freeEmojiLabel(emoji) {
+  if (emoji === "🟢") return tr("Green status");
+  if (emoji === "🟠") return tr("Orange status");
+  if (emoji === "🔴") return tr("Red status");
+  if (emoji === "🌙") return tr("Moon status");
+  return tr("Status emoji");
+}
+
+function emojiButtons(current) {
+  const free = FREE_EMOJI.map(function (emoji) {
+    const on = current === emoji;
+    return '<button type="button" class="presence-emoji' + (on ? " on" : "") + '" data-presence="emoji" data-emoji="' + emoji + '" aria-pressed="' + (on ? "true" : "false") + '" aria-label="' + esc(freeEmojiLabel(emoji)) + '">' + emoji + '</button>';
+  }).join("");
+  const owned = ownedSpecials.map(function (item) {
+    const on = current === item.emoji;
+    return '<button type="button" class="presence-emoji' + (on ? " on" : "") + '" data-presence="emoji" data-emoji="' + esc(item.emoji) + '" aria-pressed="' + (on ? "true" : "false") + '" aria-label="' + esc(emojiLabel(item.id)) + '">' + esc(item.emoji) + '</button>';
+  }).join("");
+  return '<div class="presence-emojis">' + free + owned + '</div>';
+}
+
+function emojiLabel(id) {
+  if (id === "flame") return tr("Flame status");
+  if (id === "party") return tr("Party status");
+  if (id === "rocket") return tr("Rocket status");
+  if (id === "rainbow") return tr("Rainbow status");
+  if (id === "dragon") return tr("Dragon status");
+  if (id === "gem") return tr("Gem status");
+  if (id === "unicorn") return tr("Unicorn status");
+  if (id === "regal") return tr("Crown status");
+  return tr("Status emoji");
+}
+
 function formHtml() {
   const pref = (mine && mine.preference) || "online";
   const privacy = (mine && mine.seenPrivacy) || "everyone";
+  const audience = (mine && mine.audience) || "everyone";
   const clear = "never";
   const options = CLEAR_IDS.map(function (id) {
     return '<option value="' + id + '"' + (clear === id ? " selected" : "") + '>' + esc(clearCopy(id)) + '</option>';
   }).join("");
+  const audienceOptions = STATUS_AUDIENCE.map(function (id) {
+    return '<option value="' + id + '"' + (audience === id ? " selected" : "") + '>' + esc(audienceCopy(id)) + '</option>';
+  }).join("");
+  const lists = audience === "list" && window.AudienceLists && window.AudienceLists.checksHtml
+    ? window.AudienceLists.checksHtml(mine && mine.listIds)
+    : "";
   return '<div class="presence-form">' +
     '<p class="presence-kicker">' + esc(tr("Your status")) + '</p>' +
     choiceRows(pref, "preference") +
-    '<p class="presence-kicker">' + esc(tr("Custom status")) + '</p>' +
-    '<div class="presence-status">' +
-      '<input data-presence-emoji maxlength="16" placeholder="' + esc(tr("Emoji")) + '" aria-label="' + esc(tr("Emoji")) + '" value="' + esc(mine && mine.emoji || "") + '">' +
-      '<input data-presence-text maxlength="80" placeholder="' + esc(tr("Status text")) + '" aria-label="' + esc(tr("Status text")) + '" value="' + esc(mine && mine.text || "") + '">' +
-    '</div>' +
+    '<p class="presence-kicker">' + esc(tr("Pick an emoji")) + '</p>' +
+    emojiButtons(mine && mine.emoji || "") +
+    '<input data-presence-emoji maxlength="16" placeholder="' + esc(tr("Any emoji")) + '" aria-label="' + esc(tr("Any emoji")) + '" value="' + esc(mine && mine.emoji || "") + '">' +
     '<label class="presence-clear">' + esc(tr("Clear after")) +
       '<select data-presence-clear aria-label="' + esc(tr("Clear after")) + '">' + options + '</select></label>' +
+    '<label class="presence-clear">' + esc(tr("Who can see this status")) +
+      '<select data-presence-audience aria-label="' + esc(tr("Who can see this status")) + '">' + audienceOptions + '</select></label>' +
+    lists +
     '<div class="presence-actions"><button type="button" class="presence-save" data-presence="save">' + esc(tr("Save")) + '</button>' +
       '<button type="button" class="presence-textbtn" data-presence="clear-status">' + esc(tr("Clear status")) + '</button></div>' +
     '<p class="presence-kicker">' + esc(tr("Who can see my last seen")) + '</p>' +
@@ -471,6 +525,13 @@ function placeSheet() {
   card.style.bottom = Math.max(8, window.innerHeight - rect.top + 8) + "px";
 }
 
+function loadOwned() {
+  return call("/v1/status-emoji").then(function (body) {
+    if (!body || body.status !== 200 || !Array.isArray(body.emojis)) return;
+    ownedSpecials = body.emojis.filter(function (item) { return item && item.owned && item.emoji; });
+  });
+}
+
 function open(anchor) {
   if (!token()) return;
   sheetAnchor = anchor || null;
@@ -478,9 +539,9 @@ function open(anchor) {
   sheet.hidden = false;
   fillSheet();
   placeSheet();
-  call("/v1/presence").then(function (body) {
-    if (!body || body.status !== 200) return;
-    applyMine(body);
+  Promise.all([call("/v1/presence"), loadOwned()]).then(function (parts) {
+    const body = parts[0];
+    if (body && body.status === 200) applyMine(body);
     fillSheet();
     paint();
   });
@@ -493,12 +554,16 @@ function close() {
 
 function readBox(root) {
   const emoji = root.querySelector("[data-presence-emoji]");
-  const text = root.querySelector("[data-presence-text]");
+  const picked = root.querySelector(".presence-emoji.on");
   const clear = root.querySelector("[data-presence-clear]");
+  const audience = root.querySelector("[data-presence-audience]");
+  const typed = emoji ? String(emoji.value || "").trim() : "";
+  const choice = picked ? picked.getAttribute("data-emoji") || "" : "";
   return {
-    emoji: emoji ? emoji.value : "",
-    text: text ? text.value : "",
-    clear: clear ? clear.value : "never"
+    emoji: typed || choice,
+    clear: clear ? clear.value : "never",
+    audience: audience ? audience.value : ((mine && mine.audience) || "everyone"),
+    listIds: window.AudienceLists && window.AudienceLists.selectedLists ? window.AudienceLists.selectedLists(root) : []
   };
 }
 
@@ -521,11 +586,18 @@ function save(root, status) {
       end.setDate(end.getDate() + add);
       end.setHours(0, 0, 0, 0);
     }
-    body.status = { emoji: status.emoji, text: status.text, clear: status.clear, clearAt: status.clear === "today" || status.clear === "week" ? end.getTime() : 0 };
+    body.status = {
+      emoji: status.emoji,
+      text: "",
+      clear: status.clear,
+      clearAt: status.clear === "today" || status.clear === "week" ? end.getTime() : 0,
+      audience: status.audience || "everyone",
+      listIds: status.listIds || []
+    };
   }
   return call("/v1/presence", { method: "PATCH", body: body }).then(function (res) {
     if (!res || res.status !== 200) {
-      note(root, tr("Couldn’t save your status."));
+      note(root, res && res.error === "owned" ? tr("This emoji is not in your collection.") : tr("Couldn’t save your status."));
       return;
     }
     applyMine(res);
@@ -566,6 +638,19 @@ function onClick(event) {
     save(root);
     return;
   }
+  if (act === "emoji") {
+    event.preventDefault();
+    const value = el.getAttribute("data-emoji") || "";
+    const box = el.closest(".presence-form") || document;
+    const field = box.querySelector("[data-presence-emoji]");
+    if (field) field.value = value;
+    box.querySelectorAll(".presence-emoji").forEach(function (button) {
+      const on = button === el;
+      button.classList.toggle("on", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    return;
+  }
   if (act === "save" || act === "clear-status") {
     event.preventDefault();
     save(root, act === "clear-status" ? null : readBox(root));
@@ -578,7 +663,7 @@ function wrap(publicId, html, attrs) {
   if (!isAccountId(publicId) || !html || String(html).indexOf("ava-none") >= 0) return html || "";
   const view = cached(publicId);
   const state = view && view.state ? view.state : "";
-  return '<span class="ava-presence" data-pid="' + publicId + '" data-presence="' + esc(state) + '"' + (attrs || "") + '>' + html + '<i class="presence-dot" aria-hidden="true"></i></span>';
+  return '<span class="ava-presence" data-pid="' + publicId + '" data-presence="' + esc(state) + '"' + (attrs || "") + '>' + html + '<i class="status-badge" aria-hidden="true">' + esc(badgeChar(view)) + '</i></span>';
 }
 
 function linesHtml(publicId) {
@@ -591,7 +676,7 @@ function dmSubHtml(publicId, fallback) {
   const text = fallback == null ? "" : String(fallback);
   if (!isAccountId(publicId)) return esc(text);
   const view = cached(publicId);
-  const shown = (view && (statusText(view) || phrase(view))) || text;
+  const shown = (view && phrase(view)) || text;
   return '<span data-pid-status="' + publicId + '" data-fallback="' + esc(text) + '">' + esc(shown) + '</span>';
 }
 
@@ -625,6 +710,19 @@ function boot() {
   window.addEventListener("keydown", noteInput, true);
   window.addEventListener("scroll", noteInput, { passive: true, capture: true });
   document.addEventListener("click", onClick);
+  document.addEventListener("change", function (event) {
+    const el = event.target;
+    if (!el || !el.getAttribute || !el.hasAttribute("data-presence-audience")) return;
+    if (!mine) mine = { id: selfId(), exact: true, preference: "online", seenPrivacy: "everyone", audience: "everyone", state: "offline", emoji: "", text: "" };
+    mine.audience = el.value || "everyone";
+    const form = el.closest(".presence-form");
+    if (!form) return;
+    const old = form.querySelector(".presence-lists");
+    if (old) old.remove();
+    if (el.value === "list" && window.AudienceLists && window.AudienceLists.checksHtml) {
+      el.insertAdjacentHTML("afterend", '<div class="presence-lists">' + window.AudienceLists.checksHtml(mine.listIds || []) + "</div>");
+    }
+  });
   window.addEventListener("resize", placeSheet);
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") close();
