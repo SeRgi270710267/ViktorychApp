@@ -2358,5 +2358,8 @@ SI18n.addPack("en", {
   "Picture of Safari install steps": "Picture of Safari install steps",
   "Live pills row": "Live pills row",
   "Weather, scores and live spaces above the timeline. Off loads nothing for it.": "Weather, scores and live spaces above the timeline. Off loads nothing for it.",
-  "The stories tray and viewer. Off loads nothing for it.": "The stories tray and viewer. Off loads nothing for it."
+  "The stories tray and viewer. Off loads nothing for it.": "The stories tray and viewer. Off loads nothing for it.",
+  "Sort replies": "Sort replies",
+  "Follow {handle}": "Follow {handle}",
+  "Unfollow {handle}": "Unfollow {handle}"
 });

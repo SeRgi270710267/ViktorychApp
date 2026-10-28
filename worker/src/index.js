@@ -730,6 +730,10 @@ async function handleSignup(request, env) {
   });
   if (created.error) return json(created.error === "handle_taken" ? 409 : 503, { error: created.error });
   await rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
+  if (!checked.owner) {
+    try { await followOwnerAccounts(env, created.account.publicId); }
+    catch (err) { /* the account still exists without starter follows */ }
+  }
   const recoveryCodes = await issueRecoveryCodes(env, created.account.publicId, recoveryDeps());
   return json(201, {
     token: created.token,
@@ -737,6 +741,25 @@ async function handleSignup(request, env) {
     recoveryCodes: recoveryCodes,
     account: created.account
   });
+}
+
+/* A new account starts out following only the owner's own accounts: the
+   app account with the owner flag and that account's public, verified
+   linked identities. Nothing is hardcoded here, and existing accounts are
+   never touched. */
+async function followOwnerAccounts(env, publicId) {
+  const owner = await env.DB.prepare("SELECT public_id FROM accounts WHERE owner = 1 AND profile_less = 0").first();
+  if (!owner || !owner.public_id || owner.public_id === publicId) return [];
+  const ids = ["app:" + owner.public_id];
+  const identities = await listAccountIdentities(env, owner.public_id);
+  identities.forEach((row) => {
+    if (!row || row.verified === false || row.hidden || (row.audience && row.audience !== "public")) return;
+    const id = cleanFollowId(String(row.platform || "") + ":" + String(row.handle || "").replace(/^@/, ""));
+    if (id && ids.indexOf(id) < 0) ids.push(id);
+  });
+  const now = Date.now();
+  await env.DB.batch(ids.map((id) => env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?) ON CONFLICT(follower_id, target_id) DO NOTHING").bind(publicId, id, now)));
+  return ids;
 }
 
 function recoveryDeps() {
