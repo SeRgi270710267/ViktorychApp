@@ -1,13 +1,14 @@
 html.shorts-on,
 html.shorts-on body { overflow: hidden; }
 html.shorts-on .center {
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   padding-top: 0;
   padding-bottom: 0;
 }
 .shorts-top { flex: 0 0 auto; position: sticky; top: 0; z-index: 5; background: var(--topbar); }
-html.shorts-on .app { min-height: 100dvh; align-items: stretch; }
+html.shorts-on .app { min-height: 100vh; min-height: 100dvh; align-items: stretch; }
 .shorts-page {
   display: flex;
   flex-direction: column;
@@ -776,6 +777,7 @@ span.shorts-past-play { background: var(--line); color: var(--text); }
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.72);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   padding: 16px;
   animation: tt-fade-in 0.2s ease;

@@ -8056,7 +8056,7 @@ const here = parseRoute();
     return posts().filter((p) => ids.has(p.feedId) || ids.has((p.platform || "x") + ":" + p.handle)).sort(byStamp);
   }
 
-  const FEED_PAGE = 25;
+  const FEED_PAGE = (window.ViktorychIos && window.ViktorychIos.lite) ? 12 : 25;
 
   function forYouMemory() {
     if (!window.ForYou) return null;
@@ -8073,7 +8073,8 @@ const here = parseRoute();
       followed: (post) => followedPost(post) || !!(post && post.feedId && feedById(post.feedId)),
       liked: (post) => !!(post && likes[post.id]),
       read: (post) => !!(STATE.openedPosts && post && STATE.openedPosts[post.id]),
-      skip: (post) => hiddenPost(post)
+      skip: (post) => hiddenPost(post),
+      lite: !!(window.ViktorychIos && window.ViktorychIos.lite)
     };
   }
 
@@ -17594,6 +17595,10 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     }
     if (el.id !== "welcome-photo" || !el.files || !el.files[0]) return;
     const file = el.files[0];
+    if (window.ViktorychIos && window.ViktorychIos.isHeic && window.ViktorychIos.isHeic(file)) {
+      window.ViktorychIos.readOriginal(file).then((data) => { welcomePhoto = data || ""; });
+      return;
+    }
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -20910,6 +20915,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   async function ensureNotifyPermission() {
+    if (window.ViktorychIos && window.ViktorychIos.pushNeedsInstall && window.ViktorychIos.pushNeedsInstall()) {
+      toast(tr("Notifications on iPhone need the installed app."));
+      return false;
+    }
     if (typeof Notification === "undefined") return true;
     let permission = Notification.permission;
     if (permission !== "granted") {

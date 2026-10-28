@@ -310,7 +310,11 @@ function rank(posts, ctx) {
   context.weights = context.weights || DEFAULTS;
   context.memory = context.memory || emptyMemory();
   context.now = context.now || Date.now();
-  const unique = dedupe(posts || []);
+  let source = posts || [];
+  if (context.lite && source.length > 180) {
+    source = source.slice().sort((a, b) => (Date.parse((b && (b.date || b.sortDate)) || "") || 0) - (Date.parse((a && (a.date || a.sortDate)) || "") || 0)).slice(0, 180);
+  }
+  const unique = dedupe(source);
   const bag = interestBag(unique, context);
   const pools = candidates(unique, context, bag);
   const norms = authorNorms(pools.inn.concat(pools.oon));
