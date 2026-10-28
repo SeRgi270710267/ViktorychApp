@@ -7,7 +7,7 @@
   if (root) root.ViktorychUpdate = api;
   if (typeof document !== "undefined") api.start();
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var PREFIX = "viktorych-a36-";
+  var PREFIX = "viktorych-a37-";
   var SNOOZE_MS = 30 * 60 * 1000;
   var CHECK_MS = 3 * 60 * 1000;
   var RESTORE_MS = 2 * 60 * 1000;
