@@ -6448,7 +6448,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function revealArchive() {
     const route = parseRoute();
-    if (route.name !== "home") { render(); return; }
+    if (route.name !== "home" && !document.getElementById("archive-more") && !document.querySelector("[data-hydrate]")) return;
     render({ y: window.scrollY });
   }
 
