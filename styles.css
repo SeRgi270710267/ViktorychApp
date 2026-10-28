@@ -2435,6 +2435,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .drawer-edit-bar .save, .drawer-edit-bar .outline { height: 32px; padding: 0 12px; }
 .drawer-edit-note { margin: 0 16px 8px; color: var(--muted); font-size: 13px; }
 .drawer-edit-list, .drawer-section-items { display: flex; flex-direction: column; }
+.drawer-section-items { min-height: 36px; }
 .drawer-edit-row, .drawer-section-head {
   display: flex;
   align-items: center;
@@ -2459,6 +2460,12 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .drawer-eye, .drawer-lock { width: 36px; height: 36px; flex: none; }
 .drawer-move { max-width: 108px; height: 32px; background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
 .drawer-section { border-top: 1px solid var(--line); margin-top: 4px; }
+.drawer-section-emoji { width: 44px; flex: none; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); text-align: center; font-size: 16px; }
+.drawer-section-name { flex: 1; min-width: 0; }
+.drawer-folder { margin: 4px 0; }
+.drawer-folder-sum { cursor: pointer; padding: 10px 16px; font-weight: 700; list-style: none; }
+.drawer-folder-sum::-webkit-details-marker { display: none; }
+.nav-folder-emoji { font-size: 18px; line-height: 1; }
 .drawer-section-name { flex: 1; min-width: 0; height: 36px; border: 0; background: transparent; color: var(--text); font-size: 16px; font-weight: 700; }
 .drawer-section-label { padding: 10px 16px 2px; color: var(--muted); font-size: 13px; font-weight: 700; }
 .drawer-foot { flex: none; padding: 4px 8px calc(12px + env(safe-area-inset-bottom)); }

@@ -87,6 +87,13 @@ async function checkSidebar(page, label) {
   if (before.drawer || !before.customize || !before.bookmarks || !before.settings || !before.tv) fail(label + " sidebar is missing a core row");
   await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
   await page.waitForSelector(".nav-customize-modal .drawer-edit-list");
+  const listed = await page.evaluate(() => ({
+    profile: !!document.querySelector("[data-drawer-key='profile']"),
+    premium: !!document.querySelector("[data-drawer-key='premium']"),
+    explore: !!document.querySelector("[data-drawer-key='explore']"),
+    homeEye: !!document.querySelector("[data-drawer-key='home'] [data-act='drawer-vis']")
+  }));
+  if (!listed.profile || !listed.premium || !listed.explore || listed.homeEye) fail(label + " editor is missing a sidebar item");
   if (await page.locator(".drawer-x").count()) fail(label + " edit opened the edge drawer");
   const locked = await page.evaluate(() => {
     const row = (id) => document.querySelector(`[data-drawer-key="${id}"]`);
@@ -112,6 +119,7 @@ async function checkSidebar(page, label) {
   await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
   await page.click("[data-act='drawer-add-section']");
   await page.waitForSelector(".drawer-section-name");
+  await page.waitForSelector(".drawer-section-emoji");
   await page.click("[data-act='drawer-reset']");
   await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
   const restored = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
@@ -159,6 +167,7 @@ async function check(page, label) {
   await page.locator(".drawer-x [data-act='drawer-edit']").click();
   await page.click("[data-act='drawer-add-section']");
   await page.waitForSelector(".drawer-section-name");
+  await page.waitForSelector(".drawer-section-emoji");
   await page.click("[data-act='drawer-reset']");
   await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
   const restored = await page.evaluate(() => [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"));

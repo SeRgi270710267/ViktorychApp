@@ -2191,6 +2191,7 @@ SI18n.addPack("ru", {
   "Section name": "Название раздела",
   "Main list": "Основной список",
   "This item always stays available": "Этот пункт всегда остаётся в меню",
+  "Home, Settings, and Log out stay put. Folders take a name and an emoji, then collapse in the sidebar.": "Главная, Настройки и Выход остаются на месте. Папкам можно дать имя и эмодзи, и они сворачиваются в боковой панели.",
   "Go live": "Начать эфир",
   "Screen": "Экран",
   "Camera and screen": "Камера и экран",

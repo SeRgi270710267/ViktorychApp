@@ -2191,6 +2191,7 @@ SI18n.addPack("es", {
   "Section name": "Nombre de la sección",
   "Main list": "Lista principal",
   "This item always stays available": "Este elemento siempre permanece disponible",
+  "Home, Settings, and Log out stay put. Folders take a name and an emoji, then collapse in the sidebar.": "Inicio, Ajustes y Salir se quedan fijos. Las carpetas llevan nombre y emoji, y se pliegan en la barra.",
   "Go live": "Emitir",
   "Screen": "Pantalla",
   "Camera and screen": "Cámara y pantalla",
