@@ -201,6 +201,7 @@
     histClear: "",
     history: null
   };
+  if (window.ProfileAbout) window.ProfileAbout.lists = function () { return (STATE.settings && STATE.settings.lists) || []; };
   let previewAnchor = 0;
   const SCROLLS = {};
   const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };

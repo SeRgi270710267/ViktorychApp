@@ -26,6 +26,7 @@ UI_FILES = (
     "sw.js",
     "index.html",
     "404.html",
+    "about-ui.js",
     "accounts.js",
     "passkeys.js",
     "app-lock.js",
