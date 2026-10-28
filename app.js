@@ -7429,6 +7429,10 @@ const here = parseRoute();
       }
     });
 
+    html += `<button type="button" class="nav-item" data-act="go-live" aria-label="${esc(tr("Go live"))}" data-tooltip="${esc(tr("Go live"))}">
+      <span class="nav-ico">${icon("video")}</span>
+      <span class="nav-label">${esc(tr("Go live"))}</span>
+    </button>`;
     html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
       <span class="nav-ico">${icon("sliders")}</span>
       <span class="nav-label">${tr("Customize sidebar")}</span>
@@ -7938,7 +7942,6 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
-      ${window.ViktorychLive && window.ViktorychLive.homeHtml ? window.ViktorychLive.homeHtml() : ""}
       ${homeLivePillsRow()}
     </div>`;
   }
@@ -12403,7 +12406,7 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
@@ -12568,6 +12571,7 @@ const here = parseRoute();
     if (id === "points") return { id: id, href: "#/points", icon: "spark", label: tr("Viktorychs"), extra: `<span class="points-pill" data-points-balance></span>` };
     if (id === "lists") return { id: id, href: "#/lists", icon: "lists", label: tr("Lists") };
     if (id === "spaces") return { id: id, href: drawerSpacesHref(), icon: "mic", label: tr("Spaces") };
+    if (id === "golive") return { id: id, href: "", icon: "video", label: tr("Go live"), act: "go-live" };
     if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Follow requests") };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
@@ -12717,6 +12721,7 @@ const here = parseRoute();
       ${drawerSheet()}
       <div class="drawer-scroll">
         ${rows}
+        ${STATE.drawerEdit ? "" : '<div class="live-row drawer-lives" data-live-row hidden></div>'}
         ${install}
       </div>
       <div class="drawer-foot"><button class="drawer-theme" type="button" data-act="explore-theme" aria-label="${esc(tr("Theme"))}">${icon("moon")}</button></div>

@@ -12,7 +12,7 @@
   var VINE_MS = 6000;
   var SEEN_KEY = "rss-stories-seen-v1";
   var BAR_KEY = "viktorych-stories-bar-v1";
-  var BAR_H = { expanded: 204, slim: 52, hidden: 28 };
+  var BAR_H = { expanded: 112, slim: 52, hidden: 28 };
   var ORG_KEY = "viktorych-story-org-v1";
   var NOTE_EMOJI = ["😀", "😂", "❤️", "🔥", "👏", "😮", "😢", "👍"];
   var REACTIONS = ["❤", "🔥", "👏", "😂", "😮", "😢"];
@@ -507,7 +507,8 @@
         '<span>' + esc(folder.name) + "</span></button>";
     }).join("");
     var hidden = org.hidden.length ? '<button type="button" class="story-folder" data-story-act="hidden-open">' + esc(tr("Hidden stories")) + "</button>" : "";
-    return '<div class="story-folders" role="tablist" aria-label="' + esc(tr("Story folders")) + '">' +
+    var bare = !org.folders.length && !org.hidden.length;
+    return '<div class="story-folders' + (bare ? " is-empty" : "") + '" role="tablist" aria-label="' + esc(tr("Story folders")) + '">' +
       '<button type="button" class="story-folder' + (!org.active ? " on" : "") + '" data-story-act="folder-pick" data-id="">' + esc(tr("All")) + "</button>" +
       chips + hidden +
       '<button type="button" class="story-folder" data-story-act="folder-new" aria-label="' + esc(tr("New folder")) + '">+</button></div>';
