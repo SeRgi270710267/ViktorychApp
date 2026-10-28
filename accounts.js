@@ -127,6 +127,19 @@
   function blocking() {
     return !!(config().gate && !readSession());
   }
+  function installedApp() {
+    try {
+      if (navigator.standalone === true) return true;
+      if (window.matchMedia) {
+        if (window.matchMedia("(display-mode: standalone)").matches) return true;
+        if (window.matchMedia("(display-mode: window-controls-overlay)").matches) return true;
+      }
+    } catch (err) { /* a normal browser tab still gets the landing page */ }
+    return false;
+  }
+  function showLanding() {
+    return blocking() && !installedApp();
+  }
   function tellSW(on, wipe) {
     if (wipe === "signout" && window.ViktorychLocal) window.ViktorychLocal.wipe();
     if (!navigator.serviceWorker) return;
@@ -379,14 +392,52 @@
     if (!key) return "";
     return '<div class="cf-turnstile" data-sitekey="' + esc(key) + '"></div>';
   }
+  function paintLandingMeta() {
+    var title = appName();
+    var desc = tr("A home for posts, stories, and the people you choose.");
+    if (title) document.title = title;
+    function setMeta(selector, value) {
+      var node = document.head && document.head.querySelector(selector);
+      if (node) node.setAttribute("content", value);
+    }
+    setMeta('meta[name="description"]', desc);
+    setMeta('meta[property="og:title"]', title);
+    setMeta('meta[property="og:description"]', desc);
+    setMeta('meta[name="twitter:title"]', title);
+    setMeta('meta[name="twitter:description"]', desc);
+  }
   function landing() {
     var year = String(new Date().getFullYear());
     var pages = [["about", tr("About")], ["help", tr("Help Center")], ["terms", tr("Terms of Service")], ["privacy", tr("Privacy Policy")], ["cookie", tr("Cookie Policy")], ["accessibility", tr("Accessibility")], ["blog", tr("Blog")], ["developers", tr("Developers")]];
     var foot = pages.map(function (page) {
       return '<button type="button" data-acct="legal" data-legal="' + page[0] + '" data-title="' + esc(page[1]) + '">' + esc(page[1]) + "</button>";
     }).join("");
-    var legal = '<p class="acct-legal">' + esc(tr("By signing up, you agree to the")) + ' <button type="button" data-acct="legal" data-legal="terms" data-title="' + esc(tr("Terms of Service")) + '">' + esc(tr("Terms of Service")) + "</button> " + esc(tr("and the")) + ' <button type="button" data-acct="legal" data-legal="privacy" data-title="' + esc(tr("Privacy Policy")) + '">' + esc(tr("Privacy Policy")) + "</button>.</p>";
-    return '<div class="x-shell"><div class="x-land"><div class="x-land-logo">' + mark("x-mark") + '</div><div class="x-land-copy"><h1>' + esc(tr("Happening now")) + "</h1><h2>" + esc(tr("Join today.")) + '</h2><button class="acct-fill" type="button" data-acct="signup">' + esc(tr("Create account")) + "</button>" + legal + '<h3>' + esc(tr("Already have an account?")) + '</h3><button class="acct-line" type="button" data-acct="login">' + esc(tr("Sign in")) + '</button></div></div><footer class="x-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
+    var langs = [["en", "English"], ["es", "Español"], ["ru", "Русский"]].map(function (pair) {
+      var on = readLang() === pair[0] ? " on" : "";
+      return '<button class="land-lang' + on + '" type="button" data-acct="lang" data-lang="' + pair[0] + '">' + esc(pair[1]) + "</button>";
+    }).join("");
+    var shots = [
+      ["landing/timeline.webp", tr("A familiar timeline"), tr("For you and Following, in a dark layout built for scrolling."), tr("Picture of the timeline")],
+      ["landing/stories.webp", tr("Stories with rings"), tr("Rings, folders, and a full-screen viewer, close to a chat app."), tr("Picture of stories")],
+      ["landing/notes.webp", tr("Notes above stories"), tr("A short thought sits on your story. Choose who can see it."), tr("Picture of notes")],
+      ["landing/highlights.webp", tr("Highlights on your profile"), tr("Pin the stories you want to keep after the day ends."), tr("Picture of highlights")],
+      ["landing/lists.webp", tr("Lists you control"), tr("Custom lists for the timeline, private audience lists, and a switch that hides followers and following."), tr("Picture of lists and privacy")],
+      ["landing/live.webp", tr("Live from this device"), tr("Go live with the camera or the screen. The media stays on the call."), tr("Picture of live video")],
+      ["landing/store.webp", tr("Gifts from the store"), tr("ViktorychStore lists gifts you can send. Points come from using the app. Nothing is for sale."), tr("Picture of the gift store")],
+      ["landing/birthdays.webp", tr("Birthdays on the profile"), tr("When it is someone's day, the profile says so, and you can send a gift."), tr("Picture of a birthday")],
+      ["landing/details.webp", tr("Personal details you choose"), tr("City, home, and the rest of About. Each line can be public, for followers, or only you."), tr("Picture of personal details")],
+      ["landing/sidebar.webp", tr("A sidebar you arrange"), tr("Reorder the menu, hide what you skip, and group the rest into folders."), tr("Picture of the sidebar")],
+      ["landing/status.webp", tr("An emoji for your status"), tr("Set an emoji and a short line, and choose who can see when you were last here."), tr("Picture of an emoji status")],
+      ["landing/badges.webp", tr("Badges you earn"), tr("Tiers for showing up, posting, and going live. Pin a few, and choose who sees each one."), tr("Picture of badges")],
+      ["landing/pwa.webp", tr("Install it on your phone"), tr("Add it to your home screen. It opens full screen and keeps a copy for offline."), tr("Picture of installing the app")],
+      ["landing/safari.webp", tr("Ready for iPhone and older Safari"), tr("The same layout on iPhone 11, and pages that still open in Safari from iOS 13."), tr("Picture of Safari install steps")]
+    ];
+    var blocks = shots.map(function (row, index) {
+      var flip = index % 2 ? " land-flip" : "";
+      return '<section class="land-block' + flip + '"><div class="land-copy"><h2>' + esc(row[1]) + "</h2><p>" + esc(row[2]) + '</p></div><div class="land-frame"><div class="land-device"><img alt="' + esc(row[3]) + '" src="' + row[0] + '" width="414" height="896" loading="lazy" decoding="async"></div></div></section>';
+    }).join("");
+    var actions = '<button class="land-btn land-btn-line" type="button" data-acct="login">' + esc(tr("Log in")) + '</button><button class="land-btn land-btn-fill" type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button>";
+    return '<div class="x-shell land-page"><header class="land-bar"><a class="land-brand" href="./">' + mark("land-mark") + "<span>" + esc(appName()) + '</span></a><div class="land-bar-actions"><div class="land-langs" role="group" aria-label="' + esc(tr("Display language")) + '">' + langs + "</div>" + actions + '</div></header><main><section class="land-hero x-land-copy"><p class="land-kicker">' + esc(appName()) + "</p><h1>" + esc(appName()) + '</h1><p class="land-tag">' + esc(tr("A home for posts, stories, and the people you choose.")) + '</p><p class="land-lead">' + esc(tr("The timeline, stories, notes, live video, and gifts. It runs in the browser and as an installed app.")) + '</p><div class="land-hero-actions">' + actions + "</div></section>" + blocks + '</main><footer class="x-foot land-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
   }
   function honeypotHtml() {
     return '<div class="acct-hp" aria-hidden="true"><label>Fax<input name="fax" tabindex="-1" autocomplete="off" value=""></label></div>';
@@ -673,7 +724,10 @@ var numberNote = form.passkey
       return;
     }
     var html = "";
-    if (blocking()) html += landing();
+    if (showLanding()) {
+      paintLandingMeta();
+      html += landing();
+    }
     if (view === "signup") html += modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
     else if (view === "prefs") html += modal(tr("Settings"), prefsBody());
@@ -786,7 +840,6 @@ var numberNote = form.passkey
       if (window.Audio && window.SIntelMusic && window.SIntelMusic.pause) window.SIntelMusic.pause();
       document.querySelectorAll("audio, video").forEach(function (el) { el.pause(); });
     } catch (e) {}
-    document.documentElement.setAttribute("data-wall", "1");
     var queued = window.__VIKTORYCH_AUTH;
     window.__VIKTORYCH_AUTH = "";
     if (readPending()) {
@@ -795,7 +848,12 @@ var numberNote = form.passkey
     } else if (queued === "signup" || queued === "login" || queued === "prefs") {
       view = queued;
       step = 0;
+    } else if (installedApp()) {
+      view = "login";
+      step = 0;
     }
+    if (showLanding()) document.documentElement.setAttribute("data-wall", "1");
+    else document.documentElement.removeAttribute("data-wall");
     tellSW(false);
     paint();
   }
