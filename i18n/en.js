@@ -1982,5 +1982,17 @@ SI18n.addPack("en", {
   "Search mutuals": "Search mutuals",
   "Not interested": "Not interested",
   "Show less often": "Show less often",
-  "We'll show you less of this.": "We'll show you less of this."
+  "We'll show you less of this.": "We'll show you less of this.",
+  "Follower": "Follower",
+  "Premium": "Premium",
+  "New": "New",
+  "Creator Studio": "Creator Studio",
+  "Settings and privacy": "Settings and privacy",
+  "Spaces": "Spaces",
+  "New post notifications for {name}": "New post notifications for {name}",
+  "New post notifications for {name} and {n} others": "New post notifications for {name} and {n} others",
+  "Notification filters": "Notification filters",
+  "Notification options": "Notification options",
+  "No Spaces right now": "No Spaces right now",
+  "Live audio shows up here.": "Live audio shows up here."
 });
