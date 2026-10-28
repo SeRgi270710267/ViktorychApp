@@ -7054,6 +7054,7 @@ const here = parseRoute();
       return { name: "messages", channel: channel, query };
     }
     if (parts[0] === "spaces") return { name: "spaces", id: parts[1] || "", query };
+    if (parts[0] === "live" && /^[a-f0-9]{32}$/.test(parts[1] || "")) return { name: "live", id: parts[1], query };
     if (parts[0] === "history") {
       const tab = parts[1] === "likes" || parts[1] === "videos" || parts[1] === "articles" ? parts[1] : "bookmarks";
       return { name: "history", tab: tab, query };
@@ -7921,6 +7922,7 @@ const here = parseRoute();
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
+      ${window.ViktorychLive && window.ViktorychLive.homeHtml ? window.ViktorychLive.homeHtml() : ""}
       ${homeLivePillsRow()}
     </div>`;
   }
@@ -14318,6 +14320,7 @@ if (STATE.histClear) {
       return pageHead(tr("Spaces")) + (rows || emptyBlock(tr("No Spaces right now"), tr("Live audio shows up here.")));
     }
     if (route.name === "spaces") return (window.Spaces && window.Spaces.page && window.Spaces.page(route)) || pageHead(tr("Space"), "", true) + emptyBlock(tr("This Space has ended"), tr("This Space isn’t available."));
+    if (route.name === "live") return (window.ViktorychLive && window.ViktorychLive.page && window.ViktorychLive.page(route)) || pageHead(tr("Live"), "", true) + emptyBlock(tr("This live has ended"), tr("This live isn’t available."));
     if (route.name === "connections") return connectionsView(route);
     if (route.name === "profile") return profileView(route);
     if (route.name === "user") return userView(route);
@@ -15273,6 +15276,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "stop") return;
     if (act && act.indexOf("xc-") === 0 && window.ViktorychXCompose && window.ViktorychXCompose.onAct) {
       window.ViktorychXCompose.onAct(act, el);
+      return;
+    }
+    if ((act === "go-live" || (act && act.indexOf("live-") === 0)) && window.ViktorychLive && window.ViktorychLive.onAct) {
+      window.ViktorychLive.onAct(act, el);
       return;
     }
     if (act === "dock-pref") {

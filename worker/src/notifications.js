@@ -291,7 +291,7 @@ async function presentNote(env, request, viewer, item) {
     const row = await env.DB.prepare("SELECT handle FROM accounts WHERE public_id = ?").bind(match[1]).first();
     next.feedId = row && row.handle ? "app:@" + row.handle : "";
   }
-  if (legacyMedia(next.hash) || /\d{12}/.test(String(next.hash || ""))) {
+  if ((legacyMedia(next.hash) || /\d{12}/.test(String(next.hash || ""))) && !String(next.hash || "").startsWith("#/live/")) {
     next.hash = String(next.hash || "").replace(/([A-Za-z0-9_\u0400-\u04FF]{1,32})\d{12}\b/g, "$1");
   }
   if (next.handle && request && viewer) {
