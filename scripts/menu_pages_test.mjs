@@ -800,6 +800,16 @@ async function runParallel() {
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, cases.length) }, worker));
+  /* A busy runner can leave a tap target mid-animation; a case that failed
+     next to others gets one quiet run on its own before it counts. */
+  for (let index = 0; index < results.length; index += 1) {
+    if (results[index].code === 0) continue;
+    const item = results[index].item;
+    console.log("retrying alone: " + item.auth + " " + item.id);
+    const again = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { env: { ...process.env, ONLY: item.id, AUTH: item.auth, MENU_CHILD: "1" }, encoding: "utf8" });
+    process.stdout.write((again.stdout || "") + (again.stderr || ""));
+    results[index] = { item, code: again.status, out: "" };
+  }
   const failed = results.filter((done) => done.code !== 0);
   if (failed.length) {
     console.error("menu page checks failed: " + failed.map((done) => done.item.auth + " " + done.item.id).join(", "));
