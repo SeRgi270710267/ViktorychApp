@@ -13,6 +13,9 @@
   var SEEN_KEY = "rss-stories-seen-v1";
   var BAR_KEY = "viktorych-stories-bar-v1";
   var BAR_H = { expanded: 112, slim: 52, hidden: 28 };
+  var tuck = 0;
+  var appliedExtra = null;
+  var trackTimer = 0;
   var ORG_KEY = "viktorych-story-org-v1";
   var NOTE_EMOJI = ["😀", "😂", "❤️", "🔥", "👏", "😮", "😢", "👍"];
   var REACTIONS = ["❤", "🔥", "👏", "😂", "😮", "😢"];
@@ -204,31 +207,90 @@
     return false;
   }
 
+  function notesEnabled() {
+    if (!deps.notesOn) return true;
+    try { return deps.notesOn() !== false; } catch (err) { return true; }
+  }
+
+  function expandedHeight() {
+    return notesEnabled() ? BAR_H.expanded : 92;
+  }
+
+  function tuckProgress() {
+    var state = barState();
+    if (state === "hidden" || state === "slim") return 1;
+    if (tuck < 0) return 0;
+    if (tuck > 1) return 1;
+    return tuck;
+  }
+
   function trayExtra() {
     if (!hasTray()) return 0;
-    return BAR_H[barState()] || BAR_H.expanded;
+    var state = barState();
+    if (state === "hidden") return BAR_H.hidden;
+    if (state === "slim") return BAR_H.slim;
+    return Math.round(expandedHeight() - tuckProgress() * (expandedHeight() - BAR_H.slim));
+  }
+
+  function paintTuck(tracking) {
+    if (typeof document === "undefined") return;
+    var node = document.querySelector(".story-shell");
+    var state = barState();
+    var progress = tuckProgress();
+    var height = state === "hidden" ? BAR_H.hidden : Math.round(expandedHeight() - progress * (expandedHeight() - BAR_H.slim));
+    if (state === "slim") height = BAR_H.slim;
+    if (node) {
+      node.setAttribute("data-state", state);
+      node.style.setProperty("--story-tuck", String(progress));
+      node.style.height = height + "px";
+      node.classList.toggle("is-tracking", !!tracking);
+      var fold = node.querySelector(".story-fold");
+      if (fold) fold.setAttribute("aria-expanded", state === "expanded" && progress < 0.5 ? "true" : "false");
+      if (tracking) {
+        if (trackTimer) clearTimeout(trackTimer);
+        trackTimer = setTimeout(function () {
+          trackTimer = 0;
+          var live = document.querySelector(".story-shell");
+          if (live) live.classList.remove("is-tracking");
+        }, 140);
+      }
+    }
+    var extra = trayExtra();
+    if (appliedExtra == null) appliedExtra = extra;
+    var delta = extra - appliedExtra;
+    appliedExtra = extra;
+    if (!delta) return;
+    var main = document.querySelector("main.center");
+    if (!main) return;
+    var current = parseFloat(main.style.getPropertyValue("--top"));
+    if (isNaN(current)) return;
+    if (tracking) main.style.transition = "";
+    else {
+      main.style.transition = "padding-top 0.22s cubic-bezier(.2, .9, .2, 1)";
+      setTimeout(function () { if (main) main.style.transition = ""; }, 260);
+    }
+    main.style.setProperty("--top", (current + delta) + "px");
   }
 
   function applyBar(next) {
     if (next !== "expanded" && next !== "slim" && next !== "hidden") next = "expanded";
-    var prev = barState();
+    tuck = next === "expanded" ? 0 : 1;
     try { localStorage.setItem(BAR_KEY, next); } catch (err) { /* private mode */ }
-    if (typeof document === "undefined") return;
-    var node = document.querySelector(".story-shell");
-    if (node) {
-      node.setAttribute("data-state", next);
-      var fold = node.querySelector(".story-fold");
-      if (fold) fold.setAttribute("aria-expanded", next === "expanded" ? "true" : "false");
+    paintTuck(false);
+  }
+
+  function trackScroll(delta, scrollTop) {
+    if (!delta) return;
+    var state = barState();
+    if (state === "hidden") return;
+    if (state === "slim") {
+      if (delta < 0) applyBar("expanded");
+      return;
     }
-    var main = document.querySelector("main.center");
-    if (main && prev !== next) {
-      var current = parseFloat(main.style.getPropertyValue("--top"));
-      if (!isNaN(current)) {
-        main.style.transition = "padding-top 0.28s cubic-bezier(.2, .9, .2, 1)";
-        main.style.setProperty("--top", (current + (BAR_H[next] || 0) - (BAR_H[prev] || 0)) + "px");
-        setTimeout(function () { if (main) main.style.transition = ""; }, 320);
-      }
-    }
+    var range = expandedHeight() - BAR_H.slim;
+    if (scrollTop <= 0 && delta < 0) tuck = 0;
+    else tuck = Math.max(0, Math.min(1, tuck + delta / range));
+    paintTuck(true);
   }
 
   function emptyOrg() {
@@ -444,7 +506,10 @@
     var state = barState();
     var noteCards = noteCardsHtml();
     var cards = noteCards + (mine ? selfHtml(mine) : "") + (connect ? connectHtml() : "") + list.map(cardHtml).join("");
-    return '<div class="story-shell" data-state="' + state + '">' +
+    appliedExtra = trayExtra();
+    var progress = tuckProgress();
+    var tucked = progress > 0 ? ' style="--story-tuck:' + progress + ';height:' + trayExtra() + 'px"' : "";
+    return '<div class="story-shell" data-state="' + state + '" data-notes="' + (notesEnabled() ? "on" : "off") + '"' + tucked + '>' +
       folderBarHtml() +
       '<div class="story-tray" role="list" aria-label="' + esc(tr("Stories")) + '">' + cards + "</div>" +
       orgMenuHtml() +
@@ -454,6 +519,7 @@
   }
 
   function noteCardsHtml() {
+    if (!notesEnabled()) return "";
     if (!viewerAccount()) return "";
     var org = readOrg();
     var mine = notes && notes.mine;
@@ -1638,6 +1704,33 @@
     pullOrg();
   }
 
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    var lastScrollY = 0;
+    var touchY = 0;
+    window.addEventListener("scroll", function () {
+      if (!document.querySelector(".story-shell")) return;
+      var y = window.scrollY || document.documentElement.scrollTop || 0;
+      var delta = y - lastScrollY;
+      lastScrollY = y;
+      trackScroll(delta, y);
+    }, { passive: true });
+    window.addEventListener("wheel", function (event) {
+      if (!document.querySelector(".story-shell")) return;
+      var y = window.scrollY || document.documentElement.scrollTop || 0;
+      if (y <= 0 && event.deltaY < 0) trackScroll(event.deltaY, 0);
+    }, { passive: true });
+    window.addEventListener("touchstart", function (event) {
+      if (event.touches && event.touches[0]) touchY = event.touches[0].clientY;
+    }, { passive: true });
+    window.addEventListener("touchmove", function (event) {
+      if (!document.querySelector(".story-shell") || !event.touches || !event.touches[0]) return;
+      var y = event.touches[0].clientY;
+      var delta = touchY - y;
+      touchY = y;
+      var top = window.scrollY || document.documentElement.scrollTop || 0;
+      if (top <= 0 && delta < 0) trackScroll(delta, 0);
+    }, { passive: true });
+  }
   if (typeof document !== "undefined") {
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey, true);
@@ -1674,6 +1767,7 @@
     organize: organize,
     barState: barState,
     applyBar: applyBar,
+    nudge: function (delta, scrollTop) { trackScroll(delta, scrollTop || 0); },
     activeAccounts: activeAccounts,
     orderedAccounts: orderedAccounts,
     itemKey: itemKey

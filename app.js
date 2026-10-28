@@ -12307,7 +12307,12 @@ const here = parseRoute();
         <p class="phandle set-desc">${esc(desc)}</p>`;
       };
       const presenceBlock = window.ViktorychPresence ? window.ViktorychPresence.settingsHtml() : "";
+      const notesOn = !STATE.settings || STATE.settings.storyNotes !== false;
+      const notesSwitch = `<h2>${esc(tr("Notes"))}</h2>
+        <button class="tab-switch${notesOn ? " on" : ""}" type="button" role="switch" aria-checked="${notesOn ? "true" : "false"}" data-act="story-notes"><span>${esc(tr("Show notes"))}</span><i></i></button>
+        <p class="phandle">${esc(tr("Notes sit above stories. Turn this off to hide them."))}</p>`;
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
+        ${notesSwitch}
         ${presenceBlock}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
@@ -16185,6 +16190,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }
       return;
     }
+    if (act === "story-notes") {
+      if (STATE.settings) {
+        STATE.settings.storyNotes = STATE.settings.storyNotes === false;
+        saveSettings();
+        render();
+      }
+      return;
+    }
     if (act === "toggle-privacy-pref") {
       const key = el.dataset.key;
       if (key && STATE.settings) {
@@ -18061,8 +18074,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
   window.addEventListener("scroll", () => {
     paintProfileChrome();
-    if (window.innerWidth >= 500) {
+    const homeStories = parseRoute().name === "home" && document.querySelector(".story-shell");
+    if (window.innerWidth >= 500 || homeStories) {
       STATE.headerHidden = false;
+      if (homeStories) document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
       return;
     }
     const y = window.scrollY;
@@ -21836,7 +21851,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         owner: signedOwner,
         api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
         apiRoot: accountsApi,
-        toast: toast
+        toast: toast,
+        notesOn: function () { return !STATE.settings || STATE.settings.storyNotes !== false; }
       });
       if (window.AudienceLists) {
         window.AudienceLists.bind({
@@ -22388,6 +22404,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("viktorych-settings-applied", () => {
     if (!STATE.settings) return;
     const next = loadSettings();
+    if ((next.storyNotes === true || next.storyNotes === false) && STATE.settings.storyNotes !== next.storyNotes) {
+      STATE.settings.storyNotes = next.storyNotes;
+      render();
+    }
     if (next.navLayoutSync || STATE.settings.navLayoutSync) {
       STATE.settings.navLayout = next.navLayout;
       STATE.settings.navLayoutLand = next.navLayoutLand;
