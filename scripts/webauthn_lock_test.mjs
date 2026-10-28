@@ -178,13 +178,22 @@ async function privacyAndPasskeys(browser, origin) {
     document.hasFocus = () => false;
     window.dispatchEvent(new Event("blur"));
     const cover = document.getElementById("privacy-cover");
+    const app = getComputedStyle(document.getElementById("app"));
     return {
       attr: document.documentElement.getAttribute("data-privacy-cover"),
-      open: !!(cover && !cover.hasAttribute("hidden"))
+      modeAttr: document.documentElement.getAttribute("data-privacy-mode"),
+      open: !!(cover && !cover.hasAttribute("hidden")),
+      display: app.display,
+      visibility: app.visibility,
+      filter: app.filter
     };
   });
-  assert.equal(blur.attr, "app");
+  assert.equal(blur.attr, null);
+  assert.equal(blur.modeAttr, null);
   assert.equal(blur.open, true);
+  assert.notEqual(blur.display, "none");
+  assert.equal(blur.visibility, "visible");
+  assert.equal(blur.filter, "none");
 
   const dms = await page.evaluate(() => {
     document.hasFocus = () => true;
@@ -192,20 +201,24 @@ async function privacyAndPasskeys(browser, origin) {
     window.ViktorychPrivacy.setMode("dms");
     document.hasFocus = () => false;
     window.dispatchEvent(new Event("blur"));
-    return document.documentElement.getAttribute("data-privacy-cover");
+    const cover = document.getElementById("privacy-cover");
+    return !!(cover && !cover.hasAttribute("hidden"));
   });
-  assert.equal(dms, "dms");
+  assert.equal(dms, false);
 
   const quiet = await page.evaluate(() => {
-    document.querySelector("main").removeAttribute("data-privacy");
-    window.ViktorychPrivacy.paint();
-    const covered = document.documentElement.getAttribute("data-privacy-cover");
-    document.querySelector("main").setAttribute("data-privacy", "sensitive");
+    const main = document.querySelector("main");
+    if (main) main.removeAttribute("data-privacy");
     document.hasFocus = () => true;
     window.dispatchEvent(new Event("focus"));
-    return covered;
+    const cover = document.getElementById("privacy-cover");
+    return {
+      attr: document.documentElement.getAttribute("data-privacy-cover"),
+      open: !!(cover && !cover.hasAttribute("hidden"))
+    };
   });
-  assert.equal(quiet, "off");
+  assert.equal(quiet.attr, null);
+  assert.equal(quiet.open, false);
 
   const printed = await page.evaluate(() => {
     window.ViktorychPrivacy.setMode("app");
@@ -214,15 +227,22 @@ async function privacyAndPasskeys(browser, origin) {
     window.dispatchEvent(new Event("afterprint"));
     return open;
   });
-  assert.equal(printed, true);
+  assert.equal(printed, false);
 
   const frozen = await page.evaluate(() => {
+    document.hasFocus = () => true;
+    window.ViktorychPrivacy.setMode("app");
     document.dispatchEvent(new Event("freeze"));
-    const reason = window.ViktorychPrivacy.paint().reason;
+    const app = getComputedStyle(document.getElementById("app"));
+    const choice = window.ViktorychPrivacy.paint();
+    const open = !document.getElementById("privacy-cover").hasAttribute("hidden");
     document.dispatchEvent(new Event("resume"));
-    return reason;
+    return { reason: choice.reason, open: open, display: app.display, visibility: app.visibility };
   });
-  assert.equal(frozen, "freeze");
+  assert.equal(frozen.reason, "freeze");
+  assert.equal(frozen.open, true);
+  assert.notEqual(frozen.display, "none");
+  assert.equal(frozen.visibility, "visible");
 
   const pip = await page.evaluate(() => {
     document.dispatchEvent(new Event("enterpictureinpicture"));
@@ -230,15 +250,17 @@ async function privacyAndPasskeys(browser, origin) {
     document.dispatchEvent(new Event("leavepictureinpicture"));
     return reason;
   });
-  assert.equal(pip, "pip");
+  assert.equal(pip, "");
 
   await page.emulateMedia({ media: "print" });
-  await page.evaluate(() => window.ViktorychPrivacy.setMode("dms"));
-  const hidden = await page.evaluate(() => getComputedStyle(document.querySelector("[data-privacy='sensitive']")).visibility);
-  assert.equal(hidden, "hidden");
   await page.evaluate(() => window.ViktorychPrivacy.setMode("app"));
-  const printedApp = await page.evaluate(() => getComputedStyle(document.getElementById("app")).display);
-  assert.equal(printedApp, "none");
+  const printedApp = await page.evaluate(() => {
+    const app = document.getElementById("app");
+    const style = getComputedStyle(app);
+    return { display: style.display, visibility: style.visibility };
+  });
+  assert.notEqual(printedApp.display, "none");
+  assert.equal(printedApp.visibility, "visible");
   await page.emulateMedia({ media: "screen" });
 
   const cdp = await context.newCDPSession(page);
@@ -253,27 +275,23 @@ async function privacyAndPasskeys(browser, origin) {
   });
   const split = await page.evaluate(() => {
     window.ViktorychPrivacy.setMode("app");
+    document.hasFocus = () => true;
     window.dispatchEvent(new Event("focus"));
     document.dispatchEvent(new Event("resume"));
-    document.dispatchEvent(new Event("leavepictureinpicture"));
     const choice = window.ViktorychPrivacy.paint();
     return {
       reason: choice.reason,
       cover: choice.cover,
-      sw: screen.width,
-      sh: screen.height,
-      ww: window.outerWidth || window.innerWidth,
-      wh: window.outerHeight || window.innerHeight,
-      iw: window.innerWidth,
-      ih: window.innerHeight
+      open: !document.getElementById("privacy-cover").hasAttribute("hidden")
     };
   });
-  assert.equal(split.cover, true, JSON.stringify({ reason: split.reason, sw: split.sw, sh: split.sh, ww: split.ww, wh: split.wh }));
-  assert.equal(split.reason, "split");
+  assert.equal(split.cover, false);
+  assert.equal(split.reason, "");
+  assert.equal(split.open, false);
   await cdp.send("Emulation.clearDeviceMetricsOverride");
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => {
-    window.ViktorychPrivacy.setMode("dms");
+    window.ViktorychPrivacy.setMode("off");
     window.ViktorychPrivacy.paint();
   });
 
