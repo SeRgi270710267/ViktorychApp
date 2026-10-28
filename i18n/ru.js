@@ -2361,5 +2361,19 @@ SI18n.addPack("ru", {
   "The stories tray and viewer. Off loads nothing for it.": "Лента и просмотр историй. Когда выключено, для них ничего не загружается.",
   "Sort replies": "Сортировка ответов",
   "Follow {handle}": "Читать {handle}",
-  "Unfollow {handle}": "Отписаться от {handle}"
+  "Unfollow {handle}": "Отписаться от {handle}",
+  "My devices": "Мои устройства",
+  "Every device signed in to this account.": "Все устройства, на которых выполнен вход в этот аккаунт.",
+  "Sign in to see your devices": "Войдите, чтобы увидеть свои устройства",
+  "Unnamed device": "Устройство без названия",
+  "Active now": "Активно сейчас",
+  "Last seen {when}": "Был в сети {when}",
+  "Could not load your devices.": "Не удалось загрузить ваши устройства.",
+  "No devices yet.": "Устройств пока нет.",
+  "Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account.": "Устройства, на которых выполнен вход в этот аккаунт, появляются здесь сами. Удаление устройства завершает на нём сеанс. QR-коды нужны только для привязки другого аккаунта.",
+  "Device name": "Название устройства",
+  "Could not rename that device.": "Не удалось переименовать это устройство.",
+  "Remove this device? You will be signed out here.": "Удалить это устройство? Здесь будет выполнен выход.",
+  "Remove this device? It will be signed out.": "Удалить это устройство? На нём будет выполнен выход.",
+  "Could not remove that device.": "Не удалось удалить это устройство."
 });
