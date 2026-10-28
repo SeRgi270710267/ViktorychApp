@@ -1,5 +1,16 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("ru", {
+  "Technology": "Технологии",
+  "News": "Новости",
+  "Gaming": "Игры",
+  "Sports": "Спорт",
+  "Entertainment": "Развлечения",
+  "Science": "Наука",
+  "Business": "Бизнес",
+  "See all communities": "Все сообщества",
+  "Recorded {date}": "Запись {date}",
+  "Switch community": "Сменить сообщество",
+  "Popular communities": "Популярные сообщества",
   "{count} votes": "Голосов: {count}",
   "Edit post": "Изменить пост",
   "Delete post": "Удалить пост",

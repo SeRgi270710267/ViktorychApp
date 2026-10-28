@@ -1,5 +1,16 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("en", {
+  "Technology": "Technology",
+  "News": "News",
+  "Gaming": "Gaming",
+  "Sports": "Sports",
+  "Entertainment": "Entertainment",
+  "Science": "Science",
+  "Business": "Business",
+  "See all communities": "See all communities",
+  "Recorded {date}": "Recorded {date}",
+  "Switch community": "Switch community",
+  "Popular communities": "Popular communities",
   "{count} votes": "{count} votes",
   "Edit post": "Edit post",
   "Delete post": "Delete post",

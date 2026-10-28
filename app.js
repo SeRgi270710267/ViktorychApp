@@ -16235,7 +16235,7 @@ if (STATE.histClear) {
       badge: () => {
         if (!STATE.settings) return;
         const notes = Array.isArray(STATE.settings.bellNotes) ? STATE.settings.bellNotes.slice() : [];
-        notes.unshift({ id: "hscroll-badge-" + Date.now(), at: Date.now(), handle: "news", name: "News", text: "badge", hash: "#/" });
+        notes.unshift({ id: "hscroll-badge-" + Date.now(), at: Date.now(), handle: "news", name: tr("News"), text: "badge", hash: "#/" });
         STATE.settings.bellNotes = cleanBellNotes(notes);
         paintBellBadge();
         render();
