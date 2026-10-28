@@ -1,5 +1,7 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("es", {
+  "Play with the X player": "Reproducir con el reproductor de X",
+  "Play with the TikTok player": "Reproducir con el reproductor de TikTok",
   "{count} votes": "{count} votos",
   "Edit post": "Editar publicación",
   "Delete post": "Eliminar publicación",

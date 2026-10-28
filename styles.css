@@ -6085,3 +6085,52 @@ img, video { max-width: 100%; }
 .device-actions { display: flex; gap: 8px; flex: none; }
 .device-actions .outline { padding: 4px 12px; min-height: 32px; }
 .device-tag { font-size: 12px; font-weight: 500; color: var(--muted, #71767b); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+
+/* Official embed as the last resort: a tap-to-load placeholder, then the
+   platform's player scaled to cover the post's video frame. */
+.vembed-tap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  height: 36px;
+  padding: 0 16px 0 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(15, 20, 25, 0.78);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.vembed-tap:hover { background: rgba(39, 44, 48, 0.85); }
+.vembed-tap svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
+.vembed-tap span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vembed-fit {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  background: #000;
+}
+.vembed-fit iframe,
+.vplay.is-x-embed .vembed-fit iframe {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 0;
+  transform-origin: 50% 50%;
+  background: #000;
+}
+.vplay.is-official .vposter,
+.vplay.is-official .vdur,
+.vplay.is-official > .play { visibility: hidden; }
+.vplay.is-official-wait .vretry, .vplay.is-official-wait .vfallback { display: none !important; }
