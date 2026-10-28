@@ -5237,7 +5237,7 @@ async function route(request, env, ctx) {
     const listed = await handleAudienceLists(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (listed) return listed;
   }
-  if (path === "/v1/points" || path.startsWith("/v1/points/") || path === "/v1/gifts" || path.startsWith("/v1/gifts/")) {
+  if (path === "/v1/points" || path.startsWith("/v1/points/") || path === "/v1/gifts" || path.startsWith("/v1/gifts/") || path === "/v1/status-emoji" || path.startsWith("/v1/status-emoji/")) {
     const paid = await handlePoints(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (paid) return paid;
   }

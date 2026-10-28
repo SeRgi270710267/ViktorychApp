@@ -1994,6 +1994,24 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<img class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
   }
 
+  function presenceWrap(html, id) {
+    const raw = String(id || "");
+    let pid = "";
+    if (/^\d{12}$/.test(raw)) pid = raw;
+    else if (raw.indexOf("app:") === 0 && /^\d{12}$/.test(raw.slice(4))) pid = raw.slice(4);
+    if (!pid || !window.ViktorychPresence || !window.ViktorychPresence.wrap) return html || "";
+    return window.ViktorychPresence.wrap(pid, html || "");
+  }
+
+  function postAuthorPid(post) {
+    if (!post) return "";
+    if (/^\d{12}$/.test(String(post.authorId || ""))) return String(post.authorId);
+    const feed = String(post.feedId || "");
+    if (feed.indexOf("app:") === 0 && /^\d{12}$/.test(feed.slice(4))) return feed.slice(4);
+    if (/^\d{12}$/.test(String(post.publicId || ""))) return String(post.publicId);
+    return "";
+  }
+
   function badge(type) {
     if (!type || type === "none") return "";
     const cls = type === "business" ? "business" : type === "government" ? "government" : "blue";
@@ -6980,7 +6998,7 @@ const here = parseRoute();
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
     const displayHandle = internalPostHandle(creator ? (post.handle || creator.handle || "") : (post.handle || ""), post, creator);
-    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
+    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || tr("Profile"))}">${presenceWrap(avatar(face.avatar, displayName), postAuthorPid(post))}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
@@ -8290,7 +8308,8 @@ const here = parseRoute();
     const mine = signedAccount();
     const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
     const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
-    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
+    const publicFace = presenceWrap(avatar(post.authorAvatar, post.authorName || post.authorHandle), post.authorId);
+    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="post-row">${publicFace}<div class="post-main"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></div></div></article>`;
   }
 
   function welcomeHtml(route) {
@@ -9675,7 +9694,7 @@ const here = parseRoute();
     }, banner)}
     <div class="pinfo" data-live-error="${esc(row.errorDetail || row.error || "")}">
       <div class="pava-row">
-        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(profile.avatar, profile.name, "pava"), profile.platform, profile.handle) : avatar(profile.avatar, profile.name, "pava")}
+        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(presenceWrap(avatar(profile.avatar, profile.name, "pava", profile.avatarFace), presenceIdOf(profile)), profile.platform, profile.handle) : presenceWrap(avatar(profile.avatar, profile.name, "pava", profile.avatarFace), presenceIdOf(profile))}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="${tr("Share")}">${icon("share")}</button>
           ${bellButton(liveFollowId(profile), profile.handle)}
@@ -9895,7 +9914,7 @@ const here = parseRoute();
     }, banner)}
     <div class="pinfo">
       <div class="pava-row">
-        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(feed.avatar, feed.name, "pava"), feed.platform, feed.handle) : avatar(feed.avatar, feed.name, "pava")}
+        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(presenceWrap(avatar(feed.avatar, feed.name, "pava"), presenceIdOf(feed)), feed.platform, feed.handle) : presenceWrap(avatar(feed.avatar, feed.name, "pava"), presenceIdOf(feed))}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="${tr("Share")}">${icon("share")}</button>
           ${bellButton(feed.id, feed.handle)}
@@ -10000,8 +10019,8 @@ const here = parseRoute();
           <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
-      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
-      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
+      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${presenceWrap(avatar(face.avatar, post.author), postAuthorPid(post))}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${presenceWrap(avatar(face.avatar, post.author), postAuthorPid(post))}</a>${names}</div>${body}</article>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><h1 class="grow">${tr("Post noun")}</h1></div></div>
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
@@ -14443,7 +14462,7 @@ if (STATE.histClear) {
     const ancHandle = internalPostHandle(post.handle || "", post);
     const shown = parentShown ? mentionless(post) : post;
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
-      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
+      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${presenceWrap(avatar(face.avatar, post.author || post.handle), postAuthorPid(post))}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
         <div class="byline">
           <a class="name" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>

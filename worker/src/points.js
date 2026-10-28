@@ -63,7 +63,17 @@ export const POINTS_SCHEMA = [
     hide_tab INTEGER NOT NULL DEFAULT 0,
     who TEXT NOT NULL DEFAULT 'everyone',
     updated_at INTEGER NOT NULL
-  )`
+  )`,
+  `CREATE TABLE IF NOT EXISTS status_emoji_owned (
+    public_id TEXT NOT NULL,
+    emoji_id TEXT NOT NULL,
+    from_id TEXT NOT NULL DEFAULT '',
+    gift_send_id TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (public_id, emoji_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS status_emoji_owned_account ON status_emoji_owned(public_id, created_at DESC)",
+  "CREATE INDEX IF NOT EXISTS gift_sends_sender ON gift_sends(sender_id, created_at DESC)"
 ];
 
 export const RULES = {
@@ -109,6 +119,99 @@ export const GIFT_CATALOG = [
 
 function giftById(id) {
   return GIFT_CATALOG.find((item) => item.id === id) || null;
+}
+
+/* Special status emojis. The price lives here. A client price is ignored. */
+export const STATUS_EMOJI_CATALOG = [
+  { id: "flame", emoji: "🔥", price: 20, popular: true, fresh: false },
+  { id: "party", emoji: "🎉", price: 25, popular: true, fresh: true },
+  { id: "rocket", emoji: "🚀", price: 40, popular: false, fresh: true },
+  { id: "rainbow", emoji: "🌈", price: 35, popular: false, fresh: false },
+  { id: "dragon", emoji: "🐉", price: 60, popular: true, fresh: true },
+  { id: "gem", emoji: "💎", price: 80, popular: true, fresh: false },
+  { id: "unicorn", emoji: "🦄", price: 100, popular: false, fresh: true },
+  { id: "regal", emoji: "👑", price: 120, popular: false, fresh: false }
+];
+
+export function statusEmojiById(id) {
+  return STATUS_EMOJI_CATALOG.find((item) => item.id === String(id || "")) || null;
+}
+
+export function statusEmojiByChar(emoji) {
+  const text = String(emoji || "");
+  return STATUS_EMOJI_CATALOG.find((item) => item.emoji === text) || null;
+}
+
+function statusGiftId(id) {
+  const text = String(id || "");
+  return text.indexOf("status:") === 0 ? text.slice(7) : "";
+}
+
+export async function emojiAllowed(env, publicId, emoji) {
+  const text = String(emoji || "");
+  if (!text) return { ok: true };
+  const item = statusEmojiByChar(text);
+  if (!item) return { ok: true };
+  const row = await env.DB.prepare(
+    "SELECT emoji_id FROM status_emoji_owned WHERE public_id = ? AND emoji_id = ?"
+  ).bind(publicId, item.id).first();
+  if (!row) return { ok: false, error: "owned" };
+  return { ok: true, id: item.id };
+}
+
+async function ownsEmoji(env, publicId, emojiId) {
+  const row = await env.DB.prepare(
+    "SELECT emoji_id FROM status_emoji_owned WHERE public_id = ? AND emoji_id = ?"
+  ).bind(publicId, emojiId).first();
+  return !!row;
+}
+
+async function grantEmoji(env, publicId, emojiId, fromId, giftSendId, now) {
+  await env.DB.prepare(
+    `INSERT INTO status_emoji_owned (public_id, emoji_id, from_id, gift_send_id, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(public_id, emoji_id) DO NOTHING`
+  ).bind(publicId, emojiId, fromId || "", giftSendId || "", now).run();
+}
+
+async function ownedIds(env, publicId) {
+  const listed = await env.DB.prepare(
+    "SELECT emoji_id FROM status_emoji_owned WHERE public_id = ? ORDER BY created_at DESC"
+  ).bind(publicId).all();
+  return rowsOf(listed).map((row) => row.emoji_id);
+}
+
+export async function spendChecked(env, publicId, amount, reason, ref) {
+  const cost = Math.floor(Number(amount) || 0);
+  if (cost <= 0 || !PUBLIC_ID.test(String(publicId || ""))) return { ok: false, error: "cost" };
+  const now = Date.now();
+  const mark = String(ref || newId()).slice(0, 120);
+  const prior = await env.DB.prepare(
+    "SELECT id FROM point_ledger WHERE public_id = ? AND reason = ? AND ref = ?"
+  ).bind(publicId, reason, mark).first();
+  if (prior) return { ok: false, error: "duplicate", balance: await balanceOf(env, publicId) };
+  const before = await balanceOf(env, publicId);
+  if (before < cost) return { ok: false, error: "balance", balance: before };
+  const updated = await env.DB.prepare(
+    "UPDATE point_balances SET balance = balance - ?, updated_at = ? WHERE public_id = ? AND balance >= ?"
+  ).bind(cost, now, publicId, cost).run();
+  const meta = updated && (updated.meta || updated);
+  const changes = meta && meta.changes != null ? Number(meta.changes) : null;
+  if (changes === 0 || (changes == null && (await balanceOf(env, publicId)) !== before - cost)) {
+    return { ok: false, error: "balance", balance: await balanceOf(env, publicId) };
+  }
+  try {
+    await env.DB.prepare(
+      "INSERT INTO point_ledger (id, public_id, delta, reason, ref, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(newId(), publicId, -cost, reason, mark, now).run();
+  } catch (err) {
+    await env.DB.prepare(
+      "UPDATE point_balances SET balance = balance + ?, updated_at = ? WHERE public_id = ?"
+    ).bind(cost, now, publicId).run();
+    if (/UNIQUE/i.test(String(err && err.message || err))) return { ok: false, error: "duplicate", balance: await balanceOf(env, publicId) };
+    throw err;
+  }
+  return { ok: true, balance: await balanceOf(env, publicId) };
 }
 
 function hex(bytes) {
@@ -275,11 +378,14 @@ async function prefsOf(env, publicId) {
 
 function presentGift(row, viewerId, owner) {
   const privacy = row.privacy === "private" || row.privacy === "anonymous" ? row.privacy : "public";
-  const gift = giftById(row.gift_id);
+  const special = statusEmojiById(statusGiftId(row.gift_id));
+  const gift = special ? null : giftById(row.gift_id);
   const item = {
     id: row.id,
-    giftId: row.gift_id,
+    giftId: special ? special.id : row.gift_id,
     svg: gift ? gift.svg : "",
+    emoji: special ? special.emoji : "",
+    kind: special ? "status" : "gift",
     message: row.message || "",
     at: Number(row.created_at) || 0,
     hidden: row.hidden === 1,
@@ -420,11 +526,103 @@ export async function awardBirthdayBonuses(env, now) {
   return { awarded: awarded };
 }
 
+async function recentSends(env, publicId) {
+  const listed = await env.DB.prepare(
+    "SELECT g.id, g.gift_id, g.message, g.created_at, a.handle AS recipient_handle, a.display_name AS recipient_name FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.recipient_id WHERE g.sender_id = ? ORDER BY g.created_at DESC LIMIT 8"
+  ).bind(publicId).all();
+  return rowsOf(listed).map((row) => {
+    const special = statusEmojiById(statusGiftId(row.gift_id));
+    const gift = special ? null : giftById(row.gift_id);
+    return {
+      id: row.id,
+      giftId: special ? special.id : row.gift_id,
+      emoji: special ? special.emoji : "",
+      svg: gift ? gift.svg : "",
+      kind: special ? "status" : "gift",
+      handle: row.recipient_handle || "",
+      name: row.recipient_name || "",
+      message: row.message || "",
+      at: Number(row.created_at) || 0
+    };
+  });
+}
+
 export async function handlePoints(request, env, path, deps) {
   const url = new URL(request.url);
   const viewer = await deps.sessionAccount(env, request);
   if (path === "/v1/gifts/catalog" && request.method === "GET") {
-    return deps.json(200, { gifts: GIFT_CATALOG.map((item) => ({ id: item.id, category: item.category, price: item.price, seasonal: item.seasonal, svg: item.svg })) });
+    const owned = viewer ? await ownedIds(env, viewer.public_id) : [];
+    return deps.json(200, {
+      gifts: GIFT_CATALOG.map((item) => ({ id: item.id, category: item.category, price: item.price, seasonal: item.seasonal, svg: item.svg })),
+      statusEmojis: STATUS_EMOJI_CATALOG.map((item) => ({ id: item.id, emoji: item.emoji, price: item.price, popular: item.popular, fresh: item.fresh, owned: owned.indexOf(item.id) >= 0 })),
+      balance: viewer ? await balanceOf(env, viewer.public_id) : 0,
+      recent: viewer ? await recentSends(env, viewer.public_id) : []
+    });
+  }
+  if (path === "/v1/status-emoji" && request.method === "GET") {
+    if (!viewer) return deps.json(401, { error: "unauthorized" });
+    const owned = await ownedIds(env, viewer.public_id);
+    return deps.json(200, {
+      emojis: STATUS_EMOJI_CATALOG.map((item) => ({ id: item.id, emoji: item.emoji, price: item.price, popular: item.popular, fresh: item.fresh, owned: owned.indexOf(item.id) >= 0 })),
+      balance: await balanceOf(env, viewer.public_id),
+      recent: await recentSends(env, viewer.public_id)
+    });
+  }
+  if (path === "/v1/status-emoji/buy" && request.method === "POST") {
+    if (!viewer) return deps.json(401, { error: "unauthorized" });
+    const paced = await deps.rateHit(env, "emoji-buy:" + viewer.public_id, 20, 60 * 60 * 1000);
+    if (!paced.ok) return deps.limited(paced);
+    const body = await deps.readJson(request, 2000);
+    if (body.error) return deps.json(400, { error: body.error });
+    const item = statusEmojiById(body.emojiId);
+    if (!item) return deps.json(400, { error: "emoji" });
+    if (await ownsEmoji(env, viewer.public_id, item.id)) {
+      return deps.json(200, { already: true, balance: await balanceOf(env, viewer.public_id), emoji: item.emoji, id: item.id });
+    }
+    const paid = await spendChecked(env, viewer.public_id, item.price, "status_buy", "buy:" + item.id);
+    if (!paid.ok) return deps.json(402, { error: paid.error === "balance" ? "balance" : paid.error, balance: paid.balance || 0 });
+    await grantEmoji(env, viewer.public_id, item.id, "", "", Date.now());
+    return deps.json(201, { id: item.id, emoji: item.emoji, balance: paid.balance, owned: true });
+  }
+  if (path === "/v1/status-emoji/gift" && request.method === "POST") {
+    if (!viewer) return deps.json(401, { error: "unauthorized" });
+    const paced = await deps.rateHit(env, "emoji-gift:" + viewer.public_id, 20, 60 * 60 * 1000);
+    if (!paced.ok) return deps.limited(paced);
+    const body = await deps.readJson(request, 4000);
+    if (body.error) return deps.json(400, { error: body.error });
+    const item = statusEmojiById(body.emojiId);
+    if (!item) return deps.json(400, { error: "emoji" });
+    const recipient = await accountByHandle(env, body.handle || body.recipientHandle || "");
+    if (!recipient || recipient.public_id === viewer.public_id) return deps.json(400, { error: "recipient" });
+    if (await blocksEither(env, viewer.public_id, recipient.public_id)) return deps.json(403, { error: "blocked" });
+    if (await ownsEmoji(env, recipient.public_id, item.id)) return deps.json(409, { error: "owned" });
+    const sendId = newId();
+    const paid = await spendChecked(env, viewer.public_id, item.price, "status_gift", sendId);
+    if (!paid.ok) return deps.json(402, { error: paid.error, balance: paid.balance || 0 });
+    const now = Date.now();
+    const message = cleanMessage(body.message);
+    const privacy = body.privacy === "private" || body.privacy === "anonymous" ? body.privacy : "public";
+    await grantEmoji(env, recipient.public_id, item.id, viewer.public_id, sendId, now);
+    await env.DB.prepare(
+      "INSERT INTO gift_sends (id, gift_id, sender_id, recipient_id, message, privacy, hidden, cost, context, post_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 'direct', '', ?)"
+    ).bind(sendId, "status:" + item.id, viewer.public_id, recipient.public_id, message, privacy, item.price, now).run();
+    try {
+      const named = privacy !== "anonymous";
+      const note = await planNotification(env, {
+        publicId: recipient.public_id,
+        kind: "gift",
+        at: now,
+        actorId: named ? viewer.public_id : "",
+        idempotencyKey: "status-emoji:" + sendId,
+        handle: named ? viewer.handle : "",
+        name: named ? viewer.display_name : "",
+        text: message.slice(0, 140),
+        hash: "#/@" + encodeURIComponent(recipient.handle || "") + "?tab=gifts",
+        platform: "app"
+      });
+      if (note && note.statements) await commitBundled(env, note.statements, note.deliveries || [], request);
+    } catch (err) { /* the emoji is already in their collection */ }
+    return deps.json(201, { id: sendId, emoji: item.emoji, balance: paid.balance });
   }
   if (path === "/v1/gifts/daily" && request.method === "GET") return deps.json(200, await dailyFreeGift());
   if (path === "/v1/points/board" && request.method === "GET") {

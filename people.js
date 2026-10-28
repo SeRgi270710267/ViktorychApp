@@ -424,6 +424,14 @@
     const hrefFor = (id) => "#/p/" + encodeURIComponent(person.id) + (id === "posts" ? "" : "?tab=" + id);
     const tabHtml = tabs.map((pair) => `<a class="tab${tab === pair[0] ? " on" : ""}" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" href="${esc(hrefFor(pair[0]))}"><span>${esc(pair[1])}</span></a>`).join("");
     let avatar = h.avatar ? h.avatar(person.avatar, person.name, "pava") : "";
+    let presenceId = "";
+    (person.accounts || []).forEach(function (account) {
+      const id = String(account && (account.publicId || account.id) || "");
+      if (/^\d{12}$/.test(id)) presenceId = id;
+      else if (id.indexOf("app:") === 0 && /^\d{12}$/.test(id.slice(4))) presenceId = id.slice(4);
+    });
+    if (!presenceId && /^\d{12}$/.test(String(person.publicId || ""))) presenceId = String(person.publicId);
+    if (presenceId && root.ViktorychPresence && root.ViktorychPresence.wrap) avatar = root.ViktorychPresence.wrap(presenceId, avatar);
     if (root.Spaces && root.Spaces.avatar) {
       (person.accounts || []).forEach((account) => {
         avatar = root.Spaces.avatar(avatar, account && account.platform, account && account.handle);
