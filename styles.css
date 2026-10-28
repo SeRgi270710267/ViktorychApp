@@ -1796,6 +1796,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .pava-row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: -67px; min-height: 67px; }
 .pactions { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .pactions .presence-lines { margin: 0; text-align: right; flex: none; }
+.pname .name-row-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pname .protected-badge { display: inline-flex; width: 18px; height: 18px; flex: none; align-items: center; justify-content: center; }
 .pname .protected-badge svg { width: 18px; height: 18px; display: block; }
 .follow.pending { background: transparent; color: var(--text); border-color: #536471; }
@@ -2459,8 +2460,9 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .drawer-x .drawer-ava { width: 40px; height: 40px; flex: none; }
 .drawer-x .drawer-name { margin-top: 12px; font-size: 20px; line-height: 24px; }
 .drawer-x .drawer-name b { font-weight: 800; }
-.drawer-lock { display: inline-flex; color: var(--text); }
-.drawer-lock svg { width: 16px; height: 16px; }
+.drawer-x .drawer-name.pname { font-weight: 800; min-width: 0; }
+.drawer-lock { display: inline-flex; color: var(--muted); }
+.drawer-lock svg { width: 18px; height: 18px; }
 .drawer-x .drawer-handle { margin-top: 2px; color: var(--muted); font-size: 15px; line-height: 20px; }
 .drawer-x .drawer-counts { display: flex; gap: 16px; margin-top: 12px; font-size: 14px; color: var(--muted); }
 .drawer-x .drawer-counts b { color: var(--text); font-weight: 700; }
@@ -2521,8 +2523,28 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   touch-action: none;
   flex: none;
 }
-.drawer-eye, .drawer-lock { width: 36px; height: 36px; flex: none; }
-.drawer-move { max-width: 108px; height: 32px; background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+.drawer-eye { width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.drawer-eye svg { width: 20px; height: 20px; fill: currentColor; }
+/* Customize rows read like X's settings lists: grip, icon, full label and
+   the eye on one thin line; where the item lives sits on a second line. */
+.drawer-edit-row {
+  display: grid;
+  grid-template-columns: 32px 26px minmax(0, 1fr) 36px;
+  grid-template-areas: "grip ico label eye" ". ctl ctl ctl";
+  column-gap: 8px;
+  row-gap: 0;
+  min-height: 44px;
+  padding: 2px 12px;
+}
+.drawer-edit-row > .drawer-grip { grid-area: grip; height: 36px; }
+.drawer-edit-row > .drawer-ico { grid-area: ico; }
+.drawer-edit-row > .drawer-label { grid-area: label; min-width: 0; overflow: hidden; white-space: nowrap; line-height: 20px; }
+.drawer-edit-row > .drawer-eye { grid-area: eye; min-width: 36px; min-height: 36px; padding: 0; }
+.drawer-ctl { grid-area: ctl; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; padding-bottom: 6px; }
+.drawer-place { display: inline-flex; flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 2px; border: 1px solid var(--line); border-radius: 999px; }
+.drawer-seg { height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; cursor: pointer; }
+.drawer-seg.on { background: var(--text); color: var(--bg); cursor: default; }
+.drawer-move { flex: 0 1 auto; min-width: 0; max-width: 150px; height: 28px; font-size: 12px; padding: 0 6px; text-overflow: ellipsis; background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
 .drawer-place-title { margin: 14px 16px 4px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .drawer-edit-list[data-place="popup"] { min-height: 48px; }
 .drawer-section-emoji { width: 44px; flex: none; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); text-align: center; font-size: 16px; }
