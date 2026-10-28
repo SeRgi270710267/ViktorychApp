@@ -42,7 +42,7 @@
       "text": "text",
       "url": "url",
       "files": [
-        { "name": "media", "accept": ["image/*", "video/*", "audio/*", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov"] }
+        { "name": "media", "accept": ["image/*", "video/*", "audio/*", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".heif", ".mp4", ".webm", ".mov"] }
       ]
     }
   },
@@ -50,7 +50,7 @@
     {
       "action": "./",
       "accept": {
-        "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif"],
+        "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".heic", ".heif"],
         "video/*": [".mp4", ".webm", ".mov", ".m4v"]
       }
     }
