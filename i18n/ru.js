@@ -2358,5 +2358,8 @@ SI18n.addPack("ru", {
   "Picture of Safari install steps": "Изображение шагов установки в Safari",
   "Live pills row": "Строка live-плашек",
   "Weather, scores and live spaces above the timeline. Off loads nothing for it.": "Погода, счёт матчей и эфиры над лентой. Когда выключено, для неё ничего не загружается.",
-  "The stories tray and viewer. Off loads nothing for it.": "Лента и просмотр историй. Когда выключено, для них ничего не загружается."
+  "The stories tray and viewer. Off loads nothing for it.": "Лента и просмотр историй. Когда выключено, для них ничего не загружается.",
+  "Sort replies": "Сортировка ответов",
+  "Follow {handle}": "Читать {handle}",
+  "Unfollow {handle}": "Отписаться от {handle}"
 });

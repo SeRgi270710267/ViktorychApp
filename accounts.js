@@ -300,6 +300,8 @@
         activeApiRoot = root;
         return res.json().catch(function () { return {}; }).then(function (body) {
           body = body || {};
+          // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
+          if (typeof body.status === "string") body.bodyStatus = body.status;
           body.status = res.status;
           return body;
         });
@@ -1273,6 +1275,12 @@ function signupPayload() {
     }).then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.accountNumber) {
+        /* The server already follows the owner's accounts for a new account.
+           Guest follows stay on this device and are not imported. */
+        if (res.account && res.account.publicId) writeStored("follows-imported-v2-" + res.account.publicId, "1");
+        if (typeof window.ViktorychAccounts.onSignup === "function") {
+          try { window.ViktorychAccounts.onSignup(res.account || {}); } catch (err) { /* the session still opens */ }
+        }
         writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
         view = "signup";
         step = 2;
@@ -2291,6 +2299,10 @@ function signupPayload() {
     }
     return null;
   }
+  function friendWord(res) {
+    var word = res && (res.friendStatus || res.bodyStatus);
+    return word === "none" || word === "sent" || word === "received" || word === "friends" ? word : "";
+  }
   function friendButtonHtml(account) {
     var session = readSession();
     var ref = accountRef(account);
@@ -2327,7 +2339,7 @@ function signupPayload() {
       var id = key;
       graphCounts[id] = graphCounts[id] || {};
       if (res.friendsCount != null) graphCounts[id].friends = res.friendsCount;
-      if (res.status != null) graphCounts[id].friendStatus = res.status;
+      if (friendWord(res)) graphCounts[id].friendStatus = friendWord(res);
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { friendsLoads[key] = false; });
@@ -2423,7 +2435,7 @@ function signupPayload() {
         if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
         return;
       }
-      if (res.status != null) graphCounts[idKey].friendStatus = res.status;
+      if (friendWord(res)) graphCounts[idKey].friendStatus = friendWord(res);
       if (res.friendsCount != null && graphCounts[meKey]) graphCounts[meKey].friends = res.friendsCount;
       refreshFriends();
       refreshProfileMedia();
@@ -4421,6 +4433,7 @@ else if (act === "copy-id") copyAccountId();
     storedAccount: storedAccount,
     followButton: null,
     onServerFollows: null,
+    onSignup: null,
     changeFollow: changeFollow,
     pressFollow: pressFollow,
     releaseFollow: releaseFollow,
