@@ -96,7 +96,7 @@ export async function decorate(env, posts, viewerId) {
 /* The quoted post as a card: author, avatar, text, media and time, or a
    placeholder when the viewer may not see it. */
 export async function quoteFor(env, request, quoteId, viewerId) {
-  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.created_at, p.audience, p.hidden, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(quoteId).first();
+  const row = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.parent_id, p.created_at, p.audience, p.hidden, p.scheduled_at, p.ext_parent, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ?").bind(quoteId).first();
   if (!row || row.hidden || Number(row.scheduled_at) > Date.now()) return { id: quoteId, unavailable: true, deleted: !!(row && Number(row.hidden) === DELETED) };
   if (!(await viewerCanSee(env, viewerId, row))) return { id: quoteId, unavailable: true };
   const mediaRows = await env.DB.prepare("SELECT id, mime, size, alt_text FROM public_post_media WHERE post_id = ? ORDER BY sort_order ASC, id ASC").bind(row.id).all();
@@ -262,7 +262,7 @@ async function remove(request, env, deps, session) {
   return deps.json(200, { ok: true, id: row.id });
 }
 
-const SELECT = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id";
+const SELECT = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, p.ext_parent, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id";
 
 /* One post with its ancestors and its replies, sorted like the reply tabs. */
 async function thread(request, env, deps, session) {
