@@ -72,8 +72,22 @@
     catch (err) { return function () { return Promise.reject(err); }; }
   })();
 
+  /* Features the owner switched off on the server are never loaded. */
+  function serverOff(name) {
+    try {
+      var list = JSON.parse(localStorage.getItem("viktorychapp-server-off") || "[]");
+      return Array.isArray(list) && list.indexOf(name) !== -1;
+    } catch (err) { return false; }
+  }
+
+  /* Idle preloading is skipped on metered or slow connections. */
+  function lightNetwork() {
+    var c = navigator.connection || {};
+    return !!c.saveData || /(^|-)(2g|3g)$/.test(String(c.effectiveType || ""));
+  }
+
   function ensure(name, silent) {
-    if (!REGISTRY[name]) return Promise.resolve();
+    if (!REGISTRY[name] || serverOff(name)) return Promise.resolve();
     if (loads[name]) return loads[name];
     loads[name] = loadOne(name, REGISTRY[name]).then(function () {
       notify(name, silent);
@@ -84,6 +98,7 @@
   function preload(list) {
     if (preloadStarted) return;
     preloadStarted = true;
+    if (lightNetwork()) return;
     var start = (typeof requestIdleCallback === "function")
       ? new Promise(function (resolve) { requestIdleCallback(function () { resolve(); }); })
       : new Promise(function (resolve) { setTimeout(resolve, 2500); });
@@ -97,6 +112,7 @@
 
   window.ViktorychLazy = {
     ensure: function (name) { return ensure(name, false); },
-    preload: preload
+    preload: preload,
+    serverOff: serverOff
   };
 })();

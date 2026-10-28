@@ -158,6 +158,8 @@ async function main() {
     if (explore.status !== 0) throw new Error("explore nav check failed");
     const features = spawnSync(process.execPath, [path.join(root, "scripts", "home_features_test.mjs")], { stdio: "inherit", env: process.env });
     if (features.status !== 0) throw new Error("home features check failed");
+    const serverOff = spawnSync(process.execPath, [path.join(root, "scripts", "server_off_test.mjs")], { stdio: "inherit", env: process.env });
+    if (serverOff.status !== 0) throw new Error("server off check failed");
   } finally {
     await browser.close();
     server.close();
