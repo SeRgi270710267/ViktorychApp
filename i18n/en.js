@@ -1,5 +1,16 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("en", {
+  "Technology": "Technology",
+  "News": "News",
+  "Gaming": "Gaming",
+  "Sports": "Sports",
+  "Entertainment": "Entertainment",
+  "Science": "Science",
+  "Business": "Business",
+  "See all communities": "See all communities",
+  "Recorded {date}": "Recorded {date}",
+  "Switch community": "Switch community",
+  "Popular communities": "Popular communities",
   "Delete post?": "Delete post?",
   "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.": "This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results.",
   "{count} votes": "{count} votes",
