@@ -23,7 +23,7 @@ function staticChecks() {
   if (!shell.includes("position: relative")) fail("story shell must stay in flow");
   if (/position:\s*fixed/.test(shell) || /position:\s*absolute/.test(shell)) fail("story shell must not cover the feed");
   if (!shell.includes("backdrop-filter: none")) fail("story shell must not blur the feed");
-  if (!css.includes("height: 204px") || !css.includes("height: 52px") || !css.includes("height: 28px")) fail("collapse heights missing");
+  if (!css.includes("height: 112px") || !css.includes("height: 52px") || !css.includes("height: 28px")) fail("collapse heights missing");
   if (!css.includes(".story-shell[data-state=\"slim\"] .note-bubble") || !css.includes(".story-folders") || !css.includes("display: none")) fail("collapsed bar must hide note bubbles and folders");
   if (!css.includes("border-radius: 999px")) fail("story rings must be circles");
   if (!css.includes("max-width: 499px") || !css.includes("min-width: 1000px") || !css.includes("max-width: 999px")) fail("story bar needs phone, tablet, and desktop rules");
@@ -33,7 +33,7 @@ function staticChecks() {
   const tabsAt = header.indexOf('class="tabs-bar"');
   if (trayAt < 0 || tabsAt < 0 || trayAt > tabsAt) fail("stories must sit above For you and Following");
   if (!app.includes('getElementById("new-posts")')) fail("new posts pill hook missing");
-  if (!read("sw.js").includes('VERSION = "viktorych-a38-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a39-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok story bar layout rules");
 }
 
