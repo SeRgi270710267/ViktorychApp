@@ -1257,6 +1257,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   // the id in the list, so the next load does not add it again.
   function mergeDefaultFollows(parsed, configured) {
     if (!configured.length || !posts().length) return;
+    /* Signed-in accounts get no catalog defaults; their follows come from the server. */
+    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
+      parsed.seenDefaults = Array.from(new Set([].concat(Array.isArray(parsed.seenDefaults) ? parsed.seenDefaults : [], configured)));
+      parsed.seenFeeds = parsed.seenDefaults.slice();
+      return;
+    }
     const follows = parsed.follows || [];
     if (!Array.isArray(parsed.seenDefaults)) {
       if (Array.isArray(parsed.seenFeeds)) {
@@ -22810,6 +22816,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     };
     window.ViktorychAccounts.toast = toast;
     if (window.ViktorychAccounts.syncFriends) window.ViktorychAccounts.syncFriends();
+    /* A new account follows only what the server set up (the owner's own
+       accounts). Every default this device was offered counts as seen, so
+       none is added back. */
+    window.ViktorychAccounts.onSignup = function () {
+      const configured = feeds().filter((f) => f.configured).map((f) => f.id);
+      STATE.settings.follows = [];
+      STATE.settings.accountFollows = [];
+      STATE.settings.seenDefaults = Array.from(new Set([].concat(STATE.settings.seenDefaults || [], configured)));
+      STATE.settings.seenFeeds = STATE.settings.seenDefaults.slice();
+      saveSettings();
+    };
     window.ViktorychAccounts.onServerFollows = function (ids) {
       const list = Array.isArray(ids) ? ids : [];
       const feeds = [];

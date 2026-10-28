@@ -1275,6 +1275,12 @@ function signupPayload() {
     }).then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.accountNumber) {
+        /* The server already follows the owner's accounts for a new account.
+           Guest follows stay on this device and are not imported. */
+        if (res.account && res.account.publicId) writeStored("follows-imported-v2-" + res.account.publicId, "1");
+        if (typeof window.ViktorychAccounts.onSignup === "function") {
+          try { window.ViktorychAccounts.onSignup(res.account || {}); } catch (err) { /* the session still opens */ }
+        }
         writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
         view = "signup";
         step = 2;
@@ -4427,6 +4433,7 @@ else if (act === "copy-id") copyAccountId();
     storedAccount: storedAccount,
     followButton: null,
     onServerFollows: null,
+    onSignup: null,
     changeFollow: changeFollow,
     pressFollow: pressFollow,
     releaseFollow: releaseFollow,
