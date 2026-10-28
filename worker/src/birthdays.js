@@ -4,6 +4,7 @@
 import { blocksEither } from "./social.js";
 import { emitNotification } from "./notifications.js";
 import { birthdayParts, canSeeField, daysUntilBirthday } from "./about.js";
+import { canSeeAudience } from "./audience.js";
 
 function rowsOf(result) {
   return (result && result.results) || [];
@@ -64,6 +65,18 @@ function visibleTo(audience, relation, allowed) {
   return canSeeField(audience, relation, allowed);
 }
 
+async function mayKnow(env, audience, relation, allowed, ownerId, fieldId) {
+  if (visibleTo(audience, relation, allowed)) return true;
+  if (audience !== "list" || !relation || !relation.viewerId) return false;
+  return canSeeAudience(env, {
+    viewerId: relation.viewerId,
+    ownerId: ownerId,
+    audience: "list",
+    subject: "about",
+    subjectId: fieldId
+  });
+}
+
 export async function upcomingBirthdays(env, viewer, now) {
   if (!viewer) return { upcoming: [], notes: true, enabled: false };
   const pref = await env.DB.prepare("SELECT notes FROM birthday_prefs WHERE public_id = ?").bind(viewer.public_id).first();
@@ -86,7 +99,7 @@ export async function upcomingBirthdays(env, viewer, now) {
     if (!account || account.profile_less === 1) continue;
     const allowed = field.audience === "list" ? await allowSet(env, field.id) : {};
     const relation = await followerRelation(env, ownerId, viewer.public_id, allowed);
-    if (!visibleTo(field.audience, relation, allowed)) continue;
+    if (!(await mayKnow(env, field.audience, relation, allowed, ownerId, field.id))) continue;
     const parts = birthdayParts(field.body);
     const inDays = daysUntilBirthday(parts, now, field.tz);
     if (inDays == null || inDays < 0 || inDays > 7) continue;
@@ -149,7 +162,7 @@ export async function runBirthdaySweep(env, now) {
       const followerId = ids[i];
       if (muted[followerId]) continue;
       const relation = await followerRelation(env, field.public_id, followerId, allowed);
-      if (!visibleTo(field.audience, relation, allowed)) continue;
+      if (!(await mayKnow(env, field.audience, relation, allowed, field.public_id, field.id))) continue;
       const note = await emitNotification(env, {
         publicId: followerId,
         kind: "birthday",

@@ -12083,6 +12083,7 @@ const here = parseRoute();
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${presenceBlock}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
+        ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
@@ -21184,6 +21185,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
         dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
       });
+      if (window.AudienceLists) {
+        window.AudienceLists.bind({
+          token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
+          api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+          render: render
+        });
+      }
     }
     if (window.Spaces && !window.Spaces.__shell) {
       window.Spaces.__shell = true;

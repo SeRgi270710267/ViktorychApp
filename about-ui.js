@@ -317,6 +317,7 @@
         '<textarea data-about-field="' + esc(field.id) + '" data-about-key="text" aria-label="' + esc(kindLabel(field.kind)) + '">' + esc(field.text || "") + "</textarea>" +
         extra +
         '<select data-about-field="' + esc(field.id) + '" data-about-key="audience" aria-label="' + esc(tr("Who can see this")) + '">' + audienceOptions(field.audience) + "</select>" +
+        (field.audience === "list" && window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(field.listIds) : "") +
         '<div class="about-edit-actions"><button type="button" data-about="up" data-index="' + index + '">' + esc(tr("Move up")) + '</button><button type="button" data-about="down" data-index="' + index + '">' + esc(tr("Move down")) + '</button><button type="button" data-about="drop" data-index="' + index + '">' + esc(tr("Delete")) + "</button></div></div>";
     }).join("");
     var add = kinds.map(function (kind) {
@@ -383,6 +384,7 @@
       listId: field.listId || "",
       showYear: !!field.showYear,
       tz: field.tz || "",
+      listIds: window.AudienceLists && window.AudienceLists.selectedLists ? window.AudienceLists.selectedLists(document) : [],
       personHandle: field.personHandle || "",
       sort: index
     };
