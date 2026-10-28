@@ -58,6 +58,9 @@ jobs:
       - name: Notifications list is never blank
         run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/notifications_page_test.mjs
 
+      - name: Profile banner actions
+        run: PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/profile_chrome_test.mjs
+
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
 
