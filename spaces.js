@@ -277,7 +277,8 @@
 
   function marqueePlan(overflow, reduced) {
     if (reduced || !(overflow > 1)) return { animate: false, duration: 0 };
-    return { animate: true, duration: 20, easing: "linear", from: "0%", to: "-100%" };
+    const duration = Math.max(18, Math.min(48, overflow / 22));
+    return { animate: true, duration: duration, easing: "linear", from: "0%", to: "-100%" };
   }
 
   // Telegram mirror of one published loop playlist. The version and the AAC
