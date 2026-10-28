@@ -3,6 +3,7 @@
    Cloudflare cache does not keep them. Rows expire after 24 hours. */
 
 import { blocksEither } from "./social.js";
+import { canSeeAudience, normalizeAudience, setListGrants } from "./audience.js";
 
 export const APP_STORIES_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS app_stories (
@@ -14,6 +15,7 @@ export const APP_STORIES_SCHEMA = [
     mime TEXT NOT NULL,
     bytes INTEGER NOT NULL,
     caption TEXT NOT NULL DEFAULT '',
+    audience TEXT NOT NULL DEFAULT 'public',
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
   )`,
@@ -120,7 +122,7 @@ function avatarUrl(request, row, own) {
 async function readStory(env, id) {
   if (!STORY_ID.test(id)) return null;
   return env.DB.prepare(
-    "SELECT id, public_id, kind, vine, r2_key, mime, bytes, caption, created_at, expires_at FROM app_stories WHERE id = ?"
+    "SELECT id, public_id, kind, vine, r2_key, mime, bytes, caption, audience, created_at, expires_at FROM app_stories WHERE id = ?"
   ).bind(id).first();
 }
 
@@ -156,7 +158,7 @@ async function listVisible(env, request, viewer) {
   if (!allowed.length) return [];
   const marks = allowed.map(() => "?").join(",");
   const listed = await env.DB.prepare(
-    "SELECT s.id, s.public_id, s.kind, s.vine, s.mime, s.caption, s.created_at, s.expires_at, a.handle, a.display_name, a.avatar, a.hide_avatar FROM app_stories s JOIN accounts a ON a.public_id = s.public_id WHERE s.expires_at > ? AND s.public_id IN (" + marks + ") ORDER BY s.created_at ASC"
+    "SELECT s.id, s.public_id, s.kind, s.vine, s.mime, s.caption, s.audience, s.created_at, s.expires_at, a.handle, a.display_name, a.avatar, a.hide_avatar, a.profile_less FROM app_stories s JOIN accounts a ON a.public_id = s.public_id WHERE s.expires_at > ? AND s.public_id IN (" + marks + ") ORDER BY s.created_at ASC"
   ).bind(now, ...allowed).all();
   const grouped = {};
   const order = [];
@@ -173,6 +175,14 @@ async function listVisible(env, request, viewer) {
       };
       order.push(row.public_id);
     }
+    if (!(await canSeeAudience(env, {
+      viewerId: viewer.public_id,
+      ownerId: row.public_id,
+      audience: row.audience || "public",
+      subject: "story",
+      subjectId: row.id,
+      profileLess: row.profile_less === 1
+    }))) continue;
     grouped[row.public_id].items.push({
       id: row.id,
       type: row.kind === "video" ? "video" : "photo",
@@ -278,9 +288,13 @@ async function handleCreate(request, env, viewer, deps) {
       cacheControl: "private, no-store"
     }
   });
+  const audience = normalizeAudience(form.get("audience")) || "public";
+  let listIds = [];
+  try { listIds = JSON.parse(String(form.get("listIds") || "[]")); } catch (err) { listIds = []; }
   await env.DB.prepare(
-    "INSERT INTO app_stories (id, public_id, kind, vine, r2_key, mime, bytes, caption, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind(id, viewer.public_id, kind, vine, key, mime, bytes.length, caption, now, now + DAY).run();
+    "INSERT INTO app_stories (id, public_id, kind, vine, r2_key, mime, bytes, caption, audience, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, viewer.public_id, kind, vine, key, mime, bytes.length, caption, audience, now, now + DAY).run();
+  if (audience === "list") await setListGrants(env, viewer.public_id, "story", id, listIds);
   return deps.json(201, {
     id: id,
     type: kind === "video" ? "video" : "photo",
@@ -391,6 +405,15 @@ export async function handleAppStories(request, env, path, deps) {
   if (media && (request.method === "GET" || request.method === "HEAD")) {
     const row = await readStory(env, media[1]);
     if (!row || Number(row.expires_at) <= Date.now()) return deps.json(404, { error: "not_found" });
+    const viewer = await deps.sessionAccount(env, request);
+    const allowed = await canSeeAudience(env, {
+      viewerId: viewer ? viewer.public_id : "",
+      ownerId: row.public_id,
+      audience: row.audience || "public",
+      subject: "story",
+      subjectId: row.id
+    });
+    if (!allowed) return deps.json(404, { error: "not_found" });
     return sendObject(request, env, row.r2_key, row.mime);
   }
   const viewer = await deps.sessionAccount(env, request);

@@ -3,7 +3,7 @@
    A highlight does not expire. The audience is checked on every read. */
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
-import { blocksEither, pairState } from "./social.js";
+import { canSeeAudience, normalizeAudience, setListGrants, grantsFor } from "./audience.js";
 
 export const HIGHLIGHT_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS story_library (
@@ -48,7 +48,7 @@ export const HIGHLIGHT_SCHEMA = [
   "CREATE INDEX IF NOT EXISTS highlight_items_parent ON highlight_items(highlight_id, sort_order, created_at)"
 ];
 
-const AUDIENCES = { public: 1, followers: 1, friends: 1, only: 1 };
+const AUDIENCES = { public: 1, followers: 1, friends: 1, only: 1, list: 1 };
 const ID = /^[a-f0-9]{32}$/;
 const PUBLIC_ID = /^\d{12}$/;
 const TELEGRAM_KEY = /^stories\/telegram\/[a-f0-9]{64}\.(?:jpg|jpeg|png|webp|gif|mp4|webm|mov)$/;
@@ -120,18 +120,16 @@ async function accountByHandle(env, handle) {
   ).bind(checked.skeleton).first();
 }
 
-async function canSee(env, viewer, owner, audience) {
-  if (!owner || owner.profile_less === 1) return !!(viewer && viewer.public_id === owner.public_id);
-  if (viewer && viewer.public_id === owner.public_id) return true;
-  const viewerId = viewer ? viewer.public_id : "";
-  if (viewerId && await blocksEither(env, viewerId, owner.public_id)) return false;
-  if (audience === "public") return true;
-  if (!viewerId || audience === "only") return false;
-  const state = await pairState(env, viewerId, owner.public_id);
-  if (state.viewerBlocks || state.blockedBy) return false;
-  if (audience === "followers") return !!state.following;
-  if (audience === "friends") return !!(state.friends || (state.following && state.followsYou));
-  return false;
+async function canSee(env, viewer, owner, audience, highlightId) {
+  if (!owner) return false;
+  return canSeeAudience(env, {
+    viewerId: viewer ? viewer.public_id : "",
+    ownerId: owner.public_id,
+    audience: audience,
+    subject: "highlight",
+    subjectId: highlightId,
+    profileLess: owner.profile_less === 1
+  });
 }
 
 async function copyBytes(env, fromKey, toKey, mime) {
@@ -219,7 +217,7 @@ async function listFor(env, request, viewer, owner) {
   const mine = !!(viewer && viewer.public_id === owner.public_id);
   const highlights = [];
   for (const row of rowsOf(listed)) {
-    if (!(await canSee(env, viewer, owner, row.audience))) continue;
+    if (!(await canSee(env, viewer, owner, row.audience, row.id))) continue;
     const item = presentCover(request, row);
     if (mine) item.audience = row.audience;
     highlights.push(item);
@@ -307,7 +305,7 @@ export async function handleHighlights(request, env, path, deps) {
       "SELECT public_id, handle, display_name, profile_less FROM accounts WHERE public_id = ?"
     ).bind(item.public_id).first();
     const viewer = await deps.sessionAccount(env, request);
-    if (!(await canSee(env, viewer, owner, item.audience))) return deps.json(404, { error: "not_found" });
+    if (!(await canSee(env, viewer, owner, item.audience, item.highlight_id))) return deps.json(404, { error: "not_found" });
     return sendItem(request, env, item);
   }
   const viewer = await deps.sessionAccount(env, request);
@@ -320,7 +318,7 @@ export async function handleHighlights(request, env, path, deps) {
     const owner = await env.DB.prepare(
       "SELECT public_id, handle, display_name, profile_less FROM accounts WHERE public_id = ?"
     ).bind(row.public_id).first();
-    if (!(await canSee(env, viewer, owner, row.audience))) return deps.json(404, { error: "not_found" });
+    if (!(await canSee(env, viewer, owner, row.audience, row.id))) return deps.json(404, { error: "not_found" });
     const items = await readItems(env, row.id);
     return deps.json(200, {
       id: row.id,
@@ -387,7 +385,7 @@ export async function handleHighlights(request, env, path, deps) {
     if (Number(count && count.n) >= HIGHLIGHT_CAP) return deps.json(429, { error: "too_many" });
     const picked = Array.isArray(body.items) ? body.items.slice(0, ITEM_CAP) : [];
     if (!picked.length) return deps.json(400, { error: "items" });
-    const audience = AUDIENCES[body.audience] ? body.audience : "public";
+    const audience = AUDIENCES[normalizeAudience(body.audience) || "public"] ? (normalizeAudience(body.audience) || "public") : "public";
     const crop = cropOf(body);
     const id = newId();
     const now = Date.now();
@@ -401,6 +399,7 @@ export async function handleHighlights(request, env, path, deps) {
     await env.DB.prepare(
       "INSERT INTO highlights (id, public_id, title, audience, cover_item, crop_x, crop_y, crop_w, crop_h, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(id, viewer.public_id, text(body.title), audience, made[coverAt], crop.x, crop.y, crop.w, crop.h, Number(count && count.n) || 0, now, now).run();
+    if (audience === "list") await setListGrants(env, viewer.public_id, "highlight", id, body.listIds);
     return deps.json(201, { id: id, title: text(body.title) });
   }
   const one = path.match(/^\/v1\/highlights\/([a-f0-9]{32})$/);
@@ -426,7 +425,8 @@ export async function handleHighlights(request, env, path, deps) {
   if (request.method !== "PUT") return null;
   const body = await deps.readJson(request, 2000000);
   if (body.error) return deps.json(body.error === "too_large" ? 413 : 400, { error: body.error });
-  const audience = body.audience && AUDIENCES[body.audience] ? body.audience : row.audience;
+  const nextAudience = normalizeAudience(body.audience);
+  const audience = nextAudience && AUDIENCES[nextAudience] ? nextAudience : row.audience;
   const crop = body.crop ? cropOf(body) : { x: row.crop_x, y: row.crop_y, w: row.crop_w, h: row.crop_h };
   const title = body.title != null ? text(body.title) : row.title;
   const now = Date.now();
@@ -466,5 +466,6 @@ export async function handleHighlights(request, env, path, deps) {
   await env.DB.prepare(
     "UPDATE highlights SET title = ?, audience = ?, cover_item = ?, crop_x = ?, crop_y = ?, crop_w = ?, crop_h = ?, updated_at = ? WHERE id = ? AND public_id = ?"
   ).bind(title, audience, cover, crop.x, crop.y, crop.w, crop.h, now, row.id, viewer.public_id).run();
+  if (body.listIds || audience === "list") await setListGrants(env, viewer.public_id, "highlight", row.id, audience === "list" ? body.listIds : []);
   return deps.json(200, { id: row.id, title: title });
 }

@@ -756,6 +756,8 @@
       '<p class="story-file-name" aria-live="polite"></p>' +
       '<label class="story-vine"><input class="story-vine-input" type="checkbox"> ' + esc(tr("Vine, 6 seconds")) + "</label>" +
       '<input class="story-caption-input" maxlength="140" placeholder="' + esc(tr("Caption")) + '" aria-label="' + esc(tr("Caption")) + '">' +
+      '<label>' + esc(tr("Audience")) + ' <select class="story-audience"><option value="public">' + esc(tr("Everyone")) + '</option><option value="followers">' + esc(tr("Followers")) + '</option><option value="friends">' + esc(tr("Mutuals")) + '</option><option value="only">' + esc(tr("Only me")) + '</option><option value="list">' + esc(tr("Custom lists")) + "</option></select></label>" +
+      (window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml([]) : "") +
       '<button type="button" class="story-post" data-story-act="post">' + esc(tr("Post story")) + "</button>" +
       '<p class="story-miss" hidden>' + esc(tr("Couldn’t post this story.")) + "</p></div>";
     node.hidden = false;
@@ -898,6 +900,9 @@
     body.append("file", pickedFile);
     body.append("vine", vine && vine.checked ? "1" : "0");
     body.append("caption", caption ? caption.value : "");
+    var storyAudience = node.querySelector(".story-audience");
+    body.append("audience", storyAudience ? storyAudience.value : "public");
+    body.append("listIds", JSON.stringify(window.AudienceLists && window.AudienceLists.selectedLists ? window.AudienceLists.selectedLists(node) : []));
     fetch(apiRoot() + "/v1/stories", {
       method: "POST",
       headers: { Authorization: "Bearer " + token() },
@@ -1485,7 +1490,9 @@
       '<label>' + esc(tr("Who can see this")) + ' <select class="note-audience" aria-label="' + esc(tr("Who can see this")) + '">' +
       '<option value="followers"' + (audience === "followers" ? " selected" : "") + ">" + esc(tr("Followers")) + "</option>" +
       '<option value="friends"' + (audience === "friends" ? " selected" : "") + ">" + esc(tr("Mutuals")) + "</option>" +
-      '<option value="only"' + (audience === "only" ? " selected" : "") + ">" + esc(tr("Only me")) + "</option></select></label>" +
+      '<option value="only"' + (audience === "only" ? " selected" : "") + ">" + esc(tr("Only me")) + "</option>" +
+      '<option value="list"' + (audience === "list" ? " selected" : "") + ">" + esc(tr("Custom lists")) + "</option></select></label>" +
+      (window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml(mine && mine.listIds) : "") +
       '<label class="note-expire"><input class="note-expire-input" type="checkbox"' + (expire ? " checked" : "") + "> " + esc(tr("Expire after 24 hours")) + "</label>" +
       (mine && mine.text ? '<button type="button" data-story-act="note-delete">' + esc(tr("Delete note")) + "</button>" : "") +
       '<p class="story-miss" hidden>' + esc(tr("Couldn’t save that note.")) + "</p></div>";
@@ -1523,7 +1530,7 @@
     var text = field ? String(field.value || "").trim() : "";
     storyApi("/v1/notes", {
       method: "PUT",
-      body: { text: text, audience: audience ? audience.value : "followers", expire: !(expire && !expire.checked) }
+      body: { text: text, audience: audience ? audience.value : "followers", expire: !(expire && !expire.checked), listIds: window.AudienceLists && window.AudienceLists.selectedLists ? window.AudienceLists.selectedLists(node) : [] }
     }).then(function (body) {
       if (body && body.status === 200) {
         close();

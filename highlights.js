@@ -123,10 +123,11 @@
       '<div class="note-sheet-bar"><button type="button" data-hl="close" aria-label="' + esc(tr("Close")) + '">×</button><b>' + esc(sheet.mode === "edit" ? tr("Edit highlight") : tr("New highlight")) + '</b><button type="button" data-hl="save">' + esc(tr("Save")) + "</button></div>" +
       '<input class="hl-name" aria-label="' + esc(tr("Highlight title")) + '" placeholder="' + esc(tr("Highlight title")) + '" value="' + esc(sheet.title || "") + '">' +
       '<label>' + esc(tr("Who can see this")) + ' <select class="hl-audience">' +
-      ["public", "followers", "friends", "only"].map(function (id) {
-        var label = id === "public" ? tr("Everyone") : id === "followers" ? tr("Followers") : id === "friends" ? tr("Mutuals") : tr("Only me");
+      ["public", "followers", "friends", "only", "list"].map(function (id) {
+        var label = id === "public" ? tr("Everyone") : id === "followers" ? tr("Followers") : id === "friends" ? tr("Mutuals") : id === "only" ? tr("Only me") : tr("Custom lists");
         return '<option value="' + id + '"' + (sheet.audience === id ? " selected" : "") + ">" + esc(label) + "</option>";
       }).join("") + "</select></label>" +
+      (root.AudienceLists && root.AudienceLists.checksHtml ? root.AudienceLists.checksHtml(sheet.highlight && sheet.highlight.listIds) : "") +
       '<label>' + esc(tr("Cover crop")) + ' <input class="hl-crop" type="range" min="1000" max="10000" value="' + esc(String((sheet.crop && sheet.crop.w) || 10000)) + '"></label>' +
       '<label class="hl-file">' + esc(tr("Choose a photo or video")) + '<input class="hl-file-input" type="file" accept="image/*,video/*"></label>' +
       '<div class="hl-grid">' + tiles + local + "</div>" +
@@ -176,9 +177,10 @@
     });
     Promise.all(jobs).then(function (items) {
       var clean = items.filter(Boolean);
-      var payload = { title: sheet.title || "", audience: audience ? audience.value : "public", crop: crop, cover: 0, items: clean };
+      var listIds = root.AudienceLists && root.AudienceLists.selectedLists ? root.AudienceLists.selectedLists(node) : [];
+      var payload = { title: sheet.title || "", audience: audience ? audience.value : "public", crop: crop, cover: 0, items: clean, listIds: listIds };
       var req = sheet.mode === "edit" && sheet.highlight
-        ? call("/v1/highlights/" + sheet.highlight.id, { method: "PUT", body: { title: payload.title, audience: payload.audience, crop: crop, add: clean } })
+        ? call("/v1/highlights/" + sheet.highlight.id, { method: "PUT", body: { title: payload.title, audience: payload.audience, crop: crop, add: clean, listIds: listIds } })
         : call("/v1/highlights", { method: "POST", body: payload });
       return req.then(function (body) {
         if (!body || (body.status && body.status >= 400)) {
