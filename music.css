@@ -449,3 +449,9 @@ html.music-mini .mu-mini-x svg { width: 18px; height: 18px; fill: currentColor; 
 @media (prefers-reduced-motion: reduce) {
   .mu-eq i { animation: none; height: 8px; }
 }
+/* Phone held sideways: the icon rail stays on the left, so the bar starts
+   after it and never covers the rail's buttons. */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) {
+  html.music-on .mu-dock, html.music-mini .mu-dock { left: calc(80px + var(--safe-l, env(safe-area-inset-left, 0px))); }
+  html.music-on .nav, html.music-mini .nav { padding-bottom: calc(4px + var(--safe-b, env(safe-area-inset-bottom, 0px))); }
+}
