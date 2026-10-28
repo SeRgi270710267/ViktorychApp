@@ -195,7 +195,15 @@ export async function awardActivity(env, publicId, action, ref) {
     if (!/UNIQUE/i.test(String(err && err.message || err))) throw err;
     return { awarded: 0, balance: await balanceOf(env, publicId), duplicate: true };
   }
+  await tallyBadges(env, publicId);
   return { awarded: delta, balance: await balanceOf(env, publicId) };
+}
+
+async function tallyBadges(env, publicId) {
+  try {
+    const badges = await import("./badges.js");
+    await badges.syncBadges(env, publicId);
+  } catch (err) { /* points are saved even if a badge tally misses */ }
 }
 
 export async function clawback(env, publicId, action, ref) {
@@ -563,6 +571,8 @@ export async function handlePoints(request, env, path, deps) {
     await env.DB.prepare(
       "INSERT INTO gift_sends (id, gift_id, sender_id, recipient_id, message, privacy, hidden, cost, context, post_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)"
     ).bind(sendId, gift.id, viewer.public_id, recipient.public_id, message, privacy, gift.price, mode, postId, now).run();
+    await tallyBadges(env, viewer.public_id);
+    await tallyBadges(env, recipient.public_id);
     try {
       const named = privacy !== "anonymous";
       const note = await planNotification(env, {
