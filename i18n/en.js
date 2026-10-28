@@ -1997,6 +1997,8 @@ SI18n.addPack("en", {
   "Couldn’t update that follow. Try again.": "Couldn’t update that follow. Try again.",
   "{name} requested to follow you": "{name} requested to follow you",
   "{name} accepted your follow request": "{name} accepted your follow request",
+  "{name} sent you a friend request": "{name} sent you a friend request",
+  "{name} accepted your friend request": "{name} accepted your friend request",
   "Search followers": "Search followers",
   "Search following": "Search following",
   "Load more": "Load more",

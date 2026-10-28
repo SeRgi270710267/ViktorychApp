@@ -1997,6 +1997,8 @@ SI18n.addPack("es", {
   "Couldn’t update that follow. Try again.": "No se pudo actualizar ese seguimiento. Inténtalo de nuevo.",
   "{name} requested to follow you": "{name} pidió seguirte",
   "{name} accepted your follow request": "{name} aceptó tu solicitud de seguimiento",
+  "{name} sent you a friend request": "{name} te envió una solicitud de amistad",
+  "{name} accepted your friend request": "{name} aceptó tu solicitud de amistad",
   "Search followers": "Buscar seguidores",
   "Search following": "Buscar seguidos",
   "Load more": "Cargar más",

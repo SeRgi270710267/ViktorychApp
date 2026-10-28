@@ -2348,6 +2348,19 @@ function signupPayload() {
     }).catch(function () { friendRequestsLoading = false; });
   }
 
+  /* After any friend change, here or on the other side (the server sends a
+     "friends" signal on the notifications channel), reload the requests,
+     the cached friends lists and the presence list. */
+  function refreshFriends() {
+    friendRequestsLoading = false;
+    friendsCache = {};
+    friendsLoads = {};
+    ensureFriendRequests();
+    var session = readSession();
+    if (session && session.account) ensureFriends(accountRef(session.account));
+    if (window.ViktorychPresence && window.ViktorychPresence.reloadFriends) window.ViktorychPresence.reloadFriends();
+  }
+
   function syncFriends() {
     var session = readSession();
     if (!session || !hasApi()) return Promise.resolve();
@@ -2378,27 +2391,25 @@ function signupPayload() {
       graphCounts[meKey] = graphCounts[meKey] || {};
       graphCounts[meKey].friends = prevMyCount + 1;
       friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
-        return r.id !== "app:" + tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId;
       });
-      delete friendsCache[me];
-      delete friendsCache[tId];
+      friendsCache = {};
     } else if (action === "decline") {
       graphCounts[idKey].friendStatus = "none";
       friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
-        return r.id !== "app:" + tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId;
       });
     } else if (action === "cancel") {
       graphCounts[idKey].friendStatus = "none";
       friendRequestsCache.outgoing = friendRequestsCache.outgoing.filter(function (r) {
-        return r.id !== "app:" + tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId;
       });
     } else if (action === "remove") {
       graphCounts[idKey].friendStatus = "none";
       graphCounts[idKey].friends = Math.max(0, prevCount - 1);
       graphCounts[meKey] = graphCounts[meKey] || {};
       graphCounts[meKey].friends = Math.max(0, prevMyCount - 1);
-      delete friendsCache[me];
-      delete friendsCache[tId];
+      friendsCache = {};
     }
 
     if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -2414,6 +2425,7 @@ function signupPayload() {
       }
       if (res.status != null) graphCounts[idKey].friendStatus = res.status;
       if (res.friendsCount != null && graphCounts[meKey]) graphCounts[meKey].friends = res.friendsCount;
+      refreshFriends();
       refreshProfileMedia();
       if (window.ViktorychAccounts && window.ViktorychAccounts.toast) {
         if (action === "request") window.ViktorychAccounts.toast(tr("Friend request sent"));
@@ -4423,6 +4435,7 @@ else if (act === "copy-id") copyAccountId();
     },
     syncFollows: syncFollows,
     syncFriends: syncFriends,
+    refreshFriends: refreshFriends,
     friendButton: friendButtonHtml,
     friendsSectionHtml: friendsSectionHtml,
     doFriendAction: doFriendAction,

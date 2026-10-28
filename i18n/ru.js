@@ -1997,6 +1997,8 @@ SI18n.addPack("ru", {
   "Couldn’t update that follow. Try again.": "Не удалось обновить подписку. Попробуйте снова.",
   "{name} requested to follow you": "{name} запросил подписку",
   "{name} accepted your follow request": "{name} принял ваш запрос на подписку",
+  "{name} sent you a friend request": "{name} отправил(а) вам запрос в друзья",
+  "{name} accepted your friend request": "{name} принял(а) ваш запрос в друзья",
   "Search followers": "Искать подписчиков",
   "Search following": "Искать подписки",
   "Load more": "Показать ещё",
