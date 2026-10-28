@@ -8112,7 +8112,7 @@ const here = parseRoute();
     const mime = String(item.mime || "");
     const tag = mime.indexOf("video/") === 0 ? "video" : mime.indexOf("audio/") === 0 ? "audio" : mime.indexOf("image/") === 0 ? "img" : "";
     if (!tag) return "";
-    const extra = tag === "img" ? ' alt=""' : " controls";
+    const extra = tag === "img" ? ` alt="${esc(item.alt || "")}"` : " controls";
     return `<${tag}${extra} data-public-media="${esc(item.url || "")}"></${tag}>`;
   }
 
@@ -8122,11 +8122,13 @@ const here = parseRoute();
       return `<article class="card public-post" data-post="${esc(post.id)}"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></article>`;
     }
     const media = (post.media || []).map(publicMediaHtml).join("");
+    const poll = post.poll && post.poll.options ? `<div class="public-poll">${post.poll.options.map((opt) => `<div>${esc(opt)}</div>`).join("")}</div>` : "";
+    const place = post.location ? `<p class="phandle">${esc(post.location)}</p>` : "";
     const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
     const mine = signedAccount();
     const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
     const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
-    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
+    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${place}${poll}${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
   }
 
   function welcomeHtml(route) {
@@ -8150,6 +8152,110 @@ const here = parseRoute();
       body = `<h2>${esc(tr("Notifications can wait until you ask"))}</h2><button class="save" type="button" data-act="welcome-notify">${esc(tr("Notify me about new posts"))}</button>`;
     }
     return `<section class="welcome-sheet" data-welcome>${body}<div class="welcome-actions"><button type="button" data-act="welcome-skip">${esc(tr("Not now"))}</button><button class="save" type="button" data-act="welcome-next">${esc(tr("Next"))}</button></div></section>`;
+  }
+
+  function deviceScheduleKey() { return "viktorychapp-x-schedule-v1"; }
+  function readDeviceSchedule() {
+    try {
+      const doc = JSON.parse(localStorage.getItem(deviceScheduleKey()) || "null");
+      return doc && Array.isArray(doc.items) ? doc.items : [];
+    } catch (err) { return []; }
+  }
+  function writeDeviceSchedule(items) {
+    try { localStorage.setItem(deviceScheduleKey(), JSON.stringify({ items: (items || []).slice(0, 20) })); } catch (err) { /* this device is full */ }
+  }
+  function publishComposer(payload, quiet) {
+    const posts = (payload && payload.posts) || [];
+    const token = accountToken();
+    const root = accountsApi();
+    if (!quiet) {
+      STATE.modal = null;
+      STATE.composeVia = "";
+      STATE.composeParent = "";
+      STATE.composeQuote = "";
+      STATE.composeSeed = "";
+      render();
+    }
+    if (!posts.length) return;
+    const scheduled = !!(posts[0] && posts[0].scheduleAt);
+    if (scheduled && (!navigator.onLine || !token || !root)) {
+      writeDeviceSchedule(readDeviceSchedule().concat([{
+        at: posts[0].scheduleAt, text: posts[0].text || "", audience: posts[0].audience || "everyone",
+        replyControl: posts[0].replyControl || "everyone", location: posts[0].location || "", poll: posts[0].poll || null
+      }]));
+      toast(tr("If you’re signed in, the server publishes this when it’s due. Otherwise it stays on this device until the app is open."));
+      return;
+    }
+    if (!navigator.onLine || !token || !root) {
+      const text = posts.map((part) => part.text).filter(Boolean).join("\n\n");
+      if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
+      if (!navigator.onLine && text) queueOffline({ type: "reply", id: "compose", on: true, body: text });
+      toast(navigator.onLine && !token ? tr("Saved on this device. This reader doesn’t publish.") : tr("Could not send that post. It is still saved on this device."));
+      return;
+    }
+    const sendAt = (index, parentId) => {
+      if (index >= posts.length) {
+        if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
+        toast(scheduled ? tr("Scheduled. It will publish when it’s due.") : tr("Your post was sent."));
+        render();
+        return;
+      }
+      const part = posts[index];
+      const parent = index === 0 ? (payload.parentId || "") : parentId;
+      const quote = index === 0 ? (payload.quoteId || "") : "";
+      const done = (res) => {
+        if (res && res.status === 201 && res.post) {
+          if (!(res.scheduled || part.scheduleAt) && res.post.id) publicPosts = [res.post].concat(publicPosts.filter((item) => item.id !== res.post.id));
+          publicStamp = Date.now();
+          sendAt(index + 1, res.post.id);
+          return;
+        }
+        const text = posts.slice(index).map((item) => item.text).filter(Boolean).join("\n\n");
+        if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
+        toast(res && res.error === "reply_limited" ? tr("Replies are limited on that post.") : tr("Could not send that post. It is still saved on this device."));
+      };
+      const files = (part.media || []).map((item) => item.file).filter(Boolean);
+      if (files.length) {
+        const data = new FormData();
+        if (part.text) data.set("body", part.text);
+        if (parent) data.set("parentId", parent);
+        if (quote) data.set("quoteId", quote);
+        if (part.audience) data.set("audience", part.audience);
+        if (part.replyControl) data.set("replyControl", part.replyControl);
+        if (part.location) data.set("location", part.location);
+        if (part.scheduleAt) data.set("scheduledAt", String(part.scheduleAt));
+        files.forEach((file, i) => {
+          data.append("file", file, file.name || "upload");
+          data.append("alt" + i, (part.media[i] && part.media[i].alt) || "");
+        });
+        if ((part.media || []).some((item) => item.kind === "audio" || String(item.type || "").indexOf("audio/") === 0)) data.set("mediaKind", "audio");
+        fetch(root + "/v1/posts", { method: "POST", headers: { Authorization: "Bearer " + token }, body: data, credentials: "omit" }).then((res) => {
+          return res.json().catch(() => ({})).then((body) => { body.status = res.status; return body; });
+        }).then(done).catch(() => done(null));
+        return;
+      }
+      const body = { body: part.text || "" };
+      if (parent) body.parentId = parent;
+      if (quote) body.quoteId = quote;
+      if (part.audience) body.audience = part.audience;
+      if (part.replyControl) body.replyControl = part.replyControl;
+      if (part.location) body.location = part.location;
+      if (part.poll) body.poll = part.poll;
+      if (part.scheduleAt) body.scheduledAt = part.scheduleAt;
+      accountCall("/v1/posts", { method: "POST", body: body }).then(done).catch(() => done(null));
+    };
+    sendAt(0, "");
+  }
+  function flushDeviceSchedule() {
+    if (!navigator.onLine || !accountToken() || STATE.modal === "compose") return;
+    const now = Date.now();
+    const items = readDeviceSchedule();
+    const due = items.filter((item) => item && item.at && item.at <= now && item.text);
+    if (!due.length) return;
+    writeDeviceSchedule(items.filter((item) => due.indexOf(item) < 0));
+    due.forEach((item) => publishComposer({
+      posts: [{ text: item.text, media: [], poll: item.poll, location: item.location || "", audience: item.audience || "everyone", replyControl: item.replyControl || "everyone", scheduleAt: 0 }]
+    }, true));
   }
 
   function publishPublicPost(text, parentId, quoteId, file) {
@@ -12138,7 +12244,7 @@ if (STATE.histClear) {
       </div></div>`;
     }
     if (STATE.modal === "compose") {
-      if (STATE.composeVia === "x" && window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
+      if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
         const composed = window.ViktorychXCompose.modalHtml();
         if (composed) return composed;
       }
@@ -14906,12 +15012,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "compose") {
       STATE.composeVia = "app";
       STATE.modal = "compose";
+      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
       const drafts = window.ViktorychLocal;
       if (!STATE.composeSeed && drafts && drafts.readDoc) {
         drafts.readDoc("drafts", "compose").then((saved) => {
           const text = saved && saved.text ? String(saved.text) : "";
           if (STATE.modal === "compose" && text && !STATE.composeSeed) {
             STATE.composeSeed = text;
+            if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(text);
             render();
           }
         }).catch(() => {});
@@ -14923,6 +15031,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       STATE.composeSeed = window.ViktorychGames && window.ViktorychGames.shareText ? window.ViktorychGames.shareText() : "";
       STATE.composeVia = "app";
       STATE.modal = "compose";
+      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
       render();
       return;
     }
@@ -15103,6 +15212,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "close-modal" || act === "close-remove") {
+      if (act === "close-modal" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.requestClose && window.ViktorychXCompose.requestClose()) return;
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
       STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
     }
@@ -15182,6 +15292,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "public-reply" || act === "public-quote") {
+      const found = publicPosts.find((item) => item && item.id === (el.dataset.id || ""));
+      const opener = window.ViktorychXCompose;
+      if (opener && opener.openReply && opener.openQuote) {
+        const post = { id: el.dataset.id || "", handle: found && found.authorHandle, text: found && found.body, name: found && found.authorName };
+        if (act === "public-reply") opener.openReply(post);
+        else opener.openQuote(post);
+        return;
+      }
       STATE.composeParent = act === "public-reply" ? (el.dataset.id || "") : "";
       STATE.composeQuote = act === "public-quote" ? (el.dataset.id || "") : "";
       STATE.composeVia = "app";
@@ -16876,6 +16994,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
       }
     }
+    if (event.key === "Escape" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.onEscape && window.ViktorychXCompose.onEscape()) return;
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
     if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
       STATE.modal = null;
@@ -20918,7 +21037,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!mine) return '<span class="ava initials">Y</span>';
         return avatar(mine.avatar, mine.displayName || mine.handle);
       },
-      modalOpen: function () { return STATE.modal === "compose" && STATE.composeVia === "x"; },
+      modalOpen: function () { return STATE.modal === "compose"; },
       openModal: function () { STATE.composeVia = "x"; STATE.modal = "compose"; render(); },
       closeModal: function () {
         if (STATE.modal === "compose") STATE.modal = null;
@@ -20927,8 +21046,26 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       },
       saveLocal: function (text) {
         const value = String(text || "");
-        if (value.trim() && window.ViktorychLocal && window.ViktorychLocal.saveDoc) window.ViktorychLocal.saveDoc("drafts", "compose", { text: value });
+        if (window.ViktorychLocal && window.ViktorychLocal.saveDoc) window.ViktorychLocal.saveDoc("drafts", "compose", { text: value });
       },
+      publish: function (payload) { publishComposer(payload); },
+      signedIn: function () { return !!accountToken(); },
+      gifSearch: function (q) {
+        return accountCall("/v1/gif?q=" + encodeURIComponent(q || "")).then((res) => {
+          if (!res || res.status !== 200) throw new Error("gif");
+          return res;
+        });
+      },
+      gifFile: function (url) {
+        const root = accountsApi();
+        const token = accountToken();
+        if (!root || !token) return Promise.reject(new Error("gif"));
+        return fetch(root + "/v1/gif/file?u=" + encodeURIComponent(url || ""), { headers: { Authorization: "Bearer " + token }, credentials: "omit" }).then((res) => {
+          if (!res.ok) throw new Error("gif");
+          return res.blob();
+        });
+      },
+      flushSchedule: function () { flushDeviceSchedule(); },
       post: function (id) { return findAnyPost(id); },
       suggest: function (kind) {
         if (kind === "mention") {
