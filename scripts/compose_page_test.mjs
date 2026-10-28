@@ -168,20 +168,24 @@ async function main() {
     }));
     window.VIKTORYCH_ACCOUNTS = { api: location.origin, gate: true, tiktokAudience: "owner" };
   });
+  // Home's community and app post cards ride along here so the smoke workflow
+  // runs them. They start now and run beside the composer checks.
+  const { spawn } = await import("node:child_process");
+  const ride = (name) => new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(root, "scripts", name)], { stdio: "inherit", env: process.env });
+    child.on("close", (code) => resolve(code));
+  });
+  const riders = Promise.all([ride("community_home_test.mjs"), ride("own_post_test.mjs"), ride("post_page_test.mjs")]);
   try {
     for (const vp of widths) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await exercise(page, vp, origin);
     }
     console.log("composer page ok");
-    // Home's community and app post cards ride along here so the smoke workflow runs them.
-    const { spawnSync } = await import("node:child_process");
-    const home = spawnSync(process.execPath, [path.join(root, "scripts", "community_home_test.mjs")], { stdio: "inherit", env: process.env });
-    if (home.status !== 0) fail("community home check failed");
-    const own = spawnSync(process.execPath, [path.join(root, "scripts", "own_post_test.mjs")], { stdio: "inherit", env: process.env });
-    if (own.status !== 0) fail("own post check failed");
-    const single = spawnSync(process.execPath, [path.join(root, "scripts", "post_page_test.mjs")], { stdio: "inherit", env: process.env });
-    if (single.status !== 0) fail("post page check failed");
+    const [home, own, single] = await riders;
+    if (home !== 0) fail("community home check failed");
+    if (own !== 0) fail("own post check failed");
+    if (single !== 0) fail("post page check failed");
   } finally {
     await browser.close();
     server.close();

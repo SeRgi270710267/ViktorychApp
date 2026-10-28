@@ -20,7 +20,7 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
-import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
 import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
@@ -1243,6 +1243,8 @@ async function handleSyncGet(request, env) {
   return json(200, { payload, updatedAt: saved.updated_at });
 }
 
+const SYNC_UI_KEYS = ["appearance", "drawerMenu", "navCustom", "navCustomAt", "bottomNav", "bottomNavCustom", "profileTabs", "homePills", "stories", "prefsAt", "showPictures", "showBanners"];
+
 async function handleSyncPut(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
@@ -1303,6 +1305,19 @@ async function handleSyncPut(request, env) {
     delete payload.navLayoutSync;
   }
   delete payload.deviceStats;
+  // A device that keeps its own look sends uiLocal and leaves out the shared
+  // look, so the account's copy stays for the other devices.
+  if (payload.uiLocal === true && previous) {
+    SYNC_UI_KEYS.forEach((key) => {
+      if (payload[key] === undefined && previous[key] !== undefined) payload[key] = previous[key];
+    });
+  }
+  delete payload.uiLocal;
+  if (payload.syncUi != null) payload.syncUi = payload.syncUi !== false;
+  payload.syncUiAt = Math.max(0, Math.min(Number(payload.syncUiAt) || 0, Date.now() + 60000));
+  if (payload.prefsAt != null && (typeof payload.prefsAt !== "object" || Array.isArray(payload.prefsAt))) delete payload.prefsAt;
+  if (payload.homePills != null && typeof payload.homePills !== "boolean") delete payload.homePills;
+  if (payload.stories != null && typeof payload.stories !== "boolean") delete payload.stories;
   if (payload.storyNotes === true || payload.storyNotes === false) payload.storyNotes = payload.storyNotes === true;
   else if (previous && (previous.storyNotes === true || previous.storyNotes === false)) payload.storyNotes = previous.storyNotes === true;
   if (payload.devicePerf != null) {
@@ -1320,6 +1335,12 @@ async function handleSyncPut(request, env) {
   }
   const now = Date.now();
   await env.DB.prepare("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").bind(row.public_id, text, now).run();
+  // Other signed-in devices hear about a real change and pull it.
+  if (!current || current.payload !== text) {
+    const device = String(body.device || "").replace(/[^a-z0-9]/gi, "").slice(0, 24);
+    try { await publishToAccount(env, row.public_id, "sync", { updatedAt: now, device }, row.public_id); }
+    catch (err) { /* devices also check when they come back */ }
+  }
   return json(200, { payload: body.payload, updatedAt: now });
 }
 
