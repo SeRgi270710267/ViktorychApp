@@ -6126,3 +6126,13 @@ img, video { max-width: 100%; }
 
 /* Sticky right rail (see fitRail in app.js). */
 .side { position: sticky; top: var(--rail-top, 0px); align-self: flex-start; }
+
+/* Inline "Show N posts" row at the top of Home, like X. */
+.show-posts {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 48px; padding: 0 16px;
+  background: none; border: 0; border-bottom: 1px solid var(--line);
+  color: var(--blue); font-size: 15px; font-weight: 400; cursor: pointer;
+}
+.show-posts:hover { background: var(--hover, rgba(255, 255, 255, 0.03)); }
+.show-posts .pill-ava { width: 24px; height: 24px; }
