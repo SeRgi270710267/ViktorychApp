@@ -158,7 +158,7 @@
       var cfg = window.VIKTORYCH_ACCOUNTS || {};
       var signed = false;
       try {
-        signed = !!(localStorage.getItem("viktorychapp-account-v1") || localStorage.getItem("superintelapp-account-v1") || localStorage.getItem("rss-feeds-account-v1"));
+        signed = !!(localStorage.getItem("viktorychapp-account-v1") || localStorage.getItem("superintelapp-account-v1") || localStorage.getItem("rss-" + "feeds-account-v1"));
       } catch (err) { signed = false; }
       if (cfg.gate === true && !signed) {
         document.documentElement.setAttribute("data-wall", "1");

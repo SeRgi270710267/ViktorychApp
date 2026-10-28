@@ -4,7 +4,7 @@ const VERSION = "viktorych-a34-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-28T01:20:00Z-home-feed
+// cache-bust: 2026-10-28T02:40:00Z-drawer-menu
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -1129,7 +1129,7 @@ async function pullOne(path, report, state, signal, cache) {
           });
           const digest = await crypto.subtle.digest("SHA-256", all);
           const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-          if (hash) headers.set("x-shell-sha266", hash);
+          if (hash) headers.set("x-shell-sha256", hash);
         }
       } catch (err) { /* the versioned cache name still busts a changed shell */ }
       try {

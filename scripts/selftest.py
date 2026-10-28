@@ -3561,7 +3561,7 @@ def ia_backup_checks() -> None:
     check(again["manifest"]["items"] == manifest["items"], "a second run keeps the same random item ids")
 
     jpeg_old = b"\xff\xd8\xff\xd9"
-    old_digest = hashlib.sha266(jpeg_old).hexdigest()
+    old_digest = hashlib.sha256(jpeg_old).hexdigest()
     old_name = old_digest[:20] + ".jpg"
     saved_files = {}
     deleted = []
@@ -3881,7 +3881,7 @@ def ia_backup_checks() -> None:
     check(shard_url({"shards": {"2026-10": "https://archive.org/download/superintelapp-2026-10/2026-10.json"}}, "archive/2026-10.json") == "", "a named item url is not used")
 
     sample = b"hello-archive"
-    sample_digest = hashlib.sha266(sample).hexdigest()
+    sample_digest = hashlib.sha256(sample).hexdigest()
     retire_host = "http://127.0.0.1"
     copied_url = retire_host + "/download/" + anon + "/file.json"
     retire_state = {
@@ -4497,7 +4497,7 @@ def story_checks() -> None:
     dispatch_wf = (ROOT / ".github" / "workflows" / "worker-dispatch-secret.yml").read_text(encoding="utf-8")
     check("WORKER_DISPATCH_TOKEN" in readme and "WORKER_DISPATCH_TOKEN" in wrangler and ".github/worker-dispatch-secret" in (ROOT / "worker" / "README.md").read_text(encoding="utf-8"), "WORKER_DISPATCH_TOKEN is the repo secret")
     check("not set yet" in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\" | npx wrangler secret put GITHUB_DISPATCH_TOKEN --name viktorych-accounts" in dispatch_wf, "an empty dispatch token is skipped and a set one is copied from stdin")
-    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha266sum" in dispatch_wf and "actions/cache/restore@v4" in dispatch_wf and "actions/cache/save@v4" in dispatch_wf, "the dispatch secret workflow retries itself and skips a value it already copied")
+    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha256sum" in dispatch_wf and "actions/cache/restore@v4" in dispatch_wf and "actions/cache/save@v4" in dispatch_wf, "the dispatch secret workflow retries itself and skips a value it already copied")
     check('echo "$WORKER_DISPATCH_TOKEN"' not in dispatch_wf and "echo $WORKER_DISPATCH_TOKEN" not in dispatch_wf and "echo ${{ secrets" not in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\"" in dispatch_wf, "the dispatch secret workflow does not print the token")
     live_check = (ROOT / "worker" / "dispatch-live-check.mjs").read_text(encoding="utf-8")
     check("node dispatch-live-check.mjs" in dispatch_wf and "/tiktok-live.yml/dispatches" in live_check and "media-extract.yml" not in live_check and "tiktok-added.yml" not in live_check, "the worker dispatch check starts only tiktok-live.yml")
@@ -4929,7 +4929,7 @@ def gdrive_checks() -> None:
     sizes = {media[0]["logical"]: 10, media[-1]["logical"]: 90}
     ordered = [row for row in gdrive_backup.sort_media(media, sizes) if row["kind"] == "media"]
     check(len(ordered) == 2 and sizes[ordered[0]["logical"]] == 90 and sizes[ordered[1]["logical"]] == 10, "the larger video is uploaded before the smaller one")
-    known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha266": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
+    known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha256": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
     check(songs[0]["logical"] in gdrive_backup.known_ids(known) and ("ab" * 32) in gdrive_backup.known_hashes(known), "a stored hash and logical id are treated as already uploaded")
     import cf_pages_prepare
     import cf_pages_deploy
