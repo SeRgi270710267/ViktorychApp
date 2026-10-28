@@ -3,6 +3,7 @@
    Block, mute, and a hidden flag keep people and reported posts out of the
    timeline. The moderation list is owner-only. */
 
+import { viewerHandle } from "./usernames.js";
 import { awardActivity, clawback, giftForPost } from "./points.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
 import { addCommunityPost, communityHomeRows } from "./communities.js";
@@ -241,8 +242,8 @@ async function presentPost(env, request, row, viewerId) {
   }
   let quote = null;
   if (row.quote_id) {
-    const quoted = await env.DB.prepare("SELECT p.id, p.body, p.created_at, a.handle, a.display_name FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ? AND p.hidden = 0").bind(row.quote_id).first();
-    if (quoted) quote = { id: quoted.id, body: quoted.body, createdAt: quoted.created_at, authorName: quoted.display_name, authorHandle: quoted.handle };
+    const quoted = await env.DB.prepare("SELECT p.id, p.author_id, p.body, p.created_at, a.handle, a.display_name FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.id = ? AND p.hidden = 0").bind(row.quote_id).first();
+    if (quoted) quote = { id: quoted.id, body: quoted.body, createdAt: quoted.created_at, authorName: quoted.display_name, authorHandle: (await viewerHandle(env, request, quoted.author_id, viewerId)).handle };
   }
   return {
     id: row.id,
@@ -252,7 +253,7 @@ async function presentPost(env, request, row, viewerId) {
     quoteId: row.quote_id || "",
     authorId: row.author_id,
     authorName: row.display_name,
-    authorHandle: row.handle,
+    authorHandle: (await viewerHandle(env, request, row.author_id, viewerId)).handle,
     authorAvatar: row.avatar || "",
     media: media,
     quote: quote,
