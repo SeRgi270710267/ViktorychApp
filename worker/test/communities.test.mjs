@@ -416,3 +416,31 @@ test("an account's own posts, replies and quotes list on its profile with ?by=",
   const bad = await call("/v1/posts?by=nope", { ip: "203.0.113.148", token: rae.body.token });
   assert.equal(bad.status, 400);
 });
+
+test("a profile lists the account's community posts and replies, with community privacy", async () => {
+  const sam = await call("/v1/signup", { method: "POST", ip: "203.0.113.150", body: { displayName: "Sam Comm", handle: "sam_comm" } });
+  assert.equal(sam.status, 201);
+  const root = await call("/v1/communities/proffeed/posts", { method: "POST", ip: "203.0.113.151", token: sam.body.token, body: { text: "Sam in a community" } });
+  assert.equal(root.status, 200);
+  const reply = await call("/v1/communities/proffeed/posts", { method: "POST", ip: "203.0.113.152", token: sam.body.token, body: { text: "Sam replies in a community", parentId: root.body.post.id } });
+  assert.equal(reply.status, 200);
+  const id = sam.body.account.publicId;
+  const own = await call("/v1/posts?by=" + id, { ip: "203.0.113.153", token: sam.body.token });
+  const ownRows = (own.body.posts || []).filter((item) => item.community && item.community.name === "proffeed");
+  assert.deepEqual(ownRows.map((item) => item.id).sort(), [root.body.post.id, reply.body.post.id].sort());
+  assert.equal(ownRows.find((item) => item.id === reply.body.post.id).parentId, root.body.post.id);
+
+  const viewer = await call("/v1/signup", { method: "POST", ip: "203.0.113.154", body: { displayName: "View Comm", handle: "view_comm" } });
+  const open = await call("/v1/posts?by=" + id, { ip: "203.0.113.155", token: viewer.body.token });
+  assert.equal((open.body.posts || []).filter((item) => item.community && item.community.name === "proffeed").length, 2);
+
+  const db = await mf.getD1Database("DB");
+  await db.prepare("INSERT INTO community_meta (community_id, visibility, updated_at) VALUES (?, 'private', ?) ON CONFLICT(community_id) DO UPDATE SET visibility = 'private'").bind("proffeed", Date.now()).run();
+  const closed = await call("/v1/posts?by=" + id, { ip: "203.0.113.156", token: viewer.body.token });
+  assert.equal((closed.body.posts || []).filter((item) => item.community).length, 0);
+  const still = await call("/v1/posts?by=" + id, { ip: "203.0.113.157", token: sam.body.token });
+  assert.equal((still.body.posts || []).filter((item) => item.community).length, 2);
+  await db.prepare("INSERT INTO community_members (community_id, public_id, created_at) VALUES (?, ?, ?)").bind("proffeed", viewer.body.account.publicId, Date.now()).run();
+  const member = await call("/v1/posts?by=" + id, { ip: "203.0.113.158", token: viewer.body.token });
+  assert.equal((member.body.posts || []).filter((item) => item.community).length, 2);
+});

@@ -115,7 +115,10 @@ async function compose(page, vp, text) {
 }
 
 async function run(browser, vp, origin) {
-  const page = await browser.newPage();
+  // The service worker would answer API calls after a reload and bypass the mocks.
+  const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: vp.width, height: vp.height } });
+  const page = await context.newPage();
+  page.on("pageerror", (err) => console.error(vp.name + " page error: " + (err && err.message)));
   await page.addInitScript(() => {
     localStorage.setItem("viktorychapp-lang-user-picked", "1");
     localStorage.setItem("viktorychapp-welcome-v1", JSON.stringify({ step: 2, done: true }));
@@ -164,10 +167,13 @@ async function run(browser, vp, origin) {
   // After a refresh the server is the source of truth.
   await page.unroute("**/v1/**");
   const created = { id: NEW_ID, body: "Fresh own post", createdAt: Date.now() - 5000, media: [], authorName: "User A", authorHandle: "user_a", authorId: ME };
+  const group = { name: "placeholder_group", rootId: "va_00000000000000a1" };
+  const commPost = { id: "va_00000000000000a1", body: "My community post", createdAt: Date.now() - 9000, media: [], authorName: "User A", authorHandle: "user_a", authorId: ME, community: group };
+  const commReply = { id: "va_00000000000000a2", body: "My community reply", parentId: "va_00000000000000b9", createdAt: Date.now() - 7000, media: [], authorName: "User A", authorHandle: "user_a", authorId: ME, community: { name: "placeholder_group", rootId: "va_00000000000000b9" } };
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/v1/posts") {
-      const list = url.searchParams.get("by") ? [created] : [created, OTHER];
+      const list = url.searchParams.get("by") ? [created, commReply, commPost] : [created, OTHER];
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ posts: list, communitiesHome: true }) });
       return;
     }
@@ -181,10 +187,17 @@ async function run(browser, vp, origin) {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction((id) => !!document.querySelector('article.post[data-post="' + id + '"]'), NEW_ID, { timeout: 15000 })
     .catch(() => fail(vp.name + " the profile lost the post after a refresh"));
+  // Community posts sit on Posts and community replies on Replies, as normal cards with the community line.
+  await page.waitForFunction(() => !!document.querySelector('article.post[data-post="va_00000000000000a1"] .community-line'), null, { timeout: 15000 })
+    .catch(() => fail(vp.name + " the profile Posts tab is missing the community post"));
+  if (await page.locator('article.post[data-post="va_00000000000000a2"]').count()) fail(vp.name + " a community reply is on the Posts tab");
+  await page.goto(origin + "/#/@user_a?tab=replies", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!document.querySelector('article.post[data-post="va_00000000000000a2"] .community-line'), null, { timeout: 15000 })
+    .catch(() => fail(vp.name + " the profile Replies tab is missing the community reply"));
   await page.goto(origin + "/#/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction((id) => { const first = document.querySelector("article.post"); return first && first.getAttribute("data-post") === id; }, NEW_ID, { timeout: 15000 })
     .catch(() => fail(vp.name + " Home lost the post after a refresh"));
-  await page.close();
+  await context.close();
 }
 
 async function main() {

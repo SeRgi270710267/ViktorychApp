@@ -145,15 +145,19 @@ function rootOf(parentId, id) {
   return parent || id;
 }
 
-export async function communityHomeRows(env, request, viewer, presentAccount) {
+export async function communityHomeRows(env, request, viewer, presentAccount, opts) {
   // The app owner adds communities from the owner list rather than joining them,
   // so the owner reads every community on Home. Others read the communities they
   // joined (posting joins a public one), plus public-community posts from people
   // they follow.
   const viewerId = typeof viewer === "string" ? viewer : String((viewer && viewer.public_id) || "");
   const ownerView = !!(viewer && typeof viewer === "object" && Number(viewer.owner) === 1);
+  // opts.authorId: one account's community posts and replies for its profile.
+  // Private communities stay limited to members, the author and the owner;
+  // Home preferences don't apply on a profile.
+  const authorId = opts && opts.authorId ? String(opts.authorId) : "";
   let communitiesHome = true;
-  try {
+  if (!authorId) try {
     const global = await env.DB.prepare("SELECT show_home FROM community_feed_prefs WHERE public_id = ? AND community_id = ''").bind(viewerId).first();
     if (global && Number(global.show_home) === 0) communitiesHome = false;
   } catch (err) {
@@ -161,7 +165,14 @@ export async function communityHomeRows(env, request, viewer, presentAccount) {
   }
   if (!communitiesHome) return { posts: [], communitiesHome: false };
   let listed;
-  try {
+  if (authorId) try {
+    listed = await env.DB.prepare(
+      "SELECT c.id, c.author_id, c.parent_id, c.body, c.created_at, c.community_id, a.handle, a.display_name, a.avatar, a.profile_less FROM community_posts c JOIN accounts a ON a.public_id = c.author_id LEFT JOIN community_meta meta ON meta.community_id = c.community_id LEFT JOIN community_members mem ON mem.community_id = c.community_id AND mem.public_id = ? WHERE c.deleted_at = 0 AND c.author_id = ? AND a.profile_less = 0 AND (? = 1 OR c.author_id = ? OR mem.public_id IS NOT NULL OR COALESCE(meta.visibility, 'public') = 'public') ORDER BY c.created_at DESC LIMIT 60"
+    ).bind(viewerId, authorId, ownerView ? 1 : 0, viewerId).all();
+  } catch (err) {
+    return { posts: [], communitiesHome: true };
+  }
+  else try {
     listed = await env.DB.prepare(
       "SELECT c.id, c.author_id, c.parent_id, c.body, c.created_at, c.community_id, a.handle, a.display_name, a.avatar, a.profile_less FROM community_posts c JOIN accounts a ON a.public_id = c.author_id LEFT JOIN community_meta meta ON meta.community_id = c.community_id LEFT JOIN community_members mem ON mem.community_id = c.community_id AND mem.public_id = ? LEFT JOIN community_feed_prefs pref ON pref.public_id = ? AND pref.community_id = c.community_id LEFT JOIN account_follows fol ON fol.follower_id = ? AND fol.target_id = 'app:' || c.author_id WHERE c.deleted_at = 0 AND COALESCE(pref.show_home, 1) = 1 AND COALESCE(pref.muted, 0) = 0 AND (? = 1 OR mem.public_id IS NOT NULL OR (COALESCE(meta.visibility, 'public') = 'public' AND (c.author_id = ? OR fol.follower_id IS NOT NULL))) ORDER BY c.created_at DESC LIMIT 60"
     ).bind(viewerId, viewerId, viewerId, ownerView ? 1 : 0, viewerId).all();
