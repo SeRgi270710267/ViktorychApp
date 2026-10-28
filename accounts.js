@@ -2669,13 +2669,18 @@ function signupPayload() {
     var banner = publicBanner(account.banner, account.bannerFace);
     if (banner.indexOf("<img") >= 0) banner = banner.replace("<img", '<img data-acct="open-gallery" data-kind="banner"');
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
+    var giftBtn = !mine ? '<button class="outline" type="button" data-gift="open" data-handle="' + esc(account.handle || "") + '">' + esc(tr("Send a gift")) + "</button>" : "";
+    var birthdayBanner = window.ProfileGifts && window.ProfileGifts.banner ? window.ProfileGifts.banner(account) : "";
     var followBtn = !mine && ref && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(ref, true) || "") : "";
     var friendBtn = !mine && ref ? friendButtonHtml(account) : "";
     var activeTab = (route && route.query && route.query.get("tab")) || (route && route.tab) || "posts";
-    if (activeTab !== "friends" && activeTab !== "about") activeTab = "posts";
+    if (activeTab !== "friends" && activeTab !== "about" && activeTab !== "gifts") activeTab = "posts";
     if (window.ProfileAbout) window.ProfileAbout.ensure(account, account.aboutPreview || "");
+    if (window.ProfileGifts) window.ProfileGifts.ensure(account);
     var showAbout = window.ProfileAbout && window.ProfileAbout.showTab(account);
+    var showGifts = window.ProfileGifts && window.ProfileGifts.showTab(account);
     if (activeTab === "about" && !showAbout) activeTab = "posts";
+    if (activeTab === "gifts" && !showGifts) activeTab = "posts";
 
     var pack = { html: "", count: 0 };
     if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account) || pack;
@@ -2686,7 +2691,8 @@ function signupPayload() {
     else if (!mine && account.locked) postsBody = '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
     var friendsBody = friendsSectionHtml(account);
     var aboutBody = activeTab === "about" && window.ProfileAbout ? window.ProfileAbout.html(account) : "";
-    var body = activeTab === "about" ? aboutBody : (activeTab === "friends" ? friendsBody : postsBody);
+    var giftsBody = activeTab === "gifts" && window.ProfileGifts ? window.ProfileGifts.giftsHtml(account.gifts, mine) : "";
+    var body = activeTab === "about" ? aboutBody : (activeTab === "gifts" ? giftsBody : (activeTab === "friends" ? friendsBody : postsBody));
 
     var profileHref = "#/@" + encodeURIComponent(account.handle || "");
     var friendsHref = "#/@" + encodeURIComponent(account.handle || "") + "?tab=friends";
@@ -2699,6 +2705,7 @@ function signupPayload() {
       '<a class="tab' + (activeTab === "posts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "posts" ? "true" : "false") + '" href="' + esc(profileHref) + '"><span>' + esc(tr("Posts")) + '</span></a>' +
       '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
       (showAbout ? '<a class="tab' + (activeTab === "about" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "about" ? "true" : "false") + '" href="' + esc(profileHref + "?tab=about") + '"><span>' + esc(tr("About")) + "</span></a>" : "") +
+      (showGifts ? '<a class="tab' + (activeTab === "gifts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "gifts" ? "true" : "false") + '" href="' + esc(profileHref + "?tab=gifts") + '"><span>' + esc(tr("Gifts")) + "</span></a>" : "") +
     '</div>';
 
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
@@ -2712,7 +2719,8 @@ function signupPayload() {
       own: !!mine,
       count: tr("{count} posts", { count: count })
     }, banner) : banner;
-    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + highlightRow + tabs + body + galleryHtml(account);
+    top = birthdayBanner + top;
+    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + highlightRow + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
