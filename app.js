@@ -19444,6 +19444,34 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     hscrollOnResize();
   }
   window.addEventListener("resize", () => syncShell());
+
+  // Right rail like X: sticky at top 0 when it fits the viewport, otherwise
+  // it scrolls with the page until its bottom meets the viewport bottom
+  // (top = viewport height - rail height). No blank space below it.
+  let railEl = null;
+  let railObserver = null;
+  function fitRail() {
+    const el = document.querySelector(".side");
+    if (!el) { railEl = null; return; }
+    if (el !== railEl) {
+      railEl = el;
+      if (railObserver) railObserver.disconnect();
+      if (typeof ResizeObserver === "function") {
+        railObserver = new ResizeObserver(() => fitRail());
+        railObserver.observe(el);
+      }
+    }
+    const top = Math.min(0, Math.round((window.innerHeight || 0) - el.offsetHeight));
+    const want = top + "px";
+    if (el.style.getPropertyValue("--rail-top") !== want) el.style.setProperty("--rail-top", want);
+  }
+  window.addEventListener("resize", fitRail, { passive: true });
+  (function watchRail() {
+    const root = document.getElementById("app");
+    if (!root || typeof MutationObserver !== "function") return;
+    new MutationObserver(() => { if (document.querySelector(".side") !== railEl) fitRail(); }).observe(root, { childList: true, subtree: true });
+    fitRail();
+  })();
   window.addEventListener("orientationchange", () => syncShell());
   syncShell();
   function paintProfileChrome() {
