@@ -577,6 +577,28 @@
     return true;
   }
 
+  function tryMetaEmbed(img) {
+    if (!img || img.dataset.metaEmbed === "1") return false;
+    const tile = img.closest(".tile");
+    if (!tile) return false;
+    const id = String(tile.dataset.id || "");
+    const post = id ? posts().find((row) => String(row.id) === id || String(row.statusId) === id || canonicalId(row) === id) : null;
+    if (!post || (post.platform !== "instagram" && post.platform !== "threads")) return false;
+    const src = metaEmbedSrc(post);
+    if (!src) return false;
+    const frame = document.createElement("iframe");
+    frame.src = src;
+    frame.title = post.platform === "threads" ? "Threads" : "Instagram";
+    frame.loading = "lazy";
+    frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    tile.classList.add("embed-tile");
+    tile.classList.remove("broken");
+    tile.textContent = "";
+    tile.appendChild(frame);
+    img.dataset.metaEmbed = "1";
+    return true;
+  }
+
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
     if (tryDeviceRelay(img)) return;
@@ -589,6 +611,7 @@
       img.replaceWith(span);
       return;
     }
+    if (tryMetaEmbed(img)) return;
     const tile = img.closest(".tile") || img.closest(".media") || img.closest(".yt-thumb");
     if (tile) tile.classList.add("broken");
     img.remove();
@@ -2661,10 +2684,41 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
   }
 
+  function metaEmbedSrc(post) {
+    const code = metaCode(post);
+    if (!code) return "";
+    const url = String((post && post.url) || "");
+    if ((post && post.platform) === "threads" || /threads\.(?:com|net)\//.test(url)) {
+      return "https://www.threads.net/t/" + code + "/embed";
+    }
+    if (/instagram\.com\/reel\//.test(url)) return "https://www.instagram.com/reel/" + code + "/embed/captioned/";
+    return "https://www.instagram.com/p/" + code + "/embed/captioned/";
+  }
+
+  function metaNeedsEmbed(post, media) {
+    if (!post || (post.platform !== "instagram" && post.platform !== "threads")) return false;
+    const url = String((media && (media.url || media.poster)) || "");
+    if (!url || deadMediaUrl(url)) return true;
+    if (oePast(url) || oePast(media && media.poster)) return true;
+    return false;
+  }
+
+  function metaEmbedHtml(post) {
+    const src = metaEmbedSrc(post);
+    if (!src) return "";
+    const open = post.url ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("Open original")}</a>` : "";
+    const title = post.platform === "threads" ? "Threads" : "Instagram";
+    return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(src)}" title="${esc(title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>${open}</div></div>`;
+  }
+
   function mediaHtml(items, eager, post) {
     const files = attachmentHtml(items);
     const list = (items || []).filter((m) => m && m.type !== "file" && m.type !== "audio" && (m.url || m.poster || m.videoId || m.type === "embed" || m.type === "placeholder" || m.type === "video" || m.type === "animated_gif")).slice(0, 4);
     if (!list.length) return files;
+    if (post && list.length && list.every((item) => metaNeedsEmbed(post, item))) {
+      const embed = metaEmbedHtml(post);
+      if (embed) return embed + files;
+    }
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
       let src = String(embed.url || "");
@@ -13281,7 +13335,7 @@ if (STATE.histClear) {
     delete pendingReposts[postKey];
   }
 
-  function profilePostsHtml(account) {
+  function profilePostsHtml(account, tab) {
     const lib = repostLib();
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
@@ -13331,7 +13385,11 @@ if (STATE.histClear) {
       });
     }
     postList.sort(byStamp);
-    return { html: postList.map((post) => card(post, "")).join(""), count: postList.length };
+    let shown = postList;
+    if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
+    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
+    else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
+    return { html: shown.map((post) => card(post, "")).join(""), count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -15094,6 +15152,33 @@ if (STATE.histClear) {
     });
   }
 
+  function pillMarqueeHtml(text) {
+    const safe = esc(text || "");
+    return `<span class="sp-marquee" data-sp-marquee><span class="sp-marquee-clip"><span class="sp-marquee-track"><span class="sp-marquee-copy"><span class="sp-marquee-text">${safe}</span></span><span class="sp-marquee-copy" aria-hidden="true"><span class="sp-marquee-text">${safe}</span></span></span></span></span>`;
+  }
+
+  function fitPillLabels(root) {
+    if (!root) return;
+    const nodes = root.querySelectorAll(".story-folder, .cm-chip, .yt-chip > span, .hist-chip, .friends-pill, .gchip, .ptabs .tab > span, .pill > span");
+    nodes.forEach((el) => {
+      if (el.querySelector("[data-sp-marquee]") || el.closest("[data-sp-marquee]")) return;
+      const loose = [];
+      el.childNodes.forEach((node) => {
+        if (node.nodeType === 3 && String(node.textContent || "").trim()) loose.push(node);
+      });
+      if (!el.childElementCount && String(el.textContent || "").trim()) {
+        el.innerHTML = pillMarqueeHtml(el.textContent);
+        return;
+      }
+      loose.forEach((node) => {
+        const span = document.createElement("span");
+        span.className = "pill-fit";
+        span.innerHTML = pillMarqueeHtml(String(node.textContent || "").trim());
+        node.replaceWith(span);
+      });
+    });
+  }
+
   function commitApp(html) {
     const app = document.getElementById("app");
     if (!app) return;
@@ -15106,6 +15191,7 @@ if (STATE.histClear) {
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
     hscrollSettle({ reveal: true });
+    if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
 
   function hscrollRestoreSaved(retry) {
@@ -15519,6 +15605,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       watchHydration();
       scheduleDetect();
       if (window.FeedsTranslate) window.FeedsTranslate.paint();
+      fitPillLabels(document.getElementById("app"));
       if (window.SIntelMusic && window.SIntelMusic.afterRender) window.SIntelMusic.afterRender(route);
       syncMediaSession();
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);

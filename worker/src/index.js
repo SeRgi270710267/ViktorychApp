@@ -56,7 +56,7 @@ const BANNER_BYTES = 150 * 1024;
 const AVATAR_TEXT = 90000;
 const BANNER_TEXT = 220000;
 const MEDIA_KEY = /^media\/(avatars|banners)\/(\d{12})\/([a-f0-9]{64})\.(webp|jpg|png)$/;
-const ACCOUNT_COLS = "public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty, private_follows, profile_less, protected_account";
+const ACCOUNT_COLS = "public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty, private_follows, profile_less, protected_account, profile_tabs";
 let schemaReady = null;
 let mediaReady = null;
 
@@ -253,7 +253,8 @@ async function addProfileColumns(env) {
     "ALTER TABLE accounts ADD COLUMN banner_empty TEXT NOT NULL DEFAULT 'default'",
     "ALTER TABLE accounts ADD COLUMN private_follows INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE accounts ADD COLUMN profile_less INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE accounts ADD COLUMN protected_account INTEGER NOT NULL DEFAULT 0"
+    "ALTER TABLE accounts ADD COLUMN protected_account INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE accounts ADD COLUMN profile_tabs TEXT NOT NULL DEFAULT ''"
   ];
   for (let i = 0; i < statements.length; i++) {
     try {
@@ -453,7 +454,7 @@ function publicAccount(row, request, own) {
   const bannerUrl = mediaPublicUrl(request, row.banner);
   const avatarFace = hidden || (avatarUrl ? "photo" : cleanGap(row.avatar_empty));
   const bannerFace = bannerUrl ? "photo" : cleanGap(row.banner_empty);
-  return {
+  const account = {
     publicId: row.public_id,
     handle: row.handle,
     displayName: row.display_name,
@@ -473,6 +474,40 @@ function publicAccount(row, request, own) {
     protected: row.protected_account === 1,
     createdAt: row.created_at
   };
+  const tabs = publicProfileTabs(row.profile_tabs, own);
+  if (tabs) account.profileTabs = tabs;
+  return account;
+}
+
+const PROFILE_TAB_SYNC_IDS = ["posts", "replies", "media", "highlights", "friends", "about", "gifts"];
+
+function cleanProfileTabsSync(raw) {
+  if (typeof raw === "string") {
+    if (!raw) return null;
+    try { raw = JSON.parse(raw); } catch (err) { return null; }
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const order = [];
+  const seen = {};
+  (Array.isArray(raw.order) ? raw.order : PROFILE_TAB_SYNC_IDS).forEach((id) => {
+    if (PROFILE_TAB_SYNC_IDS.indexOf(id) < 0 || seen[id]) return;
+    seen[id] = true;
+    order.push(id);
+  });
+  PROFILE_TAB_SYNC_IDS.forEach((id) => { if (!seen[id]) order.push(id); });
+  const hidden = [];
+  (Array.isArray(raw.hidden) ? raw.hidden : []).forEach((id) => {
+    if (PROFILE_TAB_SYNC_IDS.indexOf(id) < 0 || id === "posts" || hidden.indexOf(id) >= 0) return;
+    hidden.push(id);
+  });
+  return { order, hidden, share: raw.share === true, at: Number(raw.at) || 0 };
+}
+
+function publicProfileTabs(raw, own) {
+  const tabs = cleanProfileTabsSync(raw);
+  if (!tabs) return null;
+  if (!own && !tabs.share) return null;
+  return tabs;
 }
 
 async function presentAccount(env, request, row, own, opts) {
@@ -1029,10 +1064,15 @@ async function handleProfilePatch(request, env) {
   const privateFollows = body.privateFollows == null ? (row.private_follows === 1 ? 1 : 0) : (body.privateFollows ? 1 : 0);
   const profileLess = (row.owner === 1) ? 0 : (body.profileLess == null ? (row.profile_less === 1 ? 1 : 0) : (body.profileLess ? 1 : 0));
   const protectedAccount = (row.owner === 1) ? 0 : (body.protected == null ? (row.protected_account === 1 ? 1 : 0) : (body.protected ? 1 : 0));
+  let profileTabs = row.profile_tabs || "";
+  if (body.profileTabs != null) {
+    const cleanedTabs = cleanProfileTabsSync(body.profileTabs);
+    profileTabs = cleanedTabs ? JSON.stringify(cleanedTabs) : "";
+  }
   if (skeleton) {
-    await env.DB.prepare("UPDATE accounts SET handle = ?, skeleton = ?, display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ?, profile_less = ?, protected_account = ? WHERE public_id = ?").bind(handle, skeleton, displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, profileLess, protectedAccount, row.public_id).run();
+    await env.DB.prepare("UPDATE accounts SET handle = ?, skeleton = ?, display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ?, profile_less = ?, protected_account = ?, profile_tabs = ? WHERE public_id = ?").bind(handle, skeleton, displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, profileLess, protectedAccount, profileTabs, row.public_id).run();
   } else {
-    await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ?, profile_less = ?, protected_account = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, profileLess, protectedAccount, row.public_id).run();
+    await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ?, profile_less = ?, protected_account = ?, profile_tabs = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, profileLess, protectedAccount, profileTabs, row.public_id).run();
   }
   const next = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(row.public_id).first();
   await invalidate(env, "p:" + row.public_id);
@@ -1208,6 +1248,11 @@ async function handleSyncPut(request, env) {
     else delete payload.bottomNav;
   }
   if (payload.bottomNavCustom != null) payload.bottomNavCustom = payload.bottomNavCustom === true;
+  if (payload.profileTabs != null) {
+    const cleanedTabs = cleanProfileTabsSync(payload.profileTabs);
+    if (cleanedTabs) payload.profileTabs = cleanedTabs;
+    else delete payload.profileTabs;
+  }
   if (payload.navLayoutSync === true) {
     payload.navLayout = payload.navLayout === "bar" ? "bar" : "auto";
     payload.navLayoutLand = payload.navLayoutLand === true;
