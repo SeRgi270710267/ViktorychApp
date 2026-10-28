@@ -4685,7 +4685,7 @@ def story_checks() -> None:
         saved = json.loads(dest.read_text(encoding="utf-8"))
     check(health == [] and quiet == [] and saved["accounts"] == [], "VK_USER_TOKEN unset writes no VK stories and does not call out")
     vk_web_checks(now)
-    check("border-radius: 16px" in styles and "linear-gradient" in styles and "#stories" in styles, "story avatars are rounded squares and the viewer is full screen")
+    check("border-radius: 999px" in styles and "linear-gradient" in styles and "#stories" in styles and ".story-shell" in styles and "viktorych-stories-bar-v1" in (ROOT / "stories.js").read_text(encoding="utf-8"), "story avatars are circles and the bar collapses without covering the viewer")
     row = subprocess.run(["node", "scripts/stories_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "story tray ordering passed\n" + row.stdout + row.stderr)
 
