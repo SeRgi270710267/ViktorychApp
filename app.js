@@ -12164,7 +12164,7 @@ const here = parseRoute();
       <div class="drawer-scroll">
         ${rows}
         <button class="drawer-fold" type="button" data-act="drawer-fold" aria-expanded="${open ? "true" : "false"}"><span class="drawer-ico">${icon("more")}</span><span class="drawer-label">${esc(tr("More"))}</span></button>
-        ${open ? `<div class="drawer-fold-body">${drawerExtraRows()}</div>` : ""}
+        <div class="drawer-fold-body"${open ? "" : " hidden"}>${drawerExtraRows()}</div>
       </div>
       <div class="drawer-foot"><button class="drawer-theme" type="button" data-act="explore-theme" aria-label="${esc(tr("Theme"))}">${icon("moon")}</button></div>
     </div></div>`;
