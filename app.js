@@ -1565,6 +1565,82 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }, 20000);
   }
 
+  /* Owner kill switches. The public list is cached for ten minutes in
+     localStorage so lazy modules, the live row and the index mount skip
+     features the owner turned off without asking the server again. */
+  const SERVER_OFF_KEY = "viktorychapp-server-off";
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills"];
+  function serverOffList() {
+    try {
+      const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
+      return Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
+    } catch (err) { return []; }
+  }
+  function storeServerOff(list) {
+    try {
+      localStorage.setItem(SERVER_OFF_KEY, JSON.stringify(list || []));
+      localStorage.setItem(SERVER_OFF_KEY + "-at", String(Date.now()));
+    } catch (err) { /* private mode keeps the old list */ }
+    if (typeof syncFeatureFlags === "function") syncFeatureFlags();
+  }
+  function syncServerFeatures(force) {
+    const api = accountsApi();
+    if (!api) return Promise.resolve(serverOffList());
+    let at = 0;
+    try { at = Number(localStorage.getItem(SERVER_OFF_KEY + "-at")) || 0; } catch (err) { at = 0; }
+    if (!force && Date.now() - at < 10 * 60 * 1000) return Promise.resolve(serverOffList());
+    return fetch(api + "/v1/features").then((res) => res.ok ? res.json() : null).then((body) => {
+      if (body && Array.isArray(body.off)) storeServerOff(body.off);
+      return serverOffList();
+    }).catch(() => serverOffList());
+  }
+  let ownerFeatureState = null;
+  function loadOwnerFeatures() {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!signedOwner() || !api || !token || ownerFeatureState) return;
+    ownerFeatureState = { off: serverOffList(), busy: true };
+    fetch(api + "/v1/owner/features", { headers: { Authorization: "Bearer " + token }, cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((body) => {
+        if (body && Array.isArray(body.off)) { ownerFeatureState.off = body.off; storeServerOff(body.off); }
+        ownerFeatureState.busy = false;
+        render();
+      }).catch(() => { ownerFeatureState.busy = false; });
+  }
+  function setOwnerFeature(name, off) {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!signedOwner() || !api || !token || !SERVER_FEATURES.includes(name)) return;
+    fetch(api + "/v1/owner/features", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify({ name, off: !!off })
+    }).then((res) => res.ok ? res.json() : null).then((body) => {
+      if (!body || !Array.isArray(body.off)) { toast(tr("Could not save that setting.")); return; }
+      ownerFeatureState = { off: body.off, busy: false };
+      storeServerOff(body.off);
+      render();
+    }).catch(() => toast(tr("Could not save that setting.")));
+  }
+  function ownerFeaturesSection() {
+    if (!signedOwner()) return "";
+    loadOwnerFeatures();
+    const off = (ownerFeatureState && ownerFeatureState.off) || serverOffList();
+    const labels = {
+      shorts: [tr("Shorts"), tr("Shorts pages, TikTok live watching and its cron work.")],
+      stories: [tr("Stories"), tr("Story uploads, the story bar and expiry sweeps.")],
+      lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
+      telegram: [tr("Telegram ingest"), tr("The Telegram bot webhook and media relay.")],
+      pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")]
+    };
+    const rows = SERVER_FEATURES.map((name) => {
+      const on = !off.includes(name);
+      return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="owner-feature" data-feature="${esc(name)}"><span>${esc(labels[name][0])}</span><i></i></button><p class="phandle">${esc(labels[name][1])}</p>`;
+    }).join("");
+    return `<section class="owner-features"><h2>${esc(tr("Server features"))}</h2><p class="phandle">${esc(tr("Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it."))}</p>${rows}</section>`;
+  }
+
   function loadOwnerAccounts() {
     const api = accountsApi();
     const token = accountToken();
@@ -8217,7 +8293,13 @@ const here = parseRoute();
   const HOME_FEATURE_FLAGS = { homePills: "viktorychapp-off-home-pills", stories: "viktorychapp-off-stories" };
   const SYNCED_UI_PREFS = ["homePills", "stories"];
   window.ViktorychPrefs = Object.assign(window.ViktorychPrefs || {}, { synced: SYNCED_UI_PREFS.slice(), flags: Object.assign({}, HOME_FEATURE_FLAGS) });
+  const SERVER_FEATURE_FOR = { homePills: "pills", stories: "stories" };
   function featureOn(key) {
+    // The owner's server switch wins over this device's choice.
+    if (SERVER_FEATURE_FOR[key] && serverOffList().includes(SERVER_FEATURE_FOR[key])) return false;
+    return userFeatureOn(key);
+  }
+  function userFeatureOn(key) {
     const value = STATE.settings ? STATE.settings[key] : undefined;
     if (typeof value === "boolean") return value;
     // Before settings load (or for an old settings blob) the boot flag decides.
@@ -8229,7 +8311,7 @@ const here = parseRoute();
     Object.keys(HOME_FEATURE_FLAGS).forEach((key) => {
       if (!featureOn(key)) off.push(key);
       try {
-        if (featureOn(key)) localStorage.removeItem(HOME_FEATURE_FLAGS[key]);
+        if (userFeatureOn(key)) localStorage.removeItem(HOME_FEATURE_FLAGS[key]);
         else localStorage.setItem(HOME_FEATURE_FLAGS[key], "1");
       } catch (err) { /* storage blocked */ }
     });
@@ -12778,8 +12860,9 @@ const here = parseRoute();
   }
 
   function homeFeatureSwitch(key, label, note) {
-    const on = featureOn(key);
-    return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="home-feature" data-key="${esc(key)}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(note)}</p>`;
+    const on = userFeatureOn(key);
+    const blocked = featureOn(key) !== on;
+    return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="home-feature" data-key="${esc(key)}"${blocked ? " disabled" : ""}><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(blocked ? tr("Turned off for everyone by the owner.") : note)}</p>`;
   }
 
   function settingsView() {
@@ -12878,7 +12961,7 @@ const here = parseRoute();
           ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
         </div>
         ${peerMediaSettingsHtml()}
-      </div>`;
+      </div>${ownerFeaturesSection()}`;
     }
     if (section === "notifications" && sub === "discord") return discordAlertsView();
     if (section === "notifications") {
@@ -17019,14 +17102,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "home-feature") {
       const key = el.dataset.key;
       if (!Object.prototype.hasOwnProperty.call(HOME_FEATURE_FLAGS, key)) return;
-      const on = !featureOn(key);
+      const on = !userFeatureOn(key);
       STATE.settings[key] = on;
       STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { [key]: Date.now() });
       saveSettings();
       render();
       /* Off has to stop work that already started, and on needs files that
          were skipped, so reload when the loaded state does not match. */
-      if (featureLoaded(key) !== on) setTimeout(() => location.reload(), 150);
+      if (featureLoaded(key) !== featureOn(key)) setTimeout(() => location.reload(), 150);
       return;
     }
     if (act === "note-tabs-same") {
@@ -17341,6 +17424,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const cap = Number(el.dataset.cap);
       if (cap === 32768 || cap === 65536 || cap === 131072 || cap === 262144) writeDevicePerf({ peerUploadCap: cap });
       render();
+      return;
+    }
+    if (act === "owner-feature") {
+      const name = el.getAttribute("data-feature") || "";
+      const nowOn = el.getAttribute("aria-checked") === "true";
+      setOwnerFeature(name, nowOn);
       return;
     }
     if (act === "peer-share") {
@@ -22884,6 +22973,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (info.name === "communities") bindCommunitiesModule();
     if (!info.silent) render();
   });
+  syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
       window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
