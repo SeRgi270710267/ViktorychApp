@@ -2020,5 +2020,20 @@ SI18n.addPack("en", {
   "No drafts yet": "No drafts yet",
   "A poll needs two choices.": "A poll needs two choices.",
   "Replies are limited on that post.": "Replies are limited on that post.",
-  "Verified accounts proved a linked profile in this app.": "Verified accounts proved a linked profile in this app."
+  "Verified accounts proved a linked profile in this app.": "Verified accounts proved a linked profile in this app.",
+  "Not interested": "Not interested",
+  "Show less often": "Show less often",
+  "We'll show you less of this.": "We'll show you less of this.",
+  "Follower": "Follower",
+  "Premium": "Premium",
+  "New": "New",
+  "Creator Studio": "Creator Studio",
+  "Settings and privacy": "Settings and privacy",
+  "Spaces": "Spaces",
+  "New post notifications for {name}": "New post notifications for {name}",
+  "New post notifications for {name} and {n} others": "New post notifications for {name} and {n} others",
+  "Notification filters": "Notification filters",
+  "Notification options": "Notification options",
+  "No Spaces right now": "No Spaces right now",
+  "Live audio shows up here.": "Live audio shows up here."
 });

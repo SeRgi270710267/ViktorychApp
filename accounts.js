@@ -2181,13 +2181,30 @@ function signupPayload() {
       }
     });
   }
+  function viewerOwnsSubject(subjectId, handle) {
+    var session = readSession();
+    var me = session && session.account;
+    if (!me) return false;
+    var id = String(subjectId || "");
+    var mine = String(me.publicId || "");
+    if (mine && (id === mine || id === "app:" + mine)) return true;
+    if (id.indexOf("app:") !== 0) return false;
+    if (/^app:\d{12}$/.test(id)) return false;
+    var fromId = id.slice(4).replace(/^@/, "");
+    var candidate = fromId || String(handle || "");
+    if (!candidate || !me.handle) return false;
+    return skel(candidate) === skel(me.handle);
+  }
   function subjectForHandle(handle, platform) {
     var key = skel(handle);
     var session = readSession();
+    var me = session && session.account;
     var account = profiles[key];
-    if (!account && session && session.account && skel(session.account.handle) === key) account = session.account;
+    if (!account && me && skel(me.handle) === key) account = me;
     if (account && account.handle) {
-      var id = account.publicId && /^\d{12}$/.test(String(account.publicId)) ? "app:" + account.publicId : "app:@" + account.handle;
+      var publicId = /^\d{12}$/.test(String(account.publicId || "")) ? String(account.publicId) : "";
+      if (!publicId && me && skel(me.handle) === skel(account.handle) && /^\d{12}$/.test(String(me.publicId || ""))) publicId = String(me.publicId);
+      var id = publicId ? "app:" + publicId : "app:@" + account.handle;
       return { id: id, kind: "account", name: account.displayName || account.handle, handle: account.handle, platform: "x" };
     }
     if ((platform || "x") === "x" && readSession() && hasApi() && !profileMiss[key]) {
@@ -2554,15 +2571,14 @@ function signupPayload() {
     if (pack.error) return search + '<div class="empty"><h2>' + esc(tr("Followers")) + '</h2><p>' + esc(tr("Couldn’t load this list.")) + '</p></div>';
     if (pack.blocked) return '<div class="empty"><h2>' + esc(tr("You're blocked")) + '</h2><p>' + esc(tr("This account has blocked you. You can’t see their posts or profile.")) + '</p></div>';
     if (pack.locked) return '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
-    if (pack.isPrivate) return '<div class="empty"><h2>' + esc(tr("These lists are private")) + '</h2><p>' + esc(tr("Only @{handle} can see who they follow and who follows them.", { handle: handle || "" })) + '</p></div>';
+    if (pack.isPrivate && !viewerOwnsSubject(subjectId, handle)) return '<div class="empty"><h2>' + esc(tr("These lists are private")) + '</h2><p>' + esc(tr("Only @{handle} can see who they follow and who follows them.", { handle: handle || "" })) + '</p></div>';
     var rows = pack.accounts || [];
     if (!rows.length) {
       var title = tab === "followers" ? tr("No followers yet") : tab === "mutuals" ? tr("No mutuals yet") : tab === "requests" ? tr("No follow requests") : tr("Not following anyone yet");
       var copy = tab === "requests" ? tr("When someone asks to follow you, they’ll show up here.") : tab === "mutuals" ? tr("People you follow who follow you back show up here.") : tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
       return search + '<div class="empty"><h2>' + esc(title) + '</h2><p>' + esc(copy) + '</p></div>';
     }
-    var session = readSession();
-    var mine = session && session.account && ("app:" + session.account.publicId) === subjectId;
+    var mine = viewerOwnsSubject(subjectId, handle);
     var html = rows.map(function (item) {
       var button = window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(item.id, false) || "") : "";
       var badge = item.followsYou ? '<span class="pill-badge">' + esc(tr("Follows you")) + '</span>' : "";
@@ -2688,23 +2704,38 @@ function signupPayload() {
     var sub = isAnon ? tr("Profile-less") : "@" + (account.handle || "");
     return photo + '<span class="account-meta"><b>' + esc(name) + "</b><span>" + esc(sub) + "</span></span>";
   }
+  function drawerTools() {
+    return '<div class="drawer-id-tools">' +
+      '<button class="icon-btn" type="button" data-act="drawer-accounts" aria-label="' + esc(tr("Accounts")) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h9v-2.5c0-.9.3-1.7.8-2.4A12 12 0 0 0 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg></button>' +
+      '<button class="icon-btn" type="button" data-act="drawer-more" aria-label="' + esc(tr("Account menu")) + '" aria-haspopup="menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg></button>' +
+      '</div>';
+  }
   function drawerHead() {
     var session = readSession();
     if (!session || !session.account) {
-      return '<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer">' +
-        '<span class="ava initials">?</span>' +
-        '<div style="flex:1"><b>' + esc(tr("Sign in")) + '</b><div class="phandle">' + esc(tr("Not signed in")) + '</div></div>' +
-        '<button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">' + esc(tr("Sign in")) + '</button>' +
+      return '<div class="drawer-id">' +
+        '<div class="drawer-id-top"><button class="drawer-ava" type="button" data-acct="login" aria-label="' + esc(tr("Sign in")) + '"><span class="ava initials">?</span></button>' + drawerTools() + '</div>' +
+        '<button class="drawer-name" type="button" data-acct="login"><b>' + esc(tr("Sign in")) + '</b></button>' +
+        '<div class="drawer-handle">' + esc(tr("Not signed in")) + '</div>' +
         '</div>';
     }
     var account = session.account;
-    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, ""), true);
+    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, ""), false);
     var isAnon = !!account.profileLess;
     var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
     var sub = isAnon ? tr("Profile-less account") : "@" + (account.handle || "");
-    return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(name) + '</b><div class="phandle">' + esc(sub) + "</div></div></a>" +
-      '<div style="padding:0 20px 8px"><button class="outline presence-set" type="button" data-acct="presence-open">' + esc(tr("Set a status")) + '</button></div>' +
-      '<div style="padding:0 20px 12px"><button class="outline" type="button" data-acct="logout" style="width:100%;font-size:13px;padding:6px 12px;border-color:rgba(244,33,46,0.4);color:#f4212e">' + esc(tr("Log out")) + '</button></div>';
+    var href = account.handle ? "#/@" + encodeURIComponent(account.handle) : "#/settings";
+    var lock = (account.privateFollows || account.locked) ? '<span class="drawer-lock" title="' + esc(tr("Private account")) + '">' + lockIcon(16) + '</span>' : "";
+    var following = accountStat(account, "following");
+    var followers = accountStat(account, "followers");
+    var followerLabel = followers === 1 ? tr("Follower") : tr("Followers");
+    if (accountRef(account)) ensureCounts(accountRef(account));
+    return '<div class="drawer-id">' +
+      '<div class="drawer-id-top"><a class="drawer-ava" href="' + esc(href) + '">' + photo + '</a>' + drawerTools() + '</div>' +
+      '<a class="drawer-name" href="' + esc(href) + '"><b>' + esc(name) + '</b>' + lock + '</a>' +
+      '<a class="drawer-handle" href="' + esc(href) + '">' + esc(sub) + '</a>' +
+      '<div class="drawer-counts"><a href="' + esc(href + "/following") + '"><b>' + esc(formatNum(following)) + '</b> ' + esc(tr("Following count")) + '</a><a href="' + esc(href + "/followers") + '"><b>' + esc(formatNum(followers)) + '</b> ' + esc(followerLabel) + '</a></div>' +
+      '</div>';
   }
   var tiktokHealth = null;
   var tiktokHealthAt = 0;
@@ -3888,6 +3919,7 @@ else if (act === "copy-id") copyAccountId();
     listPack: listPack,
     followersOf: followersOf,
     subjectForHandle: subjectForHandle,
+    ownsSubject: viewerOwnsSubject,
     setPrivateFollows: setPrivateFollows,
     account: function () {
       var session = readSession();

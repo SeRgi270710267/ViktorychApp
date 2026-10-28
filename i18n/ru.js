@@ -2020,5 +2020,20 @@ SI18n.addPack("ru", {
   "No drafts yet": "Черновиков пока нет",
   "A poll needs two choices.": "Для опроса нужны два варианта.",
   "Replies are limited on that post.": "Ответы на эту запись ограничены.",
-  "Verified accounts proved a linked profile in this app.": "Подтверждённые аккаунты доказали связанный профиль в этом приложении."
+  "Verified accounts proved a linked profile in this app.": "Подтверждённые аккаунты доказали связанный профиль в этом приложении.",
+  "Not interested": "Не интересно",
+  "Show less often": "Показывать реже",
+  "We'll show you less of this.": "Мы будем показывать меньше такого.",
+  "Follower": "Подписчик",
+  "Premium": "Премиум",
+  "New": "Новое",
+  "Creator Studio": "Студия автора",
+  "Settings and privacy": "Настройки и конфиденциальность",
+  "Spaces": "Пространства",
+  "New post notifications for {name}": "Уведомления о новых постах {name}",
+  "New post notifications for {name} and {n} others": "Уведомления о новых постах {name} и ещё {n}",
+  "Notification filters": "Фильтры уведомлений",
+  "Notification options": "Параметры уведомлений",
+  "No Spaces right now": "Сейчас нет пространств",
+  "Live audio shows up here.": "Прямой эфир появится здесь."
 });
