@@ -922,8 +922,25 @@
   if (typeof MutationObserver !== "undefined" && document.body) {
     new MutationObserver(function () { paintRow(); }).observe(document.body, { childList: true, subtree: true });
   }
-  setInterval(refreshRow, 20000);
-  refreshRow();
+  /* The live row only polls while the tab is visible and lives are on. */
+  var rowAt = 0;
+  function livesOff() {
+    try { return (JSON.parse(localStorage.getItem("viktorychapp-server-off") || "[]") || []).indexOf("lives") !== -1; }
+    catch (err) { return false; }
+  }
+  function pollRow(force) {
+    if (livesOff()) {
+      if (state.lives.length) { state.lives = []; state.rowStamp = "off"; paintRow(); }
+      return;
+    }
+    if (document.visibilityState === "hidden") return;
+    if (!force && Date.now() - rowAt < 15000) return;
+    rowAt = Date.now();
+    refreshRow();
+  }
+  setInterval(function () { pollRow(false); }, 30000);
+  document.addEventListener("visibilitychange", function () { pollRow(false); });
+  pollRow(true);
 
   root.ViktorychLive = {
     homeHtml: homeHtml,

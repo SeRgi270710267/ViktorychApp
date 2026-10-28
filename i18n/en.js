@@ -2375,5 +2375,22 @@ SI18n.addPack("en", {
   "Could not rename that device.": "Could not rename that device.",
   "Remove this device? You will be signed out here.": "Remove this device? You will be signed out here.",
   "Remove this device? It will be signed out.": "Remove this device? It will be signed out.",
-  "Could not remove that device.": "Could not remove that device."
+  "Could not remove that device.": "Could not remove that device.",
+  "Devices": "Devices",
+  "Sync across my devices": "Sync across my devices",
+  "Menu, sidebar and display choices follow your account on every device you sign in on.": "Menu, sidebar and display choices follow your account on every device you sign in on.",
+  "Keep this device's own look": "Keep this device's own look",
+  "Only this device ignores synced menu and display choices.": "Only this device ignores synced menu and display choices.",
+  "Lives": "Lives",
+  "Telegram ingest": "Telegram ingest",
+  "Pills data": "Pills data",
+  "Server features": "Server features",
+  "Could not save that setting.": "Could not save that setting.",
+  "Shorts pages, TikTok live watching and its cron work.": "Shorts pages, TikTok live watching and its cron work.",
+  "Story uploads, the story bar and expiry sweeps.": "Story uploads, the story bar and expiry sweeps.",
+  "Going live, the live row and live sweeps.": "Going live, the live row and live sweeps.",
+  "The Telegram bot webhook and media relay.": "The Telegram bot webhook and media relay.",
+  "Weather and scores data for every visitor.": "Weather and scores data for every visitor.",
+  "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.": "Owner only. Off stops the feature for everyone: no cron work, its endpoints answer empty, and apps load nothing for it.",
+  "Turned off for everyone by the owner.": "Turned off for everyone by the owner."
 });
