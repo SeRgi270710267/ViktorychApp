@@ -2090,6 +2090,7 @@ SI18n.addPack("en", {
   "Share a thought...": "Share a thought...",
   "Note": "Note",
   "Who can see this": "Who can see this",
+  "Show on profile": "Show on profile",
   "Expire after 24 hours": "Expire after 24 hours",
   "Delete note": "Delete note",
   "Couldn’t save that note.": "Couldn’t save that note.",

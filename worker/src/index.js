@@ -8,7 +8,7 @@ import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "./tel
 import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
-import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from "./identities.js";
+import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
@@ -881,6 +881,7 @@ async function liveProfileCounts(env, row, account, viewer) {
 
 async function publicProfileText(env, request, row) {
   const account = await presentAccount(env, request, row, false, { skipMedia: true });
+  account.identities = [];
   const reposts = await listReposts(env, row.public_id);
   return JSON.stringify(redactPublicIds({ account: account, reposts: reposts }));
 }
@@ -924,6 +925,7 @@ async function handleProfileGet(request, env, handle) {
     delete account.publicId;
   }
   await liveProfileCounts(env, row, account, viewer);
+  account.identities = await visibleIdentities(env, row.public_id, viewer, own);
   account.protected = row.protected_account === 1;
   if (viewer && viewer.public_id !== row.public_id) {
     const state = await pairState(env, viewer.public_id, row.public_id);

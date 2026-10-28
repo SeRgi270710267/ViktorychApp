@@ -2090,6 +2090,7 @@ SI18n.addPack("es", {
   "Share a thought...": "Comparte una idea...",
   "Note": "Nota",
   "Who can see this": "Quién puede ver esto",
+  "Show on profile": "Mostrar en el perfil",
   "Expire after 24 hours": "Caduca a las 24 horas",
   "Delete note": "Eliminar nota",
   "Couldn’t save that note.": "No se pudo guardar esa nota.",
