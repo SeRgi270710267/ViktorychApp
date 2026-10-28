@@ -273,7 +273,13 @@ async function main() {
         const info = await readState(opened.page);
         assertVisible(info, ["empty"], viewport.name + " signed out");
         if (!info.text.includes("Nada que ver")) fail(viewport.name + " empty copy");
-        if (viewport.name !== "tablet") await checkDrawer(opened.page, viewport.name);
+        if (viewport.name === "phone") await checkDrawer(opened.page, viewport.name);
+        if (viewport.name === "desktop") {
+          await opened.page.locator("header.nav:not(.nav-land) button.account-pill").click();
+          await opened.page.waitForSelector(".acct-menu", { timeout: 5000 });
+          if (await opened.page.locator(".drawer-x").count()) fail(viewport.name + " edge drawer");
+          await opened.page.keyboard.press("Escape");
+        }
       } finally {
         await opened.context.close();
       }
@@ -360,21 +366,15 @@ async function main() {
       if (!menu.mark || !menu.filter) fail("gear menu");
       await grouped.page.keyboard.press("Escape");
       await grouped.page.waitForSelector(".note-gear-menu", { state: "detached", timeout: 5000 });
-      await grouped.page.click("button.m-ava");
-      await grouped.page.waitForSelector(".drawer-x .drawer-counts", { timeout: 5000 });
-      const signed = await grouped.page.evaluate(() => {
-        const drawer = document.querySelector(".drawer-x");
-        return {
-          counts: !!drawer.querySelector(".drawer-counts"),
-          status: !!drawer.querySelector("[data-acct='presence-open']"),
-          logout: !!drawer.querySelector("[data-acct='logout']")
-        };
-      });
-      if (!signed.counts || signed.status || signed.logout) fail("signed-in drawer");
-      await grouped.page.click("[data-act='drawer-more']");
-      await grouped.page.waitForSelector(".drawer-pop [data-acct='presence-open']", { timeout: 5000 });
-      const moved = await grouped.page.evaluate(() => !!document.querySelector(".drawer-pop [data-acct='logout']"));
-      if (!moved) fail("account menu");
+      await grouped.page.locator("header.nav:not(.nav-land) button.account-pill").click();
+      await grouped.page.waitForSelector(".acct-menu [data-acct='logout']", { timeout: 5000 });
+      const signed = await grouped.page.evaluate(() => ({
+        drawer: !!document.querySelector(".drawer-x"),
+        logout: !!document.querySelector(".acct-menu [data-acct='logout']"),
+        settings: !!document.querySelector(".acct-menu a[href='#/settings']"),
+        name: (document.querySelector("header.nav:not(.nav-land) button.account-pill") || {}).innerText || ""
+      }));
+      if (signed.drawer || !signed.logout || !signed.settings || signed.name.indexOf("User A") < 0) fail("signed-in account menu");
     } finally {
       await grouped.context.close();
     }

@@ -147,6 +147,7 @@
     draft: {},
     menu: null,
     drawer: false,
+    accountMenu: false,
     drawerSheet: "",
     drawerFold: false,
     drawerEdit: false,
@@ -7429,6 +7430,7 @@ const here = parseRoute();
       }
     });
 
+    html += sidebarDrawerLinks(route);
     html += `<button type="button" class="nav-item" data-act="go-live" aria-label="${esc(tr("Go live"))}" data-tooltip="${esc(tr("Go live"))}">
       <span class="nav-ico">${icon("video")}</span>
       <span class="nav-label">${esc(tr("Go live"))}</span>
@@ -7439,6 +7441,42 @@ const here = parseRoute();
     </button>`;
 
     return html;
+  }
+
+  function sidebarDrawerLinks(route) {
+    if (typeof getDrawerMenu !== "function" || typeof drawerItem !== "function") return "";
+    const menu = getDrawerMenu();
+    const hidden = new Set(menu.hidden || []);
+    const seen = new Set();
+    const row = (id) => {
+      if (!id || seen.has(id)) return "";
+      seen.add(id);
+      if (id === "logout") return "";
+      if (hidden.has(id) && DRAWER_LOCKED.indexOf(id) < 0) return "";
+      const navId = DRAWER_NAV[id];
+      if (navId && ALL_NAV_IDS.indexOf(navId) >= 0) return "";
+      const item = drawerItem(id);
+      if (!item || item.accountMenu) return "";
+      if (item.act) {
+        return `<button type="button" class="nav-item" data-act="${item.act}" aria-label="${esc(item.label)}" data-tooltip="${esc(item.label)}"><span class="nav-ico">${icon(item.icon)}</span><span class="nav-label">${esc(item.label)}</span></button>`;
+      }
+      const on = item.href && (location.hash || "#/") === item.href;
+      return navItem(item.href, item.icon, item.label, !!on);
+    };
+    let html = "";
+    (menu.order || []).forEach((entry) => {
+      if (String(entry).indexOf("section:") === 0) {
+        const section = (menu.sections || []).find((item) => item.id === entry.slice(8));
+        if (!section) return;
+        const inner = (section.items || []).map(row).join("");
+        if (!inner) return;
+        html += `<div class="nav-section">${esc(section.name)}</div>${inner}`;
+        return;
+      }
+      html += row(entry);
+    });
+    if (!html) return "";
+    return `<div class="nav-rule"></div>${html}`;
   }
 
   function brandLink() {
@@ -7452,8 +7490,9 @@ const here = parseRoute();
       ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}" data-tooltip="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
       : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}" data-tooltip="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
     const split = extraClass ? "" : `<div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>`;
-    const pillInner = (window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`;
-    const account = `<button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">${pillInner}<span class="dots">${icon("more")}</span></button>`;
+    const pillRaw = (window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials">?</span><span class="account-meta"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`;
+    const pillInner = String(pillRaw).replace(/\sdata-acct="[^"]*"/g, "");
+    const account = `<button class="account-pill" data-act="account-menu" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}" aria-expanded="${STATE.accountMenu ? "true" : "false"}">${pillInner}<span class="dots">${icon("more")}</span></button>`;
     /* Landscape keeps the mark above a scrolling icon list, with Post and the
        account pinned under that list so a short screen scrolls instead of
        squashing the rows. */
@@ -12732,8 +12771,32 @@ const here = parseRoute();
     return rows + music + install;
   }
 
+  function sidebarOwnsNav() {
+    const width = window.innerWidth || 0;
+    if (width < 500) return false;
+    if (width >= 1280) return true;
+    return document.documentElement.getAttribute("data-nav-layout") !== "bar";
+  }
+
+  function accountPopup() {
+    if (!STATE.accountMenu || !sidebarOwnsNav()) return "";
+    const mine = signedAccount();
+    const accounts = mine
+      ? `<button type="button" data-acct="login">${esc(tr("Add account"))}</button>`
+      : "";
+    const leave = mine
+      ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+      : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}<a href="#/settings">${esc(tr("Settings"))}</a>${leave}</div></div>`;
+  }
+
+  function drawerEditModal() {
+    if (!STATE.drawerEdit || !sidebarOwnsNav()) return "";
+    return `<div class="modal-back" data-act="drawer-edit-done"><div class="modal nav-customize-modal" role="dialog" aria-label="${esc(tr("Edit menu"))}" data-act="stop"><div class="modal-body">${drawerMenuHtml(getDrawerMenu(), true)}</div></div></div>`;
+  }
+
   function drawer() {
-    if (!STATE.drawer) return "";
+    if (!STATE.drawer || sidebarOwnsNav()) return "";
     const head = (window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead())
       || `<div class="drawer-id"><div class="drawer-id-top"><button class="drawer-ava" type="button" data-acct="login" aria-label="${esc(tr("Sign in"))}"><span class="ava initials">?</span></button></div><button class="drawer-name" type="button" data-acct="login"><b>${esc(tr("Sign in"))}</b></button><div class="drawer-handle">${esc(tr("Not signed in"))}</div></div>`;
     const rows = drawerMenuHtml(getDrawerMenu(), !!STATE.drawerEdit);
@@ -13027,7 +13090,7 @@ if (STATE.histClear) {
     const top = bar + rowExtra + storyExtra + liveExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
   }
 
   function toggleReaction(act, id) {
@@ -15689,9 +15752,25 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       pullNotes();
       return;
     }
-    if (act === "drawer") { STATE.drawer = true; STATE.drawerSheet = ""; render(); return; }
-    if (act === "close-drawer") { STATE.drawer = false; STATE.drawerSheet = ""; STATE.drawerEdit = false; render(); return; }
-    if (act === "drawer-edit") { STATE.drawer = true; STATE.drawerEdit = true; render(); return; }
+    if (act === "drawer") {
+      if (sidebarOwnsNav()) { STATE.accountMenu = true; STATE.drawer = false; render(); return; }
+      STATE.drawer = true; STATE.drawerSheet = ""; STATE.accountMenu = false; render(); return;
+    }
+    if (act === "account-menu") {
+      STATE.accountMenu = !STATE.accountMenu;
+      STATE.drawer = false;
+      render();
+      return;
+    }
+    if (act === "close-account-menu") { STATE.accountMenu = false; render(); return; }
+    if (act === "close-drawer") { STATE.drawer = false; STATE.drawerSheet = ""; STATE.drawerEdit = false; STATE.accountMenu = false; render(); return; }
+    if (act === "drawer-edit") {
+      STATE.drawerEdit = true;
+      STATE.accountMenu = false;
+      STATE.drawer = !sidebarOwnsNav();
+      render();
+      return;
+    }
     if (act === "drawer-edit-done") { STATE.drawerEdit = false; render(); return; }
     if (act === "drawer-reset") { saveDrawerMenu(null); render(); return; }
     if (act === "drawer-vis") {
@@ -17328,6 +17407,13 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
 
   window.__VIKTORYCH_CLICK = true;
   document.addEventListener("click", (event) => {
+    const acct = event.target.closest && event.target.closest(".acct-menu [data-acct]");
+    if (!acct) return;
+    STATE.accountMenu = false;
+    const back = document.querySelector(".acct-menu-back");
+    if (back) back.remove();
+  }, true);
+  document.addEventListener("click", (event) => {
     if (swallowTabDrag || swallowNotePress || swallowBottomNavDrag) {
       swallowTabDrag = false;
       swallowNotePress = false;
@@ -17861,10 +17947,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (event.key === "Escape" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.onEscape && window.ViktorychXCompose.onEscape()) return;
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.drawerEdit || STATE.accountMenu || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
       STATE.modal = null;
       STATE.composeVia = "";
       STATE.drawer = false;
+      STATE.accountMenu = false;
       STATE.drawerEdit = false;
       STATE.drawerSheet = "";
       STATE.noteGear = false;
@@ -18274,6 +18361,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.drawer = false;
     STATE.drawerSheet = "";
     STATE.drawerEdit = false;
+    STATE.accountMenu = false;
     STATE.noteGear = false;
     if ((location.hash || "#/").indexOf("#/notifications") !== 0) STATE.noteUnreadPaint = null;
     STATE.menu = null;

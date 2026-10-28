@@ -59,22 +59,71 @@ const SIZES = [
 ];
 
 async function openDrawer(page) {
-  await page.waitForFunction(() => [...document.querySelectorAll(".m-ava, .account-pill")].some((el) => {
+  const wide = await page.evaluate(() => window.innerWidth >= 500);
+  if (wide) return "wide";
+  await page.waitForFunction(() => [...document.querySelectorAll(".m-ava")].some((el) => {
     const box = el.getBoundingClientRect();
     return box.width > 0 && box.height > 0;
   }));
   await page.evaluate(() => {
-    const el = [...document.querySelectorAll(".m-ava, .account-pill")].find((node) => {
+    const el = [...document.querySelectorAll(".m-ava")].find((node) => {
       const box = node.getBoundingClientRect();
       return box.width > 0 && box.height > 0;
     });
     if (el) el.click();
   });
   await page.waitForSelector(".drawer-x", { timeout: 8000 });
+  return "phone";
+}
+
+async function checkSidebar(page, label) {
+  const before = await page.evaluate(() => ({
+    drawer: !!document.querySelector(".drawer-x"),
+    customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='drawer-edit']"),
+    bookmarks: !!document.querySelector("header.nav a[href='#/bookmarks']"),
+    settings: !!document.querySelector("header.nav a[href='#/settings']"),
+    tv: !!document.querySelector("header.nav a[href='#/tv']")
+  }));
+  if (before.drawer || !before.customize || !before.bookmarks || !before.settings || !before.tv) fail(label + " sidebar is missing a core row");
+  await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
+  await page.waitForSelector(".nav-customize-modal .drawer-edit-list");
+  if (await page.locator(".drawer-x").count()) fail(label + " edit opened the edge drawer");
+  const locked = await page.evaluate(() => {
+    const row = (id) => document.querySelector(`[data-drawer-key="${id}"]`);
+    return {
+      settingsEye: !!(row("settings") && row("settings").querySelector("[data-act='drawer-vis']")),
+      logoutEye: !!(row("logout") && row("logout").querySelector("[data-act='drawer-vis']")),
+      customizeEye: !!(row("customize") && row("customize").querySelector("[data-act='drawer-vis']")),
+      grips: document.querySelectorAll(".drawer-grip").length
+    };
+  });
+  if (locked.settingsEye || locked.logoutEye || locked.customizeEye) fail(label + " a locked item can be hidden");
+  if (locked.grips < 3) fail(label + " drag handles missing");
+  await page.click("[data-drawer-key='bookmarks'] [data-act='drawer-vis']");
+  await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
+  const hidden = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
+  if (hidden) fail(label + " hidden item is still shown");
+  const back = await page.evaluate(() => ({
+    customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='drawer-edit']"),
+    settings: !!document.querySelector("header.nav a[href='#/settings']"),
+    drawer: !!document.querySelector(".drawer-x")
+  }));
+  if (!back.customize || !back.settings || back.drawer) fail(label + " core items disappeared");
+  await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
+  await page.click("[data-act='drawer-add-section']");
+  await page.waitForSelector(".drawer-section-name");
+  await page.click("[data-act='drawer-reset']");
+  await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
+  const restored = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
+  if (!restored) fail(label + " reset did not restore the menu");
 }
 
 async function check(page, label) {
-  await openDrawer(page);
+  const kind = await openDrawer(page);
+  if (kind === "wide") {
+    await checkSidebar(page, label);
+    return;
+  }
   const before = await page.evaluate(() => ({
     customize: !!document.querySelector("[data-act='drawer-edit']"),
     bookmarks: [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"),
@@ -84,7 +133,7 @@ async function check(page, label) {
     logoutInBody: !!document.querySelector(".drawer-scroll [data-acct='logout']")
   }));
   if (!before.customize || !before.bookmarks || !before.settings || !before.fold || !before.tv || before.logoutInBody) fail(label + " menu is missing a core row");
-  await page.click("[data-act='drawer-edit']");
+  await page.locator(".drawer-x [data-act='drawer-edit']").click();
   await page.waitForSelector(".drawer-edit-list");
   const locked = await page.evaluate(() => {
     const row = (id) => document.querySelector(`[data-drawer-key="${id}"]`);
@@ -98,7 +147,7 @@ async function check(page, label) {
   if (locked.settingsEye || locked.logoutEye || locked.customizeEye) fail(label + " a locked item can be hidden");
   if (locked.grips < 3) fail(label + " drag handles missing");
   await page.click("[data-drawer-key='bookmarks'] [data-act='drawer-vis']");
-  await page.click("[data-act='drawer-edit-done']");
+  await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
   const hidden = await page.evaluate(() => [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"));
   if (hidden) fail(label + " hidden item is still shown");
     const back = await page.evaluate(() => ({
@@ -107,11 +156,11 @@ async function check(page, label) {
     fold: !!document.querySelector("[data-act='drawer-fold']")
   }));
   if (!back.customize || !back.settings || !back.fold) fail(label + " core items disappeared");
-  await page.click("[data-act='drawer-edit']");
+  await page.locator(".drawer-x [data-act='drawer-edit']").click();
   await page.click("[data-act='drawer-add-section']");
   await page.waitForSelector(".drawer-section-name");
   await page.click("[data-act='drawer-reset']");
-  await page.click("[data-act='drawer-edit-done']");
+  await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
   const restored = await page.evaluate(() => [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"));
   if (!restored) fail(label + " reset did not restore the menu");
   await page.click("[data-act='close-drawer']");
