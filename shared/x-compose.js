@@ -199,6 +199,7 @@ export function classifyMedia(files) {
     if (type === "image/gif") return "gif";
     if (type.indexOf("image/") === 0) return "image";
     if (type.indexOf("video/") === 0) return "video";
+    if (type.indexOf("audio/") === 0) return "audio";
     return "other";
   });
   if (!kinds.length) return { ok: true, kind: "none", count: 0 };
@@ -206,10 +207,12 @@ export function classifyMedia(files) {
   const gif = kinds.filter((kind) => kind === "gif").length;
   const video = kinds.filter((kind) => kind === "video").length;
   const image = kinds.filter((kind) => kind === "image").length;
-  if ((gif && (video || image)) || (video && image) || gif > 1 || video > 1 || image > 4) {
+  const audio = kinds.filter((kind) => kind === "audio").length;
+  const used = [gif > 0, video > 0, image > 0, audio > 0].filter(Boolean).length;
+  if (used > 1 || gif > 1 || video > 1 || audio > 1 || image > 4) {
     return { ok: false, error: "mix" };
   }
-  return { ok: true, kind: gif ? "gif" : video ? "video" : "image", count: list.length };
+  return { ok: true, kind: gif ? "gif" : video ? "video" : audio ? "audio" : "image", count: list.length };
 }
 
 export function sharePlan(count) {
