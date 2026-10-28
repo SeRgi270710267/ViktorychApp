@@ -1065,7 +1065,7 @@
       name: String(f.name || tr("Folder")),
       items: Array.isArray(f.items) ? f.items.filter((it) => typeof it === "string" && ALL_NAV_IDS.includes(it)) : []
     })) : [];
-    const hidden = Array.isArray(custom.hidden) ? custom.hidden.filter((h) => typeof h === "string" && h !== "settings") : [];
+    const hidden = Array.isArray(custom.hidden) ? custom.hidden.filter((h) => typeof h === "string" && h !== "settings" && h !== "home") : [];
     let order = Array.isArray(custom.order) ? custom.order.filter((o) => typeof o === "string") : [];
 
     const accounted = new Set();
@@ -7533,11 +7533,11 @@ const here = parseRoute();
       ? raw.hidden
       : BOTTOM_NAV_IDS.filter((id) => !BOTTOM_NAV_DEFAULT_ON.includes(id));
     const hiddenSet = new Set(hiddenSrc.filter((id) => id !== "home" && BOTTOM_NAV_IDS.includes(id)));
-    const visibleIds = () => order.filter((id) => !hiddenSet.has(id) && bottomNavAvailable(id));
+    if (order.indexOf("home") < 0) order.unshift("home");
+    const visibleIds = () => order.filter((id) => !hiddenSet.has(id) && (id === "home" || bottomNavAvailable(id)));
     let visibleNow = visibleIds();
-    if (visibleNow.length > BOTTOM_NAV_MAX) {
-      visibleNow.slice(BOTTOM_NAV_MAX).forEach((id) => { if (id !== "home") hiddenSet.add(id); });
-    }
+    visibleNow.filter((id) => id !== "home").slice(BOTTOM_NAV_MAX - 1).forEach((id) => hiddenSet.add(id));
+    hiddenSet.delete("home");
     visibleNow = visibleIds();
     if (visibleNow.length < BOTTOM_NAV_MIN) {
       order.forEach((id) => {
@@ -7547,6 +7547,7 @@ const here = parseRoute();
         visibleNow.push(id);
       });
     }
+    hiddenSet.delete("home");
     return { order, hidden: order.filter((id) => hiddenSet.has(id)) };
   }
 
@@ -7563,14 +7564,20 @@ const here = parseRoute();
 
   function bottomBarItems() {
     const custom = getBottomNav();
-    const hidden = new Set(custom.hidden);
+    const hidden = new Set((custom.hidden || []).filter((id) => id !== "home"));
     const items = [];
     custom.order.forEach((id) => {
-      if (hidden.has(id) || !bottomNavAvailable(id)) return;
+      if (id !== "home" && (hidden.has(id) || !bottomNavAvailable(id))) return;
       const def = navItemDef(id);
       if (def) items.push(def);
     });
-    return items.slice(0, BOTTOM_NAV_MAX);
+    if (!items.some((def) => def.id === "home")) {
+      const home = navItemDef("home");
+      if (home) items.unshift(home);
+    }
+    const keep = new Set(items.filter((def) => def.id !== "home").slice(0, BOTTOM_NAV_MAX - 1).map((def) => def.id));
+    keep.add("home");
+    return items.filter((def) => keep.has(def.id)).slice(0, BOTTOM_NAV_MAX);
   }
 
   function bottomHiddenItems() {
@@ -7927,7 +7934,7 @@ const here = parseRoute();
       <h1 class="vh">${tr("Home")}</h1>
       <div class="mhead">
         <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button>
-        <a class="m-logo" href="#/" aria-label="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}</a>
+        ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
@@ -8436,9 +8443,14 @@ const here = parseRoute();
     return homeHeader(tab) + bar + inline + body + timelineSentinel(list.length, sorted.length);
   }
 
+  function mobileLogo() {
+    return `<a class="m-logo" href="#/" aria-label="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}</a>`;
+  }
+
   function pageHead(title, extra, back, action) {
     return `<div class="topbar tall"><div class="mhead">
         <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button>
+        ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
       <div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>` : ""}<div class="head-text grow"><h1>${esc(title)}</h1>${extra || ""}</div>${action || ""}</div></div>`;
@@ -12158,6 +12170,7 @@ const here = parseRoute();
       : `<button class="icon-btn" type="button" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button>`;
     return `<div class="topbar tall"><div class="mhead">
         <button class="m-ava" type="button" data-act="drawer" aria-label="${esc(tr("Menu"))}"><span class="ava initials">Y</span></button>
+        ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${esc(tr("Settings"))}">${icon("spark")}</a>
       </div>
       <div class="page-head settings-head">${back}<div class="head-text grow"><h1>${esc(title)}</h1></div></div></div>`;
@@ -12410,11 +12423,12 @@ const here = parseRoute();
     </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
-  const DRAWER_LOCKED = ["settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "profile", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
+    home: "home",
     communities: "communities",
     lists: "lists",
     studio: "feeds",
@@ -12507,7 +12521,7 @@ const here = parseRoute();
   function mirrorDrawerMenu(menu) {
     const hidden = new Set(menu.hidden || []);
     const custom = getNavCustom();
-    const navHidden = new Set((custom.hidden || []).filter((id) => id !== "settings"));
+    const navHidden = new Set((custom.hidden || []).filter((id) => id !== "settings" && id !== "home"));
     Object.keys(DRAWER_NAV).forEach((drawerId) => {
       const navId = DRAWER_NAV[drawerId];
       if (!navId || navId === "settings" || ALL_NAV_IDS.indexOf(navId) < 0) return;
@@ -12534,6 +12548,7 @@ const here = parseRoute();
       if (hidden.has(drawerId)) bottomHidden.add(navId);
       else bottomHidden.delete(navId);
     });
+    bottomHidden.delete("home");
     bottom.hidden = [...bottomHidden];
     const bottomRank = new Map();
     drawerFlatIds(menu).forEach((id, index) => {
@@ -12569,6 +12584,7 @@ const here = parseRoute();
 
   function drawerItem(id) {
     const mine = signedAccount();
+    if (id === "home") return { id: id, href: "#/", icon: "home", label: tr("Home"), locked: true };
     if (id === "profile") return { id: id, href: drawerProfileHref() || "#/settings", icon: "user", label: tr("Profile") };
     if (id === "premium") return { id: id, href: "#/settings", icon: "check", label: tr("Premium"), extra: `<span class="drawer-pill">${esc(tr("New"))}</span>` };
     if (id === "communities") return { id: id, href: "#/communities", icon: "communities", label: tr("Communities") };
@@ -12773,7 +12789,7 @@ const here = parseRoute();
               <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="-1" aria-label="${tr("Move up")}"${subIdx === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
               <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="1" aria-label="${tr("Move down")}"${subIdx === folder.items.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
               <button class="outline" type="button" data-act="nav-remove-from-folder" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" style="height:28px;padding:0 8px;font-size:12px;">${tr("Remove from folder")}</button>
-              <button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(itId)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>
+              ${itId === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(itId)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
             </div>
           </div>`;
         }).join("");
@@ -12807,7 +12823,7 @@ const here = parseRoute();
               <option value="">${tr("Move to folder")}...</option>
               ${custom.folders.map((f) => `<option value="${esc(f.id)}">${esc(folderDisplayName(f))}</option>`).join("")}
             </select>
-            <button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(entry)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>
+            ${entry === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(entry)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
           </div>
         </div>`;
       }
@@ -15925,7 +15941,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "nav-toggle-vis") {
       const itemId = el.dataset.id;
-      if (itemId === "settings") return;
+      if (itemId === "settings" || itemId === "home") return;
       const custom = getNavCustom();
       const idx = custom.hidden.indexOf(itemId);
       if (idx !== -1) {
@@ -17342,7 +17358,14 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       onAct(actEl);
       return;
     }
+    const brand = event.target.closest && event.target.closest("a.logo, a.m-logo");
+    if (brand) {
+      event.preventDefault();
+      goHash("#/");
+      return;
+    }
     if (window.innerWidth < 500 && event.target.closest(".topbar") && !event.target.closest("button, a, input, textarea, select")) {
+      if (parseRoute().name !== "home") { goHash("#/"); return; }
       smoothTop();
       return;
     }

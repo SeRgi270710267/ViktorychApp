@@ -1092,8 +1092,10 @@ function cleanBottomNavSync(raw) {
   (Array.isArray(raw.hidden) ? raw.hidden : []).forEach((id) => {
     if (id !== "home" && BOTTOM_NAV_SYNC_IDS.indexOf(id) >= 0) hiddenSet.add(id);
   });
+  if (order.indexOf("home") < 0) order.unshift("home");
   let visible = order.filter((id) => !hiddenSet.has(id));
-  if (visible.length > 6) visible.slice(6).forEach((id) => { if (id !== "home") hiddenSet.add(id); });
+  visible.filter((id) => id !== "home").slice(5).forEach((id) => hiddenSet.add(id));
+  hiddenSet.delete("home");
   visible = order.filter((id) => !hiddenSet.has(id));
   for (let i = 0; i < order.length && visible.length < 2; i++) {
     if (!hiddenSet.has(order[i])) continue;
