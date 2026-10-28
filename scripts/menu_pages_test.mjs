@@ -490,6 +490,16 @@ async function openDrawerAndTap(page, label) {
     await tapMarkedLink(page, label, ".nav-land-menu a[href]");
     return;
   }
+  if (mode === "account" || mode === "dots") {
+    await clickSelector(page, mode === "dots" ? "button.account-pill .dots" : "button.account-pill", label + " menu");
+    const compact = await page.locator(".acct-menu a[href='#/settings']").locator("visible=true").count();
+    if (compact) {
+      if (await page.locator(".drawer-x").count()) fail(label + " desktop drawer");
+      await tapMarkedLink(page, label, ".acct-menu a[href]");
+      await page.keyboard.press("Escape");
+      return;
+    }
+  }
   if (mode === "account") {
     await clickSelector(page, "button.account-pill", label + " menu");
     try {
@@ -519,6 +529,13 @@ async function openDrawerAndTap(page, label) {
   }
   const opener = mode === "dots" ? "button.account-pill .dots" : "button.m-ava";
   await clickSelector(page, opener, label + " menu");
+  const compact = await page.locator(".acct-menu a[href='#/settings']").locator("visible=true").count();
+  if (compact) {
+    if (await page.locator(".drawer-x").count()) fail(label + " desktop drawer");
+    await tapMarkedLink(page, label, ".acct-menu a[href]");
+    await page.keyboard.press("Escape");
+    return;
+  }
   try {
     await page.waitForSelector(".drawer a[href]", { timeout: 5000 });
   } catch (err) {
