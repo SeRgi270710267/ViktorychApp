@@ -39,6 +39,7 @@ import { handleUnfurl } from "./unfurl.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
+import { warmRender } from "./render-warm.js";
 import { sealPayload, openPayload, maybeBackupSettings } from "./settings-vault.js";
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
@@ -60,7 +61,7 @@ import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { GAMES_SCHEMA, handleGames } from "./games.js";
-import { SERVERS_SCHEMA, handleServers } from "./servers.js";
+import { REACTION_SCHEMA, handleReactions } from "./reactions.js";
 import { handleP2p } from "./p2p.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
@@ -257,7 +258,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -2414,7 +2415,7 @@ async function handleOwnerMedia(request, env, url) {
   });
 }
 
-const PUBLIC_MEDIA_HOST = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
+const PUBLIC_MEDIA_HOST = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|yt3\.ggpht\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
 
 function publicMediaHostOk(hostname) {
   return PUBLIC_MEDIA_HOST.test(String(hostname || ""));
@@ -5272,7 +5273,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {
     const isTor = !!(request.cf && request.cf.isTor) || request.headers.get("cf-ipcountry") === "T1";
     const country = (request.cf && request.cf.country) || request.headers.get("cf-ipcountry") || "XX";
-    return json(200, { country: country, isRu: country === "RU", isTor: isTor });
+    return json(200, { country: country, isRu: country === "RU", isIn: country === "IN", isTor: isTor });
   }
   if (path === "/v1/media" && (request.method === "GET" || request.method === "HEAD")) {
     return handlePublicMediaProxy(request, env, url);
@@ -5422,6 +5423,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/p2p/signal") {
     const signaled = await handleP2p(request, env, path, url, recoveryDeps());
     if (signaled) return signaled;
+  }
+  if (path.startsWith("/v1/reactions")) {
+    const reacted = await handleReactions(request, env, path, url, recoveryDeps());
+    if (reacted) return reacted;
   }
   if (path.startsWith("/v1/games/")) {
     const played = await handleGames(request, env, path, url, recoveryDeps());
@@ -5653,6 +5658,8 @@ export default {
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));
+    // Every ten minutes outside quiet hours: keep the Render backup awake.
+    jobs.push(warmRender(env, at).catch(() => null));
     jobs.push(maybeBackupSettings(env, at));
     if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {

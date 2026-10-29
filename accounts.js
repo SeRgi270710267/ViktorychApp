@@ -293,13 +293,29 @@
     return list.map(function (u) { return String(u || "").replace(/\/$/, ""); }).filter(Boolean);
   }
   function currentApi() {
-    var order = apiOrder();
+    var order = bySpeed(apiOrder());
     activeApiRoot = order[0] || String(config().api || "").replace(/\/$/, "");
     return activeApiRoot;
   }
   function rotateApi(failedRoot, retryAfter) {
     breakerFail(failedRoot || activeApiRoot, retryAfter);
     activeApiRoot = "";
+    wakeBackup(failedRoot);
+  }
+  /* The free Render backup sleeps when idle and takes up to a minute to
+     wake. The moment the main API stumbles, one tiny no-cors ping starts
+     that wake in the background, so by the time a retry or the next read
+     goes to the backup it answers at once. At most once per four minutes. */
+  var wakeAt = 0;
+  function wakeBackup(failedRoot) {
+    var backup = String(config().backupApi || "").replace(/\/$/, "");
+    if (!backup || backup === String(failedRoot || "").replace(/\/$/, "") || !nativeFetch) return;
+    var now = Date.now();
+    if (now - wakeAt < 4 * 60 * 1000) return;
+    wakeAt = now;
+    try {
+      nativeFetch(backup + "/backup/health", { mode: "no-cors", cache: "no-store", credentials: "omit", keepalive: true }).catch(function () {});
+    } catch (err) { /* best effort */ }
   }
   function hasApi() {
     return !!(currentApi() || (config().api || config().backupApi));
@@ -413,8 +429,65 @@
     etagHeld[key] = { tag: tag, text: text };
     while (etagOrder.length > 60) delete etagHeld[etagOrder.shift()];
   }
+  /* How fast each API root answered lately, kept per device. A root that
+     stalls (DPI throttling looks like a hang, not an error) drops behind a
+     faster one until it is quick again. */
+  var SPEED_KEY = "viktorychapp-api-speed-v1";
+  var speedMemo = null;
+  function speedRead() {
+    if (speedMemo) return speedMemo;
+    try { speedMemo = JSON.parse(localStorage.getItem(SPEED_KEY) || "{}") || {}; }
+    catch (err) { speedMemo = {}; }
+    return speedMemo;
+  }
+  function speedNote(root, ms) {
+    if (!root || !(ms >= 0)) return;
+    var all = speedRead();
+    var row = all[root] || {};
+    row.ms = row.ms ? Math.round(row.ms * 0.7 + ms * 0.3) : Math.round(ms);
+    row.at = Date.now();
+    all[root] = row;
+    try { localStorage.setItem(SPEED_KEY, JSON.stringify(all)); } catch (err) { /* memory still has it */ }
+  }
+  function speedOf(root) {
+    var row = speedRead()[root];
+    if (!row || !row.ms || Date.now() - Number(row.at || 0) > 6 * 3600 * 1000) return 0;
+    return Number(row.ms) || 0;
+  }
+  /* Keep config order, except that a root averaging over 2.5 s goes behind
+     one that is at least 3x faster. */
+  function bySpeed(list) {
+    if (list.length < 2) return list;
+    var first = list[0];
+    var slow = speedOf(first);
+    if (slow < 2500) return list;
+    for (var i = 1; i < list.length; i++) {
+      var fast = speedOf(list[i]);
+      if (fast && fast * 3 < slow) {
+        var out = list.slice();
+        out.splice(i, 1);
+        out.unshift(list[i]);
+        return out;
+      }
+    }
+    return list;
+  }
+  function later(fn, ms) { return typeof setTimeout === "function" ? setTimeout(fn, ms) : 0; }
+  function stopLater(id) { if (id && typeof clearTimeout === "function") clearTimeout(id); }
+  var READ_TIMEOUT = 15000;
+  var HEDGE_MS = 3000;
+  var trouble = { all: 0, at: 0 };
+  function troubleNote(ok) {
+    var was = trouble.all >= 2;
+    if (ok) trouble.all = 0;
+    else { trouble.all += 1; trouble.at = Date.now(); }
+    var now = trouble.all >= 2;
+    if (was !== now) {
+      try { window.dispatchEvent(new CustomEvent("viktorych-api-trouble", { detail: { on: now } })); } catch (err) { /* old browser */ }
+    }
+  }
   function api(path, opts) {
-    var list = apiOrder();
+    var list = bySpeed(apiOrder());
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     opts = opts || {};
     var headers = {};
@@ -425,11 +498,8 @@
     }
 
     var reading = !opts.method || opts.method === "GET";
-    function attempt(endpointIndex) {
-      if (endpointIndex >= list.length) {
-        return Promise.resolve({ status: 503, error: "all_endpoints_failed" });
-      }
-      var root = list[endpointIndex];
+
+    function send(root, signal) {
       var tagKey = reading ? etagKey(root + path, opts.token) : "";
       var held = tagKey ? etagHeld[tagKey] : null;
       var sendHeaders = headers;
@@ -438,41 +508,133 @@
         Object.keys(headers).forEach(function (key) { sendHeaders[key] = headers[key]; });
         sendHeaders["If-None-Match"] = held.tag;
       }
-      return nativeFetch(root + path, {
+      var init = {
         method: opts.method || "GET",
         headers: sendHeaders,
         body: opts.form || (opts.body ? JSON.stringify(opts.body) : undefined),
         credentials: "omit"
-      }).then(function (res) {
+      };
+      if (signal) init.signal = signal;
+      return { tagKey: tagKey, held: held, promise: nativeFetch(root + path, init) };
+    }
+
+    function finish(root, res, tagKey, held) {
+      breakerOk(root);
+      activeApiRoot = root;
+      // A 304 means nothing changed since the last read: reuse that body.
+      var reused = res.status === 304 && !!held;
+      var code = reused ? 200 : res.status;
+      var tag = tagKey && res.status === 200 && res.headers && res.headers.get ? res.headers.get("ETag") : "";
+      var read = reused ? Promise.resolve(held.text)
+        : typeof res.text === "function" ? res.text()
+        : Promise.resolve(res.json()).then(function (b) { return JSON.stringify(b || {}); });
+      return read.then(function (text) {
+        if (tag) keepEtag(tagKey, tag, text);
+        try { return text ? JSON.parse(text) : {}; } catch (err) { return {}; }
+      }, function () { return {}; }).then(function (body) {
+        body = body || {};
+        // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
+        if (typeof body.status === "string") body.bodyStatus = body.status;
+        body.status = code;
+        return body;
+      });
+    }
+
+    /* Writes: one root at a time, as before, so nothing is sent twice. */
+    function attempt(endpointIndex) {
+      if (endpointIndex >= list.length) {
+        troubleNote(false);
+        return Promise.resolve({ status: 503, error: "all_endpoints_failed" });
+      }
+      var root = list[endpointIndex];
+      var sent = send(root, null);
+      return sent.promise.then(function (res) {
         if (failoverStatus(res.status)) {
           rotateApi(root, retryAfterMs(res));
           if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
-        } else breakerOk(root);
-        activeApiRoot = root;
-        // A 304 means nothing changed since the last read: reuse that body.
-        var reused = res.status === 304 && !!held;
-        var code = reused ? 200 : res.status;
-        var tag = tagKey && res.status === 200 && res.headers && res.headers.get ? res.headers.get("ETag") : "";
-        var read = reused ? Promise.resolve(held.text)
-          : typeof res.text === "function" ? res.text()
-          : Promise.resolve(res.json()).then(function (b) { return JSON.stringify(b || {}); });
-        return read.then(function (text) {
-          if (tag) keepEtag(tagKey, tag, text);
-          try { return text ? JSON.parse(text) : {}; } catch (err) { return {}; }
-        }, function () { return {}; }).then(function (body) {
-          body = body || {};
-          // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
-          if (typeof body.status === "string") body.bodyStatus = body.status;
-          body.status = code;
-          return body;
-        });
+        }
+        troubleNote(true);
+        return finish(root, res, sent.tagKey, sent.held);
       }).catch(function (err) {
         rotateApi(root, 0);
         if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
+        troubleNote(false);
         throw err;
       });
     }
 
+    /* Reads: each try has a timeout, and when a root is silent for a few
+       seconds the next root starts too. The first usable answer wins and
+       the slower tries are cancelled. */
+    function hedgedRead() {
+      return new Promise(function (resolve, reject) {
+        var next = 0;
+        var running = [];
+        var settled = false;
+        var lastRes = null;
+        var lastErr = null;
+        var hedgeTimer = 0;
+        function maybeEnd() {
+          if (settled || running.length || next < list.length) return;
+          settled = true;
+          stopLater(hedgeTimer);
+          troubleNote(false);
+          if (lastRes) {
+            var held = lastRes;
+            finish(held.root, held.res, held.tagKey, held.held).then(resolve, reject);
+          } else if (lastErr) reject(lastErr);
+          else resolve({ status: 503, error: "all_endpoints_failed" });
+        }
+        function launch() {
+          if (settled || next >= list.length) return false;
+          var root = list[next++];
+          var ctrl = typeof AbortController === "function" ? new AbortController() : null;
+          var started = Date.now();
+          var run = { root: root, ctrl: ctrl, timer: 0 };
+          var sent = send(root, ctrl ? ctrl.signal : null);
+          if (ctrl) run.timer = later(function () { try { ctrl.abort(); } catch (err) { /* over */ } }, (Number(config().readTimeoutMs) || READ_TIMEOUT));
+          running.push(run);
+          function drop() {
+            stopLater(run.timer);
+            running = running.filter(function (item) { return item !== run; });
+          }
+          sent.promise.then(function (res) {
+            drop();
+            if (settled) return;
+            speedNote(root, Date.now() - started);
+            if (failoverStatus(res.status)) {
+              rotateApi(root, retryAfterMs(res));
+              lastRes = { root: root, res: res, tagKey: sent.tagKey, held: sent.held };
+              if (!launch()) maybeEnd();
+              return;
+            }
+            var winner = run;
+            running.forEach(function (other) { if (other !== winner) { stopLater(other.timer); try { other.ctrl && other.ctrl.abort(); } catch (err) { /* over */ } } });
+            running = [];
+            settled = true;
+            stopLater(hedgeTimer);
+            troubleNote(true);
+            finish(root, res, sent.tagKey, sent.held).then(resolve, reject);
+          }).catch(function (err) {
+            drop();
+            if (settled) return;
+            speedNote(root, Date.now() - started + 5000);
+            rotateApi(root, 0);
+            lastErr = err;
+            if (!launch()) maybeEnd();
+          });
+          return true;
+        }
+        function hedge() {
+          if (settled) return;
+          if (launch()) hedgeTimer = later(hedge, Number(config().hedgeMs) || HEDGE_MS);
+        }
+        launch();
+        if (list.length > 1) hedgeTimer = later(hedge, Number(config().hedgeMs) || HEDGE_MS);
+      });
+    }
+
+    if (reading && nativeFetch) return hedgedRead();
     return attempt(0);
   }
   function errorMessage(code) {
