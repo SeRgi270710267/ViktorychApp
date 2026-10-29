@@ -4,7 +4,7 @@ const VERSION = "viktorych-a123-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T11:45:00Z-data-saver
+// cache-bust: 2026-10-29T11:46:00Z-comments
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -62,6 +62,7 @@ const SHELL_FILES = [
   "./storage.css",
   "./localfirst.js",
   "./direct.js",
+  "./comments-client.js",
   "./device.js",
   "./device-search.js",
   "./device-ai.js",
