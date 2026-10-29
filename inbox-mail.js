@@ -555,7 +555,7 @@
   }
   function page() {
     var sec = section();
-    if (!token()) return '<div class="inbox-mail" data-inbox-mail>' + head(tr("Inbox")) + notice(tr("Sign in to use Mail."), "") + "</div>";
+    if (!token() && sec !== "aliases") return '<div class="inbox-mail" data-inbox-mail>' + head(tr("Inbox")) + notice(tr("Sign in to use Mail."), "") + "</div>";
     loadAll().then(function () { repaint(); if (sec === "mail") start(); if (sec === "aliases" && state.sl.key && !state.sl.aliases) slLoadAliases(); });
     if (sec === "connect") return connectPage();
     var s = sub();
