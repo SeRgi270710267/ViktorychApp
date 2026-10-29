@@ -65,6 +65,8 @@
   var friendRequestsLoaded = false;
   var friendReqTriedAt = 0;
   var friendRequestsLoading = false;
+  var friendReqFetchedAt = 0;
+  var friendsFailedAt = {};
   var friendsSearchQuery = "";
   var friendsSubTab = "all";
   var unfriendTarget = null;
@@ -2600,10 +2602,11 @@ function signupPayload() {
     if (key.charAt(0) === "@") key = "app:" + key;
     if (!session || !hasApi()) return;
     if (friendsLoads[key] || friendsCache[key]) return;
+    if (friendsFailedAt[key] && Date.now() - friendsFailedAt[key] < 30000) return;
     friendsLoads[key] = true;
     api("/v1/friends?id=" + encodeURIComponent(key) + "&tab=friends", { token: session.token }).then(function (res) {
       friendsLoads[key] = false;
-      if (!res || res.status !== 200) return;
+      if (!res || res.status !== 200) { friendsFailedAt[key] = Date.now(); return; }
       friendsCache[key] = Array.isArray(res.friends) ? res.friends : [];
       var id = key;
       graphCounts[id] = graphCounts[id] || {};
@@ -2611,13 +2614,17 @@ function signupPayload() {
       if (friendWord(res)) graphCounts[id].friendStatus = friendWord(res);
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-    }).catch(function () { friendsLoads[key] = false; });
+    }).catch(function () { friendsLoads[key] = false; friendsFailedAt[key] = Date.now(); });
   }
 
-  function ensureFriendRequests() {
+  function ensureFriendRequests(force) {
     var session = readSession();
     if (!session || !hasApi() || friendRequestsLoading) return;
+    // Renders call this; a fresh copy (or a recent failure) is reused so a
+    // render after the answer does not start the next request.
+    if (!force && Date.now() - friendReqFetchedAt < (friendRequestsLoaded ? 60000 : 30000)) return;
     friendRequestsLoading = true;
+    friendReqFetchedAt = Date.now();
     api("/v1/friends?tab=requests", { token: session.token }).then(function (res) {
       friendRequestsLoading = false;
       if (!res || res.status !== 200) return;
@@ -2638,7 +2645,8 @@ function signupPayload() {
     friendRequestsLoading = false;
     friendsCache = {};
     friendsLoads = {};
-    ensureFriendRequests();
+    friendsFailedAt = {};
+    ensureFriendRequests(true);
     var session = readSession();
     if (session && session.account) ensureFriends(accountRef(session.account));
     if (window.ViktorychPresence && window.ViktorychPresence.reloadFriends) window.ViktorychPresence.reloadFriends();
@@ -2707,7 +2715,7 @@ function signupPayload() {
         graphCounts[idKey].friendStatus = prevStatus;
         graphCounts[idKey].friendAt = 0;
         friendRequestsLoading = false;
-        ensureFriendRequests();
+        ensureFriendRequests(true);
         graphCounts[idKey].friends = prevCount;
         if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
         if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -2729,7 +2737,7 @@ function signupPayload() {
       graphCounts[idKey].friendStatus = prevStatus;
       graphCounts[idKey].friendAt = 0;
       friendRequestsLoading = false;
-      ensureFriendRequests();
+      ensureFriendRequests(true);
       graphCounts[idKey].friends = prevCount;
       if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
