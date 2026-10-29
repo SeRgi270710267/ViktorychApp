@@ -5749,8 +5749,28 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(handle || "").replace(/^@/, "");
   }
 
+  /* A referenced (quoted) item normally arrives embedded and fully normalized
+     (docs/POST-SCHEMA.md). When the sync could only record its ref
+     (embedded === false), fetch it once on demand and re-render. */
+  const QUOTE_FILL = {};
+  function fillReferenced(quoted) {
+    if (!quoted || quoted.embedded !== false || (quoted.platform || "x") !== "x") return;
+    const sid = String(quoted.statusId || quoted.id || "");
+    if (!/^\d{1,24}$/.test(sid) || QUOTE_FILL[sid]) return;
+    QUOTE_FILL[sid] = true;
+    fxStatusPost(sid).then((found) => {
+      if (!found || (!found.text && !(found.media || []).length)) return;
+      ["author", "handle", "avatar", "verifiedType", "text", "media", "date", "url", "stats"].forEach((key) => {
+        if (found[key] != null && found[key] !== "" && (quoted[key] == null || quoted[key] === "" || (Array.isArray(quoted[key]) && !quoted[key].length))) quoted[key] = found[key];
+      });
+      quoted.embedded = true;
+      render();
+    }).catch(() => {});
+  }
+
   function quoteCard(quoted) {
     if (!quoted) return "";
+    fillReferenced(quoted);
     const platform = quoted.platform || "x";
     const asQuoted = asPost(quoted, platform);
     const art = articleOf(asQuoted);
