@@ -64,7 +64,6 @@ function makeSandbox(opts) {
   sb.listeners = listeners;
   vm.createContext(sb);
   vm.runInContext(read("keys.js"), sb, { filename: "keys.js" });
-  vm.runInContext(read("keys-hi.js"), sb, { filename: "keys-hi.js" });
   vm.runInContext(read("keys-ui.js"), sb, { filename: "keys-ui.js" });
   return sb;
 }
@@ -270,8 +269,7 @@ function pack(file) {
   const t = read(file);
   return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1));
 }
-const packs = { en: pack("i18n/en.js"), ru: pack("i18n/ru.js"), es: pack("i18n/es.js") };
-const hi = sb.ViktorychKeysHi;
+const packs = { en: pack("i18n/en.js"), ru: pack("i18n/ru.js"), es: pack("i18n/es.js"), hi: pack("i18n/hi.js") };
 const strings = new Set(K.commands().map((c) => c.label).concat(Object.values(K.SCOPE_LABELS)));
 ["keys.js", "keys-ui.js"].forEach((f) => {
   for (const m of read(f).matchAll(/\btr\("((?:[^"\\]|\\.)*)"/g)) strings.add(JSON.parse('"' + m[1] + '"'));
@@ -279,16 +277,9 @@ const strings = new Set(K.commands().map((c) => c.label).concat(Object.values(K.
 });
 ["Sidebar items 1–9", "Home tabs 1–9", "Commands", "Pages", "Settings", "Accounts", "Communities", "Chats", "Themes", "Navigation", "Keyboard shortcuts"].forEach((s) => strings.add(s));
 strings.forEach((s) => {
-  ["en", "ru", "es"].forEach((code) => assert(Object.prototype.hasOwnProperty.call(packs[code], s), code + " pack has: " + s));
-  assert(hi[s] || !Object.prototype.hasOwnProperty.call(hi, s), "hi entry not empty: " + s);
+  ["en", "ru", "es", "hi"].forEach((code) => assert(packs[code][s], code + " pack has: " + s));
 });
-Object.keys(hi).forEach((s) => assert(packs.en[s], "Hindi entry has an English key: " + s));
-assert(hi["Keyboard shortcuts"] && hi["Command palette"], "Hindi has the new strings");
-/* Hindi fallback: the hi pack wins, else keys-hi.js. */
-const s7 = makeSandbox();
-s7.SI18n = { t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => (v && v[n] != null ? v[n] : "")), getLang: () => "hi" };
-assert.equal(s7.ViktorychKeys.tr("Command palette"), s7.ViktorychKeysHi["Command palette"]);
-assert.equal(s7.ViktorychKeys.tr("Speed {n}×", { n: 2 }), "गति 2×");
+assert.notEqual(packs.hi["Command palette"], "Command palette", "Hindi is translated");
 
 /* ---------- No ad-hoc shortcut handlers left behind ---------- */
 assert(!/onShortcut/.test(read("dock.js")), "dock shortcuts live in the registry");

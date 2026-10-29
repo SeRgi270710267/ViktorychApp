@@ -53,7 +53,6 @@ const SHELL_FILES = [
   "./dock.css",
   "./dock.js",
   "./keys.js",
-  "./keys-hi.js",
   "./keys-ui.js",
   "./keys.css",
   "./i18n.js",

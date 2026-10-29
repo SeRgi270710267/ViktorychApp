@@ -267,3 +267,22 @@ data-saver.js|HD video variants
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
+# Keyboard shortcut labels are pack keys, translated with tr() where they render.
+# keys.js: scope labels are pack keys; key-cap names (Space, Tab, Menu) and
+# aria-keyshortcuts tokens stay as printed on keyboards.
+keys: keys.js
+keys: keys-ui.js
+keys.js|Meta
+keys.js|Alt
+keys.js|Backspace
+keys.js|Control
+keys.js|Ctrl
+keys.js|Enter
+keys.js|Esc
+keys.js|Escape
+keys.js|Hyper
+keys.js|Page Down
+keys.js|Page Up
+keys.js|Shift
+keys.js|Super
+keys.js|Win

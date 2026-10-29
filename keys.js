@@ -582,14 +582,9 @@
     if (!vars) return String(text);
     return String(text).replace(/\{(\w+)\}/g, function (_, n) { return vars[n] == null ? "" : String(vars[n]); });
   }
-  // Hindi strings ship in keys-hi.js until the Hindi pack carries them.
   function tr(key, vars) {
     var i18n = root.SI18n;
-    var text = i18n && i18n.t ? i18n.t(key, vars) : fill(key, vars);
-    var lang = i18n && i18n.getLang ? i18n.getLang() : "en";
-    var hi = root.ViktorychKeysHi;
-    if (lang === "hi" && hi && hi[key] && text === fill(key, vars)) text = fill(hi[key], vars);
-    return text;
+    return i18n && i18n.t ? i18n.t(key, vars) : fill(key, vars);
   }
   function label(cmd) { return tr(cmd.label, cmd.vars || undefined); }
   function esc(s) {
