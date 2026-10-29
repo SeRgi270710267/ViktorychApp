@@ -719,6 +719,118 @@ async function firstRun(page) {
   return notes;
 }
 
+/* TV sign-in end to end against the in-process Worker: a TV asks for an
+   account by username, the account's notifications list shows "Approve
+   sign-in on TV?", Approve signs the TV in and Deny turns it away. The
+   reply to the TV is the same for a name that does not exist. Then the
+   desktop "Link a TV" box: paste a code with a dash and it goes on by
+   itself. The username is made up inside the page and never printed. */
+async function tvWorker(route, body) {
+  const res = await worker.dispatchFetch("https://accounts.test" + route, {
+    method: "POST",
+    headers: { origin: pageOrigin, "content-type": "application/json", "cf-connecting-ip": "198.51.100." + ((ipCounter++ % 200) + 1) },
+    body: JSON.stringify(body || {})
+  });
+  let data = {};
+  try { data = await res.json(); } catch (err) { data = {}; }
+  return { status: res.status, body: data };
+}
+
+async function signUpQuick(page) {
+  // The same step flow as fullFlow: account steps, then skip through setup.
+  await gotoFresh(page);
+  const notes = [];
+  if (!(await createAccount(page, notes, "tv ask"))) throw new Error("tv ask signup: " + notes.join("; "));
+  await walkSetup(page, [], "tv ask");
+}
+
+async function tvNotes(page, code) {
+  // A fresh load pulls the list; on a live device the push or the open
+  // notifications stream does that.
+  await openPage(page, "/#/notifications");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  return page.locator(`[data-tvn='${code}']`).waitFor({ timeout: 20000 }).then(() => true, () => false);
+}
+
+async function tvAskFlow(browser) {
+  const notes = [];
+  const shots = process.env.SHOTS || "";
+  const { context, page, problems } = await openFresh(browser, { width: 390, height: 844 });
+  try {
+    await signUpQuick(page);
+    const handle = await page.evaluate(() => {
+      const session = JSON.parse(localStorage.getItem("viktorychapp-account-v1") || "{}");
+      return String((session.account && session.account.handle) || "");
+    });
+    if (!handle) { notes.push("tv ask: no signed-in account"); return notes; }
+
+    // 1. Ask by username. A name that does not exist gets the same reply.
+    let tv = (await tvWorker("/v1/tv-pair/start")).body;
+    const asked = await tvWorker("/v1/tv-pair/ask", { poll: tv.poll, username: "@" + handle.toUpperCase() });
+    const ghostTv = (await tvWorker("/v1/tv-pair/start")).body;
+    const ghost = await tvWorker("/v1/tv-pair/ask", { poll: ghostTv.poll, username: "nobodyhere" + Date.now().toString(36) });
+    if (asked.status !== 200 || ghost.status !== 200) notes.push("tv ask: replies " + asked.status + "/" + ghost.status);
+    if (JSON.stringify(Object.keys(asked.body).sort()) !== JSON.stringify(Object.keys(ghost.body).sort()) || asked.body.sent !== ghost.body.sent) notes.push("tv ask: reply differs for a missing name");
+
+    // 2. The account's notifications show the request; Approve signs the TV in.
+    if (!(await tvNotes(page, tv.code))) { notes.push("tv ask: no Approve sign-in on TV? notification"); return notes; }
+    const row = await page.locator(`[data-tvn='${tv.code}']`).innerText();
+    if (!/Approve sign-in on TV\?/.test(row) || row.replace(/\s/g, "").indexOf(tv.code) < 0) notes.push("tv ask: notification does not show the code");
+    if (shots) { await page.waitForTimeout(500); await page.screenshot({ mask: [page.getByText(/^@[a-z0-9_.]+$/)], path: path.join(shots, "phone-approve-notification.png") }); }
+    await page.locator(`[data-tvn='${tv.code}'] [data-tvnote='approve']`).click();
+    await page.getByText("Approved. Your TV is signing in.").waitFor({ timeout: 15000 });
+    const signed = await tvWorker("/v1/tv-pair/poll", { poll: tv.poll });
+    if (signed.status !== 200 || !signed.body.token) notes.push("tv ask: approve did not sign the TV in (" + signed.status + ")");
+
+    // 3. Deny: the TV hears "denied" and the code is gone.
+    tv = (await tvWorker("/v1/tv-pair/start")).body;
+    await tvWorker("/v1/tv-pair/ask", { poll: tv.poll, username: handle });
+    if (!(await tvNotes(page, tv.code))) { notes.push("tv ask: second request missing"); return notes; }
+    await page.locator(`[data-tvn='${tv.code}'] [data-tvnote='deny']`).click();
+    await page.getByText("Denied. The TV was not signed in.").waitFor({ timeout: 15000 });
+    const denied = await tvWorker("/v1/tv-pair/poll", { poll: tv.poll });
+    if (denied.status !== 403 || denied.body.error !== "denied") notes.push("tv ask: deny was not passed to the TV (" + denied.status + ")");
+
+    // 4. Desktop: Settings > Link a TV, a big box, paste with a dash, no button press.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    tv = (await tvWorker("/v1/tv-pair/start")).body;
+    await openPage(page, "/#/link-tv");
+    await page.locator("[data-tvpair-form] input[name=code]").waitFor({ timeout: 15000 });
+    const size = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector("[data-tvpair-form] input[name=code]")).fontSize));
+    if (!(size >= 40)) notes.push("link a tv: the code box is small on desktop (" + size + "px)");
+    await page.locator("[data-tvpair-form] input[name=code]").click();
+    await page.keyboard.type(tv.code.slice(0, 3).toLowerCase());
+    if (shots) { await page.waitForTimeout(500); await page.screenshot({ mask: [page.getByText(/^@[a-z0-9_.]+$/)], path: path.join(shots, "desktop-link-tv.png") }); }
+    await page.evaluate((text) => {
+      const input = document.querySelector("[data-tvpair-form] input[name=code]");
+      const data = new DataTransfer();
+      data.setData("text/plain", text);
+      input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    }, " " + tv.code.slice(0, 3).toLowerCase() + "-" + tv.code.slice(3) + " ");
+    await page.locator("[data-tvp-phone='done']").waitFor({ timeout: 15000 });
+    if (shots) { await page.waitForTimeout(500); await page.screenshot({ mask: [page.getByText(/^@[a-z0-9_.]+$/)], path: path.join(shots, "desktop-link-tv-done.png") }); }
+    const linked = await tvWorker("/v1/tv-pair/poll", { poll: tv.poll });
+    if (linked.status !== 200) notes.push("link a tv: pasted code did not sign the TV in (" + linked.status + ")");
+
+    // 5. viktorychapp.pages.dev/tv on a PC: typing the 6th character goes on.
+    tv = (await tvWorker("/v1/tv-pair/start")).body;
+    await openPage(page, "/tv/");
+    await page.locator("#pair-code").waitFor({ timeout: 15000 });
+    await page.locator("#pair-code").click();
+    await page.keyboard.type(tv.code.slice(0, 3).toLowerCase() + "-" + tv.code.slice(3, 5));
+    if (shots) { await page.waitForTimeout(500); await page.screenshot({ mask: [page.getByText(/^@[a-z0-9_.]+$/)], path: path.join(shots, "desktop-tv-code-box.png") }); }
+    await page.keyboard.type(tv.code.slice(5));
+    const went = await page.waitForFunction((code) => location.href.indexOf("pair=" + code) >= 0 || location.hash.indexOf("code=" + code) >= 0, tv.code, { timeout: 15000 }).then(() => true, () => false);
+    if (!went) notes.push("/tv code box did not go on after 6 characters");
+    notes.push(...problems.map((p) => "tv ask pageerror: " + p.slice(0, 180)));
+  } catch (err) {
+    notes.push("tv ask flow failed: " + redact(err && err.stack || err).slice(0, 1200));
+  } finally {
+    await context.close();
+  }
+  return notes;
+}
+
 const server = await startServer();
 worker = new Miniflare({
   scriptPath: path.join(root, "worker/src/index.js"),
@@ -765,6 +877,7 @@ try {
       await context.close();
     }
   }
+  failures.push(...await tvAskFlow(browser));
   // The whole step flow at phone and desktop size, the quick path at both,
   // and both motion settings.
   const runs = [
