@@ -373,6 +373,18 @@ async function firstRun(page) {
     else {
       await page.locator("#onb-layer [data-onb='skip']").click();
       await page.locator("#onb-layer [data-step='prefs']").waitFor();
+      // The theme picker lists every theme from window.ViktorychThemes,
+      // flag themes included, and picking one applies it.
+      const flagIds = await page.evaluate(() => Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}));
+      for (const id of flagIds) {
+        if (!(await page.locator(`#onb-layer [data-onb='theme'][data-mode='${id}']`).count())) notes.push(`setup theme picker is missing the ${id} theme`);
+      }
+      if (flagIds.length) {
+        await page.locator(`#onb-layer [data-onb='theme'][data-mode='${flagIds[0]}']`).click();
+        const applied = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+        if (applied !== flagIds[0]) notes.push("picking a flag theme in setup did not apply it");
+        await page.locator("#onb-layer [data-onb='theme'][data-mode='lightsout']").click();
+      }
       await page.locator("#onb-layer [data-onb='skip']").click();
       await page.locator("#onb-layer [data-step='done'] [data-onb='finish']").click();
       await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 });

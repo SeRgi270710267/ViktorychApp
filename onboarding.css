@@ -430,3 +430,4 @@ html[data-ava-shape="square"] .onb-pic { border-radius: 8px; }
 }
 .onb-quiet.onb-temp:hover { text-decoration: none; background: rgba(231, 233, 234, 0.1); }
 .acct-back.acct-temp-setup .acct-head { grid-template-columns: 36px 1fr 36px; }
+.onb-theme-flag { border-color: rgba(128, 128, 128, 0.5); }
