@@ -6489,3 +6489,6 @@ html[data-flag] .action.like.on .count,
 html[data-flag] .action.like:hover .count { color: var(--text); }
 /* Links are white for contrast; flag blue marks them as links. */
 html[data-flag] a.entity { text-decoration: underline; text-decoration-color: var(--flag-2); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+
+/* Notification privacy: locked switches while names are off. */
+.notif-privacy .tab-switch[disabled] { opacity: .5; cursor: default; }

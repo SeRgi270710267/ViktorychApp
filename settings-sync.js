@@ -21,7 +21,7 @@
       ["translateAuto", "Automatically translate posts"], ["translateNever", "Never translate"],
       ["peopleLinks", "Merged profiles"]
     ] },
-    { id: "notifications", label: "Notifications", keys: [["notify", "Notifications"], ["bells", "Account alerts"]] },
+    { id: "notifications", label: "Notifications", keys: [["notify", "Notifications"], ["bells", "Account alerts"], ["notifPrivacy", "Notification privacy"]] },
     { id: "privacy", label: "Privacy and mentions", keys: [
       ["mutedWords", "Muted words"], ["mutedAccounts", "Muted accounts"], ["blocks", "Muted & blocked"], ["privacyEmbedShield", "Third-party embed shield"],
       ["privacyWebRTC", "WebRTC leak protection"], ["privacyNoReferrer", "Strict no-referrer"], ["privacyStripTrackers", "Strip tracking parameters"],
@@ -33,7 +33,7 @@
   // Plain values that merge by their own stamp. Lists such as muted words
   // keep their union merge in accounts.js.
   var LWW = ["appearance", "showPictures", "showBanners", "autoplay", "followingSort", "forYouReposts", "forYouReplies",
-    "storyNotes", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells",
+    "storyNotes", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "notifPrivacy",
     "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "peopleLinks", "musicPrefs", "brandLogo"];
   var CAT_OF = {};
   CATS.forEach(function (cat) { cat.keys.forEach(function (row) { CAT_OF[row[0]] = cat.id; }); });
