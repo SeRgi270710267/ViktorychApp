@@ -275,12 +275,36 @@ def verify_site(dest: Path, files: list[str]) -> None:
         raise SystemExit("referenced assets missing from _site:\n" + "\n".join(missing))
 
 
+def commit_built(sha: str, root: Path | None = None) -> str:
+    """The commit time of sha in UTC (YYYY-MM-DDTHH:MM:SSZ), or "".
+
+    sw.js carries this instead of the deploy time, so scheduled runs of the
+    same commit publish byte-identical workers and phones see no new install.
+    """
+    if not sha:
+        return ""
+    import subprocess
+    from datetime import datetime, timezone
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%ct", sha],
+            cwd=str(root or Path(__file__).resolve().parent.parent),
+            capture_output=True, text=True, timeout=10, check=True,
+        ).stdout.strip()
+        return datetime.fromtimestamp(int(out), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        return ""
+
+
 def stamp_worker(dest: Path, sha: str) -> None:
     worker = dest / "sw.js"
     if not worker.is_file() or not sha:
         return
-    text = worker.read_text(encoding="utf-8")
-    worker.write_text(text.replace("__SW_VERSION__", sha), encoding="utf-8")
+    text = worker.read_text(encoding="utf-8").replace("__SW_VERSION__", sha)
+    built = commit_built(sha)
+    if built:
+        text = text.replace("__SW_BUILT__", built)
+    worker.write_text(text, encoding="utf-8")
 
 
 def copy_sidecar(root: Path, dest: Path) -> None:

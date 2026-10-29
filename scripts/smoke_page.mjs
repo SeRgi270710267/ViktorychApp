@@ -40,6 +40,10 @@ const OWNER_CHECK = `(() => {
   try { settings = accounts && accounts.settingsHtml ? accounts.settingsHtml() : ""; }
   catch (err) { settings = ""; }
   const shorts = window.ViktorychShorts || null;
+  // The owner can switch Shorts off on the server (GET /v1/features "off").
+  // Then the module must stay unloaded instead of being checked.
+  const lazy = window.ViktorychLazy;
+  const shortsOff = !!(lazy && lazy.serverOff && lazy.serverOff("shorts"));
   let unlocks = false;
   let shown = false;
   if (shorts && shorts.setUnlocked && shorts.isUnlocked) {
@@ -56,6 +60,7 @@ const OWNER_CHECK = `(() => {
     owner: !!(account && account.owner === true && account.handle === "mirathorn"),
     health: settings.indexOf("TikTok health") >= 0,
     kept: settings.indexOf('data-acct="open-delete"') < 0,
+    shortsOff,
     shorts: !!(shorts && shorts.isUnlocked && shorts.setUnlocked),
     unlocks,
     shown
@@ -249,7 +254,7 @@ async function probe(pageUrl, opts) {
       while (Date.now() - started < 8000) {
         const checked = await send("Runtime.evaluate", { expression: OWNER_CHECK, returnByValue: true });
         ownerInfo = checked && checked.result && checked.result.value || null;
-        if (ownerInfo && ownerInfo.owner && ownerInfo.health && ownerInfo.kept && ownerInfo.shorts && ownerInfo.unlocks && ownerInfo.shown) break;
+        if (ownerInfo && ownerInfo.owner && ownerInfo.health && ownerInfo.kept && (ownerInfo.shortsOff ? !ownerInfo.shorts : (ownerInfo.shorts && ownerInfo.unlocks && ownerInfo.shown))) break;
         await sleep(400);
       }
     }
@@ -290,9 +295,13 @@ async function probe(pageUrl, opts) {
       if (!row.owner) problems.push("owner session was not recognized");
       if (!row.health) problems.push("owner menu missing");
       if (!row.kept) problems.push("owner account was deletable");
-      if (!row.shorts) problems.push("shorts module missing");
-      if (!row.unlocks) problems.push("shorts unlock list missing");
-      if (!row.shown) problems.push("shorts hidden from the owner");
+      if (row.shortsOff) {
+        if (row.shorts) problems.push("shorts loaded although the server switched it off");
+      } else {
+        if (!row.shorts) problems.push("shorts module missing");
+        if (!row.unlocks) problems.push("shorts unlock list missing");
+        if (!row.shown) problems.push("shorts hidden from the owner");
+      }
     }
     return { problems, text: opts.owner ? "" : (pageInfo.text || ""), label: opts.label };
   } finally {
@@ -339,7 +348,7 @@ async function main() {
         if (!/did not open a debugger/.test(message)) throw err;
         result = await probe(url, run);
       }
-      console.log(run.label + ": " + (result.text || "(empty)").slice(0, 120));
+      console.log(run.label + ": " + (result.text || (run.owner ? "(owner checks only)" : "(empty)")).slice(0, 120));
       result.problems.forEach((problem) => problems.push(run.label + " " + problem));
     }
     if (problems.length) {
