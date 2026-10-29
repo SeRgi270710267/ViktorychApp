@@ -298,6 +298,49 @@
     var soonest = list.slice().sort(function (a, b) { return breakerOpenUntil(a) - breakerOpenUntil(b); });
     return soonest.slice(0, 1);
   }
+  /* Origin pool: when the main Worker says today's free requests are nearly
+     used (X-Quota-Pct), reads move to the next healthy origin for a sticky,
+     jittered while, shared by every tab. Writes stay on the main Worker.
+     The breaker above still skips any origin that is failing, so if the
+     backup stumbles reads come straight back to the main one. */
+  var QUOTA_KEY = "viktorychapp-quota-v1";
+  var QUOTA_SHIFT_PCT = 85;
+  function quotaRead() {
+    try { var q = JSON.parse(localStorage.getItem(QUOTA_KEY) || "null"); return q && typeof q === "object" ? q : {}; }
+    catch (err) { return {}; }
+  }
+  function quotaNote(root, res) {
+    var main = String(config().api || "").replace(/\/$/, "");
+    if (!main || String(root || "").replace(/\/$/, "") !== main || !res || !res.headers || !res.headers.get) return;
+    var raw = res.headers.get("X-Quota-Pct");
+    if (raw === null || raw === "" || !isFinite(Number(raw))) return;
+    var pct = Number(raw);
+    var limit = Number(config().quotaShiftPct) || QUOTA_SHIFT_PCT;
+    var q = quotaRead();
+    var nowMs = Date.now();
+    q.pct = pct;
+    q.at = nowMs;
+    if (pct >= limit) {
+      // Sticky for 10 to 15 minutes so tabs do not flap between origins.
+      if (!(Number(q.until) > nowMs)) q.until = nowMs + 10 * 60 * 1000 + Math.floor(Math.random() * 5 * 60 * 1000);
+    } else q.until = 0;
+    try { localStorage.setItem(QUOTA_KEY, JSON.stringify(q)); } catch (err) { /* memory only */ }
+  }
+  function quotaShifted() {
+    var q = quotaRead();
+    return Number(q.until) > Date.now();
+  }
+  /* Reads: the same pool, with the main Worker moved last while it is near
+     its daily quota. A new UTC day clears the shift. */
+  function readOrder(speed) {
+    var list = apiOrder();
+    if (list.length < 2 || !quotaShifted()) return speed ? bySpeed(list) : list;
+    var q = quotaRead();
+    if (new Date(Number(q.at) || 0).toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10)) return list;
+    var main = String(config().api || "").replace(/\/$/, "");
+    var rest = list.filter(function (root) { return root !== main; });
+    return rest.length ? rest.concat(list.indexOf(main) >= 0 ? [main] : []) : list;
+  }
   function apiEndpoints() {
     var c = config();
     var list = [];
@@ -375,7 +418,7 @@
     if (!key || !config().gate) return mirrorPageFetch(input, init, url);
     var session = readSession();
     if (key === "BLOCK" || !session) return Promise.resolve(new Response("", { status: 401 }));
-    var order = apiOrder();
+    var order = readOrder();
     if (!order.length) return Promise.resolve(new Response("", { status: 401 }));
     var headers = new Headers(init && init.headers || (typeof input !== "string" && input && input.headers) || {});
     headers.set("Authorization", "Bearer " + session.token);
@@ -401,6 +444,7 @@
           return res;
         }
         breakerOk(apiRoot);
+        quotaNote(apiRoot, res);
         if (res.status === 200 && mark) pulseKeep(key, mark, res.clone());
         return res;
       }, function (err) {
@@ -550,9 +594,9 @@
   }
 
   function api(path, opts) {
-    var list = bySpeed(apiOrder());
-    if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     opts = opts || {};
+    var list = (!opts.method || opts.method === "GET") ? readOrder(true) : bySpeed(apiOrder());
+    if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     var headers = {};
     if (opts.body && !opts.form) headers["content-type"] = "application/json";
     if (opts.token) headers.Authorization = "Bearer " + opts.token;
@@ -583,6 +627,7 @@
 
     function finish(root, res, tagKey, held) {
       breakerOk(root);
+      quotaNote(root, res);
       activeApiRoot = root;
       // A 304 means nothing changed since the last read: reuse that body.
       var reused = res.status === 304 && !!held;
@@ -5765,6 +5810,7 @@ else if (act === "copy-id") copyAccountId();
     profilePostsHtml: null,
     call: api,
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
+    originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted },
     saveOwnAccount: applyOwnAccount,
     openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
     openLogin: function () { openAuth("login"); },

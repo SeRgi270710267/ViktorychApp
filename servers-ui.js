@@ -107,6 +107,9 @@
     }
     lsSet("who", who);
   }
+  var FRESH_MS = 1500;
+  var fresh = {};
+  var inflight = {};
   function call(path, opts) {
     opts = opts || {};
     var base = api();
@@ -125,15 +128,31 @@
     if (reading && now < coolDevice) return Promise.resolve({ status: 429, held: true, body: { error: "rate_limited", retry: Math.ceil((coolDevice - now) / 1000) } });
     var held = reading ? cool[path] : null;
     if (held && now < held.until) return Promise.resolve({ status: held.status, held: true, body: { error: held.status === 0 ? "offline" : held.status === 429 ? "rate_limited" : "backoff" } });
-    return fetch(base + "/v1/servers" + path, { method: method, headers: headers, body: body, cache: "no-store" })
+    // The same read twice in a few seconds, or while the tab is hidden,
+    // reuses the last answer; two callers at once share one request.
+    if (reading) {
+      var last = fresh[path];
+      var hidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+      if (last && hidden) return Promise.resolve({ status: last.status, held: true, body: last.body });
+      if (last && now - last.at < FRESH_MS) return Promise.resolve({ status: last.status, body: last.body });
+      if (inflight[path]) return inflight[path];
+    }
+    var run = fetch(base + "/v1/servers" + path, { method: method, headers: headers, body: body, cache: "no-store" })
       .then(function (res) {
         if (reading) noteRead(path, res.status, res);
-        return res.json().catch(function () { return {}; }).then(function (data) { return { status: res.status, body: data || {} }; });
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (reading && res.status === 200) fresh[path] = { at: Date.now(), status: 200, body: data || {} };
+          if (!reading) fresh = {};
+          return { status: res.status, body: data || {} };
+        });
       })
       .catch(function () {
         if (reading) noteRead(path, 0, null);
         return { status: 0, body: { error: "offline" } };
       });
+    if (!reading) return run;
+    inflight[path] = run;
+    return run.then(function (out) { delete inflight[path]; return out; }, function (err) { delete inflight[path]; throw err; });
   }
   var cool = {};
   var coolDevice = 0;

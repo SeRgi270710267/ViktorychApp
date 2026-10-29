@@ -11,6 +11,7 @@ import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
 import { usageReport } from "./usage.js";
+import { quotaPct, refreshQuota } from "./quota.js";
 import { guardClass, guardKey, takeToken, noteGuardTier, tokenGuardKey, publishPulse, pulseResponse } from "./guard.js";
 import { handleNostr } from "./nostr.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
@@ -166,7 +167,9 @@ function withCors(request, env, response) {
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
   headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent");
-  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag, Retry-After, X-Limit-Scope");
+  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag, Retry-After, X-Limit-Scope, X-Quota-Pct");
+  const quota = quotaPct(Date.now());
+  if (quota >= 0) headers.set("x-quota-pct", String(quota));
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
   headers.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
@@ -5782,6 +5785,7 @@ export default {
       if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
       // One client cannot spend the free daily budget alone. Sync jobs that
       // sign with the bot secret are not counted. Tests leave REQUEST_GUARD unset.
+      try { refreshQuota(env, ctx, Date.now()); } catch (err) { /* the header just stays stale */ }
       const kind = guardClass(request.method, path);
       if (kind && String(env.REQUEST_GUARD || "") === "on" && !bearerIsBot(env, request)) {
         const take = takeToken(guardKey(request), kind, Date.now());
