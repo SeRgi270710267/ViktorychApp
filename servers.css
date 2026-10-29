@@ -492,7 +492,7 @@ button.vsrv-throw { width: 100%; border: 0; background: none; cursor: pointer; t
 .vsrv-crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vsrv-crumb:hover { color: var(--text); }
 .vsrv-crumb .vsrv-conv-ic { width: 18px; height: 18px; }
-.vsrv-crumb-sep { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.vsrv-crumb-sep { width: 14px; height: 14px; color: var(--muted); flex: none; -webkit-transform: rotate(-90deg); transform: rotate(-90deg); }
 .vsrv-th-flag { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; color: var(--muted); flex: none; }
 .vsrv-thchip {
   display: flex; align-items: center; gap: 8px; max-width: 420px; margin: 6px 0 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px;
@@ -643,4 +643,5 @@ button.vsrv-pill.on { background: var(--text); color: var(--bg); border-color: v
   body:has(.xdock.side-right) .vsrv:not(.members-open) .vsrv-compose-wrap,
   body:has(.xdock.side-right) .vsrv:not(.has-channel) .vsrv-compose-wrap { padding-right: 132px; }
 }
+@media (max-width: 699px) { .vsrv-crumb, .vsrv-crumb-sep { display: none; } }
 @media (max-width: 499px) { .vsrv-post-img { width: 56px; height: 56px; } .vsrv-sgrid > button, .vsrv-scell { width: 33.333%; } .vsrv-crumb { max-width: 34%; } }

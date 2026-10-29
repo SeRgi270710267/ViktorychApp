@@ -428,7 +428,16 @@
       byId[m.id] = cur.length;
       cur.push(m);
     });
-    if (replace) (S.msgs[cid] || []).forEach(function (m) { if (m.pending) cur.push(m); });
+    if (replace) {
+      /* A slow newest-page load must not wipe what was sent or delivered after it was asked for. */
+      var top = "", recent = Date.now() - 60000;
+      cur.forEach(function (m) { if (m.id > top) top = m.id; });
+      (S.msgs[cid] || []).forEach(function (m) {
+        if (m.pending) { cur.push(m); return; }
+        if (replace !== "latest" || byId[m.id] != null) return;
+        if (top ? m.id > top : (m.t || msgTime(m.id)) > recent) { byId[m.id] = cur.length; cur.push(m); }
+      });
+    }
     var sent = cur.filter(function (m) { return !m.pending; }).sort(cmpId);
     var pend = cur.filter(function (m) { return m.pending; });
     var seenNonce = {};
@@ -458,7 +467,7 @@
       else if (!opts.after) {
         var have = S.msgs[cid] || [];
         var overlap = list.length && have.some(function (m) { return m.id === list[0].id; });
-        if (!overlap || opts.around) { S.more[cid] = !!res.body.more || opts.around; mergeMessages(cid, list, true); list = null; }
+        if (!overlap || opts.around) { S.more[cid] = !!res.body.more || opts.around; mergeMessages(cid, list, opts.around ? true : "latest"); list = null; }
         else S.more[cid] = S.more[cid] == null ? !!res.body.more : S.more[cid];
       } else if (res.body.more) {
         // A long gap since the last visit: drop the stale tail and keep the newest page.
@@ -853,11 +862,17 @@
     return groups;
   }
   function firstChannel(sid) {
-    var out = "";
+    /* Land on a chat channel first, like Discord; a forum only when nothing else is visible. */
+    var out = "", any = "";
     orderedChannels(sid).some(function (g) {
-      return g.items.some(function (c) { if (has(Number(c.perms) || 0, P.VIEW) && c.kind !== "category") { out = c.id; return true; } return false; });
+      return g.items.some(function (c) {
+        if (!has(Number(c.perms) || 0, P.VIEW) || c.kind === "category") return false;
+        if (!any) any = c.id;
+        if (c.kind === "forum") return false;
+        out = c.id; return true;
+      });
     });
-    return out;
+    return out || any;
   }
 
   function sideInner() {
