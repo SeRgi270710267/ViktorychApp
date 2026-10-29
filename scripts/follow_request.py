@@ -599,6 +599,12 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
+    try:
         sys.exit(main())
     except Reject as exc:
         print("rejected:", exc, file=sys.stderr)
