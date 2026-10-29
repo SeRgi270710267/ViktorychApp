@@ -43,3 +43,57 @@
   object-fit: cover;
   display: block;
 }
+
+/* Merged profiles: per-platform follow, unmerge, "Posts from", cross-post badges. */
+.pchip-wrap { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.pchip-follow, .pchip-split, .pm-btn, .pfrom-pill {
+  min-height: 28px;
+  padding: 2px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pchip-follow { background: var(--text); color: var(--bg); border-color: var(--text); }
+.pchip-follow.on { background: transparent; color: var(--text); border-color: var(--line); }
+.pchip-split { border: 0; color: var(--muted); font-weight: 400; padding: 2px 6px; }
+.pchip-split:hover { color: var(--text); text-decoration: underline; }
+.pfrom { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.pfrom-label { color: var(--muted); font-size: 13px; margin-right: 2px; }
+.pfrom-pill { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; font-weight: 400; }
+.pfrom-pill.on { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 700; }
+.pfrom-pill .src { margin: 0; }
+.pm-suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; }
+.pm-suggest span { flex: 1 1 160px; }
+.pm-btn.primary, .pm-go { background: var(--text); color: var(--bg); border-color: var(--text); }
+.xp-badges { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+.xp-badge { display: inline-flex; align-items: center; line-height: 0; opacity: 1; }
+.xp-badge .src { margin: 0; }
+.xp-badge.off { opacity: 0.4; }
+.pm-sheet { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(91, 112, 131, 0.4); padding: 16px; }
+.pm-card { width: min(360px, 100%); max-height: 90vh; overflow: auto; background: var(--bg); color: var(--text); border-radius: 16px; padding: 20px; box-shadow: 0 0 15px var(--shadow); }
+.pm-title { font-size: 20px; margin: 0 0 12px; }
+.pm-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 0; cursor: pointer; }
+.pm-row input { width: 20px; height: 20px; accent-color: var(--blue); }
+.pm-net { font-weight: 700; }
+.pm-handle { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.pm-acts .follow { min-height: 36px; }
+#toast .toast-act { margin-left: 12px; padding: 4px 10px; border: 1px solid rgba(255, 255, 255, 0.7); border-radius: 999px; background: transparent; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+#toast { display: flex; align-items: center; flex-wrap: wrap; max-width: calc(100vw - 32px); }
+#toast[hidden] { display: none; }
+@media (max-width: 500px) {
+  .pm-sheet { align-items: flex-end; padding: 0; }
+  .pm-card { width: 100%; border-radius: 16px 16px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+}
+/* TV and keyboard: every control shows where the focus is. */
+.pchip-follow:focus-visible, .pchip-split:focus-visible, .pfrom-pill:focus-visible, .pm-btn:focus-visible, .pm-go:focus-visible, .pm-row:focus-within, .xp-badge:focus-visible, #toast .toast-act:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+html.tv-on .pchip-follow, body.tv .pfrom-pill, body.tv .pm-btn { min-height: 44px; font-size: 18px; }
+.pglyph-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 12px; font-weight: 800; line-height: 1; }
