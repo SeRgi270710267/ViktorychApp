@@ -2710,7 +2710,7 @@ SI18n.addPack("hi", {
   "Sign in to see the gifts you sent and received.": "भेजे और मिले तोहफ़े देखने के लिए साइन इन करें।",
   "You haven’t sent any gifts yet.": "आपने अभी तक कोई तोहफ़ा नहीं भेजा है।",
   "No gifts here right now.": "अभी यहाँ कोई तोहफ़ा नहीं है।",
-  "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "तोहफ़ों का आर्ट: Google का Noto Emoji (Apache 2.0, एनिमेटेड CC BY 4.0)।",
+  "Gift art: original illustrations made for ViktorychApp, plus Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "तोहफ़ों का आर्ट: ViktorychApp के लिए बनाए गए मूल चित्र, और Google का Noto Emoji (Apache 2.0, एनिमेटेड CC BY 4.0)।",
   "You’ve used today’s free gifts. Try again tomorrow.": "आज के मुफ़्त तोहफ़े इस्तेमाल हो चुके हैं। कल फिर से कोशिश करें।",
   "Not enough Viktorychs for this gift.": "इस तोहफ़े के लिए पर्याप्त विक्टोरिच नहीं हैं।",
   "Jack-o’-lantern": "कद्दू की लालटेन",
