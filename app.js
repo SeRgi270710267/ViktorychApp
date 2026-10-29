@@ -110,6 +110,7 @@
     clock: "M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm1 11h-4V7h2v4h2v2z",
     plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z",
     play: "M8 5v14l11-7z",
+    expand: "M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z",
     vol: "M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z",
     volOff: "M16.5 12a4.5 4.5 0 0 0-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4 9.91 6.09 12 8.18V4z",
     pin: "M16 3H8v2l1 5-3 3v2h5v6l1 1 1-1v-6h5v-2l-3-3 1-5V3z",
@@ -209,7 +210,10 @@
   if (window.ProfileAbout) window.ProfileAbout.lists = function () { return (STATE.settings && STATE.settings.lists) || []; };
   let previewAnchor = 0;
   const SCROLLS = {};
-  const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
+  const THEMES = window.ViktorychThemes || { base: { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" }, flags: {} };
+  const THEME_COLORS = Object.assign({}, THEMES.base);
+  Object.keys(THEMES.flags || {}).forEach((id) => { THEME_COLORS[id] = THEMES.flags[id].tint[0]; });
+  const FLAG_THEME_IDS = Object.keys(THEMES.flags || {});
 
   const icon = (name) => name === "clock"
     ? `<svg class="clock" viewBox="0 0 24 24" aria-hidden="true">${LINE.clock}</svg>`
@@ -2947,7 +2951,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const href = xId && window.ViktorychEmbed.xOpenUrl ? window.ViktorychEmbed.xOpenUrl(xId) : originalOf(post, media);
     const mode = preview === "feed" || preview === "subs" ? preview : "";
     const chrome = mode === "feed" && !gif
-      ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden>${esc(dur || "")}</span>`
+      ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><button class="vexpand" type="button" data-act="video-expand" aria-label="${tr("Full screen")}" title="${tr("Full screen")}">${icon("expand")}</button><span class="vleft" hidden>${esc(dur || "")}</span><span class="vseek" role="slider" aria-label="${tr("Seek")}" tabindex="-1"></span>`
       : "";
     const isYt = youtubeId(post, media);
     const shieldBadge = STATE.settings && STATE.settings.privacyEmbedShield && isYt
@@ -5007,7 +5011,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function startPlayback(el, opts) {
     if (!el) return;
     opts = opts || {};
-    const previewing = !!(opts.preview || (el.dataset && el.dataset.preview && !el.classList.contains("player")));
+    const previewing = !opts.inline && !!(opts.preview || (el.dataset && el.dataset.preview && !el.classList.contains("player")));
     if (previewing) {
       opts.preview = true;
       const early = playMedia(el, playPost(el) || {}) || {};
@@ -5442,7 +5446,167 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  /* Inline play, like X: a tap plays the clip in its card with sound, a tap
+     on a muted clip unmutes it, a tap on a clip playing with sound pauses it
+     (on a wide screen with a mouse it opens the media view instead, as on
+     x.com). Only the expand button opens the full-screen player. The tapped
+     clip is the one clip that plays; it pauses once it leaves the screen. */
+  function wideMouse() {
+    return (window.innerWidth || 0) >= 1000 && !!(window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches);
+  }
+
+  function setInlinePaused(tile, paused) {
+    tile._userPaused = !!paused;
+    tile.classList.toggle("is-user-paused", !!paused);
+    const play = tile.querySelector(":scope > .play");
+    if (play) play.setAttribute("aria-label", paused ? tr("Play") : tr("Pause"));
+  }
+
+  function inlineTap(tile) {
+    bindInlineSeek();
+    const post = playPost(tile) || {};
+    const media = playMedia(tile, post) || {};
+    const gif = media.type === "animated_gif" || !!tile.querySelector(".gif-badge");
+    const video = tile.querySelector("video");
+    const frame = tile.querySelector("iframe:not([src='about:blank'])");
+    const mine = STATE.inlineEl === tile;
+    if (mine && video && !video.error && (video.currentSrc || video.src)) {
+      if (tile._userPaused || video.paused) {
+        setInlinePaused(tile, false);
+        if (!gif) STATE.sound = true;
+        resumePreview(tile);
+        return;
+      }
+      if (!gif && video.muted) {
+        STATE.sound = true;
+        video.muted = false;
+        document.querySelectorAll(".vmute").forEach(paintMute);
+        return;
+      }
+      if (!gif && wideMouse()) { openFullVideo(tile); return; }
+      try { video.pause(); } catch (err) { /* already paused */ }
+      setInlinePaused(tile, true);
+      return;
+    }
+    if (mine && frame && !tile.querySelector(".vshield")) return;
+    if (STATE.inlineEl && STATE.inlineEl !== tile) {
+      setInlinePaused(STATE.inlineEl, false);
+      STATE.inlineEl.classList.remove("is-inline");
+    }
+    if (STATE.autoEl && STATE.autoEl !== tile) pausePreview(STATE.autoEl);
+    STATE.inlineEl = tile;
+    STATE.autoEl = tile;
+    tile.classList.add("is-inline");
+    setInlinePaused(tile, false);
+    if (!gif) STATE.sound = true;
+    document.querySelectorAll(".vmute").forEach(paintMute);
+    // A muted preview of a file keeps playing; it only gains sound.
+    if (video && !video.error && (video.currentSrc || video.src) && !youtubeId(post, media)) {
+      resumePreview(tile);
+      return;
+    }
+    const held = Number(tile._hold) > 0.25 ? Number(tile._hold) : (video && video.currentTime > 0.25 ? video.currentTime : 0);
+    // YouTube and other official players play inline with their own controls.
+    if (youtubeId(post, media) || (frame && !video)) {
+      tile._inlineFrame = true;
+      clearPlayer(tile);
+      tile.classList.remove("is-playing", "is-shown");
+      startPlayback(tile, { inline: true, resume: held });
+      return;
+    }
+    startPlayback(tile, { preview: true, loop: gif || clipLoops(media), muted: gif, resume: held });
+  }
+
+  /* Tap or drag the bottom strip of an inline clip to seek, like X. */
+  function bindInlineSeek() {
+    if (STATE.seekBound) return;
+    STATE.seekBound = true;
+    const seekTo = (event) => {
+      const strip = event.target && event.target.closest ? event.target.closest(".vseek") : null;
+      if (!strip) return false;
+      const tile = strip.closest(".vplay");
+      const video = tile && tile.querySelector("video");
+      event.preventDefault();
+      event.stopPropagation();
+      if (!video || !isFinite(video.duration) || video.duration <= 0) return true;
+      const box = strip.getBoundingClientRect();
+      const x = (event.touches && event.touches[0] ? event.touches[0].clientX : event.clientX) - box.left;
+      const at = Math.max(0, Math.min(1, x / Math.max(1, box.width)));
+      try { video.currentTime = at * video.duration; } catch (err) { /* not seekable yet */ }
+      const bar = tile.querySelector(".vprog");
+      if (bar) bar.style.width = (at * 100).toFixed(1) + "%";
+      return true;
+    };
+    document.addEventListener("click", seekTo, true);
+    document.addEventListener("pointermove", (event) => { if (event.buttons === 1) seekTo(event); }, { capture: true, passive: false });
+  }
+
+  /* A full render swaps the feed for fresh nodes; the tapped clip carries on
+     in its new card, from where it was, unless the user had paused it. */
+  function adoptInline(old) {
+    const pid = old.getAttribute("data-pid");
+    const mi = old.getAttribute("data-mi");
+    if (!pid) return null;
+    let fresh = null;
+    document.querySelectorAll('.vplay[data-preview="feed"]').forEach((node) => {
+      if (!fresh && node.getAttribute("data-pid") === pid && node.getAttribute("data-mi") === mi && !node.classList.contains("player")) fresh = node;
+    });
+    if (!fresh) return null;
+    const oldVideo = old.querySelector("video");
+    const at = oldVideo && oldVideo.currentTime > 0.25 ? oldVideo.currentTime : (Number(old._hold) > 0.25 ? Number(old._hold) : 0);
+    const paused = !!old._userPaused;
+    clearPlayer(old);
+    if (at > 0.25) fresh._hold = at;
+    STATE.inlineEl = fresh;
+    if (STATE.autoEl === old) STATE.autoEl = null;
+    fresh.classList.add("is-inline");
+    if (paused) { setInlinePaused(fresh, true); return fresh; }
+    const post = playPost(fresh) || {};
+    const media = playMedia(fresh, post) || {};
+    const gif = media.type === "animated_gif";
+    STATE.autoEl = fresh;
+    if (youtubeId(post, media) || old._inlineFrame) {
+      fresh._inlineFrame = true;
+      startPlayback(fresh, { inline: true, resume: at });
+    } else {
+      startPlayback(fresh, { preview: true, loop: gif || clipLoops(media), muted: gif || !STATE.sound, resume: at });
+    }
+    return fresh;
+  }
+
+  function inlineOwner() {
+    let el = STATE.inlineEl;
+    if (!el) return null;
+    if (!el.isConnected) {
+      const fresh = adoptInline(el);
+      if (fresh) el = fresh;
+    }
+    const metrics = el.isConnected ? visibleMetrics(el) : { ratio: 0, cover: 0 };
+    if (metrics.ratio >= 0.2 || metrics.cover >= 0.2) return el;
+    STATE.inlineEl = null;
+    setInlinePaused(el, false);
+    el.classList.remove("is-inline");
+    if (el.isConnected) pausePreview(el);
+    if (STATE.autoEl === el) STATE.autoEl = null;
+    return null;
+  }
+
   function syncPreview() {
+    if (STATE.viewer && STATE.viewer.video && STATE.inlineEl) {
+      pausePreview(STATE.inlineEl);
+      STATE.inlineEl.classList.remove("is-inline");
+      setInlinePaused(STATE.inlineEl, false);
+      STATE.inlineEl = null;
+    }
+    const own = inlineOwner();
+    if (own) {
+      if (STATE.autoEl && STATE.autoEl !== own) pausePreview(STATE.autoEl);
+      STATE.autoEl = own;
+      const current = own.querySelector("video");
+      if (!own._userPaused && current && current.paused && !current.error && (current.currentSrc || current.src)) resumePreview(own);
+      paintAutoplayDebug();
+      return;
+    }
     if (!autoplayAllowed() || (STATE.viewer && STATE.viewer.video)) {
       if (STATE.autoEl) pausePreview(STATE.autoEl);
       STATE.autoEl = null;
@@ -12621,6 +12785,7 @@ const here = parseRoute();
     if (mode === "dim") return tr("Dim");
     if (mode === "default") return tr("Light");
     if (mode === "auto") return tr("Auto");
+    if (THEMES.flags && THEMES.flags[mode]) return tr(THEMES.flags[mode].name);
     return tr("Lights out");
   }
 
@@ -12937,7 +13102,7 @@ const here = parseRoute();
       return;
     }
     if (act === "explore-theme") {
-      const order = ["lightsout", "dim", "default"];
+      const order = ["lightsout", "dim", "default"].concat(FLAG_THEME_IDS);
       const cur = (STATE.settings && STATE.settings.appearance) || "lightsout";
       const at = order.indexOf(cur);
       const next = order[(at + 1) % order.length];
@@ -15016,6 +15181,7 @@ const here = parseRoute();
           ${themeBtn("default", tr("Default"))}
           ${themeBtn("dim", tr("Dim"))}
           ${themeBtn("lightsout", tr("Lights out"))}
+          ${FLAG_THEME_IDS.map((id) => themeBtn(id, tr(THEMES.flags[id].name))).join("")}
         </div>
         <h2>${esc(tr("Profile pictures"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Profile pictures"))}">
@@ -19887,7 +20053,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (tile && tile.querySelector(".gif-badge")) return;
       if (tile && tile.querySelector("iframe") && !tile.querySelector("video")) {
         STATE.sound = true;
-        openFullVideo(tile);
+        inlineTap(tile);
         return;
       }
       STATE.sound = !STATE.sound;
@@ -20287,6 +20453,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "video-expand") {
+      const tile = el.closest(".vplay");
+      if (tile) { STATE.sound = true; openFullVideo(tile); }
+      return;
+    }
     if (act === "play" || act === "video-retry") {
       const tile = el.closest(".vplay") || el;
       if (act === "video-retry") {
@@ -20301,6 +20472,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
         delete tile._prefetch;
         clearPlayer(tile);
         startPlayback(tile, tile.dataset.preview ? { preview: true } : {});
+        return;
+      }
+      if (tile.dataset.preview === "feed" && !tile.classList.contains("player") && !document.documentElement.classList.contains("tv-on")) {
+        inlineTap(tile);
         return;
       }
       if (tile.dataset.preview && !tile.classList.contains("player")) {
@@ -21853,7 +22028,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function applyTheme() {
     const theme = resolvedTheme();
-    document.documentElement.setAttribute("data-theme", theme);
+    if (THEMES.apply) THEMES.apply(theme);
+    else document.documentElement.setAttribute("data-theme", theme);
     applyNavLayout();
     const color = THEME_COLORS[theme] || "#000000";
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
