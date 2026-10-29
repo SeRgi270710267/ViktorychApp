@@ -23,7 +23,7 @@
     ] },
     { id: "notifications", label: "Notifications", keys: [["notify", "Notifications"], ["bells", "Account alerts"]] },
     { id: "privacy", label: "Privacy and mentions", keys: [
-      ["mutedWords", "Muted words"], ["mutedAccounts", "Muted accounts"], ["privacyEmbedShield", "Third-party embed shield"],
+      ["mutedWords", "Muted words"], ["mutedAccounts", "Muted accounts"], ["blocks", "Muted & blocked"], ["privacyEmbedShield", "Third-party embed shield"],
       ["privacyWebRTC", "WebRTC leak protection"], ["privacyNoReferrer", "Strict no-referrer"], ["privacyStripTrackers", "Strip tracking parameters"],
       ["privacyAntiFingerprint", "Fingerprint resistance"]
     ] },

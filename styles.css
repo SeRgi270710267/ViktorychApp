@@ -6339,6 +6339,13 @@ img, video { max-width: 100%; }
 .usage-panel .usage-day { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line, rgba(127,127,127,.25)); }
 .usage-panel .usage-day.hot { border-color: #f4212e; color: #f4212e; }
 
+/* Muted & blocked: placeholders load nothing (no avatar, media or preview). */
+.post.post-hidden .post-main { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 4px 0; }
+.post.post-hidden .phandle { margin: 0; }
+.quote.quote-gone { color: var(--muted, #71767b); font-size: 14px; padding: 12px; cursor: default; }
+.quote.quote-gone .linkish, .post.post-hidden .linkish { background: none; border: 0; color: var(--blue); font: inherit; cursor: pointer; padding: 0; }
+#toast button.toast-link { background: none; border: 0; font: inherit; cursor: pointer; padding: 0; }
+.cm-reddit-action-btn.cm-block-btn { margin-left: auto; }
 /* Personal sidebar logo text, set in the wordmark's own lockup: Inter Black
    for the first letter at 1.1x, Inter Regular for the rest, currentColor so
    every theme inverts it. The subset covers Latin, Cyrillic, Greek and

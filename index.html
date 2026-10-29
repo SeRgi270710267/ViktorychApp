@@ -201,6 +201,12 @@
         var headers = { "X-Feed-Refresh": "1" };
         var auth = gated ? sessionToken() : "";
         if (auth) headers.Authorization = "Bearer " + auth;
+        if (gated && key === "feeds.json") {
+          try {
+            var blockList = localStorage.getItem("viktorychapp-block-h");
+            if (blockList) headers["X-Block"] = blockList;
+          } catch (err) {}
+        }
         return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
           if (!res || !res.ok) return emptyBody(key);
           return res;
@@ -584,6 +590,7 @@
     <script src="logo-text.js" defer></script>
     <script src="translate.js" defer></script>
     <script src="live-translate.js" defer></script>
+    <script src="shared/blocklist.js" type="module"></script>
     <script src="shared/feed-order.js" type="module"></script>
     <script src="shared/for-you.js" type="module"></script>
     <script src="shared/home-fresh.js" defer></script>
