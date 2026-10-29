@@ -3460,5 +3460,10 @@ SI18n.addPack("hi", {
   "Explain this post": "इस पोस्ट को समझाएँ",
   "Profile picture shape": "प्रोफ़ाइल फ़ोटो का आकार",
   "Round": "गोल",
-  "Square": "चौकोर"
+  "Square": "चौकोर",
+  "Haptics": "हैप्टिक फ़ीडबैक",
+  "A light tap when you press and hold a tab or pick from a shortcut menu.": "किसी टैब को दबाकर रखने या शॉर्टकट मेनू से कुछ चुनने पर हल्का कंपन।",
+  "Scroll to top & refresh": "ऊपर जाएँ और रीफ़्रेश करें",
+  "No communities yet": "अभी कोई कम्युनिटी नहीं",
+  "{name} shortcuts": "{name} शॉर्टकट"
 });
