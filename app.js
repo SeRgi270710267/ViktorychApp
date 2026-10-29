@@ -13303,6 +13303,53 @@ const here = parseRoute();
     return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="home-feature" data-key="${esc(key)}"${blocked ? " disabled" : ""}><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(blocked ? tr("Turned off for everyone by the owner.") : note)}</p>`;
   }
 
+  /* Search Settings, like X. Words match every page; a question in plain
+     words also goes to the browser's built-in model when it has one. */
+  function settingsSearchHtml() {
+    if (!window.ViktorychSettingsAssistant) return "";
+    const q = String(STATE.settingsQ || "");
+    return `<div class="lang-search set-search"><label class="search"><span class="sr">${icon("search")}</span><input id="settings-q" type="search" autocomplete="off" placeholder="${esc(tr("Search Settings"))}" aria-label="${esc(tr("Search Settings"))}" value="${esc(q)}"></label>${window.ViktorychSettingsAssistant.available() ? `<p class="phandle set-search-tip">${esc(tr("Ask in your own words, like “make the text bigger”."))}</p>` : ""}</div><div class="set-list set-search-out" id="settings-q-out" aria-live="polite"${q.trim() ? "" : " hidden"}>${settingsSearchRows(q, -1)}</div>`;
+  }
+
+  function settingsSearchRows(q, pick) {
+    const sa = window.ViktorychSettingsAssistant;
+    if (!sa || !String(q || "").trim()) return "";
+    const t = (key, vars) => tr(key, Object.assign({ app: productName("app") }, vars || {}));
+    let rows = sa.rank(q, t, 6);
+    if (!accountToken()) rows = rows.filter((row) => row.href !== "#/settings/devices");
+    let out = "";
+    if (pick >= 0 && sa.INDEX[pick]) {
+      const hit = sa.INDEX[pick];
+      out += `<p class="phandle set-ai-pick">${esc(tr("Suggested by the on-device assistant"))}</p>` + settingsRow(hit[0], t(hit[1]), hit[2] ? t(hit[2]) : "");
+      rows = rows.filter((row) => row.href !== hit[0]);
+    }
+    out += rows.map((row) => settingsRow(row.href, row.title, row.sub)).join("");
+    return out || `<p class="phandle set-block">${esc(tr("No results"))}</p>`;
+  }
+
+  let settingsAskSeq = 0;
+  function settingsSearchInput(value) {
+    STATE.settingsQ = value;
+    const out = document.getElementById("settings-q-out");
+    const q = String(value || "").trim();
+    document.querySelectorAll(".set-main-list, .set-main-note").forEach((el) => { el.hidden = !!q; });
+    if (!out) return;
+    out.hidden = !q;
+    out.innerHTML = settingsSearchRows(value, -1);
+    const sa = window.ViktorychSettingsAssistant;
+    const seq = ++settingsAskSeq;
+    if (!q || !sa || !sa.looksLikeQuestion(q) || !sa.available()) return;
+    setTimeout(() => {
+      if (seq !== settingsAskSeq) return;
+      const t = (key, vars) => tr(key, Object.assign({ app: productName("app") }, vars || {}));
+      sa.ask(q, t).then((pick) => {
+        if (seq !== settingsAskSeq || pick < 0) return;
+        const box = document.getElementById("settings-q-out");
+        if (box) box.innerHTML = settingsSearchRows(value, pick);
+      });
+    }, 500);
+  }
+
   function settingsView() {
     const route = parseRoute();
     const section = route.section || "";
@@ -13543,7 +13590,7 @@ const here = parseRoute();
     const keysRow = window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()
       ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
       : "";
-    return settingsHead(tr("Settings"), "") + `<div class="set-block"><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list">
+    return settingsHead(tr("Settings"), "") + settingsSearchHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
@@ -19079,6 +19126,10 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     if (el.id === "quote-text") {
       const btn = document.getElementById("quote-post");
       if (btn) btn.disabled = !String(el.value || "").trim();
+      return;
+    }
+    if (el.id === "settings-q") {
+      settingsSearchInput(el.value);
       return;
     }
     if (el.id === "lang-q") {
