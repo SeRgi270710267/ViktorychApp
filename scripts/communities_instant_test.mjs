@@ -170,12 +170,19 @@ async function main() {
     for (let i = 0; i < 6; i++) { await page.mouse.wheel(0, 200); await page.waitForTimeout(60); }
     await page.waitForTimeout(600);
     const before = await page.evaluate(() => window.scrollY);
-    await page.evaluate(() => { location.hash = "#/communities/placeholder_one/placeholder_one_p0"; });
-    await page.waitForFunction(ROUTES[2].ready, null, { timeout: 4000 });
-    await page.waitForTimeout(300);
+    /* Open the thread the way a tap does: through a link click. */
+    await page.evaluate(() => {
+      const a = document.createElement("a");
+      a.href = "#/communities/placeholder_one/placeholder_one_p0";
+      (document.querySelector("main") || document.body).appendChild(a);
+      a.click();
+    });
+    await page.waitForFunction(ROUTES[2].ready, null, { timeout: 8000 });
+    await page.waitForTimeout(500);
     await page.goBack();
     await page.waitForFunction(ROUTES[1].ready, null, { timeout: 4000 });
-    await page.waitForTimeout(700);
+    await page.waitForFunction((y) => Math.abs(window.scrollY - y) <= 80, before, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(300);
     const after = await page.evaluate(() => window.scrollY);
     if (before < 300 || Math.abs(after - before) > 80) fail("scroll position was not kept: " + before + " -> " + after);
 
