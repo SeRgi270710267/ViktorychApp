@@ -27,7 +27,7 @@ Settings > Display > TV performance, and Reset puts them back:
 - Lighter images: the smaller image size
 - Video autoplay: Off (or Muted / On)
 - Fewer posts per page (12 instead of 25)
-- Lighter start: skip background preloading
+- Lighter start: only preload what a sidebar item needs; the rest loads when opened
 
 On the first TV start the device performance level is also set to Light, unless it was already set.
 Settings are stored under `viktorychapp-tv-v1` in the browser.
