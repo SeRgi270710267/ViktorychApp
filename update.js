@@ -7,7 +7,7 @@
   if (root) root.ViktorychUpdate = api;
   if (typeof document !== "undefined") api.start();
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var PREFIX = "viktorych-a98-";
+  var PREFIX = "viktorych-a101-";
   var SNOOZE_MS = 30 * 60 * 1000;
   var CHECK_MS = 3 * 60 * 1000;
   var RESTORE_MS = 2 * 60 * 1000;
@@ -17,6 +17,7 @@
   var FAIL_KEY = "viktorychapp-update-fails";
   var LOG_KEY = "viktorychapp-update-log";
   var FALLBACK_KEY = "viktorychapp-update-fallback";
+  var APPLIED_KEY = "viktorychapp-update-applied";
   var RING = 2 * Math.PI * 44;
 
   function tr(key, vars) {
@@ -118,12 +119,48 @@
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(text) ? text : "";
   }
 
-  function manifestPending(remoteSha, currentSha, remoteBuilt, currentBuilt) {
+  /* version.json only counts as an update when it is strictly newer than the
+     running build. Equal, older, or unknown build times stay idle, and a sha
+     this device already applied is never offered again. A real deploy still
+     shows up through the waiting service worker. */
+  function manifestPending(remoteSha, currentSha, remoteBuilt, currentBuilt, appliedSha) {
     if (!remoteSha || !currentSha || remoteSha === currentSha) return false;
+    if (appliedSha && remoteSha === appliedSha) return false;
     var remote = isoBuilt(remoteBuilt);
     var local = isoBuilt(currentBuilt);
-    if (remote && local) return remote > local;
-    return true;
+    if (!remote || !local) return false;
+    return remote > local;
+  }
+
+  function appliedSha() {
+    try { return String(localStorage.getItem(APPLIED_KEY) || "").toLowerCase(); } catch (err) { return ""; }
+  }
+
+  function remotePending() {
+    return manifestPending(state.remoteSha, state.currentSha, state.remoteBuilt, state.currentBuilt, appliedSha());
+  }
+
+  /* A waiting worker with the same sha as the running one only differs in
+     its build stamp: nothing to offer. Ask it over a private port; an older
+     worker that cannot answer falls back to the version.json check. */
+  function considerWaiting(worker) {
+    if (!worker) return;
+    state.waiting = worker;
+    var done = false;
+    function settle(sha) {
+      if (done) return;
+      done = true;
+      sha = String(sha || "").toLowerCase();
+      var fresh = sha ? (sha !== state.currentSha && sha !== appliedSha()) : remotePending();
+      if (fresh) { state.pending = true; paint(); }
+      else if (!applying) { state.waiting = null; }
+    }
+    try {
+      var channel = new MessageChannel();
+      channel.port1.onmessage = function (event) { settle(event.data && event.data.sha); };
+      worker.postMessage({ type: "sw-version" }, [channel.port2]);
+      setTimeout(function () { settle(""); }, 1500);
+    } catch (err) { settle(""); }
   }
 
   function shouldOfferReset(failures) {
@@ -524,6 +561,8 @@
     if (state.reloaded) return;
     state.reloaded = true;
     state.expectingController = false;
+    var appliedNow = state.remoteSha || state.currentSha;
+    if (appliedNow) writeStore(localStorage, APPLIED_KEY, appliedNow);
     state.failures = 0;
     state.failureNoted = false;
     state.failPath = "";
@@ -658,9 +697,10 @@
     if (data.type === "sw-version" && data.sha) {
       state.currentSha = String(data.sha).toLowerCase();
       state.currentBuilt = isoBuilt(data.built);
-      if (state.waiting) state.pending = true;
-      else if (manifestPending(state.remoteSha, state.currentSha, state.remoteBuilt, state.currentBuilt)) state.pending = true;
-      else if (state.phase === "offer") state.pending = false;
+      if (!(state.waiting && state.pending)) {
+        if (remotePending()) state.pending = true;
+        else if (state.phase === "offer") state.pending = false;
+      }
       paint();
       return;
     }
@@ -729,9 +769,7 @@
       if (worker.state !== "installed") return;
       var controller = navigator.serviceWorker.controller;
       if (controller && controller !== worker) {
-        state.waiting = worker;
-        state.pending = true;
-        paint();
+        considerWaiting(worker);
       } else if (!controller) maybePrime(state.reg);
     });
   }
@@ -745,8 +783,7 @@
     }
     if (reg.installing) track(reg.installing);
     if (reg.waiting && navigator.serviceWorker.controller) {
-      state.waiting = reg.waiting;
-      state.pending = true;
+      considerWaiting(reg.waiting);
     }
     maybePrime(reg);
     askVersion();
@@ -776,7 +813,7 @@
       state.remoteBuilt = isoBuilt(doc && doc.built);
       state.notes = notesOf(doc);
       state.short = String((doc && doc.short) || sha.slice(0, 7));
-      if (manifestPending(sha, state.currentSha, state.remoteBuilt, state.currentBuilt)) state.pending = true;
+      if (remotePending()) state.pending = true;
       paint();
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
