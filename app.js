@@ -20290,7 +20290,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       face = window.ViktorychPresence.wrap(pid, face);
       seen = window.ViktorychPresence.linesHtml(pid);
     }
-    box.innerHTML = `<div class="hcard">${banner}<div class="hbody"><div class="pava-row">${face}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${seen}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
+    box.innerHTML = `<div class="hcard">${banner}<div class="hbody"><div class="pava-row">${face}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}${affSlot({ publicId: presenceIdOf(profile) })}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${seen}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
     const left = Math.min(rect.left, window.innerWidth - 320);
     box.style.left = Math.max(8, left) + "px";
     box.style.top = (rect.bottom + 8) + "px";
