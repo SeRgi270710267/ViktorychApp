@@ -19,22 +19,25 @@ export const TIER_ORDER = ["free", "small", "medium", "premium"];
 export const PREMIUM_ART = ["crown", "comet", "gem", "ring", "unicorn", "lion", "trophy", "rocket", "crystal_ball", "magic_wand", "bouquet", "xmas_tree"];
 export const REFUND_DAYS = 14;
 
+/* Marks a display name as a translation key; the UI translates it when it renders. */
+const t = (key) => key;
+
 /* Limited editions: a fixed number of copies, numbered in order of purchase.
    base is the art they reuse. viktorychs 0 means money only. */
 export const LIMITED = [
-  { id: "crown_founders", base: "crown", name: "Founders’ crown", tier: "premium", viktorychs: 0, limit: 500, until: "" },
-  { id: "pumpkin_2026", base: "pumpkin", name: "Halloween 2026 pumpkin", tier: "small", viktorychs: 60, limit: 1000, until: "2026-11-08" },
-  { id: "unicorn_gold", base: "unicorn", name: "Golden unicorn", tier: "premium", viktorychs: 900, limit: 250, until: "" }
+  { id: "crown_founders", base: "crown", name: t("Founders’ crown"), tier: "premium", viktorychs: 0, limit: 500, until: "" },
+  { id: "pumpkin_2026", base: "pumpkin", name: t("Halloween 2026 pumpkin"), tier: "small", viktorychs: 60, limit: 1000, until: "2026-11-08" },
+  { id: "unicorn_gold", base: "unicorn", name: t("Golden unicorn"), tier: "premium", viktorychs: 900, limit: 250, until: "" }
 ];
 
 /* Sticker packs. Each sticker is one piece of our own art. */
 export const STICKER_PACKS = [
-  { id: "starter", name: "Starter stickers", tier: "free", viktorychs: 0, items: ["thanks", "hug", "cat_smile", "two_hearts", "heart_eyes", "party_popper"] },
-  { id: "critters", name: "Cute critters", tier: "small", viktorychs: 80, items: ["fox", "hedgehog", "otter", "sloth", "panda", "penguin", "koala", "hamster", "chipmunk", "seal", "frog", "turtle"] },
-  { id: "love", name: "Love notes", tier: "small", viktorychs: 80, items: ["heart", "kiss", "rose", "love_letter", "gift_heart", "blow_kiss", "cupid", "beating_heart", "sparkling_heart", "cat_love"] },
-  { id: "spooky", name: "Spooky night", tier: "small", viktorychs: 60, items: ["pumpkin", "ghost", "bat", "black_cat", "skull", "spider", "witch_broom", "zombie", "vampire", "imp", "alien_monster", "web"] },
-  { id: "party", name: "Party time", tier: "medium", viktorychs: 150, items: ["party_popper", "balloon", "cake", "candle", "spark", "star", "present", "doughnut", "lollipop", "hot_drink"] },
-  { id: "royal", name: "Royal treasures", tier: "premium", viktorychs: 400, items: ["crown", "gem", "ring", "trophy", "rocket", "comet", "unicorn", "lion", "crystal_ball", "magic_wand"] }
+  { id: "starter", name: t("Starter stickers"), tier: "free", viktorychs: 0, items: ["thanks", "hug", "cat_smile", "two_hearts", "heart_eyes", "party_popper"] },
+  { id: "critters", name: t("Cute critters"), tier: "small", viktorychs: 80, items: ["fox", "hedgehog", "otter", "sloth", "panda", "penguin", "koala", "hamster", "chipmunk", "seal", "frog", "turtle"] },
+  { id: "love", name: t("Love notes"), tier: "small", viktorychs: 80, items: ["heart", "kiss", "rose", "love_letter", "gift_heart", "blow_kiss", "cupid", "beating_heart", "sparkling_heart", "cat_love"] },
+  { id: "spooky", name: t("Spooky night"), tier: "small", viktorychs: 60, items: ["pumpkin", "ghost", "bat", "black_cat", "skull", "spider", "witch_broom", "zombie", "vampire", "imp", "alien_monster", "web"] },
+  { id: "party", name: t("Party time"), tier: "medium", viktorychs: 150, items: ["party_popper", "balloon", "cake", "candle", "spark", "star", "present", "doughnut", "lollipop", "hot_drink"] },
+  { id: "royal", name: t("Royal treasures"), tier: "premium", viktorychs: 400, items: ["crown", "gem", "ring", "trophy", "rocket", "comet", "unicorn", "lion", "crystal_ball", "magic_wand"] }
 ];
 
 const LOCAL = new Set(LOCAL_ART);
