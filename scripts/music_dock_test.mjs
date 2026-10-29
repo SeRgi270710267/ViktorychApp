@@ -1,5 +1,7 @@
 /* ViktorychMusic keeps playing while the user moves around the app. The mini
-   player sits above the phone bottom bar and along the bottom on desktop,
+   player is one more small corner square, the size of the chat squares and
+   the compose button, in their row with the same gap and never on top of
+   them, above the phone bottom bar;
    controls work, the queue and position survive a reload, and other sound in
    the app pauses the music. Generated tone and placeholder titles only. */
 import http from "node:http";
@@ -121,6 +123,13 @@ const state = () => {
     navTop: navBox && navBox.height ? navBox.top : 0,
     vh: window.innerHeight,
     title: (document.getElementById("mu-dock-title") || {}).textContent || "",
+    /* The other small corner squares: the chat row tiles and the compose button. */
+    squares: Array.from(document.querySelectorAll("#dock-root .xdock-panel:not(.is-open), .fab")).filter((el) => {
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 0 && r.height > 0;
+    }).map((el) => { const r = el.getBoundingClientRect(); return { kind: el.classList.contains("fab") ? "fab" : "chat", left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; }),
+    inRow: !!(dock && dock.classList.contains("in-row")),
     hash: location.hash
   };
 };
@@ -177,7 +186,16 @@ async function exercise(browser, origin, vp) {
     if (!after.mini || !after.shown) fail(where + " mini player is missing on " + hash);
     if (after.title !== "Tone A") fail(where + " mini player title " + after.title);
     if (after.navTop && after.bottom > after.navTop + 1) fail(where + " mini player covers the bottom bar");
-    if (Math.abs(after.width - after.height) > 1 || after.width > 180 || after.width < 96) fail(where + " mini player is not a small square " + after.width + "x" + after.height);
+    if (Math.abs(after.width - after.height) > 1 || after.width > 60 || after.width < 44) fail(where + " mini player is not a small square " + after.width + "x" + after.height);
+    for (const sq of after.squares) {
+      if (Math.abs(sq.width - after.width) > 1 || Math.abs(sq.height - after.height) > 1) fail(where + " mini player " + after.width + "px is not the size of the " + sq.kind + " square " + sq.width + "px");
+      if (after.left < sq.right && after.right > sq.left && after.top < sq.bottom && after.bottom > sq.top) fail(where + " mini player overlaps the " + sq.kind + " square");
+    }
+    const row = after.squares.filter((sq) => Math.abs(sq.bottom - after.bottom) < 1);
+    if (!row.length) fail(where + " mini player is not in a row with the other squares " + JSON.stringify(after.squares));
+    const gap = Math.min(...row.map((sq) => Math.max(sq.left - after.right, after.left - sq.right)));
+    if (Math.abs(gap - 12) > 1) fail(where + " mini player gap to its neighbour is " + gap + ", not 12");
+    if (where === "desktop" && !after.inRow) fail(where + " mini player is not in the chat squares row");
     if (after.right > after.vw + 1 || after.bottom > after.vh + 1 || after.left < 0 || after.top < 0) fail(where + " mini player is off screen");
     if (after.side && after.center && after.left < after.center.right && after.right > after.center.left) fail(where + " mini player covers the timeline");
     if (after.pad < after.height + 8) fail(where + " the page leaves no room under the mini player " + after.pad);
@@ -189,7 +207,10 @@ async function exercise(browser, origin, vp) {
   await wait(page, where + " step 153", () => document.getElementById("mu-audio").paused, null, { timeout: 5000 });
   await page.click("#mu-dock #mu-play");
   await wait(page, where + " step 155", () => !document.getElementById("mu-audio").paused, null, { timeout: 5000 });
-  await page.click("#mu-dock [data-act='music-next']");
+  await page.click("#mu-dock .mu-id");
+  await wait(page, where + " open for next", () => { const n = document.getElementById("mu-now"); return n && !n.hidden; }, null, { timeout: 5000 });
+  await page.click("#mu-now [data-act='music-next']");
+  await page.click("#mu-now [data-act='music-now-close']");
   await wait(page, where + " step 157", () => (document.getElementById("mu-dock-title") || {}).textContent === "Tone B" && !document.getElementById("mu-audio").paused, null, { timeout: 8000 });
   await ev(page, () => {
     const seek = document.getElementById("mu-seek");
@@ -198,19 +219,6 @@ async function exercise(browser, origin, vp) {
     seek.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await wait(page, where + " step 163", () => document.getElementById("mu-audio").currentTime >= 11.5, null, { timeout: 5000 });
-
-  /* With a mouse the popout drags into the nearest corner and remembers it. */
-  if (where === "desktop") {
-    const box = await page.$eval("#mu-dock", (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 24 }; });
-    await page.mouse.move(box.x, box.y);
-    await page.mouse.down();
-    await page.mouse.move(box.x - 300, box.y - 200, { steps: 6 });
-    await page.mouse.move(120, 120, { steps: 6 });
-    await page.mouse.up();
-    await wait(page, where + " drag", () => { const d = document.getElementById("mu-dock"); const r = d.getBoundingClientRect(); return d.getAttribute("data-corner") === "tl" && r.top < 60 && r.left < 60 && localStorage.getItem("viktorych-music-corner") === "tl"; }, null, { timeout: 5000 });
-    if (!(await ev(page, () => document.getElementById("mu-now").hidden))) fail(where + " dragging opened the full player");
-    await ev(page, () => { localStorage.setItem("viktorych-music-corner", "br"); document.getElementById("mu-dock").setAttribute("data-corner", "br"); });
-  }
 
   /* The mini player opens the full now playing view. */
   await page.click("#mu-dock .mu-id");
@@ -239,7 +247,14 @@ async function exercise(browser, origin, vp) {
   await wait(page, where + " step 188", () => { const a = document.getElementById("mu-audio"); return !a.paused && a.currentTime >= 11; }, null, { timeout: 10000 });
 
   /* Close stops playback and removes the mini player. */
-  await page.click("#mu-dock .mu-mini-x");
+  if (where === "desktop") {
+    await page.hover("#mu-dock .mu-id");
+    await page.click("#mu-dock .mu-mini-x");
+  } else {
+    await page.click("#mu-dock .mu-id");
+    await wait(page, where + " open to close", () => { const n = document.getElementById("mu-now"); return n && !n.hidden; }, null, { timeout: 5000 });
+    await page.click("#mu-now [data-act='music-stop']");
+  }
   await wait(page, where + " step 192", () => document.getElementById("mu-audio").paused && document.getElementById("mu-dock").hidden && !document.documentElement.classList.contains("music-mini"), null, { timeout: 5000 });
   if (errors.length) fail(where + " page error " + errors[0]);
   await context.close();
@@ -254,7 +269,9 @@ async function main() {
   try {
     await Promise.all([
       exercise(browser, origin, { name: "phone", width: 390, height: 844 }),
-      exercise(browser, origin, { name: "desktop", width: 1280, height: 800 })
+      exercise(browser, origin, { name: "desktop", width: 1280, height: 800 }),
+      exercise(browser, origin, { name: "tablet", width: 820, height: 1180 }),
+      exercise(browser, origin, { name: "landscape", width: 844, height: 390 })
     ]);
     console.log("music dock ok");
   } finally {
