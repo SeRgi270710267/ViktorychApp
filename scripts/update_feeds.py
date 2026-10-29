@@ -1790,6 +1790,19 @@ def main() -> None:
                 write_status()
         except Exception as exc:
             print(f"[health] {exc}", file=sys.stderr)
+        try:
+            # X Community Notes on our X posts: once a day, streamed and
+            # filtered, only when this refresh still has time to spare.
+            from x_notes_mirror import mirror as mirror_x_notes
+
+            limit = feed_deadline()
+            spare = (limit - time.monotonic()) if limit else 240.0
+            if spare < 90:
+                print("[xnotes] skipped; refresh budget spent", file=sys.stderr)
+            else:
+                print(f"[xnotes] {mirror_x_notes(doc['posts'], budget=min(180.0, spare - 30))}")
+        except Exception as exc:
+            print(f"[xnotes] {exc}", file=sys.stderr)
         if video_failed is not None:
             try:
                 from video_media import write_video_status
