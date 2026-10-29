@@ -122,6 +122,8 @@ body {
 }
 @view-transition { navigation: auto; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; animation-timing-function: ease; }
+/* A route that takes a moment to render dims the old view; it never blocks input. */
+.center.route-wait > * { opacity: .55; transition: opacity .12s ease .06s; }
 .nav, .topbar, .bottom-nav, .drawer, .fab, .tab, button, .mhead {
   -webkit-user-select: none;
   user-select: none;

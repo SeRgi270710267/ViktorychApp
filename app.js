@@ -17230,7 +17230,109 @@ if (STATE.histClear) {
     else startPlayback(tile, {});
   }
 
+  /* Background renders (feed data arriving, modules refreshing) rebuild the
+     whole shell, sidebar included. While the feed loaded that happened many
+     times a second, so a press that started on a nav link ended on a brand-new
+     node and the browser dropped the click: the UI felt locked. Now a
+     background render waits while a pointer is held, and bursts merge into one
+     render with a gap for input while the feed loads. Renders from the
+     user's own input stay synchronous. */
+  var renderQ = { held: false, heldAt: 0, pending: false, opts: null, last: 0, scheduled: false, flushing: false };
+  const RENDER_GAP_MS = 120;
+  const RENDER_HOLD_MAX_MS = 1500;
+
+  function inUserInput() {
+    const ev = window.event;
+    return !!(ev && ev.type && /^(click|dblclick|auxclick|contextmenu|pointer|mouse|touch|key|input|change|submit|wheel|drag|drop|paste|cut|copy|composition|focus|blur|hashchange|popstate)/.test(ev.type));
+  }
+
+  function renderHeld() {
+    if (renderQ.held && performance.now() - renderQ.heldAt > RENDER_HOLD_MAX_MS) renderQ.held = false;
+    return renderQ.held;
+  }
+
+  function renderDeferred(opts) {
+    if (renderQ.flushing || inUserInput()) return false;
+    const held = renderHeld();
+    // Bursts only merge while the feed is still loading; after that every
+    // render stays synchronous, as callers expect.
+    const burst = !opts && !!(STATE && STATE.loading) && (renderQ.scheduled || performance.now() - renderQ.last < RENDER_GAP_MS);
+    if (!held && !burst) return false;
+    if (opts) renderQ.opts = opts;
+    renderQ.pending = true;
+    if (!held) scheduleRenderFlush();
+    return true;
+  }
+
+  function scheduleRenderFlush() {
+    if (renderQ.scheduled) return;
+    renderQ.scheduled = true;
+    const wait = Math.max(16, Math.round(renderQ.last + RENDER_GAP_MS - performance.now()));
+    setTimeout(() => {
+      renderQ.scheduled = false;
+      if (!renderQ.pending) return;
+      if (renderHeld()) return;
+      const queued = renderQ.opts;
+      renderQ.flushing = true;
+      try { render(queued || undefined); } finally { renderQ.flushing = false; }
+    }, wait);
+  }
+
+  function releaseRenderHold() {
+    setTimeout(() => {
+      renderQ.held = false;
+      if (renderQ.pending) scheduleRenderFlush();
+    }, 0);
+  }
+
+  /* A press whose node was swapped out by a render that still slipped in
+     (one from the user's own input) gets its click delivered to the matching
+     node that now sits under the pointer. */
+  const PRESS_SEL = "a[href], button, [data-act], [data-open], [role='tab']";
+  let pressRec = null;
+  function pressSig(el) {
+    return [el.tagName, el.getAttribute("href") || "", el.getAttribute("data-act") || "", el.getAttribute("data-open") || "", el.getAttribute("data-id") || "", el.getAttribute("data-tab") || "", el.getAttribute("aria-label") || "", String(el.textContent || "").trim().slice(0, 60)].join("|");
+  }
+  try {
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.isTrusted) return;
+      if (event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) { pressRec = null; return; }
+      renderQ.held = true;
+      renderQ.heldAt = performance.now();
+      const el = event.target && event.target.closest ? event.target.closest(PRESS_SEL) : null;
+      pressRec = el ? { el: el, sig: pressSig(el) } : null;
+    }, true);
+    document.addEventListener("pointerup", (event) => {
+      if (!event.isTrusted) return;
+      const rec = pressRec;
+      pressRec = null;
+      releaseRenderHold();
+      if (!rec || rec.el.isConnected || event.isPrimary === false) return;
+      const hit = document.elementFromPoint(event.clientX, event.clientY);
+      const twin = hit && hit.closest ? hit.closest(PRESS_SEL) : null;
+      if (!twin || pressSig(twin) !== rec.sig) return;
+      let clicked = false;
+      const mark = (ev) => { if (ev.target && twin.contains(ev.target)) clicked = true; };
+      document.addEventListener("click", mark, true);
+      setTimeout(() => {
+        document.removeEventListener("click", mark, true);
+        if (!clicked && twin.isConnected) twin.click();
+      }, 0);
+    }, true);
+    document.addEventListener("pointercancel", () => { pressRec = null; releaseRenderHold(); }, true);
+    window.addEventListener("blur", () => { pressRec = null; releaseRenderHold(); });
+  } catch (err) { /* no document */ }
+
   function render(opts) {
+    if (!renderQ) return renderNow(opts);
+    if (renderDeferred(opts)) return;
+    if (!opts && renderQ.opts) opts = renderQ.opts;
+    renderQ.pending = false;
+    renderQ.opts = null;
+    try { return renderNow(opts); } finally { renderQ.last = performance.now(); }
+  }
+
+  function renderNow(opts) {
     if (document.documentElement.classList.contains("is-split-drag")) {
       STATE.splitRender = opts || STATE.splitRender || {};
       return;
@@ -17304,7 +17406,11 @@ if (STATE.histClear) {
     rememberPlayback();
     if (leavingWatch) STATE.playing = null;
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const transition = routeChanged && document.startViewTransition && !reduced;
+    /* No document.startViewTransition for route changes: while one runs the
+       browser hit-tests the whole page as <html>, so every click in the
+       ~250 ms after a tap (longer on slow CPUs) went nowhere. The centre
+       column fades in with .route-in instead, which never blocks input. */
+    const transition = false && routeChanged && !reduced;
     const apply = () => {
       if (gen !== STATE.renderGen) return;
       if (STATE.snapTop) y = 0;
@@ -20677,15 +20783,43 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     hscrollNav = true;
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
-    render({
-      y: y,
-      done: () => {
-        if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
-        routing = false;
-        scrollFreeze = false;
-      }
+    // The tapped item lights up and the page answers on the next frame; the
+    // new view renders right after that paint instead of inside the click.
+    paintNavNow(nextRoute);
+    const token = ++routeRenderToken;
+    afterNextPaint(() => {
+      if (token !== routeRenderToken) return;
+      render({
+        y: y,
+        done: () => {
+          if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
+          routing = false;
+          scrollFreeze = false;
+        }
+      });
     });
   });
+
+  let routeRenderToken = 0;
+  function afterNextPaint(fn) {
+    let ran = false;
+    const go = () => { if (ran) return; ran = true; fn(); };
+    if (window.requestAnimationFrame && document.visibilityState !== "hidden") window.requestAnimationFrame(() => setTimeout(go, 0));
+    setTimeout(go, 100);
+  }
+
+  function paintNavNow(route) {
+    try {
+      document.querySelectorAll("a.nav-item[href], .bottom-nav a[href]").forEach((a) => {
+        const on = sameNavSection(route, a.getAttribute("href") || "");
+        a.classList.toggle("on", on);
+        if (on) a.setAttribute("aria-current", "page");
+        else a.removeAttribute("aria-current");
+      });
+      const center = document.querySelector("main.center");
+      if (center) center.classList.add("route-wait");
+    } catch (err) { /* the render paints it anyway */ }
+  }
 
   function resolvedTheme() {
     const mode = (STATE.settings && STATE.settings.appearance) || "lightsout";
