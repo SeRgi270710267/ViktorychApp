@@ -4,7 +4,7 @@ const VERSION = "viktorych-a132-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T14:44:00Z-block
+// cache-bust: block
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -53,6 +53,7 @@ const SHELL_FILES = [
   "./dock.css",
   "./dock.js",
   "./i18n.js",
+  "./shared/blocklist.js",
   "./i18n/en.js",
   "./i18n/ru.js",
   "./i18n/es.js",
@@ -112,7 +113,6 @@ const SHELL_FILES = [
   "./presence.js",
   "./pulse.js",
   "./presence.css",
-  "./shared/blocklist.js",
   "./shared/presence.js",
   "./about-ui.js",
   "./gifts-ui.js",

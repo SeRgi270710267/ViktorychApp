@@ -342,7 +342,9 @@
     var bases = api.bases(root, "", "").filter(function (base) { return base !== api.normalizeBase(root); });
     var next = bases.length ? api.rewrite(bases[0], rel) : "";
     if (!next) return fallback || Promise.reject(new Error("fetch"));
-    return nativeFetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store" }).then(function (res) {
+    var t = timedSignal(DATA_TIMEOUT, init && init.signal);
+    return nativeFetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", signal: t.signal }).then(function (res) {
+      t.done();
       if (res && res.ok && res.type !== "opaque") return res;
       return fallback || res;
     }).catch(function () {
@@ -372,12 +374,16 @@
     var path = "/v1/data/" + key.split("/").map(encodeURIComponent).join("/");
     function attempt(i) {
       var apiRoot = order[i];
+      // A stalled root must not hang the feed: give up after a while and try the next one.
+      var t = timedSignal(Number(config().dataTimeoutMs) || DATA_TIMEOUT, init && init.signal);
       return nativeFetch(apiRoot + path, {
         method: "GET",
         headers: headers,
         credentials: "omit",
-        cache: "no-store"
+        cache: "no-store",
+        signal: t.signal
       }).then(function (res) {
+        t.done();
         if (failoverStatus(res.status)) {
           rotateApi(apiRoot, retryAfterMs(res));
           if (i + 1 < order.length) return attempt(i + 1);
@@ -387,6 +393,8 @@
         if (res.status === 200 && mark) pulseKeep(key, mark, res.clone());
         return res;
       }, function (err) {
+        t.done();
+        if (init && init.signal && init.signal.aborted) throw err;
         rotateApi(apiRoot, 0);
         if (i + 1 < order.length) return attempt(i + 1);
         throw err;
@@ -485,6 +493,27 @@
   function later(fn, ms) { return typeof setTimeout === "function" ? setTimeout(fn, ms) : 0; }
   function stopLater(id) { if (id && typeof clearTimeout === "function") clearTimeout(id); }
   var READ_TIMEOUT = 15000;
+  var DATA_TIMEOUT = 20000;
+  var WRITE_TIMEOUT = 30000;
+  var UPLOAD_TIMEOUT = 120000;
+  /* A signal that aborts after ms, or when the caller's own signal aborts.
+     done() clears the timer; timedOut() tells a timeout from a caller abort. */
+  function timedSignal(ms, outer) {
+    if (typeof AbortController !== "function") return { signal: outer || undefined, done: function () {}, timedOut: function () { return false; } };
+    var ctrl = new AbortController();
+    var fired = false;
+    var timer = later(function () { fired = true; try { ctrl.abort(); } catch (err) { /* over */ } }, ms || 20000);
+    function onOuter() { try { ctrl.abort(); } catch (err) { /* over */ } }
+    if (outer) {
+      if (outer.aborted) onOuter();
+      else if (outer.addEventListener) outer.addEventListener("abort", onOuter, { once: true });
+    }
+    return {
+      signal: ctrl.signal,
+      done: function () { stopLater(timer); if (outer && outer.removeEventListener) outer.removeEventListener("abort", onOuter); },
+      timedOut: function () { return fired; }
+    };
+  }
   var HEDGE_MS = 3000;
   var trouble = { all: 0, at: 0 };
   function troubleNote(ok) {
@@ -561,8 +590,11 @@
         return Promise.resolve({ status: 503, error: "all_endpoints_failed" });
       }
       var root = list[endpointIndex];
-      var sent = send(root, null);
+      var limit = Number(opts.timeoutMs) || (opts.form ? UPLOAD_TIMEOUT : (Number(config().writeTimeoutMs) || WRITE_TIMEOUT));
+      var t = timedSignal(limit, opts.signal);
+      var sent = send(root, t.signal);
       return sent.promise.then(function (res) {
+        t.done();
         if (failoverStatus(res.status)) {
           rotateApi(root, retryAfterMs(res));
           if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
@@ -570,6 +602,15 @@
         troubleNote(true);
         return finish(root, res, sent.tagKey, sent.held);
       }).catch(function (err) {
+        t.done();
+        // A write that timed out may still have arrived, so it is not sent
+        // to another root (that could apply it twice).
+        if (t.timedOut()) {
+          rotateApi(root, 0);
+          troubleNote(false);
+          return { status: 504, error: "timeout" };
+        }
+        if (opts.signal && opts.signal.aborted) throw err;
         rotateApi(root, 0);
         if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
         troubleNote(false);
