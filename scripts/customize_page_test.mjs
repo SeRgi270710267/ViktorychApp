@@ -87,6 +87,8 @@ async function check(page, label) {
     edit: !!document.querySelector(".pz-page [data-act='drawer-edit']"),
     drawer: !!document.querySelector(".drawer-x")
   }));
+  const ach = await page.evaluate(() => !window.ViktorychAchievements || !!document.querySelector(".pz-page .pz-ach [data-ach-set='sound']"));
+  if (!ach) fail(label + " Achievements settings are missing");
   if (parts.sections < 8 || parts.themes !== 3 || parts.accents !== 6 || parts.fonts !== 5 || !parts.edit) fail(label + " page is missing parts " + JSON.stringify(parts));
   if (parts.drawer) fail(label + " the menu stayed open over the page");
   await page.locator(".pz-accent[data-value='pink']").click();

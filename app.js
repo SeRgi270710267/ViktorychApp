@@ -14772,6 +14772,7 @@ const here = parseRoute();
         <h3>${esc(tr("Live previews"))}</h3><div class="theme-row" role="group" aria-label="${esc(tr("Live previews"))}">${["auto", "on", "off"].map((id) => seg("live-preview", `data-mode="${id}"`, livePreview === id, id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))).join("")}</div>
         <div class="set-list">${settingsRow("#/settings/data", tr("Data usage"), tr("Save data, reactions and sharing between devices."))}${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}</div>`)}
       ${sec(tr("Motion"), sw("pz-look", look.reduceMotion, tr("Reduce motion"), tr("Fewer animations and no sliding screens. Your device setting is always followed too."), ` data-key="reduceMotion"`))}
+      ${window.ViktorychAchievements && window.ViktorychAchievements.settingsHtml ? `<div class="pz-sec pz-ach">${window.ViktorychAchievements.settingsHtml()}</div>` : ""}
       ${sec(tr("Menus and navigation"), `<div class="set-list"><button class="set-row" type="button" data-act="drawer-edit"><span class="set-copy"><b>${esc(tr("Edit menu"))}</b><span class="set-sub">${esc(tr("Reorder, hide and group the items in the side menu."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}</div>
         <div class="pz-wide-only theme-row">${seg("nav-collapse", "", collapsed, tr("Collapse sidebar"))}</div>
         ${logoSettingsHtml()}
@@ -15033,7 +15034,7 @@ const here = parseRoute();
         ${sameSwitch}
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
-        ${window.ViktorychAchievements && window.ViktorychAchievements.settingsHtml ? window.ViktorychAchievements.settingsHtml() : ""}
+        ${window.ViktorychAchievements ? `<div class="set-list">${settingsRow("#/customize", tr("Achievements"), tr("A short animation plays when you earn a badge."))}</div>` : ""}
       </div>`;
     }
     if (section === "security") {
