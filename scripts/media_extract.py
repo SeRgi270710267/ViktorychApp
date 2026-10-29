@@ -867,9 +867,14 @@ def extract() -> int:
     except Exception:
         pass
     try:
-        from log_redact import install
+        from log_redact import collect, install
 
-        install(tracked + [row.get("handle") for row in accounts if isinstance(row, dict)])
+        quiet = set(tracked)
+        collect(accounts, quiet)
+        collect(config, quiet)
+        collect(accounts_doc, quiet)
+        collect(x_doc, quiet)
+        install(quiet)
     except Exception:
         pass
     if not accounts:
@@ -1165,4 +1170,10 @@ def main(argv: list | None = None) -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     sys.exit(main())
