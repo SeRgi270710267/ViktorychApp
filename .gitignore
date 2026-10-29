@@ -16,3 +16,4 @@ owner/
 !/data/communities/index.json
 .wrangler/
 .discord-x/
+backup-server/node_modules/

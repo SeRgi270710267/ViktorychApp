@@ -130,4 +130,27 @@ await cache.default.put(request, new Response("cached"));
 const hit = await cache.default.match(request);
 assert.equal(await hit.text(), "cached");
 
+console.log("[test] memory cache: max-age, private, size cap, LRU budget");
+{
+  let now = 1000;
+  const small = createMemoryCache({ maxBytes: 10, maxEntryBytes: 6, now: () => now });
+  const c = small.default;
+  await c.put(new Request("https://cache.test/ttl"), new Response("abc", { headers: { "cache-control": "max-age=60" } }));
+  assert.equal(await (await c.match(new Request("https://cache.test/ttl"))).text(), "abc");
+  now += 61000;
+  assert.equal(await c.match(new Request("https://cache.test/ttl")), undefined, "expired entries are gone");
+  await c.put(new Request("https://cache.test/p"), new Response("abc", { headers: { "cache-control": "private, max-age=600" } }));
+  assert.equal(await c.match(new Request("https://cache.test/p")), undefined, "private is not cached");
+  await c.put(new Request("https://cache.test/big"), new Response("1234567"));
+  assert.equal(await c.match(new Request("https://cache.test/big")), undefined, "bodies over the entry cap are skipped");
+  await c.put(new Request("https://cache.test/1"), new Response("12345"));
+  await c.put(new Request("https://cache.test/2"), new Response("12345"));
+  await c.match(new Request("https://cache.test/1"));
+  await c.put(new Request("https://cache.test/3"), new Response("12345"));
+  assert.ok(small.stats.bytes <= 10, "stays inside the byte budget");
+  assert.equal(await c.match(new Request("https://cache.test/2")), undefined, "least recently used goes first");
+  assert.equal(await (await c.match(new Request("https://cache.test/1"))).text(), "12345");
+  assert.equal(typeof (await small.open("x")).match, "function", "caches.open works");
+}
+
 console.log("[test] ALL CLOUDFLARE BACKUP TESTS PASSED!");
