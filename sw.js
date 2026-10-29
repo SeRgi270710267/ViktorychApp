@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a99-__SW_VERSION__";
+const VERSION = "viktorych-a100-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T03:47:00Z-p2p-direct
+// cache-bust: 2026-10-29T03:56:00Z-p2p-direct
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -206,7 +206,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js"];
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a99-";
+  const prefix = "viktorych-a100-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1519,6 +1519,10 @@ self.addEventListener("message", (event) => {
   }
   if (data.type === "sw-version") {
     const info = versionInfo();
+    if (event.ports && event.ports[0]) {
+      try { event.ports[0].postMessage({ type: "sw-version", version: info.version, sha: info.sha, built: info.built }); } catch (err) { /* the page already continued */ }
+      return;
+    }
     if (event.source) {
       try { event.source.postMessage({ type: "sw-version", version: info.version, sha: info.sha, built: info.built }); } catch (err) { /* the page already continued */ }
     }
