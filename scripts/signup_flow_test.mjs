@@ -133,7 +133,14 @@ async function gotoFresh(page) {
 }
 
 async function logOut(page) {
-  await page.locator("[data-acct='logout']").waitFor({ state: "attached", timeout: 20000 });
+  // A sign-in that is still settling can bounce the first settings visit
+  // (seen on CI runners), so open settings again before giving up.
+  for (let attempt = 0; ; attempt++) {
+    const found = await page.locator("[data-acct='logout']").waitFor({ state: "attached", timeout: 8000 }).then(() => true, () => false);
+    if (found) break;
+    if (attempt >= 2) throw new Error("settings never showed Log out (" + page.url() + ")");
+    await openPage(page, "/#/settings");
+  }
   // Log out sits far below the phone viewport, and settings redraws while
   // federation status loads. Scrolling, or clicking a node resolved earlier,
   // misses the handler. Click the button that is in the document now.
