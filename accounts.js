@@ -1341,7 +1341,7 @@ var numberNote = form.passkey
      account unless the account switch is off or this device keeps its own.
      The account switch syncs itself (last write wins by syncUiAt); the
      device override never leaves this device. */
-  var UI_KEYS = ["appearance", "drawerMenu", "navCustom", "navCustomAt", "bottomNav", "bottomNavCustom", "profileTabs", "homePills", "stories", "prefsAt", "showPictures", "showBanners"];
+  var UI_KEYS = ["appearance", "drawerMenu", "navCustom", "navCustomAt", "bottomNav", "bottomNavCustom", "inboxLayout", "profileTabs", "homePills", "stories", "prefsAt", "showPictures", "showBanners"];
   var DEVICE_OWN_KEY = "viktorychapp-device-own-ui";
   function deviceOwnUi() {
     try { return localStorage.getItem(DEVICE_OWN_KEY) === "1"; } catch (err) { return false; }
@@ -1366,7 +1366,7 @@ var numberNote = form.passkey
     if (!reg) return [];
     return reg.localKeys({ allOff: !!settings && settings.syncUi === false, lookOwn: deviceOwnUi() });
   }
-  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "peopleLinks", "friendsRail", "brandLogo"];
+  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "peopleLinks", "friendsRail", "brandLogo", "inboxLayout"];
   function pickPrefs(local, remote) {
     // Home pills and Stories: each key keeps the newer choice.
     var out = {};
