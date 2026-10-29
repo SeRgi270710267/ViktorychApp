@@ -282,7 +282,7 @@
   function cdnUrl(url) {
     const text = String(url || "");
     if (!text || text.length > 500 || /[\s<>"'\\]/.test(text)) return "";
-    if (!/^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\//.test(text)) return "";
+    if (!/^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net|(?:[a-z0-9-]+\.)*(?:userapi\.com|vkuserphoto\.ru|vk-cdn\.net|vk\.com|vk\.ru))\//.test(text)) return "";
     return text;
   }
 
@@ -1728,7 +1728,7 @@
   }
 
   function docPathOk(path) {
-    return /^discord\/(?:index|state|messages\/\d{1,22}(?:\/p\/\d{1,4})?|pins\/\d{1,22})\.json$/.test(String(path || ""));
+    return /^discord\/(?:index|state|vk|messages\/\d{1,22}(?:\/p\/\d{1,4})?|pins\/\d{1,22})\.json$/.test(String(path || ""));
   }
 
   function accountsBase() {
@@ -1988,7 +1988,7 @@
 
   function ensurePins(id) {
     const ch = channelById(id);
-    if (!ch || ch.mode !== "messages" || state.fixture || paced() || state.pinFiles[id] || state.pinLoading[id]) return;
+    if (!ch || ch.mode !== "messages" || state.fixture || isVk(id) || paced() || state.pinFiles[id] || state.pinLoading[id]) return;
     if (typeof fetch !== "function") return;
     state.pinLoading[id] = true;
     loadDoc("discord/pins/" + id + ".json", function (doc, fresh) {
@@ -2018,6 +2018,7 @@
       if (doc || fresh) state.loading[id] = false;
       if (state.open === id && (doc || fresh)) paintChannel(id);
       if (doc || fresh) noteShared();
+      if (doc && isVk(id) && state.open !== id && onMessages()) refreshInbox();
     });
   }
 
@@ -2035,7 +2036,8 @@
       return;
     }
     pending.then(function (res) { return res && res.ok ? res.json() : null; }).then(function (doc) {
-      if (doc && Array.isArray(doc.discord)) applyConfig(doc.discord);
+      if (doc && Array.isArray(doc.discord)) { state.configList = doc.discord; applyConfig(doc.discord); }
+      loadVk();
       return loadDoc("discord/index.json", function (index, fresh) {
         if (index) {
           applyIndex(index);
@@ -2050,6 +2052,36 @@
       noteShared();
     });
   }
+
+  /* VK channels (Worker cron, see worker/src/vk.js) join the Discord list as
+     one more server. They have no live push, so an open VK channel and the
+     list re-read every minute while the page is visible. */
+  function isVk(id) { return /^99\d{12}$/.test(String(id || "")); }
+  function loadVk() {
+    return loadDoc("discord/vk.json", function (doc) {
+      const vk = doc && Array.isArray(doc.servers) ? doc.servers.filter(function (server) { return server && /^99\d{13}$/.test(String(server.id || "")); }) : [];
+      if (!vk.length) return;
+      state.vkServers = vk;
+      const before = state.channels.map(function (ch) { return ch.id; }).join(",");
+      applyConfig((state.configList || []).concat(vk));
+      // VK has no index.json, so read each channel once for its preview.
+      state.channels.forEach(function (ch) { if (isVk(ch.id) && !state.files[ch.id]) ensureChannel(ch.id); });
+      if (!onMessages()) return;
+      // A new channel needs the whole list drawn again, not a repaint.
+      if (before !== state.channels.map(function (ch) { return ch.id; }).join(",") && hooks().render) hooks().render();
+      else refreshInbox();
+    });
+  }
+  function vkTick() {
+    if (typeof document === "undefined" || document.visibilityState !== "visible" || !onMessages() || !state.vkServers) return;
+    loadVk();
+    (state.channels || []).forEach(function (ch) {
+      if (!isVk(ch.id) || state.open !== ch.id) return;
+      state.net[ch.id] = false;
+      ensureChannel(ch.id);
+    });
+  }
+  if (typeof setInterval === "function") setInterval(vkTick, 60000);
 
   function onMessages() {
     try { return /^#\/messages(?:\/|\?|$)/.test(location.hash || ""); }

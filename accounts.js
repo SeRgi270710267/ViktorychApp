@@ -31,6 +31,39 @@
   var friendsCache = {};
   var friendsLoads = {};
   var friendRequestsCache = { incoming: [], outgoing: [] };
+  /* Pending friend requests survive a reload: the last server list is kept
+     per account in localStorage, so the profile button shows Request Sent
+     (or Confirm) at first paint instead of Add friend. */
+  var FRIEND_REQ_KEY = "friend-req-v1";
+  function friendReqHandles(list) {
+    return (list || []).map(function (r) { return String((r && r.handle) || "").replace(/^@/, "").toLowerCase(); }).filter(Boolean).slice(0, 200);
+  }
+  function friendReqOwner() {
+    var session = readSession();
+    return session && session.account ? String(session.account.publicId || session.account.handle || "") : "";
+  }
+  function saveFriendReqs() {
+    var owner = friendReqOwner();
+    if (!owner) return;
+    writeStored(FRIEND_REQ_KEY, JSON.stringify({ owner: owner, out: friendReqHandles(friendRequestsCache.outgoing), inc: friendReqHandles(friendRequestsCache.incoming) }));
+  }
+  function storedFriendReqs() {
+    try {
+      var raw = JSON.parse(readStored(FRIEND_REQ_KEY) || "null");
+      if (!raw || raw.owner !== friendReqOwner()) return { out: [], inc: [] };
+      return { out: Array.isArray(raw.out) ? raw.out : [], inc: Array.isArray(raw.inc) ? raw.inc : [] };
+    } catch (err) { return { out: [], inc: [] }; }
+  }
+  function pendingFriendStatus(handle) {
+    var h = String(handle || "").replace(/^@/, "").toLowerCase();
+    if (!h) return "";
+    var live = friendRequestsLoaded ? { out: friendReqHandles(friendRequestsCache.outgoing), inc: friendReqHandles(friendRequestsCache.incoming) } : storedFriendReqs();
+    if (live.out.indexOf(h) >= 0) return "sent";
+    if (live.inc.indexOf(h) >= 0) return "received";
+    return "";
+  }
+  var friendRequestsLoaded = false;
+  var friendReqTriedAt = 0;
   var friendRequestsLoading = false;
   var friendsSearchQuery = "";
   var friendsSubTab = "all";
@@ -2217,7 +2250,7 @@ function signupPayload() {
     if (account.followingCount != null && !graphCounts[id].fresh) graphCounts[id].following = account.followingCount;
     if (account.followersCount != null && !graphCounts[id].fresh) graphCounts[id].followers = account.followersCount;
     if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
-    if (account.viewerFriendStatus != null) graphCounts[id].friendStatus = account.viewerFriendStatus;
+    if (account.viewerFriendStatus != null && !(graphCounts[id].friendAt && Date.now() - graphCounts[id].friendAt < 60000)) graphCounts[id].friendStatus = account.viewerFriendStatus;
     if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
     graphCounts[id].pending = !!account.viewerPending;
     graphCounts[id].viewerBlocks = !!account.viewerBlocks;
@@ -2534,7 +2567,10 @@ function signupPayload() {
     var session = readSession();
     var ref = accountRef(account);
     if (!session || !account || !ref || profileMine(account)) return "";
+    if (!friendRequestsLoaded && Date.now() - friendReqTriedAt > 60000) { friendReqTriedAt = Date.now(); ensureFriendRequests(); }
     var status = (graphCounts[ref] && graphCounts[ref].friendStatus) || account.viewerFriendStatus || "none";
+    var recent = graphCounts[ref] && graphCounts[ref].friendAt && Date.now() - graphCounts[ref].friendAt < 60000;
+    if (status === "none" && !recent) status = pendingFriendStatus(account.handle) || "none";
     var pid = ref;
     var handle = account.handle || "";
 
@@ -2583,6 +2619,8 @@ function signupPayload() {
         incoming: Array.isArray(res.incoming) ? res.incoming : [],
         outgoing: Array.isArray(res.outgoing) ? res.outgoing : []
       };
+      friendRequestsLoaded = true;
+      saveFriendReqs();
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { friendRequestsLoading = false; });
   }
@@ -2622,26 +2660,29 @@ function signupPayload() {
     var prevCount = graphCounts[idKey].friends || 0;
     var prevMyCount = (graphCounts[meKey] && graphCounts[meKey].friends) || 0;
 
+    graphCounts[idKey].friendAt = Date.now();
+    var reqHandle = String(handle || "").replace(/^@/, "");
     if (action === "request") {
       graphCounts[idKey].friendStatus = "sent";
+      if (reqHandle && !friendRequestsCache.outgoing.some(function (r) { return String(r.handle || "").toLowerCase() === reqHandle.toLowerCase(); })) friendRequestsCache.outgoing.unshift({ handle: reqHandle, id: "app:@" + reqHandle, friendStatus: "sent" });
     } else if (action === "accept") {
       graphCounts[idKey].friendStatus = "friends";
       graphCounts[idKey].friends = prevCount + 1;
       graphCounts[meKey] = graphCounts[meKey] || {};
       graphCounts[meKey].friends = prevMyCount + 1;
       friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
-        return r.id !== tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId && !(reqHandle && String(r.handle || "").toLowerCase() === reqHandle.toLowerCase());
       });
       friendsCache = {};
     } else if (action === "decline") {
       graphCounts[idKey].friendStatus = "none";
       friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
-        return r.id !== tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId && !(reqHandle && String(r.handle || "").toLowerCase() === reqHandle.toLowerCase());
       });
     } else if (action === "cancel") {
       graphCounts[idKey].friendStatus = "none";
       friendRequestsCache.outgoing = friendRequestsCache.outgoing.filter(function (r) {
-        return r.id !== tId && r.publicId !== tId;
+        return r.id !== tId && r.publicId !== tId && !(reqHandle && String(r.handle || "").toLowerCase() === reqHandle.toLowerCase());
       });
     } else if (action === "remove") {
       graphCounts[idKey].friendStatus = "none";
@@ -2651,12 +2692,16 @@ function signupPayload() {
       friendsCache = {};
     }
 
+    saveFriendReqs();
     if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
 
     var ep = "/v1/friends/" + action;
     api(ep, { method: "POST", token: session.token, body: { targetId: tId } }).then(function (res) {
       if (!res || res.status !== 200) {
         graphCounts[idKey].friendStatus = prevStatus;
+        graphCounts[idKey].friendAt = 0;
+        friendRequestsLoading = false;
+        ensureFriendRequests();
         graphCounts[idKey].friends = prevCount;
         if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
         if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -2676,6 +2721,9 @@ function signupPayload() {
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {
       graphCounts[idKey].friendStatus = prevStatus;
+      graphCounts[idKey].friendAt = 0;
+      friendRequestsLoading = false;
+      ensureFriendRequests();
       graphCounts[idKey].friends = prevCount;
       if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -3551,6 +3599,45 @@ function signupPayload() {
     var checked = window.HandleSkeleton && window.HandleSkeleton.inspectHandle ? window.HandleSkeleton.inspectHandle(handle) : null;
     return !!(checked && checked.owner);
   }
+  var inactivityState = { loaded: false, loading: false, months: 1, saving: false };
+  function loadInactivity() {
+    var session = readSession();
+    if (!session || !session.token || inactivityState.loading) return;
+    inactivityState.loading = true;
+    api("/v1/account/inactivity", { token: session.token }).then(function (res) {
+      inactivityState.loading = false;
+      inactivityState.loaded = true;
+      if (res && res.status === 200 && res.months) inactivityState.months = Number(res.months) || 1;
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () { inactivityState.loading = false; inactivityState.loaded = true; });
+  }
+  function saveInactivity(months) {
+    var session = readSession();
+    var n = Number(months);
+    if (!session || !session.token || [1, 3, 6, 12].indexOf(n) < 0) return;
+    var before = inactivityState.months;
+    inactivityState.months = n;
+    api("/v1/account/inactivity", { token: session.token, method: "PUT", body: { months: n } }).then(function (res) {
+      if (!res || res.status !== 200) {
+        inactivityState.months = before;
+        if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      }
+    }).catch(function () { inactivityState.months = before; });
+  }
+  /* Like Telegram: delete the account automatically after a period away. */
+  function inactivityHtml(account) {
+    if (isOwnerAccount(account)) return "";
+    if (!inactivityState.loaded && !inactivityState.loading) loadInactivity();
+    var opts = [[1, tr("1 month")], [3, tr("3 months")], [6, tr("6 months")], [12, tr("12 months")]].map(function (row) {
+      return '<option value="' + row[0] + '"' + (inactivityState.months === row[0] ? " selected" : "") + ">" + esc(row[1]) + "</option>";
+    }).join("");
+    return '<h2>' + esc(tr("If you’re away for")) + '</h2><p class="set-sub">' + esc(tr("If you don’t use your account for this long, it and its data are deleted.")) + '</p><label class="acct-field acct-select"><select data-acct="inactivity-months" aria-label="' + esc(tr("If you’re away for")) + '">' + opts + "</select></label>";
+  }
+  document.addEventListener("change", function (event) {
+    var node = event.target;
+    if (!node || !node.getAttribute || node.getAttribute("data-acct") !== "inactivity-months") return;
+    saveInactivity(node.value);
+  }, true);
   function deleteEntryHtml(account) {
     if (isOwnerAccount(account)) return "";
     return '<h2>' + esc(tr("Delete account")) + '</h2><p class="set-sub">' + esc(tr("Permanently delete this account and the data tied to it.")) + '</p><button class="outline acct-danger" type="button" data-acct="open-delete">' + esc(tr("Delete account")) + "</button>";
@@ -3871,7 +3958,7 @@ function signupPayload() {
     var aboutPrivacy = window.ProfileAbout && window.ProfileAbout.privacyOpen() ? window.ProfileAbout.privacyHtml(account.about || { sections: [] }) : "";
     return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
       '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + inactivityHtml(account) + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
     var reqKind = event.target && event.target.closest ? event.target.closest("[data-req-kind]") : null;
     if (reqKind) {
