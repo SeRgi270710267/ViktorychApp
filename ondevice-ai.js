@@ -415,7 +415,7 @@
       return cut.replace(/[.!?]$/, "") + ".";
     }
     if (tone === "clear") return raw.replace(/\b(very|really|just)\b/gi, "").replace(/\s{2,}/g, " ").trim() + ".";
-    if (tone === "warm" || tone === "friendly") return "Thanks for this. " + raw + ".";
+    if (tone === "warm" || tone === "friendly") return tr("Thanks for this.") + " " + raw + ".";
     if (tone === "formal") {
       return raw.replace(/\bdon't\b/gi, "do not").replace(/\bcan't\b/gi, "cannot").replace(/\bi'm\b/gi, "I am").replace(/\bit's\b/gi, "it is").replace(/\b(very|really|just)\b/gi, "").replace(/\s{2,}/g, " ").trim() + ".";
     }
@@ -432,11 +432,13 @@
   function suggestionsFor(text) {
     var bits = words(text).filter(function (word) { return word.length > 3; }).slice(0, 4);
     var topic = bits.slice(0, 3).join(" ");
-    if (!topic) topic = "this";
+    if (!topic) {
+      return [tr("Thanks for sharing this."), tr("Could you say a bit more?"), tr("This is useful.")];
+    }
     return [
-      "Thanks for sharing this about " + topic + ".",
-      "Could you say a bit more about " + topic + "?",
-      "This is useful. I read the part about " + topic + "."
+      tr("Thanks for sharing this about {topic}.").replace("{topic}", topic),
+      tr("Could you say a bit more about {topic}?").replace("{topic}", topic),
+      tr("This is useful. I read the part about {topic}.").replace("{topic}", topic)
     ];
   }
 

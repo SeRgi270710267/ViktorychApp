@@ -69,19 +69,19 @@
         } catch (e) {}
 
         var saved = localStorage.getItem(key);
-        if ((userPicked || hasSession) && (saved === "ru" || saved === "es" || saved === "en")) {
+        if ((userPicked || hasSession) && (saved === "ru" || saved === "es" || saved === "hi" || saved === "en")) {
           code = saved;
         } else if (isRu) {
           code = "ru";
           try { localStorage.setItem(key, "ru"); } catch (err) {}
-        } else if (saved === "ru" || saved === "es" || saved === "en") {
+        } else if (saved === "ru" || saved === "es" || saved === "hi" || saved === "en") {
           code = saved;
         } else if (saved == null) {
           var list = navigator.languages || [navigator.language || ""];
           var i;
           for (i = 0; i < list.length; i++) {
             var item = String(list[i] || "").toLowerCase().split("-")[0];
-            if (item === "ru" || item === "es") { code = item; break; }
+            if (item === "ru" || item === "es" || item === "hi") { code = item; break; }
           }
           try { localStorage.setItem(key, code); } catch (err) {}
         }
@@ -404,19 +404,25 @@
         }
         root.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:16px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";
         root.textContent = "";
+        var words = {
+          en: ["Something went wrong", "Reload", "Reset app data"],
+          es: ["Algo salió mal", "Recargar", "Restablecer los datos de la app"],
+          ru: ["Что-то пошло не так", "Перезагрузить", "Сбросить данные приложения"],
+          hi: ["कुछ गड़बड़ हो गई", "फिर से लोड करें", "ऐप का डेटा रीसेट करें"]
+        }[String(document.documentElement.lang || "en").split("-")[0]] || ["Something went wrong", "Reload", "Reset app data"];
         var box = document.createElement("div");
         var title = document.createElement("p");
-        title.textContent = "Something went wrong";
+        title.textContent = words[0];
         var row = document.createElement("p");
         var reload = document.createElement("button");
         reload.type = "button";
         reload.id = "boot-reload";
-        reload.textContent = "Reload";
+        reload.textContent = words[1];
         reload.style.cssText = "margin:0 8px;padding:10px 16px;border-radius:999px;border:0;background:#fff;color:#000;font:inherit";
         var reset = document.createElement("button");
         reset.type = "button";
         reset.id = "boot-reset";
-        reset.textContent = "Reset app data";
+        reset.textContent = words[2];
         reset.style.cssText = reload.style.cssText;
         reload.addEventListener("click", function () { location.reload(); });
         reset.addEventListener("click", resetData);
@@ -529,11 +535,12 @@
       if (document.documentElement.getAttribute("data-wall") !== "1") return;
       var root = document.getElementById("account-layer");
       if (!root || root.childElementCount) return;
-      var lang = document.documentElement.lang === "ru" || document.documentElement.lang === "es" ? document.documentElement.lang : "en";
+      var lang = ({ ru: 1, es: 1, hi: 1 })[String(document.documentElement.lang).split("-")[0]] ? String(document.documentElement.lang).split("-")[0] : "en";
       var pack = {
         en: ["ViktorychApp", "A home for posts, stories, and the people you choose.", "Sign up", "Log in"],
         es: ["ViktorychApp", "Un hogar para publicaciones, historias y las personas que eliges.", "Regístrate", "Entrar"],
-        ru: ["ВикторычАпп", "Дом для постов, историй и людей, которых вы выбираете.", "Регистрация", "Войти"]
+        ru: ["ВикторычАпп", "Дом для постов, историй и людей, которых вы выбираете.", "Регистрация", "Войти"],
+        hi: ["ViktorychApp", "पोस्ट, स्टोरीज़ और आपके चुने हुए लोगों का घर।", "साइन अप करें", "लॉग इन करें"]
       };
       var t = pack[lang];
       root.innerHTML = '<div class="x-shell land-page boot-land"><header class="land-bar"><a class="land-brand" href="./"><img alt="" src="favicon.svg" width="28" height="28"><span>' + t[0] + '</span></a><div class="land-bar-actions"><button class="land-btn land-btn-line" type="button" data-acct="login">' + t[3] + '</button><button class="land-btn land-btn-fill" type="button" data-acct="signup">' + t[2] + '</button></div></header><main><section class="land-hero x-land-copy"><h1>' + t[0] + '</h1><p class="land-tag">' + t[1] + "</p></section></main></div>";
@@ -580,6 +587,7 @@
     <script src="i18n/en.js" defer></script>
     <script src="i18n/ru.js" defer></script>
     <script src="i18n/es.js" defer></script>
+    <script src="i18n/hi.js" defer></script>
     <script src="marks.js" defer></script>
     <script src="logo-text.js" defer></script>
     <script src="translate.js" defer></script>
@@ -674,7 +682,7 @@
         nodes = nodes.filter(wanted);
         if (!links.length && !nodes.length) return;
         if (document.documentElement.getAttribute("data-wall") === "1") {
-          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "settings-sync.js", "data-saver.js", "accounts.js"];
+          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "i18n/hi.js", "marks.js", "shared/handle-skeleton.js", "settings-sync.js", "data-saver.js", "accounts.js"];
           function rank(node) {
             var src = node.getAttribute("src") || "";
             var at = first.indexOf(src.replace(/^\.\//, ""));
@@ -710,8 +718,9 @@
         try {
           var savedLang = localStorage.getItem("superintelapp-lang");
           var sure = localStorage.getItem("viktorychapp-lang-user-picked") === "1" || !!localStorage.getItem("viktorychapp-account-v1") || !!localStorage.getItem("viktorychapp-accounts-session-v1");
-          if (savedLang === "en" || savedLang === "ru" || savedLang === "es") {
+          if (savedLang === "en" || savedLang === "ru" || savedLang === "es" || savedLang === "hi") {
             if (savedLang !== "es") skipPack["i18n/es.js"] = 1;
+            if (savedLang !== "hi") skipPack["i18n/hi.js"] = 1;
             if (savedLang !== "ru" && sure) skipPack["i18n/ru.js"] = 1;
           }
         } catch (err) { /* private mode keeps every pack */ }
