@@ -3,6 +3,7 @@
 (function (root) {
   "use strict";
 
+  function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
     var fn = (typeof window !== "undefined" && window.t) ? window.t : null;
     return fn ? fn(key, vars) : key;
@@ -191,7 +192,7 @@
       return '<li data-chat="' + esc(item.id) + '"><span>' + esc(who) + '</span> ' + esc(item.text || item.emoji || "") + drop + '</li>';
     }).join("");
     var invite = host && state.invite ? '<p class="live-note"><button type="button" data-act="live-copy">' + esc(tr("Copy invite link")) + '</button></p>' : "";
-    return '<div class="live-stage"><div class="live-videos" data-live-videos></div><div class="live-bar"><span class="live-dot" aria-hidden="true"></span><span>' + esc(tr("{n} watching", { n: state.viewers })) + '</span>' + controls + '</div>' +
+    return '<div class="live-stage"><div class="live-videos" data-live-videos></div><div class="live-bar"><span class="live-dot" aria-hidden="true"></span><span>' + esc(tn("watching", state.viewers, { count: state.viewers })) + '</span>' + controls + '</div>' +
       (state.status ? '<p class="live-note" data-live-status>' + esc(state.status) + '</p>' : "") +
       invite +
       (roster ? '<ul class="live-roster" aria-label="' + esc(tr("Viewers")) + '">' + roster + '</ul>' : "") +
@@ -518,7 +519,7 @@
       return;
     }
     var bar = document.querySelector(".live-bar span:nth-child(2)");
-    if (bar) bar.textContent = tr("{n} watching", { n: state.viewers });
+    if (bar) bar.textContent = tn("watching", state.viewers, { count: state.viewers });
     var roster = document.querySelector(".live-roster");
     if (roster && state.role === "host") {
       roster.innerHTML = state.roster.map(function (id, index) {

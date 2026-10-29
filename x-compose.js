@@ -455,7 +455,7 @@
     var when = "";
     if (slot.scheduleAt) {
       var stamp = "";
-      try { stamp = new Date(slot.scheduleAt).toLocaleString(); } catch (err) { stamp = ""; }
+      try { stamp = new Date(slot.scheduleAt).toLocaleString((window.SI18n ? window.SI18n.locale() : undefined)); } catch (err) { stamp = ""; }
       when = '<p class="xc-loc">' + esc(tr("Schedule")) + (stamp ? " · " + esc(stamp) : "") + "</p>";
     }
     var place = slot.location ? '<p class="xc-loc">' + esc(slot.location) + "</p>" : "";

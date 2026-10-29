@@ -202,10 +202,16 @@
   function formatReleased(value) {
     var parts = String(value || "").split("-");
     if (parts.length !== 3) return "";
-    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    var month = months[Number(parts[1]) - 1];
-    if (!month || !parts[0] || !parts[2]) return "";
-    return month + " " + Number(parts[2]) + ", " + parts[0];
+    var year = Number(parts[0]);
+    var month = Number(parts[1]);
+    var day = Number(parts[2]);
+    if (!year || !(month >= 1 && month <= 12) || !day) return "";
+    var loc = (typeof window !== "undefined" && window.SI18n) ? window.SI18n.locale() : undefined;
+    try {
+      return new Intl.DateTimeFormat(loc, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+    } catch (err) {
+      return parts.join("-");
+    }
   }
 
   function formatTime(sec) {
