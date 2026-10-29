@@ -33,6 +33,7 @@ ALLOW_IDENTICAL = {
     "GitHub",
     "GIF",
     "RSS",
+    "YouTube Music",
     "ALT",
     "https://",
     "Wi-Fi",
