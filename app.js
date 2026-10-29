@@ -1183,7 +1183,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", brandLogo: { mode: "default", text: "" } });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", brandLogo: { mode: "default", text: "" }, busyPrefs: { at: 0, modes: {}, mutes: {}, server: true } });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1221,6 +1221,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.forYouReposts = parsed.forYouReposts !== false;
       parsed.forYouReplies = parsed.forYouReplies !== false;
       parsed.brandLogo = cleanBrandLogo(parsed.brandLogo);
+      parsed.busyPrefs = cleanBusyPrefs(parsed.busyPrefs);
       parsed.tabViews = cleanTabViews(parsed.tabViews);
       parsed.translateTo = window.FeedsTranslate && window.FeedsTranslate.normalizeTarget ? window.FeedsTranslate.normalizeTarget(parsed.translateTo) : (parsed.translateTo || "ui");
       parsed.translateAuto = parsed.translateAuto !== false;
@@ -7905,8 +7906,10 @@ const here = parseRoute();
     const forYouItem = here.name === "home" && (here.tab || "foryou") === "foryou"
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
+    const busyKey = post.appPost ? "" : busyKeyOf(post);
+    const busyItem = busyKey ? `<button data-act="busy-menu" data-key="${esc(busyKey)}" data-name="${esc(post.author || post.name || "")}" data-handle="${esc(post.handle || "")}" data-platform="${esc(post.platform || "x")}">${tr("Posting volume")}</button>` : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -9218,6 +9221,133 @@ const here = parseRoute();
     return kept;
   }
 
+  /* Busy accounts (busy.js): detection, per-account caps, folding and
+     interleaving all run here on the device, from posts already cached, so
+     they work offline and on a slow server. The pace is read in idle slices
+     and remembered, so the first paint already knows which accounts are busy. */
+  const BUSY_KEY = "viktorychapp-busy-v1";
+  function busyApi() { return window.ViktorychBusy || null; }
+  function cleanBusyPrefs(raw) {
+    const api = busyApi();
+    if (api) return api.cleanPrefs(raw);
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : { at: 0, modes: {}, mutes: {}, server: true };
+  }
+  function busyPrefs() {
+    if (!STATE.settings) return { modes: {}, mutes: {} };
+    if (!STATE.settings.busyPrefs || !STATE.settings.busyPrefs.modes) STATE.settings.busyPrefs = cleanBusyPrefs(STATE.settings.busyPrefs);
+    return STATE.settings.busyPrefs;
+  }
+  function busyStats() {
+    if (STATE.busyStats) return STATE.busyStats;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(BUSY_KEY) || "null"); } catch (err) { saved = null; }
+    STATE.busyStats = saved && typeof saved === "object" && saved.map && typeof saved.map === "object" ? saved.map : {};
+    return STATE.busyStats;
+  }
+  let busySig = "";
+  let busyCancel = null;
+  /* Read the pace again when the cache changed. Never on the render path:
+     the slices run when the device is idle and a changed busy set repaints
+     once, keeping the scroll position. */
+  function busyRefresh(all) {
+    const api = busyApi();
+    if (!api || !Array.isArray(all) || !all.length) return;
+    const first = all[0];
+    const sig = all.length + "|" + String((first && (first.id || first.statusId)) || "") + "|" + String((STATE.data && STATE.data.updated) || "");
+    if (sig === busySig) return;
+    busySig = sig;
+    if (busyCancel) busyCancel();
+    busyCancel = api.statsLater(all, {}, (fresh) => {
+      busyCancel = null;
+      const map = {};
+      Object.keys(fresh).forEach((key) => { if (fresh[key].busy) map[key] = { busy: true, perDay: fresh[key].perDay, replyShare: fresh[key].replyShare }; });
+      const before = Object.keys(busyStats()).sort().join("\n");
+      STATE.busyStats = map;
+      try { localStorage.setItem(BUSY_KEY, JSON.stringify({ at: Date.now(), map: map })); } catch (err) { /* storage full: kept in memory */ }
+      if (Object.keys(map).sort().join("\n") !== before && parseRoute().name === "home") render({ y: window.scrollY });
+    });
+  }
+  function busyOn(key) {
+    const row = key && busyStats()[key];
+    return !!(row && row.busy);
+  }
+  function busyKeyOf(post) {
+    const api = busyApi();
+    return api ? api.keyOf(post) : String((post && post.feedId) || "");
+  }
+  /* The Home list with every account's choice applied and spread out so no
+     single account fills a screen. Folded posts are never handed to card(). */
+  function homeShaped(route) {
+    const tab = route.tab || "foryou";
+    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
+    const api = busyApi();
+    if (!api || tabView(tab) === "reposts") return sorted;
+    try {
+      busyRefresh((STATE.data && STATE.data.posts) || []);
+      if (!STATE.busyOpen) STATE.busyOpen = {};
+      const shaped = api.shape(sorted, { prefs: busyPrefs(), busy: busyStats(), open: STATE.busyOpen, now: Date.now() });
+      STATE.busyCounts = shaped.counts || null;
+      return tabSort(tab) === "popular" ? shaped : api.interleave(shaped);
+    } catch (err) {
+      return sorted;
+    }
+  }
+  function busyName(row) {
+    const feed = row && row.feedId ? feedById(row.feedId) : null;
+    return String((feed && (feed.name || feed.handle)) || (row && (row.author || row.handle)) || "");
+  }
+  function busyHandle(row) {
+    const feed = row && row.feedId ? feedById(row.feedId) : null;
+    return String((feed && feed.handle) || (row && row.handle) || "").replace(/^@/, "");
+  }
+  /* One row in place of the posts it folds. Text only, no media, previews or
+     reactions: those load when the reader opens the row. */
+  function busyRow(group) {
+    const n = group.posts.length;
+    const handle = busyHandle(group);
+    const who = handle ? "@" + handle : busyName(group);
+    if (group.kind === "digest") {
+      const lines = group.posts.slice(0, 3).map((post) => `<li dir="auto">${esc(String(post.text || post.title || "").replace(/\s+/g, " ").slice(0, 140))}</li>`).join("");
+      return `<article class="post busy-digest" data-post="${esc(group.id)}"><button type="button" class="busy-open" data-act="busy-open" data-id="${esc(group.id)}" aria-label="${esc(tr("Show all {n} posts", { n: n }))}"><span class="busy-digest-head"><b dir="auto">${esc(busyName(group) || who)}</b> <span class="phandle">· ${esc(tr("Daily digest"))} · ${esc(tr("{n} posts", { n: formatCount(n) }))}</span></span><ul class="busy-digest-lines">${lines}</ul><span class="busy-more-link">${esc(tr("Show all {n} posts", { n: formatCount(n) }))}</span></button></article>`;
+    }
+    return `<div class="busy-more" data-post="${esc(group.id)}"><button type="button" class="busy-open" data-act="busy-open" data-id="${esc(group.id)}"><span class="busy-more-line" aria-hidden="true"></span><span class="busy-more-link" dir="auto">${esc(tr("+{n} more from {name}", { n: formatCount(n), name: who }))}</span></button></div>`;
+  }
+  function busyTarget(key, name, handle, platform) {
+    return { key: String(key || ""), name: String(name || ""), handle: String(handle || "").replace(/^@/, ""), platform: String(platform || "x") };
+  }
+  function busySheet() {
+    const sheet = STATE.busySheet;
+    if (!sheet || !sheet.key) return "";
+    const prefs = busyPrefs();
+    const busy = busyOn(sheet.key);
+    const muted = Number((prefs.mutes || {})[sheet.key]) > Date.now();
+    const mode = (prefs.modes || {})[sheet.key] || "auto";
+    const stat = busyStats()[sheet.key];
+    const choice = (id, text, note) => {
+      const on = mode === id;
+      return `<button class="bell-choice busy-choice" type="button" role="menuitemradio" aria-checked="${on ? "true" : "false"}" data-act="busy-mode" data-mode="${id}"><span class="bell-choice-label">${esc(text)}${note ? `<small>${esc(note)}</small>` : ""}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
+    };
+    const who = sheet.handle ? "@" + sheet.handle : sheet.name;
+    const pace = stat && stat.perDay ? `<p class="bell-note">${esc(tr("About {n} posts a day", { n: formatCount(Math.round(stat.perDay)) }))}</p>` : "";
+    const mutes = muted
+      ? `<button class="bell-choice" type="button" data-act="busy-mute" data-hours="0"><span class="bell-choice-label">${esc(tr("Unmute"))}</span></button>`
+      : [[8, tr("Mute for 8 hours")], [24, tr("Mute for 1 day")], [168, tr("Mute for 7 days")]].map((row) => `<button class="bell-choice" type="button" data-act="busy-mute" data-hours="${row[0]}"><span class="bell-choice-label">${esc(row[1])}</span></button>`).join("");
+    return `<div class="bell-sheet busy-sheet" data-act="busy-close"><div class="menu bell-menu busy-menu" data-act="stop" role="menu" aria-label="${esc(tr("Posting volume"))}"><div class="bell-grab" aria-hidden="true"></div><p class="busy-title"><b>${esc(tr("Posting volume"))}</b> <span class="phandle" dir="auto">${esc(who)}</span></p>${pace}
+      ${choice("auto", busy ? tr("Automatic (busy account)") : tr("Automatic"), tr("Hides replies to other people and shows up to 3 posts every 2 hours when the account posts a lot"))}
+      ${choice("all", tr("Show all"), "")}
+      ${choice("originals", tr("Only original posts"), tr("No replies"))}
+      ${choice("top", tr("Top posts only"), tr("By likes and reposts"))}
+      ${choice("digest", tr("Daily digest"), tr("One grouped card a day"))}
+      <div class="bell-split"></div>${mutes}
+      <p class="bell-note">${esc(tr("Folded posts load nothing until you open them. Your choice follows your account."))}</p></div></div>`;
+  }
+  function busyChanged() {
+    const prefs = busyPrefs();
+    prefs.at = Date.now();
+    STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { busyPrefs: prefs.at });
+    saveSettings();
+  }
+
   function homeSorted(route) {
     const tab = route.tab || "foryou";
     let list = posts().filter((post) => homeShows(post, route));
@@ -9265,7 +9395,7 @@ const here = parseRoute();
       return;
     }
     const tab = route.tab || "foryou";
-    const list = homeSorted(route);
+    const list = homeShaped(route);
     const count = (STATE.feedShown && STATE.feedShown[tab]) || FEED_PAGE;
     if (count < list.length) {
       if (!STATE.feedShown) STATE.feedShown = {};
@@ -10128,7 +10258,7 @@ const here = parseRoute();
   function homeView(route) {
     const tab = route.tab || "foryou";
     if (tab.indexOf("ctab:") === 0) return communityTabView(tab);
-    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
+    const sorted = homeShaped(route);
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
@@ -10137,7 +10267,7 @@ const here = parseRoute();
       : "";
     const tabLoading = !list.length && tabStillLoading(tab);
     if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
-    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? list.map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -11387,6 +11517,7 @@ const here = parseRoute();
     if (menu === "more") {
       rows.push(profileSheetRow("share", tr("Share"), `data-kind="profile" data-id="${esc(target.feedId || link)}"`));
       if (!target.own && (target.feedId || target.handle)) rows.push(profileSheetRow("profile-mute", tr("Mute"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}"`));
+      if (!target.own && (target.feedId || target.handle) && target.platform !== "app") rows.push(profileSheetRow("busy-menu", tr("Posting volume"), `data-key="${esc(target.feedId || ((target.platform || "x") + ":" + String(target.handle || "").toLowerCase()))}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}" data-platform="${esc(target.platform || "x")}"`));
       const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
       if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
       if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
@@ -15141,7 +15272,7 @@ if (STATE.histClear) {
     const giftsWide = route.name === "store";
     const mode = (wide || giftsWide ? " wide" : "") + (giftsWide ? " gifts-mode" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${busySheet()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
   }
 
   function toggleReaction(act, id) {
@@ -19241,6 +19372,35 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "busy-open") {
+      if (!STATE.busyOpen) STATE.busyOpen = {};
+      STATE.busyOpen[el.dataset.id || ""] = true;
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "busy-menu") {
+      STATE.menu = null;
+      STATE.profileMenu = null;
+      STATE.busySheet = busyTarget(el.dataset.key, el.dataset.name, el.dataset.handle, el.dataset.platform);
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "busy-close") { STATE.busySheet = null; render({ y: window.scrollY }); return; }
+    if (act === "busy-mode" || act === "busy-mute") {
+      const sheet = STATE.busySheet;
+      const api = busyApi();
+      if (!sheet || !sheet.key || !api || !STATE.settings) return;
+      if (act === "busy-mode") STATE.settings.busyPrefs = api.setMode(busyPrefs(), sheet.key, el.dataset.mode || "auto");
+      else {
+        const hours = Number(el.dataset.hours) || 0;
+        STATE.settings.busyPrefs = api.mute(busyPrefs(), sheet.key, hours ? Date.now() + hours * 3600000 : 0);
+      }
+      busyChanged();
+      STATE.busySheet = null;
+      if (act === "busy-mute") toast(Number(el.dataset.hours) ? tr("Muted for now. Change it any time in Posting volume.") : tr("Unmuted"));
+      render({ y: window.scrollY });
+      return;
+    }
     if (act === "menu") { STATE.menu = STATE.menu === el.dataset.id ? null : el.dataset.id; render(); return; }
     if (act === "profile-tools" || act === "profile-more") {
       const next = act === "profile-tools" ? "tools" : "more";
@@ -20372,7 +20532,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (event.key === "Escape" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.onEscape && window.ViktorychXCompose.onEscape()) return;
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.drawerEdit || STATE.accountMenu || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.drawerEdit || STATE.accountMenu || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.busySheet || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
       STATE.modal = null;
       STATE.composeVia = "";
       STATE.drawer = false;
@@ -20385,6 +20545,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       STATE.groupMenu = null;
       STATE.tabMenu = null;
       STATE.bellMenu = null;
+      STATE.busySheet = null;
       STATE.tabAssign = null;
       STATE.tabContext = null;
       if (STATE.confirm && STATE.confirm.kind === "feed-tab") STATE.confirm = null;
@@ -25508,7 +25669,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "busyPrefs"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
