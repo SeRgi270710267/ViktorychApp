@@ -26,7 +26,7 @@ import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
 import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
-import { NOTIFICATION_SCHEMA, drainOutbox, handleNotificationRoutes, notifyFollow, planRepostNotification, notifyLiveStarted } from "./notifications.js";
+import { NOTIFICATION_SCHEMA, drainOutbox, handleNotificationRoutes, notifyFollow, planRepostNotification, notifyLiveStarted, emitNotification } from "./notifications.js";
 import { MENTION_SCHEMA, commitBundled, handleBlockMuteRoutes, handleContentRoutes, planMentions } from "./mention-store.js";
 import { DISCORD_ALERT_SCHEMA, handleDiscordAlertRoutes } from "./discord-alerts.js";
 import { unlockedHandles } from "./tiktok-unlock.js";
@@ -46,6 +46,7 @@ import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
 import { syncVk, vkDue } from "./vk.js";
+import { handlePackagesRoute, pollPackages, packageNotifier } from "./packages.js";
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
 import { BADGE_SCHEMA, handleBadges, syncBadges } from "./badges.js";
 import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
@@ -5427,6 +5428,9 @@ async function route(request, env, ctx) {
     const handled = await handleLive(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
     if (handled) return handled;
   }
+  if (path === "/v1/packages" || path.startsWith("/v1/packages/")) {
+    return handlePackagesRoute(request, env, path, { json, sessionAccount, readJson, notify: packageNotifier(emitNotification) });
+  }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
     return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
@@ -5562,7 +5566,7 @@ export default {
     // Jobs the Render backup claimed in the last couple of minutes run there.
     const away = await claimedJobs(env, at);
     const minute = new Date(at).getUTCMinutes();
-    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), sweepExpiredNotes(env, at)];
+    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), pollPackages(env, at, null, packageNotifier(emitNotification)).catch(() => null), sweepExpiredNotes(env, at)];
     const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
     run("ownerFeeds", () => sweepOwnerFeeds(env, at));
     if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
