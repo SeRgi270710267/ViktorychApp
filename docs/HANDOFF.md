@@ -2,6 +2,10 @@
 
 A takeover guide for the next assistant or coding agent. Written from the state of the project on 2026-10-28. Anything marked "unverified" was not re-checked, so check it before you rely on it.
 
+## 0. Running with nobody
+
+If no assistant is working on the project, read `docs/RUNNING-WITHOUT-BOT.md`. The Worker watchdog (`worker/src/watchdog.js`) keeps workflows on, re-runs a stuck deploy and reports health.
+
 ## 1. What the project is
 
 ViktorychApp is an X.com-clone PWA. The front end is static and served from GitHub Pages. The back end is a Cloudflare Worker with D1 (SQL) and R2 (object storage). Coding agents open PRs, and the owner's assistant reviews and merges them.
@@ -52,9 +56,32 @@ Queued work, in order:
 - The owner tests the password-manager prompt and Notifications on a phone.
 - Cleanup and account deletion only with an explicit owner go-ahead and a full backup.
 
+## Merge queue: one coordinator
+
+Why things stall: about twenty workers push PRs at once. Every PR bumps the `// cache-bust:` stamp line in `sw.js` and appends strings to the end of the `i18n/*.js` packs, so each merge makes most other open PRs conflict (DIRTY). Every rebase starts a new CI run, the Actions concurrency limit lets only a few run at a time, and the queue grows faster than it drains. Main does not require branches to be up to date, so only real conflicts block a merge.
+
+Rules:
+1. One coordinator merges. Workers push commits to their own PR branch and stop; they never run `ship.sh`, auto-ship loops or `gh pr merge` themselves. The coordinator stops leftover per-PR loops by their exact PID and takes those PRs into its queue.
+2. Cancel only superseded queued runs: a queued run whose branch has a newer commit and whose workflow already has a newer run on that branch. Never cancel the newest run of a branch or workflow. A cancelled run on an old commit is normal, not a failure.
+3. Merge order: small fixes first, then features, then large or risky work. Leave Dependabot PRs and anything touching `.github/workflows/` or dependencies for the owner. A PR whose checks take a long time goes in a quiet window when nothing else will merge.
+4. Merge one PR at a time with `/workspace/ship.sh <pr>` (squash, `--match-head-commit`). Only PRs that are green and not DIRTY merge.
+5. Rebasing a DIRTY PR: work in a separate worktree. Fetch the branch first and note its head sha, rebase onto `origin/main`, and keep both sides' intent.
+   - `sw.js`: start from main's file and re-apply only that PR's own lines. For the stamp line, keep one `// cache-bust:` line with a fresh time and the PR's label.
+   - `i18n/*.js` and `scripts/i18n_allow.txt`: keep both sides (main's entries first, then the PR's) and fix the comma between them.
+   - Every new English string needs `ru`, `es` and `hi` entries; run `python3 scripts/check_i18n.py`.
+   - Run the quick checks from the smoke workflow (`check_i18n.py`, `assemble_site.py --selftest`, `handle_guard.py --selftest`) before you push.
+6. Never drop anyone's commits. Push with `git push --force-with-lease=refs/heads/<branch>:<sha you started from>` to that PR branch only. If the push is rejected, a worker pushed: fetch, rebase again on top of their commits, and retry. Do not refresh the lease by fetching just before the push, since that silently drops the worker's new commits.
+7. Deploy window: after each merge (or a batch of at most 2 or 3), stop merging until the Accounts and Sync feeds runs for the newest main commit have finished successfully. Then check that the live `version.json` shows main's commit and that the Worker's `/v1/watchdog` answers. A merge while a deploy is still queued starves it: runners pick jobs oldest first, and PR checks fill them. Queued Accounts or Sync feeds runs for older main commits may be cancelled (use force-cancel if a plain cancel leaves a queued job stuck), never the newest one.
+8. If main's own smoke check fails, every PR fails it too. Fix main first in a tiny PR at the top of the queue.
+9. Never edit `.github/workflows/`, never force-push main, never merge old main back into a branch, never use `git stash`. No account handles or IDs in commits, PR text or logs.
+
 ## 6. Gotchas
 
 - `scripts/handle_guard.py` rejects any token from the private owner catalog, including product and assistant names used as handles. Keep docs neutral.
 - The Home button once vanished on mobile because a saved layout hid it. Home is now locked, and a saved bar keeps items added later hidden until the user turns them on.
 - Some Playwright checks ride along inside other test scripts (for example `home_reach_test.mjs` runs `explore_nav_test.mjs`, and `compose_page_test.mjs` runs `community_home_test.mjs`), because the workflow files could not be edited.
 - An overnight routine named "Overnight ship check" merges green, clean PRs, oldest first. Check what it has merged before you act.
+
+## Post schema
+
+Every source is normalized to one canonical post shape before it ships. See [POST-SCHEMA.md](POST-SCHEMA.md) and `docs/post.schema.json`; tests: `python3 scripts/normalize_test.py` (also run by `handle_guard.py --selftest` in CI).

@@ -69,6 +69,21 @@ def check(cond, message):
     print("ok", message)
 
 
+def x_notes_checks() -> None:
+    import subprocess
+
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "x_notes_mirror.py"), "--selftest"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        sys.stdout.write(proc.stdout)
+        sys.stdout.write(proc.stderr)
+    check(proc.returncode == 0, "the X Community Notes mirror self-test passes")
+
+
 def telegram_checks() -> None:
     import subprocess
 
@@ -1312,8 +1327,14 @@ def main() -> None:
     direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
     device_flow = subprocess.run(["node", str(ROOT / "scripts" / "device_test.js")], cwd=ROOT)
     check(local_flow.returncode == 0, "a blocked reload paints home, a profile, a post, and notifications from cache")
+    counts_flow = subprocess.run(["node", str(ROOT / "scripts" / "profile_counts_test.mjs")], cwd=ROOT)
+    check(counts_flow.returncode == 0, "profile headers never show 0 as a stand-in for unknown counts and paint last known counts from this device")
+    swr_flow = subprocess.run(["node", str(ROOT / "scripts" / "swr_cache_test.js")], cwd=ROOT)
+    check(swr_flow.returncode == 0, "the shared local-first cache stays under its byte budget and evicts least recently used pages")
     check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
     check(device_flow.returncode == 0, "device performance levels, toggles, and fallbacks pass")
+    tv_flow = subprocess.run(["node", str(ROOT / "scripts" / "tv_boot_test.js")], cwd=ROOT)
+    check(tv_flow.returncode == 0, "TV mode detects TVs, keeps its light defaults switchable, and publishes the TV app files")
     page_html = (ROOT / "index.html").read_text(encoding="utf-8")
     published = deployed_paths()
     check('src="storage.js"' in page_html and "storage.js" in published and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
@@ -1326,6 +1347,7 @@ def main() -> None:
     feed_order_checks()
     gdrive_checks()
     telegram_checks()
+    x_notes_checks()
 
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
@@ -1437,16 +1459,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a121-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a137-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a121-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a137-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in deployed_paths() and "spaces.css" in deployed_paths() and "live/" in deployed_paths(), "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a121-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a137-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -1503,7 +1525,7 @@ def main() -> None:
     hidden_chips = css[css.index(".topbar.is-hidden ~ .yt-chips"):css.index(".topbar.is-hidden ~ .yt-chips") + 160]
     check("${head}${strip}${chips}${save}<div class=\"subs-feed\">" in subs_markup and "display: flow-root" in css[css.index(".subs-feed"):css.index(".subs-feed") + 80] and "z-index: 0" in css[css.index(".subs.grid .yt-grid"):css.index(".subs.grid .yt-grid") + 240], "the groups row sits under the channel strip and outside the video grid")
     check("top: env(safe-area-inset-top)" in hidden_chips, "the groups row sticks to the top when the phone header hides")
-    subs_strip = app[app.index("const strip = "):app.index("const strip = ") + 1100]
+    subs_strip = app[app.index("const strip = `<div class=\"yt-strip\""):app.index("const strip = `<div class=\"yt-strip\"") + 1100]
     ch_name = css[css.index(".yt-ch .ch-name"):css.index(".yt-ch .ch-name") + 420]
     subs_view = app[app.index("function subsView("):app.index("function revealSubsChannel(")]
     check("function subsChannelHash(" in app and "parts[1] || query.get(\"c\")" in app and "subsChannelHash" in subs_strip and "accountHash" not in subs_strip and "ch-name" in subs_strip and "creditCarried" in subs_view and "onChannel" in subs_view and "-webkit-line-clamp: 2" in ch_name and "height: 32px" in ch_name and "align-items: flex-start" in css[css.index(".yt-strip {"):css.index(".yt-strip {") + 180], "a channel in the subscription row filters that creator's videos and its name wraps to two lines")
@@ -1751,6 +1773,8 @@ def main() -> None:
     import subprocess
     update_flow = subprocess.run(["node", str(ROOT / "scripts" / "update_flow_test.js")], cwd=ROOT)
     check(update_flow.returncode == 0, "the update flow helpers pass")
+    comments_client = subprocess.run(["node", str(ROOT / "scripts" / "comments_client_test.mjs")], cwd=ROOT)
+    check(comments_client.returncode == 0, "comments share in-flight loads, cache for minutes, revalidate stale pages, and cancel on leave")
     check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "function frameSpec(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
     check("function stripLeadMentions(" in app and "function threadPair(" in app and "parentShown" in app and 'class="thread"' in app and "function quoteCard(" in app, "a reply with its parent is a thread and a quote stays a quote card")
     frame_test = subprocess.run(["node", str(ROOT / "scripts" / "media_frame_test.js")], cwd=ROOT)
@@ -2231,6 +2255,51 @@ def main() -> None:
     linked_before = json.dumps(linked_people)
     linked_suggestions = people.suggest(suggest_profiles, linked_people)
     check(suggestion_pair(linked_suggestions, ("x", "lefty"), ("youtube", "righty")) is None and json.dumps(linked_people) == linked_before, "suggestions never merge or rewrite people")
+    import subprocess as links_proc
+    links_run = links_proc.run(["node", str(ROOT / "scripts" / "people_links_test.js")], capture_output=True, text=True)
+    check(links_run.returncode == 0, "per-reader merge overrides: platform toggles, merge with Undo, unmerge: " + (links_run.stderr or "")[-300:])
+
+    auto_profiles = [
+        {"id": "instagram:quillfern", "platform": "instagram", "handle": "quillfern", "name": "Quill Fern"},
+        {"id": "threads:quillfern", "platform": "threads", "handle": "quillfern", "name": "Quill"},
+        {"id": "x:lefty", "platform": "x", "handle": "lefty", "name": "Left Side", "bio": "videos https://www.youtube.com/@righty"},
+        {"id": "youtube:righty", "platform": "youtube", "handle": "righty", "name": "Left Side"},
+        {"id": "vk:lonely", "platform": "vk", "handle": "lonely", "name": "Lonely", "bio": "https://x.com/someoneelse"},
+        {"id": "x:someoneelse", "platform": "x", "handle": "someoneelse", "name": "Other Name"},
+        {"id": "telegram:northlamp", "platform": "telegram", "handle": "northlamp", "name": "Canadian Prepper", "bio": "https://www.youtube.com/@northlamp"},
+    ]
+    owner_people = [{"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "northlamp"}]}]
+    auto_profiles.append({"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "name": "Canadian Prepper"})
+    merged, weak_rows, merge_counts = people.auto_people(auto_profiles, owner_people)
+    auto_ids = [person for person in merged if person.get("auto")]
+    pair_sets = [{(a["platform"], a["handle"]) for a in person["accounts"]} for person in auto_ids]
+    check({("instagram", "quillfern"), ("threads", "quillfern")} in pair_sets, "a Threads account merges with the Instagram account of the same handle")
+    check({("x", "lefty"), ("youtube", "righty")} in pair_sets, "a bio link plus the same name merges on its own")
+    check(not any(("vk", "lonely") in s for s in pair_sets) and any({a["handle"] for a in row["accounts"]} == {"lonely", "someoneelse"} for row in weak_rows), "a one-way link without a matching name is only suggested")
+    owner_row = next(person for person in merged if person["id"] == "canadian-prepper")
+    check(any(a["platform"] == "telegram" and a.get("auto") for a in owner_row["accounts"]) and owner_people[0]["accounts"] == [{"platform": "youtube", "handle": "northlamp"}], "a new source that links a hand-linked person joins that person and the owner config stays as is")
+    split_people, _w, _c = people.auto_people(auto_profiles, [], {"threads:quillfern"})
+    check(not any({a["handle"] for a in p["accounts"]} == {"quillfern"} for p in split_people), "an account the owner split out never merges again")
+    cross_people = [{"id": "q", "name": "Q", "accounts": [{"platform": "instagram", "handle": "quillfern", "feedId": "instagram:quillfern"}, {"platform": "threads", "handle": "quillfern", "feedId": "threads:quillfern"}, {"platform": "x", "handle": "quillx", "feedId": "x:quillx"}]}]
+    cross_rows = [
+        {"id": "i1", "platform": "instagram", "handle": "quillfern", "feedId": "instagram:quillfern", "date": "2026-10-20T10:00:00Z", "text": "New mural finished today, come see it downtown!", "media": [{"type": "photo", "url": "https://cdn.example/a.jpg", "width": 1080, "height": 1350}]},
+        {"id": "t1", "platform": "threads", "handle": "quillfern", "feedId": "threads:quillfern", "date": "2026-10-20T10:03:00Z", "text": "New mural finished today, come see it downtown! #art", "media": [{"type": "photo", "url": "https://cdn.example/b.jpg", "width": 640, "height": 800}]},
+        {"id": "x1", "platform": "x", "handle": "quillx", "feedId": "x:quillx", "date": "2026-10-20T11:00:00Z", "text": "New mural finished today, come see it downtown!"},
+        {"id": "y1", "platform": "youtube", "handle": "other", "statusId": "abcdefghijk", "date": "2026-10-20T09:00:00Z", "text": "a video"},
+    ]
+    folded, fold_stats = people.dedupe_cross_posts([dict(row) for row in cross_rows], cross_people)
+    first = next(row for row in folded if row["id"] == "i1")
+    check(fold_stats["dropped"] == 1 and [ref["platform"] for ref in first.get("crossPosts", [])] == ["threads"] and any(row["id"] == "x1" for row in folded), "the same post on two platforms within ten minutes shows once with the larger media, and a copy an hour later stays")
+    video_people = [{"id": "v", "name": "V", "accounts": [{"platform": "x", "handle": "vx", "feedId": "x:vx"}, {"platform": "youtube", "handle": "vy", "feedId": "youtube:vy"}]}]
+    video_rows = [
+        {"id": "xv", "platform": "x", "handle": "vx", "feedId": "x:vx", "date": "2026-10-20T10:00:00Z", "text": "new video", "links": [{"url": "https://youtu.be/abcdefghijk"}]},
+        {"id": "yv", "platform": "youtube", "handle": "vy", "feedId": "youtube:vy", "statusId": "abcdefghijk", "date": "2026-10-20T10:05:00Z", "text": "My video"},
+    ]
+    vfold, _vs = people.dedupe_cross_posts(video_rows, video_people)
+    check(len(vfold) == 1 and vfold[0]["platform"] == "youtube" and vfold[0]["crossPosts"][0]["platform"] == "x", "an X post sharing the person's own YouTube video folds into the video")
+    now_ts = 1_000_000.0
+    mirrors = people.update_mirrors({}, {"threads:quillfern": 1.0}, {"threads:quillfern"}, now_ts)
+    check(not people.mirror_due(mirrors, "threads:quillfern", now_ts + 60) and people.mirror_due(mirrors, "threads:quillfern", now_ts + 3 * 3600) and people.mirror_due(mirrors, "x:new", now_ts), "a mirror source is read every three hours and others every run")
 
     link_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\nx:nasa\n"
     link_config = {"feeds": [{"id": "x:keep"}], "people": json.loads(json.dumps(site_config["people"]))}
@@ -4524,7 +4593,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "viktorych-a121-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-a137-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     lazy = (ROOT / "shared" / "lazy-modules.js").read_text(encoding="utf-8")
     check('shorts.js", "shorts.css"' in lazy and "shorts.js" in worker and "shorts.css" in worker and 'info.name === "shorts"' in app, "the page and the service worker load Shorts on demand")
     check('drive.js", "drive.css"' in lazy and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker and 'ensureLazy("drive")' in app, "the page and the service worker load Drive on demand")
@@ -4579,7 +4648,7 @@ def story_checks() -> None:
     shorts_js = (ROOT / "shorts.js").read_text(encoding="utf-8")
     check('tr("added accounts")' in shorts_js and 'data-shorts="remove-account"' in shorts_js and 'tr("Original quality")' in shorts_js and "tracked" not in shorts_js.lower(), "Shorts lets the owner add an account and does not call it tracked")
     check("isTikTokCdn(url)" in worker and "if (isTikTokCdn(url)) return;" in worker, "the service worker does not intercept TikTok CDN media")
-    check('VERSION = "viktorych-a121-__SW_VERSION__"' in worker, "the service worker cache stamp is a121")
+    check('VERSION = "viktorych-a137-__SW_VERSION__"' in worker, "the service worker cache stamp is a137")
     landing_css = (ROOT / "landing.css").read_text(encoding="utf-8")
     accounts_src = (ROOT / "accounts.js").read_text(encoding="utf-8")
     check("function showLanding(" in accounts_src and "function installedApp(" in accounts_src and "display-mode: standalone" in accounts_src and 'data-acct="signup"' in accounts_src and 'data-acct="login"' in accounts_src and "prefers-reduced-motion" in landing_css and "animation-timeline" in landing_css and "landing/timeline.webp" in accounts_src, "logged-out visitors get the marketing landing and an installed app skips it")
@@ -4600,7 +4669,7 @@ def story_checks() -> None:
     dispatch_wf = (ROOT / ".github" / "workflows" / "worker-dispatch-secret.yml").read_text(encoding="utf-8")
     check("WORKER_DISPATCH_TOKEN" in readme and "WORKER_DISPATCH_TOKEN" in wrangler and ".github/worker-dispatch-secret" in (ROOT / "worker" / "README.md").read_text(encoding="utf-8"), "WORKER_DISPATCH_TOKEN is the repo secret")
     check("not set yet" in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\" | npx wrangler secret put GITHUB_DISPATCH_TOKEN --name viktorych-accounts" in dispatch_wf, "an empty dispatch token is skipped and a set one is copied from stdin")
-    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha256sum" in dispatch_wf and "actions/cache/restore@v4" in dispatch_wf and "actions/cache/save@v4" in dispatch_wf, "the dispatch secret workflow retries itself and skips a value it already copied")
+    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha256sum" in dispatch_wf and re.search(r"actions/cache/restore@(?:v4\b|[0-9a-f]{40} # v4)", dispatch_wf) is not None and re.search(r"actions/cache/save@(?:v4\b|[0-9a-f]{40} # v4)", dispatch_wf) is not None, "the dispatch secret workflow retries itself and skips a value it already copied")
     check('echo "$WORKER_DISPATCH_TOKEN"' not in dispatch_wf and "echo $WORKER_DISPATCH_TOKEN" not in dispatch_wf and "echo ${{ secrets" not in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\"" in dispatch_wf, "the dispatch secret workflow does not print the token")
     live_check = (ROOT / "worker" / "dispatch-live-check.mjs").read_text(encoding="utf-8")
     check("node dispatch-live-check.mjs" in dispatch_wf and "/tiktok-live.yml/dispatches" in live_check and "media-extract.yml" not in live_check and "tiktok-added.yml" not in live_check, "the worker dispatch check starts only tiktok-live.yml")
@@ -5052,6 +5121,9 @@ def gdrive_checks() -> None:
     wrangler_text = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
     check("head_sampling_rate = 1" in wrangler_text and 'binding = "CACHE"' in wrangler_text and 'crons = ["* * * * *"]' in wrangler_text, "workers logs and the KV cache are configured beside the existing cron")
     check("backups/d1/" in (ROOT / "worker" / "src" / "d1-backup.js").read_text(encoding="utf-8"), "the daily D1 export keeps its objects under backups/d1/")
+    import secret_scan
+    check(secret_scan.selftest() == 0, "the secret and personal-data scan catches its samples")
+    check(secret_scan.report(secret_scan.scan(secret_scan.git_files(False), False)) == 0, "no secret or personal data in the tracked tree")
 
 
 if __name__ == "__main__":

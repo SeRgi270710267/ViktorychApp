@@ -1,15 +1,15 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a121-__SW_VERSION__";
+const VERSION = "viktorych-a137-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T10:59:00Z-msg-servers-p2
+// cache-bust: 2026-10-29T19:02:30Z-msg-servers-p2
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./i18n/hi.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION, "./notif-privacy.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -22,7 +22,7 @@ async function ensureUiLang() {
   try {
     const db = await idb();
     const savedLang = await idbGet(db, "ui-lang");
-    if ((savedLang === "en" || savedLang === "ru" || savedLang === "es") && self.SI18n) self.SI18n.setLang(savedLang);
+    if ((savedLang === "en" || savedLang === "ru" || savedLang === "es" || savedLang === "hi") && self.SI18n) self.SI18n.setLang(savedLang);
   } catch (err) { /* English until the page sends a language */ }
 }
 async function brandManifestResponse(response) {
@@ -56,12 +56,14 @@ const SHELL_FILES = [
   "./i18n/en.js",
   "./i18n/ru.js",
   "./i18n/es.js",
+  "./i18n/hi.js",
   "./app.js",
   "./update.js",
   "./storage.js",
   "./storage.css",
   "./localfirst.js",
   "./direct.js",
+  "./comments-client.js",
   "./device.js",
   "./device-search.js",
   "./device-ai.js",
@@ -87,6 +89,8 @@ const SHELL_FILES = [
   "./people.css",
   "./tv.js",
   "./tv.css",
+  "./shared/tv-boot.js",
+  "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",
   "./split.js",
@@ -115,10 +119,13 @@ const SHELL_FILES = [
   "./shared/gift-catalog.js",
   "./badges.js",
   "./badges.css",
+  "./setting-alerts.js",
+  "./setting-alerts.css",
   "./audience-ui.js",
   "./gifts.css",
   "./reactions.css",
   "./settings-sync.js",
+  "./notif-privacy.js",
   "./accounts.js",
   "./passkeys.js",
   "./app-lock.js",
@@ -200,6 +207,9 @@ const SHELL_FILES = [
   "./icons/music-maskable-512.png",
   "./peer-media.js",
   "./shared/peer-media.js",
+  "./peer-pool.js",
+  "./shared/peer-pool.js",
+  "./shared/pool-scheduler.js",
   "./shared/device-performance.js"
 ];
 
@@ -211,12 +221,12 @@ let serveNetworkOnce = false;
 let peerOn = false;
 const armedClients = new Set();
 const reloadingClients = new Set();
-const PRECACHE_TRIES = 4;
-const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inter-400.woff2", "./fonts/inter-900.woff2"];
+const PRECACHE_TRIES = 6;
+const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inter-400.woff2", "./fonts/inter-900.woff2", "./onboarding.js", "./onboarding.css"];
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a121-";
+  const prefix = "viktorych-a137-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1209,8 +1219,10 @@ function retryableStatus(status) {
 }
 
 function precacheDelay(attempt) {
+  // 0.5s, 1s, 2s, 4s, 8s: long enough for a CDN edge that still serves the
+  // previous deploy (a 404 or an old copy) to catch up.
   if (attempt <= 0) return 0;
-  return Math.min(1600, 200 * (2 ** (attempt - 1)));
+  return Math.min(8000, 500 * (2 ** (attempt - 1)));
 }
 
 function precacheShell(report, fresh) {
@@ -1499,7 +1511,25 @@ async function offFeatureFiles() {
   }
 }
 
+/* Written into this version's shell cache once every file is in. A worker
+   that the browser stopped and started again (phones do this all the time)
+   then knows the download already finished and never repeats it. */
+const SHELL_READY = "./__shell-ready";
+async function shellReadyState() {
+  try {
+    const res = await (await caches.open(SHELL)).match(SHELL_READY);
+    if (!res) return null;
+    const doc = await res.json();
+    return doc && typeof doc === "object" ? doc : null;
+  } catch (err) { return null; }
+}
+
 async function doPrecache(report, generation, signal) {
+  const done = await shellReadyState();
+  if (done) {
+    progressState = { files: Number(done.files) || 0, totalFiles: Number(done.totalFiles) || 0, bytes: Number(done.bytes) || 0, totalBytes: Number(done.totalBytes) || 0 };
+    return progressState;
+  }
   // Download the whole shell into a staging cache. The live cache is
   // replaced only after every required file succeeds, so a client never
   // runs one version's HTML with another version's scripts. The staging
@@ -1554,6 +1584,8 @@ async function doPrecache(report, generation, signal) {
       if (res) await live.put(req, res);
     }));
     ok = true;
+    const summary = { files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes };
+    try { await live.put(SHELL_READY, new Response(JSON.stringify(summary), { headers: { "Content-Type": "application/json" } })); } catch (err) { /* the next apply checks the files again */ }
     console.info("shell update ready", "reused " + state.reused, "downloaded " + state.fetched);
     progressState = { files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes };
     return progressState;
@@ -1679,9 +1711,38 @@ self.addEventListener("message", (event) => {
     // The page heard nothing for a while. Answer with where this worker is.
     // A waiting worker with no download running is not making progress, so
     // the page shows Retry instead of waiting on it forever.
+    // A phone stops an idle worker and starts it again with no download in
+    // memory; that is not a failure. Pick the download up again (files
+    // already saved are kept) instead of sending the page to Retry.
     if (shellTask) broadcastProgress({ step: "download" }, true);
     else if (self.registration.active === self.serviceWorker) broadcastProgress({ step: "activate" }, true);
+    else if (self.registration.waiting === self.serviceWorker || self.registration.installing === self.serviceWorker) event.waitUntil(runApply(false));
     else broadcast({ type: "update-progress", step: "error", url: "", reason: "timeout" });
+    return;
+  }
+  if (data.type === "predownload") {
+    // A new version is waiting. Download its files quietly in the
+    // background; the page shows What's new only once this is done, so
+    // Update now just switches over. A failure here is never shown: the
+    // page tries again later.
+    event.waitUntil((async () => {
+      if (self.registration.active === self.serviceWorker) return;
+      const info = versionInfo();
+      try {
+        let task = precacheShell(false, false);
+        for (;;) {
+          try { await task; break; } catch (err) {
+            if (!err || err.reason !== "replaced" || !shellTask || shellTask === task) throw err;
+            task = shellTask;
+          }
+        }
+        broadcast({ type: "shell-ready", sha: info.sha, version: info.version });
+      } catch (err) {
+        const reason = safeShellReason(err && err.reason);
+        if (reason === "replaced") return;
+        broadcast({ type: "shell-pending", sha: info.sha, reason: reason, url: safeShellPath(err && err.shellPath) });
+      }
+    })());
     return;
   }
   if (data.type === "apply-update" || data.type === "skip-waiting") {
@@ -1787,7 +1848,7 @@ self.addEventListener("message", (event) => {
       if (Array.isArray(data.mutedAccounts)) await idbSet(db, "muted-accounts", data.mutedAccounts);
       if (Array.isArray(data.repostOff)) await idbSet(db, "repost-off", data.repostOff);
       if (typeof data.notifyAll === "boolean") await idbSet(db, "notify-all", data.notifyAll);
-      if (data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es") {
+      if (data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es" || data.uiLang === "hi") {
         await idbSet(db, "ui-lang", data.uiLang);
         if (self.SI18n) self.SI18n.setLang(data.uiLang);
       }
@@ -1866,6 +1927,8 @@ self.addEventListener("fetch", (event) => {
   }
   if (request.method !== "GET") return;
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  // The TV install page, the APK, and assetlinks go straight to the network.
+  if (url.origin === self.location.origin && (/\.apk$/i.test(url.pathname) || /\/tv\/(?:index\.html)?$/.test(url.pathname) || url.pathname.indexOf("/.well-known/") >= 0)) return;
   if (url.origin === self.location.origin && url.pathname.toLowerCase().endsWith("/version.json")) {
     event.respondWith((async () => {
       const res = await mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" }));
@@ -2043,13 +2106,14 @@ function shellDocument(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
   if (/\/(?:s|u)\//.test(path)) return false;
+  if (/\/tv\/(?:index\.html)?$/.test(path)) return false;
   return /\/(?:index\.html)?$/.test(path);
 }
 
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -2258,12 +2322,14 @@ async function deliverBellNotesNow(notes, dnd) {
     delivered.push(note);
     if (quiet || Notification.permission !== "granted") continue;
     try {
-      await self.registration.showNotification(note.name || ("@" + (note.handle || "post")), {
-        body: note.text || tr("New post"),
-        icon: note.avatar || "icons/icon-192.png",
-        image: note.image || undefined,
+      const NPB = self.ViktorychNotifPrivacy;
+      const shownB = NPB ? NPB.present(Object.assign({ kind: "post" }, note), await NPB.load(), { title: note.name || ("@" + (note.handle || "post")) }) : null;
+      await self.registration.showNotification(shownB ? shownB.title : (note.name || ("@" + (note.handle || "post"))), {
+        body: shownB ? shownB.body : (note.text || tr("New post")),
+        icon: shownB ? shownB.icon : (note.avatar || "icons/icon-192.png"),
+        image: shownB ? shownB.image : (note.image || undefined),
         tag: "note-" + id,
-        data: { hash: note.hash || "#/", id: id }
+        data: { hash: shownB && shownB.generic ? "#/notifications" : (note.hash || "#/"), id: id }
       });
     } catch (err) { /* the page still keeps the in-app row */ }
   }
@@ -2274,7 +2340,7 @@ async function deliverBellNotesNow(notes, dnd) {
   if (!visible) {
     const queued = ((await idbGet(db, "bell-queue")) || []).concat(delivered).slice(-80);
     await idbSet(db, "bell-queue", queued);
-    if (navigator.setAppBadge) {
+    if (navigator.setAppBadge && await swBadgeAllowed()) {
       try { await navigator.setAppBadge(queued.length); } catch (err) { /* badges are optional */ }
     }
   }
@@ -2425,7 +2491,7 @@ async function refreshAndNotify() {
     if (!(await swNoteHidden(fresh[i]))) visibleFresh.push(fresh[i]);
   }
   if (!visibleFresh.length || notifyAll !== true) return;
-  if (navigator.setAppBadge) {
+  if (navigator.setAppBadge && await swBadgeAllowed()) {
     try { await navigator.setAppBadge(visibleFresh.length); } catch (err) { /* badges are optional */ }
   }
   if (Notification.permission === "granted") {
@@ -2551,6 +2617,71 @@ self.addEventListener("sync", (event) => {
   if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
 });
 
+// Notification privacy (notif-privacy.js). The badge follows the person's choice.
+async function swBadgeAllowed() {
+  const NP = self.ViktorychNotifPrivacy;
+  if (!NP) return true;
+  try { return (await NP.load()).badge !== false; } catch (err) { return true; }
+}
+
+// One small server read when this device has no copy of a note and names
+// are allowed. Hidden names never trigger a request.
+async function fetchPushNote(sid) {
+  const NP = self.ViktorychNotifPrivacy;
+  const db = await idb();
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  if (!auth || !auth.token || !api || !sid) return null;
+  const since = Date.now() - 15 * 60 * 1000;
+  const res = await fetch(String(api).replace(/\/$/, "") + "/v1/notifications?since=" + since, {
+    headers: { Authorization: "Bearer " + auth.token },
+    cache: "no-store"
+  });
+  if (!res || !res.ok) return null;
+  const view = await res.json().catch(() => null);
+  const items = (view && Array.isArray(view.items)) ? view.items : [];
+  await NP.remember(items, await NP.load());
+  return NP.lookup(sid);
+}
+
+// Compact pushes: {v:2,k,i,n}. Text comes from this device only.
+async function showCompactPush(c) {
+  const NP = self.ViktorychNotifPrivacy;
+  const db = await idb();
+  const mark = c.sid + ":" + c.count;
+  if (c.sid) {
+    const seen = (await idbGet(db, "push-seen")) || [];
+    if (seen.indexOf(mark) >= 0) return;
+    await idbSet(db, "push-seen", seen.concat([mark]).slice(-300));
+  }
+  const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (open.some((client) => client.visibilityState === "visible")) {
+    open.forEach((client) => {
+      try { client.postMessage({ type: "push-note", note: {} }); }
+      catch (err) { /* the page polls when it is next visible */ }
+    });
+    return;
+  }
+  await ensureUiLang();
+  const prefs = await NP.load();
+  let note = null;
+  if (NP.showNames(prefs, c.kind)) {
+    note = await NP.lookup(c.sid);
+    if (!note || (c.count && Number(note.others || 0) !== c.count)) {
+      try { note = (await fetchPushNote(c.sid)) || note; } catch (err) { /* generic copy below */ }
+    }
+  }
+  if (note && await swNoteHidden(note)) return;
+  const shown = NP.present(note ? Object.assign({}, note, { kind: note.kind || c.kind, others: c.count || note.others }) : null, prefs, { kind: c.kind });
+  await self.registration.showNotification(shown.title, {
+    body: shown.body,
+    icon: shown.icon,
+    image: shown.image,
+    tag: "n-" + (c.sid || c.kind),
+    data: { hash: shown.hash, id: (note && note.id) || "" }
+  });
+}
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let data = {};
@@ -2558,6 +2689,11 @@ self.addEventListener("push", (event) => {
     catch (err) { data = {}; }
     if (await pushIsDnd(!!(data && data.dnd))) return;
     if (data && data.silent) return;
+    const compact = self.ViktorychNotifPrivacy ? self.ViktorychNotifPrivacy.parsePush(data) : null;
+    if (compact) {
+      await showCompactPush(compact);
+      return;
+    }
     const hasCopy = !!(data && (data.titleKey || data.body));
     if (!hasCopy) return;
     if (await swNoteHidden(data)) return;
@@ -2584,11 +2720,13 @@ self.addEventListener("push", (event) => {
     await ensureUiLang();
     const vars = data && data.titleVars && typeof data.titleVars === "object" ? data.titleVars : {};
     const title = data && data.titleKey ? tr(data.titleKey, vars) : tr("New post");
-    await self.registration.showNotification(title, {
-      body: (data && data.body) || "",
-      icon: (data && data.icon) || "icons/icon-192.png",
+    const NPL = self.ViktorychNotifPrivacy;
+    const shownL = NPL ? NPL.present({ kind: NPL.kindFromTitleKey(data && data.titleKey), name: vars.name || "", handle: vars.handle || "", text: (data && data.body) || "", avatar: (data && data.icon) || "", hash: (data && data.hash) || "#/" }, await NPL.load(), { title: title }) : null;
+    await self.registration.showNotification(shownL ? shownL.title : title, {
+      body: shownL ? shownL.body : ((data && data.body) || ""),
+      icon: shownL ? shownL.icon : ((data && data.icon) || "icons/icon-192.png"),
       tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
-      data: { hash: (data && data.hash) || "#/", id: (data && data.id) || "" }
+      data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "" }
     });
   })());
 });

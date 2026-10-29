@@ -1,0 +1,83 @@
+name: TV custom build
+run-name: TV custom build
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: Build id from the accounts Worker
+        required: true
+      label:
+        description: Home-screen name (kept out of the logs)
+        required: true
+      icon:
+        description: default, media, browser, player or notes
+        required: false
+        default: default
+permissions:
+  contents: write
+concurrency:
+  group: tv-custom
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Read and hide the inputs
+        run: |
+          set -euo pipefail
+          LABEL="$(jq -r '.inputs.label // ""' "$GITHUB_EVENT_PATH")"
+          echo "::add-mask::$LABEL"
+          ID="$(jq -r '.inputs.build_id // ""' "$GITHUB_EVENT_PATH")"
+          ICON="$(jq -r '.inputs.icon // "default"' "$GITHUB_EVENT_PATH")"
+          [[ "$ID" =~ ^[0-9a-z]{36}$ ]] || { echo "bad build id"; exit 1; }
+          case "$ICON" in default|media|browser|player|notes) ;; *) echo "bad icon"; exit 1 ;; esac
+          [ -n "$LABEL" ] || { echo "empty label"; exit 1; }
+          {
+            echo "BUILD_ID=$ID"
+            echo "TV_APP_ICON=$ICON"
+            D="EOF_$(openssl rand -hex 8)"
+            echo "TV_APP_LABEL<<$D"; echo "$LABEL"; echo "$D"
+          } >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        with:
+          gradle-version: "8.9"
+      - name: Build and sign
+        env:
+          TV_KEYSTORE_B64: ${{ secrets.TV_KEYSTORE_B64 }}
+          TV_KEYSTORE_PASS: ${{ secrets.TV_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TV_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/tv.jks"
+          export TV_KEYSTORE="$RUNNER_TEMP/tv.jks" TV_KEY_ALIAS=viktorychtv
+          cd android-tv
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          gradle --no-daemon -q assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/ViktorychTV.apk"
+          rm -f "$RUNNER_TEMP/tv.jks"
+      - name: Publish as a private draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cutoff="$(date -u -d '24 hours ago' +%s)"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft and (.tag_name | startswith("tv-custom-"))) | [.id, .created_at] | @tsv' |
+          while IFS=$'\t' read -r rid created; do
+            if [ "$(date -u -d "$created" +%s)" -lt "$cutoff" ]; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$rid" >/dev/null || true
+            fi
+          done
+          gh release create "tv-custom-$BUILD_ID" "$RUNNER_TEMP/ViktorychTV.apk#ViktorychTV.apk" \
+            --draft --title "TV custom build" --notes "Private build. Deleted after a day." --target main

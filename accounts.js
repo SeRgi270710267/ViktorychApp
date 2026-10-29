@@ -72,6 +72,7 @@
   var unfriendTarget = null;
   var reportState = { items: [], loading: false };
 
+  function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
   }
@@ -341,7 +342,9 @@
     var bases = api.bases(root, "", "").filter(function (base) { return base !== api.normalizeBase(root); });
     var next = bases.length ? api.rewrite(bases[0], rel) : "";
     if (!next) return fallback || Promise.reject(new Error("fetch"));
-    return nativeFetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store" }).then(function (res) {
+    var t = timedSignal(DATA_TIMEOUT, init && init.signal);
+    return nativeFetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", signal: t.signal }).then(function (res) {
+      t.done();
       if (res && res.ok && res.type !== "opaque") return res;
       return fallback || res;
     }).catch(function () {
@@ -369,12 +372,16 @@
     var path = "/v1/data/" + key.split("/").map(encodeURIComponent).join("/");
     function attempt(i) {
       var apiRoot = order[i];
+      // A stalled root must not hang the feed: give up after a while and try the next one.
+      var t = timedSignal(Number(config().dataTimeoutMs) || DATA_TIMEOUT, init && init.signal);
       return nativeFetch(apiRoot + path, {
         method: "GET",
         headers: headers,
         credentials: "omit",
-        cache: "no-store"
+        cache: "no-store",
+        signal: t.signal
       }).then(function (res) {
+        t.done();
         if (failoverStatus(res.status)) {
           rotateApi(apiRoot, retryAfterMs(res));
           if (i + 1 < order.length) return attempt(i + 1);
@@ -384,9 +391,20 @@
         if (res.status === 200 && mark) pulseKeep(key, mark, res.clone());
         return res;
       }, function (err) {
+        t.done();
+        if (init && init.signal && init.signal.aborted) throw err;
         rotateApi(apiRoot, 0);
         if (i + 1 < order.length) return attempt(i + 1);
         throw err;
+      });
+    }
+    // The sharing pool may answer from a nearby device first; it checks the
+    // bytes against the signed manifest and falls back to the normal read.
+    var pool = window.ViktorychPool;
+    if (pool && pool.wants && pool.wants(key)) {
+      return pool.fetchData(key, function () { return attempt(0); }).then(function (res) {
+        if (res && res.status === 200 && mark && res.headers.get("x-pool")) pulseKeep(key, mark, res.clone());
+        return res;
       });
     }
     return attempt(0);
@@ -475,6 +493,27 @@
   function later(fn, ms) { return typeof setTimeout === "function" ? setTimeout(fn, ms) : 0; }
   function stopLater(id) { if (id && typeof clearTimeout === "function") clearTimeout(id); }
   var READ_TIMEOUT = 15000;
+  var DATA_TIMEOUT = 20000;
+  var WRITE_TIMEOUT = 30000;
+  var UPLOAD_TIMEOUT = 120000;
+  /* A signal that aborts after ms, or when the caller's own signal aborts.
+     done() clears the timer; timedOut() tells a timeout from a caller abort. */
+  function timedSignal(ms, outer) {
+    if (typeof AbortController !== "function") return { signal: outer || undefined, done: function () {}, timedOut: function () { return false; } };
+    var ctrl = new AbortController();
+    var fired = false;
+    var timer = later(function () { fired = true; try { ctrl.abort(); } catch (err) { /* over */ } }, ms || 20000);
+    function onOuter() { try { ctrl.abort(); } catch (err) { /* over */ } }
+    if (outer) {
+      if (outer.aborted) onOuter();
+      else if (outer.addEventListener) outer.addEventListener("abort", onOuter, { once: true });
+    }
+    return {
+      signal: ctrl.signal,
+      done: function () { stopLater(timer); if (outer && outer.removeEventListener) outer.removeEventListener("abort", onOuter); },
+      timedOut: function () { return fired; }
+    };
+  }
   var HEDGE_MS = 3000;
   var trouble = { all: 0, at: 0 };
   function troubleNote(ok) {
@@ -486,6 +525,15 @@
       try { window.dispatchEvent(new CustomEvent("viktorych-api-trouble", { detail: { on: now } })); } catch (err) { /* old browser */ }
     }
   }
+  /* Settings alerts watch for rate limits and expired sessions. Only the
+     status code leaves this function, never the path or the body. */
+  function noteApiStatus(code, authed, res) {
+    if (code !== 429 && code !== 401 && !(authed && code >= 200 && code < 300)) return;
+    var wait = 0;
+    try { wait = Number(res && res.headers && res.headers.get && res.headers.get("Retry-After")) * 1000 || 0; } catch (err) { wait = 0; }
+    try { document.dispatchEvent(new CustomEvent("viktorych-api-status", { detail: { status: code, authed: authed, retryAfter: wait } })); } catch (err) { /* alerts are optional */ }
+  }
+
   function api(path, opts) {
     var list = bySpeed(apiOrder());
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
@@ -536,6 +584,7 @@
         // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
         if (typeof body.status === "string") body.bodyStatus = body.status;
         body.status = code;
+        noteApiStatus(code, !!opts.token, res);
         return body;
       });
     }
@@ -547,8 +596,11 @@
         return Promise.resolve({ status: 503, error: "all_endpoints_failed" });
       }
       var root = list[endpointIndex];
-      var sent = send(root, null);
+      var limit = Number(opts.timeoutMs) || (opts.form ? UPLOAD_TIMEOUT : (Number(config().writeTimeoutMs) || WRITE_TIMEOUT));
+      var t = timedSignal(limit, opts.signal);
+      var sent = send(root, t.signal);
       return sent.promise.then(function (res) {
+        t.done();
         if (failoverStatus(res.status)) {
           rotateApi(root, retryAfterMs(res));
           if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
@@ -556,6 +608,15 @@
         troubleNote(true);
         return finish(root, res, sent.tagKey, sent.held);
       }).catch(function (err) {
+        t.done();
+        // A write that timed out may still have arrived, so it is not sent
+        // to another root (that could apply it twice).
+        if (t.timedOut()) {
+          rotateApi(root, 0);
+          troubleNote(false);
+          return { status: 504, error: "timeout" };
+        }
+        if (opts.signal && opts.signal.aborted) throw err;
         rotateApi(root, 0);
         if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
         troubleNote(false);
@@ -657,10 +718,108 @@
     if (code === "too_fast") return tr("Wait a moment and try again.");
     if (code === "guard_required" || code === "rejected") return tr("Sign-up could not be checked. Try again.");
     if (code === "recovery_invalid") return tr("That recovery code did not work.");
+    if (code === "bad_expiry") return tr("Pick a time between 15 minutes and 90 days from now.");
+    if (code === "temporary_account") return tr("Temporary accounts can't do this. Save the account first.");
+    if (code === "temporary_dm_limit") return tr("Temporary accounts can only send a few messages a day to people they don't know.");
     return tr("Something went wrong. Try again.");
   }
   function layer() {
     return document.getElementById("account-layer");
+  }
+  /* First-time setup (onboarding.js) is loaded only for sign-up. Its progress
+     sits in localStorage so a reload resumes the same step. */
+  var ONB_KEY = "viktorychapp-onboard-v1";
+  var onbLoad = null;
+  var setupPainted = -1;
+  function readOnb() {
+    try {
+      var doc = JSON.parse(localStorage.getItem(ONB_KEY) || "null");
+      return doc && typeof doc === "object" ? doc : null;
+    } catch (err) { return null; }
+  }
+  function writeOnb(doc) {
+    try {
+      if (doc) localStorage.setItem(ONB_KEY, JSON.stringify(doc));
+      else localStorage.removeItem(ONB_KEY);
+    } catch (err) { /* private mode */ }
+  }
+  function loadOnboarding() {
+    if (window.ViktorychOnboarding) return Promise.resolve(window.ViktorychOnboarding);
+    if (onbLoad) return onbLoad;
+    onbLoad = new Promise(function (resolve) {
+      var timer = setTimeout(function () { onbLoad = null; resolve(window.ViktorychOnboarding || null); }, 4000);
+      if (!document.querySelector('link[href="onboarding.css"]')) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "onboarding.css";
+        document.head.appendChild(link);
+      }
+      var script = document.createElement("script");
+      script.src = "onboarding.js";
+      script.async = true;
+      script.onload = function () { clearTimeout(timer); resolve(window.ViktorychOnboarding || null); };
+      script.onerror = function () { clearTimeout(timer); onbLoad = null; resolve(null); };
+      document.head.appendChild(script);
+    });
+    return onbLoad;
+  }
+  function setupOn() {
+    if (view !== "signup" || readSession() || !window.ViktorychOnboarding) return false;
+    var doc = readOnb();
+    return !!(doc && (doc.stage === "account" || doc.stage === "post"));
+  }
+  function startSetup() {
+    if (readPending()) { openAuth("signup"); return; }
+    loadOnboarding().then(function (onb) {
+      if (onb) onb.start("pre", 0);
+      else openAuth("signup");
+    });
+  }
+  function markSetupPost(account) {
+    var doc = readOnb() || {};
+    writeOnb({ stage: "post", step: 0, lang: doc.lang || "", id: account && account.publicId ? String(account.publicId) : "", at: Date.now() });
+  }
+  function setupBack() {
+    errorText = "";
+    if (step === 1) { step = 0; paint(); return; }
+    view = "";
+    paint();
+    var onb = window.ViktorychOnboarding;
+    if (onb) onb.start("pre", 1, -1);
+  }
+  function setupModal(body) {
+    var onb = window.ViktorychOnboarding;
+    var title = tr("Create your account");
+    var anim = setupPainted === step ? "" : " acct-setup-in" + (step < setupPainted ? " back" : "");
+    setupPainted = step;
+    var backBtn = step < 2 ? '<button class="icon-btn" type="button" data-acct="setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button>' : "<span></span>";
+    return '<div class="acct-back acct-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head">' + backBtn + '<div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button></div>" + (onb ? onb.progressHtml(2 + step) : "") + '<div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  }
+  /* The temporary account sheet in the phone-style setup look, with Back
+     returning to the screen it was opened from. */
+  function tempSetupModal(body) {
+    var title = tr("Temporary account");
+    var anim = setupPainted === "temp" ? "" : " acct-setup-in";
+    setupPainted = "temp";
+    return '<div class="acct-back acct-setup acct-temp-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head"><button class="icon-btn" type="button" data-acct="temp-setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button><div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button></div><div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  }
+  function openTemp(from) {
+    tempState.pick = "1d";
+    tempState.until = "";
+    tempState.saveData = null;
+    tempState.from = from || "";
+    setupPainted = -1;
+    openAuth("temp");
+  }
+  function tempSetupBack() {
+    var from = tempState.from;
+    tempState.from = "";
+    errorText = "";
+    if (from === "signup") { setupPainted = -1; openAuth("signup"); return; }
+    view = "";
+    paint();
+    var onb = window.ViktorychOnboarding;
+    if (onb) onb.start("pre", 0, -1);
   }
   function fieldCount(name, value, max) {
     var raw = name === "accountNumber" ? String(value || "").replace(/\D/g, "") : String(value || "");
@@ -736,7 +895,7 @@
     var foot = pages.map(function (page) {
       return '<button type="button" data-acct="legal" data-legal="' + page[0] + '" data-title="' + esc(page[1]) + '">' + esc(page[1]) + "</button>";
     }).join("");
-    var langs = [["en", "English"], ["es", "Español"], ["ru", "Русский"]].map(function (pair) {
+    var langs = [["en", "English"], ["es", "Español"], ["hi", "हिन्दी"], ["ru", "Русский"]].map(function (pair) {
       var on = readLang() === pair[0] ? " on" : "";
       return '<button class="land-lang' + on + '" type="button" data-acct="lang" data-lang="' + pair[0] + '">' + esc(pair[1]) + "</button>";
     }).join("");
@@ -761,7 +920,7 @@
       return '<section class="land-block' + flip + '"><div class="land-copy"><h2>' + esc(row[1]) + "</h2><p>" + esc(row[2]) + '</p></div><div class="land-frame"><div class="land-device"><img alt="' + esc(row[3]) + '" src="' + row[0] + '" width="414" height="896" loading="lazy" decoding="async"></div></div></section>';
     }).join("");
     var actions = '<button class="land-btn land-btn-line" type="button" data-acct="login">' + esc(tr("Log in")) + '</button><button class="land-btn land-btn-fill" type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button>";
-    return '<div class="x-shell land-page"><header class="land-bar"><a class="land-brand" href="./">' + mark("land-mark") + "<span>" + esc(appName()) + '</span></a><div class="land-bar-actions"><div class="land-langs" role="group" aria-label="' + esc(tr("Display language")) + '">' + langs + "</div>" + actions + '</div></header><main><section class="land-hero x-land-copy"><p class="land-kicker">' + esc(appName()) + "</p><h1>" + esc(appName()) + '</h1><p class="land-tag">' + esc(tr("A home for posts, stories, and the people you choose.")) + '</p><p class="land-lead">' + esc(tr("The timeline, stories, notes, live video, and gifts. It runs in the browser and as an installed app.")) + '</p><div class="land-hero-actions">' + actions + "</div></section>" + blocks + '</main><footer class="x-foot land-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
+    return '<div class="x-shell land-page"><header class="land-bar"><a class="land-brand" href="./">' + mark("land-mark") + "<span>" + esc(appName()) + '</span></a><div class="land-bar-actions"><div class="land-langs" role="group" aria-label="' + esc(tr("Display language")) + '">' + langs + "</div>" + actions + '</div></header><main><section class="land-hero x-land-copy"><p class="land-kicker">' + esc(appName()) + "</p><h1>" + esc(appName()) + '</h1><p class="land-tag">' + esc(tr("A home for posts, stories, and the people you choose.")) + '</p><p class="land-lead">' + esc(tr("The timeline, stories, notes, live video, and gifts. It runs in the browser and as an installed app.")) + '</p><div class="land-hero-actions">' + actions + '</div><button class="land-temp" type="button" data-acct="open-temp">' + esc(tr("Try a temporary account")) + "</button></section>" + blocks + '</main><footer class="x-foot land-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
   }
   function honeypotHtml() {
     return '<div class="acct-hp" aria-hidden="true"><label>Fax<input name="fax" tabindex="-1" autocomplete="off" value=""></label></div>';
@@ -861,8 +1020,20 @@ var numberNote = form.passkey
     var profRow = '<div class="acct-pref-row" style="margin:16px 0 8px"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" data-acct="toggle-form-profileless"><i></i></button></div>';
     return '<p class="acct-sub">' + subText + "</p>" +
       field("displayName", form.profileLess ? tr("Name (optional)") : tr("Name"), "text", 50) +
-      profRow +
-      errorHtml() + nextButton("next", tr("Next"));
+      profRow + saveDataRow() +
+      errorHtml() + nextButton("next", tr("Next")) +
+      '<p class="acct-switch"><button type="button" data-acct="open-temp">' + esc(tr("Try a temporary account")) + "</button></p>";
+  }
+  /* Save data at sign-up: on when this device already asks to save data. */
+  function saveDataWanted() {
+    if (typeof form.saveData === "boolean") return form.saveData;
+    var saver = window.ViktorychDataSaver;
+    return !!(saver && saver.detect && saver.detect().on);
+  }
+  function saveDataRow() {
+    if (!window.ViktorychDataSaver) return "";
+    var on = saveDataWanted();
+    return '<div class="acct-pref-row" style="margin:8px 0"><div class="acct-pref-text"><b>' + esc(tr("Save data")) + '</b><p>' + esc(tr("Uses as little mobile data as possible. Change it any time in Settings.")) + '</p></div><button class="tab-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" data-acct="toggle-form-savedata"><i></i></button></div>';
   }
   function loginBody() {
     var digits = String(form.accountNumber || "").replace(/\D/g, "");
@@ -991,15 +1162,18 @@ var numberNote = form.passkey
   }
   function wallTheme() {
     var mode = document.documentElement.getAttribute("data-theme") || "lightsout";
-    if (mode !== "default" && mode !== "dim") mode = "lightsout";
+    var themes = window.ViktorychThemes;
+    if (themes ? !themes.known(mode) : (mode !== "default" && mode !== "dim")) mode = "lightsout";
     return mode;
   }
   function applyWallTheme(mode) {
-    if (mode !== "default" && mode !== "dim") mode = "lightsout";
-    document.documentElement.setAttribute("data-theme", mode);
+    var themes = window.ViktorychThemes;
+    if (themes ? !themes.known(mode) : (mode !== "default" && mode !== "dim")) mode = "lightsout";
+    if (themes) themes.apply(mode);
+    else document.documentElement.setAttribute("data-theme", mode);
     var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
     var metas = document.querySelectorAll('meta[name="theme-color"]');
-    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
+    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", themes ? themes.color(mode) : colors[mode]);
     try {
       var key = "viktorychapp-settings-v1";
       var raw = localStorage.getItem(key);
@@ -1019,8 +1193,8 @@ var numberNote = form.passkey
       return '<button class="outline' + (theme === mode ? " on" : "") + '" type="button" data-acct="appearance" data-mode="' + mode + '">' + esc(label) + "</button>";
     }
     return '<p class="acct-sub">' + esc(tr("Language and appearance stay on this device.")) + "</p>" +
-      '<div class="theme-row" role="group" aria-label="' + esc(tr("Display language")) + '">' + langBtn("en", "English") + langBtn("es", "Español") + langBtn("ru", "Русский") + "</div>" +
-      '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + "</div>" +
+      '<div class="theme-row" role="group" aria-label="' + esc(tr("Display language")) + '">' + langBtn("en", "English") + langBtn("es", "Español") + langBtn("hi", "हिन्दी") + langBtn("ru", "Русский") + "</div>" +
+      '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}).map(function (id) { return themeBtn(id, tr(window.ViktorychThemes.flags[id].name)); }).join("") + "</div>" +
       '<p class="acct-sub">' + esc(tr("Account settings are available after you sign in.")) + "</p>";
   }
   function deletedFlag() {
@@ -1052,13 +1226,16 @@ var numberNote = form.passkey
       paintLandingMeta();
       html += landing();
     }
-    if (view === "signup") html += modal(tr("Create your account"), signupBody());
+    if (view !== "signup") setupPainted = -1;
+    if (view === "signup") html += setupOn() ? setupModal(signupBody()) : modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
     else if (view === "prefs") html += modal(tr("Settings"), prefsBody());
     else if (view === "emergency") html += modal(tr("Emergency Offline Access"), emergencyBody());
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
     else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
+    else if (view === "temp") html += tempState.from ? tempSetupModal(tempBody()) : modal(tr("Temporary account"), tempBody());
+    else if (view === "temp-saved") html += modal(tr("Account saved"), tempSavedBody());
     else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
     else if (view === "edit") html += editModal(editBody());
     else if (view === "crop") html += cropModal();
@@ -1141,6 +1318,8 @@ var numberNote = form.passkey
       paint();
       return;
     }
+    if (view === "signup" && step < 2 && setupOn()) writeOnb(null);
+    if (view === "temp") tempState.from = "";
     if (view === "signup" && step === 2 && readPending()) {
       view = "leave";
       paint();
@@ -1180,6 +1359,10 @@ var numberNote = form.passkey
     else document.documentElement.removeAttribute("data-wall");
     tellSW(false);
     paint();
+    var onbDoc = readOnb();
+    if (onbDoc && !readPending() && (onbDoc.stage === "pre" || onbDoc.stage === "account")) {
+      loadOnboarding().then(function (onb) { if (onb && !readSession()) onb.start(onbDoc.stage, onbDoc.step || 0); });
+    }
   }
   function finishAuth() {
     var back = "";
@@ -1196,7 +1379,7 @@ var numberNote = form.passkey
   function readLang() {
     try {
       var lang = localStorage.getItem("superintelapp-lang");
-      if (lang === "ru" || lang === "es" || lang === "en") return lang;
+      if (lang === "ru" || lang === "es" || lang === "hi" || lang === "en") return lang;
     } catch (err) { /* English */ }
     return "en";
   }
@@ -1229,7 +1412,7 @@ var numberNote = form.passkey
     if (!reg) return [];
     return reg.localKeys({ allOff: !!settings && settings.syncUi === false, lookOwn: deviceOwnUi() });
   }
-  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "friendsRail", "brandLogo"];
+  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "notifPrivacy", "peopleLinks", "friendsRail", "brandLogo"];
   function pickPrefs(local, remote) {
     // Home pills and Stories: each key keeps the newer choice.
     var out = {};
@@ -1615,7 +1798,7 @@ var numberNote = form.passkey
     writeStored("settings-v1", JSON.stringify(settings));
     if (reg) reg.remember(taken);
     if (window.ViktorychAccounts && window.ViktorychAccounts.writeHistory) window.ViktorychAccounts.writeHistory(payload);
-    if (payload && own.indexOf("lang") < 0 && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es")) {
+    if (payload && own.indexOf("lang") < 0 && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es" || payload.lang === "hi")) {
       try { localStorage.setItem("superintelapp-lang", payload.lang); } catch (err) { /* the page language stays */ }
       try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
       if (window.SI18n && typeof window.SI18n.setLang === "function" && window.SI18n.getLang() !== payload.lang) {
@@ -1821,10 +2004,14 @@ function signupPayload() {
         /* The server already follows the owner's accounts for a new account.
            Guest follows stay on this device and are not imported. */
         if (res.account && res.account.publicId) writeStored("follows-imported-v2-" + res.account.publicId, "1");
+        if (saveDataWanted() && window.ViktorychDataSaver) {
+          try { window.ViktorychDataSaver.apply(true); } catch (err) { /* the account still opens */ }
+        }
         if (typeof window.ViktorychAccounts.onSignup === "function") {
           try { window.ViktorychAccounts.onSignup(res.account || {}); } catch (err) { /* the session still opens */ }
         }
         writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
+        markSetupPost(res.account);
         view = "signup";
         step = 2;
         form.saved = false;
@@ -1996,7 +2183,11 @@ function signupPayload() {
         return;
       }
       form.passkey = true;
+      if (saveDataWanted() && window.ViktorychDataSaver) {
+        try { window.ViktorychDataSaver.apply(true); } catch (err) { /* the account still opens */ }
+      }
       writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
+      markSetupPost(res.account);
       step = 2;
       form.saved = false;
       errorText = "";
@@ -2439,6 +2630,50 @@ function signupPayload() {
       profiles[skel(account.publicId)] = account;
     }
   }
+  /* Last seen public header of app profiles (name, bio, avatar, banner,
+     counts), so reopening a profile paints at once and refreshes in place.
+     Bounded: 60 profiles, long fields such as inline images are left out. */
+  var HEADS_KEY = "viktorychapp-profile-heads-v1";
+  var HEADS_MAX = 60;
+  var HEAD_FIELDS = ["handle", "publicId", "displayName", "avatar", "avatarFace", "banner", "bannerFace", "bio", "location", "website", "verified", "verifiedType", "followersCount", "followingCount", "friendsCount", "postsCount"];
+  function readHeads() {
+    try { var raw = JSON.parse(localStorage.getItem(HEADS_KEY) || "{}"); return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}; }
+    catch (err) { return {}; }
+  }
+  function saveHead(account) {
+    if (!account || !account.handle || account.blockedBy || account.viewerBlocks || account.locked || account.profileLess) return;
+    var head = { at: Date.now() };
+    HEAD_FIELDS.forEach(function (k) {
+      var v = account[k];
+      if (v == null) return;
+      if (typeof v === "string" && v.length > 2000) return;
+      if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") head[k] = v;
+    });
+    var ref = accountRef(account);
+    var known = ref && graphCounts[ref];
+    if (known) {
+      if (known.followers != null) head.followersCount = known.followers;
+      if (known.following != null) head.followingCount = known.following;
+      if (known.friends != null) head.friendsCount = known.friends;
+    }
+    try {
+      var heads = readHeads();
+      heads[skel(account.handle)] = head;
+      var keys = Object.keys(heads).sort(function (a, b) { return (heads[b].at || 0) - (heads[a].at || 0); });
+      keys.slice(HEADS_MAX).forEach(function (k) { delete heads[k]; });
+      localStorage.setItem(HEADS_KEY, JSON.stringify(heads));
+    } catch (err) { /* storage full or blocked */ }
+  }
+  function cachedHead(key) {
+    var head = readHeads()[key];
+    if (!head || !head.handle) return null;
+    var copy = {};
+    HEAD_FIELDS.forEach(function (k) { if (head[k] != null) copy[k] = head[k]; });
+    copy.cachedHead = true;
+    copy.reposts = [];
+    copy.repostsLoaded = false;
+    return copy;
+  }
   function loadProfile(handle) {
     var key = skel(handle);
     var session = readSession();
@@ -2465,6 +2700,7 @@ function signupPayload() {
       // differ from the name in the link; keep it under the link's key too.
       if (profiles[key] !== body.account) profiles[key] = body.account;
       noteProfile(body.account);
+      saveHead(body.account);
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { profileLoads[key] = false; });
   }
@@ -2480,7 +2716,50 @@ function signupPayload() {
     profiles[key].reposts = Array.isArray(rows) ? rows : [];
     profiles[key].repostsLoaded = true;
   }
-  var graphCounts = {};
+  /* Last known follower, following and friend counts survive a reload so a
+     profile header paints real numbers at once; unknown counts render as a
+     blank placeholder, never as 0. Bounded: the most recent 200 accounts. */
+  var COUNTS_KEY = "viktorychapp-graph-counts-v1";
+  var COUNTS_MAX = 200;
+  var graphCounts = readSavedCounts();
+  var countsTimer = 0;
+  function readSavedCounts() {
+    var out = {};
+    try {
+      var raw = JSON.parse(localStorage.getItem(COUNTS_KEY) || "{}") || {};
+      Object.keys(raw).forEach(function (id) {
+        var row = raw[id];
+        if (!row || typeof row !== "object") return;
+        out[id] = { saved: true };
+        ["followers", "following", "friends"].forEach(function (k) { if (typeof row[k] === "number" && row[k] >= 0) out[id][k] = row[k]; });
+        out[id].at = Number(row.at) || 0;
+      });
+    } catch (err) { /* no saved counts */ }
+    return out;
+  }
+  function saveCounts() {
+    clearTimeout(countsTimer);
+    countsTimer = setTimeout(function () {
+      try {
+        var ids = Object.keys(graphCounts).filter(function (id) {
+          var row = graphCounts[id];
+          return row && (row.followers != null || row.following != null || row.friends != null);
+        }).sort(function (a, b) { return (graphCounts[b].at || 0) - (graphCounts[a].at || 0); }).slice(0, COUNTS_MAX);
+        var out = {};
+        ids.forEach(function (id) {
+          var row = graphCounts[id];
+          out[id] = { at: row.at || Date.now() };
+          ["followers", "following", "friends"].forEach(function (k) { if (row[k] != null) out[id][k] = row[k]; });
+        });
+        localStorage.setItem(COUNTS_KEY, JSON.stringify(out));
+      } catch (err) { /* storage full or blocked: counts stay in memory */ }
+    }, 300);
+  }
+  function countsChanged(id) {
+    if (!graphCounts[id]) return;
+    graphCounts[id].at = Date.now();
+    saveCounts();
+  }
   var followEpoch = 0;
   var listCache = {};
   var countLoads = {};
@@ -2530,7 +2809,12 @@ function signupPayload() {
     if (field === "following" && account && account.followingCount != null) return account.followingCount;
     if (field === "followers" && account && account.followersCount != null) return account.followersCount;
     if (field === "friends" && account && account.friendsCount != null) return account.friendsCount;
-    return 0;
+    return null;
+  }
+  /* An unknown count is a quiet placeholder, never a misleading 0. */
+  function countBold(n) {
+    if (n == null) return '<b class="count-skel" aria-label="' + esc(tr("Loading")) + '">\u2007\u2007</b>';
+    return "<b>" + esc(formatNum(n)) + "</b>";
   }
   function noteProfile(account) {
     var id = accountRef(account);
@@ -2546,12 +2830,15 @@ function signupPayload() {
     graphCounts[id].blockedBy = !!account.blockedBy;
     graphCounts[id].muted = !!account.viewerMutes;
     graphCounts[id].locked = !!account.locked;
+    if (account.followingCount != null || account.followersCount != null || account.friendsCount != null) countsChanged(id);
   }
   function countLink(account, tab, n, label) {
     var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
-    return '<a href="' + esc(href) + '"><b>' + esc(formatNum(n)) + "</b> <span>" + esc(label) + "</span></a>";
+    return '<a href="' + esc(href) + '">' + countBold(n) + " <span>" + esc(label) + "</span></a>";
   }
   function accountCountsHtml(account) {
+    var ref = accountRef(account);
+    if (ref && (accountStat(account, "following") == null || accountStat(account, "followers") == null)) ensureCounts(ref);
     return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + "</div>";
   }
   function followersOf(id) {
@@ -2571,6 +2858,7 @@ function signupPayload() {
       if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
       if (res.followingCount != null) graphCounts[id].following = res.followingCount;
       graphCounts[id].fresh = true;
+      countsChanged(id);
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { countLoads[id] = false; });
   }
@@ -2620,6 +2908,7 @@ function signupPayload() {
         if (res.followingCount != null) graphCounts[id].following = res.followingCount;
         if (res.requestsCount != null) graphCounts[id].requests = res.requestsCount;
         graphCounts[id].fresh = true;
+      countsChanged(id);
       }
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {
@@ -2718,6 +3007,7 @@ function signupPayload() {
         if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
         graphCounts[id].pending = true;
         graphCounts[id].fresh = true;
+      countsChanged(id);
         if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
         if (me && res.followingCount != null) {
           graphCounts[me] = graphCounts[me] || {};
@@ -2730,6 +3020,7 @@ function signupPayload() {
       graphCounts[id].pending = false;
       if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
       graphCounts[id].fresh = true;
+      countsChanged(id);
       if (me && res.followingCount != null) {
         graphCounts[me] = graphCounts[me] || {};
         graphCounts[me].following = res.followingCount;
@@ -3066,7 +3357,7 @@ function signupPayload() {
         cardsHtml = '<div class="friends-grid">' + incoming.map(function (req) {
           var rpid = req.id ? req.id.replace(/^app:/, "") : "";
           var photo = presenceWrap(rpid, publicAvatar(req.avatar, req.avatarFace, "friend-avatar"), false);
-          var mutual = req.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: req.mutualFriendsCount })) + '</div>' : '';
+          var mutual = req.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tn("mutualFriends", req.mutualFriendsCount, { count: req.mutualFriendsCount })) + '</div>' : '';
           return '<div class="friend-card" data-friend-card="app:' + esc(rpid) + '">' +
             '<a class="friend-card-media" href="#/@' + encodeURIComponent(req.handle) + '">' + photo + '</a>' +
             '<div class="friend-card-info">' +
@@ -3100,7 +3391,7 @@ function signupPayload() {
         cardsHtml = '<div class="friends-grid">' + filtered.map(function (fr) {
           var fpid = fr.id ? fr.id.replace(/^app:/, "") : fr.publicId;
           var photo = presenceWrap(fpid, publicAvatar(fr.avatar, fr.avatarFace, "friend-avatar"), false);
-          var mutual = fr.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: fr.mutualFriendsCount })) + '</div>' : '';
+          var mutual = fr.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tn("mutualFriends", fr.mutualFriendsCount, { count: fr.mutualFriendsCount })) + '</div>' : '';
           var btn = "";
           if (mine) {
             btn = '<button class="friend-btn friend-mutual" type="button" data-friend-act="unfriend" data-friend-id="' + esc(fpid) + '" data-handle="' + esc(fr.handle) + '"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg><span class="f">' + esc(tr("Friends")) + '</span><span class="u">' + esc(tr("Unfriend")) + '</span></button>';
@@ -3124,7 +3415,7 @@ function signupPayload() {
     var headingHtml = '<div class="friends-header">' +
       '<div class="friends-header-left">' +
         '<h2 class="friends-heading">' + esc(tr("Friends")) + '</h2>' +
-        '<span class="friends-sub">' + esc(tr("{count} friends", { count: totalFriends })) + '</span>' +
+        '<span class="friends-sub">' + esc(tn("friends", totalFriends, { count: totalFriends })) + '</span>' +
       '</div>' +
       '<div class="friends-header-right">' + headerRight + '</div>' +
     '</div>';
@@ -3654,9 +3945,10 @@ function signupPayload() {
     var bar = profileTabBar(account, mine, requested, profileHref);
     var activeTab = bar.active;
 
-    var pack = { html: "", count: 0 };
+    var pack = { html: "", count: null };
     if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account, activeTab) || pack;
-    var count = String(pack.count || 0);
+    /* Unknown while posts load: leave the count out rather than show 0. */
+    var count = pack.count == null ? (account.postsCount != null ? String(account.postsCount) : "") : String(pack.count);
 
     var postsEmpty = activeTab === "replies"
       ? '<div class="empty"><h2>' + esc(tr("No replies yet")) + "</h2><p>" + esc(tr("Replies from this account will show up here.")) + "</p></div>"
@@ -3673,7 +3965,7 @@ function signupPayload() {
     var body = activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
 
     var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
-    var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tr("{count} mutual friends", { count: mutualCount })) + '</div>' : '';
+    var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tn("mutualFriends", mutualCount, { count: mutualCount })) + '</div>' : '';
 
     var tabs = bar.html;
 
@@ -3685,7 +3977,7 @@ function signupPayload() {
       feedId: account.publicId ? "app:" + account.publicId : "",
       url: "",
       own: !!mine,
-      count: tr("{count} posts", { count: count })
+      count: count === "" ? "" : tn("posts", Number(count), { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
     return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
@@ -3702,7 +3994,9 @@ function signupPayload() {
     }
     if (!account) {
       loadProfile(route.handle);
-      return "";
+      /* Seen before on this device: paint the last known header now. */
+      var head = cachedHead(key);
+      return head ? accountPage(head, route) : "";
     }
     if (!account.repostsLoaded) loadProfile(route.handle);
     if (account.handle && skel(account.handle) !== key) {
@@ -3748,7 +4042,8 @@ function signupPayload() {
   function nameRowHtml(account) {
     var name = account.displayName || account.handle || "";
     var lock = (account.privateFollows || account.locked) ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
-    return '<span class="name-row-text">' + esc(name) + "</span>" + lock + (account.owner ? badge() : "") + (window.ViktorychAffiliations ? window.ViktorychAffiliations.slot(account.publicId) : "");
+    var temp = account.temporary ? '<span class="temp-label">' + esc(tr("Temporary")) + "</span>" : "";
+    return '<span class="name-row-text">' + esc(name) + "</span>" + lock + temp + (account.owner ? badge() : "") + (window.ViktorychAffiliations ? window.ViktorychAffiliations.slot(account.publicId) : "");
   }
   function drawerHead() {
     var session = readSession();
@@ -3767,13 +4062,14 @@ function signupPayload() {
     var href = account.handle ? "#/@" + encodeURIComponent(account.handle) : "#/settings";
     var following = accountStat(account, "following");
     var followers = accountStat(account, "followers");
-    var followerLabel = followers === 1 ? tr("Follower") : tr("Followers");
+    if (accountRef(account) && myAccountId() === accountRef(account) && following == null) following = localFeedFollows().length + localAppFollows().length;
+    var followerLabel = tn("followerWord", followers == null ? 2 : followers);
     if (accountRef(account)) ensureCounts(accountRef(account));
     return '<div class="drawer-id">' +
       '<div class="drawer-id-top"><a class="drawer-ava" href="' + esc(href) + '">' + photo + '</a>' + drawerTools() + '</div>' +
       '<a class="drawer-name pname" href="' + esc(href) + '">' + (isAnon ? '<span class="name-row-text">' + esc(name) + "</span>" : nameRowHtml(account)) + '</a>' +
       '<a class="drawer-handle" href="' + esc(href) + '">' + esc(sub) + '</a>' +
-      '<div class="drawer-counts"><a href="' + esc(href + "/following") + '"><b>' + esc(formatNum(following)) + '</b> ' + esc(tr("Following count")) + '</a><a href="' + esc(href + "/followers") + '"><b>' + esc(formatNum(followers)) + '</b> ' + esc(followerLabel) + '</a></div>' +
+      '<div class="drawer-counts"><a href="' + esc(href + "/following") + '">' + countBold(following) + ' ' + esc(tr("Following count")) + '</a><a href="' + esc(href + "/followers") + '">' + countBold(followers) + ' ' + esc(followerLabel) + '</a></div>' +
       '</div>';
   }
   var tiktokHealth = null;
@@ -3836,11 +4132,22 @@ function signupPayload() {
       if (week) rows += '<p class="set-sub">' + esc(tr("Worker requests, last 7 days")) + '</p><div class="usage-week">' + week + "</div>";
     }
     rows += usageRow(tr("Backup server hours this month (at most)"), u.renderHoursCeiling, L.renderHoursMonth);
+    rows += poolUsageHtml(u.pool);
     return head + rows + "</div>";
+  }
+  /* Sharing pool totals from the last 7 days, as the devices report them. */
+  function poolUsageHtml(p) {
+    if (!p) return "";
+    var mb = function (n) { return (Math.max(0, Number(n) || 0) / 1048576).toFixed(1) + " MB"; };
+    var pct = function (n) { return Math.round(Math.max(0, Math.min(1, Number(n) || 0)) * 100) + "%"; };
+    return '<p class="set-sub">' + esc(tr("Sharing pool, last 7 days")) + "</p>" +
+      '<p class="phandle">' + esc(tr("Peer hit rate {rate} ({hits} of {tries})", { rate: pct(p.hitRate), hits: formatNum(p.hits || 0), tries: formatNum(p.tries || 0) })) + "</p>" +
+      '<p class="phandle">' + esc(tr("Offloaded from the server {peer} of {total} ({share})", { peer: mb(p.peerBytes), total: mb((p.peerBytes || 0) + (p.originBytes || 0)), share: pct(p.byteShare) })) + "</p>" +
+      '<p class="phandle">' + esc(tr("Online in the pool now {n} · rejected chunks {bad}", { n: formatNum(p.online || 0), bad: formatNum(p.rejected || 0) })) + "</p>";
   }
   function healthWhen(value) {
     if (!value) return "";
-    try { return new Date(value).toLocaleString(); } catch (err) { return String(value); }
+    try { return new Date(value).toLocaleString((window.SI18n ? window.SI18n.locale() : undefined)); } catch (err) { return String(value); }
   }
   function healthHtml() {
     var body = tiktokHealth;
@@ -3871,7 +4178,7 @@ function signupPayload() {
       lines = '<p class="phandle">' + esc("403 " + (body.blocked403 || 0) + " · 429 " + (body.blocked429 || 0) + " · captcha " + (body.captcha || 0)) + "</p>";
       lines += rows.map(function (row) {
         var when = "";
-        try { when = row.until ? new Date(row.until).toLocaleString() : ""; } catch (err) { when = row.until || ""; }
+        try { when = row.until ? new Date(row.until).toLocaleString((window.SI18n ? window.SI18n.locale() : undefined)) : ""; } catch (err) { when = row.until || ""; }
         return '<p class="phandle">@' + esc(row.handle || "") + " " + esc(tr("Backing off until {time}", { time: when })) + "</p>";
       }).join("");
     }
@@ -3924,7 +4231,7 @@ function signupPayload() {
     }).join("");
     return '<div class="set-block"><h2>' + esc(tr("Backup channels")) + "</h2>" +
       '<p class="set-sub">' + esc(tr("The same bot posts there. Lives are spread across these channels.")) + "</p>" +
-      '<p class="phandle">' + esc(tr("{count} extra channels", { count: String(extra) })) + "</p>" +
+      '<p class="phandle">' + esc(tn("extraChannels", extra, { count: String(extra) })) + "</p>" +
       list +
       '<input name="backup-channel" autocomplete="off" spellcheck="false" placeholder="-100…" aria-label="' + esc(tr("Add a backup channel")) + '">' +
       '<button class="outline" type="button" data-acct="add-channel">' + esc(tr("Add a backup channel")) + "</button>" +
@@ -3983,6 +4290,278 @@ function signupPayload() {
     if (isOwnerAccount(account)) return "";
     return '<h2>' + esc(tr("Delete account")) + '</h2><p class="set-sub">' + esc(tr("Permanently delete this account and the data tied to it.")) + '</p><button class="outline acct-danger" type="button" data-acct="open-delete">' + esc(tr("Delete account")) + "</button>";
   }
+  /* Temporary accounts: one tap, no number to keep, and the account and its
+     data are deleted at the time picked here. The server cron does the
+     deletion even if this device never comes back. */
+  var tempState = { pick: "1d", until: "", from: "", busy: false, error: "", note: "", saveData: null, confirm: false, ownerLoaded: false, ownerLoading: false, ownerLabel: true, ownerCount: 0 };
+  function tempDeviceKey() {
+    var key = "";
+    try { key = localStorage.getItem("va-device-key") || ""; } catch (err) { key = ""; }
+    if (/^[A-Za-z0-9_-]{16,128}$/.test(key)) return key;
+    var bytes = new Uint8Array(18);
+    try { crypto.getRandomValues(bytes); } catch (err) { for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256); }
+    key = Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    try { localStorage.setItem("va-device-key", key); } catch (err) { /* the server still limits by address */ }
+    return key;
+  }
+  function tempExpiresAt(account) {
+    var t = account && account.temporary;
+    return t && typeof t === "object" ? Number(t.expiresAt) || 0 : 0;
+  }
+  function tempLeft(ms) {
+    var mins = Math.max(1, Math.ceil(ms / 60000));
+    if (mins < 60) return tr("{n} min", { n: mins });
+    var hours = Math.round(mins / 60);
+    if (hours < 48) return tr("{n} h", { n: hours });
+    return tr("{n} days", { n: Math.round(hours / 24) });
+  }
+  function tempChipText(account) {
+    var at = tempExpiresAt(account);
+    if (!at) return "";
+    return tr("Temporary · deletes in {time}", { time: tempLeft(at - Date.now()) });
+  }
+  function localInputValue(ms) {
+    var d = new Date(ms);
+    function two(n) { return ("0" + n).slice(-2); }
+    return d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) + "T" + two(d.getHours()) + ":" + two(d.getMinutes());
+  }
+  function tempPickerHtml(prefix) {
+    var picks = [["1h", tr("1 hour")], ["1d", tr("1 day")], ["7d", tr("7 days")], ["30d", tr("30 days")], ["custom", tr("Custom")]];
+    var chips = picks.map(function (row) {
+      var on = tempState.pick === row[0];
+      return '<button class="temp-chip' + (on ? " on" : "") + '" type="button" role="radio" aria-checked="' + (on ? "true" : "false") + '" data-acct="temp-pick" data-pick="' + row[0] + '">' + esc(row[1]) + "</button>";
+    }).join("");
+    var custom = tempState.pick === "custom"
+      ? '<label class="acct-field temp-date"><input type="datetime-local" name="tempUntil" data-temp-until min="' + localInputValue(Date.now() + 15 * 60000) + '" max="' + localInputValue(Date.now() + 89 * 86400000) + '" value="' + esc(tempState.until || localInputValue(Date.now() + 3 * 86400000)) + '" aria-label="' + esc(tr("Delete on")) + '"></label>'
+      : "";
+    return '<div class="temp-picks" role="radiogroup" aria-label="' + esc(tr("Delete after")) + '" id="' + prefix + '-picks">' + chips + "</div>" + custom;
+  }
+  function tempChoiceBody() {
+    if (tempState.pick !== "custom") return { expiresIn: tempState.pick };
+    var raw = tempState.until || localInputValue(Date.now() + 3 * 86400000);
+    var when = new Date(raw).getTime();
+    if (!isFinite(when)) return null;
+    return { expiresAt: when };
+  }
+  function dataSaverOn() {
+    var saver = window.ViktorychDataSaver;
+    if (tempState.saveData != null) return !!tempState.saveData;
+    try { return !!(saver && saver.detect && saver.detect().on); } catch (err) { return false; }
+  }
+  function tempBody() {
+    var saver = window.ViktorychDataSaver && window.ViktorychDataSaver.apply
+      ? '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Use less data")) + "</b><p>" + esc(tr("Lighter images and no autoplay.")) + '</p></div><button class="tab-switch' + (dataSaverOn() ? " on" : "") + '" type="button" role="switch" aria-checked="' + (dataSaverOn() ? "true" : "false") + '" data-acct="temp-savedata"><i></i></button></div>'
+      : "";
+    var notes = [tr("No email, phone, or password. This device keeps the key."), tr("Gifts and points spending are off, and messages to people you don't know are limited."), tr("Others may see a Temporary label on your profile.")];
+    return '<p class="acct-sub">' + esc(tr("Try the app without signing up. The account and everything you post are deleted at the time you pick.")) + "</p>" +
+      field("displayName", tr("Name (optional)"), "text", 50) +
+      '<h2 class="temp-h">' + esc(tr("Delete after")) + "</h2>" + tempPickerHtml("temp-new") + saver +
+      '<ul class="temp-notes">' + notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>" +
+      honeypotHtml() + errorHtml() + nextButton("do-temp", tr("Start temporary account")) +
+      '<p class="acct-switch"><button type="button" data-acct="signup">' + esc(tr("Create a full account instead")) + "</button></p>";
+  }
+  function doTempSignup() {
+    if (authBusy) return;
+    errorText = "";
+    var choice = tempChoiceBody();
+    if (!choice) { errorText = errorMessage("bad_expiry"); paint(); return; }
+    var body = {
+      temporary: true,
+      displayName: String(form.displayName || "").trim(),
+      deviceKey: tempDeviceKey(),
+      turnstileToken: turnstileToken()
+    };
+    Object.keys(choice).forEach(function (k) { body[k] = choice[k]; });
+    var wantSaver = dataSaverOn();
+    authBusy = true;
+    paint();
+    ensureGuard().then(function (pow) {
+      body.pow = pow;
+      body.fax = faxValue();
+      return api("/v1/signup", { method: "POST", body: body });
+    }).then(function (res) {
+      authBusy = false;
+      if (res.status === 201 && res.token && res.account) {
+        var id = res.account.publicId || "";
+        if (id) {
+          writeStored("follows-imported-v2-" + id, "1");
+          if (res.accountNumber) writeStored("temp-number-" + id, String(res.accountNumber));
+        }
+        if (wantSaver && window.ViktorychDataSaver && window.ViktorychDataSaver.apply) {
+          try { window.ViktorychDataSaver.apply(true); } catch (err) { /* the account still opens */ }
+        }
+        if (typeof window.ViktorychAccounts.onSignup === "function") {
+          try { window.ViktorychAccounts.onSignup(res.account); } catch (err) { /* the session still opens */ }
+        }
+        commitSession(res.token, res.account);
+        return;
+      }
+      if (view !== "temp") return;
+      errorText = res.status === 429 && res.error !== "rate_limited" ? tr("Too many temporary accounts today. Try again tomorrow.") : errorMessage(res.error);
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      if (view !== "temp") return;
+      errorText = offlineMessage();
+      paint();
+    });
+  }
+  function updateTempAccount(expiresAt) {
+    var session = readSession();
+    if (!session || !session.account) return;
+    if (expiresAt) session.account.temporary = { expiresAt: expiresAt };
+    else delete session.account.temporary;
+    writeSession(session);
+    tempTick();
+  }
+  function tempSettingsHtml(account) {
+    var at = tempExpiresAt(account);
+    if (!at) return "";
+    var when = new Date(at);
+    var whenText = when.toLocaleString(readLang(), { dateStyle: "medium", timeStyle: "short" });
+    if (tempState.confirm) {
+      return '<div class="temp-settings"><h2>' + esc(tr("Delete this account now?")) + '</h2><p class="set-sub">' + esc(tr("The account, its posts, messages, and files are deleted right away. This cannot be undone.")) + '</p><button class="acct-next acct-danger" type="button" data-acct="temp-delete-go"' + (tempState.busy ? " disabled" : "") + ">" + esc(tr("Delete now")) + '</button><button class="outline" type="button" data-acct="temp-delete-cancel">' + esc(tr("Cancel")) + "</button></div>";
+    }
+    return '<div class="temp-settings"><h2>' + esc(tr("Temporary account")) + '</h2><p class="temp-badge-line"><span class="temp-pill">' + esc(tempChipText(account)) + '</span></p><p class="set-sub">' + esc(tr("Deletes on {date}.", { date: whenText })) + "</p>" +
+      '<h2>' + esc(tr("Change the delete time")) + '</h2><p class="set-sub">' + esc(tr("Counted from now.")) + "</p>" + tempPickerHtml("temp-set") +
+      '<button class="outline" type="button" data-acct="temp-extend"' + (tempState.busy ? " disabled" : "") + ">" + esc(tr("Save delete time")) + "</button>" +
+      '<h2>' + esc(tr("Save this account")) + '</h2><p class="set-sub">' + esc(tr("Keep it for good. You get an account number and recovery codes to sign in on other devices.")) + '</p><button class="outline" type="button" data-acct="temp-keep"' + (tempState.busy ? " disabled" : "") + ">" + esc(tr("Save this account")) + "</button>" +
+      '<button class="outline acct-danger" type="button" data-acct="temp-delete">' + esc(tr("Delete now")) + "</button>" +
+      (tempState.error ? '<p class="acct-error" role="alert">' + esc(tempState.error) + "</p>" : "") +
+      (tempState.note ? '<p class="set-sub" role="status">' + esc(tempState.note) + "</p>" : "") + "</div>";
+  }
+  function tempRender() {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function tempExtend() {
+    var session = readSession();
+    var choice = tempChoiceBody();
+    if (!session || tempState.busy) return;
+    if (!choice) { tempState.error = errorMessage("bad_expiry"); tempRender(); return; }
+    tempState.busy = true;
+    tempState.error = "";
+    tempState.note = "";
+    api("/v1/account/temporary", { method: "PUT", token: session.token, body: choice }).then(function (res) {
+      tempState.busy = false;
+      if (res.status === 200 && res.expiresAt) {
+        updateTempAccount(Number(res.expiresAt));
+        tempState.note = tr("Delete time saved.");
+      } else tempState.error = errorMessage(res.error);
+      tempRender();
+    }, function () { tempState.busy = false; tempState.error = offlineMessage(); tempRender(); });
+  }
+  function tempKeep() {
+    var session = readSession();
+    if (!session || tempState.busy) return;
+    tempState.busy = true;
+    tempState.error = "";
+    api("/v1/account/temporary/keep", { method: "POST", token: session.token, headers: { "X-Viktorych-Intent": "account-keep" }, body: {} }).then(function (res) {
+      tempState.busy = false;
+      if (res.status !== 200 || !res.ok) { tempState.error = errorMessage(res.error); tempRender(); return; }
+      var id = session.account.publicId || "";
+      var number = id ? readStored("temp-number-" + id) : "";
+      updateTempAccount(0);
+      openAuth("temp-saved");
+      form.savedNumber = number || "";
+      form.recoveryCodes = res.recoveryCodes || [];
+      if (id) removeStored("temp-number-" + id);
+      paint();
+      tempRender();
+    }, function () { tempState.busy = false; tempState.error = offlineMessage(); tempRender(); });
+  }
+  function tempSavedBody() {
+    var digits = String(form.savedNumber || "").replace(/\D/g, "");
+    var number = digits ? '<p class="acct-sub">' + esc(tr("This number is shown once. Save it now. It is the only way back into this account.")) + '</p><div class="acct-number" role="status">' + esc(grouped(digits)) + '</div><div class="acct-row"><button type="button" data-acct="temp-copy-number">' + esc(tr("Copy")) + "</button></div>" : "";
+    return '<p class="acct-sub">' + esc(tr("This account is no longer temporary.")) + "</p>" + number + recoveryShownBody();
+  }
+  function tempDeleteNow() {
+    var session = readSession();
+    if (!session || tempState.busy) return;
+    tempState.busy = true;
+    tempRender();
+    api("/v1/account/temporary/delete", { method: "POST", token: session.token, headers: { "X-Viktorych-Intent": "account-delete" }, body: {} }).then(function (res) {
+      tempState.busy = false;
+      if (res.status === 200 && res.ok) {
+        wipeDevice();
+        showDeleted();
+        return;
+      }
+      tempState.confirm = false;
+      tempState.error = res.error === "not_temporary" ? tr("This account is no longer temporary.") : deleteError(res.error);
+      tempRender();
+    }, function () { tempState.busy = false; tempState.error = offlineMessage(); tempRender(); });
+  }
+  var tempChecking = false;
+  /* The countdown chip, and a local wipe once the time has passed. The
+     server deletes the account on its own schedule either way. */
+  function tempTick() {
+    try { tempTickNow(); } catch (err) { /* a page without a full DOM */ }
+  }
+  function tempTickNow() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
+    var session = readSession();
+    var at = session && tempExpiresAt(session.account);
+    var chip = document.getElementById("temp-countdown");
+    if (!at) { if (chip) chip.remove(); return; }
+    if (Date.now() >= at) {
+      if (tempChecking) return;
+      tempChecking = true;
+      api("/v1/account/temporary", { token: session.token }).then(function (res) {
+        tempChecking = false;
+        if (res.status === 200 && res.temporary && Number(res.expiresAt) > Date.now()) { updateTempAccount(Number(res.expiresAt)); return; }
+        if (res.status === 200 && !res.temporary) { updateTempAccount(0); return; }
+        if (res.status === 401 || res.status === 200) { wipeDevice(); showDeleted(); }
+      }, function () { tempChecking = false; });
+      return;
+    }
+    if (!document.body) return;
+    if (!chip) {
+      chip = document.createElement("a");
+      chip.id = "temp-countdown";
+      chip.className = "temp-countdown";
+      chip.href = "#/settings";
+      document.body.appendChild(chip);
+    }
+    var text = tempChipText(session.account);
+    if (chip.textContent !== text) chip.textContent = text;
+  }
+  try {
+    if (typeof setInterval === "function") setInterval(tempTick, 30000);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tempTick);
+    else if (typeof setTimeout === "function") setTimeout(tempTick, 0);
+  } catch (err) { /* no timers here; settings still show the time */ }
+  function loadOwnerTemp() {
+    var session = readSession();
+    if (!session || tempState.ownerLoading) return;
+    tempState.ownerLoading = true;
+    api("/v1/owner/temporary", { token: session.token }).then(function (res) {
+      tempState.ownerLoading = false;
+      tempState.ownerLoaded = true;
+      if (res.status === 200) { tempState.ownerLabel = res.label !== false; tempState.ownerCount = Number(res.accounts) || 0; }
+      tempRender();
+    }, function () { tempState.ownerLoading = false; tempState.ownerLoaded = true; });
+  }
+  function ownerTempHtml() {
+    if (!tempState.ownerLoaded && !tempState.ownerLoading) loadOwnerTemp();
+    var on = tempState.ownerLabel;
+    return '<h2>' + esc(tr("Temporary accounts")) + '</h2><p class="set-sub">' + esc(tr("{n} temporary accounts right now. Show a Temporary label on their profiles to everyone else.", { n: tempState.ownerCount })) + '</p><button class="tab-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" data-acct="toggle-temp-label"><span>' + esc(tr("Temporary label")) + "</span><i></i></button>";
+  }
+  function toggleTempLabel() {
+    var session = readSession();
+    if (!session) return;
+    var next = !tempState.ownerLabel;
+    tempState.ownerLabel = next;
+    tempRender();
+    api("/v1/owner/temporary", { method: "PUT", token: session.token, body: { label: next } }).then(function (res) {
+      if (res.status !== 200) tempState.ownerLabel = !next;
+      tempRender();
+    }, function () { tempState.ownerLabel = !next; tempRender(); });
+  }
+  document.addEventListener("input", function (event) {
+    var el = event.target;
+    if (!el || !el.hasAttribute || !el.hasAttribute("data-temp-until")) return;
+    tempState.until = el.value;
+  }, true);
   function deleteReady() {
     var session = readSession();
     var account = session && session.account;
@@ -4030,7 +4609,7 @@ function signupPayload() {
       sessionStorage.clear();
       sessionStorage.setItem(DELETED_KEY, "1");
     } catch (err) { /* the screen still replaces the page */ }
-    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord"];
+    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord", "viktorych-notes"];
     if (window.indexedDB && indexedDB.deleteDatabase) {
       databases.forEach(function (name) {
         try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
@@ -4298,9 +4877,9 @@ function signupPayload() {
     }
     if (window.ProfileAbout) window.ProfileAbout.ensure(account, "");
     var aboutPrivacy = window.ProfileAbout && window.ProfileAbout.privacyOpen() ? window.ProfileAbout.privacyHtml(account.about || { sections: [] }) : "";
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
+    return '<div class="set-block acct-settings">' + tempSettingsHtml(account) + '<h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
       '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + inactivityHtml(account) + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? ownerTempHtml() + '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + (tempExpiresAt(account) ? "" : inactivityHtml(account) + deleteEntryHtml(account)) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
     var reqKind = event.target && event.target.closest ? event.target.closest("[data-req-kind]") : null;
     if (reqKind) {
@@ -4368,7 +4947,25 @@ function signupPayload() {
       if (window.ViktorychPresence) window.ViktorychPresence.open(acct);
       return;
     }
-    if (act === "signup") openAuth("signup");
+    if (act === "signup") startSetup();
+    else if (act === "setup-back") setupBack();
+    else if (act === "open-temp") openTemp(setupOn() ? "signup" : "");
+    else if (act === "temp-setup-back") tempSetupBack();
+    else if (act === "temp-pick") {
+      tempState.pick = acct.getAttribute("data-pick") || "1d";
+      if (view === "temp") paint(); else tempRender();
+    }
+    else if (act === "temp-savedata") { tempState.saveData = !dataSaverOn(); paint(); }
+    else if (act === "do-temp") doTempSignup();
+    else if (act === "temp-extend") tempExtend();
+    else if (act === "temp-keep") tempKeep();
+    else if (act === "temp-delete") { tempState.confirm = true; tempState.error = ""; tempRender(); }
+    else if (act === "temp-delete-cancel") { tempState.confirm = false; tempRender(); }
+    else if (act === "temp-delete-go") tempDeleteNow();
+    else if (act === "toggle-temp-label") toggleTempLabel();
+    else if (act === "temp-copy-number") {
+      try { navigator.clipboard.writeText(String(form.savedNumber || "").replace(/\D/g, "")); } catch (err) { /* select it by hand */ }
+    }
     else if (act === "login") openAuth("login");
     else if (act === "open-restore") openAuth("restore");
     else if (act === "open-emergency") openAuth("emergency");
@@ -4556,6 +5153,7 @@ function signupPayload() {
     else if (act === "avatar-clear") { form.avatar = ""; form.avatarTouched = true; form.avatarEmpty = "default"; form.mediaMenu = ""; paint(); }
     else if (act === "toggle-form-private") { form.privateFollows = !form.privateFollows; paint(); }
     else if (act === "toggle-form-profileless") { form.profileLess = !form.profileLess; paint(); }
+    else if (act === "toggle-form-savedata") { form.saveData = !saveDataWanted(); paint(); }
     else if (act === "toggle-private-follows") { var s = readSession(); if (s && s.account) setPrivateFollows(!s.account.privateFollows); }
     else if (act === "toggle-protected") { var sp = readSession(); if (sp && sp.account) setProtected(!sp.account.protected); }
     else if (act === "unblock-account" || act === "unmute-account-server") {
@@ -4618,7 +5216,7 @@ else if (act === "copy-id") copyAccountId();
     var deviceKey = window.ViktorychNostr && window.ViktorychNostr.keyInfo();
     var pubkey = (next && deviceKey && deviceKey.pubkey) || federationState.nostr_pubkey;
     if (next && !pubkey) {
-      var entered = window.prompt("Enter your Nostr public key (npub or hex):", "");
+      var entered = window.prompt(tr("Enter your Nostr public key (npub or hex):"), "");
       if (!entered) return;
       pubkey = entered.trim();
     }
@@ -5008,6 +5606,13 @@ else if (act === "copy-id") copyAccountId();
 
   var mine = readSession();
   if (mine && mine.account) remember(mine.account);
+  (function resumeSetup() {
+    var doc = readOnb();
+    if (!doc) return;
+    if (!mine || !mine.account) return;
+    if (doc.stage !== "post" || (doc.id && doc.id !== String(mine.account.publicId || ""))) { writeOnb(null); return; }
+    loadOnboarding().then(function (onb) { if (onb && readSession()) onb.start("post", doc.step || 0); });
+  })();
   if (config().gate) {
     installFetch();
     tellSW(!!mine);
@@ -5073,6 +5678,10 @@ else if (act === "copy-id") copyAccountId();
     requestRender: null,
     profilePostsHtml: null,
     call: api,
+    saveOwnAccount: applyOwnAccount,
+    openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
+    openLogin: function () { openAuth("login"); },
+    openTemp: function () { openTemp("welcome"); },
     setReposts: setReposts,
     ensureProfile: loadProfile,
     profilePending: profilePending,

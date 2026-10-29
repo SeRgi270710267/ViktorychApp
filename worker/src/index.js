@@ -22,11 +22,13 @@ import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlayl
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
-import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
+import { TEMP_SCHEMA, cleanDeviceKey, decorateTemporary, handleTemporary, markTemporary, sweepTemporary, tempBlockedPointsRoute, tempExpiry, tempSignupsPerDay, isTemporary } from "./temp-accounts.js";
+import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
+import { handlePool, notePoolDocument, poolSignable, poolUsage } from "./peer-pool.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
 import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, drainOutbox, handleNotificationRoutes, notifyFollow, planRepostNotification, notifyLiveStarted, emitNotification } from "./notifications.js";
@@ -36,6 +38,8 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
+import { handleComments } from "./comments-edge.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
@@ -53,6 +57,7 @@ import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./
 import { syncVk, vkDue } from "./vk.js";
 import { handlePackagesRoute, pollPackages, packageNotifier } from "./packages.js";
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
+import { handleTvBuild } from "./tv-build.js";
 import { BADGE_SCHEMA, handleBadges, syncBadges } from "./badges.js";
 import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
@@ -67,6 +72,7 @@ import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
 import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
 import { HIGHLIGHT_SCHEMA, handleHighlights } from "./highlights.js";
+import { passiveMediaType } from "./media-type.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -258,7 +264,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -538,6 +544,7 @@ async function presentAccount(env, request, row, own, opts) {
   const next = await ensureMediaKeys(env, row);
   const account = publicAccount(next, request, !!own);
   account.identities = await listAccountIdentities(env, next.public_id);
+  await decorateTemporary(env, next.public_id, account, !!own);
   if (opts && opts.skipMedia) {
     if (!own) {
       delete account.publicId;
@@ -692,8 +699,12 @@ async function handleSignup(request, env) {
   if (!attempts.ok) return limited(attempts);
   const body = await readJson(request, 8000);
   if (body.error) return json(400, { error: body.error });
-  const isProfileLess = !!body.profileLess;
+  const temporary = body.temporary === true;
+  const tempUntil = temporary ? tempExpiry(body, Date.now()) : 0;
+  if (temporary && !tempUntil) return json(400, { error: "bad_expiry" });
+  const isProfileLess = !temporary && !!body.profileLess;
   let displayName = cleanName(body.displayName);
+  if (!displayName && temporary) displayName = "Guest";
   if (!displayName) {
     if (isProfileLess) {
       displayName = "Anonymous";
@@ -701,7 +712,15 @@ async function handleSignup(request, env) {
       return json(400, { error: "invalid_name" });
     }
   }
-  let handleInput = body.handle;
+  let handleInput = temporary ? "" : body.handle;
+  if (temporary) {
+    for (let i = 0; i < 6 && !handleInput; i++) {
+      const candidate = "tmp_" + randomDigits(8);
+      const clash = await env.DB.prepare("SELECT public_id FROM accounts WHERE handle = ?").bind(candidate).first();
+      if (!clash) handleInput = candidate;
+    }
+    if (!handleInput) return json(503, { error: "unavailable" });
+  }
   if (!handleInput && isProfileLess) {
     for (let i = 0; i < 6; i++) {
       const candidate = "anon_" + randomDigits(8);
@@ -719,7 +738,7 @@ async function handleSignup(request, env) {
     if (checked.error === "reserved") return json(409, { error: "handle_reserved" });
     return json(400, { error: "invalid_handle" });
   }
-  if (isProfileLess && checked.owner) {
+  if ((isProfileLess || temporary) && checked.owner) {
     return json(400, { error: "invalid_handle" });
   }
   if (!(await verifyTurnstile(request, env, body.turnstileToken))) return json(403, { error: "turnstile" });
@@ -735,6 +754,17 @@ async function handleSignup(request, env) {
   }
   const taken = await nameTaken(env, checked.skeleton, "");
   if (taken) return json(409, { error: taken });
+  if (temporary) {
+    // A few temporary accounts per address and per device each day.
+    const perDay = tempSignupsPerDay(env);
+    const byIp = await rateHit(env, "su-tmp-ip:" + ip, perDay, 24 * 60 * 60 * 1000);
+    if (!byIp.ok) return limited(byIp);
+    const device = cleanDeviceKey(body.deviceKey);
+    if (device) {
+      const byDevice = await rateHit(env, "su-tmp-dev:" + (await sha256Hex(device)).slice(0, 32), perDay, 24 * 60 * 60 * 1000);
+      if (!byDevice.ok) return limited(byDevice);
+    }
+  }
   const prior = await env.DB.prepare("SELECT hits, reset_at FROM rate_limits WHERE bucket = ?").bind("su-ok:" + ip).first();
   if (prior && Number(prior.reset_at) > Date.now() && Number(prior.hits) >= 4) {
     return limited({ retry: Math.max(1, Math.ceil((Number(prior.reset_at) - Date.now()) / 1000)) });
@@ -748,6 +778,19 @@ async function handleSignup(request, env) {
   });
   if (created.error) return json(created.error === "handle_taken" ? 409 : 503, { error: created.error });
   await rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
+  if (temporary) {
+    try {
+      await markTemporary(env, created.account.publicId, tempUntil, Date.now());
+    } catch (err) {
+      // Never leave a temporary account without its delete time.
+      await deleteAccountById(env, created.account.publicId).catch(() => null);
+      return json(503, { error: "unavailable" });
+    }
+    created.account.temporary = { expiresAt: tempUntil };
+    try { await followOwnerAccounts(env, created.account.publicId); }
+    catch (err) { /* the account still exists without starter follows */ }
+    return json(201, { token: created.token, accountNumber: created.accountNumber, recoveryCodes: [], account: created.account, temporary: { expiresAt: tempUntil } });
+  }
   if (!checked.owner) {
     try { await followOwnerAccounts(env, created.account.publicId); }
     catch (err) { /* the account still exists without starter follows */ }
@@ -827,7 +870,8 @@ function recoveryDeps() {
     originAllowed: originAllowed,
     blockDeletedLogin: blockDeletedLogin,
     accountCols: ACCOUNT_COLS,
-    publish: publishToAccount
+    publish: publishToAccount,
+    tgObject: telegramObject
   };
 }
 
@@ -1527,23 +1571,68 @@ function catalogUnusable(key, text) {
 }
 
 async function readStoredText(env, key) {
-  if (!env || !env.DATA || !key) return "";
+  return (await readStoredEntry(env, key)).text;
+}
+
+/* The stored text and its R2 etag (the pulse mark). The etag is empty
+   when the last good copy had to answer. */
+async function readStoredEntry(env, key) {
+  if (!env || !env.DATA || !key) return { text: "", etag: "" };
   let text = "";
+  let etag = "";
   try {
     const object = await env.DATA.get(key);
     text = object ? await object.text() : "";
+    etag = object ? String(object.etag || "") : "";
   } catch (err) { text = ""; }
-  if (!catalogUnusable(key, text)) return text;
+  if (!catalogUnusable(key, text)) return { text: text, etag: etag };
+  return { text: await readLastGood(env, key), etag: "" };
+}
+
+async function readLastGood(env, key) {
   let backup = "";
   try {
     const object = await env.DATA.get("lastgood/" + key);
     backup = object ? await object.text() : "";
   } catch (err) { backup = ""; }
-  if (catalogUnusable(key, backup)) return "";
+  if (catalogUnusable(key, backup)) {
+    // Third tier: the snapshot the Telegram backup stores under snap/<key>.
+    // Used only when R2 and lastgood/ both failed, so it costs nothing on a
+    // normal read.
+    if (!TG_SNAPSHOT_KEYS.has(key)) return "";
+    let snap = "";
+    try {
+      const copy = await telegramObject(env, "snap/" + key);
+      snap = copy ? await copy.text() : "";
+    } catch (err) { snap = ""; }
+    if (catalogUnusable(key, snap)) return "";
+    backup = snap;
+  }
   try {
     await env.DATA.put(key, backup, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
   } catch (err) { /* the last good copy is still served */ }
   return backup;
+}
+
+// Public catalogs the Telegram backup snapshots (scripts/telegram_backup.py
+// SNAPSHOT_KEYS). Keep the two lists the same.
+const TG_SNAPSHOT_KEYS = new Set(["feeds.json", "stories.json", "people.json", "suggestions.json", "data/music.json", "data/communities/index.json"]);
+// Keys that have their own access checks elsewhere. /tg serves them only to
+// the backup's verify bearer; the app reads them through their own routes.
+const TG_PRIVATE_KEY = /^(?:snap|post-media|srv)\//;
+
+// A user upload or a public catalog whose R2 copy is missing or failing is
+// read from its Telegram copy: a single file under 19 MB, never encrypted.
+// Returns a Response with the whole body, or null.
+async function telegramObject(env, key) {
+  if (!env || !env.DB || !env.TELEGRAM_BOT_TOKEN || !key || telegramSecretKey(key)) return null;
+  let row = null;
+  try {
+    row = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime, duration, serve, encrypted FROM telegram_files WHERE object_key = ? AND kind = 'single' AND part_index = 0 AND serve = 1 AND encrypted = 0").bind(String(key)).first();
+  } catch (err) { return null; }
+  if (!row || !row.file_id) return null;
+  try { return await telegramBody(env, row); }
+  catch (err) { return null; }
 }
 
 function catalogResponse(text) {
@@ -1557,7 +1646,7 @@ function catalogResponse(text) {
   });
 }
 
-async function handleData(request, env, pathname) {
+async function handleData(request, env, pathname, ctx) {
   const own = privateDiscordKey(String(pathname || "").replace(/^\/v1\/data\/?/, ""));
   if (own) {
     // Servers the owner picked in Messages. Signed-in readers see the
@@ -1589,13 +1678,25 @@ async function handleData(request, env, pathname) {
     }
     return discordData(request, object);
   }
-  const text = await readStoredText(env, key);
+  const stored = await readStoredEntry(env, key);
+  const text = stored.text;
   if (!text) return json(404, { error: "not_found" });
   if (row.owner === 1) return catalogResponse(text);
   let parsed = null;
   try { parsed = JSON.parse(text); }
   catch (err) { return json(502, { error: "bad_json" }); }
-  return json(200, stripOwnerOnly(parsed, env));
+  const body = JSON.stringify(stripOwnerOnly(parsed, env));
+  // The sharing pool signs the hash of exactly these bytes, once per version.
+  if (stored.etag && poolSignable(env, key, stored.etag, body)) {
+    const job = notePoolDocument(env, key, stored.etag, body).catch(() => false);
+    if (ctx && ctx.waitUntil) ctx.waitUntil(job);
+  }
+  return new Response(body, { status: 200, headers: {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
+  } });
 }
 
 const TIKTOK_HANDLE = /^[A-Za-z0-9._]{2,24}$/;
@@ -2489,8 +2590,11 @@ async function handlePublicMediaProxy(request, env, url) {
     return json(400, { error: "bad_url" });
   }
   const respHeaders = new Headers();
-  const ctype = upstream.headers.get("content-type") || "image/jpeg";
+  const ctype = passiveMediaType(upstream.headers.get("content-type") || "image/jpeg");
   respHeaders.set("content-type", ctype);
+  // Hosts such as the Discord CDN serve user uploads. Even if one returns
+  // HTML or SVG, it must never run as a page on this Worker's origin.
+  respHeaders.set("content-security-policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox");
   const length = upstream.headers.get("content-length");
   if (length) respHeaders.set("content-length", length);
   const contentRange = upstream.headers.get("content-range");
@@ -3220,6 +3324,7 @@ async function handleTelegram(request, env, path, ctx) {
     if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
   }
   if (telegramSecretKey(decoded)) return json(404, { error: "not_found" });
+  if (!verify && TG_PRIVATE_KEY.test(decoded)) return json(404, { error: "not_found" });
   let key = decoded;
   let mode = "file";
   let index = 0;
@@ -5266,6 +5371,9 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
     return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
   }
+  if (path === "/v1/comments" && request.method === "GET") {
+    return handleComments(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
   if (path === "/v1/unfurl" && request.method === "GET") {
     return handleUnfurl(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
@@ -5281,6 +5389,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/yt/manifest" || path === "/v1/yt/media") {
     return handleYtRoute(request, env, url);
   }
+  if (path === "/v1/watchdog" || path === "/v1/owner/health") {
+    const watched = await handleWatchdog(request, env, path, { json, requireOwner });
+    if (watched) return watched;
+  }
   if (path === "/v1/health" && request.method === "GET") {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
   }
@@ -5293,7 +5405,7 @@ async function route(request, env, ctx) {
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   const viewMedia = path.match(/^\/v1\/media\/view\/([a-f0-9]{32})$/);
   if (viewMedia && request.method === "GET") return handleMediaView(request, env, viewMedia[1]);
-  if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path);
+  if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path, ctx);
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
   }
@@ -5303,7 +5415,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/usage" && request.method === "GET") {
     const gate = await requireOwner(request, env);
     if (gate.error) return gate.error;
-    return json(200, await usageReport(env, Date.now()));
+    const report = Object.assign({}, await usageReport(env, Date.now()));
+    report.pool = await poolUsage(env);
+    return json(200, report);
   }
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
@@ -5375,6 +5489,10 @@ async function route(request, env, ctx) {
       const posted = await handlePosts(request, env, path, recoveryDeps());
       if (posted) return posted;
     }
+  }
+  if (path === "/v1/account/temporary" || path.startsWith("/v1/account/temporary/") || path === "/v1/owner/temporary") {
+    const handled = await handleTemporary(request, env, path, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, issueRecoveryCodes: (e, id) => issueRecoveryCodes(e, id, recoveryDeps()) });
+    if (handled) return handled;
   }
   if (path === "/v1/account/inactivity") {
     return handleInactivity(request, env, { json, readJson, rateHit, limited, sessionAccount });
@@ -5463,6 +5581,10 @@ async function route(request, env, ctx) {
     const badges = await handleBadges(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (badges) return badges;
   }
+  if (path === "/v1/tv/build" || path.startsWith("/v1/tv/build/")) {
+    const built = await handleTvBuild(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (built) return built;
+  }
   if (path === "/v1/about" || path.startsWith("/v1/about/")) {
     const birthday = await handleBirthdayRoutes(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (birthday) return birthday;
@@ -5496,6 +5618,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/channel" || path === "/v1/channel/ticket") {
     return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
   }
+  if (path === "/v1/pool/room") return handlePool(request, env, url, { json });
   if (path === "/v1/media/swarm" || path === "/v1/media/swarm/ticket") {
     return handleMediaSwarm(request, env, url, { json, sessionAccount, rateHit, limited });
   }
@@ -5532,6 +5655,10 @@ async function route(request, env, ctx) {
     if (listed) return listed;
   }
   if (path === "/v1/points" || path.startsWith("/v1/points/") || path === "/v1/gifts" || path.startsWith("/v1/gifts/")) {
+    if (tempBlockedPointsRoute(request.method, path)) {
+      const spender = await sessionAccount(env, request);
+      if (spender && await isTemporary(env, spender.public_id)) return json(403, { error: "temporary_account", message: "Save this account to send gifts." });
+    }
     const paid = await handlePoints(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (paid) return paid;
   }
@@ -5641,11 +5768,15 @@ export default {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
     // Features the owner turned off do no cron work at all.
-    const off = await readFlags(env, at);
+    const flags = await readFlags(env, at);
     // Jobs the Render backup claimed in the last couple of minutes run there.
     const away = await claimedJobs(env, at);
     const minute = new Date(at).getUTCMinutes();
-    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), pollPackages(env, at, null, packageNotifier(emitNotification)).catch(() => null), sweepExpiredNotes(env, at)];
+    // Near a free daily limit the watchdog pauses optional cron work.
+    const paused = await watchdogPause(env, at).catch(() => false);
+    // A copy: the memoised flags also answer requests.
+    const off = paused ? Object.assign({}, flags, { shorts: true }) : flags;
+    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)).catch((err) => logError("cron", err)).then(() => sweepTemporary(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), pollPackages(env, at, null, packageNotifier(emitNotification)).catch(() => null), sweepExpiredNotes(env, at)];
     const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
     run("ownerFeeds", () => sweepOwnerFeeds(env, at));
     if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
@@ -5654,7 +5785,10 @@ export default {
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
-    if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (minute % 15 === 0 && !paused) jobs.push(maybeDispatchDiscord(env));
+    // Hourly unattended watchdog: re-enables workflows, re-runs a stuck
+    // deploy and records health for the owner (src/watchdog.js).
+    if (minute === 7) jobs.push(runWatchdog(env, at));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));

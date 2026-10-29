@@ -21,7 +21,7 @@ export const RENDER_BACKUP = "https://viktorych-backup.onrender.com";
 export const WARM_EVERY_MIN = 10;
 export const QUIET_HOURS_UTC = [21, 22, 23, 0];
 
-function quietHours(env) {
+export function quietHours(env) {
   const raw = String((env && env.RENDER_WARM_QUIET_UTC) || "").trim();
   if (!raw) return QUIET_HOURS_UTC;
   if (raw === "none") return [];

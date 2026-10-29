@@ -150,6 +150,20 @@ async function logOut(page) {
   });
 }
 
+async function openSignup(page) {
+  // Sign up opens the first-time setup: a welcome screen, then language,
+  // then the account steps inside the same full-screen frame.
+  await page.getByRole("button", { name: "Sign up" }).first().click();
+  // The welcome screen also offers a temporary account with its delete-time
+  // picker; Back returns to the welcome screen.
+  await page.locator("#onb-layer [data-step='welcome'] [data-onb='temp']").click({ timeout: 15000 });
+  await page.locator(".acct-temp-setup [data-acct='temp-pick'][data-pick='7d']").click();
+  await page.locator(".acct-temp-setup [data-acct='temp-setup-back']").click();
+  await page.locator("#onb-layer [data-step='welcome'] [data-onb='next']").click({ timeout: 15000 });
+  await page.locator("#onb-layer [data-step='language'] [data-onb='next']").click();
+  await page.locator(".acct-setup .acct-modal").waitFor();
+}
+
 async function openPage(page, path) {
   const url = pageOrigin + path;
   let last = null;
@@ -201,7 +215,7 @@ async function layoutPass(page, viewport) {
       notes.push(viewport.name + ": " + key + " outside the viewport");
     }
   }
-  await page.getByRole("button", { name: "Sign up" }).first().click();
+  await openSignup(page);
   await page.getByRole("heading", { name: "Create your account" }).waitFor();
   await page.locator("#acct-displayName").fill("");
   await page.locator(".acct-modal [data-acct='next']").click();
@@ -289,7 +303,7 @@ async function firstRun(page) {
     signupStatus = response.status();
     await route.fulfill({ response });
   });
-  await page.getByRole("button", { name: "Sign up" }).first().click();
+  await openSignup(page);
   await page.locator("#acct-displayName").fill("Example Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
@@ -346,6 +360,36 @@ async function firstRun(page) {
   await page.locator(".acct-modal input[name='saved']").check();
   await page.locator(".acct-modal [data-acct='saved']").click();
   await page.waitForFunction(() => document.documentElement.getAttribute("data-wall") !== "1", null, { timeout: 20000 });
+  const setup = await page.locator("#onb-layer [data-step='profile']").waitFor({ timeout: 20000 }).then(() => true, () => false);
+  if (!setup) notes.push("first-time setup did not continue after the account was saved");
+  else {
+    const named = await page.locator("#onb-layer input[name='onbName']").inputValue();
+    if (named !== "Example Reader") notes.push("setup did not prefill the display name");
+    await page.locator("#onb-layer [data-onb='skip']").click();
+    await page.locator("#onb-layer [data-step='follow']").waitFor();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const resumed = await page.locator("#onb-layer [data-step='follow']").waitFor({ timeout: 20000 }).then(() => true, () => false);
+    if (!resumed) notes.push("first-time setup did not resume the same step after reload");
+    else {
+      await page.locator("#onb-layer [data-onb='skip']").click();
+      await page.locator("#onb-layer [data-step='prefs']").waitFor();
+      // The theme picker lists every theme from window.ViktorychThemes,
+      // flag themes included, and picking one applies it.
+      const flagIds = await page.evaluate(() => Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}));
+      for (const id of flagIds) {
+        if (!(await page.locator(`#onb-layer [data-onb='theme'][data-mode='${id}']`).count())) notes.push(`setup theme picker is missing the ${id} theme`);
+      }
+      if (flagIds.length) {
+        await page.locator(`#onb-layer [data-onb='theme'][data-mode='${flagIds[0]}']`).click();
+        const applied = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+        if (applied !== flagIds[0]) notes.push("picking a flag theme in setup did not apply it");
+        await page.locator("#onb-layer [data-onb='theme'][data-mode='lightsout']").click();
+      }
+      await page.locator("#onb-layer [data-onb='skip']").click();
+      await page.locator("#onb-layer [data-step='done'] [data-onb='finish']").click();
+      await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 });
+    }
+  }
   const welcome = page.locator("[data-act='welcome-skip']");
   if (await welcome.count()) await welcome.click();
   const timeline = await page.getByText("No posts yet").first().waitFor({ timeout: 20000 }).then(() => true, () => false);
@@ -452,7 +496,7 @@ async function firstRun(page) {
   await openPage(page, "/#/settings");
   await logOut(page);
   await page.getByRole("heading", { name: "ViktorychApp" }).waitFor({ timeout: 20000 });
-  await page.getByRole("button", { name: "Sign up" }).first().click();
+  await openSignup(page);
   await page.locator("#acct-displayName").fill("Second Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
@@ -469,7 +513,7 @@ async function firstRun(page) {
   await page.getByText("That handle is taken.").waitFor({ timeout: 20000 });
   await page.keyboard.press("Escape");
   await page.context().setOffline(true);
-  await page.getByRole("button", { name: "Sign up" }).first().click();
+  await openSignup(page);
   await page.locator("#acct-displayName").fill("Offline Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();

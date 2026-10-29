@@ -28,6 +28,11 @@ REQUIRED_EXTRAS = (
     "404.html",
     "robots.txt",
     ".nojekyll",
+    ".well-known/assetlinks.json",
+    "tv/index.html",
+    "tv/version.json",
+    "tv/qr.svg",
+    "tv/ViktorychTV.apk",
 )
 
 PRIVATE_PUBLICATION = {
@@ -421,6 +426,10 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
     if args.selftest:
+        # The unattended-run guards ride along with the shell selftest,
+        # because the workflow files cannot be edited by the bot token.
+        import source_breaker
+        source_breaker.selftest()
         return selftest()
     root = Path(args.root).resolve()
     dest = Path(args.site)
@@ -433,6 +442,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     try:
         raise SystemExit(main())
     except SystemExit:

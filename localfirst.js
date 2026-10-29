@@ -568,6 +568,136 @@
     return state.restored;
   }
 
+
+  /* Stale-while-revalidate cache shared by every page. Reads are synchronous
+     (localStorage), so a page with cached data paints it on the first frame
+     and never shows a spinner; the caller refreshes in the background and
+     calls put() with the new copy. Storage stays small: one entry is capped,
+     the whole cache is capped, and the least recently used entries go first. */
+  var SWR_PREFIX = "viktorych-swr-v1:";
+  var SWR_INDEX = "viktorych-swr-v1-index";
+  var SWR_MAX_BYTES = 1500000;
+  var SWR_MAX_ENTRY = 300000;
+  var SWR_MAX_ENTRIES = 120;
+  var swrMemo = {};
+  var swrIndex = null;
+
+  function swrStore(store) { return store || local(); }
+  function swrReadIndex(store) {
+    if (swrIndex) return swrIndex;
+    var raw = readJson(swrStore(store), SWR_INDEX);
+    swrIndex = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    return swrIndex;
+  }
+  function swrWriteIndex(store) { writeJson(swrStore(store), SWR_INDEX, swrIndex || {}); }
+  function swrTotal(index) {
+    return Object.keys(index).reduce(function (sum, key) { return sum + (Number(index[key].b) || 0); }, 0);
+  }
+  function swrDrop(key, store) {
+    var index = swrReadIndex(store);
+    delete index[key];
+    delete swrMemo[key];
+    try { swrStore(store).removeItem(SWR_PREFIX + key); } catch (err) { /* already gone */ }
+  }
+  /* Evict least recently used entries until `need` more bytes fit. */
+  function swrEvict(need, store, keep) {
+    var index = swrReadIndex(store);
+    var keys = Object.keys(index).filter(function (key) { return key !== keep; })
+      .sort(function (a, b) { return (index[a].u || 0) - (index[b].u || 0); });
+    while (keys.length && (swrTotal(index) + need > SWR_MAX_BYTES || Object.keys(index).length >= SWR_MAX_ENTRIES)) {
+      swrDrop(keys.shift(), store);
+    }
+  }
+  function swrGet(key, store) {
+    key = String(key || "");
+    if (!key) return null;
+    var index = swrReadIndex(store);
+    var meta = index[key];
+    if (!meta) return null;
+    var hit = swrMemo[key];
+    if (!hit) {
+      var raw = readJson(swrStore(store), SWR_PREFIX + key);
+      if (!raw || !("v" in raw)) { swrDrop(key, store); swrWriteIndex(store); return null; }
+      hit = swrMemo[key] = { value: raw.v, at: Number(raw.at) || 0 };
+    }
+    meta.u = Date.now();
+    clearTimeout(swrGet.timer);
+    swrGet.timer = setTimeout(function () { swrWriteIndex(store); }, 500);
+    if (swrGet.timer && swrGet.timer.unref) swrGet.timer.unref();
+    return hit;
+  }
+  function swrPut(key, value, store) {
+    key = String(key || "");
+    if (!key) return false;
+    var at = Date.now();
+    var text = "";
+    try { text = JSON.stringify({ v: value, at: at }); } catch (err) { return false; }
+    if (text.length > SWR_MAX_ENTRY) { swrDrop(key, store); swrWriteIndex(store); return false; }
+    var index = swrReadIndex(store);
+    delete index[key];
+    swrEvict(text.length, store, key);
+    var target = swrStore(store);
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        if (!target) break;
+        target.setItem(SWR_PREFIX + key, text);
+        index[key] = { b: text.length, u: at };
+        swrMemo[key] = { value: value, at: at };
+        swrWriteIndex(store);
+        return true;
+      } catch (err) {
+        /* Quota: the device is fuller than our budget assumed. Drop the
+           oldest half of this cache (at least one entry) and try again. */
+        var older = Object.keys(index).filter(function (k) { return k !== key; })
+          .sort(function (a, b) { return (index[a].u || 0) - (index[b].u || 0); });
+        if (!older.length) break;
+        older.slice(0, Math.max(1, Math.ceil(older.length / 2))).forEach(function (k) { swrDrop(k, store); });
+      }
+    }
+    swrWriteIndex(store);
+    return false;
+  }
+  function swrFresh(key, ttl, store) {
+    var hit = swrGet(key, store);
+    return !!(hit && Date.now() - hit.at < (ttl || 0));
+  }
+  function swrClear(store) {
+    var index = swrReadIndex(store);
+    Object.keys(index).forEach(function (key) { swrDrop(key, store); });
+    swrIndex = {};
+    writeJson(swrStore(store), SWR_INDEX, null);
+  }
+  function swrReset() { swrIndex = null; swrMemo = {}; }
+  /* Route snapshots: the last painted HTML of a page, shown at once while its
+     module or data loads. Pages that hold private data opt out by not saving. */
+  /* Pages with private data (messages, bookmarks, lists, drafts, notifications)
+     keep their snapshot under a "private-list" key, so the device seal encrypts
+     it and the private wipe removes it with the rest of the private lists. */
+  var PRIVATE_ROUTE = /^#\/(?:messages|chat|bookmarks|lists?|drafts|notifications)(?:[/?]|$)/;
+  function routeKey(hash) {
+    return (PRIVATE_ROUTE.test(String(hash)) ? "private-list:route:" : "route:") + hash;
+  }
+  function wipePrivateRoutes(store) {
+    var index = swrReadIndex(store);
+    Object.keys(index).forEach(function (key) { if (key.indexOf("private-list") >= 0) swrDrop(key, store); });
+    swrWriteIndex(store);
+  }
+  function saveRoute(hash, html) {
+    if (!hash || !html || html.length > 150000 || /<script/i.test(html)) return false;
+    clearTimeout(saveRoute.timers && saveRoute.timers[hash]);
+    saveRoute.timers = saveRoute.timers || {};
+    saveRoute.timers[hash] = setTimeout(function () {
+      var memo = swrMemo[routeKey(hash)];
+      if (memo && memo.value === html) return;
+      swrPut(routeKey(hash), html);
+    }, 400);
+    return true;
+  }
+  function readRoute(hash) {
+    var hit = hash ? swrGet(routeKey(hash)) : null;
+    return hit && typeof hit.value === "string" ? hit.value : "";
+  }
+
   function wipe() {
     state.queue = [];
     state.scrolls = {};
@@ -576,6 +706,7 @@
     state.restored = false;
     var store = local();
     [SCREEN_KEY, SCROLL_KEY, PILL_KEY, QUEUE_KEY, OPENS_KEY].forEach(function (key) { writeJson(store, key, null); });
+    swrClear(store);
     var api = storageApi();
     if (api && typeof indexedDB !== "undefined") {
       api.openDb().then(function (db) { return api.clearDocs(db, "all"); }).catch(function () {});
@@ -643,6 +774,11 @@
     wasRestored: wasRestored,
     restoreEarly: restoreEarly,
     wipe: wipe,
+    swr: { get: swrGet, put: swrPut, fresh: swrFresh, drop: swrDrop, clear: swrClear, reset: swrReset, limits: { bytes: SWR_MAX_BYTES, entry: SWR_MAX_ENTRY, entries: SWR_MAX_ENTRIES } },
+    saveRoute: saveRoute,
+    readRoute: readRoute,
+    routeKey: routeKey,
+    wipePrivate: function (store) { wipePrivateRoutes(store || local()); },
     start: start
   };
 });

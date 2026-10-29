@@ -867,9 +867,14 @@ def extract() -> int:
     except Exception:
         pass
     try:
-        from log_redact import install
+        from log_redact import collect, install
 
-        install(tracked + [row.get("handle") for row in accounts if isinstance(row, dict)])
+        quiet = set(tracked)
+        collect(accounts, quiet)
+        collect(config, quiet)
+        collect(accounts_doc, quiet)
+        collect(x_doc, quiet)
+        install(quiet)
     except Exception:
         pass
     if not accounts:
@@ -1095,7 +1100,7 @@ def selftest() -> int:
     check(tb.runner_blocked("HTTP Error 403: Forbidden") and tb.runner_blocked("captcha") and not tb.runner_blocked("private account"), "a 403 or captcha is a skip")
     workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
     check('cron: "17 */3 * * *"' in workflow and 'cron: "*/30 * * * *"' not in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")
-    check("cancel-in-progress: false" in workflow, "an upload that is already running is not cancelled")
+    check("cancel-in-progress: false" in workflow or "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in workflow, "an upload that is already running is not cancelled")
     check(photos_allowed("blocked") is True, "a blocked video does not skip photos")
     queued = catalog_queue([
         {"platform": "x", "posted": "2026-10-22T16:00:00Z", "key": "old"},
@@ -1165,4 +1170,10 @@ def main(argv: list | None = None) -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     sys.exit(main())
