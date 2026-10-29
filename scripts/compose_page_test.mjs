@@ -175,14 +175,14 @@ async function main() {
     const child = spawn(process.execPath, [path.join(root, "scripts", name)], { stdio: "inherit", env: process.env });
     child.on("close", (code) => resolve(code));
   });
-  const riders = Promise.all([ride("community_home_test.mjs"), ride("communities_hub_test.mjs"), ride("own_post_test.mjs"), ride("post_page_test.mjs"), ride("music_dock_test.mjs"), ride("video_fallback_test.mjs"), ride("device_guard_test.mjs"), ride("usernames_settings_test.mjs"), ride("settings_assistant_test.mjs"), ride("nostr_settings_test.mjs"), ride("games_mobile_test.mjs"), ride("live_translate_test.mjs")]);
+  const riders = Promise.all([ride("community_home_test.mjs"), ride("communities_hub_test.mjs"), ride("own_post_test.mjs"), ride("post_page_test.mjs"), ride("music_dock_test.mjs"), ride("video_fallback_test.mjs"), ride("device_guard_test.mjs"), ride("usernames_settings_test.mjs"), ride("settings_assistant_test.mjs"), ride("nostr_settings_test.mjs"), ride("games_mobile_test.mjs"), ride("live_translate_test.mjs"), ride("friend_p2p_test.mjs")]);
   try {
     for (const vp of widths) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await exercise(page, vp, origin);
     }
     console.log("composer page ok");
-    const [home, hub, own, single, dock, vfall, guard, names, setai, nostr, games, livetr] = await riders;
+    const [home, hub, own, single, dock, vfall, guard, names, setai, nostr, games, livetr, friendp2p] = await riders;
     if (home !== 0) fail("community home check failed");
     if (hub !== 0) fail("communities hub check failed");
     if (own !== 0) fail("own post check failed");
@@ -195,6 +195,7 @@ async function main() {
     if (nostr !== 0) fail("nostr check failed");
     if (games !== 0) fail("games check failed");
     if (livetr !== 0) fail("live translate check failed");
+    if (friendp2p !== 0) fail("friend p2p check failed");
   } finally {
     await browser.close();
     server.close();

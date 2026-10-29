@@ -30,7 +30,7 @@ function staticChecks() {
   const external = read("app.js");
   const profile = external.slice(external.indexOf("function profileView"), external.indexOf("function statusView"));
   if (profile.includes("ProfileAbout") || profile.includes("?tab=about")) fail("external profiles must not grow an About tab");
-  if (!read("sw.js").includes('VERSION = "viktorych-a99-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a100-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok about layout rules");
 }
 

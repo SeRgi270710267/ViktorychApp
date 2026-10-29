@@ -2649,5 +2649,12 @@ SI18n.addPack("es", {
   "Only sound from playing videos counts. Translation stops when the video pauses.": "Solo cuenta el sonido de videos en reproducción. La traducción se detiene cuando el video se pausa.",
   "Videos from sites that don’t share their sound, such as YouTube, can’t be translated.": "No se pueden traducir videos de sitios que no comparten su sonido, como YouTube.",
   "Couldn’t load voices. Check that your key allows Text-to-Speech.": "No se pudieron cargar las voces. Comprueba que tu clave permita Text-to-Speech.",
-  "Hear and read videos in your language while they play.": "Escucha y lee los videos en tu idioma mientras se reproducen."
+  "Hear and read videos in your language while they play.": "Escucha y lee los videos en tu idioma mientras se reproducen.",
+  "New message: {text}": "Nuevo mensaje: {text}",
+  "typing…": "escribiendo…",
+  "Sent {n} waiting messages": "Se enviaron {n} mensajes pendientes",
+  "Friends direct": "Directo con amigos",
+  "Connect directly to friends": "Conectarse directamente con amigos",
+  "Messages, online status and typing go straight to friends who are online, and media they already loaded can come from their device. Friends can see your IP address while connected. Messages written offline are sent when you’re back online.": "Los mensajes, el estado en línea y la escritura van directo a los amigos conectados, y el contenido multimedia que ya cargaron puede llegar desde su dispositivo. Tus amigos pueden ver tu dirección IP mientras están conectados. Los mensajes escritos sin conexión se envían cuando vuelves a estar en línea.",
+  "You’re offline. It will send when you’re back online.": "Estás sin conexión. Se enviará cuando vuelvas a estar en línea."
 });
