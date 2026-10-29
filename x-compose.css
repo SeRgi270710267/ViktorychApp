@@ -72,7 +72,7 @@
   border: 1px solid var(--blue);
   border-radius: 999px;
   background: transparent;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -95,7 +95,7 @@
   word-break: break-word;
   pointer-events: none;
 }
-.xc-mark { color: var(--blue); }
+.xc-mark { color: var(--link, var(--blue)); }
 .xc-text {
   position: relative;
   z-index: 1;
@@ -224,7 +224,7 @@
 .xc-linkish, .xc-menu button, .xc-draft button {
   border: 0;
   background: transparent;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -245,7 +245,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -254,7 +254,7 @@
 .xc-reply-row svg, .xc-intent svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .xc-intent {
   margin-inline-start: auto;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
@@ -279,14 +279,14 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   display: grid;
   place-items: center;
   flex: none;
 }
 .xc-tool:hover, .xc-tool[aria-pressed="true"] { background: var(--blue-dim); }
 .xc-tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.xc-tool[data-recording="1"] { color: var(--red); }
+.xc-tool[data-recording="1"] { color: var(--red-text, var(--red)); }
 .xc-ai { position: static; }
 .xc-ai-btn svg { fill: currentColor; stroke: none; }
 .xc-ai-pop, .xc-menu {
@@ -380,7 +380,7 @@
 .xc-split { width: 1px; height: 26px; background: var(--line); }
 .xc-count { position: relative; display: grid; place-items: center; width: 30px; height: 30px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .xc-count.near { color: #ffd400; }
-.xc-count.over { color: var(--red, #f4212e); }
+.xc-count.over { color: var(--red-text, var(--red, #f4212e)); }
 .xc-meter { width: 22px; height: 22px; }
 .xc-count.near .xc-meter, .xc-count.over .xc-meter { width: 30px; height: 30px; }
 .xc-left { position: absolute; font-size: 11px; line-height: 1; }
@@ -408,7 +408,7 @@
 .xc-drafts-link {
   border: 0;
   background: transparent;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font: inherit;
   font-size: 15px;
   font-weight: 700;
@@ -502,7 +502,7 @@
 .xc-confirm p { margin: 8px 0; font-size: 15px; font-weight: 700; }
 .xc-draft { display: flex; gap: 8px; align-items: center; padding: 8px 16px; }
 .xc-draft .xc-draft-open { flex: 1; color: var(--text); font-weight: 500; }
-.xc-loc { margin-top: 8px; color: var(--blue); font-size: 15px; font-weight: 700; }
+.xc-loc { margin-top: 8px; color: var(--link, var(--blue)); font-size: 15px; font-weight: 700; }
 .note-partial, .xc-banner {
   margin: 0;
   padding: 10px 16px;
