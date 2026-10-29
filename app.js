@@ -7408,7 +7408,7 @@ const here = parseRoute();
       : (redditSub(post) && !opts.parentShown
         ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(redditSub(post))}">${esc("r/" + redditSub(post))}</a></div>`
         : "");
-    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
+    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}${cardHeightStyle(post.id)}>
       ${community}
       ${repost}
       ${sharedNote}
@@ -19698,6 +19698,39 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     paintHover(el, profile);
   }
 
+  /* Feed cards skip layout off screen (content-visibility: auto) and guess 220px
+     until drawn. A new DOM after Back forgets the real sizes, so the page came
+     back shorter and the old scroll landed thousands of pixels early. Keep the
+     drawn heights per post and hand them back as the guess. */
+  function cardHeights() { return STATE.cardHeights || (STATE.cardHeights = new Map()); }
+  function rememberCardHeights() {
+    const CARD_HEIGHTS = cardHeights();
+    const cards = document.querySelectorAll("#app article.post[data-post]");
+    for (let i = 0; i < cards.length; i++) {
+      const h = Math.round(cards[i].getBoundingClientRect().height);
+      if (h > 40 && h < 6000) CARD_HEIGHTS.set(cards[i].getAttribute("data-post"), h);
+    }
+    while (CARD_HEIGHTS.size > 800) CARD_HEIGHTS.delete(CARD_HEIGHTS.keys().next().value);
+    // The first card on screen, so Back can line it up exactly.
+    STATE.homeAnchor = null;
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i].getBoundingClientRect();
+      if (r.bottom > 60) { STATE.homeAnchor = { key: STATE.scrollKey, id: cards[i].getAttribute("data-post"), top: r.top }; break; }
+    }
+  }
+  function settleHomeAnchor(key) {
+    const anchor = STATE.homeAnchor;
+    if (!anchor || anchor.key !== key) return;
+    const el = [...document.querySelectorAll("#app article.post[data-post]")].find((node) => node.getAttribute("data-post") === anchor.id);
+    if (!el) return;
+    const off = el.getBoundingClientRect().top - anchor.top;
+    if (Math.abs(off) > 2) window.scrollBy(0, off);
+  }
+  function cardHeightStyle(id) {
+    const h = STATE.cardHeights ? STATE.cardHeights.get(String(id || "")) : 0;
+    return h ? ` style="contain-intrinsic-size:auto ${h}px"` : "";
+  }
+
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   try {
     matchMedia("(max-width: 699px)").addEventListener("change", () => refreshMediaFrames());
@@ -19766,6 +19799,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       window.FeedsDiscord.syncFromHash();
       return;
     }
+    const leavingKey = STATE.scrollKey;
+    if (/^#\/(?:home)?(?:[/?]|$)|^#?$/.test(prevHash)) rememberCardHeights();
     const nextRoute = parseRoute();
     if (nextRoute.name === "home") {
       const nextTab = nextRoute.tab || "foryou";
@@ -19802,6 +19837,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render({
       y: y,
       done: () => {
+        if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
         routing = false;
         scrollFreeze = false;
       }
