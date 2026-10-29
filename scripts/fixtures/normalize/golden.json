@@ -1,0 +1,1272 @@
+{
+ "fxtwitter:fxtwitter_sample.json": [
+  {
+   "cid": "c1-0ffb60dd612dddd012e7ab45132299ee",
+   "date": "2026-10-20T12:00:00.000Z",
+   "kind": "quote",
+   "media": [],
+   "quoted": true,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "364d2ca9a77e"
+  },
+  {
+   "cid": "c1-b98fb597740173b277a2cfac5a37799d",
+   "date": "2026-10-20T13:00:00.000Z",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "reposts"
+   ],
+   "text": "b57dbadfae81"
+  },
+  {
+   "cid": "c1-7245d5f7f203ee08e8cd5ac032581274",
+   "date": "2026-10-20T14:00:00.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "c16e9e6ed19d"
+  }
+ ],
+ "generic_rss:generic_sample.xml": [
+  {
+   "cid": "c1-5cc3f9fc7eb23a909826cb5725238ce9",
+   "date": "2026-10-20T10:00:00.000Z",
+   "kind": "quote",
+   "media": [
+    "photo",
+    "video",
+    "photo"
+   ],
+   "quoted": true,
+   "stats": [
+    "replies"
+   ],
+   "text": "62c4fd6c4593"
+  }
+ ],
+ "generic_rss:normalize/weird_atom.xml": [
+  {
+   "cid": "c1-acb8b1762f3848a70175222d4f89ea75",
+   "date": "2026-10-20T08:04:32.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "989b40aa897b"
+  },
+  {
+   "cid": "c1-56aab36e38d11e7a776583c407c76a5b",
+   "date": "2026-10-20T10:00:00.000Z",
+   "kind": "post",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "c59ff5d48b7d"
+  },
+  {
+   "cid": "c1-068dc03bd0c77151fab8bcf36b15561a",
+   "date": "2026-10-21T08:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "3eeb42526de8"
+  }
+ ],
+ "json_feed:normalize/weird_feed.json": [
+  {
+   "cid": "c1-97cb91b3926642d726666182d6634f4d",
+   "date": "2026-10-22T16:30:00.000Z",
+   "kind": "post",
+   "media": [
+    "audio",
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "2d9e733cd91e"
+  },
+  {
+   "cid": "c1-3e23a2d70a77a0e7679a4414fba749c6",
+   "date": "",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "75d6b4675835"
+  }
+ ],
+ "nitter_rss:nitter_sample.xml": [
+  {
+   "cid": "c1-10ad9ac62378029b994aa27e578af759",
+   "date": "2026-10-20T12:00:00.000Z",
+   "kind": "repost",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "888cde7b0ecb"
+  },
+  {
+   "cid": "c1-ceb672e00cfb3f406163887ea2a8bb4b",
+   "date": "2026-10-20T11:00:00.000Z",
+   "kind": "quote",
+   "media": [],
+   "quoted": true,
+   "stats": [],
+   "text": "568b08e61511"
+  }
+ ],
+ "rsshub_instagram:ig_atom_bridge.xml": [
+  {
+   "cid": "c1-913bf064c2f948781c2a3f8c765837d5",
+   "date": "2026-10-20T10:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "6412faec5e74"
+  }
+ ],
+ "rsshub_instagram:rsshub_instagram_birchlane.xml": [
+  {
+   "cid": "c1-0d57433b7690af3c03aa974292d34d71",
+   "date": "2026-10-12T15:04:36.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "313bb0b7fc58"
+  },
+  {
+   "cid": "c1-2adcd65a7605718963b5c78c7d17bd1f",
+   "date": "2026-10-11T00:29:16.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "42118b9d4c0a"
+  },
+  {
+   "cid": "c1-f565014bbe62d4a382f90a6b73bff2eb",
+   "date": "2026-09-25T16:50:35.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "b25a71cc7e72"
+  },
+  {
+   "cid": "c1-ebdcc34b511e35238369d03f505c86f4",
+   "date": "2026-09-24T00:12:39.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "bdc9ed677b94"
+  },
+  {
+   "cid": "c1-803c2349f566cde6566180676e2fdc4a",
+   "date": "2026-09-22T17:00:31.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "eecb70486e35"
+  },
+  {
+   "cid": "c1-0ab6c352a4807b1715fc79b7589ba721",
+   "date": "2026-09-20T17:51:47.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "b2f755debe4b"
+  },
+  {
+   "cid": "c1-6adca3674c846fb1b8b1a5f0c8988ec3",
+   "date": "2026-09-08T18:56:53.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "941d62fda1fb"
+  },
+  {
+   "cid": "c1-de56e62002160037d671c3e059dda57d",
+   "date": "2026-08-10T09:59:26.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "f667ace4a796"
+  },
+  {
+   "cid": "c1-ea84f089980fa22f01235cd324fab2dc",
+   "date": "2026-08-09T17:00:07.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "b8e6d67d94a9"
+  },
+  {
+   "cid": "c1-a151f55104f4d6395dfa3783198f1baa",
+   "date": "2026-07-28T22:36:10.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "058f8bf0c530"
+  },
+  {
+   "cid": "c1-e541a60283f46ebfaced3a827848bcb8",
+   "date": "2026-07-04T14:47:06.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "f977ed10d658"
+  },
+  {
+   "cid": "c1-40cb94549f916740e75de450a91fc7bc",
+   "date": "2026-06-26T17:18:17.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "30e6879865e5"
+  },
+  {
+   "cid": "c1-3e05d261c82670af601d9d463180616b",
+   "date": "2026-06-25T14:01:35.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "8df3df492bad"
+  },
+  {
+   "cid": "c1-9a3a169057ccf21db463356b0463056a",
+   "date": "2026-06-23T12:59:43.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "b4d018e496a0"
+  },
+  {
+   "cid": "c1-7a4572047abd315cb000f42002ac7d91",
+   "date": "2026-06-10T22:26:40.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "403afd4c427c"
+  },
+  {
+   "cid": "c1-33277440f3150dec667a9fe6480bb5f9",
+   "date": "2026-05-25T21:48:33.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "b6dd96411a0f"
+  },
+  {
+   "cid": "c1-29d02696c448907d1b4a9f35a166c0cd",
+   "date": "2026-05-12T16:01:12.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "5483e5f78a22"
+  },
+  {
+   "cid": "c1-8a3ec5b24f04f0c9cc2ccc71477d292d",
+   "date": "2026-05-05T16:01:25.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "0ad17f9f61e1"
+  },
+  {
+   "cid": "c1-970298bec1bba9d164802a0acb6e1c38",
+   "date": "2026-04-05T00:04:44.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "88ba65cf4513"
+  },
+  {
+   "cid": "c1-46f222ecf9a4650f2f148a6e67b2cf65",
+   "date": "2026-03-08T17:21:40.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "39defe381189"
+  },
+  {
+   "cid": "c1-d24f4e23c05c6ee90b153c10348d3a9e",
+   "date": "2026-02-26T18:20:36.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "c83afa8a48ae"
+  },
+  {
+   "cid": "c1-96269213e3d15059d6968e520bbb6756",
+   "date": "2026-01-09T20:36:39.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "db863bca4a8b"
+  },
+  {
+   "cid": "c1-6ef4fac320021b89e9f1aaccd2bef1b2",
+   "date": "2026-01-06T16:30:51.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "59b2d9ba0620"
+  },
+  {
+   "cid": "c1-25c9c7e13349ee3abaea2d89e1fea922",
+   "date": "2026-01-01T04:35:54.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "a4fe2e8ab418"
+  },
+  {
+   "cid": "c1-e123e79d4d31101a7f1087b9711f6998",
+   "date": "2025-12-30T17:09:09.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "50909ec93daa"
+  },
+  {
+   "cid": "c1-91a3624c2d613a62db2b958968648e6e",
+   "date": "2025-12-18T00:22:51.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "4780d7202f78"
+  },
+  {
+   "cid": "c1-4c51f5a48f708e8b7600046ef579e5d3",
+   "date": "2025-12-16T17:21:30.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "49756f417eac"
+  },
+  {
+   "cid": "c1-b09223ec23f6df7577637829e5afa35d",
+   "date": "2025-11-19T15:54:43.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "4e4e3018e9f8"
+  },
+  {
+   "cid": "c1-e50d12bad8de2388bb8eae50e66ad3b8",
+   "date": "2025-11-17T16:24:40.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "1a0e40f4b71e"
+  },
+  {
+   "cid": "c1-c3e037d9fc36a656df122c5a4ca5ea11",
+   "date": "2025-11-09T06:49:47.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "90d3d2e72219"
+  },
+  {
+   "cid": "c1-4dfa75e8cc6dfa8dbc947c688d4f7783",
+   "date": "2025-11-07T16:36:16.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "0ef7fe937cde"
+  },
+  {
+   "cid": "c1-f14428289a99d4a10b1bcc1b47bad36e",
+   "date": "2025-11-06T14:26:58.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "409114bd978d"
+  },
+  {
+   "cid": "c1-a014f6065f4b3f32ec4e627f4b11ceb2",
+   "date": "2025-10-31T23:52:55.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "2f84857586e0"
+  }
+ ],
+ "rsshub_threads:rsshub_threads_birchlane.xml": [
+  {
+   "cid": "c1-90f67e9be0d7ce4fb15779799c69ac2b",
+   "date": "2026-10-12T16:57:09.000Z",
+   "kind": "reply",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "1da6c7277651"
+  },
+  {
+   "cid": "c1-b17fb46876d85a4c58104bc6a13089fb",
+   "date": "2026-10-12T16:56:29.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "c1d10c25b00f"
+  },
+  {
+   "cid": "c1-d28a8aa81de8472597e3158048e049a7",
+   "date": "2026-10-12T16:56:28.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "3a24a41955d1"
+  },
+  {
+   "cid": "c1-3203fc308028e4c35b796f066c129479",
+   "date": "2026-10-12T16:56:28.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "736813b3a99d"
+  },
+  {
+   "cid": "c1-3f524e277a2959c4c61d8444ad53b6b2",
+   "date": "2026-10-12T15:01:17.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "313bb0b7fc58"
+  },
+  {
+   "cid": "c1-63c5e77864142b3b6d4ef577abf2e5c2",
+   "date": "2026-09-28T12:35:40.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "86f2d660493e"
+  },
+  {
+   "cid": "c1-95fe72f56e11e52080eed45af709ae96",
+   "date": "2026-09-28T12:35:32.000Z",
+   "kind": "post",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "2dc43eeaf601"
+  },
+  {
+   "cid": "c1-529b55e9bc660b424823871a711546a2",
+   "date": "2026-09-28T12:35:32.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "35e329615240"
+  },
+  {
+   "cid": "c1-ed0dea6a1407cb5bb06087cb0b52e4c8",
+   "date": "2026-09-28T12:35:32.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "e2b3cbec5496"
+  },
+  {
+   "cid": "c1-81f1f9d916690a0480cd449e860c6cfd",
+   "date": "2026-09-25T16:50:21.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "photo",
+    "video",
+    "photo",
+    "photo",
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "b25a71cc7e72"
+  }
+ ],
+ "rsshub_threads:threads_atom_bridge.xml": [
+  {
+   "cid": "c1-af785f094187081a0ae59e67af196e58",
+   "date": "2026-10-20T10:00:00.000Z",
+   "kind": "reply",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "73c5ee55991e"
+  }
+ ],
+ "telegram:telegram_channel.html": [
+  {
+   "cid": "c1-5c349203314da8a4ee0879489022e464",
+   "date": "2026-08-26T19:11:05.000Z",
+   "kind": "post",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "views"
+   ],
+   "text": "2d84cfe8541b"
+  },
+  {
+   "cid": "c1-90d12992dd009fdda531b39e2de6cf92",
+   "date": "2026-08-20T12:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [
+    "views"
+   ],
+   "text": "0523ca4d1589"
+  },
+  {
+   "cid": "c1-0c5e67968fbaf5f7d2741bf05daa4dc2",
+   "date": "2026-08-19T12:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [
+    "views"
+   ],
+   "text": "a11789cd0caa"
+  },
+  {
+   "cid": "c1-4cc68f0bf47cf1ce5ac886f5e3d454da",
+   "date": "2026-08-18T12:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "animated_gif"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "663c6a12953b"
+  },
+  {
+   "cid": "c1-8c615ffd1aeb627d77d551f73848b3ff",
+   "date": "2026-08-17T12:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "76f8f9b91b9d"
+  },
+  {
+   "cid": "c1-b51361d38a3f4af4612dce97503f67d9",
+   "date": "2026-08-16T12:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "audio"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "de4f21827654"
+  },
+  {
+   "cid": "c1-e9adf22b336cf91da5dba197b9b4ddc7",
+   "date": "2026-08-15T12:00:00.000Z",
+   "kind": "post",
+   "media": [
+    "file"
+   ],
+   "quoted": null,
+   "stats": [],
+   "text": "575a09aade19"
+  },
+  {
+   "cid": "c1-1b2e308ff9783332123cf24e0dfe229f",
+   "date": "2026-08-14T12:00:00.000Z",
+   "kind": "post",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "32263620b62f"
+  },
+  {
+   "cid": "c1-0eb4eaa33e903e7f1cc8fcab7e617dbe",
+   "date": "2026-08-13T12:00:00.000Z",
+   "kind": "post",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "83de026e03dd"
+  },
+  {
+   "cid": "c1-b5b06e094ee9fcabfeeecb890faad509",
+   "date": "2026-08-12T12:00:00.000Z",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "b7387cce92ca"
+  },
+  {
+   "cid": "c1-22bfb72d9fd4a1bf949d997300b55ec3",
+   "date": "2026-08-11T12:00:00.000Z",
+   "kind": "post",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "d6c68d623f77"
+  }
+ ],
+ "vk:vk_wall_vk.json": [
+  {
+   "cid": "c1-b08bb7b567f33dda481410bbda1ff205",
+   "date": "2026-10-18T07:00:45.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "226b1fe2c840"
+  },
+  {
+   "cid": "c1-73a1af52efae98388cc52e1f57784eb9",
+   "date": "2026-10-17T01:20:00.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "da39a3ee5e6b"
+  },
+  {
+   "cid": "c1-ee837753d643a97b453da1bb98986efa",
+   "date": "2026-10-15T21:33:20.000Z",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "4a7a440321a8"
+  },
+  {
+   "cid": "c1-aea3168956a3477a4dea883db2b00fd4",
+   "date": "2026-10-13T14:00:00.000Z",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [],
+   "text": "902b8e5ac49d"
+  }
+ ],
+ "x_api_v2:x_api_v2_mosspoint.json": [
+  {
+   "cid": "c1-542fbccdcad542800cad6f27b90a86cb",
+   "date": "2026-10-15T17:01:12.000Z",
+   "kind": "post",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "f0809e000905"
+  },
+  {
+   "cid": "c1-3ce6192cbba47a68fe55228955816937",
+   "date": "2026-10-13T21:13:17.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "76c9d4c9cb83"
+  },
+  {
+   "cid": "c1-f4ac0037c3cb55389445289eb64074ca",
+   "date": "2026-10-13T21:08:23.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "377f7edb0e52"
+  },
+  {
+   "cid": "c1-11b754a262671bb3d2ffab896bcb1fbe",
+   "date": "2026-10-12T16:55:02.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "e633ffc803d7"
+  },
+  {
+   "cid": "c1-2d25c7150ecfb3c149436cc364ddd58d",
+   "date": "2026-10-12T16:55:02.000Z",
+   "kind": "reply",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "8f4b47d85505"
+  }
+ ],
+ "x_api_v2:x_api_v2_samplea.json": [
+  {
+   "cid": "c1-50d558c6b8d79db54e930a2ef9aa7435",
+   "date": "2026-10-20T17:56:36.000Z",
+   "kind": "quote",
+   "media": [],
+   "quoted": true,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "974f5ce2351a"
+  },
+  {
+   "cid": "c1-c8bdc575e2d0628239d05633375de21d",
+   "date": "2026-10-20T17:44:06.000Z",
+   "kind": "post",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "7bcefbd3137c"
+  },
+  {
+   "cid": "c1-f007d26523cb694d2983348f8b0d1d2f",
+   "date": "2026-10-20T14:30:03.000Z",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "9468f22f74fe"
+  },
+  {
+   "cid": "c1-7c655cbaefaac90f5739ecedbfed4726",
+   "date": "2026-10-20T17:16:42.000Z",
+   "kind": "quote",
+   "media": [],
+   "quoted": true,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "f00f270f47f0"
+  },
+  {
+   "cid": "c1-b8d715d50ca67264b5a708521c25d3b4",
+   "date": "2026-10-20T14:01:19.000Z",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "b73f6448f606"
+  },
+  {
+   "cid": "c1-123bfc87d77557833d2da835f4a0771c",
+   "date": "2026-10-20T17:14:00.000Z",
+   "kind": "quote",
+   "media": [],
+   "quoted": true,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "ef1cde6b3fb4"
+  },
+  {
+   "cid": "c1-b384b092e7a69e4b7b6664d4a015c83f",
+   "date": "",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "af7c7240741b"
+  },
+  {
+   "cid": "c1-dfba30f96448cb1b8775f67f388e005f",
+   "date": "",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "a26b395e34ce"
+  },
+  {
+   "cid": "c1-fd13501c96eb1ded6c970b15e4699bb5",
+   "date": "",
+   "kind": "repost",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "21536ceec565"
+  },
+  {
+   "cid": "c1-057b3b6d7ef4665572e43e69c8016e21",
+   "date": "2026-10-20T17:08:17.000Z",
+   "kind": "quote",
+   "media": [],
+   "quoted": true,
+   "stats": [
+    "bookmarks",
+    "likes",
+    "quotes",
+    "replies",
+    "reposts",
+    "views"
+   ],
+   "text": "88b33e4e12f7"
+  }
+ ],
+ "youtube_community:youtube_community_initial.json": [
+  {
+   "cid": "c1-bfcaed1602045fafd4074e521f425549",
+   "date": "",
+   "kind": "community",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes"
+   ],
+   "text": "5d98d912d5b3"
+  }
+ ],
+ "youtube_community:youtube_community_invidious.json": [
+  {
+   "cid": "c1-921b088021b60c5682955dbe8e33dc45",
+   "date": "",
+   "kind": "community",
+   "media": [
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "replies"
+   ],
+   "text": "5d98d912d5b3"
+  },
+  {
+   "cid": "c1-4b281348a5e4c173dce0d954bbefe60b",
+   "date": "",
+   "kind": "community",
+   "media": [
+    "photo",
+    "photo",
+    "photo",
+    "photo"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "replies"
+   ],
+   "text": "d7e7772c717d"
+  },
+  {
+   "cid": "c1-08a6a1a746de44b5fa2510266e979c1b",
+   "date": "",
+   "kind": "community",
+   "media": [],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "replies"
+   ],
+   "text": "e4d94b870421"
+  },
+  {
+   "cid": "c1-ffcfccfe26c3c2cbaa388ce9ffcb1bf9",
+   "date": "",
+   "kind": "community",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "replies"
+   ],
+   "text": "60593ae6a3f5"
+  }
+ ],
+ "youtube_rss:youtube_amberquill.xml": [
+  {
+   "cid": "c1-80286ed96c2262f492c7c44617d7910c",
+   "date": "2026-10-17T02:09:23.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "views"
+   ],
+   "text": "c9b74e7a2c77"
+  },
+  {
+   "cid": "c1-bf9eeef03ae2232c7428d879277c6147",
+   "date": "2026-10-13T22:42:38.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "views"
+   ],
+   "text": "f1438a1e4dfe"
+  }
+ ],
+ "youtube_rss:youtube_goldthistle.xml": [
+  {
+   "cid": "c1-69298823f74d4dafc5db707c57cefe41",
+   "date": "2026-10-19T18:40:04.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "views"
+   ],
+   "text": "2fd8c7ff9c23"
+  },
+  {
+   "cid": "c1-ad0012191b80dcd964fbda386ca227ee",
+   "date": "2026-10-16T05:51:07.000Z",
+   "kind": "post",
+   "media": [
+    "video"
+   ],
+   "quoted": null,
+   "stats": [
+    "likes",
+    "views"
+   ],
+   "text": "6a235dbf79fe"
+  }
+ ]
+}
