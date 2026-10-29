@@ -2528,6 +2528,7 @@ SI18n.addPack("ru", {
   "Turn your phone sideways to play": "Поверните телефон горизонтально, чтобы играть",
   "Play full screen": "Играть на весь экран",
   "Controller connected. Tap the game, then press any button.": "Геймпад подключён. Коснитесь игры и нажмите любую кнопку.",
+  "The joystick and buttons appear once you join a match. Tap menus directly.": "Джойстик и кнопки появляются, когда вы входите в матч. Меню нажимайте напрямую.",
   "Playing {game}": "Играет в {game}",
   "{name} invited you to play {game}": "{name} приглашает вас сыграть в {game}",
   "{name} invited you to play": "{name} приглашает вас сыграть",
