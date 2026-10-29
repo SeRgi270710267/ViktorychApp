@@ -9,7 +9,7 @@ const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./i18n/hi.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./i18n/hi.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION, "./notif-privacy.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -125,6 +125,7 @@ const SHELL_FILES = [
   "./gifts.css",
   "./reactions.css",
   "./settings-sync.js",
+  "./notif-privacy.js",
   "./accounts.js",
   "./passkeys.js",
   "./app-lock.js",
@@ -2319,12 +2320,14 @@ async function deliverBellNotesNow(notes, dnd) {
     delivered.push(note);
     if (quiet || Notification.permission !== "granted") continue;
     try {
-      await self.registration.showNotification(note.name || ("@" + (note.handle || "post")), {
-        body: note.text || tr("New post"),
-        icon: note.avatar || "icons/icon-192.png",
-        image: note.image || undefined,
+      const NPB = self.ViktorychNotifPrivacy;
+      const shownB = NPB ? NPB.present(Object.assign({ kind: "post" }, note), await NPB.load(), { title: note.name || ("@" + (note.handle || "post")) }) : null;
+      await self.registration.showNotification(shownB ? shownB.title : (note.name || ("@" + (note.handle || "post"))), {
+        body: shownB ? shownB.body : (note.text || tr("New post")),
+        icon: shownB ? shownB.icon : (note.avatar || "icons/icon-192.png"),
+        image: shownB ? shownB.image : (note.image || undefined),
         tag: "note-" + id,
-        data: { hash: note.hash || "#/", id: id }
+        data: { hash: shownB && shownB.generic ? "#/notifications" : (note.hash || "#/"), id: id }
       });
     } catch (err) { /* the page still keeps the in-app row */ }
   }
@@ -2335,7 +2338,7 @@ async function deliverBellNotesNow(notes, dnd) {
   if (!visible) {
     const queued = ((await idbGet(db, "bell-queue")) || []).concat(delivered).slice(-80);
     await idbSet(db, "bell-queue", queued);
-    if (navigator.setAppBadge) {
+    if (navigator.setAppBadge && await swBadgeAllowed()) {
       try { await navigator.setAppBadge(queued.length); } catch (err) { /* badges are optional */ }
     }
   }
@@ -2486,7 +2489,7 @@ async function refreshAndNotify() {
     if (!(await swNoteHidden(fresh[i]))) visibleFresh.push(fresh[i]);
   }
   if (!visibleFresh.length || notifyAll !== true) return;
-  if (navigator.setAppBadge) {
+  if (navigator.setAppBadge && await swBadgeAllowed()) {
     try { await navigator.setAppBadge(visibleFresh.length); } catch (err) { /* badges are optional */ }
   }
   if (Notification.permission === "granted") {
@@ -2612,6 +2615,71 @@ self.addEventListener("sync", (event) => {
   if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
 });
 
+// Notification privacy (notif-privacy.js). The badge follows the person's choice.
+async function swBadgeAllowed() {
+  const NP = self.ViktorychNotifPrivacy;
+  if (!NP) return true;
+  try { return (await NP.load()).badge !== false; } catch (err) { return true; }
+}
+
+// One small server read when this device has no copy of a note and names
+// are allowed. Hidden names never trigger a request.
+async function fetchPushNote(sid) {
+  const NP = self.ViktorychNotifPrivacy;
+  const db = await idb();
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  if (!auth || !auth.token || !api || !sid) return null;
+  const since = Date.now() - 15 * 60 * 1000;
+  const res = await fetch(String(api).replace(/\/$/, "") + "/v1/notifications?since=" + since, {
+    headers: { Authorization: "Bearer " + auth.token },
+    cache: "no-store"
+  });
+  if (!res || !res.ok) return null;
+  const view = await res.json().catch(() => null);
+  const items = (view && Array.isArray(view.items)) ? view.items : [];
+  await NP.remember(items, await NP.load());
+  return NP.lookup(sid);
+}
+
+// Compact pushes: {v:2,k,i,n}. Text comes from this device only.
+async function showCompactPush(c) {
+  const NP = self.ViktorychNotifPrivacy;
+  const db = await idb();
+  const mark = c.sid + ":" + c.count;
+  if (c.sid) {
+    const seen = (await idbGet(db, "push-seen")) || [];
+    if (seen.indexOf(mark) >= 0) return;
+    await idbSet(db, "push-seen", seen.concat([mark]).slice(-300));
+  }
+  const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (open.some((client) => client.visibilityState === "visible")) {
+    open.forEach((client) => {
+      try { client.postMessage({ type: "push-note", note: {} }); }
+      catch (err) { /* the page polls when it is next visible */ }
+    });
+    return;
+  }
+  await ensureUiLang();
+  const prefs = await NP.load();
+  let note = null;
+  if (NP.showNames(prefs, c.kind)) {
+    note = await NP.lookup(c.sid);
+    if (!note || (c.count && Number(note.others || 0) !== c.count)) {
+      try { note = (await fetchPushNote(c.sid)) || note; } catch (err) { /* generic copy below */ }
+    }
+  }
+  if (note && await swNoteHidden(note)) return;
+  const shown = NP.present(note ? Object.assign({}, note, { kind: note.kind || c.kind, others: c.count || note.others }) : null, prefs, { kind: c.kind });
+  await self.registration.showNotification(shown.title, {
+    body: shown.body,
+    icon: shown.icon,
+    image: shown.image,
+    tag: "n-" + (c.sid || c.kind),
+    data: { hash: shown.hash, id: (note && note.id) || "" }
+  });
+}
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let data = {};
@@ -2619,6 +2687,11 @@ self.addEventListener("push", (event) => {
     catch (err) { data = {}; }
     if (await pushIsDnd(!!(data && data.dnd))) return;
     if (data && data.silent) return;
+    const compact = self.ViktorychNotifPrivacy ? self.ViktorychNotifPrivacy.parsePush(data) : null;
+    if (compact) {
+      await showCompactPush(compact);
+      return;
+    }
     const hasCopy = !!(data && (data.titleKey || data.body));
     if (!hasCopy) return;
     if (await swNoteHidden(data)) return;
@@ -2645,11 +2718,13 @@ self.addEventListener("push", (event) => {
     await ensureUiLang();
     const vars = data && data.titleVars && typeof data.titleVars === "object" ? data.titleVars : {};
     const title = data && data.titleKey ? tr(data.titleKey, vars) : tr("New post");
-    await self.registration.showNotification(title, {
-      body: (data && data.body) || "",
-      icon: (data && data.icon) || "icons/icon-192.png",
+    const NPL = self.ViktorychNotifPrivacy;
+    const shownL = NPL ? NPL.present({ kind: NPL.kindFromTitleKey(data && data.titleKey), name: vars.name || "", handle: vars.handle || "", text: (data && data.body) || "", avatar: (data && data.icon) || "", hash: (data && data.hash) || "#/" }, await NPL.load(), { title: title }) : null;
+    await self.registration.showNotification(shownL ? shownL.title : title, {
+      body: shownL ? shownL.body : ((data && data.body) || ""),
+      icon: shownL ? shownL.icon : ((data && data.icon) || "icons/icon-192.png"),
       tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
-      data: { hash: (data && data.hash) || "#/", id: (data && data.id) || "" }
+      data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "" }
     });
   })());
 });
