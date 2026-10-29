@@ -1,5 +1,10 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("ru", {
+  "3 months": "3 месяца",
+  "6 months": "6 месяцев",
+  "12 months": "12 месяцев",
+  "If you’re away for": "Если вас нет",
+  "If you don’t use your account for this long, it and its data are deleted.": "Если вы не пользуетесь аккаунтом столько времени, он и его данные удаляются.",
   "Technology": "Технологии",
   "News": "Новости",
   "Gaming": "Игры",

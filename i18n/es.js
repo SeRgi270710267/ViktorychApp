@@ -1,5 +1,10 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("es", {
+  "3 months": "3 meses",
+  "6 months": "6 meses",
+  "12 months": "12 meses",
+  "If you’re away for": "Si estás ausente durante",
+  "If you don’t use your account for this long, it and its data are deleted.": "Si no usas tu cuenta durante este tiempo, se eliminarán la cuenta y sus datos.",
   "Technology": "Tecnología",
   "News": "Noticias",
   "Gaming": "Videojuegos",
