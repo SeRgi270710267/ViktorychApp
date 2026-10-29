@@ -61,8 +61,18 @@ def write_report(doc: dict, path: Path = REPORT) -> None:
             "ok": bool(row.get("ok")),
             "detail": (row.get("detail") or "")[:300],
         })
+    parse = []
+    for key, row in sorted((doc.get("parseHealth") or {}).items()):
+        if isinstance(row, dict):
+            parse.append({
+                "source": key,
+                "items": row.get("items") or 0,
+                "rate": row.get("rate"),
+                "drift": bool(row.get("drift")),
+                "top": list(row.get("top") or [])[:3],
+            })
     path.write_text(
-        json.dumps({"updated": doc.get("updated") or "", "feeds": feeds, "stories": stories}, ensure_ascii=False, indent=2) + "\n",
+        json.dumps({"updated": doc.get("updated") or "", "feeds": feeds, "stories": stories, "parse": parse}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -121,6 +131,16 @@ def problems(report, now: str, build_result: str = "success", deploy_result: str
         detail = (row.get("detail") or "Stories sync failed.").strip()
         if detail:
             lines.append(detail)
+    for row in report.get("parse") or []:
+        if not isinstance(row, dict) or not row.get("drift"):
+            continue
+        rate = row.get("rate")
+        pct = f"{round(100 * float(rate))}%" if isinstance(rate, (int, float)) else "?"
+        line = f"{row.get('source') or 'a source'} parsed only {pct} of {row.get('items') or 0} new items twice in a row; its format may have changed."
+        top = "; ".join(row.get("top") or [])
+        if top:
+            line += " Top reasons: " + top
+        lines.append(line)
     return lines
 
 
