@@ -86,7 +86,11 @@ export const PULSE_KEYS = [
   "data/music.json",
   "archive/index.json",
   "discord/index.json",
-  "discord/vk.json"
+  "discord/vk.json",
+  "discord/x/index.json",
+  "discord/x/catalog.json",
+  "discord/x/join.json",
+  "discord/x/health.json"
 ];
 
 export const PULSE_OBJECT = "pulse/v1.json";
