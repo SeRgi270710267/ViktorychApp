@@ -350,6 +350,7 @@
         '<div class="theme-row">' + auto("off", tr("Off")) + auto("muted", tr("Muted")) + auto("on", tr("On")) + "</div>" +
         '<div class="theme-row"><button class="outline" type="button" data-tv-reset="1">' + esc(tr("Reset TV defaults")) + "</button></div>";
     }
+    if (!TV.on) html += '<div class="theme-row"><a class="outline" href="#/send-to-tv">' + esc(tr("Send to my TV")) + "</a></div>";
     html += nameHtml();
     html += appCardHtml("settings");
     return html;

@@ -267,3 +267,9 @@ data-saver.js|HD video variants
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
+send-tv.js|Samsung
+send-tv.js|SmartThings
+send-tv.js|LG ThinQ
+send-tv.js|Google TV
+send-tv.js|Fire TV
+send-tv.js|Amazon Fire TV
