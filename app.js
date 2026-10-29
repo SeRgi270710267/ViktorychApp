@@ -5536,7 +5536,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     blockReasons = new WeakMap();
     publishBlockHeader();
   }
-  window.addEventListener("viktorych-blocks", () => { blocksChanged(); if (STATE.settings) render({ y: window.scrollY }); });
+  if (typeof window.addEventListener === "function") window.addEventListener("viktorych-blocks", () => { blocksChanged(); if (STATE.settings) render({ y: window.scrollY }); });
 
   /* Why this device hides a post or comment: "account", "post", "source",
      "type", "word", or "". */
@@ -5659,7 +5659,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   /* Another tab changed the rules: apply them here at once. */
-  window.addEventListener("storage", (event) => {
+  if (typeof window.addEventListener === "function") window.addEventListener("storage", (event) => {
     if (!event || !STATE.settings) return;
     if (event.key !== BLOCK_HEADER_KEY && event.key !== storeName("settings-v1")) return;
     if (event.key === BLOCK_HEADER_KEY && event.newValue === (window.__viktorychBlockHeader || null)) return;
