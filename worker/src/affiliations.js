@@ -88,10 +88,38 @@ async function visibleGrant(env, viewerId, ownerId, grant, affiliation) {
   });
 }
 
+/* An organization whose profile_ref is "owner" is the owner's own org, so
+   every owner account carries its badge without a grant row. A grant row,
+   when one exists, still holds the owner's hide and audience choices. */
+async function impliedOwnerRows(env, ids, listedRows) {
+  if (!ids.length) return [];
+  let owners = { results: [] };
+  let orgs = { results: [] };
+  try {
+    owners = await env.DB.prepare(
+      "SELECT public_id FROM accounts WHERE owner = 1 AND public_id IN (" + ids.map(() => "?").join(",") + ")"
+    ).bind(...ids).all();
+    if (!rows(owners).length) return [];
+    orgs = await env.DB.prepare("SELECT id, name, logo, profile_ref FROM affiliations WHERE profile_ref = 'owner'").all();
+  } catch (err) {
+    return [];
+  }
+  const have = {};
+  for (const row of listedRows) have[row.public_id + "|" + row.id] = true;
+  const out = [];
+  for (const owner of rows(owners)) {
+    for (const org of rows(orgs)) {
+      if (have[owner.public_id + "|" + org.id]) continue;
+      out.push({ public_id: owner.public_id, hidden: 0, audience: "public", id: org.id, name: org.name, logo: org.logo, profile_ref: org.profile_ref });
+    }
+  }
+  return out;
+}
+
 export async function handleAffiliations(request, env, path, deps) {
   const viewer = await deps.sessionAccount(env, request);
   if (path === "/v1/affiliations" && request.method === "GET") {
-    if (!viewer) return deps.json(401, { error: "unauthorized" });
+    const viewerId = viewer ? viewer.public_id : "";
     const ids = String(new URL(request.url).searchParams.get("ids") || "").split(",").map((id) => id.trim()).filter((id) => PUBLIC_ID.test(id)).slice(0, 40);
     const accounts = {};
     if (!ids.length) return deps.json(200, { accounts: accounts });
@@ -105,14 +133,15 @@ export async function handleAffiliations(request, env, path, deps) {
       return deps.json(200, { accounts: accounts });
     }
     const hrefs = {};
-    for (const row of rows(listed)) {
-      const ok = await visibleGrant(env, viewer.public_id, row.public_id, row, row);
+    const all = rows(listed).concat(await impliedOwnerRows(env, ids, rows(listed)));
+    for (const row of all) {
+      const ok = await visibleGrant(env, viewerId, row.public_id, row, row);
       if (!ok) continue;
       if (row.profile_ref === "owner" && hrefs.owner == null) hrefs.owner = await ownerHref(env);
       if (!accounts[row.public_id]) accounts[row.public_id] = [];
-      accounts[row.public_id].push(card(row, row.profile_ref === "owner" ? hrefs.owner : "", viewer.public_id === row.public_id ? row : null));
+      accounts[row.public_id].push(card(row, row.profile_ref === "owner" ? hrefs.owner : "", viewerId && viewerId === row.public_id ? row : null));
     }
-    return deps.json(200, { accounts: accounts });
+    return deps.json(200, { accounts: accounts }, viewer ? undefined : { "cache-control": "public, max-age=300" });
   }
 
   if (path === "/v1/affiliations/me" && request.method === "GET") {
@@ -126,7 +155,7 @@ export async function handleAffiliations(request, env, path, deps) {
       return deps.json(200, { affiliations: [] });
     }
     const href = await ownerHref(env);
-    const affiliations = rows(listed).map((row) => card(row, row.profile_ref === "owner" ? href : "", row));
+    const affiliations = rows(listed).concat(await impliedOwnerRows(env, [viewer.public_id], rows(listed))).map((row) => card(row, row.profile_ref === "owner" ? href : "", row));
     return deps.json(200, { affiliations: affiliations });
   }
 
@@ -135,10 +164,17 @@ export async function handleAffiliations(request, env, path, deps) {
     if (!viewer) return deps.json(401, { error: "unauthorized" });
     const body = await deps.readJson(request, 4000);
     if (body.error) return deps.json(400, { error: body.error });
-    const grant = await env.DB.prepare(
+    let grant = await env.DB.prepare(
       "SELECT hidden, audience FROM affiliation_grants WHERE affiliation_id = ? AND public_id = ?"
     ).bind(mine[1], viewer.public_id).first();
-    if (!grant) return deps.json(404, { error: "not_granted" });
+    if (!grant) {
+      const implied = (await impliedOwnerRows(env, [viewer.public_id], [])).some((row) => row.id === mine[1]);
+      if (!implied) return deps.json(404, { error: "not_granted" });
+      await env.DB.prepare(
+        "INSERT INTO affiliation_grants (affiliation_id, public_id, hidden, audience, granted_at) VALUES (?, ?, 0, 'public', ?) ON CONFLICT(affiliation_id, public_id) DO NOTHING"
+      ).bind(mine[1], viewer.public_id, Date.now()).run();
+      grant = { hidden: 0, audience: "public" };
+    }
     const hidden = body.hidden != null ? (body.hidden ? 1 : 0) : grant.hidden;
     const audience = body.audience != null ? cleanAudience(body.audience) : cleanAudience(grant.audience);
     await env.DB.prepare(
