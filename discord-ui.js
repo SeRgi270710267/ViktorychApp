@@ -343,7 +343,7 @@
     const ms = msgTime(row);
     if (!ms) return "";
     try {
-      return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+      return new Intl.DateTimeFormat((window.SI18n ? window.SI18n.locale() : undefined), { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
     } catch (err) {
       return "";
     }
@@ -353,7 +353,7 @@
     const ms = msgTime(row);
     if (!ms) return "";
     try {
-      return new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(new Date(ms));
+      return new Intl.DateTimeFormat((window.SI18n ? window.SI18n.locale() : undefined), { month: "long", day: "numeric", year: "numeric" }).format(new Date(ms));
     } catch (err) {
       return "";
     }
@@ -950,7 +950,7 @@
       const date = new Date(ms);
       const now = new Date();
       const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
-      return new Intl.DateTimeFormat(undefined, sameDay ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric" }).format(date);
+      return new Intl.DateTimeFormat((window.SI18n ? window.SI18n.locale() : undefined), sameDay ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric" }).format(date);
     } catch (err) {
       return "";
     }
@@ -1096,7 +1096,7 @@
     const pinned = hasId(prefs().pinnedServers, server.id);
     const preview = state.paused ? tr("Discord paused") : (latest ? (latest.row.name + ": " + previewText(latest.row)) : tr("No messages yet"));
     const time = !state.paused && latest ? formatShort(msgTime(latest.row)) : "";
-    const badge = !muted && count ? '<span class="dmsgs-badge" aria-label="' + count + ' unread">' + (count > 99 ? "99+" : String(count)) + "</span>" : "";
+    const badge = !muted && count ? '<span class="dmsgs-badge" aria-label="' + esc(trn("unread", count)) + '">' + (count > 99 ? "99+" : String(count)) + "</span>" : "";
     const icon = server.icon
       ? '<img src="' + esc(server.icon) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">'
       : "<span>" + esc(initials(server.name)) + "</span>";
