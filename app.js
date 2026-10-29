@@ -17349,7 +17349,7 @@ if (STATE.histClear) {
     window.scrollTo({ top: 0, behavior: repeat || reduced ? "auto" : "smooth" });
     if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = 0;
     STATE.headerHidden = false;
-    document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
+    paintChromeHidden(false);
     document.querySelectorAll('.tab-caret[aria-expanded="true"]').forEach((btn) => btn.setAttribute("aria-expanded", "false"));
     const sheet = document.querySelector(".tab-sheet");
     if (sheet) sheet.remove();
@@ -18192,7 +18192,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
           }
         }
       }
-      document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
+      paintChromeHidden(STATE.headerHidden && window.innerWidth < 500);
       if (route.name === "subscriptions" && route.channel && (routeChanged || !STATE.scrollKey)) revealSubsChannel();
       STATE.scrollKey = nextKey;
       lastKey = location.hash;
@@ -21352,6 +21352,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   })();
   window.addEventListener("orientationchange", () => syncShell());
   syncShell();
+  function paintChromeHidden(hidden) {
+    const root = document.documentElement;
+    const on = !!hidden;
+    if (root.classList.contains("chrome-hidden") !== on) root.classList.toggle("chrome-hidden", on);
+    document.querySelectorAll(".topbar").forEach((el) => {
+      if (el.classList.contains("is-hidden") !== on) el.classList.toggle("is-hidden", on);
+    });
+  }
   function paintProfileChrome() {
     const bar = document.querySelector(".profile-chrome");
     if (!bar) return;
@@ -21363,19 +21371,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (copy) copy.hidden = !solid;
     STATE.profileSolid = solid;
   }
-  window.addEventListener("scroll", () => {
+  /* X mobile: the top bar slides up and the bottom bar fades while
+     scrolling down; both come back on the way up. One rAF per frame,
+     transform/opacity only, and classes change only when the state flips. */
+  let scrollTick = 0;
+  function onChromeScroll() {
+    scrollTick = 0;
     paintProfileChrome();
     const homeStories = parseRoute().name === "home" && document.querySelector(".story-shell");
     if (window.innerWidth >= 500 || homeStories) {
       STATE.headerHidden = false;
-      if (homeStories) document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
+      paintChromeHidden(false);
       return;
     }
     const y = window.scrollY;
     if (y > lastY + 8 && y > 70) STATE.headerHidden = true;
     else if (y < lastY - 8 || y < 40) STATE.headerHidden = false;
     lastY = y;
-    document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden));
+    paintChromeHidden(STATE.headerHidden);
+  }
+  window.addEventListener("scroll", () => {
+    if (!scrollTick) scrollTick = requestAnimationFrame(onChromeScroll);
   }, { passive: true });
 
   let hoverTimer = 0;

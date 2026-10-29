@@ -6435,3 +6435,15 @@ html[data-ava-shape="square"] :is(.ava, .ava img, .pava, .pava img, .m-ava .ava,
 @media (max-width: 999px) {
   .status-author .more-btn svg { transform: rotate(90deg); }
 }
+/* X mobile chrome: the translucent top bar slides away and the bottom bar
+   fades while scrolling down (html.chrome-hidden, set from one rAF scroll
+   handler). Transform and opacity only, so it stays on the compositor. */
+@media (max-width: 499px) {
+  .topbar { will-change: transform; }
+  .bottom-nav, .fab { transition: opacity 0.2s ease; }
+  html.chrome-hidden .bottom-nav { opacity: 0.45; }
+  html.chrome-hidden .fab { opacity: 0.45; }
+}
+@media (max-width: 499px) and (prefers-reduced-motion: reduce) {
+  .topbar, .bottom-nav, .fab { transition: none; }
+}
