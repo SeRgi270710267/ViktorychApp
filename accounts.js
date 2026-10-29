@@ -3603,6 +3603,52 @@ function signupPayload() {
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {});
   }
+  /* Owner panel: usage against the free limits, read at most every five
+     minutes while settings are open. */
+  var usageDoc = null;
+  var usageAt = 0;
+  function loadUsage() {
+    var session = readSession();
+    if (!session || !session.token || !session.account || !session.account.owner) return;
+    if (Date.now() - usageAt < 5 * 60 * 1000) return;
+    usageAt = Date.now();
+    api("/v1/owner/usage", { token: session.token }).then(function (body) {
+      if (!body || body.status !== 200) return;
+      usageDoc = body;
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  function usageRow(label, used, limit) {
+    var pct = limit ? Math.min(100, Math.round((Number(used) || 0) * 100 / limit)) : 0;
+    var level = pct >= 90 ? " hot" : pct >= 70 ? " warm" : "";
+    return '<div class="usage-row' + level + '"><div class="usage-top"><span>' + esc(label) + '</span><b>' + esc(tr("{used} of {limit}", { used: formatNum(Number(used) || 0), limit: formatNum(limit) })) + '</b></div>' +
+      '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-label="' + esc(label) + '"><i style="width:' + pct + '%"></i></div></div>';
+  }
+  function usageHtml() {
+    var u = usageDoc;
+    var head = '<div class="set-block usage-panel"><h2>' + esc(tr("Free tier usage")) + "</h2>";
+    if (!u) return head + '<p class="phandle">' + esc(tr("Loading…")) + "</p></div>";
+    var L = u.limits || {};
+    var rows = "";
+    if (!u.configured) {
+      rows += '<p class="set-sub">' + esc(tr("Usage needs a read-only analytics token. Add CF_ANALYTICS_TOKEN and CF_ACCOUNT_ID as Worker secrets.")) + "</p>";
+    } else if (u.error) {
+      rows += '<p class="set-sub">' + esc(tr("Analytics did not answer. Try again later.")) + "</p>";
+    } else {
+      rows += usageRow(tr("Worker requests today"), u.workerRequestsToday, L.workerRequestsDay);
+      rows += usageRow(tr("D1 rows read today"), u.d1RowsReadToday, L.d1RowsReadDay);
+      rows += usageRow(tr("D1 rows written today"), u.d1RowsWrittenToday, L.d1RowsWrittenDay);
+      rows += usageRow(tr("Live channel requests today"), u.durableRequestsToday, L.durableRequestsDay);
+      rows += usageRow(tr("Storage writes this month"), u.r2ClassAMonth, L.r2ClassAMonth);
+      rows += usageRow(tr("Storage reads this month"), u.r2ClassBMonth, L.r2ClassBMonth);
+      var week = (u.week || []).map(function (row) {
+        return '<span class="usage-day' + (row.requests > L.workerRequestsDay ? " hot" : "") + '">' + esc(String(row.date).slice(5)) + " " + esc(formatNum(row.requests)) + "</span>";
+      }).join("");
+      if (week) rows += '<p class="set-sub">' + esc(tr("Worker requests, last 7 days")) + '</p><div class="usage-week">' + week + "</div>";
+    }
+    rows += usageRow(tr("Backup server hours this month (at most)"), u.renderHoursCeiling, L.renderHoursMonth);
+    return head + rows + "</div>";
+  }
   function healthWhen(value) {
     if (!value) return "";
     try { return new Date(value).toLocaleString(); } catch (err) { return String(value); }
@@ -4058,7 +4104,8 @@ function signupPayload() {
     if (account.owner) {
       loadTikTokHealth();
       loadBackupChannels();
-      health = healthHtml() + channelsHtml();
+      loadUsage();
+      health = usageHtml() + healthHtml() + channelsHtml();
     }
     if (window.ProfileAbout) window.ProfileAbout.ensure(account, "");
     var aboutPrivacy = window.ProfileAbout && window.ProfileAbout.privacyOpen() ? window.ProfileAbout.privacyHtml(account.about || { sections: [] }) : "";
