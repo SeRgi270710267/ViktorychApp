@@ -272,7 +272,7 @@ function onSocketMessage(event) {
   try { msg = JSON.parse(String(event.data || "")); }
   catch (err) { return; }
   if (!msg) return;
-  if (msg.op === "event" && (msg.topic === "notifications" || msg.topic === "sync" || msg.topic === "p2p")) {
+  if (msg.op === "event" && (msg.topic === "notifications" || msg.topic === "sync" || msg.topic === "p2p" || msg.topic === "srv")) {
     notifyChannel(msg);
     return;
   }
@@ -307,7 +307,7 @@ function connect() {
     ws.addEventListener("open", function () {
       attempt = 0;
       try {
-        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync", "posts", "p2p"] }));
+        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync", "posts", "p2p", "srv"] }));
         ws.send(JSON.stringify({ op: "watch", topic: "presence", ids: currentIds() }));
       } catch (err) { /* close reconnects */ }
       clearInterval(pollTimer);
