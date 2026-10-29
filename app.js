@@ -1754,7 +1754,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1818,7 +1818,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
       telegram: [tr("Telegram ingest"), tr("The Telegram bot webhook and media relay.")],
       pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")],
-      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")]
+      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")],
+      regone_leaderboard: [tr("ReGone Top Players"), tr("The NZlay Top 100 tab on the Games page, rank cards and rank achievements.")],
+      regone_online: [tr("ReGone players online"), tr("The players-online count on the Games tile and in invites.")],
+      regone_rooms: [tr("ReGone room list"), tr("NZlay's live room list in the invite and party room picker.")],
+      regone_profile_stats: [tr("ReGone profile stats"), tr("Stats and achievements from the NZlay profile someone linked to their own account.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -15617,6 +15621,8 @@ const here = parseRoute();
         ${prefRow("reposts", tr("Reposts"))}
         ${prefRow("follows", tr("Follows"))}
         ${prefRow("dms", tr("Direct messages"))}
+        ${prefRow("games", tr("Game invites"))}
+        ${window.ViktorychGameSocial ? window.ViktorychGameSocial.notifyHtml() : ""}
         ${sameSwitch}
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
@@ -15654,6 +15660,7 @@ const here = parseRoute();
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${notesSwitch}
         ${presenceBlock}
+        ${acct && window.ViktorychGameSocial ? window.ViktorychGameSocial.privacyHtml() : ""}
         ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
@@ -24608,7 +24615,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function notePrefs() {
     const saved = STATE.settings && STATE.settings.notePrefs;
-    const base = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
+    const base = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", games: "push", mentionsFrom: "all" };
     if (!saved || typeof saved !== "object") return base;
     const out = Object.assign({}, base);
     Object.keys(base).forEach((key) => {
@@ -24621,6 +24628,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return out;
   }
 
+  // Game invites ask whether they may pop up (Notifications > Game invites).
+  window.ViktorychNotePrefs = function () { return notePrefs(); };
   function saveNotePrefs(next) {
     if (!STATE.settings) return;
     STATE.settings.notePrefs = next;
@@ -25144,6 +25153,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     if (msg.op === "event" && msg.topic === "notifications" && msg.data) applyHubEvent(msg.data);
+    if (msg.op === "event" && msg.topic === "games" && msg.data && window.ViktorychGameSocial) window.ViktorychGameSocial.onChannel(msg.data);
     if (msg.op === "event" && msg.topic === "posts") {
       clearTimeout(postsLiveTimer);
       postsLiveTimer = setTimeout(refreshAppPosts, 600);

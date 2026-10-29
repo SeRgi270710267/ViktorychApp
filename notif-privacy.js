@@ -78,6 +78,7 @@
     if (type === "follows") return t("New follower");
     if (type === "notes") return t("New Community Note");
     if (kind === "post" || kind === "bell" || kind === "live") return t("New post");
+    if (kind === "game_invite") return t("New game invite");
     return t("New notification");
   }
 
@@ -92,6 +93,7 @@
     if (kind === "mention") return t("{name} mentioned you", v);
     if (kind === "dm") return t("{name} sent you a message", v);
     if (kind === "follow") return t("{name} followed you", v);
+    if (kind === "game_invite") return t("{name} invited you to play", v);
     return name;
   }
 
