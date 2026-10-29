@@ -87,6 +87,8 @@ const SHELL_FILES = [
   "./friend-p2p.js",
   "./people.js",
   "./people.css",
+  "./pymk.js",
+  "./pymk.css",
   "./tv.js",
   "./tv.css",
   "./shared/tv-boot.js",
