@@ -4,7 +4,7 @@ const VERSION = "viktorych-a116-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T09:47:00Z-p2p-pool
+// cache-bust: 2026-10-29T09:46:00Z-gifts-art
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -196,8 +196,6 @@ const SHELL_FILES = [
   "./icons/music-maskable-512.png",
   "./peer-media.js",
   "./shared/peer-media.js",
-  "./peer-pool.js",
-  "./shared/peer-pool.js",
   "./shared/device-performance.js"
 ];
 
