@@ -1,5 +1,7 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("es", {
+  "Play with the X player": "Reproducir con el reproductor de X",
+  "Play with the TikTok player": "Reproducir con el reproductor de TikTok",
   "3 months": "3 meses",
   "6 months": "6 meses",
   "12 months": "12 meses",

@@ -92,7 +92,7 @@ async function exercise(page, label, origin) {
   const install = page.locator("#install-banner");
   if (await install.count()) {
     await page.locator("[data-native='install-dismiss']").click();
-    await page.waitForFunction(() => !document.getElementById("install-banner"));
+    await page.waitForFunction(() => !document.getElementById("install-banner"), null, { timeout: 10000 }).catch(() => fail(label + " install banner did not close"));
   }
 
   const note = page.locator("[data-ios='storage']");
@@ -102,7 +102,11 @@ async function exercise(page, label, origin) {
       fail(label + " storage note is unclear");
     }
     await page.locator("[data-ios='dismiss']").click();
-    await page.waitForFunction(() => !document.querySelector("[data-ios='storage']"));
+    // WebKit in CI sometimes lands the tap beside the sticky note; dispatch the
+    // click on the button itself when the first tap missed.
+    const gone = await page.waitForFunction(() => !document.querySelector("[data-ios='storage']"), null, { timeout: 3000 }).then(() => true, () => false);
+    if (!gone) await page.evaluate(() => document.querySelectorAll("[data-ios='dismiss']").forEach((b) => b.click()));
+    await page.waitForFunction(() => !document.querySelector("[data-ios='storage']"), null, { timeout: 10000 }).catch(() => fail(label + " storage note did not close"));
   }
 
   const opener = page.locator("button.fab, button.post-btn").locator("visible=true").first();
@@ -123,7 +127,7 @@ async function exercise(page, label, origin) {
   await page.waitForFunction(() => {
     const main = document.querySelector("main, .center");
     return !!main && (main.innerText || "").trim().length > 0;
-  }, null, { timeout: 15000 });
+  }, null, { timeout: 15000 }).catch(() => fail(label + " profile page stayed empty"));
 
   await page.goto(origin + "/#/", { waitUntil: "domcontentloaded" });
   const opened = await page.waitForFunction(() => {
@@ -141,7 +145,7 @@ async function exercise(page, label, origin) {
     });
     if (phone) phone.click();
     return !!document.querySelector(".drawer") || !!side;
-  }, null, { timeout: 15000 });
+  }, null, { timeout: 15000 }).catch(() => fail(label + " menu did not open"));
   if (await page.locator(".drawer").count()) await page.keyboard.press("Escape");
   else if (!opened) fail(label + " has no menu");
 
