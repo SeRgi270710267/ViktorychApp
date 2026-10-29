@@ -3289,34 +3289,114 @@ button.show-replies {
 .center.route-in { animation: route-in 180ms ease; }
 @keyframes route-in { from { opacity: 0; } to { opacity: 1; } }
 
+/* Installed desktop app. The OS keeps its own minimize, maximize and close
+   buttons; Window Controls Overlay only lets us draw in the rest of the title
+   bar, at env(titlebar-area-*). desktop-app.js mirrors the same box into
+   --tb-* from navigator.windowControlsOverlay on geometrychange. */
+:root { --wco-h: 0px; }
 .wco { display: none; background: var(--bg); }
-.wco-title {
+html.vk-wco { --wco-h: var(--tb-h, env(titlebar-area-height, 33px)); }
+html.vk-wco .wco {
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  color: var(--text);
+  position: fixed;
+  left: var(--tb-x, env(titlebar-area-x, 0px));
+  top: var(--tb-y, env(titlebar-area-y, 0px));
+  width: var(--tb-w, env(titlebar-area-width, 100%));
+  height: var(--wco-h);
+  z-index: 40;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--line);
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+/* Content starts below the bar: sticky headers stop under it. */
+html.vk-wco body { padding-top: var(--wco-h); }
+html.vk-wco .nav { top: var(--wco-h); height: calc(100vh - var(--wco-h)); }
+html.vk-wco .topbar, html.vk-wco .ptabs-wrap, html.vk-wco .profile-chrome, html.vk-wco .home-fresh, html.vk-wco .side-search, html.vk-wco .center.settings-flow .topbar { top: var(--wco-h); }
+html.vk-fs .wco { display: none; }
+html.vk-fs, html.vk-wco.vk-fs { --wco-h: 0px; }
+.wco-drag {
+  flex: 1 1 auto;
+  min-width: 0;
   height: 100%;
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 0 12px;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.2px;
+}
+.wco-title {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
-@media (display-mode: window-controls-overlay) {
-  .wco {
-    display: block;
-    background: var(--bg);
-    position: fixed;
-    left: env(titlebar-area-x, 0);
-    top: env(titlebar-area-y, 0);
-    width: env(titlebar-area-width, 100%);
-    height: env(titlebar-area-height, 40px);
-    z-index: 40;
-    app-region: drag;
-    -webkit-app-region: drag;
-    border-bottom: 1px solid var(--line);
-  }
-  .nav { padding-top: env(titlebar-area-height, 40px); }
+html.vk-wco-narrow .wco-title { display: none; }
+.wco-tools {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 4px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
+.wco-btn {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+  width: 30px;
+  height: 30px;
+  max-height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+}
+.wco-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.wco-btn:hover { background: rgba(231, 233, 234, 0.1); }
+.wco-close:hover { background: rgba(244, 33, 46, 0.1); color: #f4212e; }
+
+/* Page scrollbar: hidden in the installed app (and in full screen) unless
+   Settings > Display > Show scrollbar is on. Browser tabs keep theirs.
+   Wheel, trackpad, keyboard and touch scrolling are untouched. */
+html.vk-installed:not(.vk-show-scrollbar), html.vk-fs:not(.vk-show-scrollbar) { scrollbar-width: none; }
+html.vk-installed:not(.vk-show-scrollbar)::-webkit-scrollbar, html.vk-fs:not(.vk-show-scrollbar)::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* Full screen: a small exit pill that slides in when the pointer reaches the top edge. */
+.vk-fs-exit {
+  position: fixed;
+  z-index: 120;
+  top: 10px;
+  left: 50%;
+  transform: translate(-50%, -64px);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #e7e9ea;
+  font-size: 15px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.vk-fs-exit svg { width: 18px; height: 18px; fill: currentColor; }
+html.vk-fs .vk-fs-exit.on { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.vk-fs-exit:hover { background: rgba(39, 44, 48, 0.95); }
 #install-banner {
   position: fixed;
   z-index: 80;

@@ -3508,5 +3508,16 @@ SI18n.addPack("ru", {
   "Show unread count on the app icon": "Показывать число непрочитанных на значке",
   "Show unread count in the tab title": "Показывать число непрочитанных в заголовке вкладки",
   "Show names and previews for": "Показывать имена и текст для",
-  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Push-уведомления не содержат имён и текста. Устройство подставляет их из того, что уже сохранено, и это экономит трафик."
+  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Push-уведомления не содержат имён и текста. Устройство подставляет их из того, что уже сохранено, и это экономит трафик.",
+  "Full screen isn’t available here.": "Полноэкранный режим здесь недоступен.",
+  "Some of what you were writing can’t be saved on this device, like attached photos or video. Close anyway?": "Часть написанного нельзя сохранить на этом устройстве, например прикреплённые фото или видео. Всё равно закрыть?",
+  "Your browser kept this window open. Press {keys} to close it.": "Браузер не дал закрыть это окно. Нажмите {keys}, чтобы закрыть его.",
+  "Close app": "Закрыть приложение",
+  "Title bar": "Строка заголовка",
+  "Desktop app": "Приложение для компьютера",
+  "Show scrollbar": "Показывать полосу прокрутки",
+  "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "Установленное приложение скрывает полосу прокрутки страницы. Прокручивать можно колесом, тачпадом, клавиатурой или касанием. Во вкладках браузера она всегда видна.",
+  "Full screen shortcut": "Сочетание клавиш для полноэкранного режима",
+  "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (⌘+Shift+F на Mac) включает и выключает полноэкранный режим. Выйти также можно клавишами Esc или F11.",
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Собственные кнопки компьютера «Свернуть», «Развернуть» и «Закрыть» всегда остаются в углу. Приложение рисует свою строку заголовка рядом с ними."
 });

@@ -219,6 +219,10 @@ async function main() {
       }
     }
     console.log("drawer menu ok");
+    // The installed desktop app checks ride along here so the smoke workflow runs them.
+    const { spawnSync } = await import("node:child_process");
+    const desk = spawnSync(process.execPath, [path.join(root, "scripts", "desktop_app_test.mjs")], { stdio: "inherit", env: process.env });
+    if (desk.status !== 0) fail("desktop app check failed");
   } finally {
     await browser.close();
     server.close();

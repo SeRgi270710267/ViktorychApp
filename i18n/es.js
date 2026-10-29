@@ -3508,5 +3508,16 @@ SI18n.addPack("es", {
   "Show unread count on the app icon": "Mostrar no leídos en el icono de la app",
   "Show unread count in the tab title": "Mostrar no leídos en el título de la pestaña",
   "Show names and previews for": "Mostrar nombres y vistas previas de",
-  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Las notificaciones push no llevan nombres ni texto. Este dispositivo los completa con lo que ya tiene, lo que también ahorra datos."
+  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Las notificaciones push no llevan nombres ni texto. Este dispositivo los completa con lo que ya tiene, lo que también ahorra datos.",
+  "Full screen isn’t available here.": "La pantalla completa no está disponible aquí.",
+  "Some of what you were writing can’t be saved on this device, like attached photos or video. Close anyway?": "Parte de lo que escribías no se puede guardar en este dispositivo, como fotos o videos adjuntos. ¿Cerrar de todos modos?",
+  "Your browser kept this window open. Press {keys} to close it.": "Tu navegador mantuvo esta ventana abierta. Pulsa {keys} para cerrarla.",
+  "Close app": "Cerrar app",
+  "Title bar": "Barra de título",
+  "Desktop app": "App de escritorio",
+  "Show scrollbar": "Mostrar barra de desplazamiento",
+  "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "La app instalada oculta la barra de desplazamiento de la página. Puedes seguir desplazándote con la rueda, el trackpad, el teclado o el tacto. Las pestañas del navegador siempre la muestran.",
+  "Full screen shortcut": "Atajo de pantalla completa",
+  "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (⌘+Shift+F en Mac) activa y desactiva la pantalla completa. Esc o F11 también la cierran.",
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Los botones propios de tu computadora para minimizar, maximizar y cerrar siempre se quedan en la esquina. La app dibuja su barra de título junto a ellos."
 });
