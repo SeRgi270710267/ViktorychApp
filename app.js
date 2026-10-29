@@ -1365,6 +1365,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!ready.length) return;
     ready.forEach((item) => setFollowed(item, on));
     saveSettings();
+    if (on && window.FeedsPeople && window.FeedsPeople.afterFollow) setTimeout(() => { try { window.FeedsPeople.afterFollow(ready); } catch (err) { /* a hint only */ } }, 0);
     if (!navigator.onLine) {
       ready.forEach((item) => {
         if (accounts && accounts.previewFollow) accounts.previewFollow(item, on);
@@ -2249,6 +2250,19 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!platform || platform === "x" || platform === "app") return "";
     const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
+  }
+
+  function platformGlyph(platform) {
+    const p = platform || "x";
+    // X gets a plain letter: the app chrome never carries the X logo.
+    if (p === "x") return `<span class="src pglyph pglyph-x" title="X" aria-hidden="true">X</span>`;
+    const name = p === "instagram" ? "ig" : p === "threads" ? "threads" : p === "youtube" ? "subs" : p === "vk" ? "vk" : p === "telegram" ? "tg" : p === "discord" ? "discord" : p === "tiktok" ? "tiktok" : "rss";
+    return `<span class="src pglyph" title="${esc(PLATFORM[p] || p)}">${icon(name)}</span>`;
+  }
+
+  function postSourceBadges(post) {
+    const many = window.FeedsPeople && window.FeedsPeople.badges ? window.FeedsPeople.badges(post) : "";
+    return many || sourceBadge(post.platform);
   }
 
   function externalProfile(feed) {
@@ -5525,6 +5539,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function hiddenPost(post) {
     if (!post) return false;
     if (catalogRowHidden(post)) return true;
+    if (window.FeedsPeople && window.FeedsPeople.hidden && window.FeedsPeople.hidden(post)) return true;
     if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
     const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
     if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
@@ -7946,7 +7961,7 @@ const here = parseRoute();
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${post.edited ? `<span class="edited">${tr("Edited")}</span>` : ""}
-            ${sourceBadge(post.platform)}
+            ${postSourceBadges(post)}
             <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="${tr("More")}">${icon("more")}</button>
           </div>
           ${reply}
@@ -8015,7 +8030,8 @@ const here = parseRoute();
     }
     if (parts[0] === "messages") {
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
-      return { name: "messages", channel: channel, query };
+      const server = (parts[1] === "s" || parts[1] === "join") && parts[2] ? parts[2] : "";
+      return { name: "messages", channel: channel, server: server, query };
     }
     if (parts[0] === "spaces") return { name: "spaces", id: parts[1] || "", query };
     if (parts[0] === "live" && /^[a-f0-9]{32}$/.test(parts[1] || "")) return { name: "live", id: parts[1], query };
@@ -11806,7 +11822,7 @@ const here = parseRoute();
             <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>${affSlot(post)}
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(statusHandle)}</a>
           </div>
-          <span class="status-end">${sourceBadge(post.platform)}${statusMenu(post)}</span>`;
+          <span class="status-end">${postSourceBadges(post)}${statusMenu(post)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
       ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
@@ -15542,7 +15558,12 @@ if (STATE.histClear) {
 
   function followedPost(post) {
     if (!post || !STATE.settings) return false;
-    if (window.FeedOrder) return window.FeedOrder.followsPost(post, followIdsNow());
+    if (window.FeedOrder) {
+      const ids = followIdsNow();
+      if (window.FeedOrder.followsPost(post, ids)) return true;
+      // A folded cross-post counts when the reader follows any of its copies.
+      return !!(post.crossPosts && post.crossPosts.length) && post.crossPosts.some((ref) => ref && ref.feedId && ids.some((id) => sameFollowId(id, ref.feedId)));
+    }
     return profileMatch(post, STATE.settings.follows || []);
   }
 
@@ -16654,6 +16675,10 @@ if (STATE.histClear) {
   function ensureLazy(name) {
     if (window.ViktorychLazy && window.ViktorychLazy.ensure) window.ViktorychLazy.ensure(name);
   }
+  /* #/messages/s/… and #/messages/join/… belong to the app's own servers (servers-ui.js). */
+  function nativeServerHash(hash) {
+    return /^#\/messages\/(?:s|join)\//.test(hash || "");
+  }
   function lazySkeleton(title) {
     return pageHead(title) + `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`;
   }
@@ -16742,6 +16767,11 @@ if (STATE.histClear) {
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
+    if (route.name === "messages" && nativeServerHash(location.hash)) {
+      if (window.ViktorychServers) return window.ViktorychServers.page(route);
+      ensureLazy("servers");
+      return `<div class="dmsgs"><div class="dmsgs-skel" style="flex:1"><span></span><span></span><span></span><span></span></div></div>`;
+    }
     if (route.name === "messages" && window.FeedsDiscord) return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + window.FeedsDiscord.page(route);
     if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
@@ -17609,6 +17639,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       placeFloatMenu(".tab-context");
       syncTabArrows();
       if (window.FeedsDiscord && window.FeedsDiscord.mount) window.FeedsDiscord.mount(route);
+      if (window.ViktorychServers && window.ViktorychServers.mount) window.ViktorychServers.mount(route);
       if (route.name === "explore") bindExploreSearchFit();
       else clearExploreSearchFit();
       bindNavSplit();
@@ -17646,6 +17677,35 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     el.textContent = message;
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { el.hidden = true; }, 1800);
+  }
+
+  /* A toast with one action (Undo, Add, Merge) and an optional Not now. */
+  function toastAction(message, label, run, later) {
+    const el = document.getElementById("toast");
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = "";
+    const text = document.createElement("span");
+    text.textContent = message;
+    el.appendChild(text);
+    const button = (caption, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "toast-act";
+      b.textContent = caption;
+      b.addEventListener("click", (event) => {
+        event.stopPropagation();
+        el.hidden = true;
+        clearTimeout(toast._t);
+        try { fn(); } catch (err) { /* the toast is gone either way */ }
+      });
+      el.appendChild(b);
+      return b;
+    };
+    if (label && run) button(label, run);
+    if (later) button(tr("Not now"), later);
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, 6500);
   }
 
   let tabSheetClose = 0;
@@ -18681,7 +18741,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
         return;
       }
       const on = ids.some((item) => isFollowed(item));
+      if (!on && ids.length > 1 && window.FeedsPeople && window.FeedsPeople.pick && window.FeedsPeople.pick(ids, el)) return;
       applyFollow(ids, !on);
+      return;
+    }
+    if (act && act.indexOf("pm-") === 0 && window.FeedsPeople && window.FeedsPeople.act) {
+      window.FeedsPeople.act(act, el);
       return;
     }
     if (act === "graph-unblock" || act === "graph-block" || act === "graph-mute" || act === "graph-unmute") {
@@ -20879,7 +20944,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     showPill(pendingPillPosts());
     const nextHash = location.hash || "#/";
     const prevHash = lastKey || "";
-    if (/^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
+    const nativePrev = nativeServerHash(prevHash);
+    const nativeNext = nativeServerHash(nextHash);
+    if (nativePrev && nativeNext && window.ViktorychServers && window.ViktorychServers.syncFromHash && window.ViktorychServers.syncFromHash()) {
+      lastKey = nextHash;
+      STATE.scrollKey = "#/messages";
+      routing = false;
+      scrollFreeze = false;
+      return;
+    }
+    if (!nativePrev && !nativeNext && /^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
       lastKey = nextHash;
       STATE.scrollKey = "#/messages";
       routing = false;
@@ -24829,7 +24903,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       window.FeedsPeople.bind({
         esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
         followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
-        sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
+        sourceBadge: sourceBadge, platformGlyph: platformGlyph, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
+        basePosts: () => (STATE.data && STATE.data.posts) || [],
+        isFollowed: isFollowed,
+        follow: (ids, on) => applyFollow(ids, on),
+        toastAction: toastAction,
+        go: (hash) => { location.hash = hash; },
+        links: () => STATE.settings && STATE.settings.peopleLinks,
+        saveLinks: (next) => {
+          if (!STATE.settings) return;
+          STATE.settings.peopleLinks = next;
+          STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { peopleLinks: Date.now() });
+          saveSettings();
+        },
         statusHash: statusHash, watchHash: watchHash, render: render,
         connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
         extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
@@ -25078,13 +25164,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const info = event.detail || {};
     if (info.name === "shorts") bindShortsModule();
     if (info.name === "communities") bindCommunitiesModule();
-    if (!info.silent) render();
+    if (!info.silent || (info.name === "servers" && parseRoute().name === "messages")) render();
   });
   setTimeout(deviceHello, 6000);
   syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
-      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive", "packages"]);
+      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive", "packages", "servers"]);
     }
   }, 8000);
   window.addEventListener("viktorych-key-alert", function (event) {
@@ -25535,12 +25621,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
     });
     if (lookChanged) {
+      if (window.FeedsPeople && window.FeedsPeople.refresh) window.FeedsPeople.refresh();
       applyTheme();
       syncFeatureFlags();
       render();
