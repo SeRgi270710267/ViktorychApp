@@ -114,6 +114,7 @@ const SHELL_FILES = [
   "./gifts-ui.js",
   "./reactions.js",
   "./shared/gift-catalog.js",
+  "./shared/store-catalog.js",
   "./badges.js",
   "./badges.css",
   "./audience-ui.js",
