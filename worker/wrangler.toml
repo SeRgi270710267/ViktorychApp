@@ -54,6 +54,10 @@ REQUEST_GUARD = "on"
 # One flag. "owner" hides TikTok and Shorts except for the owner account.
 # "all" shows them to everyone. Keep this in step with accounts.config.js.
 TIKTOK_AUDIENCE = "owner"
+# Inbox relays for members: Mail (IMAP over TLS sockets, one chosen folder,
+# read-only) and their own SMSPool key. Stateless: nothing is stored or
+# logged. "on" enables POST /v1/inbox/mail and POST /v1/inbox/sms.
+INBOX_RELAY = "off"
 
 [[d1_databases]]
 binding = "DB"
