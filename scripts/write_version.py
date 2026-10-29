@@ -88,6 +88,17 @@ def pages_version_url(repo: str) -> str:
     return f"https://{owner}.github.io/{name}/version.json"
 
 
+def commit_built(sha: str) -> str:
+    if not sha or set(sha) == {"0"}:
+        return ""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import assemble_site
+        return assemble_site.commit_built(sha)
+    except Exception:
+        return ""
+
+
 def built_stamp(env_value: str, now: str) -> str:
     text = str(env_value or "").strip()
     if BUILT_RE.fullmatch(text):
@@ -180,7 +191,9 @@ def main(argv: list[str] | None = None) -> int:
     repo = os.environ.get("GITHUB_REPOSITORY") or ""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    built = built_stamp(os.environ.get("VERSION_BUILT") or "", now)
+    # The commit time, the same stamp sw.js carries, so the app compares
+    # like with like and a rerun of one commit writes the same manifest.
+    built = commit_built(sha) or built_stamp(os.environ.get("VERSION_BUILT") or "", now)
     previous = "--previous" in args
     if previous:
         payload = fetch_json(pages_version_url(repo), LIVE_TIMEOUT) if repo else None
