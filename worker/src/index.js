@@ -869,7 +869,8 @@ function recoveryDeps() {
     originAllowed: originAllowed,
     blockDeletedLogin: blockDeletedLogin,
     accountCols: ACCOUNT_COLS,
-    publish: publishToAccount
+    publish: publishToAccount,
+    tgObject: telegramObject
   };
 }
 
@@ -1581,11 +1582,44 @@ async function readStoredText(env, key) {
     const object = await env.DATA.get("lastgood/" + key);
     backup = object ? await object.text() : "";
   } catch (err) { backup = ""; }
-  if (catalogUnusable(key, backup)) return "";
+  if (catalogUnusable(key, backup)) {
+    // Third tier: the snapshot the Telegram backup stores under snap/<key>.
+    // Used only when R2 and lastgood/ both failed, so it costs nothing on a
+    // normal read.
+    if (!TG_SNAPSHOT_KEYS.has(key)) return "";
+    let snap = "";
+    try {
+      const copy = await telegramObject(env, "snap/" + key);
+      snap = copy ? await copy.text() : "";
+    } catch (err) { snap = ""; }
+    if (catalogUnusable(key, snap)) return "";
+    backup = snap;
+  }
   try {
     await env.DATA.put(key, backup, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
   } catch (err) { /* the last good copy is still served */ }
   return backup;
+}
+
+// Public catalogs the Telegram backup snapshots (scripts/telegram_backup.py
+// SNAPSHOT_KEYS). Keep the two lists the same.
+const TG_SNAPSHOT_KEYS = new Set(["feeds.json", "stories.json", "people.json", "suggestions.json", "data/music.json", "data/communities/index.json"]);
+// Keys that have their own access checks elsewhere. /tg serves them only to
+// the backup's verify bearer; the app reads them through their own routes.
+const TG_PRIVATE_KEY = /^(?:snap|post-media|srv)\//;
+
+// A user upload or a public catalog whose R2 copy is missing or failing is
+// read from its Telegram copy: a single file under 19 MB, never encrypted.
+// Returns a Response with the whole body, or null.
+async function telegramObject(env, key) {
+  if (!env || !env.DB || !env.TELEGRAM_BOT_TOKEN || !key || telegramSecretKey(key)) return null;
+  let row = null;
+  try {
+    row = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime, duration, serve, encrypted FROM telegram_files WHERE object_key = ? AND kind = 'single' AND part_index = 0 AND serve = 1 AND encrypted = 0").bind(String(key)).first();
+  } catch (err) { return null; }
+  if (!row || !row.file_id) return null;
+  try { return await telegramBody(env, row); }
+  catch (err) { return null; }
 }
 
 function catalogResponse(text) {
@@ -3265,6 +3299,7 @@ async function handleTelegram(request, env, path, ctx) {
     if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
   }
   if (telegramSecretKey(decoded)) return json(404, { error: "not_found" });
+  if (!verify && TG_PRIVATE_KEY.test(decoded)) return json(404, { error: "not_found" });
   let key = decoded;
   let mode = "file";
   let index = 0;
