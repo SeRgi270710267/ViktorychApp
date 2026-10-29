@@ -446,6 +446,12 @@
       try {
         if (window.VIKTORYCH_ACCOUNTS && window.VIKTORYCH_ACCOUNTS.gate) {
           app.innerHTML = "";
+          /* Signed in on this device: show the screen this account saved last
+             time right away instead of a blank page while the scripts load.
+             localfirst.js would put the same copy back a few seconds later;
+             sign-out and account deletion clear it. The wall never gets it. */
+          var acct = read("viktorychapp-account-v1");
+          if (acct && acct.token && document.documentElement.getAttribute("data-wall") !== "1") paintScreen(read("viktorych-screen-v1"));
           return;
         }
         if (paintScreen(read("viktorych-screen-v1"))) return;
