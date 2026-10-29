@@ -252,6 +252,7 @@ index.html|Regístrate
 index.html|Entrar
 reactions.js|Shift+F10
 reactions.js|800px 0px
+community-notes.js|800px 0px
 servers-ui.js|MENTION_EVERYONE
 servers-ui.js|CREATE_INVITE
 servers-ui.js|MANAGE_MESSAGES
@@ -264,6 +265,7 @@ people.js|Fediverse
 own: onboarding.js
 # data-saver.js: the fifth column of KEYS is a code note, never rendered
 data-saver.js|HD video variants
+data-saver.js|Community Notes only for posts on screen, refreshed less often
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
