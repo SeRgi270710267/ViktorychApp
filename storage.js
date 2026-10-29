@@ -111,6 +111,9 @@
     var path = url.pathname || "";
     if (/\.(m3u8|json)$/i.test(path)) return false;
     if (/\/v1\/media\/(?:view\/[a-f0-9]{32}|(?:avatars|banners)\/\d{12}\/)/i.test(path)) return false;
+    // Synced social and TikTok media on /tg has no file extension, but each key and
+    // part number is written once, so a device can keep its copy.
+    if (/\/tg\/(?:social|tiktok)\/.+\/(?:photo|image|video|gif|animated_gif|thumb|poster|cover|media)(?:\/\d+(?:\/(?:\d+|init))?)?$/i.test(path)) return true;
     var cat = categoryOf(url);
     if (cat === "videos" || cat === "photos" || cat === "live" || cat === "music") return true;
     return cat === "messages" && /\.(png|jpe?g|gif|webp|avif|mp4|webm|mov|m4s|ts|cmfv|cmfa)$/i.test(path);
