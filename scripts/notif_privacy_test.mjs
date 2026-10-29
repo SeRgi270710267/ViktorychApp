@@ -45,7 +45,7 @@ test("hidden names show generic copy only", () => {
   assert.equal(shown.hash, "#/notifications");
   assert.equal(JSON.stringify(shown).includes("Sample"), false);
   const dm = NP.present({ kind: "dm", name: "Sample Person", text: "secret" }, { names: true, preview: false }, {});
-  assert.equal(dm.title, "Sample Person");
+  assert.equal(dm.title, "Sample Person sent you a message");
   assert.equal(dm.body, "New message");
   const typeOff = NP.present({ kind: "dm", name: "Sample Person", text: "secret" }, { types: { messages: false } }, {});
   assert.equal(typeOff.generic, true);

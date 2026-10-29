@@ -21,7 +21,7 @@
   function t(key, vars) {
     var lang = root && root.SI18n;
     if (lang && typeof lang.t === "function") return lang.t(key, vars);
-    return key;
+    return String(key).replace(/\{(\w+)\}/g, function (m, name) { return vars && vars[name] != null ? String(vars[name]) : ""; });
   }
 
   function defaults() {
@@ -79,6 +79,34 @@
     return t("New notification");
   }
 
+  // Title with the sender, built on the device from cached data.
+  function actionTitle(kind, name, others) {
+    var n = Math.max(0, Number(others) || 0);
+    var v = { name: name, n: String(n) };
+    if (kind === "like") return n > 0 ? t("{name} and {n} others liked your post", v) : t("{name} liked your post", v);
+    if (kind === "repost") return n > 0 ? t("{name} and {n} others reposted your post", v) : t("{name} reposted your post", v);
+    if (kind === "quote") return t("{name} quoted your post", v);
+    if (kind === "reply") return t("{name} replied to you", v);
+    if (kind === "mention") return t("{name} mentioned you", v);
+    if (kind === "dm") return t("{name} sent you a message", v);
+    if (kind === "follow") return t("{name} followed you", v);
+    return name;
+  }
+
+  // Older full pushes carry an English title key instead of a kind.
+  function kindFromTitleKey(key) {
+    var k = String(key || "");
+    if (/liked/.test(k)) return "like";
+    if (/reposted/.test(k)) return "repost";
+    if (/quoted/.test(k)) return "quote";
+    if (/replied/.test(k)) return "reply";
+    if (/mentioned/.test(k)) return "mention";
+    if (/sent you a message/.test(k)) return "dm";
+    if (/follow/.test(k)) return "follow";
+    if (/friend request/.test(k)) return "friend_request";
+    return "post";
+  }
+
   function appName() {
     var lang = root && root.SI18n;
     if (lang && typeof lang.productName === "function") {
@@ -100,7 +128,7 @@
       return { title: appName(), body: genericText(kind), icon: "icons/icon-192.png", image: undefined, hash: "#/notifications", generic: true };
     }
     return {
-      title: o.title || n.name || ("@" + n.handle),
+      title: o.title || actionTitle(kind, n.name || ("@" + n.handle), n.others),
       body: preview ? (n.text || o.body || genericText(kind)) : genericText(kind),
       icon: n.avatar || n.icon || "icons/icon-192.png",
       image: preview ? (n.image || undefined) : undefined,
@@ -246,7 +274,7 @@
   return {
     META_KEY: META_KEY, CACHE_KEY: CACHE_KEY, TYPES: TYPES,
     defaults: defaults, normalize: normalize, typeOf: typeOf, showNames: showNames, showPreview: showPreview,
-    genericText: genericText, present: present, bannerText: bannerText, badgeCount: badgeCount, titleCount: titleCount,
+    genericText: genericText, actionTitle: actionTitle, kindFromTitleKey: kindFromTitleKey, present: present, bannerText: bannerText, badgeCount: badgeCount, titleCount: titleCount,
     shortId: shortId, parsePush: parsePush, load: load, persist: persist, remember: remember, lookup: lookup,
     settingsHtml: settingsHtml, toggle: toggle
   };
