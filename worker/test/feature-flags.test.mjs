@@ -77,6 +77,16 @@ test("the owner can turn heavy features fully off", async () => {
 
   let pub = await call("/v1/features");
   assert.equal(pub.status, 200);
+  assert.deepEqual(pub.body.off, ["nostr"], "Nostr starts off until the owner turns it on");
+  assert.ok(pub.body.features.includes("nostr"));
+  for (const path of ["/.well-known/nostr.json?name=member_test", "/v1/nostr/posts/" + "a".repeat(32)]) {
+    const res = await call(path);
+    assert.equal(res.status, 204, path + " is off by default");
+  }
+  const nostrOn = await call("/v1/owner/features", { method: "POST", token: owner.body.token, body: { name: "nostr", off: false } });
+  assert.deepEqual(nostrOn.body.off, []);
+  assert.equal((await call("/v1/nostr/posts/" + "a".repeat(32))).status, 404, "on: unknown posts have no Nostr link");
+  pub = await call("/v1/features");
   assert.deepEqual(pub.body.off, []);
   assert.ok(pub.body.features.includes("shorts") && pub.body.features.includes("stories") && pub.body.features.includes("lives") && pub.body.features.includes("telegram"));
 

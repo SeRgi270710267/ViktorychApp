@@ -971,17 +971,28 @@ function boot() {
     if (event.key === "Escape") close();
   });
   if (window.SI18n && window.SI18n.onChange) window.SI18n.onChange(function () { paint(); if (sheet && !sheet.hidden) fillSheet(); });
-  if (visible()) {
-    armHeart();
-    beat(true);
-    connect();
-    loadFriends(false);
-    call("/v1/presence").then(function (body) {
-      if (!body || body.status !== 200) return;
-      applyMine(body);
-      paint();
-    });
+  // presence.js runs before the deferred accounts.js. Without a session yet,
+  // start once the page has finished loading so the socket still opens and
+  // the 20 second notification poll does not take its place.
+  if (visible() && !token()) {
+    const later = function () { if (visible() && token()) start(); };
+    if (document.readyState === "complete") setTimeout(later, 0);
+    else window.addEventListener("load", later, { once: true });
+    return;
   }
+  if (visible()) start();
+}
+
+function start() {
+  armHeart();
+  beat(true);
+  connect();
+  loadFriends(false);
+  call("/v1/presence").then(function (body) {
+    if (!body || body.status !== 200) return;
+    applyMine(body);
+    paint();
+  });
 }
 
 const api = {
