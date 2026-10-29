@@ -961,10 +961,18 @@
     }
     if (document.visibilityState === "hidden") return;
     if (!force && Date.now() - rowAt < 15000) return;
+    // While the change signal is up, the list is read only when its live
+    // mark moved, or every ten minutes as a safety net.
+    var pulse = root.ViktorychPulse;
+    var mark = pulse && pulse.ok && pulse.ok() ? pulse.version("live") : "";
+    if (!force && mark && mark === rowMark && Date.now() - rowAt < 10 * 60 * 1000) return;
+    rowMark = mark;
     if (!claimRow(Date.now(), force)) return;
     rowAt = Date.now();
     refreshRow();
   }
+  var rowMark = "";
+  if (root.ViktorychPulse && root.ViktorychPulse.on) root.ViktorychPulse.on(function (keys) { if (keys.indexOf("live") >= 0) pollRow(false); });
   setInterval(function () { pollRow(false); }, 30000);
   document.addEventListener("visibilitychange", function () { pollRow(false); });
   pollRow(true);

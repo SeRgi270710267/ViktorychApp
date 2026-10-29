@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a93-__SW_VERSION__";
+const VERSION = "viktorych-a96-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T02:39:00Z-usage-panel
+// cache-bust: 2026-10-29T03:15:00Z-pulse
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -98,6 +98,7 @@ const SHELL_FILES = [
   "./music.js",
   "./music.css",
   "./presence.js",
+  "./pulse.js",
   "./presence.css",
   "./shared/presence.js",
   "./about-ui.js",
@@ -153,6 +154,7 @@ const SHELL_FILES = [
   "./video-embed.js",
   "./mention-suggest.js",
   "./settings-assistant.js",
+  "./nostr.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/x-compose.js",
@@ -201,7 +203,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js"];
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a93-";
+  const prefix = "viktorych-a96-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1474,8 +1476,18 @@ async function runApply(fresh) {
 }
 
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
+// While a game is open the page tells us, and background feed work waits.
+let gameBusyUntil = 0;
+function gameBusy() {
+  return gameBusyUntil > Date.now();
+}
+
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "game-busy") {
+    gameBusyUntil = data.on ? Date.now() + 3 * 60 * 1000 : 0;
+    return;
+  }
   if (data.type === "drop-profile-media") {
     event.waitUntil((async () => {
       const names = await caches.keys();
@@ -2387,9 +2399,9 @@ async function receiveShare(request) {
 }
 
 self.addEventListener("periodicsync", (event) => {
-  if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
+  if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
   if (event.tag === "notifications") event.waitUntil(Promise.all([refreshAndNotify(), refreshAccountNotes()]));
-  if (event.tag === "weather") event.waitUntil(refreshWeather());
+  if (event.tag === "weather" && !gameBusy()) event.waitUntil(refreshWeather());
 });
 
 self.addEventListener("sync", (event) => {
@@ -2398,7 +2410,7 @@ self.addEventListener("sync", (event) => {
 
 // Background Sync uses the same feed refresh as periodic sync.
 self.addEventListener("sync", (event) => {
-  if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
+  if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
 });
 
 self.addEventListener("push", (event) => {

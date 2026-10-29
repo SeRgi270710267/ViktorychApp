@@ -11,6 +11,8 @@ import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
 import { usageReport } from "./usage.js";
+import { guardClass, guardKey, takeToken, publishPulse, pulseResponse } from "./guard.js";
+import { handleNostr } from "./nostr.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
@@ -55,6 +57,7 @@ import { USERNAME_SCHEMA, handleUsernames, nameTaken, resolveName, viewerHandle 
 import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.js";
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
+import { GAMES_SCHEMA, handleGames } from "./games.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
 import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
@@ -250,7 +253,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -5211,6 +5214,7 @@ async function route(request, env, ctx) {
       }
     });
   }
+  if (path === "/v1/pulse" && request.method === "GET") return pulseResponse(env);
   // The X mirror only reads R2, so it answers before the schema check.
   if (path === "/v1/x" || path.startsWith("/v1/x/")) {
     return handleXProxy(request, env, url);
@@ -5258,6 +5262,10 @@ async function route(request, env, ctx) {
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
   if (path === "/v1/features" || path === "/v1/owner/features") return handleFeatures(request, env, { json, requireOwner });
+  if (path.startsWith("/v1/nostr/")) {
+    const linked = await handleNostr(request, env, path, recoveryDeps());
+    if (linked) return linked;
+  }
   if (path === "/v1/owner/tiktok/unlocked" && request.method === "GET") return handleTikTokUnlocked(request, env);
   if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
@@ -5365,6 +5373,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/follows" && request.method === "DELETE") return handleFollowDelete(request, env);
   if (path === "/v1/follows/import" && request.method === "POST") return handleFollowImport(request, env);
   if (path === "/v1/handle" && request.method === "GET") return handleHandle(env, url);
+  if (path.startsWith("/v1/games/")) {
+    const played = await handleGames(request, env, path, url, recoveryDeps());
+    if (played) return played;
+  }
   if (path === "/v1/friends/presence" && request.method === "GET") {
     return handleFriendPresence(request, env, { json, readJson, rateHit, limited, sessionAccount });
   }
@@ -5548,6 +5560,13 @@ export default {
       path = url.pathname;
       const origin = request.headers.get("Origin");
       if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
+      // One client cannot spend the free daily budget alone. Sync jobs that
+      // sign with the bot secret are not counted. Tests leave REQUEST_GUARD unset.
+      const kind = guardClass(request.method, path);
+      if (kind && String(env.REQUEST_GUARD || "") === "on" && !bearerIsBot(env, request)) {
+        const take = takeToken(guardKey(request), kind, Date.now());
+        if (!take.ok) return withCors(request, env, json(429, { error: "rate_limited" }, { "retry-after": String(take.retry) }));
+      }
       const response = await withEtag(request, await route(request, env, ctx));
       return withCors(request, env, response);
     } catch (err) {
@@ -5574,6 +5593,7 @@ export default {
     // writes after 04:17 UTC, once a day.
     if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
+    jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));
     jobs.push(maybeBackupSettings(env, at));
     if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));

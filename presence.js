@@ -144,6 +144,7 @@ function phrase(view) {
 
 function statusText(view) {
   if (!view) return "";
+  if (view.playing) return tr("Playing {game}", { game: view.playing });
   return [view.emoji, view.text].filter(Boolean).join(" ");
 }
 
@@ -160,12 +161,21 @@ function activityNow() {
   return "active";
 }
 
+const SHARED_BEAT = "viktorych-presence-beat";
+function sharedBeatFresh() {
+  try { return Date.now() - Number(localStorage.getItem(SHARED_BEAT) || 0) < HEARTBEAT_MS - 5000; }
+  catch (err) { return false; }
+}
+
 function beat(force) {
   if (!token() || !isAccountId(selfId())) return;
   const activity = activityNow();
   if (!force && activity === lastActivity && Date.now() - lastBeatAt < HEARTBEAT_MS) return;
+  // With several tabs open, one routine heartbeat per minute covers them all.
+  if (!force && activity === "active" && sharedBeatFresh()) { lastActivity = activity; lastBeatAt = Date.now(); return; }
   lastActivity = activity;
   lastBeatAt = Date.now();
+  if (activity === "active") { try { localStorage.setItem(SHARED_BEAT, String(lastBeatAt)); } catch (err) { /* this tab beats on its own */ } }
   call("/v1/presence", { method: "POST", body: { activity: activity } }).then(function (body) {
     if (!body || body.status !== 200) return;
     applyMine(body);
@@ -933,7 +943,8 @@ function loadFriends(force) {
         exact: person.exact,
         lastSeen: person.lastSeen,
         emoji: person.emoji,
-        text: person.text
+        text: person.text,
+        playing: person.playing || ""
       });
     });
     friendsAt = Date.now();
@@ -969,17 +980,28 @@ function boot() {
     if (event.key === "Escape") close();
   });
   if (window.SI18n && window.SI18n.onChange) window.SI18n.onChange(function () { paint(); if (sheet && !sheet.hidden) fillSheet(); });
-  if (visible()) {
-    armHeart();
-    beat(true);
-    connect();
-    loadFriends(false);
-    call("/v1/presence").then(function (body) {
-      if (!body || body.status !== 200) return;
-      applyMine(body);
-      paint();
-    });
+  // presence.js runs before the deferred accounts.js. Without a session yet,
+  // start once the page has finished loading so the socket still opens and
+  // the 20 second notification poll does not take its place.
+  if (visible() && !token()) {
+    const later = function () { if (visible() && token()) start(); };
+    if (document.readyState === "complete") setTimeout(later, 0);
+    else window.addEventListener("load", later, { once: true });
+    return;
   }
+  if (visible()) start();
+}
+
+function start() {
+  armHeart();
+  beat(true);
+  connect();
+  loadFriends(false);
+  call("/v1/presence").then(function (body) {
+    if (!body || body.status !== 200) return;
+    applyMine(body);
+    paint();
+  });
 }
 
 const api = {
