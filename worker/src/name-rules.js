@@ -1,0 +1,207 @@
+/* Display-name nicknames and per-audience mention controls.
+
+   Nicknames: an account can suggest a name its friends see instead of its
+   display name, and anyone can keep a private nickname for any account
+   (only they ever see it). Order: private nickname, then the friend name
+   for friends, then the display name.
+
+   Mentions: per audience "anyone", "replies" (only in a reply to them) or
+   "nobody", plus allow and block lists. Most specific wins: person (block
+   beats allow), then list (username list order), then friends, followers,
+   public. A refused mention neither links nor notifies, the account is not
+   suggested, and the composer gets a neutral "can't mention" hint. */
+
+import { loadNames, relationTo, resolveName, viewerHandle } from "./usernames.js";
+
+export const NAME_RULES_SCHEMA = [
+  "CREATE TABLE IF NOT EXISTS display_nicknames (viewer_id TEXT NOT NULL, target_id TEXT NOT NULL, name TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (viewer_id, target_id))",
+  "CREATE TABLE IF NOT EXISTS friend_names (public_id TEXT PRIMARY KEY, name TEXT NOT NULL, updated_at INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS mention_prefs (public_id TEXT PRIMARY KEY, policy TEXT NOT NULL DEFAULT '{}', updated_at INTEGER NOT NULL)"
+];
+
+const POLICIES = ["anyone", "replies", "nobody"];
+const PUBLIC_ID = /^\d{12}$/;
+const LIST_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const NICK_MAX = 50;
+
+export function cleanNickname(raw) {
+  return String(raw == null ? "" : raw).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "").replace(/\s+/g, " ").trim().slice(0, NICK_MAX);
+}
+
+function pol(value) {
+  return POLICIES.indexOf(value) >= 0 ? value : "";
+}
+
+function ids(list, cap) {
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach((id) => { const t = String(id || ""); if (PUBLIC_ID.test(t) && out.indexOf(t) < 0 && out.length < cap) out.push(t); });
+  return out;
+}
+
+export function normalizeMentionPolicy(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const lists = {};
+  const given = src.lists && typeof src.lists === "object" ? src.lists : {};
+  Object.keys(given).slice(0, 50).forEach((id) => { if (LIST_ID.test(id) && pol(given[id])) lists[id] = given[id]; });
+  return { public: pol(src.public) || "anyone", followers: pol(src.followers), friends: pol(src.friends), lists, allow: ids(src.allow, 500), block: ids(src.block, 500) };
+}
+
+/* Pure: the policy that applies to this mentioner. */
+export function pickPolicy(policyInput, relInput, listOrder) {
+  const policy = normalizeMentionPolicy(policyInput);
+  const rel = relInput || {};
+  if (rel.self) return "anyone";
+  const id = String(rel.id || "");
+  if (id && policy.block.indexOf(id) >= 0) return "nobody";
+  if (id && policy.allow.indexOf(id) >= 0) return "anyone";
+  const order = Array.isArray(listOrder) ? listOrder : [];
+  const rank = (x) => { const at = order.indexOf(x); return at < 0 ? order.length : at; };
+  const mine = (Array.isArray(rel.lists) ? rel.lists : []).filter((x) => policy.lists[x]).sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+  if (mine.length) return policy.lists[mine[0]];
+  if (rel.friends && policy.friends) return policy.friends;
+  if (rel.follows && policy.followers) return policy.followers;
+  return policy.public;
+}
+
+export function allows(policy, ctx) {
+  if (policy === "anyone") return true;
+  if (policy === "replies") return !!(ctx && ctx.reply);
+  return false;
+}
+
+async function loadPolicy(env, publicId) {
+  try {
+    const row = await env.DB.prepare("SELECT policy FROM mention_prefs WHERE public_id = ?").bind(publicId).first();
+    return normalizeMentionPolicy(row ? JSON.parse(row.policy || "{}") : {});
+  } catch (err) {
+    return normalizeMentionPolicy({});
+  }
+}
+
+/* May actorId mention targetId? ctx.replyTo = author id of the parent. */
+export async function canMention(env, targetId, actorId, ctx) {
+  if (!targetId || !actorId || targetId === actorId) return true;
+  const policy = await loadPolicy(env, targetId);
+  const plain = policy.public === "anyone" && !policy.followers && !policy.friends && !Object.keys(policy.lists).length && !policy.block.length;
+  if (plain) return true;
+  const set = await loadNames(env, targetId);
+  const rel = await relationTo(env, targetId, actorId);
+  return allows(pickPolicy(policy, rel, set ? set.listOrder : []), { reply: !!(ctx && ctx.replyTo && ctx.replyTo === targetId) });
+}
+
+const memos = new WeakMap();
+
+/* The display name this viewer sees for ownerId. */
+export async function viewerDisplay(env, request, ownerId, viewerId, fallback) {
+  if (!ownerId || !viewerId || ownerId === viewerId) return { name: fallback || "", nickname: "", friendName: "" };
+  let memo = request && typeof request === "object" ? memos.get(request) : null;
+  if (!memo) { memo = new Map(); if (request && typeof request === "object") memos.set(request, memo); }
+  const key = ownerId + ">" + viewerId;
+  if (!memo.has(key)) {
+    memo.set(key, (async () => {
+      let nickname = "";
+      let friendName = "";
+      try {
+        const nick = await env.DB.prepare("SELECT name FROM display_nicknames WHERE viewer_id = ? AND target_id = ?").bind(viewerId, ownerId).first();
+        nickname = nick ? nick.name : "";
+        const suggested = await env.DB.prepare("SELECT name FROM friend_names WHERE public_id = ?").bind(ownerId).first();
+        if (suggested && suggested.name) {
+          const rel = await relationTo(env, ownerId, viewerId);
+          if (rel.friends) friendName = suggested.name;
+        }
+      } catch (err) { /* tables not created yet */ }
+      return { nickname, friendName };
+    })());
+  }
+  const got = await memo.get(key);
+  return { name: got.nickname || got.friendName || fallback || "", nickname: got.nickname, friendName: got.friendName };
+}
+
+async function targetFor(env, raw, viewerId) {
+  const found = await resolveName(env, raw, viewerId);
+  return found && found.publicId !== viewerId ? found.publicId : "";
+}
+
+async function policyOut(env, request, ownerId, policy) {
+  async function handles(list) {
+    const out = [];
+    for (let i = 0; i < list.length; i++) {
+      const seen = await viewerHandle(env, request, list[i], ownerId);
+      if (seen.handle) out.push(seen.handle);
+    }
+    return out;
+  }
+  return { public: policy.public, followers: policy.followers, friends: policy.friends, lists: policy.lists, allow: await handles(policy.allow), block: await handles(policy.block) };
+}
+
+export async function handleNameRules(request, env, path, deps) {
+  const json = deps.json;
+  const session = await deps.sessionAccount(env, request);
+  if (!session) return json(401, { error: "unauthorized" });
+  const me = session.public_id;
+  const method = request.method;
+  const nocache = { "cache-control": "no-store" };
+  const body = method === "GET" ? {} : await deps.readJson(request, 40000);
+  if (body.error) return json(body.error === "too_large" ? 413 : 400, { error: body.error });
+
+  if (path === "/v1/nicknames" && method === "GET") {
+    const rows = await env.DB.prepare("SELECT target_id, name FROM display_nicknames WHERE viewer_id = ? ORDER BY updated_at DESC LIMIT 500").bind(me).all();
+    const out = [];
+    const list = (rows && rows.results) || [];
+    for (let i = 0; i < list.length; i++) {
+      const seen = await viewerHandle(env, request, list[i].target_id, me);
+      out.push({ handle: seen.handle, name: list[i].name });
+    }
+    return json(200, { nicknames: out }, nocache);
+  }
+
+  if (path === "/v1/nicknames" && method === "PUT") {
+    const paced = await deps.rateHit(env, "nick:" + me, 120, 60 * 60 * 1000);
+    if (!paced.ok) return deps.limited(paced);
+    const target = await targetFor(env, body.handle, me);
+    if (!target) return json(404, { error: "not_found" });
+    const name = cleanNickname(body.name);
+    if (name) await env.DB.prepare("INSERT INTO display_nicknames (viewer_id, target_id, name, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(viewer_id, target_id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at").bind(me, target, name, Date.now()).run();
+    else await env.DB.prepare("DELETE FROM display_nicknames WHERE viewer_id = ? AND target_id = ?").bind(me, target).run();
+    if (deps.invalidate) { try { await deps.invalidate(env, target); } catch (err) { /* ages out */ } }
+    return json(200, { ok: true, name }, nocache);
+  }
+
+  if (path === "/v1/usernames/friend-name" && method === "GET") {
+    const row = await env.DB.prepare("SELECT name FROM friend_names WHERE public_id = ?").bind(me).first();
+    return json(200, { name: row ? row.name : "" }, nocache);
+  }
+
+  if (path === "/v1/usernames/friend-name" && method === "PUT") {
+    const name = cleanNickname(body.name);
+    if (name) await env.DB.prepare("INSERT INTO friend_names (public_id, name, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at").bind(me, name, Date.now()).run();
+    else await env.DB.prepare("DELETE FROM friend_names WHERE public_id = ?").bind(me).run();
+    return json(200, { name }, nocache);
+  }
+
+  if (path === "/v1/usernames/mentions" && method === "GET") {
+    return json(200, await policyOut(env, request, me, await loadPolicy(env, me)), nocache);
+  }
+
+  if (path === "/v1/usernames/mentions" && method === "PUT") {
+    async function people(list) {
+      const out = [];
+      const items = Array.isArray(list) ? list.slice(0, 500) : [];
+      for (let i = 0; i < items.length; i++) {
+        const id = await targetFor(env, items[i], me);
+        if (id && out.indexOf(id) < 0) out.push(id);
+      }
+      return out;
+    }
+    let lists = [];
+    try { lists = ((await env.DB.prepare("SELECT id FROM audience_lists WHERE public_id = ?").bind(me).all()).results || []).map((r) => r.id); } catch (err) { lists = []; }
+    const given = body.lists && typeof body.lists === "object" ? body.lists : {};
+    const kept = {};
+    Object.keys(given).forEach((id) => { if (lists.indexOf(id) >= 0) kept[id] = given[id]; });
+    const policy = normalizeMentionPolicy({ public: body.public, followers: body.followers, friends: body.friends, lists: kept, allow: await people(body.allow), block: await people(body.block) });
+    await env.DB.prepare("INSERT INTO mention_prefs (public_id, policy, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET policy = excluded.policy, updated_at = excluded.updated_at").bind(me, JSON.stringify(policy), Date.now()).run();
+    return json(200, await policyOut(env, request, me, policy), nocache);
+  }
+
+  return json(404, { error: "not_found" });
+}

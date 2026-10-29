@@ -48,7 +48,9 @@
     if (!accounts || !accounts.call || !token) return Promise.resolve([]);
     memo[key] = accounts.call("/v1/mentions/suggest?q=" + encodeURIComponent(key), { token: token }).then(function (res) {
       if (!res || res.status !== 200 || !Array.isArray(res.accounts)) { delete memo[key]; return []; }
-      return res.accounts.map(function (row) { row.platform = "app"; return row; });
+      var rows = res.accounts.map(function (row) { row.platform = "app"; return row; });
+      if (res.hint === "cant_mention") rows.hint = true;
+      return rows;
     }).catch(function () { delete memo[key]; return []; });
     return memo[key];
   }
@@ -115,7 +117,7 @@
   }
 
   function paint() {
-    if (!state.items.length || !state.el) { close(); return; }
+    if (!state.el || (!state.items.length && !state.hint)) { close(); return; }
     if (!pop) {
       pop = document.createElement("div");
       pop.className = "mention-pop";
@@ -135,7 +137,7 @@
       document.body.appendChild(pop);
     }
     pop.setAttribute("aria-label", tr("Suggested accounts"));
-    pop.innerHTML = state.items.map(rowHtml).join("");
+    pop.innerHTML = state.items.length ? state.items.map(rowHtml).join("") : '<div class="mention-hint" role="status">' + esc(tr("You can't mention this account.")) + "</div>";
     pop.hidden = false;
     state.el.setAttribute("aria-autocomplete", "list");
     state.el.setAttribute("aria-activedescendant", "mention-opt-" + state.active);
@@ -146,6 +148,7 @@
     clearTimeout(state.timer);
     state.seq += 1;
     state.items = [];
+    state.hint = false;
     if (pop) { pop.hidden = true; pop.innerHTML = ""; }
     if (state.el) state.el.removeAttribute("aria-activedescendant");
   }
@@ -182,6 +185,7 @@
       remote(tok.query).then(function (app) {
         if (seq !== state.seq) return;
         state.items = merged(app, outside);
+        state.hint = !!app.hint;
         state.active = 0;
         paint();
       });
