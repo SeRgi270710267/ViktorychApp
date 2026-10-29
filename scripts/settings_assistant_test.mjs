@@ -114,8 +114,12 @@ async function check(browser, origin, size, lang) {
   await page.waitForFunction(() => location.hash === "#/settings/security", null, { timeout: 5000 }).catch(() => fail(label + ": pick did not open Security"));
   await page.goto(origin + "/index.html#/settings", { waitUntil: "domcontentloaded" });
   await page.waitForSelector("#settings-q");
+  /* The new route renders after the next paint; type into its box, not the old page's. */
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0)))));
+  await page.waitForFunction(() => !document.querySelector(".route-wait"), null, { timeout: 3000 }).catch(() => {});
   await page.fill("#settings-q", "");
-  const back = await page.evaluate(() => !document.querySelector(".set-main-list").hidden && document.querySelector("#settings-q-out").hidden);
+  /* The route renders right after the next paint, so wait for it rather than read the DOM in the same tick. */
+  const back = await page.waitForFunction(() => { const list = document.querySelector(".set-main-list"), out = document.querySelector("#settings-q-out"); return list && out && !list.hidden && out.hidden; }, null, { timeout: 3000 }).then(() => true, () => false);
   if (!back) fail(label + ": clearing the search did not bring the list back");
   if (outside.length) fail(label + ": the search text left the page " + outside.slice(0, 3));
   if (errors.length) fail(label + ": " + errors[0]);
