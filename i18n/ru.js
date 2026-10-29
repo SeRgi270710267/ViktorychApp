@@ -2951,5 +2951,17 @@ SI18n.addPack("ru", {
   "This is the official account of this site.": "Это официальный аккаунт этого сайта.",
   "Unpin from top": "Открепить сверху",
   "Verified account": "Подтверждённый аккаунт",
-  "Who can see it": "Кто может видеть"
+  "Who can see it": "Кто может видеть",
+  "Newsletter": "Рассылка",
+  "Newsletters": "Рассылки",
+  "Looking for the newsletter’s feed…": "Ищем ленту рассылки…",
+  "Couldn’t find a feed or archive for that newsletter.": "Не удалось найти ленту или архив этой рассылки.",
+  "Open the original issue": "Открыть оригинальный выпуск",
+  "Loading the issue…": "Загружаем выпуск…",
+  "This issue has no text in its feed.": "В ленте нет текста этого выпуска.",
+  "This issue is no longer in the newsletter’s feed.": "Этого выпуска больше нет в ленте рассылки.",
+  "Open the newsletter’s website": "Открыть сайт рассылки",
+  "Paste a newsletter link": "Вставьте ссылку на рассылку",
+  "Add a newsletter": "Добавить рассылку",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, архивы Mailchimp или любой сайт с лентой. Выпуски появляются как посты."
 });

@@ -2951,5 +2951,17 @@ SI18n.addPack("es", {
   "This is the official account of this site.": "Esta es la cuenta oficial de este sitio.",
   "Unpin from top": "Desfijar de arriba",
   "Verified account": "Cuenta verificada",
-  "Who can see it": "Quién puede verla"
+  "Who can see it": "Quién puede verla",
+  "Newsletter": "Boletín",
+  "Newsletters": "Boletines",
+  "Looking for the newsletter’s feed…": "Buscando el feed del boletín…",
+  "Couldn’t find a feed or archive for that newsletter.": "No se encontró un feed ni un archivo para ese boletín.",
+  "Open the original issue": "Abrir el número original",
+  "Loading the issue…": "Cargando el número…",
+  "This issue has no text in its feed.": "Este número no tiene texto en su feed.",
+  "This issue is no longer in the newsletter’s feed.": "Este número ya no está en el feed del boletín.",
+  "Open the newsletter’s website": "Abrir el sitio web del boletín",
+  "Paste a newsletter link": "Pega el enlace de un boletín",
+  "Add a newsletter": "Añadir un boletín",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, archivos de Mailchimp o cualquier sitio con feed. Los números aparecen como publicaciones."
 });
