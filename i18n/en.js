@@ -3489,5 +3489,15 @@ SI18n.addPack("en", {
   "Devices that turned this on pass each other files they already have: feed files, app files and other posts, each named only by its fingerprint, never by an account or list name. Pages load from nearby and the server works less. Every file is checked against its fingerprint before it is used.": "Devices that turned this on pass each other files they already have: feed files, app files and other posts, each named only by its fingerprint, never by an account or list name. Pages load from nearby and the server works less. Every file is checked against its fingerprint before it is used.",
   "Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device, 40 MB on Wi-Fi while charging, and less on low battery or in the background.": "Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device, 40 MB on Wi-Fi while charging, and less on low battery or in the background.",
   "Choose sources and sharing automatically": "Choose sources and sharing automatically",
-  "Uses the fastest of nearby devices and our servers, loads what is on screen first, and shares less on low battery, mobile data or in the background.": "Uses the fastest of nearby devices and our servers, loads what is on screen first, and shares less on low battery, mobile data or in the background."
+  "Uses the fastest of nearby devices and our servers, loads what is on screen first, and shares less on low battery, mobile data or in the background.": "Uses the fastest of nearby devices and our servers, loads what is on screen first, and shares less on low battery, mobile data or in the background.",
+  "Gift NFTs": "Gift NFTs",
+  "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.": "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.",
+  "Make it an NFT": "Make it an NFT",
+  "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.": "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.",
+  "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.": "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.",
+  "This gift is already an NFT.": "This gift is already an NFT.",
+  "Confirm in your wallet…": "Confirm in your wallet…",
+  "Sent to the network. It shows in your wallet once it is confirmed.": "Sent to the network. It shows in your wallet once it is confirmed.",
+  "Cancelled.": "Cancelled.",
+  "Couldn't make this gift an NFT.": "Couldn't make this gift an NFT."
 });

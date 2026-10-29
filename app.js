@@ -1658,13 +1658,20 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "nft"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
       return Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
     } catch (err) { return []; }
   }
+  /* True only once the server list has been fetched and the feature is not
+     in it, so default-off features stay hidden until the owner turns them on. */
+  window.ViktorychServerFeature = function (name) {
+    let at = 0;
+    try { at = Number(localStorage.getItem(SERVER_OFF_KEY + "-at")) || 0; } catch (err) { at = 0; }
+    return at > 0 && SERVER_FEATURES.includes(name) && !serverOffList().includes(name);
+  };
   function storeServerOff(list) {
     try {
       localStorage.setItem(SERVER_OFF_KEY, JSON.stringify(list || []));
@@ -1722,7 +1729,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
       telegram: [tr("Telegram ingest"), tr("The Telegram bot webhook and media relay.")],
       pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")],
-      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")]
+      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")],
+      nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);

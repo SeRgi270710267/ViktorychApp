@@ -389,7 +389,7 @@
     if (pack.hidden && !mine) return "";
     var grid = (pack.gifts || []).map(function (gift) {
       var who = gift.sender && gift.sender.name ? gift.sender.name : (gift.sender && gift.sender.handle ? gift.sender.handle : tr("Anonymous gift"));
-      var hide = mine ? '<button type="button" data-gift="hide" data-id="' + esc(gift.id) + '">' + esc(gift.hidden ? tr("Show gift") : tr("Hide gift")) + "</button>" : "";
+      var hide = mine ? '<button type="button" data-gift="hide" data-id="' + esc(gift.id) + '">' + esc(gift.hidden ? tr("Show gift") : tr("Hide gift")) + "</button>" + (root.GiftNFT ? root.GiftNFT.buttonHtml(gift) : "") : "";
       return '<article class="gift-tile' + (gift.hidden ? " is-hidden" : "") + '"><span class="gift-art">' + artHtml(gift, false) + '</span><b>' + esc(who) + "</b><p>" + esc(gift.message || "") + "</p>" + hide + "</article>";
     }).join("");
     var send = mine ? "" : '<button type="button" class="gift-send" data-gift="open" data-handle="' + esc(viewedHandle) + '">' + esc(tr("Send a gift")) + "</button>";

@@ -3483,5 +3483,15 @@ SI18n.addPack("hi", {
   "Helping while our servers can't be reached: getting posts from {n} devices, uploading nothing.": "हमारे सर्वर तक न पहुँच पाने पर मदद: {n} डिवाइसों से पोस्ट मिल रही हैं, यहाँ से कुछ भी अपलोड नहीं होता।",
   "When our servers are blocked or failing, devices in the pool can still pass you the newest posts, checked against the same signed fingerprint. On mobile data this needs On, and nothing is uploaded from mobile data. Photos and videos from other sites can't be checked, so they aren't shared.": "जब हमारे सर्वर ब्लॉक हों या काम न करें, तब भी पूल के डिवाइस आपको नई पोस्ट दे सकते हैं, जिन्हें उसी हस्ताक्षरित फ़िंगरप्रिंट से जाँचा जाता है। मोबाइल डेटा पर इसके लिए चालू चुनना होगा, और मोबाइल डेटा से कुछ भी अपलोड नहीं होता। दूसरी साइटों की फ़ोटो और वीडियो जाँचे नहीं जा सकते, इसलिए वे शेयर नहीं होते।",
   "Got {n} updates from peers while the server was out of reach": "सर्वर तक न पहुँच पाने पर दूसरों से {n} अपडेट मिले",
-  "Connection is slow - new posts came from other devices": "कनेक्शन धीमा है - नई पोस्ट दूसरे डिवाइसों से आईं"
+  "Connection is slow - new posts came from other devices": "कनेक्शन धीमा है - नई पोस्ट दूसरे डिवाइसों से आईं",
+  "Gift NFTs": "उपहार NFT",
+  "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.": "लोगों को हमारी अपनी कला वाले उपहार का संग्रहणीय NFT अपने वॉलेट से बनाने देता है। जब तक आप इसे चालू करके कॉन्ट्रैक्ट सेट नहीं करते, यह बंद रहता है।",
+  "Make it an NFT": "इसे NFT बनाएँ",
+  "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.": "इससे {chain} पर इस उपहार का एक संग्रहणीय NFT बनेगा। नेटवर्क शुल्क आपका वॉलेट देता है। यह एक संग्रहणीय वस्तु है, निवेश नहीं, और हम इसे कभी वापस नहीं खरीदते या इसके लिए भुगतान नहीं करते। आपका उपहार हर हाल में यहीं रहेगा।",
+  "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.": "कोई वॉलेट नहीं मिला। यह पेज अपने वॉलेट ऐप के ब्राउज़र में खोलें, या वॉलेट एक्सटेंशन जोड़ें।",
+  "This gift is already an NFT.": "यह उपहार पहले से NFT है।",
+  "Confirm in your wallet…": "अपने वॉलेट में पुष्टि करें…",
+  "Sent to the network. It shows in your wallet once it is confirmed.": "नेटवर्क को भेज दिया गया। पुष्टि होने पर यह आपके वॉलेट में दिखेगा।",
+  "Cancelled.": "रद्द किया गया।",
+  "Couldn't make this gift an NFT.": "इस उपहार को NFT नहीं बनाया जा सका।"
 });
