@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="name_media">Multimedia</string>
+    <string name="name_browser">Navegador</string>
+    <string name="name_player">Reproductor</string>
+    <string name="name_notes">Notas</string>
+    <string name="name_saved">Nombre guardado. La pantalla de inicio puede tardar un momento.</string>
+    <string name="update_title">Actualización de la app</string>
+    <string name="update_downloading">Descargando la actualización…</string>
+    <string name="update_failed">No se pudo abrir la actualización. Inténtalo de nuevo desde el sitio.</string>
+    <string name="allow_installs">Permite instalar desde esta app y pulsa Atrás.</string>
+</resources>
