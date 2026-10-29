@@ -2722,5 +2722,10 @@ SI18n.addPack("es", {
   "This is the official account of this site.": "Esta es la cuenta oficial de este sitio.",
   "Unpin from top": "Desfijar de arriba",
   "Verified account": "Cuenta verificada",
-  "Who can see it": "Quién puede verla"
+  "Who can see it": "Quién puede verla",
+  "Site health": "Estado del sitio",
+  "Site health: {count} problems need you": "Estado del sitio: {count} problemas necesitan tu atención",
+  "Site health: all good": "Estado del sitio: todo bien",
+  "Site health not checked yet": "El estado del sitio aún no se ha comprobado",
+  "Check now": "Comprobar ahora"
 });

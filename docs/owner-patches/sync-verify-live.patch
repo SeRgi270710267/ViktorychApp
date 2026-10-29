@@ -1,0 +1,15 @@
+diff --git a/.github/workflows/sync.yml b/.github/workflows/sync.yml
+index 4224bf6..4d3d739 100644
+--- a/.github/workflows/sync.yml
++++ b/.github/workflows/sync.yml
+@@ -738,6 +738,10 @@ jobs:
+           google-chrome --version
+ 
+       - name: Fail if the live page is black or a script is missing
++        # The Worker watchdog dispatches source=watchdog-force only after two
++        # redeploys failed to publish version.json. That run publishes the
++        # build that already passed its offline smoke check (pages-mirror).
++        continue-on-error: ${{ github.event.inputs.source == 'watchdog-force' }}
+         env:
+           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+         run: node scripts/smoke_page.mjs --url "${PAGE_URL:-https://viktorychgroup.github.io/ViktorychApp/}" --retry 18

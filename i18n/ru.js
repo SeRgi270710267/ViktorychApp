@@ -2722,5 +2722,10 @@ SI18n.addPack("ru", {
   "This is the official account of this site.": "Это официальный аккаунт этого сайта.",
   "Unpin from top": "Открепить сверху",
   "Verified account": "Подтверждённый аккаунт",
-  "Who can see it": "Кто может видеть"
+  "Who can see it": "Кто может видеть",
+  "Site health": "Состояние сайта",
+  "Site health: {count} problems need you": "Состояние сайта: проблем, требующих внимания: {count}",
+  "Site health: all good": "Состояние сайта: всё в порядке",
+  "Site health not checked yet": "Состояние сайта ещё не проверено",
+  "Check now": "Проверить сейчас"
 });

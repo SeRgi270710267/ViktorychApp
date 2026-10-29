@@ -722,6 +722,47 @@ def extract_info_limited(url: str, playlistend, timeout: float) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+_YTDLP_UPGRADED = False
+
+
+def ytdlp_stale(version: str, today=None, days: int = 21) -> bool:
+    """True when a yt-dlp release (YYYY.MM.DD) is older than `days`."""
+    from datetime import date
+
+    found = re.match(r"^(\d{4})\.(\d{1,2})\.(\d{1,2})", str(version or ""))
+    if not found:
+        return False
+    try:
+        built = date(int(found.group(1)), int(found.group(2)), int(found.group(3)))
+    except ValueError:
+        return False
+    return ((today or date.today()) - built).days > days
+
+
+def maybe_upgrade_ytdlp() -> bool:
+    """Unattended self-heal: the workflow pins yt-dlp, and TikTok changes its
+    site every few weeks. When a profile read fails and the pinned release is
+    old, install the newest release once per run. The extractor runs in a
+    child process, so the next read uses it."""
+    global _YTDLP_UPGRADED
+    if _YTDLP_UPGRADED:
+        return False
+    _YTDLP_UPGRADED = True
+    try:
+        from yt_dlp.version import __version__ as current
+    except Exception:
+        return False
+    if not ytdlp_stale(current):
+        return False
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q", "-U", "yt-dlp"], timeout=90, check=True, capture_output=True)
+    except Exception:
+        print("[tiktok] yt-dlp upgrade failed; the pinned release stays")
+        return False
+    print("[tiktok] yt-dlp " + current + " was old; upgraded for this run")
+    return True
+
+
 def fetch_playlist(handle: str, playlistend: int | None = None) -> tuple[list[dict] | None, dict | None]:
     """Public posts, plus the playlist info the sync already downloads.
 
@@ -755,6 +796,11 @@ def fetch_playlist(handle: str, playlistend: int | None = None) -> tuple[list[di
         if attempt < len(pauses):
             print("[tiktok] " + BLOCKED + ", retrying " + handle)
             time.sleep(pauses[attempt])
+    if not isinstance(info, dict) and maybe_upgrade_ytdlp():
+        try:
+            info = extract_info_limited(url, playlistend, timeout)
+        except Exception:
+            info = None
     if not isinstance(info, dict):
         print("[tiktok] " + BLOCKED)
         return None, None

@@ -201,7 +201,66 @@
     }).join("");
     return '<div class="set-block keys-settings"><p class="phandle">' + esc(tr("Paste keys from your own accounts. They stay encrypted, and the saved value is never shown again.")) + "</p>" +
       '<p class="phandle">' + esc(tr("Keys are backups. One key is used at a time, highest priority first.")) + "</p>" +
-      (note ? '<p class="phandle">' + esc(note) + "</p>" : "") + blocks + "</div>";
+      (note ? '<p class="phandle">' + esc(note) + "</p>" : "") + healthHtml() + blocks + "</div>";
+  }
+  /* Site health from the Worker watchdog (worker/src/watchdog.js). Owner only.
+     Problem lines come from the server in plain English. */
+  var health = null;
+  var healthLoading = false;
+  var healthAt = 0;
+  function serious(doc) {
+    var list = doc && Array.isArray(doc.problems) ? doc.problems : [];
+    var now = Date.now();
+    return list.filter(function (p) {
+      return p.level === "down" || now - (Number(p.since) || now) > 2 * 3600 * 1000;
+    });
+  }
+  function loadHealth(force) {
+    if (!visible() || healthLoading) return;
+    if (!force && health && Date.now() - healthAt < 15 * 60 * 1000) return;
+    healthLoading = true;
+    healthAt = Date.now();
+    send("/v1/owner/health", force === "run" ? "POST" : "GET").then(function (body) {
+      healthLoading = false;
+      if (!body || body.status !== 200) return;
+      health = body;
+      showBanner();
+      render();
+    });
+  }
+  function showBanner() {
+    var list = serious(health);
+    var old = document.getElementById("owner-health-banner");
+    var key = "viktorych-health-dismissed";
+    var sig = list.map(function (p) { return p.code; }).sort().join(",");
+    var dismissed = "";
+    try { dismissed = sessionStorage.getItem(key) || ""; } catch (err) { dismissed = ""; }
+    if (!list.length || !visible() || dismissed === sig) {
+      if (old) old.remove();
+      return;
+    }
+    var bar = old || document.createElement("div");
+    bar.id = "owner-health-banner";
+    bar.setAttribute("role", "status");
+    bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);z-index:9999;max-width:92vw;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;background:#f4212e;color:#fff;font:600 13px/1.3 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3)";
+    bar.innerHTML = '<a href="#/settings/keys" style="color:#fff;text-decoration:none">' + esc(tr("Site health: {count} problems need you", { count: list.length })) + "</a>" +
+      '<button type="button" aria-label="' + esc(tr("Dismiss")) + '" style="background:none;border:0;color:#fff;font:inherit;cursor:pointer;padding:0 2px">✕</button>';
+    bar.querySelector("button").onclick = function () {
+      try { sessionStorage.setItem(key, sig); } catch (err) { /* hides until reload */ }
+      bar.remove();
+    };
+    if (!old) document.body.appendChild(bar);
+  }
+  function healthHtml() {
+    loadHealth(false);
+    var list = health && Array.isArray(health.problems) ? health.problems : [];
+    var when2 = health && health.at ? when(health.at) : "";
+    var head = !health ? tr("Site health not checked yet") : (list.length ? tr("Site health: {count} problems need you", { count: list.length }) : tr("Site health: all good"));
+    var items = list.map(function (p) {
+      return '<p class="phandle keys-status">' + esc(p.level === "down" ? "⛔ " : "⚠️ ") + esc(p.text || p.code) + "</p>";
+    }).join("");
+    return '<section class="keys-slot"><h2>' + esc(tr("Site health")) + '</h2><p class="phandle">' + esc(head) + (when2 ? " · " + esc(when2) : "") + "</p>" + items +
+      '<button class="outline" type="button" data-act="keys-health-check" data-slot="health">' + esc(tr("Check now")) + "</button></section>";
   }
   function pasteValue(slot) {
     var field = document.querySelector('[data-keys-paste="' + slot + '"]');
@@ -224,6 +283,10 @@
     var slot = el && el.dataset ? el.dataset.slot : "";
     var key = el && el.dataset ? (el.dataset.key || "") : "";
     if (!slot) return false;
+    if (act === "keys-health-check") {
+      loadHealth("run");
+      return true;
+    }
     if (act === "keys-add") {
       openSlot = slot;
       openKey = "new";
@@ -309,6 +372,10 @@
     }
     return false;
   }
+
+  // Owner-only: check the watchdog a while after start and every half hour.
+  setTimeout(function () { loadHealth(false); }, 12000);
+  setInterval(function () { loadHealth(false); }, 30 * 60 * 1000);
 
   window.OwnerKeys = {
     visible: visible,
