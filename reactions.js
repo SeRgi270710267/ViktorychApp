@@ -15,7 +15,9 @@
   var TINT = { "❤️": "#f91880", "👍": "#1d9bf0", "😂": "#f7b928", "😮": "#f7b928", "😢": "#f7b928", "😡": "#e9710f" };
   function groupNames() { return [tr("Smileys & Emotion"), tr("People & Body"), tr("Animals & Nature"), tr("Food & Drink"), tr("Travel & Places"), tr("Activities"), tr("Objects"), tr("Symbols"), tr("Flags")]; }
   var BATCH = 50;
-  var HOLD_MS = 450;
+  var HOLD_MS = 380;
+  var FAR_PX = 90;          // drag this far off the bar and release closes it (like Facebook)
+  var drag = null;         // { pid, cur, far } while a touch hold slides across the bar
   var HOVER_MS = 550;
   var LEAVE_MS = 350;
   /* The data-saving value of the "reactionsData" setting. */
@@ -141,14 +143,7 @@
     return String(n);
   }
 
-  function summaryHtml(id, s) {
-    var names = s.top.map(function (row) { return row[0] + " " + row[1]; }).join(", ");
-    var bubbles = s.top.map(function (row, i) { return '<span class="rx-bub" style="z-index:' + (3 - i) + '">' + esc(row[0]) + "</span>"; }).join("");
-    return '<button class="rx-sum" type="button" data-act="stop" data-rx-who="' + esc(id) + '" aria-label="' + esc(tr("{n} reactions", { n: s.t }) + (names ? ": " + names : "")) + '">' +
-      '<span class="rx-bubs">' + bubbles + '</span><span class="rx-n">' + esc(countText(s.t)) + "</span></button>";
-  }
-
-  /* Draws the viewer's emoji on Like and the summary row above the actions. */
+  /* Draws the viewer's emoji on Like; counts stay in the pop-up. */
   function paint(id) {
     var s = summaryOf(id);
     likeButtons(id).forEach(function (btn) {
@@ -177,25 +172,19 @@
         btn.setAttribute("aria-haspopup", "true");
         btn.setAttribute("aria-keyshortcuts", "Shift+F10");
       }
+      /* Counts live only inside the reaction pop-up, never in the post. */
       var actions = btn.closest(".actions");
-      if (!actions || !actions.parentNode) return;
-      var row = actions.previousElementSibling;
-      var has = row && row.classList && row.classList.contains("rx-row") ? row : null;
-      if (!s || !s.t) {
-        if (has) has.parentNode.removeChild(has);
-        return;
-      }
-      var html = summaryHtml(id, s);
-      if (!has) {
-        has = document.createElement("div");
-        has.className = "rx-row";
-        actions.parentNode.insertBefore(has, actions);
-      }
-      if (has.getAttribute("data-html") !== html) {
-        has.innerHTML = html;
-        has.setAttribute("data-html", html);
-      }
+      var row = actions && actions.previousElementSibling;
+      if (row && row.classList && row.classList.contains("rx-row")) row.parentNode.removeChild(row);
     });
+  }
+
+  /* Emoji + count chips shown under the quick picks in the pop-up. */
+  function countsHtml(id, s) {
+    if (!s || !s.t || !s.top || !s.top.length) return "";
+    var chips = s.top.map(function (row) { return '<span class="rx-cnt"><span class="rx-cnt-e">' + esc(row[0]) + '</span><span class="rx-cnt-n">' + esc(countText(Number(row[1]) || 0)) + "</span></span>"; }).join("");
+    var names = s.top.map(function (row) { return row[0] + " " + row[1]; }).join(", ");
+    return '<button type="button" class="rx-counts" data-rx-who="' + esc(id) + '" aria-label="' + esc(tr("{n} reactions", { n: s.t }) + (names ? ": " + names : "")) + '">' + chips + '<span class="rx-cnt-t">' + esc(countText(s.t)) + "</span></button>";
   }
 
   function queue(id) {
@@ -367,7 +356,9 @@
     el.setAttribute("role", "toolbar");
     el.setAttribute("aria-label", tr("Reactions"));
     el.setAttribute("data-act", "stop");
-    el.innerHTML = items + '<button type="button" class="rx-pick rx-more" data-rx-pick="+" aria-label="' + esc(tr("More emoji")) + '" data-tip="' + esc(tr("More emoji")) + '"><span>+</span></button>';
+    var counts = countsHtml(id, s);
+    if (counts) el.className += " rx-has-counts";
+    el.innerHTML = '<div class="rx-picks">' + items + '<button type="button" class="rx-pick rx-more" data-rx-pick="+" aria-label="' + esc(tr("More emoji")) + '" data-tip="' + esc(tr("More emoji")) + '"><span>+</span></button></div>' + counts;
     actions.classList.add("rx-host");
     actions.appendChild(el);
     var left = Math.max(0, btn.offsetLeft - 12);
@@ -555,11 +546,62 @@
       swallowClick = Date.now();
       if (navigator.vibrate) { try { navigator.vibrate(8); } catch (err) {} }
       openBar(btn, false);
+      if (bar) { drag = { pid: event.pointerId, cur: null, far: false }; bar.el.classList.add("rx-dragging"); }
     }, HOLD_MS) };
   }
-  function cancelHold() { if (hold) { clearTimeout(hold.timer); hold = null; } }
+  /* Pure: is (x, y) further than FAR_PX outside rect? */
+  function farFrom(rect, x, y) {
+    var dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
+    var dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+    return Math.max(dx, dy) > FAR_PX;
+  }
+  function dragTo(x, y) {
+    if (!drag || !bar) return;
+    var el = document.elementFromPoint ? document.elementFromPoint(x, y) : null;
+    var hit = el && el.closest ? el.closest(".rx-pick") : null;
+    if (hit && !bar.el.contains(hit)) hit = null;
+    drag.far = farFrom(bar.el.getBoundingClientRect(), x, y);
+    if (hit === drag.cur) return;
+    if (drag.cur) drag.cur.classList.remove("rx-hot");
+    drag.cur = hit;
+    if (hit) {
+      hit.classList.add("rx-hot");
+      if (navigator.vibrate) { try { navigator.vibrate(5); } catch (err) {} }
+    }
+  }
+  function endDrag(event) {
+    var was = drag;
+    drag = null;
+    if (!was) return false;
+    if (bar) bar.el.classList.remove("rx-dragging");
+    if (was.cur) was.cur.classList.remove("rx-hot");
+    if (event && event.type === "pointercancel") return true;
+    if (was.cur && bar && bar.el.contains(was.cur)) pick(was.cur.getAttribute("data-rx-pick"));
+    else if (was.far) closeBar(false);
+    return true;
+  }
+  function cancelHold(event) {
+    if (hold) { clearTimeout(hold.timer); hold = null; }
+    if (drag && event && event.pointerId === drag.pid) {
+      if (event.type === "pointerup") endDrag(event);
+      /* pointercancel: the touch stream carries on and touchend finishes the drag. */
+    }
+  }
   function onPointerMove(event) {
+    if (drag && event.pointerId === drag.pid) { dragTo(event.clientX, event.clientY); return; }
     if (hold && (Math.abs(event.clientX - hold.x) > 10 || Math.abs(event.clientY - hold.y) > 10)) cancelHold();
+  }
+  function onTouchMove(event) {
+    if (!drag) return;
+    event.preventDefault();
+    var t = event.touches && event.touches[0];
+    if (t) dragTo(t.clientX, t.clientY);
+  }
+  function onTouchEnd(event) {
+    if (!drag) return;
+    var t = event.changedTouches && event.changedTouches[0];
+    if (t) dragTo(t.clientX, t.clientY);
+    endDrag(event);
   }
   function hoverable() {
     try { return root.matchMedia && root.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (err) { return false; }
@@ -740,6 +782,9 @@
     root.addEventListener("pointermove", onPointerMove, true);
     root.addEventListener("pointerup", cancelHold, true);
     root.addEventListener("pointercancel", cancelHold, true);
+    document.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
+    document.addEventListener("touchend", onTouchEnd, true);
+    document.addEventListener("touchcancel", onTouchEnd, true);
     document.addEventListener("pointerover", onPointerOver, true);
     document.addEventListener("pointerout", onPointerOut, true);
     root.addEventListener("click", onClick, true);
@@ -755,6 +800,8 @@
     start: start,
     settingsHtml: settingsHtml,
     applyLocal: applyLocal,
+    farFrom: farFrom,
+    HOLD_MS: HOLD_MS,
     oneEmoji: oneEmoji,
     keyFor: keyFor,
     lite: lite,
