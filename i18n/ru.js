@@ -2527,7 +2527,7 @@ SI18n.addPack("ru", {
   "Show controls": "Показать элементы управления",
   "Turn your phone sideways to play": "Поверните телефон горизонтально, чтобы играть",
   "Play full screen": "Играть на весь экран",
-  "Controller connected. Tap the game, then press any button.": "Геймпад подключён. Коснитесь игры и нажмите любую кнопку.",
+  "Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse.": "Геймпад подключён, но ReGone пока не поддерживает геймпады. Играйте касаниями или клавиатурой и мышью.",
   "The joystick and buttons appear once you join a match. Tap menus directly.": "Джойстик и кнопки появляются, когда вы входите в матч. Меню нажимайте напрямую.",
   "Playing {game}": "Играет в {game}",
   "{name} invited you to play {game}": "{name} приглашает вас сыграть в {game}",
