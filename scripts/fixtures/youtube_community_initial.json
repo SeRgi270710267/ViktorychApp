@@ -18,7 +18,7 @@
                                 "authorText": {
                                   "runs": [
                                     {
-                                      "text": "Canadian Prepper",
+                                      "text": "North Lamp",
                                       "navigationEndpoint": {
                                         "clickTrackingParams": "CLoBEPS8AiITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
                                         "commandMetadata": {
@@ -38,7 +38,7 @@
                                   ],
                                   "accessibility": {
                                     "accessibilityData": {
-                                      "label": "Canadian Prepper"
+                                      "label": "North Lamp"
                                     }
                                   }
                                 },
@@ -57,7 +57,7 @@
                                   ],
                                   "accessibility": {
                                     "accessibilityData": {
-                                      "label": "Canadian Prepper"
+                                      "label": "North Lamp"
                                     }
                                   }
                                 },

@@ -84,10 +84,68 @@ const ACCOUNT_COLS = "public_id, handle, display_name, avatar, banner, bio, loca
 let schemaReady = null;
 let mediaReady = null;
 
+// Account numbers are hashed with PBKDF2-SHA256 at PBKDF2_ITERATIONS rounds.
+// New hashes record their rounds as "p2:<rounds>:<hash>". A bare hash is from
+// before that format and used PBKDF2_LEGACY_ITERATIONS (8000 in production).
+// A good sign-in on an older or weaker hash rewrites it at the current rounds.
+// Workers caps PBKDF2 at 100000 rounds; 30000 costs about 4 ms of CPU.
+const PBKDF2_DEFAULT = 30000;
+const PBKDF2_MAX = 100000;
+
+function clampRounds(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.max(1000, Math.min(PBKDF2_MAX, Math.floor(n)));
+}
+
 function iterationsOf(env) {
-  const n = Number(env.PBKDF2_ITERATIONS || 8000);
-  if (!Number.isFinite(n)) return 8000;
-  return Math.max(1000, Math.min(200000, Math.floor(n)));
+  return clampRounds(env.PBKDF2_ITERATIONS || PBKDF2_DEFAULT, PBKDF2_DEFAULT);
+}
+
+function legacyIterationsOf(env) {
+  return clampRounds(env.PBKDF2_LEGACY_ITERATIONS || 8000, 8000);
+}
+
+// Recovery codes are 12 random characters, so they keep the older cost:
+// ten of them are hashed in one request.
+function codeIterationsOf(env) {
+  return Math.min(iterationsOf(env), legacyIterationsOf(env));
+}
+
+function encodeNumberHash(rounds, hash) {
+  return "p2:" + rounds + ":" + hash;
+}
+
+function parseNumberHash(env, stored) {
+  const text = String(stored || "");
+  const m = /^p2:(\d{1,7}):(.+)$/.exec(text);
+  if (m) return { rounds: clampRounds(m[1], legacyIterationsOf(env)), hash: m[2], versioned: true };
+  return { rounds: legacyIterationsOf(env), hash: text, versioned: false };
+}
+
+// Checks a 16-digit number against a stored hash. Returns { ok, upgrade }
+// where upgrade is a new stored value when the hash should be rewritten.
+async function checkNumberHash(env, digits, row) {
+  const target = iterationsOf(env);
+  if (!row || !row.salt || !row.number_hash) {
+    await slowHash("0000000000000000", new Uint8Array(16), target);
+    return { ok: false, upgrade: "" };
+  }
+  const salt = b64ToBytes(row.salt);
+  const stored = parseNumberHash(env, row.number_hash);
+  const hash = await slowHash(digits, salt, stored.rounds);
+  if (!timingEqual(hash, stored.hash)) return { ok: false, upgrade: "" };
+  if (stored.versioned && stored.rounds >= target) return { ok: true, upgrade: "" };
+  return { ok: true, upgrade: encodeNumberHash(target, await slowHash(digits, salt, target)) };
+}
+
+async function saveNumberHashUpgrade(env, publicId, oldStored, upgrade) {
+  if (!upgrade || !publicId) return;
+  try {
+    await env.DB.prepare("UPDATE accounts SET number_hash = ? WHERE public_id = ? AND number_hash = ?").bind(upgrade, publicId, oldStored).run();
+  } catch (err) {
+    // The old hash still works; the next sign-in tries again.
+  }
 }
 
 function allowedOrigins(env) {
@@ -610,15 +668,13 @@ async function sessionAccount(env, request) {
 
 async function verifyAccountNumber(env, row, accountNumber) {
   const digits = String(accountNumber || "").replace(/\D/g, "");
-  const rounds = iterationsOf(env);
-  const dummySalt = new Uint8Array(16);
   if (!/^\d{16}$/.test(digits)) {
-    await slowHash("0000000000000000", dummySalt, rounds);
+    await slowHash("0000000000000000", new Uint8Array(16), iterationsOf(env));
     return false;
   }
-  const salt = row && row.salt ? b64ToBytes(row.salt) : dummySalt;
-  const hash = await slowHash(digits, salt, rounds);
-  return !!(row && timingEqual(hash, row.number_hash));
+  const checked = await checkNumberHash(env, digits, row);
+  if (checked.ok && checked.upgrade) await saveNumberHashUpgrade(env, row.public_id, row.number_hash, checked.upgrade);
+  return checked.ok;
 }
 
 async function mintSession(env, publicId) {
@@ -648,7 +704,7 @@ async function createAccount(env, request, fields) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const number = (fields && fields.accountNumber) ? fields.accountNumber : randomDigits(16);
   const lookup = await hmacHex(env.ACCOUNT_PEPPER, number);
-  const hash = await slowHash(number, salt, rounds);
+  const hash = encodeNumberHash(rounds, await slowHash(number, salt, rounds));
   let publicId = "";
   if (fields && /^\d{12}$/.test(String(fields.publicId || ""))) {
     const reserved = String(fields.publicId);
@@ -864,6 +920,8 @@ function recoveryDeps() {
     b64ToBytes: b64ToBytes,
     timingEqual: timingEqual,
     iterationsOf: iterationsOf,
+    codeIterationsOf: codeIterationsOf,
+    encodeNumberHash: encodeNumberHash,
     clientIp: clientIp,
     originAllowed: originAllowed,
     blockDeletedLogin: blockDeletedLogin,
@@ -880,17 +938,15 @@ async function handleLogin(request, env) {
   const body = await readJson(request, 2000);
   if (body.error) return json(400, { error: body.error });
   const digits = String(body.accountNumber || "").replace(/\D/g, "");
-  const rounds = iterationsOf(env);
-  const dummySalt = new Uint8Array(16);
   if (!/^\d{16}$/.test(digits)) {
-    await slowHash("0000000000000000", dummySalt, rounds);
+    await slowHash("0000000000000000", new Uint8Array(16), iterationsOf(env));
     return json(401, { error: "invalid_credentials" });
   }
   const lookup = await hmacHex(env.ACCOUNT_PEPPER, digits);
   const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + ", number_hash, salt FROM accounts WHERE number_lookup = ?").bind(lookup).first();
-  const salt = row ? b64ToBytes(row.salt) : dummySalt;
-  const hash = await slowHash(digits, salt, rounds);
-  if (!row || !timingEqual(hash, row.number_hash)) {
+  const checked = await checkNumberHash(env, digits, row);
+  if (checked.ok && checked.upgrade) await saveNumberHashUpgrade(env, row.public_id, row.number_hash, checked.upgrade);
+  if (!checked.ok) {
     // Recover the owner on a fresh database only with the owner claim code.
     // A bare account number must never be enough to claim ownership.
     const ownerRow = await env.DB.prepare("SELECT public_id FROM accounts WHERE owner = 1").first();
