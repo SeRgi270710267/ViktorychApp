@@ -55,6 +55,7 @@ UI_FILES = (
     "dock.js",
     "feeds-page.js",
     "packages.js",
+    "ytm.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay
 # in English because they are product names or technical tokens.
@@ -65,6 +66,7 @@ ALLOW_IDENTICAL = {
     "GitHub",
     "GIF",
     "RSS",
+    "YouTube Music",
     "ALT",
     "https://",
     "Wi-Fi",
