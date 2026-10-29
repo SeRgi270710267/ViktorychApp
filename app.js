@@ -2309,6 +2309,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           continue;
         }
       }
+      if ((!platform || platform === "app") && src.startsWith("[[sticker:", i) && window.ProfileGifts && window.ProfileGifts.stickerHtml) {
+        const sticker = src.slice(i).match(/^\[\[sticker:([a-z0-9_]{1,24})\/([a-z0-9_]{1,32})\]\]/);
+        const shown = sticker ? window.ProfileGifts.stickerHtml(sticker[1], sticker[2]) : "";
+        if (shown) {
+          html += shown;
+          i += sticker[0].length;
+          continue;
+        }
+      }
       const mention = src.slice(i).match(/^@([A-Za-z0-9_]{1,30})/);
       if (mention && (i === 0 || !/[A-Za-z0-9_]/.test(src[i - 1]))) {
         html += `<a class="entity" data-act="stop" data-card="${esc((platform || "x") + ":" + mention[1])}" href="${esc(accountHash(platform || "x", mention[1]))}">@${esc(mention[1])}</a>`;
@@ -14063,6 +14072,15 @@ const here = parseRoute();
       <div class="page-head settings-head">${back}<div class="head-text grow"><h1>${esc(title)}</h1></div></div></div>`;
   }
 
+  /* Viktorychs: the earned balance with its coin, then the store and purchases. */
+  function viktorychsRow() {
+    const gifts = window.ProfileGifts;
+    const amount = gifts && gifts.balance ? gifts.balance() : null;
+    const coin = gifts && gifts.coin ? gifts.coin() : "";
+    const sub = amount == null ? tr("Gifts, stickers and purchases") : tr("You have {n} Viktorychs", { n: String(amount) });
+    return `<a class="set-row set-vk" href="#/points"><span class="set-copy"><b>${coin}${esc(tr("Viktorychs"))}</b><span class="set-sub">${esc(sub)}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
+  }
+
   function settingsRow(href, title, sub) {
     return `<a class="set-row" href="${href}"><span class="set-copy"><b>${esc(title)}</b>${sub ? `<span class="set-sub">${esc(sub)}</span>` : ""}</span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
   }
@@ -14450,6 +14468,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
+      ${accountToken() ? viktorychsRow() : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
