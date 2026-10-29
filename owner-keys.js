@@ -224,18 +224,19 @@
     var room = poolHasRoom();
     return list.filter(function (p) { return !(p && p.code === "usage_worker_requests" && room); });
   }
+  /* Each entry calls tr() itself so the phrase is translated when shown. */
   var USAGE_TEXT = {
-    usage_worker_requests: "Worker requests today are at {pct}% of the free limit.",
-    usage_d1_reads: "Database rows read today are at {pct}% of the free limit.",
-    usage_d1_writes: "Database rows written today are at {pct}% of the free limit.",
-    usage_durable: "Durable Object requests today are at {pct}% of the free limit.",
-    usage_r2_class_a: "Storage writes this month are at {pct}% of the free limit.",
-    usage_r2_class_b: "Storage reads this month are at {pct}% of the free limit.",
-    usage_r2_storage: "File storage is at {pct}% of the free limit.",
-    usage_d1_storage: "Database size is at {pct}% of the free limit."
+    usage_worker_requests: function (v) { return tr("Worker requests today are at {pct}% of the free limit.", v); },
+    usage_d1_reads: function (v) { return tr("Database rows read today are at {pct}% of the free limit.", v); },
+    usage_d1_writes: function (v) { return tr("Database rows written today are at {pct}% of the free limit.", v); },
+    usage_durable: function (v) { return tr("Durable Object requests today are at {pct}% of the free limit.", v); },
+    usage_r2_class_a: function (v) { return tr("Storage writes this month are at {pct}% of the free limit.", v); },
+    usage_r2_class_b: function (v) { return tr("Storage reads this month are at {pct}% of the free limit.", v); },
+    usage_r2_storage: function (v) { return tr("File storage is at {pct}% of the free limit.", v); },
+    usage_d1_storage: function (v) { return tr("Database size is at {pct}% of the free limit.", v); }
   };
   function problemText(p) {
-    if (p && USAGE_TEXT[p.code] && Number.isFinite(Number(p.ratio))) return tr(USAGE_TEXT[p.code], { pct: Math.round(Number(p.ratio) * 100) });
+    if (p && USAGE_TEXT[p.code] && Number.isFinite(Number(p.ratio))) return USAGE_TEXT[p.code]({ pct: Math.round(Number(p.ratio) * 100) });
     return p ? p.text || p.code : "";
   }
   function serious(doc) {
