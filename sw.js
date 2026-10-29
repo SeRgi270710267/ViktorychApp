@@ -4,7 +4,7 @@ const VERSION = "viktorych-a134-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T15:40:00Z-inbox
+// cache-bust: 2026-10-29T15:27:00Z-p2p-pool
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -94,10 +94,12 @@ const SHELL_FILES = [
   "./tv-page.js",
   "./tv-page.css",
   "./split.js",
-  "./inbox.js",
   "./discord-ui.js",
   "./discord-picks.js",
   "./discord-ui.css",
+  "./inbox.js",
+  "./inbox-sms.js",
+  "./inbox-sms.css",
   "./spaces.js",
   "./spaces.css",
   "./stories.js",
@@ -158,8 +160,6 @@ const SHELL_FILES = [
   "./games.css",
   "./communities.js",
   "./communities.css",
-  "./inbox-sms.js",
-  "./inbox-sms.css",
   "./yt-player.js",
   "./yt-player.css",
   "./scores.js",
@@ -205,6 +205,9 @@ const SHELL_FILES = [
   "./icons/music-maskable-512.png",
   "./peer-media.js",
   "./shared/peer-media.js",
+  "./peer-pool.js",
+  "./shared/peer-pool.js",
+  "./shared/pool-scheduler.js",
   "./shared/device-performance.js"
 ];
 
