@@ -10,6 +10,7 @@ import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "./tel
 import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
+import { handleNostr } from "./nostr.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
@@ -5252,6 +5253,10 @@ async function route(request, env, ctx) {
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
   if (path === "/v1/features" || path === "/v1/owner/features") return handleFeatures(request, env, { json, requireOwner });
+  if (path.startsWith("/v1/nostr/")) {
+    const linked = await handleNostr(request, env, path, recoveryDeps());
+    if (linked) return linked;
+  }
   if (path === "/v1/owner/tiktok/unlocked" && request.method === "GET") return handleTikTokUnlocked(request, env);
   if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
