@@ -3476,5 +3476,10 @@ SI18n.addPack("hi", {
   "One grouped card a day": "रोज़ एक समूह कार्ड",
   "Folded posts load nothing until you open them. Your choice follows your account.": "छिपी हुई पोस्ट खोलने तक कुछ भी लोड नहीं करतीं। आपकी पसंद आपके अकाउंट के साथ रहती है।",
   "Muted for now. Change it any time in Posting volume.": "फ़िलहाल म्यूट है। इसे कभी भी पोस्ट की मात्रा में बदलें।",
-  "Unmuted": "म्यूट हटा दिया गया"
+  "Unmuted": "म्यूट हटा दिया गया",
+  "Site health": "साइट की स्थिति",
+  "Site health: {count} problems need you": "साइट की स्थिति: {count} समस्याओं पर आपका ध्यान चाहिए",
+  "Site health: all good": "साइट की स्थिति: सब ठीक है",
+  "Site health not checked yet": "साइट की स्थिति अभी जाँची नहीं गई",
+  "Check now": "अभी जाँचें"
 });

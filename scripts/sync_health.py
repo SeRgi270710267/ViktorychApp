@@ -158,8 +158,44 @@ def same_problem(existing: str, lines: list[str]) -> bool:
     return found == list(lines)
 
 
-def plan(lines: list[str], open_issues: list[dict]) -> dict:
-    matches = [item for item in open_issues if (item.get("title") or "") == TITLE]
+WATCHDOG_URL = "https://viktorych-accounts.viktorych-accounts.workers.dev/v1/watchdog"
+SITE_TITLE = "Site health problem"
+SITE_MIN_AGE = 2 * 60 * 60
+
+
+def site_lines(summary, now_ms: float) -> list[str]:
+    """Watchdog problems that lasted two hours, as issue bullets."""
+    lines = []
+    if not isinstance(summary, dict):
+        return lines
+    for row in summary.get("problems") or []:
+        if not isinstance(row, dict):
+            continue
+        since = float(row.get("since") or 0)
+        if since and now_ms - since < SITE_MIN_AGE * 1000:
+            continue
+        text = str(row.get("text") or "").strip()
+        if text:
+            lines.append(text[:300])
+    return sorted(set(lines))
+
+
+def fetch_watchdog(url: str = WATCHDOG_URL):
+    import urllib.request
+
+    req = urllib.request.Request(url, headers={"User-Agent": "feeds-sync", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as res:
+        return json.loads(res.read().decode("utf-8"))
+
+
+def site_body(lines: list[str]) -> str:
+    bullets = "\n".join("- " + line for line in lines)
+    return ("The Worker watchdog found problems that lasted over two hours.\n\n" + bullets +
+            "\n\nWhat to do: docs/RUNNING-WITHOUT-BOT.md\nThis issue closes itself once they are gone.\n")
+
+
+def plan(lines: list[str], open_issues: list[dict], title: str = TITLE) -> dict:
+    matches = [item for item in open_issues if (item.get("title") or "") == title]
     extra = [item.get("number") for item in matches[1:]]
     if not lines:
         if not matches:
@@ -218,6 +254,23 @@ def main() -> int:
     decision = plan(lines, _list_open(repo))
     apply(decision, lines, run_url, repo)
     print(decision.get("action"))
+    # The Worker watchdog's findings, in a bot-authored issue so GitHub
+    # emails the owner (an issue the owner's own token opens sends no mail).
+    try:
+        summary = fetch_watchdog(os.environ.get("WATCHDOG_URL") or WATCHDOG_URL)
+        site = site_lines(summary, datetime.now(timezone.utc).timestamp() * 1000)
+        open_now = _list_open(repo)
+        site_plan = plan(site, open_now, SITE_TITLE)
+        action = site_plan.get("action")
+        if action == "open":
+            _gh(["issue", "create", "--repo", repo, "--title", SITE_TITLE, "--body", site_body(site)])
+        elif action == "edit":
+            _gh(["issue", "edit", str(site_plan["number"]), "--repo", repo, "--body", site_body(site)])
+        elif action == "close":
+            _gh(["issue", "close", str(site_plan["number"]), "--repo", repo, "--reason", "completed"])
+        print("site health " + str(action))
+    except Exception as exc:
+        print(f"[site health] skipped: {type(exc).__name__}")
     try:
         import discord_alert
 
@@ -232,4 +285,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     raise SystemExit(main())
