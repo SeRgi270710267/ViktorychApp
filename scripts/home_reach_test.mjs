@@ -160,6 +160,8 @@ async function main() {
     if (features.status !== 0) throw new Error("home features check failed");
     const serverOff = spawnSync(process.execPath, [path.join(root, "scripts", "server_off_test.mjs")], { stdio: "inherit", env: process.env });
     if (serverOff.status !== 0) throw new Error("server off check failed");
+    const feedInput = spawnSync(process.execPath, [path.join(root, "scripts", "feed_load_input_test.mjs")], { stdio: "inherit", env: process.env });
+    if (feedInput.status !== 0) throw new Error("feed load input check failed");
   } finally {
     await browser.close();
     server.close();
