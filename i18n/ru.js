@@ -3282,5 +3282,16 @@ SI18n.addPack("ru", {
   "This is how posts look with your choices. Pick a theme, a colour and a text size below, and this post changes right away.": "Так посты выглядят с вашими настройками. Выберите ниже тему, цвет и размер текста — пост сразу изменится.",
   "Translate posts": "Перевод постов",
   "Yellow": "Жёлтый",
-  "Your feed": "Ваша лента"
+  "Your feed": "Ваша лента",
+  "Also on {platforms}. Add them?": "Также в {platforms}. Добавить?",
+  "Follow on {platform}": "Читать в {platform}",
+  "Follow {name} on": "Читать {name} в",
+  "Merge": "Объединить",
+  "Merged into {name}’s profile": "Добавлено в профиль {name}",
+  "Not the same person? Unmerge": "Это разные люди? Разъединить",
+  "Posts from": "Посты из",
+  "Same person as {name}?": "Это тот же человек, что и {name}?",
+  "Undo": "Отменить",
+  "Unmerged. Each account has its own profile again.": "Разъединено. У каждого аккаунта снова свой профиль.",
+  "Merged profiles": "Объединённые профили"
 });

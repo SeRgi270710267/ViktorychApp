@@ -3282,5 +3282,16 @@ SI18n.addPack("en", {
   "This is how posts look with your choices. Pick a theme, a colour and a text size below, and this post changes right away.": "This is how posts look with your choices. Pick a theme, a colour and a text size below, and this post changes right away.",
   "Translate posts": "Translate posts",
   "Yellow": "Yellow",
-  "Your feed": "Your feed"
+  "Your feed": "Your feed",
+  "Also on {platforms}. Add them?": "Also on {platforms}. Add them?",
+  "Follow on {platform}": "Follow on {platform}",
+  "Follow {name} on": "Follow {name} on",
+  "Merge": "Merge",
+  "Merged into {name}’s profile": "Merged into {name}’s profile",
+  "Not the same person? Unmerge": "Not the same person? Unmerge",
+  "Posts from": "Posts from",
+  "Same person as {name}?": "Same person as {name}?",
+  "Undo": "Undo",
+  "Unmerged. Each account has its own profile again.": "Unmerged. Each account has its own profile again.",
+  "Merged profiles": "Merged profiles"
 });

@@ -3282,5 +3282,16 @@ SI18n.addPack("es", {
   "This is how posts look with your choices. Pick a theme, a colour and a text size below, and this post changes right away.": "Así se ven los posts con tus elecciones. Elige abajo un tema, un color y un tamaño de texto, y este post cambia al instante.",
   "Translate posts": "Traducir posts",
   "Yellow": "Amarillo",
-  "Your feed": "Tu feed"
+  "Your feed": "Tu feed",
+  "Also on {platforms}. Add them?": "También en {platforms}. ¿Añadirlos?",
+  "Follow on {platform}": "Seguir en {platform}",
+  "Follow {name} on": "Seguir a {name} en",
+  "Merge": "Unir",
+  "Merged into {name}’s profile": "Unido al perfil de {name}",
+  "Not the same person? Unmerge": "¿No es la misma persona? Separar",
+  "Posts from": "Posts de",
+  "Same person as {name}?": "¿Es la misma persona que {name}?",
+  "Undo": "Deshacer",
+  "Unmerged. Each account has its own profile again.": "Separados. Cada cuenta vuelve a tener su propio perfil.",
+  "Merged profiles": "Perfiles unidos"
 });
