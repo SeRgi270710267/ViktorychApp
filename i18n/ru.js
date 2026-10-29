@@ -2501,5 +2501,17 @@ SI18n.addPack("ru", {
   "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Разрешить приложениям Nostr находить ваш аккаунт по имени NIP-05. По умолчанию выключено.",
   "Search Settings": "Поиск по настройкам",
   "Ask in your own words, like “make the text bigger”.": "Спросите своими словами, например «сделать текст крупнее».",
-  "Suggested by the on-device assistant": "Подсказка помощника на устройстве"
+  "Suggested by the on-device assistant": "Подсказка помощника на устройстве",
+  "Free tier usage": "Использование бесплатных лимитов",
+  "{used} of {limit}": "{used} из {limit}",
+  "Usage needs a read-only analytics token. Add CF_ANALYTICS_TOKEN and CF_ACCOUNT_ID as Worker secrets.": "Для статистики нужен токен аналитики только для чтения. Добавьте CF_ANALYTICS_TOKEN и CF_ACCOUNT_ID в секреты Worker.",
+  "Analytics did not answer. Try again later.": "Аналитика не ответила. Попробуйте позже.",
+  "Worker requests today": "Запросы к Worker сегодня",
+  "D1 rows read today": "Строк D1 прочитано сегодня",
+  "D1 rows written today": "Строк D1 записано сегодня",
+  "Live channel requests today": "Запросы живого канала сегодня",
+  "Storage writes this month": "Записи в хранилище за месяц",
+  "Storage reads this month": "Чтения хранилища за месяц",
+  "Worker requests, last 7 days": "Запросы к Worker за 7 дней",
+  "Backup server hours this month (at most)": "Часы резервного сервера за месяц (не больше)"
 });

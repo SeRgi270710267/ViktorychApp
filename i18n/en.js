@@ -2501,5 +2501,17 @@ SI18n.addPack("en", {
   "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Let Nostr apps find your account by its NIP-05 name. Default is off.",
   "Search Settings": "Search Settings",
   "Ask in your own words, like “make the text bigger”.": "Ask in your own words, like “make the text bigger”.",
-  "Suggested by the on-device assistant": "Suggested by the on-device assistant"
+  "Suggested by the on-device assistant": "Suggested by the on-device assistant",
+  "Free tier usage": "Free tier usage",
+  "{used} of {limit}": "{used} of {limit}",
+  "Usage needs a read-only analytics token. Add CF_ANALYTICS_TOKEN and CF_ACCOUNT_ID as Worker secrets.": "Usage needs a read-only analytics token. Add CF_ANALYTICS_TOKEN and CF_ACCOUNT_ID as Worker secrets.",
+  "Analytics did not answer. Try again later.": "Analytics did not answer. Try again later.",
+  "Worker requests today": "Worker requests today",
+  "D1 rows read today": "D1 rows read today",
+  "D1 rows written today": "D1 rows written today",
+  "Live channel requests today": "Live channel requests today",
+  "Storage writes this month": "Storage writes this month",
+  "Storage reads this month": "Storage reads this month",
+  "Worker requests, last 7 days": "Worker requests, last 7 days",
+  "Backup server hours this month (at most)": "Backup server hours this month (at most)"
 });
