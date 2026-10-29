@@ -250,3 +250,5 @@ index.html|Restablecer los datos de la app
 index.html|Un hogar para publicaciones, historias y las personas que eliges.
 index.html|Regístrate
 index.html|Entrar
+reactions.js|Shift+F10
+reactions.js|800px 0px
