@@ -781,6 +781,32 @@ async function followOwnerAccounts(env, publicId) {
   return ids;
 }
 
+/* Member cards for native servers: name, handle and the avatar this viewer
+   may see. Account ids never leave the Worker. */
+async function serverCard(env, request, publicId, viewer) {
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (!row) return null;
+  const own = !!viewer && viewer.public_id === row.public_id;
+  const next = await ensureMediaKeys(env, row);
+  const account = publicAccount(next, request, own);
+  await applyViewer(env, request, next, account, viewer, own);
+  return {
+    handle: account.handle || "",
+    name: account.displayName || "",
+    avatar: account.avatar || "",
+    avatarFace: account.avatarFace || "",
+    profileLess: account.profileLess === true
+  };
+}
+
+function serverDeps(ctx) {
+  return Object.assign(recoveryDeps(), {
+    card: serverCard,
+    notify: emitNotification,
+    waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null
+  });
+}
+
 function recoveryDeps() {
   return {
     json: json,
@@ -5409,6 +5435,10 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/games/")) {
     const played = await handleGames(request, env, path, url, recoveryDeps());
     if (played) return played;
+  }
+  if (path === "/v1/servers" || path.startsWith("/v1/servers/")) {
+    const served = await handleServers(request, env, path, url, serverDeps(ctx));
+    if (served) return served;
   }
   if (path === "/v1/friends/presence" && request.method === "GET") {
     return handleFriendPresence(request, env, { json, readJson, rateHit, limited, sessionAccount });
