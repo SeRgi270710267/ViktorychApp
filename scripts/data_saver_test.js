@@ -78,6 +78,7 @@ assert.deepStrictEqual(Object.keys(saverToggles).sort(), Object.keys(normal.togg
 assert.deepStrictEqual(missing("storage", objectKeys(read("storage.js"), /function normalizePolicy\(/)), [], "storage policy keys without a save-data value");
 assert.deepStrictEqual(missing("liveTranslate", objectKeys(read("live-translate.js"), /function prefs\(\)/)), [], "live translate keys without a save-data value");
 assert.ok(/viktorychapp-friend-p2p/.test(read("friend-p2p.js")) && listed("friendP2P").has("on"), "friend P2P switch has a save-data value");
+assert.ok(/viktorychapp-peer-pool-v1/.test(read("shared/peer-pool.js")) && listed("pool").has("mode"), "sharing pool switch has a save-data value");
 
 /* 4. No key is both, and every data-saving value is set. */
 for (const store of Object.keys(ds.FREE)) {
@@ -97,6 +98,7 @@ assert.strictEqual(plan.settings.videoHd, false);
 assert.strictEqual(plan.settings.imageLoad, "wifi");
 assert.strictEqual(plan.storage.prefetch, false);
 assert.strictEqual(plan.friendP2P.on, false);
+assert.strictEqual(plan.pool.mode, "off");
 assert.strictEqual(plan.liveTranslate.on, false);
 assert.strictEqual(device.normalize(plan.device).level, "light");
 assert.strictEqual(device.normalize(plan.device).peerMedia, "off");
@@ -109,6 +111,7 @@ localStorage.setItem("viktorychapp-device-performance-v1", JSON.stringify(userDe
 localStorage.setItem("viktorychapp-settings-v1", JSON.stringify(userSettings));
 localStorage.setItem("viktorychapp-storage", JSON.stringify({ keep: "month", maxBytes: 0, unlimited: true, prefetch: true }));
 localStorage.setItem("viktorychapp-friend-p2p", JSON.stringify({ on: true }));
+localStorage.setItem("viktorychapp-peer-pool-v1", JSON.stringify({ mode: "on" }));
 const before = localStorage.dump();
 ds.apply(true);
 const on = JSON.parse(localStorage.getItem("viktorychapp-settings-v1"));
@@ -120,6 +123,7 @@ assert.strictEqual(on.devicePerf.level, "light");
 assert.strictEqual(on.devicePerf.peerMedia, "off");
 assert.strictEqual(JSON.parse(localStorage.getItem("viktorychapp-storage")).prefetch, false);
 assert.strictEqual(JSON.parse(localStorage.getItem("viktorychapp-friend-p2p")).on, false);
+assert.strictEqual(JSON.parse(localStorage.getItem("viktorychapp-peer-pool-v1")).mode, "off");
 assert.ok(ds.isOn());
 ds.apply(false);
 assert.ok(!ds.isOn());
@@ -128,6 +132,7 @@ assert.deepStrictEqual(JSON.parse(after["viktorychapp-settings-v1"]), Object.ass
 assert.deepStrictEqual(JSON.parse(after["viktorychapp-device-performance-v1"]), userDevice, "device settings restored");
 assert.deepStrictEqual(JSON.parse(after["viktorychapp-storage"]), JSON.parse(before["viktorychapp-storage"]), "storage policy restored");
 assert.deepStrictEqual(JSON.parse(after["viktorychapp-friend-p2p"]), { on: true }, "friend P2P restored");
+assert.deepStrictEqual(JSON.parse(after["viktorychapp-peer-pool-v1"]), { mode: "on" }, "sharing pool restored");
 
 /* 7. Held images keep their URL but do not download. */
 const held = ds.holdAttrs('<img src="https://a/b.jpg" srcset="https://a/b.jpg 1x" data-tg-first="1">');

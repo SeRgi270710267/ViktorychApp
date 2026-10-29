@@ -398,6 +398,15 @@
         throw err;
       });
     }
+    // The sharing pool may answer from a nearby device first; it checks the
+    // bytes against the signed manifest and falls back to the normal read.
+    var pool = window.ViktorychPool;
+    if (pool && pool.wants && pool.wants(key)) {
+      return pool.fetchData(key, function () { return attempt(0); }).then(function (res) {
+        if (res && res.status === 200 && mark && res.headers.get("x-pool")) pulseKeep(key, mark, res.clone());
+        return res;
+      });
+    }
     return attempt(0);
   }
   /* Shared documents the pulse tracks. While the pulse is up and a
@@ -4113,7 +4122,18 @@ function signupPayload() {
       if (week) rows += '<p class="set-sub">' + esc(tr("Worker requests, last 7 days")) + '</p><div class="usage-week">' + week + "</div>";
     }
     rows += usageRow(tr("Backup server hours this month (at most)"), u.renderHoursCeiling, L.renderHoursMonth);
+    rows += poolUsageHtml(u.pool);
     return head + rows + "</div>";
+  }
+  /* Sharing pool totals from the last 7 days, as the devices report them. */
+  function poolUsageHtml(p) {
+    if (!p) return "";
+    var mb = function (n) { return (Math.max(0, Number(n) || 0) / 1048576).toFixed(1) + " MB"; };
+    var pct = function (n) { return Math.round(Math.max(0, Math.min(1, Number(n) || 0)) * 100) + "%"; };
+    return '<p class="set-sub">' + esc(tr("Sharing pool, last 7 days")) + "</p>" +
+      '<p class="phandle">' + esc(tr("Peer hit rate {rate} ({hits} of {tries})", { rate: pct(p.hitRate), hits: formatNum(p.hits || 0), tries: formatNum(p.tries || 0) })) + "</p>" +
+      '<p class="phandle">' + esc(tr("Offloaded from the server {peer} of {total} ({share})", { peer: mb(p.peerBytes), total: mb((p.peerBytes || 0) + (p.originBytes || 0)), share: pct(p.byteShare) })) + "</p>" +
+      '<p class="phandle">' + esc(tr("Online in the pool now {n} · rejected chunks {bad}", { n: formatNum(p.online || 0), bad: formatNum(p.rejected || 0) })) + "</p>";
   }
   function healthWhen(value) {
     if (!value) return "";
