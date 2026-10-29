@@ -127,7 +127,7 @@
           [tr("Device storage is almost full", v), tr("{used} of {limit} used ({pct}%). Clear old media now.", v), tr("Free up space")],
           [tr("Device storage is full", v), tr("{used} of {limit} used. New media won't be saved until you free up space.", v), tr("Free up space")]);
       } },
-    { id: "cache-limit", icon: "layers", kind: "percent", canAuto: true, href: "#/settings/storage", target: "#stor-max",
+    { id: "cache-limit", icon: "layers", kind: "percent", canAuto: true, href: "#/settings/storage", target: "#stor-max-row, #stor-max",
       label: function () { return tr("Cache size limit"); },
       page: function () { return tr("Storage settings"); },
       copy: function (level, v) {

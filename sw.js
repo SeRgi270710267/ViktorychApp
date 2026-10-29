@@ -94,6 +94,7 @@ const SHELL_FILES = [
   "./tv.css",
   "./shared/tv-boot.js",
   "./shared/short-link.js",
+  "./shared/x-range.js",
   "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",
