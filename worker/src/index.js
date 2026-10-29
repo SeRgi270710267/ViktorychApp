@@ -1,6 +1,7 @@
 import { mentionSuggest } from "./mention-suggest.js";
 import { bindOwner, inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 import { handleFeatures, killedRoute, readFlags } from "./feature-flags.js";
+import { handleNft } from "./nft.js";
 import { parseRoomId, pickStreams, roomStats, isTopQuality } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
@@ -5423,6 +5424,7 @@ async function route(request, env, ctx) {
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
   if (path === "/v1/features" || path === "/v1/owner/features") return handleFeatures(request, env, { json, requireOwner });
+  if (path === "/v1/nft" || path.startsWith("/v1/nft/")) return handleNft(request, env, { json });
   if (path.startsWith("/v1/nostr/")) {
     const linked = await handleNostr(request, env, path, recoveryDeps());
     if (linked) return linked;
