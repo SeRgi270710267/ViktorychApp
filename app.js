@@ -2324,14 +2324,19 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const anchorHits = known.filter((l) => l.anchorText && l.anchorText !== l.expanded);
     while (i < src.length) {
       const hit = known.find((l) => src.startsWith(l.expanded, i));
+      if (hit && !safeHref(hit.expanded)) {
+        html += esc(hit.expanded);
+        i += hit.expanded.length;
+        continue;
+      }
       if (hit) {
-        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(hit.expanded)}">${esc(hit.display || hit.expanded)}</a>`;
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(safeHref(hit.expanded))}">${esc(hit.display || hit.expanded)}</a>`;
         i += hit.expanded.length;
         continue;
       }
       const anchored = anchorHits.find((l) => l.anchorText && src.startsWith(l.anchorText, i));
       if (anchored) {
-        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(anchored.expanded)}">${esc(anchored.anchorText)}</a>`;
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(safeHref(anchored.expanded) || "#")}">${esc(anchored.anchorText)}</a>`;
         i += anchored.anchorText.length;
         continue;
       }
@@ -2394,10 +2399,77 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return discordEmojiHtml(html, post.emojis);
   }
 
+  // Rich post HTML is rebuilt from an allowlist in an inert document. Only
+  // the tags and attributes the feed adapters emit survive; every other tag
+  // is unwrapped to its text and every other attribute is dropped. Links and
+  // images must be http(s). Without a DOM (tests), rich HTML is skipped and
+  // the plain text path renders instead.
+  const RICH_TAGS = { A: 1, B: 1, I: 1, U: 1, S: 1, CODE: 1, PRE: 1, BLOCKQUOTE: 1, SPAN: 1, BR: 1, IMG: 1 };
+  const RICH_DROP = { SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1, TEMPLATE: 1, NOSCRIPT: 1, SVG: 1, MATH: 1, FORM: 1, INPUT: 1, TEXTAREA: 1, SELECT: 1, BUTTON: 1, LINK: 1, META: 1, BASE: 1, FRAME: 1, FRAMESET: 1 };
+  const RICH_CLASSES = { entity: 1, "tg-spoiler": 1, "tg-emoji": 1, "discord-emoji": 1 };
+
+  function safeHref(value) {
+    const text = String(value == null ? "" : value).trim();
+    if (!text) return "";
+    if (/^(?:https?:)?\/\//i.test(text) || /^mailto:/i.test(text)) return /^\/\//.test(text) ? "https:" + text : text;
+    if (/^[#/?]/.test(text) && !/^\/\//.test(text)) return text;
+    return "";
+  }
+
+  function cleanRichNode(node) {
+    const kids = Array.prototype.slice.call(node.childNodes);
+    kids.forEach((child) => {
+      if (child.nodeType === 3) return;
+      if (child.nodeType !== 1) { child.remove(); return; }
+      const tag = String(child.tagName || "").toUpperCase();
+      if (RICH_DROP[tag]) { child.remove(); return; }
+      cleanRichNode(child);
+      if (!RICH_TAGS[tag]) {
+        while (child.firstChild) child.parentNode.insertBefore(child.firstChild, child);
+        child.remove();
+        return;
+      }
+      const attrs = Array.prototype.slice.call(child.attributes).map((a) => [a.name.toLowerCase(), a.value]);
+      attrs.forEach(([name]) => child.removeAttribute(name));
+      attrs.forEach(([name, value]) => {
+        if (name === "class") {
+          const kept = String(value).split(/\s+/).filter((c) => RICH_CLASSES[c]).join(" ");
+          if (kept) child.setAttribute("class", kept);
+        } else if (name === "href" && tag === "A") {
+          const href = safeHref(value);
+          if (href) child.setAttribute("href", href);
+        } else if (name === "src" && tag === "IMG") {
+          if (/^https:\/\//i.test(String(value).trim())) child.setAttribute("src", String(value).trim());
+        } else if (name === "alt" && tag === "IMG") {
+          child.setAttribute("alt", value);
+        } else if (name === "data-act" && (value === "stop" || value === "spoiler")) {
+          child.setAttribute("data-act", value);
+        } else if ((name === "role" && value === "button") || (name === "tabindex" && value === "0")) {
+          child.setAttribute(name, value);
+        }
+      });
+      if (tag === "A") {
+        child.setAttribute("target", "_blank");
+        child.setAttribute("rel", "noopener noreferrer");
+      }
+      if (tag === "IMG" && !child.getAttribute("src")) child.remove();
+    });
+  }
+
   function safeRich(html) {
     const raw = String(html || "");
-    if (!raw || /<\s*script\b|javascript:|onerror\s*=|onload\s*=/i.test(raw)) return "";
-    return raw;
+    if (!raw) return "";
+    if (typeof document === "undefined" || !document.implementation) return "";
+    try {
+      // A separate inert document: nothing in it loads or runs.
+      const doc = document.implementation.createHTMLDocument("");
+      const box = doc.createElement("div");
+      box.innerHTML = raw;
+      cleanRichNode(box);
+      return box.innerHTML;
+    } catch (err) {
+      return "";
+    }
   }
 
   function textHtml(post, key, full) {
