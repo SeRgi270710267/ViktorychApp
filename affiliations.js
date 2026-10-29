@@ -5,6 +5,28 @@
 
   var cache = {};
   var pending = {};
+  var STORE = "viktorych-aff-cache-v1";
+  var FRESH = 10 * 60 * 1000;
+  var stamp = {};
+
+  /* The last answer per account lives on the device, so a name row paints
+     its badge at once and the Worker is asked again only every few minutes. */
+  (function restore() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORE) || "{}");
+      Object.keys(saved).forEach(function (id) {
+        if (saved[id] && Array.isArray(saved[id].l)) { cache[id] = saved[id].l; stamp[id] = saved[id].t || 0; }
+      });
+    } catch (err) { /* private mode */ }
+  })();
+
+  function persist() {
+    try {
+      var out = {};
+      Object.keys(cache).slice(-400).forEach(function (id) { out[id] = { l: cache[id], t: stamp[id] || 0 }; });
+      localStorage.setItem(STORE, JSON.stringify(out));
+    } catch (err) { /* full or private */ }
+  }
 
   function tr(key, vars) {
     var fn = root.t || (root.SI18n && root.SI18n.t);
@@ -21,13 +43,21 @@
     return root.ViktorychAccounts || null;
   }
 
+  function visible(list) {
+    return (list || []).filter(function (item) { return !item.hidden; });
+  }
+
+  /* A span, never a button: the slot often sits inside a name link. */
   function slot(publicId) {
     if (!/^\d{12}$/.test(String(publicId || ""))) return "";
-    return '<button type="button" class="aff-slot" data-aff-for="' + publicId + '" hidden></button>';
+    var list = visible(cache[publicId]);
+    if (list.length) return '<span class="aff-slot" data-aff-for="' + publicId + '">' + list.map(badgeButton).join("") + "</span>";
+    return '<span class="aff-slot" data-aff-for="' + publicId + '" hidden></span>';
   }
 
   function badgeButton(item) {
-    return '<button type="button" class="aff-badge" data-aff-open="' + esc(item.id) + '" data-aff-name="' + esc(item.name) + '" data-aff-logo="' + esc(item.logo) + '" data-aff-href="' + esc(item.href || "") + '" aria-label="' + esc(tr("Affiliated with {name}", { name: item.name })) + '"><img src="' + esc(item.logo) + '" alt=""></button>';
+    var label = tr("Affiliated with {name}", { name: item.name });
+    return '<span class="aff-badge" role="link" tabindex="0" title="' + esc(label) + '" data-aff-open="' + esc(item.id) + '" data-aff-name="' + esc(item.name) + '" data-aff-logo="' + esc(item.logo) + '" data-aff-href="' + esc(item.href || "") + '" aria-label="' + esc(label) + '"><img src="' + esc(item.logo) + '" alt="" decoding="async"></span>';
   }
 
   function paint() {
@@ -37,22 +67,24 @@
       if (/^\d{12}$/.test(id) && ids.indexOf(id) < 0) ids.push(id);
     });
     if (!ids.length) return;
-    var missing = ids.filter(function (id) { return !cache[id] && !pending[id]; });
-    if (missing.length) load(missing);
+    var now = Date.now();
+    var missing = ids.filter(function (id) { return !pending[id] && (!cache[id] || now - (stamp[id] || 0) > FRESH); });
+    for (var i = 0; i < missing.length; i += 40) load(missing.slice(i, i + 40));
     ids.forEach(fill);
   }
 
   function load(ids) {
     var api = accounts();
-    if (!api || !api.call || !api.token || !api.token()) return;
-    var key = ids.join(",");
-    pending[key] = true;
+    if (!api || !api.call) return;
+    var token = api.token ? api.token() : "";
     ids.forEach(function (id) { pending[id] = true; });
-    api.call("/v1/affiliations?ids=" + ids.join(","), { token: api.token() }).then(function (body) {
+    api.call("/v1/affiliations?ids=" + ids.join(","), token ? { token: token } : {}).then(function (body) {
       ids.forEach(function (id) { delete pending[id]; });
       if (!body || body.status !== 200) return;
       var accountsMap = body.accounts || {};
-      ids.forEach(function (id) { cache[id] = accountsMap[id] || []; });
+      var now = Date.now();
+      ids.forEach(function (id) { cache[id] = accountsMap[id] || []; stamp[id] = now; });
+      persist();
       ids.forEach(fill);
     }).catch(function () {
       ids.forEach(function (id) { delete pending[id]; });
@@ -62,18 +94,21 @@
   function fill(id) {
     var list = cache[id];
     if (!list) return;
+    var shown = visible(list);
+    var html = shown.map(badgeButton).join("");
     document.querySelectorAll('[data-aff-for="' + id + '"]').forEach(function (el) {
-      if (!list.length) {
-        el.hidden = true;
-        el.innerHTML = "";
+      if (!shown.length) {
+        if (!el.hidden) el.hidden = true;
+        if (el.innerHTML) el.innerHTML = "";
         return;
       }
-      el.hidden = false;
-      el.innerHTML = list.map(badgeButton).join("");
+      if (el.hidden) el.hidden = false;
+      if (el.innerHTML !== html) el.innerHTML = html;
     });
     document.querySelectorAll('[data-aff-about="' + id + '"]').forEach(function (el) {
       el.hidden = !list.length;
-      el.innerHTML = list.length ? aboutBlock(list, id) : "";
+      var about = list.length ? aboutBlock(list, id) : "";
+      if (el.innerHTML !== about) el.innerHTML = about;
     });
   }
 
@@ -113,22 +148,64 @@
     document.body.appendChild(sheet);
   }
 
+  /* Like X: a tap opens the organization's profile; with no profile yet,
+     a small sheet names the organization. */
+  function openBadge(el) {
+    var href = el.getAttribute("data-aff-href") || "";
+    if (href && href.charAt(0) === "#" && !el.closest(".aff-sheet")) {
+      var hover = document.getElementById("hover");
+      if (hover) hover.innerHTML = "";
+      if (location.hash === href) openSheet(el);
+      else location.hash = href.slice(1);
+      return;
+    }
+    openSheet(el);
+  }
+
   function patch(id, body) {
     var api = accounts();
     if (!api || !api.call || !api.token || !api.token()) return;
     api.call("/v1/affiliations/me/" + encodeURIComponent(id), { method: "PATCH", token: api.token(), body: body }).then(function () {
-      delete cache[api.account && api.account() ? api.account().publicId : ""];
+      var me = api.account && api.account() ? api.account().publicId : "";
+      if (me) { stamp[me] = 0; paint(); }
       if (api.requestRender) api.requestRender();
     }).catch(function () {});
   }
 
+  var queued = false;
+  function soon() {
+    if (queued) return;
+    queued = true;
+    (root.requestAnimationFrame || setTimeout)(function () { queued = false; paint(); });
+  }
+
   function boot() {
+    /* Every name row anywhere (posts, profile, drawer, cards) paints itself. */
+    if (root.MutationObserver) {
+      new MutationObserver(function (records) {
+        for (var i = 0; i < records.length; i++) {
+          var added = records[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            var node = added[j];
+            if (node.nodeType === 1 && (node.hasAttribute("data-aff-for") || node.hasAttribute("data-aff-about") || node.querySelector("[data-aff-for], [data-aff-about]"))) { soon(); return; }
+          }
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    }
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      var open = event.target && event.target.closest && event.target.closest("[data-aff-open]");
+      if (!open) return;
+      event.preventDefault();
+      openBadge(open);
+    });
+    soon();
     document.addEventListener("click", function (event) {
       var open = event.target && event.target.closest && event.target.closest("[data-aff-open]");
       if (open) {
         event.preventDefault();
         event.stopPropagation();
-        openSheet(open);
+        openBadge(open);
         return;
       }
       var closer = event.target && event.target.closest && event.target.closest("[data-aff-close]");
