@@ -2178,6 +2178,9 @@ function signupPayload() {
         body.account.repostsLoaded = true;
       }
       remember(body.account);
+      // The server answers with the one username this viewer sees, which can
+      // differ from the name in the link; keep it under the link's key too.
+      if (profiles[key] !== body.account) profiles[key] = body.account;
       noteProfile(body.account);
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { profileLoads[key] = false; });
