@@ -1437,16 +1437,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a113-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a115-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a113-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a115-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in deployed_paths() and "spaces.css" in deployed_paths() and "live/" in deployed_paths(), "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a113-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a115-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -1524,7 +1524,7 @@ def main() -> None:
     check(".tabs-bar.notes-tabs" in css and ".tab-grip" in css and ".tab-switch" in css and ".note-gear" in css and ".tab-count" not in css and ".tab-plus" not in css, "notification tabs use the home underline bar, and reorder handles stay in the editor")
     check("pinned.slice" not in app and "lists.slice(0," not in app, "pinned home tabs are not capped")
     check("function sharePostUrl(" in app and "function shareProfileUrl(" in app and "isn’t in the published snapshot" in app and 's/watch-"' in app and 's/" + (post.platform' in app and "function notePublished(" in app and "PUBLISHED.posts" in app, "share and copy use the static preview pages, and a live post outside the snapshot does not")
-    check('og:image" content="landing/og.jpg"' in page and 'rel="canonical"' in page and "location.origin" in page and "__SITE_BASE__" not in page and "SuperintelApp/" not in page and "riverquoll.github.io" not in page and 'og:site_name" content="ViktorychApp"' in page and "<title>ViktorychApp</title>" in page and 'apple-mobile-web-app-title" content="ViktorychApp"' in page and "manifest.webmanifest?v=7" in page and "favicon.ico?v=7" in page and 'productName("app")' in app and "function routeTitle(" in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'markSvg("app", "logo-full")' in app and 'markSvg("appShort", "logo-short")' in app and 'markSvg("mark", "logo-si")' in app and "function githubRepo(" in app and "riverquoll" not in app and "viktorychapp-settings-v1" in page and "superintelapp-settings-v1" in page and 'readStored(localStorage, "settings-v1")' in app and "function shareRoot(" in app and "function pagesDirectory(" in app, "the home page names the app, the shortcut label is the short form, and copied links stay on this site")
+    check('og:image" content="landing/og.jpg"' in page and 'rel="canonical"' in page and "location.origin" in page and "__SITE_BASE__" not in page and "SuperintelApp/" not in page and "riverquoll.github.io" not in page and 'og:site_name" content="ViktorychApp"' in page and "<title>ViktorychApp</title>" in page and 'apple-mobile-web-app-title" content="ViktorychApp"' in page and "manifest.webmanifest?v=7" in page and "favicon.ico?v=7" in page and 'productName("app")' in app and "function routeTitle(" in app and '<a class="logo${' in app and 'class="m-logo" href="#/"' in app and 'markSvg("app", "logo-full")' in app and 'markSvg("appShort", "logo-short")' in app and 'markSvg("mark", "logo-si")' in app and "function githubRepo(" in app and "riverquoll" not in app and "viktorychapp-settings-v1" in page and "superintelapp-settings-v1" in page and 'readStored(localStorage, "settings-v1")' in app and "function shareRoot(" in app and "function pagesDirectory(" in app, "the home page names the app, the shortcut label is the short form, and copied links stay on this site")
     check('tr("Search {app}"' in app and "Surprise me" in app and "explore-mode" in app and 'const SEARCH_SUFFIX = "searches-v1"' in app and "readStored(localStorage, SEARCH_SUFFIX)" in app and 'id="explore-q"' in app and "function exploreHome(" in app and "function wordmarkSvg(" in app and '["videos", tr("Videos")]' in app and "ghome-logo" in css and 'html[data-theme="default"] .ghome-logo' in css, "explore is a search home with themed wordmark, suggestions, and result tabs")
     check('productName("search")' in app and 'productName("searchShort")' in app and "new ResizeObserver" in app and "EXPLORE_SEARCH_MIN = 13" in app and 'tr("Explore")' in app and 't("brand.search")' in (ROOT / "i18n.js").read_text(encoding="utf-8") and '"brand.search": "Search"' in (ROOT / "i18n" / "en.js").read_text(encoding="utf-8") and '"brand.search": "Поиск"' in (ROOT / "i18n" / "ru.js").read_text(encoding="utf-8") and '"brand.search": "Buscar"' in (ROOT / "i18n" / "es.js").read_text(encoding="utf-8"), "the explore field uses the search product name and keeps the Explore nav label")
     check("function shellDocument(" in worker and "/\\/(?:s|u)\\/" in worker, "a share-page navigation does not replace the cached app shell")
@@ -3307,6 +3307,83 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
         restored = discord_live.Board()
         restored.load_dir(empty)
         check(len(restored.rows("42")) == 120, "a missing Pages copy is restored from R2 pages")
+    discord_picks_checks(discord_live)
+
+
+def discord_picks_checks(discord_live) -> None:
+    import discord_picks
+    from adapters.discord import user_get_allowed
+
+    g1, g2, g3 = "100000000000000001", "100000000000000002", "100000000000000003"
+    check(user_get_allowed("https://discord.com/api/v10/users/@me/guilds") and user_get_allowed("https://discord.com/api/v10/guilds/%s/channels" % g1), "the picker may list the account's servers and their channels")
+    check(not user_get_allowed("https://discord.com/api/v10/invites/abc") and not user_get_allowed("https://discord.com/api/v10/users/@me/channels"), "the GET list still leaves out invites and DMs")
+    raw = [
+        {"id": "300000000000000001", "type": 4, "name": "Info", "position": 0},
+        {"id": "300000000000000002", "type": 4, "name": "Talk", "position": 1},
+        {"id": "300000000000000010", "type": 0, "name": "chat", "parent_id": "300000000000000002", "position": 0},
+        {"id": "300000000000000011", "type": 5, "name": "news", "parent_id": "300000000000000001", "position": 1},
+        {"id": "300000000000000012", "type": 2, "name": "voice", "position": 0},
+    ]
+    rows = discord_picks.guild_channels(raw)
+    check([row["name"] for row in rows] == ["news", "chat"] and rows[0]["kind"] == "announcement" and rows[0]["category"] == "Info", "the picker lists text and announcement channels in sidebar order")
+    picks = {"servers": [{"id": g1, "name": "One", "channels": [{"id": "300000000000000010", "name": "chat"}]}, {"id": g2, "name": "Main", "channels": [{"id": "300000000000000011"}]}]}
+    found = discord_picks.picked_servers(picks, [g2])
+    check([s["id"] for s in found] == [g1] and found[0]["ntfy"] == "" and found[0]["channels"][0]["private"] is True, "picked servers skip the configured one and never use ntfy")
+    check(discord_picks.catalog_task(None, None) == ("full", "") and discord_picks.catalog_task({"servers": [], "fetchedAt": "2026-01-02"}, {"requestedAt": "2026-01-01"}) == ("", "") and discord_picks.catalog_task({"servers": [], "fetchedAt": "2026-01-01"}, {"requestedAt": "2026-01-02", "guild": g3}) == ("guild", g3), "the catalog is listed when missing or when the owner asks")
+
+    class FakeClient:
+        def __init__(self):
+            self.calls = []
+
+        def get_json(self, path, params=None):
+            self.calls.append(path)
+            if path == "/users/@me/guilds":
+                return [{"id": g1, "name": "One"}, {"id": g3, "name": "Three", "icon": "abc"}]
+            return raw
+
+    fake = FakeClient()
+    old = {"servers": [{"id": g1, "name": "One", "channels": [{"id": "300000000000000010", "name": "chat"}]}, {"id": g2, "name": "Gone", "channels": []}]}
+    doc = discord_picks.build_catalog(fake, "2026-01-03", old=old, want=g3)
+    check([s["id"] for s in doc["servers"]] == [g1, g3] and fake.calls == ["/users/@me/guilds", f"/guilds/{g3}/channels"] and doc["servers"][1]["icon"].startswith("https://cdn.discordapp.com/icons/"), "a fresh join lists only the new server again")
+    check(discord_picks.join_invite("t", "abc", lambda url, headers: (200, b'{"guild":{"id":"%s"}}' % g3.encode())) == ("joined", g3), "a join returns the server")
+    check(discord_picks.join_invite("t", "abc", lambda url, headers: (400, b'{"captcha_key":["captcha-required"],"captcha_sitekey":"x"}'))[0] == "captcha", "a captcha answer is reported, not solved")
+    check(discord_picks.join_invite("t", "abc", lambda url, headers: (403, b'{"code":40002}'))[0] == "verification", "a verification answer is reported")
+    check(discord_picks.join_invite("t", "bad code!", lambda url, headers: (200, b"{}"))[0] == "invalid", "a bad code is never sent")
+    sent = []
+    seen_urls = []
+
+    def transport(url, headers):
+        seen_urls.append(url)
+        return 200, b'{"guild":{"id":"%s"}}' % g3.encode()
+
+    store = {"discord/x/request.json": {"requestedAt": "2026-01-02", "guild": g3, "join": {"code": "abc", "id": "abcdefgh1234", "guild": g3}}}
+
+    def put(key, payload):
+        sent.append(key)
+        store[key] = json.loads(payload.decode("utf-8"))
+        return True
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        picker = discord_live.Picks(root, "secret-token-value", [g2], store.get, put)
+        picker.join_transport = transport
+        picker.join(store["discord/x/request.json"])
+        picker.join(store["discord/x/request.json"])
+        check(len(seen_urls) == 1 and seen_urls[0].endswith("/invites/abc") and store["discord/x/join.json"]["status"] == "joined", "one confirmed join is sent once")
+        store["discord/x/picks.json"] = picks
+        added = picker.reload()
+        check(added == {"300000000000000010"}, "a new pick is polled right away")
+        board = discord_live.Board()
+        board.add("300000000000000010", {"id": "400000000000000001", "author": "9", "text": "hi", "date": "2026-01-01T00:00:00.000Z"}, "9", {"name": "Ada"})
+        picker.write(board)
+        sent.clear()
+        picker.upload()
+        picker.upload()
+        check(not (root / "discord").exists() and all(key.startswith("discord/x/") for key in sent) and sent[-1] == "discord/x/index.json" and len(sent) == 2, "picked servers go only to the private bucket and unchanged files are not sent again")
+        bad = discord_picks.health_doc("invalid", "unauthorized", "secret-token-value", "2026-01-01T00:00:00Z")
+        check(discord_picks.key_blocked(bad, "secret-token-value") and not discord_picks.key_blocked(bad, "other-token") and "secret" not in json.dumps(bad), "an invalid key is blocked by fingerprint until a new key is pasted")
+        index = store["discord/x/index.json"]
+        check(index["servers"][0]["channels"][0]["file"] == "discord/x/messages/300000000000000010.json" and index["servers"][0]["channels"][0]["last"] == "400000000000000001" and "secret-token-value" not in json.dumps(store), "the private index points at private files and never holds the token")
 
 
 def ia_backup_checks() -> None:
@@ -4447,7 +4524,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "viktorych-a113-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-a115-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     lazy = (ROOT / "shared" / "lazy-modules.js").read_text(encoding="utf-8")
     check('shorts.js", "shorts.css"' in lazy and "shorts.js" in worker and "shorts.css" in worker and 'info.name === "shorts"' in app, "the page and the service worker load Shorts on demand")
     check('drive.js", "drive.css"' in lazy and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker and 'ensureLazy("drive")' in app, "the page and the service worker load Drive on demand")
@@ -4502,7 +4579,7 @@ def story_checks() -> None:
     shorts_js = (ROOT / "shorts.js").read_text(encoding="utf-8")
     check('tr("added accounts")' in shorts_js and 'data-shorts="remove-account"' in shorts_js and 'tr("Original quality")' in shorts_js and "tracked" not in shorts_js.lower(), "Shorts lets the owner add an account and does not call it tracked")
     check("isTikTokCdn(url)" in worker and "if (isTikTokCdn(url)) return;" in worker, "the service worker does not intercept TikTok CDN media")
-    check('VERSION = "viktorych-a113-__SW_VERSION__"' in worker, "the service worker cache stamp is a113")
+    check('VERSION = "viktorych-a115-__SW_VERSION__"' in worker, "the service worker cache stamp is a115")
     landing_css = (ROOT / "landing.css").read_text(encoding="utf-8")
     accounts_src = (ROOT / "accounts.js").read_text(encoding="utf-8")
     check("function showLanding(" in accounts_src and "function installedApp(" in accounts_src and "display-mode: standalone" in accounts_src and 'data-acct="signup"' in accounts_src and 'data-acct="login"' in accounts_src and "prefers-reduced-motion" in landing_css and "animation-timeline" in landing_css and "landing/timeline.webp" in accounts_src, "logged-out visitors get the marketing landing and an installed app skips it")

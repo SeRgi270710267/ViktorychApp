@@ -17,6 +17,16 @@ to the device's own emoji character.
 The page footer carries a short attribution line, and this file holds the full
 notice.
 
+## Wordmark font (personal sidebar logo text, `fonts/`)
+
+Custom sidebar logo text is set in Inter, the same font the ViktorychApp
+wordmark is drawn from. `fonts/inter-400.woff2` and `fonts/inter-900.woff2`
+are subsets (Latin, Latin Extended, Cyrillic, Greek, Vietnamese) of Inter 4.1
+Regular and Black from https://github.com/rsms/inter, made with fontTools
+`pyftsubset`. Inter is licensed under the SIL Open Font License 1.1,
+Copyright (c) 2016 The Inter Project Authors; the full license is in
+`fonts/Inter-LICENSE.txt`.
+
 ## Emoji picker data
 
 `data/emoji.json` lists emoji and their English names from the Unicode emoji test data (emoji-test.txt, Unicode 15.1 and earlier), used under the Unicode License (https://www.unicode.org/license.txt). The emoji are drawn by the device font; no image assets are shipped.
