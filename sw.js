@@ -91,6 +91,7 @@ const SHELL_FILES = [
   "./tv-page.css",
   "./split.js",
   "./discord-ui.js",
+  "./discord-picks.js",
   "./discord-ui.css",
   "./spaces.js",
   "./spaces.css",

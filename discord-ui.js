@@ -165,7 +165,7 @@
     paceUntil: 0
   };
 
-  function copyChannel(ch, serverId) {
+  function copyChannel(ch, serverId, picked) {
     return {
       id: ch.id,
       name: ch.name,
@@ -173,8 +173,9 @@
       mode: ch.mode,
       serverId: serverId,
       inaccessible: false,
-      pinsForbidden: false,
-      file: ch.mode === "messages" ? "discord/messages/" + ch.id + ".json" : ""
+      pinsForbidden: !!picked,
+      picked: !!picked,
+      file: ch.mode === "messages" ? (picked ? "discord/x/messages/" : "discord/messages/") + ch.id + ".json" : ""
     };
   }
 
@@ -194,7 +195,8 @@
           name: String(ch.name || cid).slice(0, 80),
           category: String(ch.category || "").slice(0, 80),
           mode: mode
-        }, id);
+        }, id, !!server.picked);
+        if (server.picked && ch.inaccessible) row.inaccessible = true;
         rows.push(row);
         channels.push(row);
       });
@@ -203,6 +205,7 @@
         id: id,
         name: String(server.name || id).slice(0, 80),
         icon: cdnUrl(server.icon) || "",
+        picked: !!server.picked,
         channels: rows
       });
     });
@@ -1112,8 +1115,25 @@
       "</section>";
   }
 
+  /* Server switcher: one round icon per server, like Discord's rail.
+     A tap opens that server alone and brings it into view. */
+  function switcherHtml() {
+    const list = serverOrder();
+    if (list.length < 2) return "";
+    const btns = list.map(function (server) {
+      const on = !!prefs().expanded[server.id];
+      const face = server.icon
+        ? '<img src="' + esc(server.icon) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">'
+        : "<span>" + esc(initials(server.name)) + "</span>";
+      return '<button type="button" class="dmsgs-sw-btn' + (on ? " on" : "") + '" data-discord="switch" data-server="' + esc(server.id) + '" title="' + esc(server.name) + '" aria-label="' + esc(server.name) + '" aria-pressed="' + (on ? "true" : "false") + '">' + face + "</button>";
+    }).join("");
+    return '<nav class="dmsgs-switcher" aria-label="' + esc(tr("Servers")) + '">' + btns + "</nav>";
+  }
+
   function listHtml(route) {
-    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Messages") + "<" + "/h1></header>");
+    const add = (root.DiscordPicks && root.DiscordPicks.addButtonHtml) ? root.DiscordPicks.addButtonHtml() : "";
+    const warn = (root.DiscordPicks && root.DiscordPicks.keyBannerHtml) ? root.DiscordPicks.keyBannerHtml() : "";
+    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Messages") + "<" + "/h1>" + add + "</header>") + warn;
     const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
     const native = nativeServersHtml();
     if (!text.length) {
@@ -1122,7 +1142,7 @@
     }
     const rows = serverOrder().map(function (server) { return serverBlock(server, route); }).join("");
     const filtering = state.query ? " is-filtering" : "";
-    return head +
+    return head + switcherHtml() +
       '<label class="search dmsgs-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20.3 16.7 16a7.5 7.5 0 1 0-.7.7L20.3 21 21 20.3zM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z"/></svg>' +
       ("<input id=\"dmsgs-q\" class=\"dmsgs-q\" type=\"search\" " + "placeholder=\"" + tr("Search Direct Messages") + "\"" + " " + "aria-label=\"" + tr("Search Direct Messages") + "\"" + " value=\"") + esc(state.query) + '"></label>' +
       native +
@@ -1710,7 +1730,7 @@
     const kept = {};
     state.channels.forEach(function (ch) { kept[ch.id] = !!ch.inaccessible; });
     if (!adoptServers(servers)) return;
-    state.channels.forEach(function (ch) { if (kept[ch.id]) ch.inaccessible = true; });
+    state.channels.forEach(function (ch) { if (kept[ch.id] && !ch.picked) ch.inaccessible = true; });
     rememberMessages();
     noteShared();
   }
@@ -1743,7 +1763,7 @@
   }
 
   function docPathOk(path) {
-    return /^discord\/(?:index|state|vk|messages\/\d{1,22}(?:\/p\/\d{1,4})?|pins\/\d{1,22})\.json$/.test(String(path || ""));
+    return /^discord\/(?:index|state|vk|messages\/\d{1,22}(?:\/p\/\d{1,4})?|pins\/\d{1,22}|x\/(?:index|messages\/\d{15,22}(?:\/p\/\d{1,4})?))\.json$/.test(String(path || ""));
   }
 
   function accountsBase() {
@@ -1831,6 +1851,8 @@
         headers: Object.assign({ Authorization: "Bearer " + token }, headers)
       });
     };
+    // Servers the owner picked live only in the private bucket, never on Pages.
+    if (/^discord\/x\//.test(path)) return workerUrl ? worker().then(noteRate) : Promise.reject(new Error("signed out"));
     return same().then(function (res) {
       if (res && res.status === 429) return noteRate(res);
       if (res && (res.status === 200 || res.status === 304)) return res;
@@ -1965,7 +1987,9 @@
   function loadOlder(id) {
     const pageNo = state.olderNext[id] || 0;
     if (!pageNo || state.olderLoading[id] || state.fixture || paced() || typeof fetch !== "function") return;
-    const path = "discord/messages/" + id + "/p/" + pageNo + ".json";
+    const och = channelById(id);
+    const stem = och && och.file && /\.json$/.test(och.file) ? och.file.replace(/\.json$/, "") : "discord/messages/" + id;
+    const path = stem + "/p/" + pageNo + ".json";
     if (!docPathOk(path)) return;
     state.olderLoading[id] = true;
     loadDoc(path, function (doc, fresh) {
@@ -2003,7 +2027,7 @@
 
   function ensurePins(id) {
     const ch = channelById(id);
-    if (!ch || ch.mode !== "messages" || state.fixture || isVk(id) || paced() || state.pinFiles[id] || state.pinLoading[id]) return;
+    if (!ch || ch.mode !== "messages" || state.fixture || isVk(id) || ch.picked || paced() || state.pinFiles[id] || state.pinLoading[id]) return;
     if (typeof fetch !== "function") return;
     state.pinLoading[id] = true;
     loadDoc("discord/pins/" + id + ".json", function (doc, fresh) {
@@ -2033,7 +2057,7 @@
       if (doc || fresh) state.loading[id] = false;
       if (state.open === id && (doc || fresh)) paintChannel(id);
       if (doc || fresh) noteShared();
-      if (doc && isVk(id) && state.open !== id && onMessages()) refreshInbox();
+      if (doc && (isVk(id) || ch.picked) && state.open !== id && onMessages()) refreshInbox();
     });
   }
 
@@ -2053,6 +2077,9 @@
     pending.then(function (res) { return res && res.ok ? res.json() : null; }).then(function (doc) {
       if (doc && Array.isArray(doc.discord)) { state.configList = doc.discord; applyConfig(doc.discord); }
       loadVk();
+      watchPulse();
+      loadPicked();
+      if (root.DiscordPicks && root.DiscordPicks.ensureHealth) root.DiscordPicks.ensureHealth();
       return loadDoc("discord/index.json", function (index, fresh) {
         if (index) {
           applyIndex(index);
@@ -2078,9 +2105,7 @@
       if (!vk.length) return;
       state.vkServers = vk;
       const before = state.channels.map(function (ch) { return ch.id; }).join(",");
-      // Keep whatever Discord servers are already listed when feeds.config.json gave none.
-      const base = (state.configList && state.configList.length) ? state.configList : (state.servers || []).filter(function (server) { return !/^99\d{13}$/.test(String(server.id || "")); });
-      applyConfig(base.concat(vk));
+      mergeExtras();
       // VK has no index.json, so read each channel once for its preview.
       state.channels.forEach(function (ch) { if (isVk(ch.id) && !state.files[ch.id]) ensureChannel(ch.id); });
       if (!onMessages()) return;
@@ -2089,6 +2114,63 @@
       else refreshInbox();
     });
   }
+  /* Keep whatever Discord servers are already listed when feeds.config.json
+     gave none, then VK, then the servers the owner picked (discord/x/). */
+  function mergeExtras() {
+    const extra = {};
+    (state.vkServers || []).concat(state.pickedServers || []).forEach(function (server) { extra[String(server.id)] = true; });
+    const base = (state.configList && state.configList.length) ? state.configList : (state.servers || []).filter(function (server) { return !/^99\d{13}$/.test(String(server.id || "")) && !server.picked && !extra[String(server.id)]; });
+    applyConfig(base.concat(state.vkServers || [], state.pickedServers || []));
+  }
+
+  /* Picked servers: discord_live.py writes discord/x/index.json with the
+     newest id per channel. A pulse mark (worker/src/guard.js) says when it
+     moved, so nothing here runs on a timer. */
+  function loadPicked() {
+    if (state.fixture || !accountsToken() || typeof fetch !== "function") return Promise.resolve(null);
+    return loadDoc("discord/x/index.json", function (doc, fresh) {
+      if (!doc && !fresh) return;
+      const list = doc && Array.isArray(doc.servers) ? doc.servers : [];
+      const picked = [];
+      const lasts = {};
+      list.forEach(function (server) {
+        const id = String((server && server.id) || "");
+        if (!/^\d{15,22}$/.test(id)) return;
+        const channels = (server.channels || []).filter(function (ch) { return ch && /^\d{15,22}$/.test(String(ch.id || "")); }).map(function (ch) {
+          if (ch.last) lasts[ch.id] = String(ch.last);
+          return { id: String(ch.id), name: ch.name, category: ch.category, mode: "messages", inaccessible: !!ch.inaccessible };
+        });
+        picked.push({ id: id, name: server.name, icon: server.icon, picked: true, channels: channels });
+      });
+      const before = state.channels.map(function (ch) { return ch.id; }).join(",");
+      const had = JSON.stringify(state.pickedServers || []);
+      state.pickedServers = picked;
+      if (had !== JSON.stringify(picked)) mergeExtras();
+      state.channels.forEach(function (ch) {
+        if (!ch.picked) return;
+        const file = state.files[ch.id];
+        const newest = file && file.messages && file.messages[0] ? String(file.messages[0].id) : "";
+        if (!file || (lasts[ch.id] && lasts[ch.id] !== newest)) {
+          state.net[ch.id] = false;
+          ensureChannel(ch.id);
+        }
+      });
+      if (!onMessages()) return;
+      if (before !== state.channels.map(function (ch) { return ch.id; }).join(",") && hooks().render) hooks().render();
+      else refreshInbox();
+    });
+  }
+  // pulse.js loads after this file, so the listener joins on first use.
+  function watchPulse() {
+    if (state.pulseOn || typeof window === "undefined" || !window.ViktorychPulse || !window.ViktorychPulse.on) return;
+    state.pulseOn = true;
+    window.ViktorychPulse.on(function (keys) {
+      if (!keys || !keys.indexOf) return;
+      if (keys.indexOf("discord/x/index.json") >= 0 && state.loadStarted) loadPicked();
+      if ((keys.indexOf("discord/x/catalog.json") >= 0 || keys.indexOf("discord/x/join.json") >= 0 || keys.indexOf("discord/x/health.json") >= 0) && root.DiscordPicks && root.DiscordPicks.onSignal) root.DiscordPicks.onSignal();
+    });
+  }
+
   function vkTick() {
     if (typeof document === "undefined" || document.visibilityState !== "visible" || !onMessages()) return;
     // Also when the first read missed (signed in later, or VK set up since).
@@ -2370,6 +2452,22 @@
       if (!id) return;
       event.preventDefault();
       const stored = prefs();
+      if (kind === "switch") {
+        Object.keys(stored.expanded).forEach(function (key) { delete stored.expanded[key]; });
+        stored.expanded[id] = true;
+        savePrefs();
+        document.querySelectorAll(".dmsgs-sw-btn").forEach(function (el) {
+          const on = el.getAttribute("data-server") === id;
+          el.classList.toggle("on", on);
+          el.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        state.listHold = 0;
+        if (!repaintChannels() && hooks().render) hooks().render();
+        const section = document.querySelector('.dmsgs-srv[data-server="' + id + '"]');
+        const list = listEl();
+        if (section && list) list.scrollTop = Math.max(0, section.offsetTop - list.offsetTop);
+        return;
+      }
       if (kind === "toggle") {
         const willOpen = !stored.expanded[id];
         const list = listEl();
@@ -2527,6 +2625,11 @@
     syncFromHash: syncFromHash,
     _deliver: deliver,
     snapshot: rememberMessages,
-    alertSnapshot: alertSnapshot
+    alertSnapshot: alertSnapshot,
+    _reloadPicked: loadPicked,
+    _repaintKey: function () {
+      if (!onMessages()) return;
+      if (!repaintChannels() && hooks().render) hooks().render();
+    }
   };
 })(typeof window !== "undefined" ? window : globalThis);
