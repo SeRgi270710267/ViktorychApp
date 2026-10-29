@@ -252,3 +252,10 @@ index.html|Regístrate
 index.html|Entrar
 reactions.js|Shift+F10
 reactions.js|800px 0px
+servers-ui.js|MENTION_EVERYONE
+servers-ui.js|CREATE_INVITE
+servers-ui.js|MANAGE_MESSAGES
+servers-ui.js|MANAGE_CHANNELS
+servers-ui.js|MANAGE_ROLES
+servers-ui.js|MANAGE_SERVER
+servers-ui.js|Files
