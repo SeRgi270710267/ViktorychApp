@@ -260,3 +260,5 @@ servers-ui.js|MANAGE_ROLES
 servers-ui.js|MANAGE_SERVER
 servers-ui.js|Files
 people.js|Fediverse
+# onboarding.js carries its own en/es/hi/ru string tables
+own: onboarding.js

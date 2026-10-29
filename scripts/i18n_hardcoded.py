@@ -264,7 +264,7 @@ def allowed() -> set[str]:
     path = ROOT / "scripts" / "i18n_allow.txt"
     if not path.exists():
         return set()
-    return {line for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith(("# ", "keys: "))}
+    return {line for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith(("# ", "keys: "))} | {line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("own: ")}
 
 
 def find(keys: set[str], use_allow: bool = True):
@@ -272,6 +272,8 @@ def find(keys: set[str], use_allow: bool = True):
     hits = []
     for path in ui_files():
         rel = path.relative_to(ROOT).as_posix()
+        if f"own: {rel}" in allow:
+            continue
         found = scan_html(path) if path.suffix == ".html" else scan_js(path, rel)
         for line, piece in found:
             if piece in keys or f"*|{piece}" in allow or f"{rel}|{piece}" in allow:

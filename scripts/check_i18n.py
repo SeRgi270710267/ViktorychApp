@@ -143,7 +143,8 @@ def rel_of(path: Path) -> str:
 
 
 def read_allow() -> tuple[set[str], set[str]]:
-    """i18n_allow.txt: "keys: <file>" marks a file whose literals are pack keys
+    """i18n_allow.txt: "own: <file>" marks a module with its own
+    string table for every pack; "keys: <file>" marks a file whose literals are pack keys
     translated where they render; "<file>|<text>" or "*|<text>" allows one
     literal (a proper noun, brand, demo content, or technical token)."""
     keys_files, exact = set(), set()
@@ -154,6 +155,14 @@ def read_allow() -> tuple[set[str], set[str]]:
                 continue
             if line.startswith("keys: "):
                 keys_files.add(line[6:].strip())
+            elif line.startswith("own: "):
+                # A module that carries its own string table for every pack.
+                own = line[5:].strip()
+                src = (ROOT / own).read_text(encoding="utf-8")
+                missing = [code for code in PACKS if not re.search(r"\b" + code + r"\s*:\s*\{", src)]
+                if missing:
+                    raise SystemExit(f"{own} is listed as carrying its own strings but has no table for {', '.join(missing)}")
+                keys_files.add(own)
             else:
                 exact.add(line)
     return keys_files, exact
