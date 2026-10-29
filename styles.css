@@ -1389,6 +1389,21 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 }
 .media.m1 .tile.broken { min-height: 240px; }
 .tile.broken img, .tile.broken video, .media.broken img, .media.broken video { display: none; }
+/* A picture that could not load: the X picture outline on the banner colour,
+   never a broken-image glyph or an empty black frame. */
+.tile.broken { position: relative; }
+.media-gone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+.media-gone svg { width: 40px; height: 40px; fill: currentColor; display: block; }
+.tile.broken .open-original { position: relative; z-index: 1; }
+img[data-ia-wait] { visibility: hidden; }
 .unavailable {
   margin-top: 12px;
   border: 1px solid var(--line);
