@@ -189,4 +189,25 @@ assert.ok(!/sandbox/.test(JSON.stringify(frame.attrs)));
 
 assert.ok(!/sponsorblock/i.test(require("fs").readFileSync(require("path").join(__dirname, "../video-embed.js"), "utf8").split("\n").filter((line) => line.indexOf("does not call SponsorBlock") < 0).join("\n")));
 
+// TikTok and X fall back to their official players only as the last resort.
+const TT = "7300000000000000001";
+assert.strictEqual(api.tiktokVideoId("https://www.tiktok.com/@placeholder/video/" + TT + "?lang=en"), TT);
+assert.strictEqual(api.tiktokVideoId({ platform: "tiktok", id: "tiktok:" + TT }), TT);
+assert.strictEqual(api.tiktokEmbedUrl(TT), "https://www.tiktok.com/embed/v2/" + TT);
+assert.deepStrictEqual(api.match("https://www.tiktok.com/@placeholder/video/" + TT), { kind: "iframe", site: "tiktok", url: "https://www.tiktok.com/embed/v2/" + TT });
+const ttEmbed = api.officialEmbed({ platform: "tiktok", statusId: TT }, {});
+assert.strictEqual(ttEmbed.site, "tiktok");
+assert.strictEqual(ttEmbed.url, "https://www.tiktok.com/embed/v2/" + TT);
+assert.ok(ttEmbed.width > 0 && ttEmbed.height > ttEmbed.width);
+const xEmbed = api.officialEmbed({ platform: "x", statusId: STATUS }, {});
+assert.strictEqual(xEmbed.site, "x");
+assert.strictEqual(xEmbed.url, api.xEmbedUrl(STATUS));
+assert.strictEqual(api.officialEmbed({ platform: "rss" }, {}), null);
+const withBackups = api.xPlan({
+  post: { platform: "x", statusId: STATUS },
+  media: { url: "https://video.twimg.com/clip.mp4" },
+  route: (url) => ({ url: url, relay: "https://relay.test/v1/media?url=x", backups: ["https://backup.test/v1/media?url=x", "https://relay.test/v1/media?url=x", ""] })
+});
+assert.deepStrictEqual(withBackups.backups.map((row) => row.url), ["https://backup.test/v1/media?url=x"]);
+
 console.log("video embed checks passed");
