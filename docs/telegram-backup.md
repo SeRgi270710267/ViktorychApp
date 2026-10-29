@@ -6,6 +6,15 @@ The backup runs in GitHub Actions. It does not need a bot or an assistant at run
 
 The manifest is `backup/telegram-manifest.json` in the private R2 bucket (prefer `viktorych-data`). The same rows are mirrored to the D1 table `telegram_files`. The manifest is not committed.
 
+## What Telegram is used for
+
+1. **Media copy and second source.** Synced photos and videos, stories, avatars, banners, songs, covers, and the radio loop are copied at original quality. The app plays them from `/tg` when R2 fails, and the radio loop plays from Telegram first.
+2. **Uploads people made in the app.** Post photos and videos (`post-media/`), server files (`srv/`), and `highlights/` and `uploads/` are copied byte for byte. They go first in every run and are never deleted from R2. When the R2 object is missing or R2 errors, `/v1/posts/media/<id>` and the server file routes read the Telegram copy instead, with the same access checks. `/tg` does not serve these keys directly. A file over 19 MB is stored as archive parts only while the local server runs. Otherwise it is logged `skipped_too_big` and stays on R2.
+3. **Feed snapshots.** `feeds.json`, `stories.json`, `people.json`, `suggestions.json`, `data/music.json`, and `data/communities/index.json` are copied as `snap/<name>` when they change. The previous snapshot message is deleted, so the channel keeps one copy of each. `/v1/data/<name>` tries R2, then `lastgood/<name>`, then the snapshot. A good snapshot is written back to R2. Owner-only posts are still removed for other viewers. The snapshot is never read on a normal request, so it costs nothing until R2 fails. `/tg/snap/…` returns 404.
+4. **Deleted accounts.** Account deletion removes that account's rows from `telegram_files` (avatars, banners, stories, uploads, and post media), so no route can serve them. It also writes the message ids to `backup/tg-forget/` in R2. The next backup run deletes those messages from the channel, drops them from the manifest, and removes the queue file.
+5. **Render backup.** The Render backup runs the same Worker code. Add `TELEGRAM_BOT_TOKEN` to its environment (see below) and it serves `/tg`, upload copies, and feed snapshots too. That keeps them working when `workers.dev` is blocked.
+6. **Public logs.** The repository is public, so its Actions logs are too. Before a backup log line is printed, handles and account ids in object keys are replaced with a short keyed hash.
+
 ## Create the bot, the channel, and the secrets
 
 1. Open Telegram and talk to [@BotFather](https://t.me/BotFather). Send `/newbot`. Follow the prompts. Copy the token. That value is `TELEGRAM_BOT_TOKEN`.
@@ -26,6 +35,8 @@ The Worker has its own copy of the bot token. It is not the Actions secret. Push
 ```sh
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 ```
+
+For the Render backup, open the Render dashboard, then the `viktorych-backup` service, then **Environment**. Add `TELEGRAM_BOT_TOKEN` with the same bot token, and save. Render redeploys on its own.
 
 The value is never printed. Until that Worker secret is set, a signed-in `GET /tg/…` returns 503 and the app uses the next source. The token is never sent to the browser.
 
