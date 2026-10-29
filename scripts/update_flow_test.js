@@ -1,8 +1,8 @@
 const assert = require("assert");
 const update = require("../update.js");
 
-assert.strictEqual(update.shaFromVersion("viktorych-a88-abcdef1234567890"), "abcdef1234567890");
-assert.strictEqual(update.shaFromVersion("viktorych-a88-__SW_VERSION__"), "");
+assert.strictEqual(update.shaFromVersion("viktorych-a89-abcdef1234567890"), "abcdef1234567890");
+assert.strictEqual(update.shaFromVersion("viktorych-a89-__SW_VERSION__"), "");
 assert.strictEqual(update.shaFromVersion(""), "");
 
 assert.deepStrictEqual(update.notesOf({ changelog: [" One ", "One", "", "Two"] }), ["One", "Two"]);
@@ -38,7 +38,11 @@ assert.ok(!JSON.stringify(fields).includes("nope"));
 
 assert.strictEqual(update.manifestPending("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "2026-10-27T00:00:00Z", "2020-01-01T00:00:00Z"), true);
 assert.strictEqual(update.manifestPending("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "2020-01-01T00:00:00Z", "2026-10-27T00:00:00Z"), false);
-assert.strictEqual(update.manifestPending("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "", ""), true);
+assert.strictEqual(update.manifestPending("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "", ""), false);
+// version.json older than the running build (a stuck deploy) stays idle.
+assert.strictEqual(update.manifestPending("cccccccccccccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddddddddddd", "2026-10-28T22:08:00Z", "2026-10-29T01:47:00Z"), false);
+// A sha already applied on this device is never offered again.
+assert.strictEqual(update.manifestPending("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "2026-10-27T00:00:00Z", "2020-01-01T00:00:00Z", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), false);
 assert.strictEqual(update.manifestPending("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "2026-10-27T00:00:00Z", "2020-01-01T00:00:00Z"), false);
 assert.strictEqual(update.shouldOfferReset(1), false);
 assert.strictEqual(update.shouldOfferReset(2), true);
