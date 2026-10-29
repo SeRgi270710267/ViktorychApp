@@ -267,6 +267,7 @@ def private_keys(root: Path, servers: list) -> list:
 
 INVITE_CODE = re.compile(r"^[A-Za-z0-9-]{2,32}$")
 JOIN_KEY = PREFIX + "join.json"
+HEALTH_KEY = PREFIX + "health.json"
 
 
 def join_request(request) -> dict | None:
@@ -337,3 +338,30 @@ def join_invite(token: str, code: str, transport=None) -> tuple[str, str]:
         return join_outcome(exc.code, body)
     except (urllib.error.URLError, TimeoutError, OSError):
         return "error", ""
+
+
+def key_hash(token: str) -> str:
+    """Short fingerprint of the token. Never reversible; safe to store."""
+    text = (token or "").strip()
+    if not text:
+        return ""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+
+
+def health_doc(status: str, reason: str, token: str, at: str) -> dict:
+    return {
+        "status": status if status in ("ok", "invalid") else "ok",
+        "reason": reason if reason in ("unauthorized", "forbidden") else "",
+        "keyHash": key_hash(token) if status == "invalid" else "",
+        "at": at,
+    }
+
+
+def key_blocked(health, token: str) -> bool:
+    """True when this exact key already failed with 401/403."""
+    if not isinstance(health, dict) or health.get("status") != "invalid":
+        return False
+    if health.get("reason") not in ("unauthorized", "forbidden"):
+        return False
+    held = str(health.get("keyHash") or "")
+    return bool(held) and held == key_hash(token)

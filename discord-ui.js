@@ -1117,7 +1117,8 @@
 
   function listHtml(route) {
     const add = (root.DiscordPicks && root.DiscordPicks.addButtonHtml) ? root.DiscordPicks.addButtonHtml() : "";
-    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Messages") + "<" + "/h1>" + add + "</header>");
+    const warn = (root.DiscordPicks && root.DiscordPicks.keyBannerHtml) ? root.DiscordPicks.keyBannerHtml() : "";
+    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Messages") + "<" + "/h1>" + add + "</header>") + warn;
     const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
     if (!text.length) {
       return head + ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No conversations yet") + "<" + "/h2><p" + ">" + tr("Channels set to messages show up here. None are configured yet.") + "<" + "/p></div>");
@@ -2048,6 +2049,7 @@
       loadVk();
       watchPulse();
       loadPicked();
+      if (root.DiscordPicks && root.DiscordPicks.ensureHealth) root.DiscordPicks.ensureHealth();
       return loadDoc("discord/index.json", function (index, fresh) {
         if (index) {
           applyIndex(index);
@@ -2135,7 +2137,7 @@
     window.ViktorychPulse.on(function (keys) {
       if (!keys || !keys.indexOf) return;
       if (keys.indexOf("discord/x/index.json") >= 0 && state.loadStarted) loadPicked();
-      if ((keys.indexOf("discord/x/catalog.json") >= 0 || keys.indexOf("discord/x/join.json") >= 0) && root.DiscordPicks && root.DiscordPicks.onSignal) root.DiscordPicks.onSignal();
+      if ((keys.indexOf("discord/x/catalog.json") >= 0 || keys.indexOf("discord/x/join.json") >= 0 || keys.indexOf("discord/x/health.json") >= 0) && root.DiscordPicks && root.DiscordPicks.onSignal) root.DiscordPicks.onSignal();
     });
   }
 
@@ -2578,6 +2580,10 @@
     _deliver: deliver,
     snapshot: rememberMessages,
     alertSnapshot: alertSnapshot,
-    _reloadPicked: loadPicked
+    _reloadPicked: loadPicked,
+    _repaintKey: function () {
+      if (!onMessages()) return;
+      if (!repaintChannels() && hooks().render) hooks().render();
+    }
   };
 })(typeof window !== "undefined" ? window : globalThis);
