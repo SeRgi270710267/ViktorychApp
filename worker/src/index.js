@@ -5405,7 +5405,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/communities" || path.startsWith("/v1/communities/") || path === "/v1/owner/communities" || path.startsWith("/v1/owner/communities/")) {
     return handleCommunityRoute(request, env, path, url, { json, sessionAccount, rateHit, limited, readJson, requireOwnerHidden, dispatchWorkflows, presentAccount });
   }
-  if (path === "/.well-known/webfinger" || path === "/.well-known/nostr.json" || path.startsWith("/ap/") || path.startsWith("/v1/federation/")) {
+  if (path === "/.well-known/nostr.json" || path.startsWith("/v1/federation/")) {
     return handleFederationRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
   }
   if (path === "/v1/account/identities" || path.startsWith("/v1/account/identities/")) {
