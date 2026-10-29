@@ -78,6 +78,16 @@ export async function keyFromPin(pin, salt, iterations) {
   );
 }
 
+/* The per-device key the server keeps, sent as base64url. It is imported
+   as a key the page cannot read back out. */
+export async function keyFromServer(text) {
+  const clean = String(text || "").replace(/-/g, "+").replace(/_/g, "/");
+  const pad = clean + "===".slice((clean.length + 3) % 4);
+  const raw = Uint8Array.from(atob(pad), function (ch) { return ch.charCodeAt(0); });
+  if (raw.length !== 32) throw new Error("key");
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
 export async function encryptBytes(key, plain) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = plain instanceof Uint8Array ? plain : encoder.encode(String(plain || ""));

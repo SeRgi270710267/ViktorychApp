@@ -3200,7 +3200,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const body = myDevices && myDevices.loaded
       ? (rows || `<div class="set-block"><p class="phandle">${esc(myDevices.failed ? tr("Could not load your devices.") : tr("No devices yet."))}</p></div>`)
       : `<div class="set-block"><p class="phandle">${esc(tr("Loading…"))}</p></div>`;
-    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div>`;
+    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div><div class="set-block device-wipe"><p class="phandle">${esc(tr("Signs this device out and erases everything the app saved on it: drafts, messages, notifications, downloads and the offline copy."))}</p><button class="outline danger" type="button" data-act="device-wipe-self">${esc(tr("Remove this device and erase its data"))}</button></div>`;
   }
 
   function accountsApi() {
@@ -17953,6 +17953,22 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
         if (!body || !Array.isArray(body.devices)) { toast(tr("Could not rename that device.")); return; }
         myDevices = { list: body.devices, busy: false, loaded: true };
         render();
+      });
+      return;
+    }
+    if (act === "device-wipe-self") {
+      if (!confirm(tr("Remove this device and erase its data?"))) return;
+      const mine = ((myDevices && myDevices.list) || []).find((d) => d.current);
+      const lock = window.ViktorychAppLock;
+      const erase = () => {
+        const acc = window.ViktorychAccounts;
+        if (acc && acc.signOut) acc.signOut();
+        else if (lock && lock.wipe) lock.wipe();
+      };
+      if (!mine) { erase(); return; }
+      devicesCall("/v1/devices/remove", { id: mine.id }).then((body) => {
+        if (!body) { toast(tr("Could not remove that device.")); return; }
+        erase();
       });
       return;
     }

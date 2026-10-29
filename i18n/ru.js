@@ -1,5 +1,11 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("ru", {
+  "Data on this device": "Данные на этом устройстве",
+  "Drafts, messages and notifications saved here are encrypted with a key only the server keeps whenever the app is in the background. Signing out or removing this device from My devices erases them.": "Черновики, сообщения и уведомления, сохранённые здесь, шифруются ключом, который хранится только на сервере, когда приложение уходит в фон. Выход из аккаунта или удаление устройства в разделе «Мои устройства» стирает их.",
+  "Encrypt data on this device": "Шифровать данные на этом устройстве",
+  "Signs this device out and erases everything the app saved on it: drafts, messages, notifications, downloads and the offline copy.": "Выходит из аккаунта на этом устройстве и стирает всё, что приложение на нём сохранило: черновики, сообщения, уведомления, загрузки и офлайн-копию.",
+  "Remove this device and erase its data": "Удалить это устройство и стереть его данные",
+  "Remove this device and erase its data?": "Удалить это устройство и стереть его данные?",
   "Play with the X player": "Смотреть в плеере X",
   "Play with the TikTok player": "Смотреть в плеере TikTok",
   "3 months": "3 месяца",

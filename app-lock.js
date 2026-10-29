@@ -2,7 +2,7 @@
    PRF output, when the authenticator has it, is the AES-GCM key.
    Otherwise a user-verified assertion is checked locally and a PIN
    derives the key with PBKDF2. Unlock does not use the network. */
-import { keyFromPin, keyFromPrf, backoffMs, checkVerifier, decryptJson, encryptJson, makeVerifier, sensitiveDoc, sensitiveStorageKey, PIN_ITERATIONS } from "./shared/app-lock-crypto.js";
+import { keyFromServer, keyFromPin, keyFromPrf, backoffMs, checkVerifier, decryptJson, encryptJson, makeVerifier, sensitiveDoc, sensitiveStorageKey, PIN_ITERATIONS } from "./shared/app-lock-crypto.js";
 import { b64urlToBytes, bytesToB64url, credentialToJSON, hydrateCreation, hydrateRequest, prfBytes, randomBytes, verifyAssertion, verifyRegistration } from "./shared/webauthn.js";
 
 const PREFS_KEY = "viktorychapp-lock-prefs";
@@ -478,18 +478,171 @@ async function setPin(pin, confirm) {
 }
 
 async function wipeAll() {
+  await wipeData(false);
+  location.reload();
+}
+
+/* Local data protection with a key the server keeps. Each signed-in device
+   gets its own key from /v1/devices/key and holds it only in memory. When
+   the app goes to the background or closes, drafts, messages and
+   notifications saved on the device are sealed with it and the plain copy
+   is cleared; coming back restores them from memory. A cold start fetches
+   the key again to open the sealed copy. Removing the device or signing out
+   drops the key on the server, and a removed device wipes itself the next
+   time it reaches the server. The session token stays readable so the
+   device can ask for its key. */
+const GUARD_KEY = "viktorychapp-lock-guard";
+const GUARD_SEALED = "viktorychapp-lock-dsealed";
+let guardKey = null;
+let guardHeld = null;
+let guardBusy = null;
+
+function guardOn() {
+  try { return localStorage.getItem(GUARD_KEY) !== "0"; } catch (err) { return true; }
+}
+function guardSealed() {
+  try { return localStorage.getItem(GUARD_SEALED) === "1"; } catch (err) { return false; }
+}
+function setGuardSealed(on) {
+  try {
+    if (on) localStorage.setItem(GUARD_SEALED, "1");
+    else localStorage.removeItem(GUARD_SEALED);
+  } catch (err) { /* nothing to mark */ }
+}
+function guardSession() {
+  try {
+    const raw = localStorage.getItem("viktorychapp-account-v1") || localStorage.getItem("superintelapp-account-v1");
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && parsed.token ? parsed : null;
+  } catch (err) {
+    return null;
+  }
+}
+function guardApi() {
+  const acc = window.ViktorychAccounts;
+  const cur = acc && acc.currentApi ? acc.currentApi() : "";
+  const bag = window.VIKTORYCH_ACCOUNTS || {};
+  return String(cur || bag.api || bag.backupApi || "").replace(/\/$/, "");
+}
+function sessionRow(key) {
+  const text = String(key || "").toLowerCase();
+  return text.indexOf("account-v1") >= 0 || text.indexOf("accounts-session") >= 0 || text.indexOf("pending-v1") >= 0;
+}
+async function guardSnapshot() {
+  const body = await snapshot();
+  body.local = body.local.filter(function (row) { return !sessionRow(row.key); });
+  body.opfs = [];
+  return body;
+}
+async function fetchGuardKey() {
+  const session = guardSession();
+  const api = guardApi();
+  if (!session || !api || !window.fetch) return { skip: true };
+  let res = null;
+  try {
+    res = await fetch(api + "/v1/devices/key", { headers: { Authorization: "Bearer " + session.token }, cache: "no-store", credentials: "omit" });
+  } catch (err) {
+    return { offline: true };
+  }
+  let body = null;
+  try { body = await res.json(); } catch (err) { body = null; }
+  if (res.status === 401 && body && body.error === "unauthorized") return { revoked: true };
+  if (!res.ok || !body || typeof body.key !== "string" || body.key.length < 43) return { skip: true };
+  try { return { key: await keyFromServer(body.key) }; } catch (err) { return { skip: true }; }
+}
+async function guardSeal() {
+  if (!guardKey || !guardOn() || readPrefs().on || guardSealed() || !guardSession()) return false;
+  const body = await guardSnapshot();
+  if (!body.local.length && !body.docs.length) return false;
+  const packed = await encryptJson(guardKey, body);
+  const db = await openDb();
+  await kvSet(db, "guard-vault", packed);
+  db.close();
+  guardHeld = body;
+  setGuardSealed(true);
+  clearLocal(body.local);
+  await clearDocs(body.docs);
+  return true;
+}
+async function guardOpen(body) {
+  await restore(body);
+  setGuardSealed(false);
+  guardHeld = null;
+  try {
+    const db = await openDb();
+    await kvDel(db, "guard-vault");
+    db.close();
+  } catch (err) { /* the next seal overwrites it */ }
+}
+function tellSignedOut() {
+  const msg = { type: "auth", on: false, token: "", wipe: "signout" };
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg);
+  } catch (err) { /* no worker yet */ }
+}
+async function remoteWipe() {
+  tellSignedOut();
+  await wipeData(false);
+  location.reload();
+}
+async function guardBoot() {
+  if (!guardSession()) {
+    // Signed out with a sealed copy left behind: nothing can open it any more.
+    if (guardSealed()) {
+      setGuardSealed(false);
+      try { const db = await openDb(); await kvDel(db, "guard-vault"); db.close(); } catch (err) { /* already gone */ }
+    }
+    return;
+  }
+  const got = await fetchGuardKey();
+  if (got.revoked) { await remoteWipe(); return; }
+  if (!got.key) {
+    if (got.offline && guardSealed()) window.addEventListener("online", function again() { window.removeEventListener("online", again); guardBoot(); });
+    return;
+  }
+  if (!guardSealed()) { guardKey = got.key; return; }
+  const db = await openDb();
+  const packed = await kvGet(db, "guard-vault");
+  db.close();
+  if (!packed) { setGuardSealed(false); guardKey = got.key; return; }
+  let body = null;
+  try { body = await decryptJson(got.key, packed); } catch (err) { body = null; }
+  if (!body) { await guardOpen({ local: [], docs: [] }); guardKey = got.key; return; }
+  // The app already started without the sealed copy; start again with it.
+  await guardOpen(body);
+  location.reload();
+}
+function guardHide() {
+  if (!guardKey || guardBusy) return;
+  guardBusy = guardSeal().catch(function () { return false; }).then(function () { guardBusy = null; });
+}
+function guardShow() {
+  const held = guardHeld;
+  if (!held || !guardSealed()) return;
+  Promise.resolve(guardBusy).then(function () { return guardOpen(held); }).catch(function () {});
+}
+
+/* Everything this app keeps on the device. Sign-out keeps the language and
+   look of the app; a removed or wiped device keeps nothing. */
+const KEEP_ON_SIGNOUT = /^(viktorychapp|superintelapp)-(lang|theme|font|accent|density|motion|contrast|welcome|install-dismissed|lock-guard|settings-v1)/;
+async function wipeData(keepPrefs) {
   const prefixes = ["viktorychapp-", "superintelapp-", "rss-feeds-"];
   try {
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
     keys.forEach(function (key) {
       if (!key) return;
+      if (keepPrefs && (KEEP_ON_SIGNOUT.test(key) || key === "superintelapp-lang")) return;
       for (let i = 0; i < prefixes.length; i++) {
-        if (key.indexOf(prefixes[i]) === 0) localStorage.removeItem(key);
+        if (key.indexOf(prefixes[i]) === 0) { localStorage.removeItem(key); return; }
       }
     });
   } catch (err) { /* private mode */ }
-  try { sessionStorage.clear(); } catch (err) { /* already clear */ }
+  // Sign-out keeps this tab's session copy (it ends with the tab), so a
+  // just-created account number can still be used to sign back in.
+  if (!keepPrefs) {
+    try { sessionStorage.clear(); } catch (err) { /* already clear */ }
+  }
   const names = [DB_NAME, DOC_DB, "superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "viktorych-discord"];
   names.forEach(function (name) {
     try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
@@ -502,8 +655,16 @@ async function wipeAll() {
   }
   if (window.ViktorychLocal && window.ViktorychLocal.wipe) window.ViktorychLocal.wipe();
   memoryKey = null;
+  guardKey = null;
+  guardHeld = null;
   setSealed(false);
-  location.reload();
+}
+
+function guardSettingsHtml() {
+  if (!guardSession()) return "";
+  const on = guardOn();
+  return "<h2>" + esc(tr("Data on this device")) + "</h2><p class=\"phandle\">" + esc(tr("Drafts, messages and notifications saved here are encrypted with a key only the server keeps whenever the app is in the background. Signing out or removing this device from My devices erases them.")) + "</p>" +
+    '<button class="tab-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" data-sec="guard-toggle"><span>' + esc(tr("Encrypt data on this device")) + "</span><i></i></button>";
 }
 
 function settingsHtml() {
@@ -519,7 +680,7 @@ function settingsHtml() {
   const pinFields = pending
     ? '<label class="acct-field"><input id="lock-pin" name="pin" type="password" autocomplete="new-password" inputmode="numeric" maxlength="32"><span>' + esc(tr("Set a device PIN")) + '</span></label><label class="acct-field"><input id="lock-pin-2" name="confirm" type="password" autocomplete="new-password" inputmode="numeric" maxlength="32"><span>' + esc(tr("Confirm the PIN")) + '</span></label><button class="outline" type="button" data-sec="lock-pin">' + esc(tr("Set a device PIN")) + "</button><p class=\"acct-error\">" + esc(lockError) + "</p>"
     : "";
-  return "<h2>" + esc(tr("App lock")) + "</h2><p class=\"phandle\">" + esc(modeText) + "</p>" +
+  return guardSettingsHtml() + "<h2>" + esc(tr("App lock")) + "</h2><p class=\"phandle\">" + esc(modeText) + "</p>" +
     '<button class="tab-switch' + (prefs.lockOnOpen ? " on" : "") + '" type="button" role="switch" aria-checked="' + (prefs.lockOnOpen ? "true" : "false") + '" data-sec="lock-open"><span>' + esc(tr("Lock when the app opens")) + "</span><i></i></button>" +
     "<h2>" + esc(tr("Lock after time in the background")) + "</h2><div class=\"theme-row\">" +
     idle(0, tr("Never")) + idle(1, tr("After 1 minute")) + idle(5, tr("After 5 minutes")) + idle(15, tr("After 15 minutes")) + idle(60, tr("1 hour")) +
@@ -563,6 +724,13 @@ document.addEventListener("click", function (event) {
     return;
   }
   const act = node.getAttribute("data-sec");
+  if (act === "guard-toggle") {
+    event.preventDefault();
+    event.stopPropagation();
+    try { localStorage.setItem(GUARD_KEY, guardOn() ? "0" : "1"); } catch (err) { /* stays as it was */ }
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    return;
+  }
   if (!act || act.indexOf("lock-") !== 0) return;
   event.preventDefault();
   event.stopPropagation();
@@ -621,6 +789,12 @@ document.addEventListener("click", function (event) {
 }, true);
 
 document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "hidden") guardHide();
+  else guardShow();
+});
+window.addEventListener("pagehide", guardHide);
+window.addEventListener("freeze", guardHide);
+document.addEventListener("visibilitychange", function () {
   const prefs = readPrefs();
   if (!prefs.on) return;
   if (document.visibilityState === "hidden") {
@@ -649,6 +823,7 @@ window.addEventListener("viktorych-account-deleted", function () {
 });
 
 if (sealed()) showLock();
+if (!localTest() || window.__guardTest) setTimeout(function () { guardBoot().catch(function () {}); }, 0);
 
 window.ViktorychAppLock = {
   setup: setup,
@@ -656,6 +831,8 @@ window.ViktorychAppLock = {
   unlock: unlock,
   seal: seal,
   wipe: wipeAll,
+  wipeData: wipeData,
+  guard: { boot: guardBoot, seal: guardSeal, show: guardShow, hide: guardHide, sealed: guardSealed, on: guardOn, ready: function () { return !!guardKey; } },
   settingsHtml: settingsHtml,
   prefs: readPrefs,
   sealed: sealed,
