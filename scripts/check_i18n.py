@@ -72,6 +72,7 @@ ALLOW_IDENTICAL = {
     "Discord",
     "Threads",
     "VK",
+    "Nostr",
     "Bot",
     "Radio",
     "Post",

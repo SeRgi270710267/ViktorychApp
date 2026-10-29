@@ -8,9 +8,17 @@ export const FEATURES = {
   stories: { paths: ["/v1/stories", "/v1/story-bar"] },
   lives: { paths: ["/v1/live"] },
   telegram: { paths: ["/tg"] },
-  pills: { paths: ["/v1/pills"] }
+  pills: { paths: ["/v1/pills"] },
+  // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
+  nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true }
 };
 export const FEATURE_NAMES = Object.keys(FEATURES);
+
+function defaults() {
+  const off = {};
+  FEATURE_NAMES.forEach((name) => { if (FEATURES[name].defaultOff) off[name] = true; });
+  return off;
+}
 
 const MEMO_MS = 30 * 1000;
 let memo = null;
@@ -33,17 +41,19 @@ export function forgetFlags() {
 export async function readFlags(env, now) {
   const at = Number(now) || Date.now();
   if (memo && at - memoAt < MEMO_MS) return memo;
-  const off = {};
+  const off = defaults();
   if (env && env.DB) {
     try {
       await ensureFlagSchema(env);
       const rows = await env.DB.prepare("SELECT name, off FROM feature_flags").all();
       for (const row of (rows && rows.results) || []) {
-        if (FEATURES[row.name] && Number(row.off) === 1) off[row.name] = true;
+        if (!FEATURES[row.name]) continue;
+        if (Number(row.off) === 1) off[row.name] = true;
+        else delete off[row.name];
       }
     } catch (err) {
-      // An unreadable flag table never turns a feature off.
-      return memo || {};
+      // An unreadable flag table never turns a feature off (or a default-off one on).
+      return memo || defaults();
     }
   }
   memo = off;
