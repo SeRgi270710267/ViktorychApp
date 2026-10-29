@@ -6,9 +6,38 @@
 
    Server to client: {op:"ready", online:[ids]} {op:"event", c, e}
    {op:"typing", c, a:memberId} {op:"online", a:memberId, on} {op:"resync"}
-   Client to server: {op:"typing", c} {op:"view", c}
+   {op:"activity", a:memberId, act} with act {k, n, d, s} or null.
+   Client to server: {op:"typing", c, p?} {op:"view", c} {op:"activity", act}
+   Typing in a thread names the thread as c and its parent channel as p;
+   the parent decides who may see it. Activities (rich presence) live only
+   on the socket attachments, so they vanish with the last socket. */
+const ACT_KINDS = ["playing", "listening", "watching", "custom"];
 
-   Internal stub routes (not public):
+/* Rich presence from the client: kind, name, detail, start time. */
+export function cleanActivity(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const k = String(raw.k || "");
+  if (ACT_KINDS.indexOf(k) < 0) return null;
+  const strip = (v, max) => String(v == null ? "" : v).replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
+  const n = strip(raw.n, 64);
+  const d = strip(raw.d, 96);
+  const e = k === "custom" ? strip(raw.e, 16) : "";
+  if (!n && !e) return null;
+  const s = Math.floor(Number(raw.s) || 0);
+  return { k, n, d, e, s: s > 0 && s <= Date.now() + 60000 ? s : 0 };
+}
+
+function activities(room) {
+  const out = {};
+  const at = {};
+  socketsOf(room).forEach((ws) => {
+    const a = att(ws);
+    if (!a.x || !MEMBER.test(String(a.m || ""))) return;
+    if (!at[a.m] || (Number(a.xt) || 0) > at[a.m]) { out[a.m] = a.x; at[a.m] = Number(a.xt) || 0; }
+  });
+  return out;
+}
+/* Internal stub routes (not public):
      POST https://srv.internal/event   {c, e, to?:[accountIds]}
      POST https://srv.internal/resync  {a?}
      POST https://srv.internal/drop    {a}
@@ -94,7 +123,7 @@ export async function srvFetch(room, request) {
   const server = pair[1];
   room.ctx.acceptWebSocket(server);
   server.serializeAttachment({ a: account, m: member, v: visible, c: "", n: 0, w: Date.now(), t: 0 });
-  send(server, JSON.stringify({ op: "ready", me: member, online: onlineIds(room, server).concat([member]).filter((v, i, all) => all.indexOf(v) === i) }));
+  send(server, JSON.stringify({ op: "ready", me: member, online: onlineIds(room, server).concat([member]).filter((v, i, all) => all.indexOf(v) === i), acts: activities(room) }));
   if (!wasOnline) broadcastText(room, JSON.stringify({ op: "online", a: member, on: true }), (a) => a.a !== account);
   return new Response(null, { status: 101, webSocket: client });
 }
@@ -123,9 +152,31 @@ export async function srvMessage(room, ws, message) {
     try { ws.serializeAttachment(a); } catch (err) { /* closing */ }
     return;
   }
+  if (msg.op === "activity") {
+    const act = cleanActivity(msg.act);
+    if (JSON.stringify(act || null) === JSON.stringify(a.x || null)) {
+      try { ws.serializeAttachment(a); } catch (err) { /* closing */ }
+      return;
+    }
+    a.x = act;
+    a.xt = now;
+    try { ws.serializeAttachment(a); } catch (err) { /* closing */ }
+    /* Other tabs of the same person keep theirs; the newest one shows. */
+    socketsOf(room).forEach((other) => {
+      if (other === ws) return;
+      const o = att(other);
+      if (o.a !== a.a || JSON.stringify(o.x || null) === JSON.stringify(act || null)) return;
+      o.x = act; o.xt = now;
+      try { other.serializeAttachment(o); } catch (err) { /* closing */ }
+    });
+    broadcastText(room, JSON.stringify({ op: "activity", a: a.m, act: act }), () => true);
+    return;
+  }
   if (msg.op === "typing") {
     const c = String(msg.c || "");
-    if (!CHANNEL.test(c) || visible.indexOf(c) < 0) return;
+    const p = String(msg.p || "");
+    const gate = p && CHANNEL.test(p) ? p : c;
+    if (!CHANNEL.test(c) || visible.indexOf(gate) < 0) return;
     if (now - (Number(a.t) || 0) < TYPING_GAP) {
       try { ws.serializeAttachment(a); } catch (err) { /* closing */ }
       return;
@@ -133,7 +184,7 @@ export async function srvMessage(room, ws, message) {
     a.t = now;
     try { ws.serializeAttachment(a); } catch (err) { /* closing */ }
     const payload = JSON.stringify({ op: "typing", c: c, a: a.m });
-    broadcastText(room, payload, (other) => other.a !== a.a && Array.isArray(other.v) && other.v.indexOf(c) >= 0);
+    broadcastText(room, payload, (other) => other.a !== a.a && Array.isArray(other.v) && other.v.indexOf(gate) >= 0);
     return;
   }
   try { ws.serializeAttachment(a); } catch (err) { /* closing */ }

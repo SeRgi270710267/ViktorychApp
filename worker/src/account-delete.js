@@ -510,6 +510,14 @@ async function wipeDatabase(env, job) {
     push("DELETE FROM srv_reads WHERE account_id = ?", publicId);
     push("DELETE FROM srv_notify WHERE account_id = ?", publicId);
     push("DELETE FROM srv_bans WHERE account_id = ?", publicId);
+    if (tables.some((t) => t.name === "srv_threads")) {
+      // Threads and events outlive their starter, like other people's replies.
+      push("UPDATE srv_threads SET owner_id = '', owner_mid = '' WHERE owner_id = ?", publicId);
+      push("UPDATE srv_events SET creator_id = '', creator_mid = '' WHERE creator_id = ?", publicId);
+      push("DELETE FROM srv_poll_votes WHERE account_id = ?", publicId);
+      push("DELETE FROM srv_event_rsvps WHERE account_id = ?", publicId);
+      push("UPDATE srv_events SET going = (SELECT COUNT(*) FROM srv_event_rsvps r WHERE r.event_id = srv_events.id AND r.status = 'going'), interested = (SELECT COUNT(*) FROM srv_event_rsvps r WHERE r.event_id = srv_events.id AND r.status = 'interested') WHERE server_id IN (SELECT server_id FROM srv_members WHERE account_id = ?)", publicId);
+    }
     push("UPDATE srv_servers SET member_count = member_count - 1 WHERE id IN (SELECT server_id FROM srv_members WHERE account_id = ?)", publicId);
     push("DELETE FROM srv_members WHERE account_id = ?", publicId);
   }

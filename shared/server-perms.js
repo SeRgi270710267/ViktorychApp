@@ -18,11 +18,14 @@ export const PERM = {
   REACT: 1024,
   ATTACH: 2048,
   MODERATE: 4096,
+  MANAGE_EVENTS: 8192,
+  CREATE_THREADS: 16384,
+  MANAGE_THREADS: 32768,
   ADMIN: 1 << 20
 };
 
 export const ALL_PERMS = Object.keys(PERM).reduce((sum, key) => sum | PERM[key], 0);
-export const DEFAULT_EVERYONE = PERM.VIEW | PERM.SEND | PERM.REACT | PERM.ATTACH | PERM.CREATE_INVITE;
+export const DEFAULT_EVERYONE = PERM.VIEW | PERM.SEND | PERM.REACT | PERM.ATTACH | PERM.CREATE_INVITE | PERM.CREATE_THREADS;
 
 export function cleanPerms(value) {
   const n = Number(value);
