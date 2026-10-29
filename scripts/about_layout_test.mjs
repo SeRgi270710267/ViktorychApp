@@ -2,6 +2,7 @@
    The edit sheet is separate. Empty sections stay out of other people's view. */
 import fs from "node:fs";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
@@ -30,7 +31,7 @@ function staticChecks() {
   const external = read("app.js");
   const profile = external.slice(external.indexOf("function profileView"), external.indexOf("function statusView"));
   if (profile.includes("ProfileAbout") || profile.includes("?tab=about")) fail("external profiles must not grow an About tab");
-  if (!read("sw.js").includes('VERSION = "viktorych-a127-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a128-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok about layout rules");
 }
 
@@ -133,4 +134,6 @@ async function browserChecks() {
 }
 
 staticChecks();
+/* Badge achievement toast and its settings ride along with the profile badges. */
+execFileSync(process.execPath, [path.join(root, "scripts", "achievement_test.js")], { stdio: "inherit" });
 await browserChecks();

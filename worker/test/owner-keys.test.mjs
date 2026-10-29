@@ -12,9 +12,9 @@ import {
 import { migrateOwnerKeys } from "../src/owner-keys.js";
 
 const OWNER = "mirathorn";
-const SECRET = "sessionid=super-secret-cookie-value";
-const BACKUP = "sessionid=backup-secret-cookie-value";
-const LEGACY = "sessionid=legacy-kept-cookie-value";
+const SECRET = "sessionid=super-secret-cookie-value"; // secret-scan: allow synthetic test value
+const BACKUP = "sessionid=backup-secret-cookie-value"; // secret-scan: allow synthetic test value
+const LEGACY = "sessionid=legacy-kept-cookie-value"; // secret-scan: allow synthetic test value
 const ENC = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
 const JOB = "dispatch-test-token";
 
@@ -119,7 +119,7 @@ test("encryption round-trips and the mask never contains the value", async () =>
   const parsed = parseMaterial("cookie", "# Netscape HTTP Cookie File\n.tiktok.com\tTRUE\t/\tTRUE\t1000\tsessionid\tsuper-secret-cookie-value\n", Date.now());
   assert.equal(parsed.ok, true);
   assert.equal(parsed.expired, true);
-  assert.equal(parsed.material, "sessionid=super-secret-cookie-value");
+  assert.equal(parsed.material, "sessionid=super-secret-cookie-value"); // secret-scan: allow synthetic test value
   const header = parseMaterial("cookie", SECRET, Date.now());
   assert.equal(header.ok, true);
   assert.equal(header.expired, false);
