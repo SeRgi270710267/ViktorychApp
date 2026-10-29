@@ -16,3 +16,7 @@ to the device's own emoji character.
 
 The page footer carries a short attribution line, and this file holds the full
 notice.
+
+## Emoji picker data
+
+`data/emoji.json` lists emoji and their English names from the Unicode emoji test data (emoji-test.txt, Unicode 15.1 and earlier), used under the Unicode License (https://www.unicode.org/license.txt). The emoji are drawn by the device font; no image assets are shipped.
