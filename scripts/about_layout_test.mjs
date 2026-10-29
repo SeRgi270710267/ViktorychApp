@@ -136,4 +136,6 @@ async function browserChecks() {
 staticChecks();
 /* Badge achievement toast and its settings ride along with the profile badges. */
 execFileSync(process.execPath, [path.join(root, "scripts", "achievement_test.js")], { stdio: "inherit" });
+/* Settings alerts reuse the same pop-out for warnings and the auto-open countdown. */
+execFileSync(process.execPath, [path.join(root, "scripts", "setting_alerts_test.js")], { stdio: "inherit" });
 await browserChecks();
