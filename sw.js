@@ -4,7 +4,7 @@ const VERSION = "viktorych-a95-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T03:12:00Z-live-translate
+// cache-bust: 2026-10-29T03:03:00Z-games
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -1477,8 +1477,18 @@ async function runApply(fresh) {
 }
 
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
+// While a game is open the page tells us, and background feed work waits.
+let gameBusyUntil = 0;
+function gameBusy() {
+  return gameBusyUntil > Date.now();
+}
+
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "game-busy") {
+    gameBusyUntil = data.on ? Date.now() + 3 * 60 * 1000 : 0;
+    return;
+  }
   if (data.type === "drop-profile-media") {
     event.waitUntil((async () => {
       const names = await caches.keys();
@@ -2390,9 +2400,9 @@ async function receiveShare(request) {
 }
 
 self.addEventListener("periodicsync", (event) => {
-  if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
+  if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
   if (event.tag === "notifications") event.waitUntil(Promise.all([refreshAndNotify(), refreshAccountNotes()]));
-  if (event.tag === "weather") event.waitUntil(refreshWeather());
+  if (event.tag === "weather" && !gameBusy()) event.waitUntil(refreshWeather());
 });
 
 self.addEventListener("sync", (event) => {
@@ -2401,7 +2411,7 @@ self.addEventListener("sync", (event) => {
 
 // Background Sync uses the same feed refresh as periodic sync.
 self.addEventListener("sync", (event) => {
-  if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
+  if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
 });
 
 self.addEventListener("push", (event) => {

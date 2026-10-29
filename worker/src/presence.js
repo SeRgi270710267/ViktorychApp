@@ -4,6 +4,7 @@
    generic account channel only when the visible state, privacy, or
    custom status changes. */
 
+import { playingNow } from "./games.js";
 import {
   PRESENCE_CACHE_MS,
   WRITE_WINDOW_MS,
@@ -546,6 +547,7 @@ export async function handleFriendPresence(request, env, deps) {
   const views = await decorate(env, account.public_id, visible.map((row) => row.public_id), now);
   const byId = new Map();
   views.forEach((view) => byId.set(view.id, view));
+  const games = await playingNow(env, visible.map((row) => row.public_id));
   const friends = visible.map((row) => {
     const view = byId.get(row.public_id) || { state: "offline", exact: false, lastSeen: 0, emoji: "", text: "" };
     const photo = avatarOf(request, row);
@@ -559,7 +561,9 @@ export async function handleFriendPresence(request, env, deps) {
       exact: !!view.exact,
       lastSeen: Number(view.lastSeen) || 0,
       emoji: view.emoji || "",
-      text: view.text || ""
+      text: view.text || "",
+      // Only for friends whose presence you can already see.
+      playing: view.state && view.state !== "offline" ? games.get(String(row.public_id)) || "" : ""
     };
   });
   friends.sort((a, b) => {
