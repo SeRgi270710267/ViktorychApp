@@ -1525,7 +1525,7 @@ def main() -> None:
     hidden_chips = css[css.index(".topbar.is-hidden ~ .yt-chips"):css.index(".topbar.is-hidden ~ .yt-chips") + 160]
     check("${head}${strip}${chips}${save}<div class=\"subs-feed\">" in subs_markup and "display: flow-root" in css[css.index(".subs-feed"):css.index(".subs-feed") + 80] and "z-index: 0" in css[css.index(".subs.grid .yt-grid"):css.index(".subs.grid .yt-grid") + 240], "the groups row sits under the channel strip and outside the video grid")
     check("top: env(safe-area-inset-top)" in hidden_chips, "the groups row sticks to the top when the phone header hides")
-    subs_strip = app[app.index("const strip = "):app.index("const strip = ") + 1100]
+    subs_strip = app[app.index("const strip = `<div class=\"yt-strip\""):app.index("const strip = `<div class=\"yt-strip\"") + 1100]
     ch_name = css[css.index(".yt-ch .ch-name"):css.index(".yt-ch .ch-name") + 420]
     subs_view = app[app.index("function subsView("):app.index("function revealSubsChannel(")]
     check("function subsChannelHash(" in app and "parts[1] || query.get(\"c\")" in app and "subsChannelHash" in subs_strip and "accountHash" not in subs_strip and "ch-name" in subs_strip and "creditCarried" in subs_view and "onChannel" in subs_view and "-webkit-line-clamp: 2" in ch_name and "height: 32px" in ch_name and "align-items: flex-start" in css[css.index(".yt-strip {"):css.index(".yt-strip {") + 180], "a channel in the subscription row filters that creator's videos and its name wraps to two lines")
