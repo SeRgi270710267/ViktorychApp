@@ -81,7 +81,7 @@
     settings: ["version", "initialized", "follows", "seenFeeds", "seenDefaults", "lists", "likes", "bookmarks", "reposts", "savedPosts",
       "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyZeroTrace", "privacyAntiFingerprint",
       "appearance", "mutedWords", "mutedAccounts", "repostOff", "groups", "groupsOwn", "subsGroup", "followingSort", "forYouReposts",
-      "forYouReplies", "tabViews", "translateTo", "translateNever", "bells", "bellNotes", "bellSeen", "bellRead", "historyPause",
+      "forYouReplies", "tabViews", "translateTo", "translateNever", "bells", "bellNotes", "bellSeen", "bellRead", "notifPrivacy", "historyPause",
       "feedTabs", "lastNoteTab", "networkMode", "navCustom", "bottomNav", "bottomNavCustom", "navLayout", "navLayoutLand", "navLayoutSync",
       "noteTabs", "noteTabsSame", "noteClearedAt", "noteDismissed", "drawerMenu", "devicePerf", "communitiesHome", "notePrefs", "profileTabs",
       "prefsAt", "syncUi", "syncUiAt", "historyCut", "accountFollows", "bellsAt", "builtinNoteRead", "redditVotes", "navCustomAt",

@@ -138,9 +138,12 @@ test("two devices share notes, read state, and the account channel", async () =>
     method: "PUT",
     ip: "203.0.113.46",
     token: other,
-    body: { endpoint: "https://push.example/ada-desk", keys: keysB, expirationTime: 0 }
+    body: { endpoint: "https://push.example/ada-desk", keys: keysB, expirationTime: 0, fmt: 2 }
   });
   assert.equal(subB.status, 200);
+  const fmts = await one("SELECT SUM(CASE WHEN push_fmt = 2 THEN 1 ELSE 0 END) AS compact, COUNT(*) AS n FROM push_subscriptions WHERE public_id = ?", ada.account.publicId);
+  assert.equal(Number(fmts.n), 2);
+  assert.equal(Number(fmts.compact), 1);
 
   const item = { id: "post:cross-device", kind: "post", at: 1700000000000, text: "hello", handle: "ada", name: "Ada" };
   const first = await call("/v1/notifications", {
