@@ -103,6 +103,7 @@ const SHELL_FILES = [
   "./live.css",
   "./marks.js",
   "./logo-text.js",
+  "./ytm.js",
   "./music.js",
   "./music.css",
   "./presence.js",

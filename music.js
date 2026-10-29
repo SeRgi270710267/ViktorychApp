@@ -22,7 +22,7 @@
 
   var STORE = "viktorych-music-v1";
   var STORE_PREV = "sintel-music-v1";
-  var EXTRA = {"muLibrary": "M8.80 3.05H19.00A1.65 1.65 0 0 1 20.65 4.70V4.75A1.65 1.65 0 0 1 19.00 6.40H8.80A1.65 1.65 0 0 1 7.15 4.75V4.70A1.65 1.65 0 0 1 8.80 3.05ZM5.80 5.85H15.60A2.70 2.70 0 0 1 18.30 8.55V18.20A2.70 2.70 0 0 1 15.60 20.90H5.80A2.70 2.70 0 0 1 3.10 18.20V8.55A2.70 2.70 0 0 1 5.80 5.85ZM5.80 7.60A0.95 0.95 0 0 0 4.85 8.55V18.20A0.95 0.95 0 0 0 5.80 19.15H15.60A0.95 0.95 0 0 0 16.55 18.20V8.55A0.95 0.95 0 0 0 15.60 7.60Z", "muLibraryOn": "M9.25 3.05H18.30A2.55 2.55 0 0 1 20.85 5.60V13.40A2.55 2.55 0 0 1 18.30 15.95H9.25A2.55 2.55 0 0 1 6.70 13.40V5.60A2.55 2.55 0 0 1 9.25 3.05ZM5.80 6.15H15.10A2.70 2.70 0 0 1 17.80 8.85V18.15A2.70 2.70 0 0 1 15.10 20.85H5.80A2.70 2.70 0 0 1 3.10 18.15V8.85A2.70 2.70 0 0 1 5.80 6.15Z", "muList": "M4.07 4.55H12.53A1.02 1.02 0 0 1 13.55 5.57V5.57A1.02 1.02 0 0 1 12.53 6.60H4.07A1.02 1.02 0 0 1 3.05 5.57V5.57A1.02 1.02 0 0 1 4.07 4.55ZM4.07 10.95H12.53A1.02 1.02 0 0 1 13.55 11.97V11.97A1.02 1.02 0 0 1 12.53 13.00H4.07A1.02 1.02 0 0 1 3.05 11.97V11.97A1.02 1.02 0 0 1 4.07 10.95ZM4.07 17.35H8.32A1.02 1.02 0 0 1 9.35 18.38V18.38A1.02 1.02 0 0 1 8.32 19.40H4.07A1.02 1.02 0 0 1 3.05 18.38V18.38A1.02 1.02 0 0 1 4.07 17.35ZM13.20 17.25a3.00 3.00 0 1 1 6.00 0a3.00 3.00 0 1 1 -6.00 0zM14.65 17.25a1.55 1.55 0 1 0 3.10 0a1.55 1.55 0 1 0 -3.10 0zM19.20 4.90H19.20A0.85 0.85 0 0 1 20.05 5.75V14.45A0.85 0.85 0 0 1 19.20 15.30H19.20A0.85 0.85 0 0 1 18.35 14.45V5.75A0.85 0.85 0 0 1 19.20 4.90ZM20.05 4.9C22.2 6.15 23.4 7.7 23.4 9.4H21.65C21.65 8.3 20.95 7.4 19.5 6.5L20.05 4.9Z", "muListOn": "M4.07 4.55H12.53A1.02 1.02 0 0 1 13.55 5.57V5.57A1.02 1.02 0 0 1 12.53 6.60H4.07A1.02 1.02 0 0 1 3.05 5.57V5.57A1.02 1.02 0 0 1 4.07 4.55ZM4.07 10.95H12.53A1.02 1.02 0 0 1 13.55 11.97V11.97A1.02 1.02 0 0 1 12.53 13.00H4.07A1.02 1.02 0 0 1 3.05 11.97V11.97A1.02 1.02 0 0 1 4.07 10.95ZM4.07 17.35H8.32A1.02 1.02 0 0 1 9.35 18.38V18.38A1.02 1.02 0 0 1 8.32 19.40H4.07A1.02 1.02 0 0 1 3.05 18.38V18.38A1.02 1.02 0 0 1 4.07 17.35ZM13.15 17.25a3.05 3.05 0 1 1 6.10 0a3.05 3.05 0 1 1 -6.10 0zM19.27 4.85H19.27A0.88 0.88 0 0 1 20.15 5.72V16.48A0.88 0.88 0 0 1 19.27 17.35H19.27A0.88 0.88 0 0 1 18.40 16.48V5.72A0.88 0.88 0 0 1 19.27 4.85ZM20.15 4.85C22.55 6.25 23.7 8 23.7 10H21.8C21.8 8.65 21.05 7.55 19.45 6.5L20.15 4.85Z", "muRadio": "M4.15 16.90a1.75 1.75 0 1 1 3.50 0a1.75 1.75 0 1 1 -3.50 0zM9.28 11.88A6.05 6.05 0 0 1 9.28 21.92L8.33 20.51A4.35 4.35 0 0 0 8.33 13.29ZM11.27 8.94A9.60 9.60 0 0 1 11.27 24.86L10.32 23.45A7.90 7.90 0 0 0 10.32 10.35Z", "muRadioOn": "M3.75 16.90a2.15 2.15 0 1 1 4.30 0a2.15 2.15 0 1 1 -4.30 0zM9.48 11.59A6.40 6.40 0 0 1 9.48 22.21L8.14 20.22A4.00 4.00 0 0 0 8.14 13.58ZM11.49 8.61A10.00 10.00 0 0 1 11.49 25.19L10.15 23.20A7.60 7.60 0 0 0 10.15 10.60Z", "muAdd": "M2.80 12.00a9.20 9.20 0 1 1 18.40 0a9.20 9.20 0 1 1 -18.40 0zM4.55 12.00a7.45 7.45 0 1 0 14.90 0a7.45 7.45 0 1 0 -14.90 0zM11.15 7.95L12.85 7.95L12.85 11.15L16.05 11.15L16.05 12.85L12.85 12.85L12.85 16.05L11.15 16.05L11.15 12.85L7.95 12.85L7.95 11.15L11.15 11.15Z", "muAddOn": "M2.80 12.00a9.20 9.20 0 1 1 18.40 0a9.20 9.20 0 1 1 -18.40 0zM11.07 11.07L7.90 11.07L7.90 12.93L11.07 12.93L11.07 16.10L12.93 16.10L12.93 12.93L16.10 12.93L16.10 11.07L12.93 11.07L12.93 7.90L11.07 7.90Z", "muBack": "M14.6 4.65 7.25 12l7.35 7.35 1.75-1.75L10.75 12l5.6-5.6-1.75-1.75zM11.05 11.1H20.5v1.8H11.05z", "muBackOn": "M20.3 10.1H8.65l4.2-4.2-1.95-1.95L4.25 12l6.65 7.05 1.95-1.95-4.2-4.2H20.3z", "muNote": "M6.75 16.70a3.40 3.40 0 1 1 6.80 0a3.40 3.40 0 1 1 -6.80 0zM8.35 16.70a1.80 1.80 0 1 0 3.60 0a1.80 1.80 0 1 0 -3.60 0zM13.62 3.70H13.62A0.93 0.93 0 0 1 14.55 4.62V13.47A0.93 0.93 0 0 1 13.62 14.40H13.62A0.93 0.93 0 0 1 12.70 13.47V4.62A0.93 0.93 0 0 1 13.62 3.70ZM14.55 3.7C17.2 5.2 18.75 7.05 18.75 9.2H16.8C16.8 7.75 15.9 6.6 14.05 5.5L14.55 3.7Z", "muNoteOn": "M6.70 16.70a3.45 3.45 0 1 1 6.90 0a3.45 3.45 0 1 1 -6.90 0zM13.70 3.65H13.70A0.95 0.95 0 0 1 14.65 4.60V15.85A0.95 0.95 0 0 1 13.70 16.80H13.70A0.95 0.95 0 0 1 12.75 15.85V4.60A0.95 0.95 0 0 1 13.70 3.65ZM14.65 3.65C17.5 5.3 19.15 7.4 19.15 9.8H16.95C16.95 8.1 15.9 6.75 13.9 5.45L14.65 3.65Z", "muSearchOn": "M10.25 2.15a8.1 8.1 0 1 0 5.02 14.45l4.48 4.48 1.6-1.6-4.48-4.48A8.1 8.1 0 0 0 10.25 2.15z"};
+  var EXTRA = {"muLibrary": "M8.80 3.05H19.00A1.65 1.65 0 0 1 20.65 4.70V4.75A1.65 1.65 0 0 1 19.00 6.40H8.80A1.65 1.65 0 0 1 7.15 4.75V4.70A1.65 1.65 0 0 1 8.80 3.05ZM5.80 5.85H15.60A2.70 2.70 0 0 1 18.30 8.55V18.20A2.70 2.70 0 0 1 15.60 20.90H5.80A2.70 2.70 0 0 1 3.10 18.20V8.55A2.70 2.70 0 0 1 5.80 5.85ZM5.80 7.60A0.95 0.95 0 0 0 4.85 8.55V18.20A0.95 0.95 0 0 0 5.80 19.15H15.60A0.95 0.95 0 0 0 16.55 18.20V8.55A0.95 0.95 0 0 0 15.60 7.60Z", "muLibraryOn": "M9.25 3.05H18.30A2.55 2.55 0 0 1 20.85 5.60V13.40A2.55 2.55 0 0 1 18.30 15.95H9.25A2.55 2.55 0 0 1 6.70 13.40V5.60A2.55 2.55 0 0 1 9.25 3.05ZM5.80 6.15H15.10A2.70 2.70 0 0 1 17.80 8.85V18.15A2.70 2.70 0 0 1 15.10 20.85H5.80A2.70 2.70 0 0 1 3.10 18.15V8.85A2.70 2.70 0 0 1 5.80 6.15Z", "muList": "M4.07 4.55H12.53A1.02 1.02 0 0 1 13.55 5.57V5.57A1.02 1.02 0 0 1 12.53 6.60H4.07A1.02 1.02 0 0 1 3.05 5.57V5.57A1.02 1.02 0 0 1 4.07 4.55ZM4.07 10.95H12.53A1.02 1.02 0 0 1 13.55 11.97V11.97A1.02 1.02 0 0 1 12.53 13.00H4.07A1.02 1.02 0 0 1 3.05 11.97V11.97A1.02 1.02 0 0 1 4.07 10.95ZM4.07 17.35H8.32A1.02 1.02 0 0 1 9.35 18.38V18.38A1.02 1.02 0 0 1 8.32 19.40H4.07A1.02 1.02 0 0 1 3.05 18.38V18.38A1.02 1.02 0 0 1 4.07 17.35ZM13.20 17.25a3.00 3.00 0 1 1 6.00 0a3.00 3.00 0 1 1 -6.00 0zM14.65 17.25a1.55 1.55 0 1 0 3.10 0a1.55 1.55 0 1 0 -3.10 0zM19.20 4.90H19.20A0.85 0.85 0 0 1 20.05 5.75V14.45A0.85 0.85 0 0 1 19.20 15.30H19.20A0.85 0.85 0 0 1 18.35 14.45V5.75A0.85 0.85 0 0 1 19.20 4.90ZM20.05 4.9C22.2 6.15 23.4 7.7 23.4 9.4H21.65C21.65 8.3 20.95 7.4 19.5 6.5L20.05 4.9Z", "muListOn": "M4.07 4.55H12.53A1.02 1.02 0 0 1 13.55 5.57V5.57A1.02 1.02 0 0 1 12.53 6.60H4.07A1.02 1.02 0 0 1 3.05 5.57V5.57A1.02 1.02 0 0 1 4.07 4.55ZM4.07 10.95H12.53A1.02 1.02 0 0 1 13.55 11.97V11.97A1.02 1.02 0 0 1 12.53 13.00H4.07A1.02 1.02 0 0 1 3.05 11.97V11.97A1.02 1.02 0 0 1 4.07 10.95ZM4.07 17.35H8.32A1.02 1.02 0 0 1 9.35 18.38V18.38A1.02 1.02 0 0 1 8.32 19.40H4.07A1.02 1.02 0 0 1 3.05 18.38V18.38A1.02 1.02 0 0 1 4.07 17.35ZM13.15 17.25a3.05 3.05 0 1 1 6.10 0a3.05 3.05 0 1 1 -6.10 0zM19.27 4.85H19.27A0.88 0.88 0 0 1 20.15 5.72V16.48A0.88 0.88 0 0 1 19.27 17.35H19.27A0.88 0.88 0 0 1 18.40 16.48V5.72A0.88 0.88 0 0 1 19.27 4.85ZM20.15 4.85C22.55 6.25 23.7 8 23.7 10H21.8C21.8 8.65 21.05 7.55 19.45 6.5L20.15 4.85Z", "muRadio": "M4.15 16.90a1.75 1.75 0 1 1 3.50 0a1.75 1.75 0 1 1 -3.50 0zM9.28 11.88A6.05 6.05 0 0 1 9.28 21.92L8.33 20.51A4.35 4.35 0 0 0 8.33 13.29ZM11.27 8.94A9.60 9.60 0 0 1 11.27 24.86L10.32 23.45A7.90 7.90 0 0 0 10.32 10.35Z", "muRadioOn": "M3.75 16.90a2.15 2.15 0 1 1 4.30 0a2.15 2.15 0 1 1 -4.30 0zM9.48 11.59A6.40 6.40 0 0 1 9.48 22.21L8.14 20.22A4.00 4.00 0 0 0 8.14 13.58ZM11.49 8.61A10.00 10.00 0 0 1 11.49 25.19L10.15 23.20A7.60 7.60 0 0 0 10.15 10.60Z", "muAdd": "M2.80 12.00a9.20 9.20 0 1 1 18.40 0a9.20 9.20 0 1 1 -18.40 0zM4.55 12.00a7.45 7.45 0 1 0 14.90 0a7.45 7.45 0 1 0 -14.90 0zM11.15 7.95L12.85 7.95L12.85 11.15L16.05 11.15L16.05 12.85L12.85 12.85L12.85 16.05L11.15 16.05L11.15 12.85L7.95 12.85L7.95 11.15L11.15 11.15Z", "muAddOn": "M2.80 12.00a9.20 9.20 0 1 1 18.40 0a9.20 9.20 0 1 1 -18.40 0zM11.07 11.07L7.90 11.07L7.90 12.93L11.07 12.93L11.07 16.10L12.93 16.10L12.93 12.93L16.10 12.93L16.10 11.07L12.93 11.07L12.93 7.90L11.07 7.90Z", "muBack": "M14.6 4.65 7.25 12l7.35 7.35 1.75-1.75L10.75 12l5.6-5.6-1.75-1.75zM11.05 11.1H20.5v1.8H11.05z", "muBackOn": "M20.3 10.1H8.65l4.2-4.2-1.95-1.95L4.25 12l6.65 7.05 1.95-1.95-4.2-4.2H20.3z", "muNote": "M6.75 16.70a3.40 3.40 0 1 1 6.80 0a3.40 3.40 0 1 1 -6.80 0zM8.35 16.70a1.80 1.80 0 1 0 3.60 0a1.80 1.80 0 1 0 -3.60 0zM13.62 3.70H13.62A0.93 0.93 0 0 1 14.55 4.62V13.47A0.93 0.93 0 0 1 13.62 14.40H13.62A0.93 0.93 0 0 1 12.70 13.47V4.62A0.93 0.93 0 0 1 13.62 3.70ZM14.55 3.7C17.2 5.2 18.75 7.05 18.75 9.2H16.8C16.8 7.75 15.9 6.6 14.05 5.5L14.55 3.7Z", "muNoteOn": "M6.70 16.70a3.45 3.45 0 1 1 6.90 0a3.45 3.45 0 1 1 -6.90 0zM13.70 3.65H13.70A0.95 0.95 0 0 1 14.65 4.60V15.85A0.95 0.95 0 0 1 13.70 16.80H13.70A0.95 0.95 0 0 1 12.75 15.85V4.60A0.95 0.95 0 0 1 13.70 3.65ZM14.65 3.65C17.5 5.3 19.15 7.4 19.15 9.8H16.95C16.95 8.1 15.9 6.75 13.9 5.45L14.65 3.65Z", "muExplore": "M12 2.8a9.2 9.2 0 1 1 0 18.4 9.2 9.2 0 0 1 0-18.4zm0 1.75a7.45 7.45 0 1 0 0 14.9 7.45 7.45 0 0 0 0-14.9zm4.1 3.35-2.05 6.15-6.15 2.05 2.05-6.15 6.15-2.05zm-4.1 3.05a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 0 0 0-2.1z", "muExploreOn": "M12 2.8a9.2 9.2 0 1 1 0 18.4 9.2 9.2 0 0 1 0-18.4zm4.1 5.1-6.15 2.05-2.05 6.15 6.15-2.05 2.05-6.15zM12 10.95a1.05 1.05 0 1 1 0 2.1 1.05 1.05 0 0 1 0-2.1z", "muSearchOn": "M10.25 2.15a8.1 8.1 0 1 0 5.02 14.45l4.48 4.48 1.6-1.6-4.48-4.48A8.1 8.1 0 0 0 10.25 2.15z"};
   var HEART = "M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z";
   var HEART_ON = "M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z";
   var CTRL = {
@@ -64,6 +64,11 @@
   function svg(path) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>';
   }
+
+  /* YouTube Music (ytm.js). Songs from YouTube use ids "yt:<video id>". */
+  function Y() { return root.ViktorychYTM || null; }
+  function isYtId(id) { var y = Y(); return !!(y && y.isYt(id)); }
+  var YT_SECTIONS = { home: 1, explore: 1, mood: 1, search: 1, artist: 1, collection: 1, queue: 1 };
 
   function ytHost(hostname) {
     var host = String(hostname || "").toLowerCase();
@@ -324,7 +329,7 @@
   }
 
   function sectionKey(section, id) {
-    if (section === "playlist" || section === "edit") return section + ":" + (id || "");
+    if (section === "playlist" || section === "edit" || section === "artist" || section === "collection" || section === "mood") return section + ":" + (id || "");
     return section || "";
   }
 
@@ -417,6 +422,18 @@
   var audio = null;
   var yt = null;
   var ytReady = false;
+  /* YouTube player state: the last state number, whether the listener
+     paused, quality reports, and how many times it was resumed while the
+     page was hidden. */
+  var ytState = -1;
+  var userPaused = false;
+  var ytResumes = 0;
+  var ytErrors = 0;
+  var ytQuality = "";
+  var ytQualitySet = "";
+  var keep = null;
+  var placed = "";
+  var placeLoop = 0;
   var ytPending = "";
   var hls = null;
   var musicHls = null;
@@ -479,6 +496,7 @@
       root.setTimeout(fitMarquee, 0);
     }
     placeDock();
+    placeYt();
   }
 
   /* The popout is one more small square in the corner row of chat squares
@@ -595,7 +613,7 @@
      pauses the music. Muted autoplay in the timeline leaves it alone. */
   function onOtherMedia(event) {
     var el = event.target;
-    if (!el || el === audio || !el.tagName) return;
+    if (!el || el === audio || el === keep || !el.tagName) return;
     var tag = String(el.tagName).toLowerCase();
     if (tag !== "video" && tag !== "audio") return;
     if (el.paused || el.muted || el.volume === 0) return;
@@ -623,6 +641,7 @@
   function songs() { return library().songs; }
   function playlists() { return library().playlists; }
   function songById(id) {
+    if (isYtId(id)) return Y().song(id);
     var list = songs();
     for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
     return null;
@@ -646,6 +665,11 @@
         local.repeat = data.repeat === "one" || data.repeat === "all" ? data.repeat : "off";
         local.view = data.view === "list" ? "list" : "grid";
         if (Array.isArray(data.likes)) local.likes = data.likes;
+        if (Array.isArray(data.playlists) && data.playlistTouched) {
+          local.playlists = data.playlists;
+          local.playlistTouched = true;
+        }
+        if (active) hooks.render();
       } catch (err) { /* the next open reads it */ }
     });
   }
@@ -710,22 +734,28 @@
   function links(route, navItem) {
     var section = (route && route.section) || "home";
     var id = (route && route.id) || "";
+    var hasYt = !!Y();
     return navItem("#/music", "muHome", tr("Home"), section === "home") +
+      (hasYt ? navItem("#/music/explore", "muExplore", tr("Explore"), section === "explore" || section === "mood") : "") +
       navItem("#/music/search", "muSearch", tr("Search"), section === "search") +
       navItem("#/music/library", "muLibrary", tr("Your Library"), section === "library") +
       navItem("#/music/playlists", "muList", tr("Playlists"), section === "playlists" || section === "playlist") +
       navItem("#/music/liked", "muHeart", tr("Liked songs"), section === "liked") +
+      (hasYt ? navItem("#/music/ours", "muNote", tr("Our songs"), section === "ours") : "") +
       navItem("#/music/add", "muAdd", tr("Add song"), section === "add" || section === "edit") +
       navItem("#/music/radio", "muRadio", tr("Radio"), section === "radio") +
       navItem("#/", "muBack", tr("Back to {app}", { app: productName("pwa") }), false, tr("Back to {app}", { app: productName("pwa") }), tr("Back"));
   }
 
   function drawerLinks(icon) {
+    var hasYt = !!Y();
     return '<a href="#/music">' + icon("muHome") + " " + tr("Home") + "</a>" +
+      (hasYt ? '<a href="#/music/explore">' + icon("muExplore") + " " + tr("Explore") + "</a>" : "") +
       '<a href="#/music/search">' + icon("muSearch") + " " + tr("Search") + "</a>" +
       '<a href="#/music/library">' + icon("muLibrary") + " " + tr("Your Library") + "</a>" +
       '<a href="#/music/playlists">' + icon("muList") + " " + tr("Playlists") + "</a>" +
       '<a href="#/music/liked">' + icon("muHeart") + " " + tr("Liked songs") + "</a>" +
+      (hasYt ? '<a href="#/music/ours">' + icon("muNote") + " " + tr("Our songs") + "</a>" : "") +
       '<a href="#/music/add">' + icon("muAdd") + " " + tr("Add song") + "</a>" +
       '<a href="#/music/radio">' + icon("muRadio") + " " + tr("Radio") + "</a>" +
       '<a href="#/">' + icon("muBack") + " " + tr("Back to {app}", { app: productName("pwa") }) + "</a>";
@@ -738,10 +768,11 @@
     };
     return '<nav class="bottom-nav" aria-label="' + productName("musicShort") + '">' +
       item("#/music", section === "home" ? "muHomeOn" : "muHome", tr("Home"), section === "home") +
+      (Y() ? item("#/music/explore", section === "explore" || section === "mood" ? "muExploreOn" : "muExplore", tr("Explore"), section === "explore" || section === "mood") : "") +
       item("#/music/search", section === "search" ? "muSearchOn" : "muSearch", tr("Search"), section === "search") +
       item("#/music/library", section === "library" ? "muLibraryOn" : "muLibrary", tr("Your Library"), section === "library") +
       item("#/music/playlists", section === "playlists" || section === "playlist" ? "muListOn" : "muList", tr("Playlists"), section === "playlists" || section === "playlist") +
-      item("#/music/liked", section === "liked" ? "muHeartOn" : "muHeart", tr("Liked songs"), section === "liked") +
+      (Y() ? "" : item("#/music/liked", section === "liked" ? "muHeartOn" : "muHeart", tr("Liked songs"), section === "liked")) +
       ("</nav><button class=\"fab\" data-act=\"music-add\" " + "aria-label=\"" + tr("Add song") + "\"" + ">") + icon("plus") + "</button>";
   }
 
@@ -749,6 +780,8 @@
     var section = (route && route.section) || "home";
     var names = { home: tr("Home"), search: tr("Search"), library: tr("Your Library"), playlists: tr("Playlists"), playlist: tr("Playlist"), liked: tr("Liked songs"), add: tr("Add song"), edit: tr("Edit song"), radio: tr("Radio") };
     var label = names[section] || tr("Home");
+    var ytTitle = Y() && Y().titleFor ? Y().titleFor(route) : "";
+    if (ytTitle) label = ytTitle;
     if (section === "playlist") {
       var list = playlistById(route.id || "");
       if (list) label = list.name;
@@ -902,6 +935,7 @@
   }
 
   function tile(song) {
+    if (song && isYtId(song.id)) return Y().trackRow(song);
     var on = currentSong() && currentSong().id === song.id;
     return '<button class="mu-tile' + (on ? " is-current" : "") + '" type="button" data-act="music-play" data-id="' + esc(song.id) + '" data-mu-id="' + esc(song.id) + '">' +
       art(song, "mu-cover") + "<b>" + esc(song.title || tr("Untitled")) + "</b><span>" + esc(song.artist || tr("Unknown artist")) + "</span>" +
@@ -910,6 +944,7 @@
   }
 
   function row(song, listName) {
+    if (song && isYtId(song.id)) return Y().trackRow(song);
     var on = currentSong() && currentSong().id === song.id;
     var eq = on && play.playing ? '<span class="mu-eq" aria-hidden="true"><i></i><i></i><i></i></span>' : "";
     return '<div class="mu-row' + (on ? " is-current" : "") + '" draggable="true" data-mu-drag="' + esc(listName || "library") + '" data-id="' + esc(song.id) + '" data-mu-id="' + esc(song.id) + '">' +
@@ -939,7 +974,7 @@
 
   function songList(list, name) {
     if (!list.length) return empty(tr("No songs yet"), tr("Add a song with a direct audio link, a YouTube link, or a file on this device."));
-    if (local.view === "list" || name !== "library") return '<div class="mu-list">' + list.map(function (song) { return row(song, name); }).join("") + "</div>";
+    if (local.view === "list" || name !== "library") return '<div class="mu-list" data-mu-list="' + esc(name || "library") + '">' + list.map(function (song) { return row(song, name); }).join("") + "</div>";
     return '<div class="mu-grid">' + list.map(tile).join("") + "</div>";
   }
 
@@ -970,15 +1005,29 @@
       '<div class="row-actions"><button class="save" type="button" data-act="music-save">' + (song ? tr("Save") : tr("Add song")) + ("</button><button class=\"save\" type=\"button\" data-act=\"music-publish\"" + ">" + tr("Publish library to the site") + "<" + "/button></div></form>");
   }
 
+  function oursShelf() {
+    var list = songs().slice(0, 12);
+    return list.length ? '<div class="mu-hscroll">' + list.map(tile).join("") + "</div>" : "";
+  }
+
+  function oursSearch(q) {
+    var list = filtered(q).slice(0, 12);
+    return list.length ? '<div class="mu-hscroll">' + list.map(tile).join("") + "</div>" : "";
+  }
+
   function page(route) {
     var section = (route && route.section) || "home";
     var id = (route && route.id) || "";
     var all = songs();
+    if (Y() && YT_SECTIONS[section]) {
+      var ytPage = Y().page(route);
+      if (ytPage) return ytPage;
+    }
     if (section === "search") {
       return head(tr("Search")) + ("<div class=\"mu-search\"><label class=\"search\"><input id=\"mu-q\" type=\"search\" " + "placeholder=\"" + tr("Search songs") + "\"" + " " + "aria-label=\"" + tr("Search songs") + "\"" + " value=\"") + esc(ui.q) + '"></label></div><div class="mu-results">' + (ui.q ? songList(filtered(ui.q), "library") : empty(tr("Search {music}", { music: productName("music") }), tr("Find a song by title, artist, or album."))) + "</div>";
     }
     if (section === "library") {
-      return head(tr("Your Library"), viewTools()) + songList(all, "library") + confirmHtml() + ("<div class=\"mu-form\"><button class=\"save\" type=\"button\" data-act=\"music-publish\"" + ">" + tr("Publish library to the site") + "<" + "/button></div>");
+      return head(tr("Your Library"), viewTools()) + (Y() ? Y().libraryHtml() + shelf(tr("Our songs"), songList(all, "library")) : songList(all, "library")) + confirmHtml() + ("<div class=\"mu-form\"><button class=\"save\" type=\"button\" data-act=\"music-publish\"" + ">" + tr("Publish library to the site") + "<" + "/button></div>");
     }
     if (section === "playlists") {
       var cards = playlists().map(function (list) {
@@ -998,7 +1047,7 @@
       return head(list.name) + songList(rows, "playlist:" + list.id) + add;
     }
     if (section === "liked") {
-      var loved = all.filter(function (song) { return liked(song.id); });
+      var loved = (local.likes || []).slice().reverse().map(songById).filter(Boolean);
       return head(tr("Liked songs")) + (loved.length ? songList(loved, "liked") : empty(tr("No liked songs"), tr("Hearts you tap stay on this device.")));
     }
     if (section === "add") return head(tr("Add song")) + form(null);
@@ -1015,7 +1064,7 @@
     var pl = playlists().slice(0, 8).map(function (list) {
       return '<a class="mu-card" href="#/music/playlist/' + encodeURIComponent(list.id) + '">' + art({ title: list.name }, "mu-cover") + "<b>" + esc(list.name) + "</b><span>" + esc(trn("songs", (list.songIds || []).length)) + "</span></a>";
     }).join("");
-    return head(productName("music")) +
+    return head(Y() ? tr("Our songs") : productName("music")) + (Y() ? '<div class="ytm-tabs" role="tablist"><a role="tab" href="#/music" class="ytm-chip" aria-selected="false">' + esc(tr("YouTube Music")) + '</a><a role="tab" href="#/music/ours" class="ytm-chip on" aria-selected="true">' + esc(tr("Our songs")) + '</a><a role="tab" href="#/music/explore" class="ytm-chip" aria-selected="false">' + esc(tr("Explore")) + "</a></div>" : "") +
       (fresh.length ? shelf(tr("New release"), fresh.map(function (song) { return releaseHtml(song); }).join("")) : "") +
       (recent.length ? shelf(tr("Songs"), '<div class="mu-hscroll">' + recent.map(tile).join("") + "</div>") : empty(tr("No songs yet"), tr("Add a song with a direct audio link, a YouTube link, or a file on this device."))) +
       (pl ? shelf(tr("Playlists"), '<div class="mu-hscroll">' + pl + "</div>") : "") +
@@ -1342,9 +1391,12 @@
     var song = currentSong();
     playToken += 1;
     if (!song) { pauseAll(); paint(); return; }
+    var isYoutube = song.kind === "youtube" || classifySource(song.source).kind === "youtube";
+    if (!isYoutube && yt && ytState === 1) { try { yt.pauseVideo(); } catch (err) { /* gone */ } }
     if (song.kind === "hls" || streamReady(song)) startHls(song, fromUser, playToken);
-    else if (song.kind === "youtube" || classifySource(song.source).kind === "youtube") startYouTube(song, fromUser);
+    else if (isYoutube) startYouTube(song, fromUser);
     else startAudio(song, fromUser);
+    placeYt();
   }
 
   function sourceUrl(song) {
@@ -1560,12 +1612,19 @@
   function startYouTube(song, fromUser) {
     destroyHls();
     if (audio) { audio.pause(); }
-    var id = youtubeId(song.source);
+    var id = song.yt || youtubeId(song.source);
     if (!id) { hooks.toast(tr("That YouTube link has no video id")); return; }
     var host = document.getElementById("mu-yt");
     if (!host) return;
     ytPending = id;
+    userPaused = false;
+    ytResumes = 0;
+    ytQuality = "";
+    if (Y()) Y().played(song);
+    placeYt();
     var embed = root.ViktorychEmbed;
+    var kind = Y() ? Y().embedHost() : "nocookie";
+    var startAt = resume.id === song.id && resume.at > 3 ? Math.floor(resume.at) : 0;
     if (!yt || !yt.loadVideoById) {
       if (!embed || !embed.youtubePlayer) {
         ytPending = "";
@@ -1576,20 +1635,42 @@
         videoId: id,
         volume: Math.round(local.volume * 100),
         origin: location.origin,
+        controls: 1,
+        host: kind,
         onReady: function (player) {
           ytReady = true;
           player.setVolume(Math.round(local.volume * 100));
+          if (resume.at > 3 && resume.id === (currentSong() || {}).id) { player.seekTo(resume.at); resume = { id: "", at: 0 }; }
         },
         onState: function (state) {
-          if (state === 1) { ytPending = ""; play.playing = true; paint(); }
-          else if (state === 2) { play.playing = false; paint(); }
+          ytState = state;
+          if (state === 1) { ytPending = ""; ytErrors = 0; ytResumes = document.hidden ? ytResumes : 0; play.playing = true; keepAlive(true); paint(); }
+          else if (state === 2) {
+            if (onYtPaused()) return;
+            play.playing = false;
+            keepAlive(false);
+            saveNow(true);
+            paint();
+          }
           else if (state === 0) next(true);
+        },
+        onQuality: ytQualityChange,
+        onError: function (code) {
+          /* 101 and 150: the owner turned off playing on other sites. */
+          ytPending = "";
+          ytErrors += 1;
+          hooks.toast(code === 101 || code === 150 ? tr("This video can’t play outside YouTube. Skipping.") : tr("Couldn’t play that song"));
+          if (ytErrors <= 5 && play.index + 1 < play.queue.length) root.setTimeout(function () { next(false); }, 800);
+          else { play.playing = false; keepAlive(false); paint(); }
         }
       });
     } else {
+      if (yt.setHost) yt.setHost(kind);
       yt.loadVideoById(id);
+      if (startAt) root.setTimeout(function () { if (yt && ytPending === "") yt.seekTo(startAt); }, 1200);
     }
     play.playing = true;
+    keepAlive(true);
     paint();
     session(song);
     if (!fromUser) paint();
@@ -1598,10 +1679,13 @@
   function stopYouTube() {
     ytPending = "";
     if (yt && yt.stopVideo) { try { yt.stopVideo(); } catch (err) { /* already gone */ } }
+    keepAlive(false);
   }
 
   function pauseAll() {
     play.playing = false;
+    userPaused = true;
+    keepAlive(false);
     if (audio) { try { audio.pause(); } catch (err) { /* already paused */ } }
     if (yt && yt.pauseVideo) { try { yt.pauseVideo(); } catch (err) { /* already paused */ } }
   }
@@ -1619,7 +1703,9 @@
       if (hlsAttempt && hlsAttempt.catch) hlsAttempt.catch(function () {});
       play.playing = true;
     } else if ((song.kind === "youtube" || classifySource(song.source).kind === "youtube") && yt && yt.playVideo) {
+      userPaused = false;
       yt.playVideo();
+      keepAlive(true);
       play.playing = true;
     } else if (audio && audio.src) {
       var attempt = audio.play();
@@ -1635,10 +1721,252 @@
     if (local.repeat === "one" && fromEnd) { startCurrent(true); return; }
     if (play.index + 1 >= play.queue.length) {
       if (local.repeat === "all") play.index = 0;
+      else if (fromEnd && autoRadio()) return;
       else { pauseAll(); paint(); return; }
     } else play.index += 1;
     startCurrent(true);
   }
+
+  /* At the end of a queue that ends on a YouTube song, YouTube's mix for
+     that song keeps the music going, as YouTube Music does. */
+  function autoRadio() {
+    var song = currentSong();
+    if (!song || !isYtId(song.id) || !Y().radioIds) return false;
+    var token = playToken;
+    Y().radioIds(song.id).then(function (ids) {
+      if (token !== playToken) return;
+      var have = {};
+      play.queue.forEach(function (id) { have[id] = 1; });
+      var fresh = ids.filter(function (id) { return !have[id]; }).slice(0, 25);
+      if (!fresh.length) { pauseAll(); paint(); return; }
+      play.queue = play.queue.concat(fresh);
+      play.index += 1;
+      startCurrent(true);
+    }).catch(function () { pauseAll(); paint(); });
+    return true;
+  }
+
+  /* Queue helpers for ytm.js and the Up next page. */
+  function playList(ids, startId, mix) {
+    var list = (ids || []).filter(Boolean);
+    if (!list.length) return;
+    var start = list.indexOf(startId) >= 0 ? startId : list[0];
+    var keepShuffle = local.shuffle;
+    if (mix) { start = list[Math.floor(Math.random() * list.length)]; local.shuffle = true; }
+    queueFrom(start, list);
+    local.shuffle = keepShuffle;
+    startCurrent(true);
+  }
+  function playNext(ids) {
+    if (!hasQueue()) { playList(ids, ids[0], false); return; }
+    var add = ids.filter(function (id) { return id !== play.queue[play.index]; });
+    play.queue = play.queue.slice(0, play.index + 1).concat(add, play.queue.slice(play.index + 1).filter(function (id) { return add.indexOf(id) < 0; }));
+    saveNow(true);
+  }
+  function addToQueue(ids) {
+    if (!hasQueue()) { playList(ids, ids[0], false); return; }
+    play.queue = play.queue.concat(ids);
+    saveNow(true);
+  }
+  function unqueue(at) {
+    if (!(at > play.index) || at >= play.queue.length) return;
+    play.queue.splice(at, 1);
+    saveNow(true);
+  }
+  function jump(at) {
+    if (!(at >= 0) || at >= play.queue.length) return;
+    play.index = at;
+    startCurrent(true);
+  }
+  function clearUpNext() {
+    if (!hasQueue()) return;
+    play.queue = play.queue.slice(0, play.index + 1);
+    saveNow(true);
+  }
+  function synced() {
+    var acct = root.ViktorychAccounts;
+    if (acct && acct.onLocalChange) { try { acct.onLocalChange(); } catch (err) { /* next sync */ } }
+  }
+  function putPlaylist(id, name, ids) {
+    touchPlaylists();
+    var listId = id || newId();
+    var found = false;
+    local.playlists = local.playlists.map(function (list) {
+      if (list.id !== listId) return list;
+      found = true;
+      return { id: list.id, name: name || list.name, songIds: ids.slice(0, 1500) };
+    });
+    if (!found) local.playlists.push({ id: listId, name: name, songIds: ids.slice(0, 1500) });
+    save();
+    synced();
+    return listId;
+  }
+  function addToPlaylist(listId, ids) {
+    touchPlaylists();
+    local.playlists = local.playlists.map(function (list) {
+      if (list.id !== listId) return list;
+      var have = (list.songIds || []).slice();
+      ids.forEach(function (id) { if (have.indexOf(id) < 0) have.push(id); });
+      return { id: list.id, name: list.name, songIds: have };
+    });
+    save();
+    synced();
+  }
+  function addLikes(ids) {
+    ids.forEach(function (id) { if (local.likes.indexOf(id) < 0) local.likes.push(id); });
+    if (local.likes.length > 2000) local.likes = local.likes.slice(-2000);
+    save();
+    synced();
+  }
+
+  /* ---- The YouTube player on screen ----
+     YouTube's terms want the player visible at 200x200 or larger with
+     nothing on top. The iframe never moves in the page (moving it reloads
+     it); one fixed box is laid over a target instead: the cover in Now
+     Playing, the 200x200 slot of the mini player, or a 200x200 card above
+     the bar on the music pages. */
+  function ytSong() {
+    var song = live() ? currentSong() : null;
+    return song && (song.kind === "youtube" || classifySource(song.source).kind === "youtube") ? song : null;
+  }
+  function ytWhere() {
+    if (!ytSong()) return "";
+    if (ui.now) return "full";
+    return docked ? "mini" : "card";
+  }
+  function placeYt() {
+    if (typeof document === "undefined") return;
+    var host = document.getElementById("mu-yt-host");
+    if (!host) return;
+    var where = ytWhere();
+    var dock = document.getElementById("mu-dock");
+    var html = document.documentElement;
+    var mini = !!(where && docked);
+    if (dock && dock.classList.contains("is-yt") !== mini) {
+      dock.classList.toggle("is-yt", mini);
+      root.setTimeout(fitMarquee, 0);
+    }
+    html.classList.toggle("ytm-card", where === "card");
+    var rect = null;
+    if (where === "full") {
+      var artBox = document.getElementById("mu-now-art");
+      rect = artBox && artBox.getBoundingClientRect();
+    } else if (where === "mini") {
+      var slot = dock && dock.querySelector(".mu-yt-slot");
+      rect = slot && slot.getBoundingClientRect();
+    } else if (where === "card") {
+      var edge = dock && !dock.hidden ? dock.getBoundingClientRect().top : root.innerHeight;
+      var width = html.clientWidth || root.innerWidth;
+      rect = { left: width - 216, top: edge - 212, width: 200, height: 200 };
+    }
+    var key = "off";
+    if (rect && rect.width > 0) {
+      var size = Math.max(200, Math.round(Math.min(rect.width, rect.height)));
+      key = where + ":" + Math.round(rect.left) + ":" + Math.round(rect.top) + ":" + size;
+      if (key !== placed) {
+        host.style.left = Math.round(rect.left) + "px";
+        host.style.top = Math.round(rect.top) + "px";
+        host.style.width = size + "px";
+        host.style.height = size + "px";
+      }
+    }
+    if (key !== placed) {
+      placed = key;
+      host.className = key === "off" ? "is-off" : "is-on is-" + where;
+    }
+    /* The mini player moves with the chat squares and while dragged. */
+    if (where === "mini" && !placeLoop && root.requestAnimationFrame) {
+      var step = function () {
+        placeLoop = 0;
+        if (ytWhere() !== "mini" || document.hidden) return;
+        placeYt();
+      };
+      placeLoop = root.requestAnimationFrame(step);
+    }
+  }
+
+  /* A silent, looping sound keeps the page counted as playing while it is
+     in the background, so the phone keeps the Media Session controls. */
+  function silentWav() {
+    var rate = 8000;
+    var n = rate;
+    var bytes = new Uint8Array(44 + n);
+    var view = new DataView(bytes.buffer);
+    var str = function (at, text) { for (var i = 0; i < text.length; i++) bytes[at + i] = text.charCodeAt(i); };
+    str(0, "RIFF"); view.setUint32(4, 36 + n, true); str(8, "WAVE"); str(12, "fmt ");
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true); view.setUint32(28, rate, true); view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+    str(36, "data"); view.setUint32(40, n, true);
+    for (var j = 44; j < bytes.length; j++) bytes[j] = 128;
+    return URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+  }
+  function keepAlive(on) {
+    if (typeof document === "undefined") return;
+    var want = !!(on && ytSong() && Y() && Y().background());
+    if (!want) { if (keep && !keep.paused) { try { keep.pause(); } catch (err) { /* already */ } } return; }
+    if (!keep) {
+      keep = document.createElement("audio");
+      keep.id = "mu-keep";
+      keep.loop = true;
+      keep.preload = "auto";
+      keep.setAttribute("playsinline", "");
+      keep.setAttribute("aria-hidden", "true");
+      try { keep.src = silentWav(); } catch (err) { keep = null; return; }
+      document.body.appendChild(keep);
+    }
+    if (keep.paused) {
+      var attempt = keep.play();
+      if (attempt && attempt.catch) attempt.catch(function () {});
+    }
+  }
+  /* Phones pause the YouTube player when the page hides. If the listener
+     did not pause and background play is on, it is asked to go on. */
+  function onYtPaused() {
+    var hidden = typeof document !== "undefined" && document.hidden;
+    if (hidden && !userPaused && Y() && Y().background() && ytResumes < 3 && yt && yt.playVideo) {
+      ytResumes += 1;
+      root.setTimeout(function () { if (!userPaused && yt) yt.playVideo(); }, 250 * ytResumes);
+      return true;
+    }
+    return false;
+  }
+  function onVisible() {
+    if (document.hidden) return;
+    ytResumes = 0;
+    placed = "";
+    placeYt();
+    if (ytSong() && !userPaused && play.playing && ytState === 2 && yt && yt.playVideo) yt.playVideo();
+  }
+  function ytQualityChange(quality, levels) {
+    ytQuality = quality || "";
+    var song = currentSong();
+    var want = Y() ? Y().pickQuality(levels) : "";
+    var key = (song ? song.id : "") + ":" + want;
+    if (want && yt && yt.setPlaybackQuality && ytQualitySet !== key) {
+      ytQualitySet = key;
+      yt.setPlaybackQuality(want);
+    }
+    paintPills(song);
+  }
+  function paintPills(song) {
+    var pills = typeof document !== "undefined" && document.getElementById("mu-now-pills");
+    if (!pills) return;
+    var html = song && song.lossless ? '<span class="mu-badge">' + tr("Lossless") + "</span>" : "";
+    if (song && ytSong() && Y()) html += Y().nowPills(ytQuality) + Y().tipHtml();
+    if (pills.innerHTML !== html) pills.innerHTML = html;
+  }
+  function applyHost() {
+    if (!yt || !yt.setHost || !Y()) return;
+    var kind = Y().embedHost();
+    if (yt.host && yt.host() === kind) return;
+    yt.setHost(kind);
+    var song = ytSong();
+    if (song && play.playing) {
+      resume = { id: song.id, at: position().cur };
+      startYouTube(song, true);
+    }
+  }
+  function applyQuality() { ytQualitySet = ""; if (yt && yt.getAvailableQualityLevels) ytQualityChange(ytQuality, yt.getAvailableQualityLevels()); }
 
   function prev() {
     var time = audio && audio.src ? audio.currentTime : (yt && yt.getCurrentTime ? yt.getCurrentTime() : 0);
@@ -1672,14 +2000,15 @@
       var artworks = [];
       if (song.cover && song.cover.indexOf("https://") === 0) {
         var artType = "image/jpeg";
+        if (song.yt) { artworks.push({ src: song.cover, sizes: Y() && Y().low() ? "120x90" : "320x180", type: artType }); }
         if (/\.png(\?|$)/i.test(song.cover)) artType = "image/png";
         else if (/\.webp(\?|$)/i.test(song.cover)) artType = "image/webp";
-        artworks.push({ src: song.cover, sizes: "512x512", type: artType });
+        if (!song.yt) artworks.push({ src: song.cover, sizes: "512x512", type: artType });
       }
       navigator.mediaSession.metadata = new MediaMetadata({ title: song.title || productName("musicShort"), artist: song.artist || productName("musicShort"), album: song.album || "", artwork: artworks });
       var set = function (name, fn) { try { navigator.mediaSession.setActionHandler(name, fn); } catch (err) { /* unsupported */ } };
       set("play", function () { if (!play.playing) toggle(); });
-      set("pause", function () { if (play.playing) toggle(); });
+      set("pause", function () { userPaused = true; if (play.playing) toggle(); });
       set("previoustrack", prev);
       set("nexttrack", function () { next(false); });
       set("seekto", function (details) { if (details && typeof details.seekTime === "number") seekTo(details.seekTime); });
@@ -1762,8 +2091,7 @@
       paintArt("mu-dock-art", song);
       paintArt("mu-now-art", song);
       fitMarquee();
-      var pills = document.getElementById("mu-now-pills");
-      if (pills) pills.innerHTML = song && song.lossless ? '<span class="mu-badge">' + tr("Lossless") + "</span>" : "";
+      paintPills(song);
     }
     var offlineBtn = document.getElementById("mu-now-offline");
     if (offlineBtn) {
@@ -1772,6 +2100,10 @@
       if (showOffline) offlineBtn.setAttribute("data-id", song.id);
     }
     paintOfflineButtons();
+    placeYt();
+    if (navigator.mediaSession && "playbackState" in navigator.mediaSession) {
+      try { navigator.mediaSession.playbackState = play.playing ? "playing" : "paused"; } catch (err) { /* optional */ }
+    }
     if (navigator.mediaSession && navigator.mediaSession.setPositionState && pos.dur) {
       try { navigator.mediaSession.setPositionState({ duration: pos.dur, playbackRate: 1, position: Math.min(pos.cur, pos.dur) }); } catch (err) { /* optional */ }
     }
@@ -1807,7 +2139,7 @@
     dock.innerHTML = ("<div class=\"mu-bar\"><button class=\"mu-id\" type=\"button\" data-act=\"music-now\" " + "aria-label=\"" + tr("Now playing") + "\"" + "><span id=\"mu-dock-art\"></span><span class=\"mu-copy\"><b id=\"mu-dock-title\"" + ">" + tr("Not playing") + "<" + "/b><span id=\"mu-dock-artist\">") + productName("musicShort") + '</span></span></button>' +
       ("<div class=\"mu-transport\"><button type=\"button\" class=\"mu-shuffle\" data-act=\"music-shuffle\" " + "aria-label=\"" + tr("Shuffle") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.shuffle) + ("</button><button type=\"button\" data-act=\"music-prev\" " + "aria-label=\"" + tr("Previous") + "\"" + ">") + svg(CTRL.prev) + ("</button><button id=\"mu-play\" class=\"mu-play\" type=\"button\" data-act=\"music-toggle\" " + "aria-label=\"" + tr("Play") + "\"" + ">") + svg(CTRL.play) + ("</button><button type=\"button\" data-act=\"music-next\" " + "aria-label=\"" + tr("Next") + "\"" + ">") + svg(CTRL.next) + ("</button><button type=\"button\" class=\"mu-rep\" data-act=\"music-repeat\" " + "aria-label=\"" + tr("Repeat") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.repeat) + '<i></i></button></div>' +
       ("<div class=\"mu-seek\"><span class=\"mu-time\" id=\"mu-time\">0:00</span><input id=\"mu-seek\" class=\"mu-range\" type=\"range\" min=\"0\" max=\"0\" value=\"0\" step=\"0.1\" " + "aria-label=\"" + tr("Seek") + "\"" + "><span class=\"mu-time\" id=\"mu-end\">0:00</span></div>") +
-      ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div>") + '<i class="mu-pop-bar" aria-hidden="true"><b id="mu-pop-fill"></b></i><button type="button" class="mu-mini-x" data-act="music-stop" aria-label="' + tr("Close player") + '">' + svg(CTRL.close) + "</button></div>";
+      ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div>") + '<i class="mu-pop-bar" aria-hidden="true"><b id="mu-pop-fill"></b></i><span class="mu-yt-slot" aria-hidden="true"></span><button type="button" class="mu-mini-x" data-act="music-stop" aria-label="' + tr("Close player") + '">' + svg(CTRL.close) + "</button></div>";
     var now = document.createElement("div");
     now.id = "mu-now";
     now.className = "mu-now";
@@ -1815,6 +2147,7 @@
     now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="' + tr("Close") + '">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + productName("musicShort") + '</div><span class="mu-now-tools"><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="' + tr("Download for offline") + '">' + svg(CTRL.save) + '</button><button class="mu-ctl" type="button" data-act="music-stop" aria-label="' + tr("Close player") + '">' + svg(CTRL.close) + '</button></span></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">' + tr("Not playing") + '</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + tr("Seek") + '"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="' + tr("Previous") + '">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="' + tr("Play") + '">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="' + tr("Next") + '">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="' + tr("Volume") + '">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="' + tr("Volume") + '"></div>';
     var host = document.createElement("div");
     host.id = "mu-yt-host";
+    host.className = "is-off";
     host.innerHTML = '<div id="mu-yt"></div>';
     audio = document.createElement("audio");
     audio.id = "mu-audio";
@@ -1851,6 +2184,8 @@
     document.addEventListener("play", onOtherMedia, true);
     document.addEventListener("volumechange", onOtherMedia, true);
     root.addEventListener("pagehide", function () { saveNow(true); });
+    document.addEventListener("visibilitychange", onVisible);
+    root.addEventListener("resize", function () { placed = ""; placeYt(); });
     document.addEventListener("contextmenu", function (event) {
       var node = event.target;
       if (node && node.closest && node.closest("#mu-dock, #mu-now, #mu-audio, .mu-release")) event.preventDefault();
@@ -1901,6 +2236,7 @@
 
   function onInput(event) {
     var target = event.target;
+    if (Y() && Y().onInput(event)) return;
     if (!target || !target.id) return;
     if (target.id === "mu-q") {
       ui.q = target.value;
@@ -1966,8 +2302,19 @@
   function onAct(act, el) {
     if (String(act || "").indexOf("music-") !== 0) return false;
     var id = (el && el.dataset && el.dataset.id) || "";
+    if (act.indexOf("music-yt-") === 0) return Y() ? Y().onAct(act, el) : true;
     if (act === "music-add") { hooks.go("#/music/add"); return true; }
     if (act === "music-play") {
+      var ytList = el && el.getAttribute ? el.getAttribute("data-ytm-list") : "";
+      if (ytList && Y()) { var listed = Y().listIds(ytList); if (listed.length) { playList(listed, id, false); return true; } }
+      var box = el && el.closest ? el.closest("[data-mu-list]") : null;
+      var boxName = box ? box.getAttribute("data-mu-list") : "";
+      if (boxName === "liked") { playList((local.likes || []).slice().reverse(), id, false); return true; }
+      if (boxName && boxName.indexOf("playlist:") === 0) {
+        var inList = playlistById(boxName.slice(9));
+        if (inList) { playList((inList.songIds || []).slice(), id, false); return true; }
+      }
+      if (isYtId(id)) { playList([id], id, false); return true; }
       var ids = songs().map(function (song) { return song.id; });
       var listName = el && el.closest ? (el.closest("[data-mu-drag]") || {}).getAttribute && el.closest("[data-mu-drag]").getAttribute("data-mu-drag") : "";
       if (listName && listName.indexOf("playlist:") === 0) {
@@ -1991,6 +2338,7 @@
       if (liked(id)) local.likes = local.likes.filter(function (item) { return item !== id; });
       else local.likes.push(id);
       save();
+      synced();
       hooks.render();
       return true;
     }
@@ -2043,8 +2391,8 @@
       playSong(all[Math.floor(Math.random() * all.length)].id, all.map(function (song) { return song.id; }));
       return true;
     }
-    if (act === "music-now") { ui.now = true; paint(); return true; }
-    if (act === "music-now-close") { ui.now = false; paint(); return true; }
+    if (act === "music-now") { ui.now = true; placed = ""; paint(); return true; }
+    if (act === "music-now-close") { ui.now = false; placed = ""; paint(); return true; }
     if (act === "music-stop") { stopPlayer(); return true; }
     if (act === "music-offline") {
       var target = songById(id) || currentSong();
@@ -2189,6 +2537,7 @@
     if (typeof document === "undefined") return;
     restore();
     restoreNow();
+    attachYtm();
     mount();
     loadRemote();
     document.addEventListener("load", onCoverEvent, true);
@@ -2200,6 +2549,42 @@
     document.addEventListener("submit", function (event) {
       var formEl = event.target;
       if (formEl && formEl.getAttribute && String(formEl.getAttribute("data-act") || "").indexOf("music-") === 0) event.preventDefault();
+    });
+  }
+
+  function attachYtm() {
+    var y = Y();
+    if (!y || !y.attach) return;
+    y.attach({
+      api: musicApi,
+      head: head,
+      productName: productName,
+      render: function () { hooks.render(); },
+      toast: function (msg) { hooks.toast(msg); },
+      go: function (hash) { hooks.go(hash); },
+      settle: settleCovers,
+      current: currentSong,
+      queue: function () { return play.queue; },
+      index: function () { return play.index; },
+      songById: songById,
+      liked: liked,
+      likes: function () { return local.likes || []; },
+      addLikes: addLikes,
+      playlists: playlists,
+      putPlaylist: putPlaylist,
+      addToPlaylist: addToPlaylist,
+      playList: playList,
+      playNext: playNext,
+      addToQueue: addToQueue,
+      unqueue: unqueue,
+      jump: jump,
+      clearUpNext: clearUpNext,
+      synced: synced,
+      applyHost: applyHost,
+      applyQuality: applyQuality,
+      oursShelf: oursShelf,
+      oursSearch: oursSearch,
+      ourRow: function (song) { return row(song, "library"); }
     });
   }
 

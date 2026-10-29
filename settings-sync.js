@@ -82,8 +82,25 @@
   function readMusic() {
     var data = readJson(MUSIC_STORE);
     if (!data || typeof data !== "object") return undefined;
-    return { shuffle: !!data.shuffle, repeat: data.repeat === "one" || data.repeat === "all" ? data.repeat : "off",
+    var out = { shuffle: !!data.shuffle, repeat: data.repeat === "one" || data.repeat === "all" ? data.repeat : "off",
       view: data.view === "list" ? "list" : "grid", likes: Array.isArray(data.likes) ? data.likes.slice(0, 2000) : [] };
+    /* Playlists follow the account once one was made or imported (YouTube,
+       Spotify), kept small: 100 lists and 1500 songs in all. */
+    if (data.playlistTouched && Array.isArray(data.playlists)) {
+      var room = 1500;
+      out.playlists = data.playlists.slice(0, 100).map(function (list) {
+        var ids = Array.isArray(list && list.songIds) ? list.songIds.slice(0, Math.max(0, room)).map(String) : [];
+        room -= ids.length;
+        return { id: String((list && list.id) || "").slice(0, 80), name: String((list && list.name) || "").slice(0, 80), songIds: ids };
+      }).filter(function (list) { return list.id; });
+    }
+    /* Titles for the YouTube songs those point at, so another device can
+       show them before it asks YouTube. */
+    var ytm = root.ViktorychYTM;
+    if (ytm && ytm.exportSync) {
+      try { out.yt = ytm.exportSync(out.likes, out.playlists || []); } catch (err) { /* left out this time */ }
+    }
+    return out;
   }
   function writeMusic(prefs) {
     if (!prefs || typeof prefs !== "object") return;
@@ -92,6 +109,17 @@
     data.repeat = prefs.repeat === "one" || prefs.repeat === "all" ? prefs.repeat : "off";
     data.view = prefs.view === "list" ? "list" : "grid";
     if (Array.isArray(prefs.likes)) data.likes = prefs.likes.slice(0, 2000);
+    if (Array.isArray(prefs.playlists)) {
+      data.playlists = prefs.playlists.slice(0, 100).filter(function (list) { return list && list.id; }).map(function (list) {
+        return { id: String(list.id).slice(0, 80), name: String(list.name || "").slice(0, 80), songIds: Array.isArray(list.songIds) ? list.songIds.slice(0, 1500).map(String) : [] };
+      });
+      data.playlistTouched = true;
+    }
+    if (prefs.yt && typeof prefs.yt === "object") {
+      var ytm = root.ViktorychYTM;
+      if (ytm && ytm.importSync) { try { ytm.importSync(prefs.yt); } catch (err) { /* read on the next open */ } }
+      else writeJson("ytm-sync-pending", prefs.yt);
+    }
     writeJson(MUSIC_STORE, data);
     try { root.dispatchEvent(new CustomEvent("viktorych-music-prefs")); } catch (err) { /* the player reads it on open */ }
   }
