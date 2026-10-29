@@ -16,6 +16,15 @@ assert.strictEqual(update.decide({ pending: true, phase: "offer", snoozeUntil: 0
 assert.strictEqual(update.decide({ pending: true, phase: "offer", snoozeUntil: 0, busy: false }, now), "overlay");
 assert.strictEqual(update.decide({ pending: true, phase: "working", snoozeUntil: now + 10, busy: true }, now), "overlay");
 assert.strictEqual(update.decide({ pending: true, phase: "error", busy: true }, now), "overlay");
+// What's new waits until the new version's files are all downloaded.
+assert.strictEqual(update.decide({ pending: true, phase: "offer", ready: false }, now), "idle");
+assert.strictEqual(update.decide({ pending: true, phase: "offer", ready: false, forced: true }, now), "idle");
+assert.strictEqual(update.decide({ pending: true, phase: "offer", ready: true }, now), "overlay");
+assert.strictEqual(update.decide({ pending: true, phase: "working", ready: false }, now), "overlay");
+// Background download retries back off and level out at five minutes.
+assert.strictEqual(update.predownloadDelay(0), 15000);
+assert.strictEqual(update.predownloadDelay(1), 30000);
+assert.strictEqual(update.predownloadDelay(10), 5 * 60 * 1000);
 
 assert.strictEqual(update.progressRatio({ files: 0, totalFiles: 4, bytes: 0, totalBytes: 0 }), 0);
 assert.strictEqual(update.progressRatio({ files: 4, totalFiles: 4, bytes: 10, totalBytes: 10 }), 1);
