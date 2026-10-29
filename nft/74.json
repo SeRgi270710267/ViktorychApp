@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Zombie",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/zombie.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "zombie"
+    },
+    {
+      "trait_type": "Index",
+      "value": 74
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreicuvzyxocbtnxz3bjjgvgy5xml3h7w55qmmb446336p3wmoiw3xja",
+  "image_sha256": "54ae717708336df3b0a526a9b1dbb17b3feddec18c0f39edefcfdd98e45b7748"
+}

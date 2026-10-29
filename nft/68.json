@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Umbrella",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/umbrella.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "umbrella"
+    },
+    {
+      "trait_type": "Index",
+      "value": 68
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreiezk6xbooahvc6n72j5ifkac6awpii5ca6uyxgjqef3v3l6skkjia",
+  "image_sha256": "9957ae173807a8bcdfe93d41540178167a11d103d4c5cc9810bbaed7e9294940"
+}

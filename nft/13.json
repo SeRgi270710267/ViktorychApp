@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Chestnut",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/chestnut.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "chestnut"
+    },
+    {
+      "trait_type": "Index",
+      "value": 13
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreif7kno4oea6wlzlevgt2qprruri33utapnmcwjgusqerxmrjziauy",
+  "image_sha256": "bf535dc7101eb2f2b254d3d41f18d228dee9303dac15926a4a048dd914e500a6"
+}

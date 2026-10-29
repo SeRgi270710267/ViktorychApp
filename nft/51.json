@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Jack-o’-lantern",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/pumpkin.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "pumpkin"
+    },
+    {
+      "trait_type": "Index",
+      "value": 51
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreideptufj7looz5rn5eqzegqbsi3zflgktfvoazt3bzjx2gb7mvyiq",
+  "image_sha256": "647ce854fd6e767b16f490c90d00c91bc956654cb570333d8729be8c1fb2b844"
+}

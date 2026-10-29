@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Lion",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/lion.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "lion"
+    },
+    {
+      "trait_type": "Index",
+      "value": 36
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreibegdctaql2ywnbgtr2577ne55avlhcugbv4gjulty2tz2cplovwy",
+  "image_sha256": "2430c530417ac59a134e3aeffed277a0aace2a1835e19345cf1a9e7427add5b6"
+}
