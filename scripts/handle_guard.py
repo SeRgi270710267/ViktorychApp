@@ -550,6 +550,10 @@ def main(argv: list[str] | None = None, fetch=None, root: Path | None = None) ->
             # personal-data scan of the tracked tree (paths and rules only).
             import secret_scan
             code = code or secret_scan.selftest() or secret_scan.report(secret_scan.scan(secret_scan.git_files(False), False))
+            # It also runs the golden-fixture tests for every source's
+            # conversion into the canonical post (docs/POST-SCHEMA.md).
+            import normalize_test
+            code = code or normalize_test.main(["--quiet"])
         return code
     mask_env_lists()
     tree = root or ROOT
