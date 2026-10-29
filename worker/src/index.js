@@ -878,6 +878,11 @@ async function handleLogout(request, env, all) {
     if (all) await env.DB.prepare("DELETE FROM session_devices WHERE public_id = ?").bind(row.public_id).run();
     else await env.DB.prepare("DELETE FROM session_devices WHERE token_hash = ?").bind(hash).run();
   } catch (err) { /* the table appears with the first device hello */ }
+  try {
+    // Signing out drops the device's data key, so a sealed local copy left behind stays closed.
+    if (all) await env.DB.prepare("DELETE FROM device_keys WHERE public_id = ?").bind(row.public_id).run();
+    else await env.DB.prepare("DELETE FROM device_keys WHERE token_hash = ?").bind(hash).run();
+  } catch (err) { /* the table appears with the first key request */ }
   return json(200, { ok: true });
 }
 

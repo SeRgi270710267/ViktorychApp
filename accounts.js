@@ -1953,7 +1953,10 @@ function signupPayload() {
     Promise.resolve(prep).then(function () {
       removeStored("account-v1");
       tellSW(false, "signout");
-      var done = function () { location.replace(location.pathname + location.search); location.reload(); };
+      // Signing out erases what this device saved for the account (app-lock.js).
+      var lock = window.ViktorychAppLock;
+      var wiping = lock && lock.wipeData ? lock.wipeData(true).catch(function () {}) : null;
+      var done = function () { Promise.resolve(wiping).then(function () { location.replace(location.pathname + location.search); location.reload(); }); };
       if (!token || !hasApi()) { done(); return; }
       api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
     }, function () {
