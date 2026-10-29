@@ -2976,7 +2976,7 @@ SI18n.addPack("en", {
   "Sign in to see the gifts you sent and received.": "Sign in to see the gifts you sent and received.",
   "You haven’t sent any gifts yet.": "You haven’t sent any gifts yet.",
   "No gifts here right now.": "No gifts here right now.",
-  "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).",
+  "Gift art: original illustrations made for ViktorychApp, plus Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Gift art: original illustrations made for ViktorychApp, plus Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).",
   "You’ve used today’s free gifts. Try again tomorrow.": "You’ve used today’s free gifts. Try again tomorrow.",
   "Not enough Viktorychs for this gift.": "Not enough Viktorychs for this gift.",
   "Jack-o’-lantern": "Jack-o’-lantern",
