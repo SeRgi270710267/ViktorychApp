@@ -23736,15 +23736,20 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const watch = typeof MutationObserver === "function" && stage ? new MutationObserver(attach) : null;
     if (watch) watch.observe(stage, { childList: true, subtree: true });
     // Tap on the clip: collapse the expanded text, else play or pause.
+    // Capture phase: the chrome owns taps on the clip, so the player's own
+    // tap handlers below do not toggle it a second time.
     const onTap = (event) => {
       if (event.target.closest("button, a, .xv-info, .xv-bar, .xv-top, .menu")) return;
       if (!event.target.closest(".xv-cur")) return;
+      event.stopPropagation();
+      const menu = box.querySelector(".xv-menu");
+      if (menu && !menu.hidden) { menu.hidden = true; return; }
       if (box.classList.contains("xv-open")) { xvMore(box, false); return; }
       const video = xvVideo(box);
       if (!video) return;
       if (video.paused) video.play().catch(() => {}); else video.pause();
     };
-    box.addEventListener("click", onTap);
+    box.addEventListener("click", onTap, true);
     // Seek on the progress line: tap or drag.
     const prog = box.querySelector(".xv-prog");
     let dragging = false;
@@ -23794,7 +23799,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       clearTimeout(settle);
       if (watch) watch.disconnect();
       if (bound) events.forEach((name) => bound.removeEventListener(name, paint));
-      box.removeEventListener("click", onTap);
+      box.removeEventListener("click", onTap, true);
       if (track) track.removeEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll);
     };
   }

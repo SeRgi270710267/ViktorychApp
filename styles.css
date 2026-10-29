@@ -6512,6 +6512,8 @@ html[data-flag] a.entity { text-decoration: underline; text-decoration-color: va
 .xv-media {
   position: absolute;
   inset: 0;
+  z-index: 0;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
