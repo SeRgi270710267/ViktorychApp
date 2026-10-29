@@ -47,7 +47,7 @@ const r2 = new Map();
 const bucket = { async get(key) { return r2.has(key) ? { text: async () => r2.get(key) } : null; }, async put(key, value) { r2.set(key, value); } };
 let unfurlCalls = 0;
 
-const STATUS = "2115686767969902647";
+const STATUS = "1000000000000000001";
 const fxStatus = { code: 200, status: { id: STATUS, url: "https://x.com/someone/status/" + STATUS, text: "Quoted words here\nhttps://news.fixture.test/big", created_at: "Wed Oct 28 10:00:00 +0000 2026", author: { name: "Fixture Person", screen_name: "fixture", avatar_url: "" }, likes: 1, replies: 0, reposts: 0, card: { url: "https://news.fixture.test/big", title: "Big story headline", description: "Story summary", domain: "news.fixture.test", image: { width: 800, height: 419, url: "https://pbs.twimg.com/card_img/1/abc?format=jpg&name=800x419" } } } };
 const bskyThread = { thread: { post: { uri: "at://fixture.bsky/app.bsky.feed.post/abc", author: { handle: "fixture.bsky", displayName: "Sky Fixture", avatar: "" }, record: { text: "Hello from the sky", createdAt: "2026-10-28T10:00:00Z" }, embed: null } } };
 
