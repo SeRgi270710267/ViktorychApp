@@ -26126,6 +26126,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const savedScrolls = window.ViktorychLocal.readScrolls();
       if (savedScrolls) Object.assign(SCROLLS, savedScrolls);
     }
+    const early = window.__earlyScroll;
+    window.__earlyScroll = null;
+    if (early && early.y > 0 && !/^#\/(?:home|notifications|messages)?(?:[/?]|$)/.test(early.hash)) SCROLLS[early.hash] = early.y;
     if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
       registerSW();
       applyTheme();
