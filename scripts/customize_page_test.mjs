@@ -82,6 +82,7 @@ async function check(page, label) {
   const parts = await page.evaluate(() => ({
     sections: document.querySelectorAll(".pz-sec").length,
     themes: document.querySelectorAll(".pz-theme").length,
+    registry: window.ViktorychThemes ? Object.keys(window.ViktorychThemes.base).length + Object.keys(window.ViktorychThemes.flags || {}).length : 3,
     accents: document.querySelectorAll(".pz-accent").length,
     fonts: document.querySelectorAll(".pz-dot").length,
     edit: !!document.querySelector(".pz-page [data-act='drawer-edit']"),
@@ -89,11 +90,17 @@ async function check(page, label) {
   }));
   const ach = await page.evaluate(() => !window.ViktorychAchievements || !!document.querySelector(".pz-page .pz-ach [data-ach-set='sound']"));
   if (!ach) fail(label + " Achievements settings are missing");
-  if (parts.sections < 8 || parts.themes !== 3 || parts.accents !== 6 || parts.fonts !== 5 || !parts.edit) fail(label + " page is missing parts " + JSON.stringify(parts));
+  if (parts.sections < 8 || parts.themes !== parts.registry || parts.themes < 3 || parts.accents !== 6 || parts.fonts !== 5 || !parts.edit) fail(label + " page is missing parts " + JSON.stringify(parts));
   if (parts.drawer) fail(label + " the menu stayed open over the page");
   await page.locator(".pz-accent[data-value='pink']").click();
   await page.locator(".pz-dot[data-value='18']").click();
   await page.locator(".pz-page [data-act='pz-look'][data-value='compact']").click();
+  const flag = await page.evaluate(() => Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {})[0] || "");
+  if (flag) {
+    await page.locator(`.pz-theme[data-theme='${flag}']`).click();
+    const on = await page.evaluate(() => document.documentElement.getAttribute("data-flag"));
+    if (on !== flag) fail(label + " flag theme did not apply " + on);
+  }
   await page.locator(".pz-theme[data-theme='default']").click();
   await page.locator(".pz-page [data-act='pz-look'][data-key='reduceMotion']").click();
   const applied = await page.evaluate(() => {

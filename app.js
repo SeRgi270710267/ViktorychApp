@@ -209,7 +209,10 @@
   if (window.ProfileAbout) window.ProfileAbout.lists = function () { return (STATE.settings && STATE.settings.lists) || []; };
   let previewAnchor = 0;
   const SCROLLS = {};
-  const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
+  const THEMES = window.ViktorychThemes || { base: { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" }, flags: {} };
+  const THEME_COLORS = Object.assign({}, THEMES.base);
+  Object.keys(THEMES.flags || {}).forEach((id) => { THEME_COLORS[id] = THEMES.flags[id].tint[0]; });
+  const FLAG_THEME_IDS = Object.keys(THEMES.flags || {});
 
   const icon = (name) => name === "clock"
     ? `<svg class="clock" viewBox="0 0 24 24" aria-hidden="true">${LINE.clock}</svg>`
@@ -12574,6 +12577,7 @@ const here = parseRoute();
     if (mode === "dim") return tr("Dim");
     if (mode === "default") return tr("Light");
     if (mode === "auto") return tr("Auto");
+    if (THEMES.flags && THEMES.flags[mode]) return tr(THEMES.flags[mode].name);
     return tr("Lights out");
   }
 
@@ -12890,7 +12894,7 @@ const here = parseRoute();
       return;
     }
     if (act === "explore-theme") {
-      const order = ["lightsout", "dim", "default"];
+      const order = ["lightsout", "dim", "default"].concat(FLAG_THEME_IDS);
       const cur = (STATE.settings && STATE.settings.appearance) || "lightsout";
       const at = order.indexOf(cur);
       const next = order[(at + 1) % order.length];
@@ -14875,7 +14879,15 @@ const here = parseRoute();
     const seg = (act, attrs, on, label) => `<button class="outline${on ? " on" : ""}" type="button" data-act="${act}" ${attrs} aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
     const sec = (title, body) => `<section class="pz-sec"><h2>${esc(title)}</h2>${body}</section>`;
     const shownTheme = appearance === "auto" ? resolvedTheme() : appearance;
-    const themeTile = (id, label) => `<button class="pz-theme pz-theme-${id}${shownTheme === id ? " on" : ""}" type="button" data-act="theme" data-theme="${id}" role="radio" aria-checked="${shownTheme === id ? "true" : "false"}"><span class="pz-radio" aria-hidden="true">${shownTheme === id ? icon("check") : ""}</span><span>${esc(label)}</span></button>`;
+    const themeTile = (id, label, style = "") => `<button class="pz-theme pz-theme-${id}${shownTheme === id ? " on" : ""}" type="button" data-act="theme" data-theme="${id}"${style} role="radio" aria-checked="${shownTheme === id ? "true" : "false"}"><span class="pz-radio" aria-hidden="true">${shownTheme === id ? icon("check") : ""}</span><span>${esc(label)}</span></button>`;
+    /* Every theme in the registry: the three base ones, then each flag theme drawn in its own colours. */
+    const baseNames = { default: tr("Default"), dim: tr("Dim"), lightsout: tr("Lights out") };
+    const themeTiles = Object.keys(THEMES.base || baseNames).map((id) => themeTile(id, baseNames[id] || id)).join("") +
+      FLAG_THEME_IDS.map((id) => {
+        const f = THEMES.flags[id];
+        const bands = `linear-gradient(180deg, ${f.tint[0]} 0 33.4%, ${f.tint[1]} 33.4% 66.7%, ${f.tint[2]} 66.7%)`;
+        return themeTile(id, tr(f.name), ` style="background:${esc(bands)};color:#fff;border-color:${esc(f.flag[1])}"`);
+      }).join("");
     const accentNames = { blue: tr("Blue"), yellow: tr("Yellow"), pink: tr("Pink"), purple: tr("Purple"), orange: tr("Orange"), green: tr("Green") };
     const accents = Object.keys(LOOK_ACCENTS).map((id) => `<button class="pz-accent${look.accent === id ? " on" : ""}" type="button" data-act="pz-look" data-key="accent" data-value="${id}" role="radio" aria-checked="${look.accent === id ? "true" : "false"}" aria-label="${esc(accentNames[id])}" style="--sw:${LOOK_ACCENTS[id][0]}">${look.accent === id ? icon("check") : ""}</button>`).join("");
     const fonts = LOOK_FONTS.map((px) => `<button class="pz-dot${px <= look.fontSize ? " fill" : ""}${px === look.fontSize ? " on" : ""}" type="button" data-act="pz-look" data-key="fontSize" data-value="${px}" role="radio" aria-checked="${px === look.fontSize ? "true" : "false"}" aria-label="${esc(tr("Text size {n}", { n: String(px) }))}"><i></i></button>`).join("");
@@ -14899,7 +14911,7 @@ const here = parseRoute();
       <div class="topbar tall pz-top"><div class="page-head settings-head">${back}<div class="head-text grow"><h1>${esc(tr("Customize"))}</h1></div></div></div>
       ${customizeSample()}
       <p class="phandle pz-note">${esc(tr("Choices apply right away and follow your account to your other devices."))}</p>
-      ${sec(tr("Theme"), `<div class="pz-themes" role="radiogroup" aria-label="${esc(tr("Theme"))}">${themeTile("default", tr("Default"))}${themeTile("dim", tr("Dim"))}${themeTile("lightsout", tr("Lights out"))}</div>
+      ${sec(tr("Theme"), `<div class="pz-themes" role="radiogroup" aria-label="${esc(tr("Theme"))}">${themeTiles}</div>
         ${sw("theme", appearance === "auto", tr("Match my device"), tr("Light or dark follows your phone or computer."), ` data-theme="${appearance === "auto" ? shownTheme : "auto"}"`)}`)}
       ${sec(tr("Color"), `<div class="pz-accents" role="radiogroup" aria-label="${esc(tr("Color"))}">${accents}</div>`)}
       ${sec(tr("Font size"), `<div class="pz-fonts" role="radiogroup" aria-label="${esc(tr("Font size"))}"><span class="pz-aa small" aria-hidden="true">Aa</span><div class="pz-track">${fonts}</div><span class="pz-aa big" aria-hidden="true">Aa</span></div>`)}
@@ -15110,6 +15122,7 @@ const here = parseRoute();
           ${themeBtn("default", tr("Default"))}
           ${themeBtn("dim", tr("Dim"))}
           ${themeBtn("lightsout", tr("Lights out"))}
+          ${FLAG_THEME_IDS.map((id) => themeBtn(id, tr(THEMES.flags[id].name))).join("")}
         </div>
         <h2>${esc(tr("Profile pictures"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Profile pictures"))}">
@@ -21991,7 +22004,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function applyTheme() {
     const theme = resolvedTheme();
-    document.documentElement.setAttribute("data-theme", theme);
+    if (THEMES.apply) THEMES.apply(theme);
+    else document.documentElement.setAttribute("data-theme", theme);
     applyNavLayout();
     const color = THEME_COLORS[theme] || "#000000";
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
