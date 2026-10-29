@@ -1,0 +1,25 @@
+# Every change needs a review from the maintainers team. Create the team
+# (Organization -> Teams -> New team "maintainers") and add only the owner.
+# Turn on "Require review from Code Owners" in the main branch ruleset.
+*                       @ViktorychGroup/maintainers
+
+# Highest risk: anything that runs with secrets, deploys, stores data,
+# handles sign-in, or touches money.
+/.github/               @ViktorychGroup/maintainers
+/worker/                @ViktorychGroup/maintainers
+/worker/migrations/     @ViktorychGroup/maintainers
+/backup-server/         @ViktorychGroup/maintainers
+/docker/                @ViktorychGroup/maintainers
+/android-tv/            @ViktorychGroup/maintainers
+/scripts/               @ViktorychGroup/maintainers
+/sw.js                  @ViktorychGroup/maintainers
+/accounts.js            @ViktorychGroup/maintainers
+/accounts.config.js     @ViktorychGroup/maintainers
+/passkeys.js            @ViktorychGroup/maintainers
+/app-lock.js            @ViktorychGroup/maintainers
+/vault.js               @ViktorychGroup/maintainers
+/owner-keys.js          @ViktorychGroup/maintainers
+/gifts-ui.js            @ViktorychGroup/maintainers
+/render.yaml            @ViktorychGroup/maintainers
+/SECURITY.md            @ViktorychGroup/maintainers
+/CONTRIBUTING.md        @ViktorychGroup/maintainers
