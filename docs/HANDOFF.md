@@ -58,3 +58,7 @@ Queued work, in order:
 - The Home button once vanished on mobile because a saved layout hid it. Home is now locked, and a saved bar keeps items added later hidden until the user turns them on.
 - Some Playwright checks ride along inside other test scripts (for example `home_reach_test.mjs` runs `explore_nav_test.mjs`, and `compose_page_test.mjs` runs `community_home_test.mjs`), because the workflow files could not be edited.
 - An overnight routine named "Overnight ship check" merges green, clean PRs, oldest first. Check what it has merged before you act.
+
+## Post schema
+
+Every source is normalized to one canonical post shape before it ships. See [POST-SCHEMA.md](POST-SCHEMA.md) and `docs/post.schema.json`; tests: `python3 scripts/normalize_test.py` (also run by `handle_guard.py --selftest` in CI).

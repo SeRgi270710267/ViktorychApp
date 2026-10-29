@@ -5750,8 +5750,28 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(handle || "").replace(/^@/, "");
   }
 
+  /* A referenced (quoted) item normally arrives embedded and fully normalized
+     (docs/POST-SCHEMA.md). When the sync could only record its ref
+     (embedded === false), fetch it once on demand and re-render. */
+  const QUOTE_FILL = {};
+  function fillReferenced(quoted) {
+    if (!quoted || quoted.embedded !== false || (quoted.platform || "x") !== "x") return;
+    const sid = String(quoted.statusId || quoted.id || "");
+    if (!/^\d{1,24}$/.test(sid) || QUOTE_FILL[sid]) return;
+    QUOTE_FILL[sid] = true;
+    fxStatusPost(sid).then((found) => {
+      if (!found || (!found.text && !(found.media || []).length)) return;
+      ["author", "handle", "avatar", "verifiedType", "text", "media", "date", "url", "stats"].forEach((key) => {
+        if (found[key] != null && found[key] !== "" && (quoted[key] == null || quoted[key] === "" || (Array.isArray(quoted[key]) && !quoted[key].length))) quoted[key] = found[key];
+      });
+      quoted.embedded = true;
+      render();
+    }).catch(() => {});
+  }
+
   function quoteCard(quoted) {
     if (!quoted) return "";
+    fillReferenced(quoted);
     const platform = quoted.platform || "x";
     const asQuoted = asPost(quoted, platform);
     const art = articleOf(asQuoted);
@@ -17692,7 +17712,19 @@ if (STATE.histClear) {
     return /^#\/messages\/(?:s|join)\//.test(hash || "");
   }
   function lazySkeleton(title) {
+    /* Local-first: a page whose module is still loading paints its last
+       saved screen instead of a skeleton when this device has one. */
+    const saved = window.ViktorychLocal && window.ViktorychLocal.readRoute ? window.ViktorychLocal.readRoute(routeSnapKey()) : "";
+    if (saved) return saved;
     return pageHead(title) + `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`;
+  }
+  function routeSnapKey() {
+    return String(location.hash || "#/").split("?")[0];
+  }
+  /* Remember what a lazy page painted so the next open is instant. */
+  function snapRoute(html) {
+    if (html && typeof html === "string" && html.indexOf('class="reply-empty"') < 0 && window.ViktorychLocal && window.ViktorychLocal.saveRoute) window.ViktorychLocal.saveRoute(routeSnapKey(), html);
+    return html;
   }
 
   function view(route) {
@@ -17725,17 +17757,20 @@ if (STATE.histClear) {
     if (route.name === "points" && window.ProfileGifts) return window.ProfileGifts.pointsPage();
     if (route.name === "store" && window.ProfileGifts) return window.ProfileGifts.storePage(route);
     if (route.name === "games") {
-      if (window.ViktorychGames && window.ViktorychGames.page(route)) return window.ViktorychGames.page(route);
+      const lazyHtml = window.ViktorychGames ? window.ViktorychGames.page(route) : "";
+      if (lazyHtml) return lazyHtml;
       ensureLazy("games");
       return lazySkeleton(tr("Games"));
     }
     if (route.name === "communities") {
-      if (window.ViktorychCommunities && window.ViktorychCommunities.page(route)) return window.ViktorychCommunities.page(route);
+      const lazyHtml = window.ViktorychCommunities ? window.ViktorychCommunities.page(route) : "";
+      if (lazyHtml) return snapRoute(lazyHtml);
       ensureLazy("communities");
       return lazySkeleton(tr("Communities"));
     }
     if (route.name === "tv") {
-      if (window.ViktorychTV && window.ViktorychTV.page(route)) return window.ViktorychTV.page(route);
+      const lazyHtml = window.ViktorychTV ? window.ViktorychTV.page(route) : "";
+      if (lazyHtml) return lazyHtml;
       ensureLazy("tv");
       return lazySkeleton(tr("TV"));
     }

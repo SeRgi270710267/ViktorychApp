@@ -506,7 +506,27 @@ def accept_feed(name: str, payload, feed: dict) -> dict:
     """Parse one response. An error page is a failed fetch, not a list of posts."""
     if isinstance(payload, str) and (document_is_bridge_error(payload) or items_are_only_bridge_errors(payload)):
         raise BridgeError("bridge error feed")
-    result = run_adapter(name, payload, feed)
+    try:
+        result = run_adapter(name, payload, feed)
+        failure = None
+    except (SystemExit, BridgeError):
+        raise
+    except Exception as exc:
+        result, failure = None, exc
+    if not isinstance(result, dict) or not (result.get("posts") or []):
+        # The source may have switched formats (RSS to Atom or JSON Feed).
+        # A structured-feed fallback runs on top of the adapter, never instead.
+        from adapters.fallbacks import universal
+
+        try:
+            rescued = universal(payload, feed) if isinstance(payload, str) else None
+        except Exception:
+            rescued = None
+        if rescued and rescued.get("posts"):
+            print(f"[fallback] {feed.get('id')}: {len(rescued['posts'])} posts via the structured-feed fallback ({name} found none)", file=sys.stderr)
+            result = rescued
+        elif failure is not None:
+            raise failure
     if not isinstance(result, dict):
         return {"posts": [], "profiles": []}
     posts = [post for post in (result.get("posts") or []) if not post_is_bridge_error(post)]
@@ -1589,6 +1609,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     }
 
 
+def existing_parse_health(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("parseHealth")
+    except (OSError, UnicodeError, ValueError, AttributeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Merge source feeds into feeds.json")
     parser.add_argument("--config", default=str(ROOT / "feeds.config.json"))
@@ -1654,6 +1682,12 @@ def main() -> None:
             from adapters.discord import public_error
 
             print(public_error(exc), file=sys.stderr)
+    try:
+        from normalize import enforce_document
+
+        doc["parseHealth"] = enforce_document(doc, fresh_comment_ids, existing_parse_health(out), log=lambda line: print(line, file=sys.stderr))
+    except Exception as exc:
+        print(f"[normalize] {exc}", file=sys.stderr)
     save_document(out, doc)
     try:
         from people import publish
