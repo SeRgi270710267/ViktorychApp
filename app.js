@@ -210,7 +210,10 @@
   if (window.ProfileAbout) window.ProfileAbout.lists = function () { return (STATE.settings && STATE.settings.lists) || []; };
   let previewAnchor = 0;
   const SCROLLS = {};
-  const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
+  const THEMES = window.ViktorychThemes || { base: { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" }, flags: {} };
+  const THEME_COLORS = Object.assign({}, THEMES.base);
+  Object.keys(THEMES.flags || {}).forEach((id) => { THEME_COLORS[id] = THEMES.flags[id].tint[0]; });
+  const FLAG_THEME_IDS = Object.keys(THEMES.flags || {});
 
   const icon = (name) => name === "clock"
     ? `<svg class="clock" viewBox="0 0 24 24" aria-hidden="true">${LINE.clock}</svg>`
@@ -12576,6 +12579,7 @@ const here = parseRoute();
     if (mode === "dim") return tr("Dim");
     if (mode === "default") return tr("Light");
     if (mode === "auto") return tr("Auto");
+    if (THEMES.flags && THEMES.flags[mode]) return tr(THEMES.flags[mode].name);
     return tr("Lights out");
   }
 
@@ -12892,7 +12896,7 @@ const here = parseRoute();
       return;
     }
     if (act === "explore-theme") {
-      const order = ["lightsout", "dim", "default"];
+      const order = ["lightsout", "dim", "default"].concat(FLAG_THEME_IDS);
       const cur = (STATE.settings && STATE.settings.appearance) || "lightsout";
       const at = order.indexOf(cur);
       const next = order[(at + 1) % order.length];
@@ -14973,6 +14977,7 @@ const here = parseRoute();
           ${themeBtn("default", tr("Default"))}
           ${themeBtn("dim", tr("Dim"))}
           ${themeBtn("lightsout", tr("Lights out"))}
+          ${FLAG_THEME_IDS.map((id) => themeBtn(id, tr(THEMES.flags[id].name))).join("")}
         </div>
         <h2>${esc(tr("Profile pictures"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Profile pictures"))}">
@@ -21838,7 +21843,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function applyTheme() {
     const theme = resolvedTheme();
-    document.documentElement.setAttribute("data-theme", theme);
+    if (THEMES.apply) THEMES.apply(theme);
+    else document.documentElement.setAttribute("data-theme", theme);
     if (STATE.settings && STATE.settings.avatarShape === "square") document.documentElement.setAttribute("data-ava-shape", "square");
     else document.documentElement.removeAttribute("data-ava-shape");
     applyNavLayout();
