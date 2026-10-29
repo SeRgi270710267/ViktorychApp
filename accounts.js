@@ -72,6 +72,7 @@
   var unfriendTarget = null;
   var reportState = { items: [], loading: false };
 
+  function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
   }
@@ -817,7 +818,7 @@
     var foot = pages.map(function (page) {
       return '<button type="button" data-acct="legal" data-legal="' + page[0] + '" data-title="' + esc(page[1]) + '">' + esc(page[1]) + "</button>";
     }).join("");
-    var langs = [["en", "English"], ["es", "Español"], ["ru", "Русский"]].map(function (pair) {
+    var langs = [["en", "English"], ["es", "Español"], ["hi", "हिन्दी"], ["ru", "Русский"]].map(function (pair) {
       var on = readLang() === pair[0] ? " on" : "";
       return '<button class="land-lang' + on + '" type="button" data-acct="lang" data-lang="' + pair[0] + '">' + esc(pair[1]) + "</button>";
     }).join("");
@@ -1115,7 +1116,7 @@ var numberNote = form.passkey
       return '<button class="outline' + (theme === mode ? " on" : "") + '" type="button" data-acct="appearance" data-mode="' + mode + '">' + esc(label) + "</button>";
     }
     return '<p class="acct-sub">' + esc(tr("Language and appearance stay on this device.")) + "</p>" +
-      '<div class="theme-row" role="group" aria-label="' + esc(tr("Display language")) + '">' + langBtn("en", "English") + langBtn("es", "Español") + langBtn("ru", "Русский") + "</div>" +
+      '<div class="theme-row" role="group" aria-label="' + esc(tr("Display language")) + '">' + langBtn("en", "English") + langBtn("es", "Español") + langBtn("hi", "हिन्दी") + langBtn("ru", "Русский") + "</div>" +
       '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}).map(function (id) { return themeBtn(id, tr(window.ViktorychThemes.flags[id].name)); }).join("") + "</div>" +
       '<p class="acct-sub">' + esc(tr("Account settings are available after you sign in.")) + "</p>";
   }
@@ -1300,7 +1301,7 @@ var numberNote = form.passkey
   function readLang() {
     try {
       var lang = localStorage.getItem("superintelapp-lang");
-      if (lang === "ru" || lang === "es" || lang === "en") return lang;
+      if (lang === "ru" || lang === "es" || lang === "hi" || lang === "en") return lang;
     } catch (err) { /* English */ }
     return "en";
   }
@@ -1719,7 +1720,7 @@ var numberNote = form.passkey
     writeStored("settings-v1", JSON.stringify(settings));
     if (reg) reg.remember(taken);
     if (window.ViktorychAccounts && window.ViktorychAccounts.writeHistory) window.ViktorychAccounts.writeHistory(payload);
-    if (payload && own.indexOf("lang") < 0 && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es")) {
+    if (payload && own.indexOf("lang") < 0 && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es" || payload.lang === "hi")) {
       try { localStorage.setItem("superintelapp-lang", payload.lang); } catch (err) { /* the page language stays */ }
       try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
       if (window.SI18n && typeof window.SI18n.setLang === "function" && window.SI18n.getLang() !== payload.lang) {
@@ -3178,7 +3179,7 @@ function signupPayload() {
         cardsHtml = '<div class="friends-grid">' + incoming.map(function (req) {
           var rpid = req.id ? req.id.replace(/^app:/, "") : "";
           var photo = presenceWrap(rpid, publicAvatar(req.avatar, req.avatarFace, "friend-avatar"), false);
-          var mutual = req.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: req.mutualFriendsCount })) + '</div>' : '';
+          var mutual = req.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tn("mutualFriends", req.mutualFriendsCount, { count: req.mutualFriendsCount })) + '</div>' : '';
           return '<div class="friend-card" data-friend-card="app:' + esc(rpid) + '">' +
             '<a class="friend-card-media" href="#/@' + encodeURIComponent(req.handle) + '">' + photo + '</a>' +
             '<div class="friend-card-info">' +
@@ -3212,7 +3213,7 @@ function signupPayload() {
         cardsHtml = '<div class="friends-grid">' + filtered.map(function (fr) {
           var fpid = fr.id ? fr.id.replace(/^app:/, "") : fr.publicId;
           var photo = presenceWrap(fpid, publicAvatar(fr.avatar, fr.avatarFace, "friend-avatar"), false);
-          var mutual = fr.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: fr.mutualFriendsCount })) + '</div>' : '';
+          var mutual = fr.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tn("mutualFriends", fr.mutualFriendsCount, { count: fr.mutualFriendsCount })) + '</div>' : '';
           var btn = "";
           if (mine) {
             btn = '<button class="friend-btn friend-mutual" type="button" data-friend-act="unfriend" data-friend-id="' + esc(fpid) + '" data-handle="' + esc(fr.handle) + '"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg><span class="f">' + esc(tr("Friends")) + '</span><span class="u">' + esc(tr("Unfriend")) + '</span></button>';
@@ -3236,7 +3237,7 @@ function signupPayload() {
     var headingHtml = '<div class="friends-header">' +
       '<div class="friends-header-left">' +
         '<h2 class="friends-heading">' + esc(tr("Friends")) + '</h2>' +
-        '<span class="friends-sub">' + esc(tr("{count} friends", { count: totalFriends })) + '</span>' +
+        '<span class="friends-sub">' + esc(tn("friends", totalFriends, { count: totalFriends })) + '</span>' +
       '</div>' +
       '<div class="friends-header-right">' + headerRight + '</div>' +
     '</div>';
@@ -3785,7 +3786,7 @@ function signupPayload() {
     var body = activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
 
     var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
-    var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tr("{count} mutual friends", { count: mutualCount })) + '</div>' : '';
+    var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tn("mutualFriends", mutualCount, { count: mutualCount })) + '</div>' : '';
 
     var tabs = bar.html;
 
@@ -3797,7 +3798,7 @@ function signupPayload() {
       feedId: account.publicId ? "app:" + account.publicId : "",
       url: "",
       own: !!mine,
-      count: tr("{count} posts", { count: count })
+      count: tn("posts", pack.count || 0, { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
     return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
@@ -3880,7 +3881,7 @@ function signupPayload() {
     var href = account.handle ? "#/@" + encodeURIComponent(account.handle) : "#/settings";
     var following = accountStat(account, "following");
     var followers = accountStat(account, "followers");
-    var followerLabel = followers === 1 ? tr("Follower") : tr("Followers");
+    var followerLabel = tn("followerWord", followers);
     if (accountRef(account)) ensureCounts(accountRef(account));
     return '<div class="drawer-id">' +
       '<div class="drawer-id-top"><a class="drawer-ava" href="' + esc(href) + '">' + photo + '</a>' + drawerTools() + '</div>' +
@@ -3964,7 +3965,7 @@ function signupPayload() {
   }
   function healthWhen(value) {
     if (!value) return "";
-    try { return new Date(value).toLocaleString(); } catch (err) { return String(value); }
+    try { return new Date(value).toLocaleString((window.SI18n ? window.SI18n.locale() : undefined)); } catch (err) { return String(value); }
   }
   function healthHtml() {
     var body = tiktokHealth;
@@ -3995,7 +3996,7 @@ function signupPayload() {
       lines = '<p class="phandle">' + esc("403 " + (body.blocked403 || 0) + " · 429 " + (body.blocked429 || 0) + " · captcha " + (body.captcha || 0)) + "</p>";
       lines += rows.map(function (row) {
         var when = "";
-        try { when = row.until ? new Date(row.until).toLocaleString() : ""; } catch (err) { when = row.until || ""; }
+        try { when = row.until ? new Date(row.until).toLocaleString((window.SI18n ? window.SI18n.locale() : undefined)) : ""; } catch (err) { when = row.until || ""; }
         return '<p class="phandle">@' + esc(row.handle || "") + " " + esc(tr("Backing off until {time}", { time: when })) + "</p>";
       }).join("");
     }
@@ -4048,7 +4049,7 @@ function signupPayload() {
     }).join("");
     return '<div class="set-block"><h2>' + esc(tr("Backup channels")) + "</h2>" +
       '<p class="set-sub">' + esc(tr("The same bot posts there. Lives are spread across these channels.")) + "</p>" +
-      '<p class="phandle">' + esc(tr("{count} extra channels", { count: String(extra) })) + "</p>" +
+      '<p class="phandle">' + esc(tn("extraChannels", extra, { count: String(extra) })) + "</p>" +
       list +
       '<input name="backup-channel" autocomplete="off" spellcheck="false" placeholder="-100…" aria-label="' + esc(tr("Add a backup channel")) + '">' +
       '<button class="outline" type="button" data-acct="add-channel">' + esc(tr("Add a backup channel")) + "</button>" +
@@ -5032,7 +5033,7 @@ else if (act === "copy-id") copyAccountId();
     var deviceKey = window.ViktorychNostr && window.ViktorychNostr.keyInfo();
     var pubkey = (next && deviceKey && deviceKey.pubkey) || federationState.nostr_pubkey;
     if (next && !pubkey) {
-      var entered = window.prompt("Enter your Nostr public key (npub or hex):", "");
+      var entered = window.prompt(tr("Enter your Nostr public key (npub or hex):"), "");
       if (!entered) return;
       pubkey = entered.trim();
     }

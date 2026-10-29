@@ -347,7 +347,7 @@
     }
     if (!textFor(key)) return "";
     const meta = (box.translateMeta && box.translateMeta[key]) || {};
-    const engine = meta.engine || tr("translation");
+    const engine = meta.engine === "Device" ? tr("on-device model") : (meta.engine || tr("translation"));
     const from = meta.source ? tr("Translated from {language} by {engine}", { language: languageName(meta.source), engine: engine }) : tr("Translated by {engine}", { engine: engine });
     return `<span>${esc(from)}</span> <button class="show-more" type="button" data-act="show-original" data-key="${esc(key)}">${tr("Show original")}</button>`;
   }
@@ -410,7 +410,7 @@
       const fill = bar.querySelector("span");
       const label = bar.querySelector("em");
       if (fill) fill.style.width = pct + "%";
-      if (label) label.textContent = pct ? "Downloading translation model · " + pct + "%" : "Downloading translation model";
+      if (label) label.textContent = pct ? tr("Downloading translation model · {pct}%", { pct: pct }) : tr("Downloading translation model");
     });
   }
 

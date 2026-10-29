@@ -11,6 +11,13 @@
   <p><a id="go" href="./#/home">Open ViktorychApp</a></p>
   <script>
   (function () {
+    try {
+      var lang = String(localStorage.getItem("superintelapp-lang") || navigator.language || "en").toLowerCase().split("-")[0];
+      var open = { es: "Abrir ViktorychApp", ru: "Открыть ВикторычАпп", hi: "ViktorychApp खोलें" }[lang];
+      if (open) { document.getElementById("go").textContent = open; document.documentElement.lang = lang; }
+    } catch (err) { /* English link */ }
+  })();
+  (function () {
     var path = location.pathname || "/";
     var parts = path.split("/").filter(function (part) { return part; });
     var root = "/";
