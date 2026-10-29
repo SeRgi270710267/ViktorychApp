@@ -98,21 +98,124 @@
 .bdg-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 15px; text-align: left; }
 .bdg-field select { max-width: 60%; height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg, #000); color: var(--text, #e7e9ea); font: inherit; }
 .badge-note { color: var(--red, #f4212e); }
-.badge-toast {
+/* Achievement unlocked: orb first, then the pill opens sideways. */
+.ach {
+  --ach-accent: var(--blue, #1d9bf0);
+  --ach-glow: rgba(29, 155, 240, 0.55);
   position: fixed;
   left: 50%;
-  bottom: 76px;
-  transform: translateX(-50%);
-  max-width: calc(100% - 32px);
-  padding: 10px 14px;
-  border-radius: 9999px;
-  background: var(--text, #e7e9ea);
-  color: var(--bg, #000);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 18px;
-  z-index: 80;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  z-index: 95;
+  transform: translate(-50%, 24px) scale(0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 420ms cubic-bezier(0.2, 1.4, 0.4, 1), opacity 260ms ease;
 }
+.ach.tier-bronze { --ach-accent: #d98a4a; --ach-glow: rgba(217, 138, 74, 0.55); }
+.ach.tier-silver { --ach-accent: #c9d1d9; --ach-glow: rgba(201, 209, 217, 0.5); }
+.ach.tier-gold { --ach-accent: #ffd400; --ach-glow: rgba(255, 212, 0, 0.5); }
+.ach.in { transform: translate(-50%, 0) scale(1); opacity: 1; pointer-events: auto; }
+.ach.out { transform: translate(-50%, 12px) scale(0.9); opacity: 0; pointer-events: none; }
+.ach-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  max-width: 64px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 9999px;
+  background: #16181c;
+  color: var(--text, #e7e9ea);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 8px 28px rgba(0, 0, 0, 0.7), 0 0 24px var(--ach-glow);
+  transition: max-width 520ms cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.ach.open .ach-pill { max-width: min(460px, calc(100vw - 24px)); padding-right: 22px; }
+.ach-pill:focus-visible { outline: 2px solid var(--ach-accent); outline-offset: 3px; }
+.ach-orb {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #202327 0%, #000 72%);
+  box-shadow: inset 0 0 0 2px var(--ach-accent), 0 0 18px var(--ach-glow);
+}
+.ach-ico { font-size: 28px; line-height: 1; transform: scale(0.2); transition: transform 380ms cubic-bezier(0.2, 1.6, 0.4, 1) 120ms; }
+.ach.in .ach-ico { transform: scale(1); }
+.ach-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--ach-accent);
+  opacity: 0;
+}
+.ach.in .ach-ring { animation: ach-ring 1100ms ease-out 80ms 2; }
+@keyframes ach-ring {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+.ach-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 240ms ease, transform 300ms ease;
+  white-space: nowrap;
+}
+.ach.open .ach-copy { opacity: 1; transform: none; transition-delay: 220ms; }
+.ach-kicker { color: var(--ach-accent); font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 16px; }
+.ach-name { font-size: 15px; font-weight: 700; line-height: 20px; overflow: hidden; text-overflow: ellipsis; }
+.ach-desc { color: var(--muted, #71767b); font-size: 13px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; }
+.ach-shine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+.ach.open .ach-shine { animation: ach-shine 1200ms ease-in-out 700ms 1; }
+@keyframes ach-shine {
+  0% { left: -40%; opacity: 1; }
+  100% { left: 120%; opacity: 1; }
+}
+@media (max-width: 699px) {
+  .ach { bottom: calc(53px + 14px + env(safe-area-inset-bottom, 0px)); }
+}
+html.tv-on .ach { bottom: 56px; }
+html.tv-on .ach-pill { height: 80px; max-width: 80px; }
+html.tv-on .ach.open .ach-pill { max-width: 620px; }
+html.tv-on .ach-orb { width: 78px; height: 78px; }
+.ach.calm, .ach.calm .ach-pill, .ach.calm .ach-copy, .ach.calm .ach-ico { transition: opacity 300ms ease !important; animation: none !important; }
+.ach.calm { transform: translate(-50%, 0); }
+.ach.calm .ach-pill { max-width: min(460px, calc(100vw - 24px)); padding-right: 22px; }
+.ach.calm .ach-copy, .ach.calm .ach-ico { opacity: 1; transform: none; }
+.ach.calm .ach-ring, .ach.calm .ach-shine { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ach, .ach-pill, .ach-copy, .ach-ico { transition: opacity 300ms ease !important; animation: none !important; }
+  .ach, .ach.in, .ach.out { transform: translate(-50%, 0); }
+  .ach-ring, .ach-shine { display: none; }
+}
+.ach-settings { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line, #2f3336); }
+.ach-settings h2 { font-size: 20px; font-weight: 800; margin: 0 0 4px; }
+.ach-sub { font-size: 15px; font-weight: 700; margin: 16px 0 8px; }
+.ach-demo { margin: 8px 0 12px; }
+.ach-volume { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 15px; }
+.ach-volume input { flex: 1; accent-color: var(--blue, #1d9bf0); }
+.ach-chimes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.ach-chime { display: flex; gap: 6px; }
+.ach-chime .outline { flex: 1; }
+.ach-chime .outline.on { background: var(--blue, #1d9bf0); color: #fff; border-color: var(--blue, #1d9bf0); }
+.ach-play { width: 36px; min-height: 36px; border: 1px solid var(--line, #536471); border-radius: 9999px; background: transparent; color: var(--text, #e7e9ea); cursor: pointer; }
+.ach-settings button[disabled], .ach-settings input[disabled] { opacity: 0.45; cursor: default; }

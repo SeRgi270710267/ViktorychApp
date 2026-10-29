@@ -2,6 +2,7 @@
    The edit sheet is separate. Empty sections stay out of other people's view. */
 import fs from "node:fs";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
@@ -133,4 +134,6 @@ async function browserChecks() {
 }
 
 staticChecks();
+/* Badge achievement toast and its settings ride along with the profile badges. */
+execFileSync(process.execPath, [path.join(root, "scripts", "achievement_test.js")], { stdio: "inherit" });
 await browserChecks();
