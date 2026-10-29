@@ -140,6 +140,7 @@
     return unlockedAccounts.indexOf(foldHandle(handle)) >= 0;
   }
 
+  function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
   }
@@ -731,7 +732,7 @@
       : cover + '<div class="shorts-offline"><h2>' + hooks.esc(tr("Not live right now")) + "</h2>" +
         (row && row.lastLiveAt ? "<p>" + hooks.esc(tr("Last live {time}", { time: hooks.fullTime(row.lastLiveAt) })) + "</p>" : "") +
         '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a></div>";
-    var viewers = on && row.viewers ? '<span class="shorts-viewers">' + hooks.esc(tr("{count} watching", { count: hooks.formatCount(row.viewers || 0, 1000) })) + "</span>" : "";
+    var viewers = on && row.viewers ? '<span class="shorts-viewers">' + hooks.esc(tn("watching", row.viewers || 0, { count: hooks.formatCount(row.viewers || 0, 1000) })) + "</span>" : "";
     var badge = on ? '<span class="shorts-live-tag">' + hooks.esc(tr("LIVE")) + "</span>" : "";
     var recText = recordLabel(row);
     var recBadge = recText ? '<span class="shorts-rec-tag">' + hooks.esc(recText) + "</span>" : "";
@@ -1610,7 +1611,7 @@
       if (slides[i].getAttribute("data-kind") !== "live") continue;
       if (foldHandle(slides[i].getAttribute("data-handle")) !== want) continue;
       var slot = slides[i].querySelector(".shorts-viewers");
-      var text = row.live && row.viewers ? tr("{count} watching", { count: hooks.formatCount(row.viewers, 1000) }) : "";
+      var text = row.live && row.viewers ? tn("watching", row.viewers, { count: hooks.formatCount(row.viewers, 1000) }) : "";
       if (!slot && text) {
         schedulePaint();
         return;
@@ -1748,7 +1749,7 @@
       for (var i = 0; i < slides.length; i++) {
         if (foldHandle(slides[i].getAttribute("data-handle")) !== foldHandle(row.handle)) continue;
         var slot = slides[i].querySelector(".shorts-viewers");
-        var text = row.live && row.viewers ? tr("{count} watching", { count: hooks.formatCount(row.viewers, 1000) }) : "";
+        var text = row.live && row.viewers ? tn("watching", row.viewers, { count: hooks.formatCount(row.viewers, 1000) }) : "";
         if (slot) slot.textContent = text;
       }
     });
@@ -2075,7 +2076,7 @@
       return;
     }
     var viewers = root.querySelector(".shorts-live-viewers");
-    if (viewers) viewers.textContent = info.viewers ? tr("{count} watching", { count: hooks.formatCount(info.viewers, 1000) }) : "";
+    if (viewers) viewers.textContent = info.viewers ? tn("watching", info.viewers, { count: hooks.formatCount(info.viewers, 1000) }) : "";
   }
 
   function endLive(handle) {
@@ -2745,7 +2746,7 @@
         if (token !== liveToken) return;
         if (!info) { finishFail(); return; }
         var viewers = root.querySelector(".shorts-live-viewers");
-        if (viewers) viewers.textContent = info.viewers ? tr("{count} watching", { count: hooks.formatCount(info.viewers, 1000) }) : "";
+        if (viewers) viewers.textContent = info.viewers ? tn("watching", info.viewers, { count: hooks.formatCount(info.viewers, 1000) }) : "";
         var quality = root.querySelector(".shorts-live-q");
         if (quality) quality.textContent = qualityLabel(info.quality);
         var badge = root.querySelector(".shorts-live-tag");
