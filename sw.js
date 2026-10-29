@@ -4,7 +4,7 @@ const VERSION = "viktorych-a99-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T03:48:00Z-usage-panel
+// cache-bust: 2026-10-29T03:47:00Z-stable-0447
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -1516,6 +1516,10 @@ self.addEventListener("message", (event) => {
   }
   if (data.type === "sw-version") {
     const info = versionInfo();
+    if (event.ports && event.ports[0]) {
+      try { event.ports[0].postMessage({ type: "sw-version", version: info.version, sha: info.sha, built: info.built }); } catch (err) { /* the page already continued */ }
+      return;
+    }
     if (event.source) {
       try { event.source.postMessage({ type: "sw-version", version: info.version, sha: info.sha, built: info.built }); } catch (err) { /* the page already continued */ }
     }
