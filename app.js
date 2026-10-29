@@ -20074,7 +20074,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (!NP || !STATE.settings) return;
       STATE.settings.notifPrivacy = NP.toggle(STATE.settings.notifPrivacy, el.dataset.key);
       // Names off: drop the device's cached names right away.
-      if (!STATE.settings.notifPrivacy.names) NP.remember([], STATE.settings.notifPrivacy);
+      if (!STATE.settings.notifPrivacy.names) NP.wipe();
       saveSettings();
       updateBadge(bellUnread());
       document.title = withUnreadTitle(document.title);

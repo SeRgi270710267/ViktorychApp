@@ -204,36 +204,83 @@
   }
 
   // The page keeps a small cache of recent notes, keyed by short id, so a push
-  // can be named without a network request. Names are only kept while the
-  // person allows names; turning names off wipes the cache.
+  // can be named without a network request. It is private (names and text),
+  // so it lives in its own database, "viktorych-notes", which sign-out, the
+  // panic wipe and device expiry delete whole. Names are only kept while the
+  // person allows them; turning names off empties it. Entries expire after 7 days.
+  var NOTES_DB = "viktorych-notes";
+  var KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+  function notesDb() {
+    return new Promise(function (resolve, reject) {
+      if (typeof indexedDB === "undefined") { reject(new Error("no-idb")); return; }
+      var req = indexedDB.open(NOTES_DB, 1);
+      req.onupgradeneeded = function () { if (!req.result.objectStoreNames.contains("c")) req.result.createObjectStore("c"); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function cacheGet(db) {
+    return new Promise(function (resolve) {
+      try {
+        var req = db.transaction("c", "readonly").objectStore("c").get(CACHE_KEY);
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { resolve(undefined); };
+      } catch (err) { resolve(undefined); }
+    });
+  }
+  function cacheSet(db, value) {
+    return new Promise(function (resolve) {
+      try {
+        var tx = db.transaction("c", "readwrite");
+        tx.objectStore("c").put(value, CACHE_KEY);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { resolve(); };
+      } catch (err) { resolve(); }
+    });
+  }
   function slim(item) {
     return {
       kind: String(item.kind || ""), name: String(item.name || "").slice(0, 80), handle: String(item.handle || "").slice(0, 80),
       text: String(item.text || "").slice(0, 200), avatar: String(item.avatar || "").slice(0, 400), hash: String(item.hash || "").slice(0, 300),
-      others: Number(item.others) || 0, platform: String(item.platform || ""), feedId: String(item.feedId || ""), id: String(item.id || "")
+      others: Number(item.others) || 0, platform: String(item.platform || ""), feedId: String(item.feedId || ""), id: String(item.id || ""),
+      kept: Date.now()
     };
   }
   function remember(items, prefs) {
     var p = normalize(prefs);
-    return openDb().then(function (db) {
-      if (!p.names) return metaSet(db, CACHE_KEY, {});
+    return notesDb().then(function (db) {
+      if (!p.names) return cacheSet(db, {}).then(function () { db.close(); });
       var list = (items || []).filter(function (item) { return item && item.id; }).slice(0, 120);
       return Promise.all(list.map(function (item) { return shortId(item.id); })).then(function (ids) {
-        return metaGet(db, CACHE_KEY).then(function (prev) {
+        return cacheGet(db).then(function (prev) {
           var map = prev && typeof prev === "object" ? prev : {};
+          var cutoff = Date.now() - KEEP_MS;
+          Object.keys(map).forEach(function (k) { if (!map[k] || Number(map[k].kept || 0) < cutoff) delete map[k]; });
           ids.forEach(function (sid, i) { if (sid) map[sid] = slim(list[i]); });
           var keys = Object.keys(map);
           if (keys.length > 200) keys.slice(0, keys.length - 200).forEach(function (k) { delete map[k]; });
-          return metaSet(db, CACHE_KEY, map);
+          return cacheSet(db, map).then(function () { db.close(); });
         });
       });
     }).catch(function () {});
   }
   function lookup(sid) {
     if (!sid) return Promise.resolve(null);
-    return openDb().then(function (db) { return metaGet(db, CACHE_KEY); }).then(function (map) {
-      return map && map[sid] ? map[sid] : null;
+    return notesDb().then(function (db) {
+      return cacheGet(db).then(function (map) {
+        db.close();
+        var row = map && map[sid];
+        return row && Number(row.kept || 0) >= Date.now() - KEEP_MS ? row : null;
+      });
     }, function () { return null; });
+  }
+  function wipe() {
+    return new Promise(function (resolve) {
+      try {
+        var req = indexedDB.deleteDatabase(NOTES_DB);
+        req.onsuccess = req.onerror = req.onblocked = function () { resolve(); };
+      } catch (err) { resolve(); }
+    });
   }
 
   function settingsHtml(prefs, esc) {
@@ -275,7 +322,7 @@
     META_KEY: META_KEY, CACHE_KEY: CACHE_KEY, TYPES: TYPES,
     defaults: defaults, normalize: normalize, typeOf: typeOf, showNames: showNames, showPreview: showPreview,
     genericText: genericText, actionTitle: actionTitle, kindFromTitleKey: kindFromTitleKey, present: present, bannerText: bannerText, badgeCount: badgeCount, titleCount: titleCount,
-    shortId: shortId, parsePush: parsePush, load: load, persist: persist, remember: remember, lookup: lookup,
+    shortId: shortId, parsePush: parsePush, load: load, persist: persist, remember: remember, lookup: lookup, wipe: wipe, NOTES_DB: NOTES_DB,
     settingsHtml: settingsHtml, toggle: toggle
   };
 });
