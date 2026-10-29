@@ -17634,8 +17634,8 @@ if (STATE.histClear) {
      placeholder and this device has the last screen of that page, paint that
      screen now; the live render replaces it in place when data arrives. Each
      finished screen is saved (bounded, least recently used first out, wiped on
-     sign-out). Pages that hold secrets or live media are never saved. */
-  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1 };
+     sign-out). Pages that hold secrets, private lists or live media are never saved. */
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1 };
   function routeLoading(html) {
     if (!html) return true;
     if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
