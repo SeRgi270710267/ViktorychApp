@@ -252,14 +252,48 @@
         }
       } catch (err) {}
       window.__VIKTORYCH_IS_RU = isRu;
+      // India: the country our own Worker saw last time, else the time zone.
+      var isIn = false;
+      try {
+        var geo = JSON.parse(localStorage.getItem("viktorychapp-geo-v1") || "null");
+        if (geo && geo.c) isIn = geo.c === "IN";
+        else {
+          var tzIn = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+          isIn = /^Asia\/(Kolkata|Calcutta)$/i.test(tzIn);
+        }
+      } catch (err) {}
+      window.__VIKTORYCH_IS_IN = isIn;
+      // Warm the connection to our API first (DNS + TLS before app.js asks).
+      // The backup goes first when the main one was failing on this device.
+      var bad = {};
+      try { bad = JSON.parse(localStorage.getItem("viktorychapp-blocked-hosts-v1") || "{}") || {}; } catch (err) {}
+      var now = Date.now();
+      function add(href, rel) {
+        var l = document.createElement("link");
+        l.rel = rel || "preconnect";
+        l.href = href;
+        l.crossOrigin = "";
+        document.head.appendChild(l);
+      }
+      try {
+        var cfgApi = window.VIKTORYCH_ACCOUNTS || {};
+        var roots = [cfgApi.api, cfgApi.backupApi].filter(Boolean);
+        var breaker = {};
+        try { breaker = JSON.parse(localStorage.getItem("viktorychapp-breaker-v1") || "{}") || {}; } catch (err) {}
+        var main = String(roots[0] || "").replace(/\/$/, "");
+        if (main && breaker[main] && Number(breaker[main].until) > now && roots[1]) roots = [roots[1], roots[0]];
+        for (var r = 0; r < roots.length; r++) {
+          var origin = String(roots[r]).match(/^https:\/\/[^/]+/);
+          if (origin) add(origin[0], r === 0 ? "preconnect" : "dns-prefetch");
+        }
+      } catch (err) {}
       if (!isRu) {
         var hosts = ["https://pbs.twimg.com", "https://video.twimg.com", "https://i.ytimg.com", "https://api.fxtwitter.com"];
         for (var i = 0; i < hosts.length; i++) {
-          var l = document.createElement("link");
-          l.rel = "preconnect";
-          l.href = hosts[i];
-          l.crossOrigin = "";
-          document.head.appendChild(l);
+          var name = hosts[i].slice(8);
+          // A host that keeps failing here goes through our relay instead.
+          if (bad[name] && Number(bad[name].until) > now) continue;
+          add(hosts[i]);
         }
       }
     })();
