@@ -353,7 +353,7 @@ html[data-theme="default"] .xdock-menu {
 }
 .xdock.side-right .xdock-resize { left: 0; cursor: nwse-resize; }
 .xdock.side-left .xdock-resize { right: 0; cursor: nesw-resize; }
-.xdock-error { color: var(--red); padding: 8px 16px; margin: 0; }
+.xdock-error { color: var(--red-text, var(--red)); padding: 8px 16px; margin: 0; }
 .xdock-signin {
   margin-top: 12px;
   padding: 8px 16px;

@@ -62,7 +62,18 @@
 .menu.rx-bar.rx-below .rx-pick:hover::before { bottom: auto; top: calc(100% + 6px); }
 .menu.rx-bar .rx-more span { font-size: 22px; font-weight: 400; color: var(--muted); width: 30px; height: 30px; line-height: 28px; text-align: center; border-radius: 50%; border: 1px solid var(--line); }
 
-.rx-row { display: flex; align-items: center; min-height: 20px; margin: 6px 0 -2px; }
+.rx-row { display: none; }
+.menu.rx-bar { touch-action: none; }
+.menu.rx-bar .rx-pick.rx-hot { transform: translateY(-10px) scale(1.5); z-index: 1; }
+.menu.rx-bar .rx-pick.rx-hot::before { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%) scale(.67); white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.85); color: #e7e9ea; font-size: 13px; font-weight: 700; pointer-events: none; }
+.menu.rx-bar.rx-below .rx-pick.rx-hot::before { bottom: auto; top: calc(100% + 6px); }
+.menu.rx-bar .rx-picks { display: flex; gap: 2px; }
+.menu.rx-bar.rx-has-counts { flex-direction: column; align-items: stretch; border-radius: 20px; }
+.menu.rx-bar .rx-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 2px 4px 2px; padding: 6px 2px 2px; border: 0; border-top: 1px solid var(--line, #2f3336); background: none; color: var(--muted, #71767b); font-size: 13px; cursor: pointer; text-align: left; }
+.menu.rx-bar .rx-counts:hover .rx-cnt-t, .menu.rx-bar .rx-counts:focus-visible .rx-cnt-t { text-decoration: underline; }
+.menu.rx-bar .rx-cnt { display: inline-flex; align-items: center; gap: 3px; }
+.menu.rx-bar .rx-cnt-e { font-size: 16px; }
+.menu.rx-bar .rx-cnt-t { margin-left: auto; color: var(--text, #e7e9ea); font-weight: 700; }
 .rx-sum { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0 2px; color: var(--muted); font-size: 13px; cursor: pointer; border-radius: 999px; }
 .rx-sum:hover .rx-n, .rx-sum:focus-visible .rx-n { text-decoration: underline; }
 .rx-bubs { display: inline-flex; }
