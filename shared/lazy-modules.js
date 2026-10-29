@@ -8,6 +8,7 @@
     games: { classic: true, scripts: ["games.js", "games.css"] },
     tv: { classic: true, scripts: ["tv-page.js", "tv-page.css"] },
     vault: { classic: false, scripts: ["vault.js", "vault.css"] },
+    packages: { classic: false, scripts: ["packages.js", "packages.css"] },
     drive: { classic: false, scripts: ["drive.js", "drive.css"] },
     communities: { classic: true, scripts: ["communities.js", "communities.css"] }
   };
