@@ -1312,6 +1312,8 @@ def main() -> None:
     direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
     device_flow = subprocess.run(["node", str(ROOT / "scripts" / "device_test.js")], cwd=ROOT)
     check(local_flow.returncode == 0, "a blocked reload paints home, a profile, a post, and notifications from cache")
+    swr_flow = subprocess.run(["node", str(ROOT / "scripts" / "swr_cache_test.js")], cwd=ROOT)
+    check(swr_flow.returncode == 0, "the shared local-first cache stays under its byte budget and evicts least recently used pages")
     check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
     check(device_flow.returncode == 0, "device performance levels, toggles, and fallbacks pass")
     tv_flow = subprocess.run(["node", str(ROOT / "scripts" / "tv_boot_test.js")], cwd=ROOT)
