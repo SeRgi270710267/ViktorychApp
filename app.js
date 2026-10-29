@@ -7659,7 +7659,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const gift = post && post.gift;
     if (!gift) return "";
     const who = gift.sender ? (gift.sender.name || gift.sender.handle || "") : tr("Anonymous gift");
-    const art = gift.svg ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${esc(gift.svg)}"/></svg>` : "";
+    const art = gift.cp && window.ProfileGifts && window.ProfileGifts.artHtml ? window.ProfileGifts.artHtml(gift, false) : (gift.svg ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${esc(gift.svg)}"/></svg>` : "");
     return `<div class="gift-attach"><span class="gift-art">${art}</span><b>${esc(who)}</b>${gift.message ? `<p>${esc(gift.message)}</p>` : ""}</div>`;
   }
 
@@ -7934,7 +7934,7 @@ const here = parseRoute();
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "points") return { name: "points", query };
     if (parts[0] === "online") return { name: "online", query };
-    if (parts[0] === "store") return { name: "store", query };
+    if (parts[0] === "store" || parts[0] === "gifts") return { name: "store", sub: parts[1] || "", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
@@ -16532,7 +16532,7 @@ if (STATE.histClear) {
       return pageHead(tr("Vault")) + emptyBlock(tr("Vault"), tr("Reload the page."));
     }
     if (route.name === "points" && window.ProfileGifts) return window.ProfileGifts.pointsPage();
-    if (route.name === "store" && window.ProfileGifts) return window.ProfileGifts.storePage();
+    if (route.name === "store" && window.ProfileGifts) return window.ProfileGifts.storePage(route);
     if (route.name === "games") {
       if (window.ViktorychGames && window.ViktorychGames.page(route)) return window.ViktorychGames.page(route);
       ensureLazy("games");

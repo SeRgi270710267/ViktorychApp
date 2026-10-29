@@ -4,7 +4,7 @@ const VERSION = "viktorych-a110-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T08:52:00Z-community-tabs
+// cache-bust: 2026-10-29T08:45:00Z-gifts-vk
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -109,6 +109,7 @@ const SHELL_FILES = [
   "./shared/presence.js",
   "./about-ui.js",
   "./gifts-ui.js",
+  "./shared/gift-catalog.js",
   "./badges.js",
   "./badges.css",
   "./audience-ui.js",
