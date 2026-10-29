@@ -210,9 +210,11 @@ test("a profile pages back through all of an account's posts", async () => {
   const cols = Object.keys(row);
   made.push(row.id);
   await db.prepare("UPDATE public_posts SET created_at = ? WHERE id = ?").bind(1700000000000, row.id).run();
-  // Copies past the posting rate limit, one second apart.
+  // Copies past the posting rate limit, one second apart. The suffix range
+  // skips the seed's own id so a random seed cannot collide with a copy.
+  const start = /^1[0-4]\d$/.test(String(row.id).slice(-3)) ? 200 : 100;
   for (let i = 1; i < 45; i++) {
-    const copy = Object.assign({}, row, { id: String(row.id).slice(0, -3) + String(100 + i), body: "post " + i, created_at: 1700000000000 + i * 1000 });
+    const copy = Object.assign({}, row, { id: String(row.id).slice(0, -3) + String(start + i), body: "post " + i, created_at: 1700000000000 + i * 1000 });
     await db.prepare("INSERT INTO public_posts (" + cols.join(",") + ") VALUES (" + cols.map(() => "?").join(",") + ")").bind(...cols.map((c) => copy[c])).run();
     made.push(copy.id);
   }
