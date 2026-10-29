@@ -50,9 +50,10 @@ assert.ok(digest.some((p) => p.busyGroup && p.kind === "digest") && !digest.some
 prefs = B.setMode({}, "loud", "top");
 const top = B.shape(sorted, { busy, prefs, now: base });
 assert.ok(top.some((p) => !p.busyGroup && p.id === "o11"), "top keeps the most engaged post");
-prefs = B.mute({}, "loud", base + 3600e3);
-assert.ok(!B.shape(sorted, { busy, prefs, now: base }).some((p) => p.feedId === "loud"), "mute hides the source");
-assert.strictEqual(B.modeFor(prefs, "loud", true, base + 7200e3), "auto", "a mute expires");
+const muteUntil = Date.now() + 3600e3;
+prefs = B.mute({}, "loud", muteUntil);
+assert.ok(!B.shape(sorted, { busy, prefs, now: muteUntil - 1 }).some((p) => p.feedId === "loud"), "mute hides the source");
+assert.strictEqual(B.modeFor(prefs, "loud", true, muteUntil + 1), "auto", "a mute expires");
 assert.deepStrictEqual(Object.keys(B.cleanPrefs({ modes: { a: "nope", b: "top" } }).modes), ["b"], "unknown modes are dropped");
 assert.deepStrictEqual(B.serverRules(B.setMode({}, "x:Loud", "originals")), ["r|x:loud"], "originals can ask the server to drop replies");
 assert.deepStrictEqual(B.serverRules(Object.assign(B.setMode({}, "x:Loud", "originals"), { server: false })), [], "the server rule is optional");
