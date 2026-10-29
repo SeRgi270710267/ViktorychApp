@@ -124,3 +124,20 @@ partial.arrayBuffer().then((body) => {
   console.error(err);
   process.exit(1);
 });
+
+// Every place the app keeps bytes is its own row; the browser's extra count is shown as a gap.
+const stores = storage.storeList({ tally: { app: { bytes: 300, count: 3, opaque: 0 }, media: { bytes: 1000, count: 2, opaque: 1 }, prefs: { bytes: 10, count: 1, opaque: 0 } }, opfs: { bytes: 5000, count: 1 }, docBytes: 40, local: 60, usage: 10000 });
+const byId = {};
+stores.list.forEach((row) => { byId[row.id] = row; });
+assert.strictEqual(byId.app.bytes, 300);
+assert.strictEqual(byId.media.approx, true);
+assert.strictEqual(byId.opfs.bytes, 5000);
+assert.strictEqual(byId.idb.bytes, 40);
+assert.strictEqual(byId.local.bytes, 70);
+assert.strictEqual(stores.known, 6410);
+assert.strictEqual(byId.other.bytes, 10000 - 6410);
+assert.strictEqual(storage.storeList(null).known, 0);
+// Drafts are never evicted by the size cap.
+const planned = storage.planEviction([{ url: "idb:drafts:compose", bytes: 50, category: "drafts", at: 1 }, { url: "a", bytes: 50, category: "feeds", at: 2 }], 10, Date.now(), Infinity);
+assert.deepStrictEqual(planned.drop.map((row) => row.url), ["a"]);
+console.log("storage panel totals ok");

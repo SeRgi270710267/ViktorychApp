@@ -250,10 +250,26 @@ async function testCleanUpdate(browser) {
   const { server, state, url } = await startServer();
   const { context, page } = await openApp(browser, url);
   try {
+    // Media saved under an older versioned cache name moves into the stable cache.
+    await page.evaluate(async () => {
+      const old = await caches.open("media-viktorych-a104-old");
+      await old.put("https://pbs.twimg.com/media/kept.jpg", new Response("img", { headers: { "content-type": "image/jpeg" } }));
+    });
     state.version = NEW;
     state.built = NEW_BUILT;
     await offerUpdate(page);
     await waitSha(page, NEW);
+    let moved = null;
+    for (let i = 0; i < 40; i++) {
+      moved = await page.evaluate(async () => {
+        const keys = await caches.keys();
+        const hit = await caches.match("https://pbs.twimg.com/media/kept.jpg", { cacheName: "media-v1" });
+        return { old: keys.includes("media-viktorych-a104-old"), hit: !!hit };
+      }).catch(() => null);
+      if (moved && moved.hit && !moved.old) break;
+      await page.waitForTimeout(250);
+    }
+    assert(moved && moved.hit && !moved.old, "saved media must survive an update " + JSON.stringify(moved));
   } finally {
     await context.close();
     server.close();
