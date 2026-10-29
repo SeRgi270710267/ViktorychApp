@@ -6,7 +6,22 @@ services:
     region: frankfurt
     dockerfilePath: backup-server/Dockerfile
     dockerContext: .
-    healthCheckPath: /v1/health
+    # Answered by the server itself, without a D1 or R2 call, so a slow
+    # Cloudflare API can never make Render restart a healthy instance.
+    healthCheckPath: /backup/health
+    # Rebuild only when code the backup runs changes. Every push to main
+    # used to rebuild it (70+ builds a day), burning the free 500 build
+    # minutes a month; once they run out Render stops deploying and the
+    # backup falls behind the Worker.
+    buildFilter:
+      paths:
+        - backup-server/**
+        - worker/src/**
+        - shared/**
+        - render.yaml
+      ignoredPaths:
+        - "**/*.md"
+        - backup-server/*.test.mjs
     envVars:
       - key: PORT
         value: "10000"
@@ -42,6 +57,11 @@ services:
       # "0" hands them all back to the Worker.
       - key: RENDER_JOBS
         value: "1"
+      # Monthly outbound budget in MB. The free workspace includes 5 GB and
+      # going over with no card suspends the service for the month, so past
+      # this the backup serves only light JSON and hands jobs to the Worker.
+      - key: RENDER_EGRESS_BUDGET_MB
+        value: "3500"
       # Optional: with this set, TikTok live watching moves here too.
       - key: GITHUB_DISPATCH_TOKEN
         sync: false
