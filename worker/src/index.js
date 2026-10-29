@@ -58,6 +58,7 @@ import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { GAMES_SCHEMA, handleGames } from "./games.js";
+import { SERVERS_SCHEMA, handleServers } from "./servers.js";
 import { handleP2p } from "./p2p.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
@@ -254,7 +255,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -774,6 +775,32 @@ async function followOwnerAccounts(env, publicId) {
   const now = Date.now();
   await env.DB.batch(ids.map((id) => env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?) ON CONFLICT(follower_id, target_id) DO NOTHING").bind(publicId, id, now)));
   return ids;
+}
+
+/* Member cards for native servers: name, handle and the avatar this viewer
+   may see. Account ids never leave the Worker. */
+async function serverCard(env, request, publicId, viewer) {
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (!row) return null;
+  const own = !!viewer && viewer.public_id === row.public_id;
+  const next = await ensureMediaKeys(env, row);
+  const account = publicAccount(next, request, own);
+  await applyViewer(env, request, next, account, viewer, own);
+  return {
+    handle: account.handle || "",
+    name: account.displayName || "",
+    avatar: account.avatar || "",
+    avatarFace: account.avatarFace || "",
+    profileLess: account.profileLess === true
+  };
+}
+
+function serverDeps(ctx) {
+  return Object.assign(recoveryDeps(), {
+    card: serverCard,
+    notify: emitNotification,
+    waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null
+  });
 }
 
 function recoveryDeps() {
@@ -5381,6 +5408,10 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/games/")) {
     const played = await handleGames(request, env, path, url, recoveryDeps());
     if (played) return played;
+  }
+  if (path === "/v1/servers" || path.startsWith("/v1/servers/")) {
+    const served = await handleServers(request, env, path, url, serverDeps(ctx));
+    if (served) return served;
   }
   if (path === "/v1/friends/presence" && request.method === "GET") {
     return handleFriendPresence(request, env, { json, readJson, rateHit, limited, sessionAccount });

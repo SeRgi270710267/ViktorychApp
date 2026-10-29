@@ -40,6 +40,7 @@ UI_FILES = (
     "drive.js",
     "games.js",
     "communities.js",
+    "servers-ui.js",
     "yt-player.js",
     "update.js",
     "storage.js",
