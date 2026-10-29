@@ -3,7 +3,8 @@
 
 feeds.config.json holds the people the owner has linked. Sync fetches every
 linked account that already has an adapter, writes people.json, and records
-cross-post hints. Likely matches go to suggestions.json and are never merged.
+cross-post hints. Strong matches found in data the sync already has merge on
+their own; weaker ones go to suggestions.json for a one-tap confirm.
 """
 
 from __future__ import annotations
@@ -745,6 +746,18 @@ def suggest(profiles: list, people: list) -> list:
     return out
 
 
+def _merge_suggestions(first: list, second: list) -> list:
+    out = []
+    seen = set()
+    for row in list(first or []) + list(second or []):
+        key = tuple(sorted(str(a.get("id") or "").casefold() for a in row.get("accounts") or []))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
 def _ref(profile: dict) -> str:
     return (profile.get("platform") or "") + ":" + (profile.get("handle") or "").casefold()
 
@@ -758,11 +771,409 @@ def _account_ref(profile: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Automatic merges. Everything here reads the profiles and posts the sync has
+# already fetched: no extra requests. Strong evidence merges, weaker evidence
+# becomes a suggestion that the reader confirms with one tap.
+
+AUTO_PLATFORMS = ("x", "threads", "instagram", "youtube", "vk", "telegram", "tiktok", "bsky", "mastodon", "rss", "reddit", "twitch")
+CROSS_WINDOW = 10 * 60
+VIDEO_WINDOW = 6 * 60 * 60
+PLATFORM_RANK = {"youtube": 0, "x": 1, "instagram": 2, "threads": 3, "tiktok": 4, "bsky": 5, "vk": 6, "telegram": 7, "rss": 8}
+
+
+def _extra_tokens(profile: dict) -> list[str]:
+    platform = profile.get("platform") or ""
+    handle = (profile.get("handle") or "").casefold()
+    out = []
+    if not handle:
+        return out
+    if platform == "tiktok":
+        out.append(f"tiktok.com/@{handle}")
+    elif platform == "bsky":
+        out.extend([f"bsky.app/profile/{handle}"])
+    elif platform == "instagram":
+        out.append(f"instagr.am/{handle}")
+    return [token for token in out if len(token) >= 6]
+
+
+def links_to(profile: dict, other: dict) -> bool:
+    """profile's bio, website or link fields point at other."""
+    if _points_at(profile, other):
+        return True
+    blob = _blob(profile)
+    if not blob.strip():
+        return False
+    for token in _extra_tokens(other):
+        if re.search(r"(?<![a-z0-9_])" + re.escape(token) + r"(?![a-z0-9_])", blob):
+            return True
+    return False
+
+
+def _same_name(left: dict, right: dict) -> bool:
+    a = re.sub(r"[^\w]+", "", _norm_name(left.get("name") or ""))
+    b = re.sub(r"[^\w]+", "", _norm_name(right.get("name") or ""))
+    return len(a) >= 3 and a == b
+
+
+def _same_avatar(left: dict, right: dict) -> bool:
+    a = _norm_avatar(left.get("avatar") or "")
+    b = _norm_avatar(right.get("avatar") or "")
+    if a and a == b:
+        return True
+    ha = left.get("avatarHash") or ""
+    hb = right.get("avatarHash") or ""
+    if ha and hb and len(ha) == len(hb):
+        try:
+            return bin(int(ha, 16) ^ int(hb, 16)).count("1") <= 10
+        except ValueError:
+            return False
+    return False
+
+
+def pair_evidence(left: dict, right: dict) -> tuple[str, list[str]]:
+    """("strong" | "weak" | "", reasons) for two profiles on different platforms."""
+    lp = left.get("platform") or ""
+    rp = right.get("platform") or ""
+    if not lp or not rp or lp == rp:
+        return "", []
+    lh = (left.get("handle") or "").casefold()
+    rh = (right.get("handle") or "").casefold()
+    if {lp, rp} == {"threads", "instagram"} and lh and lh == rh:
+        return "strong", ["threads-instagram"]
+    there = links_to(left, right)
+    back = links_to(right, left)
+    name = _same_name(left, right)
+    face = _same_avatar(left, right)
+    if there and back:
+        return "strong", ["mutual-links"]
+    if (there or back) and (name or face):
+        return "strong", ["link+" + ("name" if name else "avatar")]
+    if there or back:
+        return "weak", ["one-way-link"]
+    if lh and lh == rh and len(lh) >= 4 and (name or face):
+        return "weak", ["same-handle+" + ("name" if name else "avatar")]
+    if name and face:
+        return "weak", ["same-name+avatar"]
+    return "", []
+
+
+LINK_RE = re.compile(r"(?:https?://)?(?:www\.|m\.)?((?:x|twitter|instagram|instagr|threads|youtube|tiktok|vk|t|telegram|bsky)\.(?:com|net|me|am|app)/[@\w./-]+)", re.I)
+
+
+def candidate_pairs(rows: list) -> list:
+    """Pairs worth comparing, found through indexes instead of every pair."""
+    by_token: dict[str, list] = {}
+    by_name: dict[str, list] = {}
+    by_handle: dict[str, list] = {}
+    for at, profile in enumerate(rows):
+        for token in _tokens(profile) + _extra_tokens(profile):
+            key = re.sub(r"^https?://(?:www\.|m\.)?", "", token.casefold()).rstrip("/")
+            by_token.setdefault(key, []).append(at)
+        name = re.sub(r"[^\w]+", "", _norm_name(profile.get("name") or ""))
+        if len(name) >= 3:
+            by_name.setdefault(name, []).append(at)
+        handle = (profile.get("handle") or "").casefold()
+        if handle:
+            by_handle.setdefault(handle, []).append(at)
+    pairs: set[tuple[int, int]] = set()
+
+    def add(a: int, b: int) -> None:
+        if a != b:
+            pairs.add((min(a, b), max(a, b)))
+
+    for at, profile in enumerate(rows):
+        for match in LINK_RE.finditer(_blob(profile)):
+            key = match.group(1).casefold().rstrip("/.")
+            key = key.replace("twitter.com/", "x.com/").replace("threads.net/", "threads.com/").replace("telegram.me/", "t.me/")
+            for size in (key, key.split("?")[0], "/".join(key.split("/")[:2]), "/".join(key.split("/")[:3])):
+                for other in by_token.get(size, []):
+                    add(at, other)
+    for bucket in list(by_name.values()) + list(by_handle.values()):
+        if len(bucket) > 40:
+            continue
+        for i, a in enumerate(bucket):
+            for b in bucket[i + 1:]:
+                add(a, b)
+    return [(rows[a], rows[b]) for a, b in sorted(pairs)]
+
+
+def _profile_ref(profile: dict) -> str:
+    return (profile.get("id") or _ref(profile)).casefold()
+
+
+def auto_people(profiles: list, people: list, split: set | None = None) -> tuple[list, list, dict]:
+    """Owner-linked people, extended with strong automatic merges.
+
+    Returns (people, weak suggestions, counts). Hand-linked people keep their
+    ids and accounts; an automatic match only adds accounts to them.
+    split holds feed ids the owner pulled out; they never merge again.
+    """
+    split = {str(item).casefold() for item in (split or set())}
+    rows = []
+    seen = set()
+    for profile in profiles or []:
+        if not isinstance(profile, dict):
+            continue
+        platform = profile.get("platform") or ""
+        if platform not in AUTO_PLATFORMS or not profile.get("handle"):
+            continue
+        ref = _profile_ref(profile)
+        if ref in seen or ref in split:
+            continue
+        seen.add(ref)
+        rows.append(profile)
+    owner_of: dict[str, int] = {}
+    for index, person in enumerate(people or []):
+        for account in person.get("accounts") or []:
+            for profile in rows:
+                if _profile_match(profile, account):
+                    owner_of[_profile_ref(profile)] = index
+    parent = {_profile_ref(p): _profile_ref(p) for p in rows}
+
+    def find(key):
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    members: dict[str, list] = {key: [p] for key, p in ((_profile_ref(p), p) for p in rows)}
+    reasons: dict[str, set] = {key: set() for key in parent}
+    weak = []
+    for left, right in candidate_pairs(rows):
+        if True:
+            level, why = pair_evidence(left, right)
+            if not level:
+                continue
+            a, b = find(_profile_ref(left)), find(_profile_ref(right))
+            if a == b:
+                continue
+            if level == "weak":
+                weak.append((left, right, why))
+                continue
+            owners = {owner_of.get(_profile_ref(p)) for p in members[a] + members[b]} - {None}
+            platforms_a = {p.get("platform") for p in members[a]}
+            platforms_b = {p.get("platform") for p in members[b]}
+            if len(owners) > 1 or platforms_a & platforms_b:
+                weak.append((left, right, why))
+                continue
+            parent[b] = a
+            members[a].extend(members.pop(b))
+            reasons[a] |= reasons.pop(b) | set(why)
+    out = [dict(person, accounts=list(person.get("accounts") or [])) for person in people or []]
+    added = 0
+    created = 0
+    for root, group in members.items():
+        if len(group) < 2:
+            continue
+        owner = next((owner_of[_profile_ref(p)] for p in group if _profile_ref(p) in owner_of), None)
+        accounts = []
+        for profile in group:
+            if owner is not None and _profile_ref(profile) in owner_of:
+                continue
+            row = {"platform": profile.get("platform"), "handle": profile.get("handle"), "auto": True}
+            for field in ("permanentId", "channelId", "secUid"):
+                if profile.get(field):
+                    row[field] = profile[field]
+            accounts.append(row)
+        if owner is not None:
+            out[owner]["accounts"].extend(accounts)
+            added += len(accounts)
+            continue
+        group.sort(key=lambda p: (PLATFORM_RANK.get(p.get("platform") or "", 9), _profile_ref(p)))
+        anchor = _profile_ref(group[0])
+        import hashlib
+
+        pid = "m-" + hashlib.sha1(anchor.encode("utf-8")).hexdigest()[:12]
+        name = next((p.get("name") for p in group if p.get("name")), "") or group[0].get("handle") or pid
+        out.append({"id": pid, "name": name, "auto": True, "reasons": sorted(reasons.get(root) or []), "accounts": accounts})
+        created += 1
+    merged_refs = set()
+    for root, group in members.items():
+        if len(group) >= 2:
+            merged_refs |= {_profile_ref(p) for p in group}
+    suggestions = []
+    for left, right, why in weak:
+        if find(_profile_ref(left)) == find(_profile_ref(right)):
+            continue
+        suggestions.append({"reasons": why, "accounts": [_account_ref(left), _account_ref(right)]})
+    counts = {"auto_people": created, "auto_accounts_added": added, "merged_profiles": len(merged_refs), "suggestions": len(suggestions)}
+    return out, suggestions, counts
+
+
+def _norm_text(text: str) -> str:
+    text = URL_RE.sub(" ", text or "")
+    text = re.sub(r"[@#]\w+", " ", text)
+    text = re.sub(r"[^\w]+", " ", text.casefold()).strip()
+    return text
+
+
+def _epoch(value: str) -> float:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _post_videos(post: dict) -> set[str]:
+    found = set()
+    if (post.get("platform") or "") == "youtube":
+        vid = str(post.get("statusId") or post.get("id") or "").split(":")[-1]
+        if re.match(r"^[A-Za-z0-9_-]{11}$", vid):
+            found.add(vid)
+    also = post.get("alsoOn")
+    if isinstance(also, dict) and also.get("videoId"):
+        found.add(also["videoId"])
+    for url in collect_urls(post):
+        vid = youtube_video_id(url)
+        if vid:
+            found.add(vid)
+    return found
+
+
+def _post_score(post: dict) -> tuple:
+    media = [m for m in post.get("media") or [] if isinstance(m, dict)]
+    video = any(m.get("type") in ("video", "animated_gif") for m in media) or (post.get("platform") == "youtube")
+    pixels = 0
+    for m in media:
+        try:
+            pixels = max(pixels, int(m.get("width") or 0) * int(m.get("height") or 0))
+        except (TypeError, ValueError):
+            pass
+    return (1 if video else 0, len(media), pixels, -PLATFORM_RANK.get(post.get("platform") or "", 9))
+
+
+def _person_index(people: list) -> dict:
+    index = {}
+    for person in people or []:
+        pid = person.get("id")
+        for account in person.get("accounts") or []:
+            platform = account.get("platform") or ""
+            for name in _handle_names(account):
+                index[(platform, name.casefold())] = pid
+            if account.get("feedId"):
+                index[("feed", str(account["feedId"]).casefold())] = pid
+            if account.get("channelId"):
+                index[(platform, str(account["channelId"]).casefold())] = pid
+    return index
+
+
+def _owner(post: dict, index: dict) -> str:
+    if post.get("feedId") and ("feed", str(post["feedId"]).casefold()) in index:
+        return index[("feed", str(post["feedId"]).casefold())]
+    return index.get((post.get("platform") or "", (post.get("handle") or "").lstrip("@").casefold()), "")
+
+
+def _cross_ref(post: dict) -> dict:
+    row = {"platform": post.get("platform") or "", "id": post.get("id") or ""}
+    for field in ("feedId", "statusId", "url"):
+        if post.get(field):
+            row[field] = post[field]
+    return row
+
+
+def dedupe_cross_posts(posts: list, people: list) -> tuple[list, dict]:
+    """One card for the same post on several platforms of one person.
+
+    Same normalized text within 10 minutes, or the same YouTube video within
+    6 hours. The richest copy stays (video first, then more and larger media)
+    and lists the others in crossPosts, so a reader who follows only one of
+    the platforms still gets the post and can open each original.
+    """
+    index = _person_index(people)
+    by_person: dict[str, list] = {}
+    for at, post in enumerate(posts):
+        if not isinstance(post, dict) or post.get("kind") in ("reply", "repost") or post.get("repostedBy"):
+            continue
+        pid = _owner(post, index)
+        if pid:
+            by_person.setdefault(pid, []).append(at)
+    drop = set()
+    per_feed_dropped: dict[str, int] = {}
+    groups = 0
+    for pid, ats in by_person.items():
+        ats.sort(key=lambda i: _epoch(posts[i].get("date")))
+        for x, i in enumerate(ats):
+            if i in drop:
+                continue
+            left = posts[i]
+            lt = _epoch(left.get("date"))
+            ltext = _norm_text(left.get("text") or "")
+            lvid = _post_videos(left)
+            group = [i]
+            for j in ats[x + 1:]:
+                if j in drop:
+                    continue
+                right = posts[j]
+                rt = _epoch(right.get("date"))
+                if rt - lt > VIDEO_WINDOW:
+                    break
+                if any((posts[g].get("platform") or "") == (right.get("platform") or "") for g in group):
+                    continue
+                same_video = bool(lvid & _post_videos(right))
+                same_text = len(ltext) >= 16 and ltext == _norm_text(right.get("text") or "") and rt - lt <= CROSS_WINDOW
+                if same_video or same_text:
+                    group.append(j)
+            if len(group) < 2:
+                continue
+            groups += 1
+            keep = max(group, key=lambda g: _post_score(posts[g]))
+            primary = posts[keep]
+            refs = [r for r in (primary.get("crossPosts") or []) if isinstance(r, dict)]
+            for g in group:
+                if g == keep:
+                    continue
+                refs.append(_cross_ref(posts[g]))
+                drop.add(g)
+                fid = str(posts[g].get("feedId") or "")
+                if fid:
+                    per_feed_dropped[fid] = per_feed_dropped.get(fid, 0) + 1
+            primary["crossPosts"] = refs
+            primary.pop("alsoOn", None) if (primary.get("platform") == "youtube") else None
+    kept = [post for at, post in enumerate(posts) if at not in drop]
+    per_feed_total: dict[str, int] = {}
+    for post in posts:
+        if isinstance(post, dict) and post.get("feedId"):
+            per_feed_total[str(post["feedId"])] = per_feed_total.get(str(post["feedId"]), 0) + 1
+    mirrors = {}
+    for fid, n in per_feed_dropped.items():
+        total = per_feed_total.get(fid, 0)
+        if total >= 3 and n / total >= 0.8:
+            mirrors[fid] = round(n / total, 2)
+    return kept, {"groups": groups, "dropped": len(drop), "before": len(posts), "after": len(kept), "mirrors": mirrors}
+
+
+MIRROR_KEY = "sync/mirrors.json"
+MIRROR_EVERY = 3 * 60 * 60
+
+
+def mirror_due(mirrors: dict, feed_id: str, now: float) -> bool:
+    """A source that only repeats another merged source is read every 3 hours."""
+    row = (mirrors or {}).get(feed_id)
+    if not isinstance(row, dict):
+        return True
+    return now - float(row.get("read") or 0) >= MIRROR_EVERY
+
+
+def update_mirrors(mirrors: dict, found: dict, read_ids: set, now: float) -> dict:
+    out = {}
+    for fid, share in (found or {}).items():
+        prev = (mirrors or {}).get(fid) or {}
+        out[fid] = {"share": share, "read": now if fid in read_ids else float(prev.get("read") or now)}
+    for fid, prev in (mirrors or {}).items():
+        if fid in out or not isinstance(prev, dict):
+            continue
+        if fid not in read_ids:
+            out[fid] = prev
+    return out
+
+
 def publish(config: dict, doc: dict, fetch: bool = False, root: Path | None = None) -> dict:
     validate_config(config)
     profiles = list(doc.get("feeds") or [])
     posts = list(doc.get("posts") or [])
-    people_doc = build_people(config, profiles, fetch=fetch)
+    linked, weak, counts = auto_people(profiles, config.get("people") or [], set(config.get("peopleSplit") or []))
+    people_doc = build_people(dict(config, people=linked), profiles, fetch=fetch)
     try:
         from account_deletions import load_deletions, scrub_value
 
@@ -775,12 +1186,12 @@ def publish(config: dict, doc: dict, fetch: bool = False, root: Path | None = No
         pass
     suggestions = {
         "updated": people_doc["updated"],
-        "suggestions": suggest(profiles, config.get("people") or []),
+        "suggestions": _merge_suggestions(suggest(profiles, linked), weak),
     }
     dest = root or ROOT
     (dest / "people.json").write_text(json.dumps(people_doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (dest / "suggestions.json").write_text(json.dumps(suggestions, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"[people] {len(people_doc['people'])} people, {len(suggestions['suggestions'])} suggestions")
+    print(f"[people] {len(people_doc['people'])} people, {len(suggestions['suggestions'])} suggestions, {counts['auto_people']} automatic, {counts['merged_profiles']} merged profiles")
     return people_doc
 
 
