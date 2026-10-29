@@ -1159,9 +1159,30 @@
     }
   }
 
+  /* Sidebar logo: default wordmark, the user's own text in the wordmark
+     style, or hidden. Personal only, never shown to anyone else. */
+  function logoApi() { return window.ViktorychLogoText || null; }
+  function cleanBrandLogo(value) {
+    const api = logoApi();
+    if (api) return api.normalize(value);
+    const raw = value && typeof value === "object" ? value : {};
+    return { mode: raw.mode === "text" || raw.mode === "hidden" ? raw.mode : "default", text: typeof raw.text === "string" ? raw.text.slice(0, 20) : "" };
+  }
+  function brandLogoPref() {
+    const pref = cleanBrandLogo(STATE.settings && STATE.settings.brandLogo);
+    const api = logoApi();
+    if (pref.mode === "text" && (!api || !pref.text)) return { mode: "default", text: "" };
+    return pref;
+  }
+  function brandLogoInner(pref) {
+    const api = logoApi();
+    const custom = pref.mode === "text" && api ? api.html(pref.text, "logo-full") : "";
+    return `${custom || markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}${markSvg("mark", "logo-si")}`;
+  }
+
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed" });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", brandLogo: { mode: "default", text: "" } });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1198,6 +1219,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.followingSort = parsed.followingSort === "popular" ? "popular" : "recent";
       parsed.forYouReposts = parsed.forYouReposts !== false;
       parsed.forYouReplies = parsed.forYouReplies !== false;
+      parsed.brandLogo = cleanBrandLogo(parsed.brandLogo);
       parsed.tabViews = cleanTabViews(parsed.tabViews);
       parsed.translateTo = window.FeedsTranslate && window.FeedsTranslate.normalizeTarget ? window.FeedsTranslate.normalizeTarget(parsed.translateTo) : (parsed.translateTo || "ui");
       parsed.translateAuto = parsed.translateAuto !== false;
@@ -7896,6 +7918,7 @@ const here = parseRoute();
       if (parts[1] === "following") tab = "following";
       else if (parts[1] === "tab") tab = "list:" + (parts[2] || "");
       else if (parts[1] === "cat") tab = "cat:" + (parts[2] || "");
+      else if (parts[1] === "ctab") tab = "ctab:" + (parts[2] || "");
       return { name: "home", tab: tab, query };
     }
     if (parts[0] === "following") return { name: "home", tab: "following", query };
@@ -7907,6 +7930,7 @@ const here = parseRoute();
     }
     if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
     if (parts[0] === "cat" && parts[1]) return { name: "home", tab: "cat:" + parts[1], query };
+    if (parts[0] === "ctab" && parts[1]) return { name: "home", tab: "ctab:" + parts[1], query };
     if (parts[0] === "notifications") return { name: "notifications", tab: parts[1] || "", query };
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
@@ -8411,7 +8435,9 @@ const here = parseRoute();
   }
 
   function brandLink() {
-    return `<a class="logo" href="#/" aria-label="${productName("app")}" data-tooltip="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}${markSvg("mark", "logo-si")}</a>`;
+    const pref = brandLogoPref();
+    if (pref.mode === "hidden") return "";
+    return `<a class="logo${pref.mode === "text" ? " logo-custom" : ""}" href="#/" aria-label="${productName("app")}" data-tooltip="${productName("app")}">${brandLogoInner(pref)}</a>`;
   }
 
   function navChrome(route, extraClass, linksHtml) {
@@ -8428,9 +8454,10 @@ const here = parseRoute();
        account pinned under that list so a short screen scrolls instead of
        squashing the rows. */
     if (extraClass === "nav-land") {
-      return `<header class="nav nav-land">${brand}<div class="nav-scroll">${linksHtml}</div>${post}${account}</header>`;
+      return `<header class="nav nav-land${brand ? "" : " nav-nologo"}">${brand}<div class="nav-scroll">${linksHtml}</div>${post}${account}</header>`;
     }
-    return `<header class="nav">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div>${account}</header>`;
+    const noLogo = brand ? "" : " nav-nologo";
+    return `<header class="nav${noLogo}">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div>${account}</header>`;
   }
 
   function nav(route) {
@@ -8774,10 +8801,12 @@ const here = parseRoute();
     if (tab === "following") return "#/following";
     if (tab && tab.indexOf("list:") === 0) return "#/tab/" + encodeURIComponent(tab.slice(5));
     if (tab && tab.indexOf("cat:") === 0) return "#/cat/" + encodeURIComponent(tab.slice(4));
+    if (tab && tab.indexOf("ctab:") === 0) return "#/ctab/" + encodeURIComponent(tab.slice(5));
     return "#/";
   }
 
   function homeHash(tab) {
+    if (tab && tab.indexOf("ctab:") === 0) return homePath(tab);
     const q = new URLSearchParams();
     if (tab === "following") q.set("sort", STATE.settings.followingSort === "popular" ? "popular" : "recent");
     else if (tab && tab.indexOf("list:") === 0) {
@@ -8854,6 +8883,7 @@ const here = parseRoute();
   }
 
   function homeMember(post, tab) {
+    if (tab && tab.indexOf("ctab:") === 0) return false;
     if (tab === "following") {
       return followedPost(post);
     }
@@ -8939,6 +8969,7 @@ const here = parseRoute();
   function homeHeader(tab) {
     const lists = STATE.settings.lists.filter((l) => l.pinned);
     const cats = feedTabs().filter((item) => item.showHome !== false);
+    const pinnedCm = communityTabsPinned();
     const tabBtn = (id, label, on, face, noteId) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}"${noteId ? ` data-note-tab="${esc(noteId)}"` : ""} role="tab" aria-selected="${on ? "true" : "false"}">${face || ""}<span>${esc(label)}</span></button>`;
     const tabWithMenu = (id, label, face, noteId) => {
       if (tab !== id) return tabBtn(id, label, false, face, noteId);
@@ -8960,6 +8991,7 @@ const here = parseRoute();
           ${tabWithMenu("following", tr("Following"))}
           ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, item.emoji ? `<span class="tab-emoji">${esc(item.emoji)}</span>` : "", item.id)).join("")}
           ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
+          ${pinnedCm.map((item) => tabBtn("ctab:" + item.id, item.name, tab === "ctab:" + item.id)).join("")}
         </div>
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
@@ -8980,6 +9012,7 @@ const here = parseRoute();
 
   function tabMenu() {
     if (!STATE.tabMenu) return "";
+    if (STATE.tabMenu.indexOf("ctab:") === 0) return "";
     const which = STATE.tabMenu;
     const listId = which.indexOf("list:") === 0 ? which.slice(5) : "";
     const list = listId ? (STATE.settings.lists || []).find((item) => item.id === listId && item.pinned) : null;
@@ -9993,8 +10026,40 @@ const here = parseRoute();
     return out.concat(queue);
   }
 
+  /* Communities custom tabs the user pinned to Home. The tab list lives in
+     settings (synced privately with the account); the feed itself comes from
+     the Communities module, loaded on demand. */
+  function communityTabsBag() {
+    const bag = STATE.settings && STATE.settings.communityTabs;
+    if (window.ViktorychCommunities && window.ViktorychCommunities.cleanTabs) return window.ViktorychCommunities.cleanTabs(bag);
+    const tabs = bag && Array.isArray(bag.tabs) ? bag.tabs.filter((tab) => tab && tab.id && tab.name) : [];
+    return { at: Number(bag && bag.at) || 0, tabs: tabs };
+  }
+  function communityTabsPinned() {
+    return communityTabsBag().tabs.filter((tab) => tab.home === true).map((tab) => ({ id: String(tab.id), name: String(tab.name).slice(0, 40) }));
+  }
+  function communityTabView(tab) {
+    const id = tab.slice(5);
+    const pinned = communityTabsPinned().find((item) => item.id === id);
+    if (!pinned) return homeHeader(tab) + emptyBlock(tr("This tab isn’t pinned to Home"), tr("Pin a Communities tab to Home to see it here."));
+    if (!window.ViktorychCommunities || !window.ViktorychCommunities.tabFeed) {
+      ensureLazy("communities");
+      return homeHeader(tab) + `<div class="reply-empty">${esc(tr("Loading"))}</div>`;
+    }
+    const body = window.ViktorychCommunities.tabFeed(id);
+    const tools = `<div class="cm-tab-tools cm-home-tools"><a class="cm-btn-join" href="#/communities" data-act="cm-tab-open" data-id="${esc(id)}"><span>${esc(tr("Open in Communities"))}</span></a><button class="cm-btn-join" type="button" data-act="cm-tab-unpin" data-id="${esc(id)}"><span>${esc(tr("Unpin from Home"))}</span></button></div>`;
+    return homeHeader(tab) + tools + (body || emptyBlock(tr("No posts in this tab"), ""));
+  }
+  let pendingCommunityAction = null;
+  function withCommunities(fn) {
+    if (window.ViktorychCommunities && window.ViktorychCommunities.openAssign) { fn(window.ViktorychCommunities); return; }
+    pendingCommunityAction = fn;
+    ensureLazy("communities");
+  }
+
   function homeView(route) {
     const tab = route.tab || "foryou";
+    if (tab.indexOf("ctab:") === 0) return communityTabView(tab);
     const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
@@ -11257,6 +11322,7 @@ const here = parseRoute();
       const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
       if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
       if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
+      if (target.feedId || target.handle) rows.push(profileSheetRow("profile-cm-tab", tr("Add to Communities tab"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}" data-name="${esc(target.name || target.handle || "")}"`));
     }
     if (menu === "lists") {
       const lists = (STATE.settings && STATE.settings.lists) || [];
@@ -14018,6 +14084,51 @@ const here = parseRoute();
     }, 500);
   }
 
+  function logoPreviewHtml(pref) {
+    if (pref.mode === "hidden") return `<span class="logo-preview-none">${esc(tr("No logo. Sidebar icons move up."))}</span>`;
+    const api = logoApi();
+    const custom = pref.mode === "text" && api && pref.text ? api.html(pref.text) : "";
+    return custom || markSvg("app", "logo-preview-mark");
+  }
+  function logoSettingsHtml() {
+    const pref = cleanBrandLogo(STATE.settings && STATE.settings.brandLogo);
+    const api = logoApi();
+    const max = api ? api.MAX : 20;
+    const modeBtn = (id, label) => `<button class="outline${pref.mode === id ? " on" : ""}" type="button" role="radio" aria-checked="${pref.mode === id ? "true" : "false"}" data-act="logo-mode" data-mode="${id}">${esc(label)}</button>`;
+    const used = api ? api.length(pref.text) : pref.text.length;
+    const field = pref.mode === "text" ? `<div class="logo-field"><label class="logo-label" for="logo-text">${esc(tr("Logo text"))}</label><input id="logo-text" class="logo-input" type="text" maxlength="${max * 2}" autocomplete="off" spellcheck="false" dir="auto" value="${esc(pref.text)}" placeholder="${esc(productName("app") || "ViktorychApp")}" aria-describedby="logo-count"><span id="logo-count" class="phandle logo-count" aria-live="polite">${used}/${max}</span><button class="outline logo-reset" type="button" data-act="logo-reset">${esc(tr("Reset to default"))}</button></div>` : "";
+    return `<h2>${esc(tr("Sidebar logo"))}</h2>
+        <p class="phandle">${esc(tr("Only you see this. It shows on wide screens where the sidebar has the logo."))}</p>
+        <div class="theme-row" role="radiogroup" aria-label="${esc(tr("Sidebar logo"))}">
+          ${modeBtn("default", tr("Default"))}
+          ${modeBtn("text", tr("Custom text"))}
+          ${modeBtn("hidden", tr("Hidden"))}
+        </div>
+        ${field}
+        <div class="logo-preview" id="logo-preview" aria-hidden="true">${logoPreviewHtml(brandLogoPref())}</div>`;
+  }
+  let logoSaveTimer = 0;
+  /* Typing updates the preview and the sidebar in place, so the field keeps
+     focus; the setting is saved shortly after the last key. */
+  function logoTextInput(el) {
+    const api = logoApi();
+    if (!api || !STATE.settings) return;
+    const cleaned = api.clean(el.value);
+    if (api.length(el.value) > api.MAX) el.value = cleaned;
+    STATE.settings.brandLogo = { mode: "text", text: cleaned };
+    const pref = brandLogoPref();
+    const count = document.getElementById("logo-count");
+    if (count) count.textContent = `${api.length(cleaned)}/${api.MAX}`;
+    const preview = document.getElementById("logo-preview");
+    if (preview) preview.innerHTML = logoPreviewHtml(pref);
+    document.querySelectorAll("header.nav .logo").forEach((a) => {
+      a.innerHTML = brandLogoInner(pref);
+      a.classList.toggle("logo-custom", pref.mode === "text");
+    });
+    clearTimeout(logoSaveTimer);
+    logoSaveTimer = setTimeout(saveSettings, 600);
+  }
+
   function settingsView() {
     const route = parseRoute();
     const section = route.section || "";
@@ -14091,6 +14202,7 @@ const here = parseRoute();
           ${faceBtn("banners", "default", tr("Default"))}
           ${faceBtn("banners", "none", tr("None"))}
         </div>
+        ${logoSettingsHtml()}
         ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
         ${window.ViktorychDock && window.ViktorychDock.settingsHtml ? window.ViktorychDock.settingsHtml() : ""}
         <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">${esc(tr("Collapse sidebar"))}</button></div>
@@ -18685,6 +18797,23 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "logo-mode") {
+      const prev = cleanBrandLogo(STATE.settings.brandLogo);
+      const mode = el.dataset.mode === "text" || el.dataset.mode === "hidden" ? el.dataset.mode : "default";
+      STATE.settings.brandLogo = { mode, text: prev.text };
+      clearTimeout(logoSaveTimer);
+      saveSettings();
+      render();
+      if (mode === "text") setTimeout(() => { const input = document.getElementById("logo-text"); if (input) input.focus(); }, 0);
+      return;
+    }
+    if (act === "logo-reset") {
+      STATE.settings.brandLogo = { mode: "default", text: "" };
+      clearTimeout(logoSaveTimer);
+      saveSettings();
+      render();
+      return;
+    }
     if (act === "face-pref") {
       const mode = el.dataset.mode === "default" || el.dataset.mode === "none" ? el.dataset.mode : "show";
       if (el.dataset.kind === "banners") STATE.settings.showBanners = mode;
@@ -19052,6 +19181,27 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "close-profile-menu") { STATE.profileMenu = null; render(); return; }
     if (act === "profile-lists") { STATE.profileMenu = "lists"; render(); return; }
+    if (act === "profile-cm-tab") {
+      const id = String(el.dataset.id || "");
+      const name = String(el.dataset.name || "");
+      STATE.profileMenu = null;
+      render();
+      if (id) withCommunities((cm) => cm.openAssign("p:" + id, name));
+      return;
+    }
+    if (act === "cm-tab-unpin") {
+      const bag = communityTabsBag();
+      bag.tabs.forEach((item) => { if (item.id === el.dataset.id) item.home = false; });
+      STATE.settings.communityTabs = { at: Date.now(), tabs: bag.tabs };
+      saveSettings();
+      toast(tr("Unpinned from Home"));
+      goHash("#/");
+      return;
+    }
+    if (act === "cm-tab-open") {
+      if (window.ViktorychCommunities && window.ViktorychCommunities.openTab) window.ViktorychCommunities.openTab(el.dataset.id || "");
+      return;
+    }
     if (act === "profile-list-toggle") {
       const list = (STATE.settings.lists || []).find((item) => item.id === el.dataset.list);
       const id = String(el.dataset.id || "");
@@ -19816,6 +19966,10 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     }
     if (el.id === "settings-q") {
       settingsSearchInput(el.value);
+      return;
+    }
+    if (el.id === "logo-text") {
+      logoTextInput(el);
       return;
     }
     if (el.id === "lang-q") {
@@ -21398,6 +21552,20 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function feedsForTab(tab) {
     if (tab === "following") return followedFeeds();
+    if (tab && tab.indexOf("ctab:") === 0) {
+      const found = communityTabsBag().tabs.find((item) => item.id === tab.slice(5));
+      const out = [];
+      const seen = {};
+      ((found && found.sources) || []).forEach((src) => {
+        if (String(src).indexOf("p:") !== 0) return;
+        const feed = memberFeed(String(src).slice(2));
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+      return out.slice(0, 40);
+    }
     if (tab && tab.indexOf("list:") === 0) {
       const found = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
       const out = [];
@@ -24598,7 +24766,49 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return hiddenPost({ handle: handle, text: text, platform: platform || "app", feedId: "" });
     };
     window.ViktorychCommunities.note = function (item) { commitBellNotes(item ? [item] : []); };
+    window.ViktorychCommunities.readTabs = function () { return STATE.settings ? STATE.settings.communityTabs : null; };
+    window.ViktorychCommunities.writeTabs = function (bag) {
+      if (!STATE.settings) return;
+      STATE.settings.communityTabs = bag;
+      saveSettings();
+    };
+    window.ViktorychCommunities.profileInfo = function (id) {
+      const feed = memberFeed(id);
+      if (!feed) return null;
+      return { id: String(id), name: feed.name || feed.handle || "", handle: feed.handle || "", platform: feed.platform || "", platformLabel: PLATFORM[feed.platform] || "", avatar: feed.avatar || "" };
+    };
+    window.ViktorychCommunities.profiles = function (q) {
+      const text = String(q || "").trim().toLowerCase().replace(/^@/, "");
+      if (!text) return [];
+      return feeds().filter((feed) => feed && feed.id && ((feed.name || "") + " " + (feed.handle || "") + " " + (feed.platform || "") + " " + (PLATFORM[feed.platform] || "")).toLowerCase().indexOf(text) >= 0).slice(0, 30);
+    };
+    window.ViktorychCommunities.profileItems = function (ids) {
+      const out = [];
+      const seen = {};
+      (ids || []).slice(0, 40).forEach((id) => {
+        const feed = memberFeed(id);
+        if (!feed) return;
+        const mine = postsFor(feed).concat((STATE.pendingLive || []).filter((post) => post && (post.feedId === feed.id || sameAuthor(post, feed))));
+        mine.slice(0, 40).forEach((post) => {
+          const key = (post.platform || "") + ":" + (post.statusId || post.id);
+          if (seen[key] || hiddenPost(post)) return;
+          seen[key] = true;
+          out.push({ created: Date.parse(stamp(post)) || 0, html: card(post) });
+        });
+      });
+      return out;
+    };
+    window.ViktorychCommunities.loadProfiles = function (tabId) { return refreshHomeTabs(["ctab:" + tabId]); };
+    window.ViktorychCommunities.tabGone = function (id) {
+      const route = parseRoute();
+      if (route.name === "home" && route.tab === "ctab:" + id) goHash("#/");
+    };
     if (window.ViktorychCommunities.pullNotes) window.ViktorychCommunities.pullNotes();
+    if (pendingCommunityAction) {
+      const fn = pendingCommunityAction;
+      pendingCommunityAction = null;
+      fn(window.ViktorychCommunities);
+    }
   }
   function bindShortsModule() {
     if (!(window.ViktorychShorts && window.ViktorychShorts.bind)) return;
@@ -25138,7 +25348,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint"].forEach((key) => {
+    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
