@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseChannels, rowsFromChannel, rowsFromWidget, rowsFromWall, widgetDate, syncVk, vkChannelId } from "../src/vk.js";
+import { pickChannel, parseChannels, rowsFromChannel, rowsFromWidget, rowsFromWall, widgetDate, syncVk, vkChannelId } from "../src/vk.js";
 
 test("channel list reads ids, links and labels", () => {
   const list = parseChannels("News=https://vk.com/club42\n-7, public7\nsome_name ; https://m.vk.com/other.name?w=1");
@@ -127,4 +127,13 @@ test("a closed community with no token still lists the channel", async () => {
   await syncVk({ DATA, VK_CHANNELS: "42" }, 0, fetcher);
   assert.equal(JSON.parse(store["discord/vk.json"]).servers[0].channels[0].id, "99000000000042");
   assert.equal(JSON.parse(store["discord/messages/99000000000042.json"]).via, "closed");
+});
+
+test("a user key that follows many channels reads only the one asked for", () => {
+  const ch = (title) => ({ peer: { id: 1, type: "chat" }, chat_settings: { title: title, is_channel: true } });
+  const list = [ch("Other"), ch("Wanted Community"), ch("Third")];
+  assert.equal(pickChannel(list, ["", "wanted community"]).chat_settings.title, "Wanted Community");
+  assert.equal(pickChannel(list, ["Third", "x"]).chat_settings.title, "Third");
+  assert.equal(pickChannel(list, ["", "Nope"]), null);
+  assert.equal(pickChannel([ch("Only")], ["", "Nope"]).chat_settings.title, "Only");
 });

@@ -9,7 +9,12 @@
      community's Messenger channel with messages.getConversations and
      messages.getHistory. Channel posts never reach the wall, so this is the
      only way to read them;
+   - the owner's own user key works the same way for a channel they follow
+     in a community they do not run, but VK grants the "messages" right to
+     user keys only on request (devsupport@corp.vk.com), so it is opt-in;
    - otherwise wall.get (service or community key).
+   VK has no public web view of a channel (vk.com/im/channels/... asks
+   visitors to sign in or pass a robot check), no RSS and no embed for it.
    Without a token, or when both come back empty, VK's public community
    widget page is parsed instead (numeric ids only, open communities). The result is stored in R2 in the same shape the Discord poller
    writes, so discord-ui.js shows VK in the same list, chat view and cards:
@@ -170,12 +175,22 @@ function isChannel(conv) {
   return !!(conv && conv.peer && conv.peer.type === "chat" && settings && (settings.is_group_channel || settings.is_channel));
 }
 
-async function channelRead(env, gid, label, fetcher) {
+/* With a community key the list holds that community's own channel. With
+   the owner's own user key it holds every channel they follow, so the one
+   wanted is picked by its title (the label, or the community's name); a
+   lone channel is taken as is, and with several and no match none is. */
+export function pickChannel(list, names) {
+  const want = (names || []).map((n) => String(n || "").trim().toLowerCase()).filter(Boolean);
+  const hit = list.find((c) => want.indexOf(String(c.chat_settings.title || "").trim().toLowerCase()) >= 0);
+  return hit || (list.length === 1 ? list[0] : null);
+}
+
+async function channelRead(env, gid, label, groupName, fetcher) {
   const convs = await vkApi(env, "messages.getConversations", { filter: "all", count: "200", extended: "1" }, fetcher);
   const list = ((convs && convs.items) || []).map((item) => item && item.conversation).filter(isChannel);
   if (!list.length) return null;
-  const want = String(label || "").toLowerCase();
-  const conv = list.find((c) => want && String(c.chat_settings.title || "").toLowerCase() === want) || list[0];
+  const conv = pickChannel(list, [label, groupName]);
+  if (!conv) return null;
   const history = await vkApi(env, "messages.getHistory", { peer_id: String(conv.peer.id), count: String(KEEP), extended: "1", fields: "photo_100,screen_name" }, fetcher);
   const got = rowsFromChannel(gid, history);
   const photo = conv.chat_settings.photo || {};
@@ -270,17 +285,18 @@ async function readOne(env, channel, fetcher, now) {
   let gid = channel.gid;
   let title = channel.label;
   let avatar = "";
+  let groupName = "";
   let empty = null;
   if (token) {
     try {
       const groups = await vkApi(env, "groups.getById", gid ? { group_id: String(gid), fields: "photo_100" } : { group_id: channel.name, fields: "photo_100" }, fetcher);
       const list = Array.isArray(groups) ? groups : (groups && groups.groups) || [];
       const g = list[0];
-      if (g && g.id) { gid = Number(g.id); title = title || String(g.name || ""); avatar = String(g.photo_100 || ""); }
+      if (g && g.id) { gid = Number(g.id); groupName = String(g.name || ""); title = title || groupName; avatar = String(g.photo_100 || ""); }
     } catch (err) { /* a community key may still read its channel */ }
     if (gid) {
       try {
-        const ch = await channelRead(env, gid, channel.label, fetcher);
+        const ch = await channelRead(env, gid, channel.label, groupName, fetcher);
         if (ch && ch.rows.length) return { gid: gid, title: title || ch.title || "VK " + gid, avatar: avatar || ch.avatar, rows: ch.rows, authors: ch.authors, via: "channel" };
         if (ch) empty = { gid: gid, title: title || ch.title || "VK " + gid, avatar: avatar || ch.avatar, rows: [], authors: {}, via: "channel" };
       } catch (err) { /* not a community key, or no messages right */ }
