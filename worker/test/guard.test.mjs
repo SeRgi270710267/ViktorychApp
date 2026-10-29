@@ -49,3 +49,21 @@ test("the pulse writes only when a mark moves", async () => {
   const body = JSON.parse(await (await pulse.get(PULSE_OBJECT)).text());
   assert.equal(body.docs["feeds.json"], "e2");
 });
+
+test("signed-in and owner sessions get a bigger, separate bucket", async () => {
+  const { GUARD_TIERS, noteGuardTier, guardTier, tokenGuardKey } = await import("../src/guard.js");
+  resetGuard();
+  const limit = GUARD_LIMITS.api;
+  const t0 = 2000000;
+  const anon = "t:anon-token";
+  const signed = tokenGuardKey("signed-token");
+  const owner = tokenGuardKey("owner-token");
+  assert.equal(guardTier(anon), "anon", "an unverified token stays anonymous");
+  noteGuardTier(signed, "signed");
+  noteGuardTier(owner, "owner");
+  const room = (key) => { let n = 0; while (takeToken(key, "api", t0).ok && n < 10000) n++; return n; };
+  assert.equal(room(anon), limit.burst);
+  assert.equal(room(signed), limit.burst * GUARD_TIERS.signed);
+  assert.equal(room(owner), limit.burst * GUARD_TIERS.owner);
+  assert.ok(takeToken(owner, "api", t0).retry >= 1);
+});

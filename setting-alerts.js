@@ -112,6 +112,9 @@
     return tr("Heads up");
   }
 
+  function fmtCount(n) {
+    try { return Number(n || 0).toLocaleString(); } catch (err) { return String(n || 0); }
+  }
   function pctCopy(level, v, w, c, l) {
     var row = level === "limit" ? l : level === "critical" ? c : w;
     return row;
@@ -210,11 +213,27 @@
           [tr("You're almost out of custom tabs", v), tr("{used} of {limit} tabs used ({pct}%).", v), tr("Manage tabs")],
           [tr("Tab limit reached", v), tr("This device can keep {limit} tabs. Remove some to add more.", v), tr("Manage tabs")]);
       } },
+    /* Owner only: today's requests across every server that answers reads
+       (the Worker plus the backups), not one server's own quota. */
+    { id: "server-pool", icon: "gauge", kind: "percent", canAuto: false, href: "#/settings", target: "[data-pool-cap], .usage-panel",
+      label: function () { return tr("Server pool capacity"); },
+      page: function () { return tr("Account settings"); },
+      copy: function (level, v) {
+        var row = pctCopy(level, v,
+          [tr("{pct}% of today's server pool used", v), tr("{used} of {limit} requests across {n} servers. Resets {reset}.", v), tr("See usage")],
+          [tr("The server pool is almost used up", v), tr("{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.", v), tr("See usage")],
+          [tr("Today's server pool is used up", v), tr("All {n} servers reached their free daily requests. Resets {reset}.", v), tr("See usage")]);
+        if (v.bypass) row = [row[0], row[1] + " " + tr("{name} is used up, so reads skip it.", { name: v.bypass }), row[2]];
+        return row;
+      } },
+    /* A short pause, not a fault: shown at most once per 10 minutes, no buzz
+       or tone, and removed from System notices once the pause is over. */
     { id: "rate-limit", icon: "gauge", kind: "flag", canAuto: false, href: "#/settings/network", target: ".set-block",
+      cooldown: 10 * 60 * 1000, transient: true, silent: true,
       label: function () { return tr("Server rate limits"); },
       page: function () { return tr("Network settings"); },
       copy: function (level, v) {
-        return [tr("You're being rate limited"), tr("The server asked this device to slow down. Try again in {wait}.", v), tr("Network settings")];
+        return [tr("Taking a short pause"), tr("This device sent a lot at once, so the app waits {wait} before asking again. Nothing is lost.", v), tr("Network settings")];
       } },
     { id: "session-expired", icon: "key", kind: "flag", canAuto: true, href: "#/settings", target: "[data-acct=\"login\"], .set-block",
       label: function () { return tr("Sign-in session"); },
@@ -495,6 +514,17 @@
     });
   }
 
+  /* A passing condition is over: drop its System notice and its pop-out. */
+  function clearTransient(def, s) {
+    s.log = s.log.filter(function (e) { return e.id !== def.id; });
+    var A = popoutApi();
+    var cur = A && A.popCurrent ? A.popCurrent() : null;
+    if (cur && cur.id === "sa-" + def.id && A.popClose) A.popClose("done");
+    var doc = root.document;
+    var notes = doc && doc.querySelector ? doc.querySelector(".sa-notes") : null;
+    if (notes) redraw(".sa-notes", function () { return notesHtml() || '<section class="sa-notes" hidden></section>'; });
+  }
+
   function logAlert(def, level, v) {
     var s = state();
     var copy = def.copy(level, v);
@@ -507,7 +537,7 @@
     var entry = logAlert(def, level, v).log.pop();
     s.log.push(entry);
     var rank = RANK[level];
-    if (!(rank < RANK.critical && quietNow(p))) feedback(def, level, entry);
+    if (!def.silent && !(rank < RANK.critical && quietNow(p))) feedback(def, level, entry);
     var wantsRedirect = rank >= RANK.critical && autoOn(def.id) && !session().done[def.id];
     if (wantsRedirect) {
       redirect.pending = { id: def.id, level: level, title: entry.title, desc: entry.desc };
@@ -535,9 +565,13 @@
       if (RANK[level] > RANK[prev]) {
         s.fired[def.id] = level;
         if (!alertOn(def.id)) return;
+        if (!s.last || typeof s.last !== "object") s.last = {};
+        if (def.cooldown && s.last[def.id] && now() - s.last[def.id] < def.cooldown) return;
+        s.last[def.id] = now();
         fire(def, level, r, s, p);
         fired.push({ id: def.id, level: level });
       } else if (RANK[level] < RANK[prev]) {
+        if (def.transient && level === "ok") clearTransient(def, s);
         /* Re-arm only once usage is clearly lower, so a value that hovers on
            a threshold does not pop again and again. */
         var eased = def.kind === "percent" ? levelOf(def, r, p, 2) : level;
@@ -939,6 +973,18 @@
       } catch (err) { /* not measured */ }
     }
 
+    var accounts = root.ViktorychAccounts;
+    if (accounts && accounts.serverPool) {
+      try {
+        var sp = accounts.serverPool();
+        var resetAt = sp && sp.origins.length ? Math.min.apply(null, sp.origins.map(function (o) { return o.reset; })) : 0;
+        var resetTxt = "";
+        try { resetTxt = resetAt ? new Date(resetAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : ""; } catch (err) { resetTxt = ""; }
+        out["server-pool"] = sp && sp.cap > 0 ? { used: sp.used, limit: sp.cap, pct: sp.used / sp.cap * 100, fmt: "count",
+          vars: { used: fmtCount(sp.used), limit: fmtCount(sp.cap), n: String(sp.origins.length), reset: resetTxt, bypass: sp.bypassed.join(", ") } } : null;
+      } catch (err) { /* not measured */ }
+    }
+
     out["screen-time"] = p.screenMin > 0 ? { used: screenUsedMin(), limit: p.screenMin, pct: screenUsedMin() / p.screenMin * 100, fmt: "min" } : null;
 
     var tabs = Array.isArray(settings.feedTabs) ? settings.feedTabs.length : 0;
@@ -946,7 +992,7 @@
     var tabCount = Math.max(tabs, ntabs);
     out["feed-tabs"] = tabCount ? { used: tabCount, limit: TAB_LIMIT, pct: tabCount / TAB_LIMIT * 100, fmt: "count" } : null;
 
-    out["rate-limit"] = rate.until > now() ? { level: "warning", vars: { wait: tempLeftText(rate.until - now()) } } : null;
+    out["rate-limit"] = rate.until > now() ? { level: "info", vars: { wait: tempLeftText(rate.until - now()) } } : null;
     out["session-expired"] = sessionGone ? { level: "critical", vars: {} } : null;
 
     var accts = root.ViktorychAccounts;
@@ -1216,7 +1262,14 @@
       });
       doc.addEventListener("viktorych-api-status", function (event) {
         var d = event && event.detail || {};
-        if (d.status === 429) { rate.until = now() + Math.max(30000, Number(d.retryAfter) || 0); setTimeout(check, 50); }
+        if (d.status === 429) {
+          var wait = Math.min(10 * 60 * 1000, Math.max(5000, Number(d.retryAfter) || 30000));
+          rate.until = Math.max(rate.until, now() + wait);
+          setTimeout(check, 50);
+          // Clear it on its own once the wait is over.
+          clearTimeout(rate.timer);
+          rate.timer = setTimeout(check, rate.until - now() + 500);
+        }
         else if (d.status === 401 && d.authed) { sessionGone = true; setTimeout(check, 50); }
         else if (d.status >= 200 && d.status < 300 && d.authed && sessionGone) { sessionGone = false; setTimeout(check, 50); }
       });

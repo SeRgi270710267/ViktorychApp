@@ -18963,6 +18963,15 @@ if (STATE.histClear) {
     if (!(route.name === "home" && STATE.tabMenu === currentTab)) STATE.tabMenu = null;
     const nextKey = routeScrollKey();
     const routeChanged = !!STATE.scrollKey && STATE.scrollKey !== nextKey;
+    /* A render that runs after the hash moved but before the hashchange
+       handler (a fetch or module repaint landing in that gap, common on slow
+       CPUs) used to paint the new route at the old page's scrollY and then
+       save that as the new route's position, so going back to a list wiped
+       its remembered 1200 to 0. Paint it at the remembered position instead,
+       exactly as the hashchange render will. */
+    if (routeChanged && !routing && lastKey !== (location.hash || "#/") && lastKey !== location.hash && !STATE.snapTop && !(opts && (opts.reset || Object.prototype.hasOwnProperty.call(opts, "y")))) {
+      opts = Object.assign({}, opts || {}, { y: SCROLLS[nextKey] || 0 });
+    }
     if (route.name !== "watch") STATE.notedWatch = "";
     if (route.name !== "status") STATE.notedStatus = "";
     if (route.name !== "article") STATE.notedArticle = "";
