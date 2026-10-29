@@ -17610,14 +17610,22 @@ if (STATE.histClear) {
     const fetching = tr("Fetching posts…");
     return !!fetching && html.indexOf(">" + esc(fetching) + "<") >= 0;
   }
+  /* The snapshot only stands in until the route paints its own content once.
+     After that a progress state is part of the live page (a pending row, a
+     refresh) and must show as is. */
+  let lfKey = "";
+  let lfLive = false;
   function localFirstView(route, html) {
     const local = window.ViktorychLocal;
     if (!local || !local.readRoute || !route || SNAP_SKIP[route.name]) return html;
     const key = String(location.hash || "#/").slice(0, 300);
+    if (key !== lfKey) { lfKey = key; lfLive = false; }
     if (routeLoading(html)) {
+      if (lfLive) return html;
       const saved = local.readRoute(key);
       return saved || html;
     }
+    lfLive = true;
     if (html.length < 150000 && !/type="password"|<script/i.test(html)) local.saveRoute(key, html);
     return html;
   }
