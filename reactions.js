@@ -141,14 +141,7 @@
     return String(n);
   }
 
-  function summaryHtml(id, s) {
-    var names = s.top.map(function (row) { return row[0] + " " + row[1]; }).join(", ");
-    var bubbles = s.top.map(function (row, i) { return '<span class="rx-bub" style="z-index:' + (3 - i) + '">' + esc(row[0]) + "</span>"; }).join("");
-    return '<button class="rx-sum" type="button" data-act="stop" data-rx-who="' + esc(id) + '" aria-label="' + esc(tr("{n} reactions", { n: s.t }) + (names ? ": " + names : "")) + '">' +
-      '<span class="rx-bubs">' + bubbles + '</span><span class="rx-n">' + esc(countText(s.t)) + "</span></button>";
-  }
-
-  /* Draws the viewer's emoji on Like and the summary row above the actions. */
+  /* Draws the viewer's emoji on Like; counts stay in the pop-up. */
   function paint(id) {
     var s = summaryOf(id);
     likeButtons(id).forEach(function (btn) {
@@ -177,25 +170,19 @@
         btn.setAttribute("aria-haspopup", "true");
         btn.setAttribute("aria-keyshortcuts", "Shift+F10");
       }
+      /* Counts live only inside the reaction pop-up, never in the post. */
       var actions = btn.closest(".actions");
-      if (!actions || !actions.parentNode) return;
-      var row = actions.previousElementSibling;
-      var has = row && row.classList && row.classList.contains("rx-row") ? row : null;
-      if (!s || !s.t) {
-        if (has) has.parentNode.removeChild(has);
-        return;
-      }
-      var html = summaryHtml(id, s);
-      if (!has) {
-        has = document.createElement("div");
-        has.className = "rx-row";
-        actions.parentNode.insertBefore(has, actions);
-      }
-      if (has.getAttribute("data-html") !== html) {
-        has.innerHTML = html;
-        has.setAttribute("data-html", html);
-      }
+      var row = actions && actions.previousElementSibling;
+      if (row && row.classList && row.classList.contains("rx-row")) row.parentNode.removeChild(row);
     });
+  }
+
+  /* Emoji + count chips shown under the quick picks in the pop-up. */
+  function countsHtml(id, s) {
+    if (!s || !s.t || !s.top || !s.top.length) return "";
+    var chips = s.top.map(function (row) { return '<span class="rx-cnt"><span class="rx-cnt-e">' + esc(row[0]) + '</span><span class="rx-cnt-n">' + esc(countText(Number(row[1]) || 0)) + "</span></span>"; }).join("");
+    var names = s.top.map(function (row) { return row[0] + " " + row[1]; }).join(", ");
+    return '<button type="button" class="rx-counts" data-rx-who="' + esc(id) + '" aria-label="' + esc(tr("{n} reactions", { n: s.t }) + (names ? ": " + names : "")) + '">' + chips + '<span class="rx-cnt-t">' + esc(countText(s.t)) + "</span></button>";
   }
 
   function queue(id) {
@@ -367,7 +354,9 @@
     el.setAttribute("role", "toolbar");
     el.setAttribute("aria-label", tr("Reactions"));
     el.setAttribute("data-act", "stop");
-    el.innerHTML = items + '<button type="button" class="rx-pick rx-more" data-rx-pick="+" aria-label="' + esc(tr("More emoji")) + '" data-tip="' + esc(tr("More emoji")) + '"><span>+</span></button>';
+    var counts = countsHtml(id, s);
+    if (counts) el.className += " rx-has-counts";
+    el.innerHTML = '<div class="rx-picks">' + items + '<button type="button" class="rx-pick rx-more" data-rx-pick="+" aria-label="' + esc(tr("More emoji")) + '" data-tip="' + esc(tr("More emoji")) + '"><span>+</span></button></div>' + counts;
     actions.classList.add("rx-host");
     actions.appendChild(el);
     var left = Math.max(0, btn.offsetLeft - 12);
