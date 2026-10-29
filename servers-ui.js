@@ -815,7 +815,7 @@
         '<span class="vsrv-rail-pill"></span>' + serverIcon(s) +
         (b.mentions ? '<span class="vsrv-badge vsrv-rail-badge">' + (b.mentions > 99 ? "99+" : b.mentions) + "</span>" : "") + "</a>";
     }).join("");
-    return '<a class="vsrv-rail-item vsrv-rail-home" href="#/messages" title="' + esc(tr("Messages")) + '" aria-label="' + esc(tr("Back to Messages")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("back") + "</span></a>" +
+    return '<a class="vsrv-rail-item vsrv-rail-home" href="#/messages" title="' + esc(tr("Inbox")) + '" aria-label="' + esc(tr("Back to Inbox")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("back") + "</span></a>" +
       '<span class="vsrv-rail-sep"></span>' + items +
       (S.canCreate ? '<button type="button" class="vsrv-rail-item vsrv-rail-add" data-vs="create-sheet" title="' + esc(tr("Create a server")) + '" aria-label="' + esc(tr("Create a server")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("plus") + "</span></button>" : "") +
       '<button type="button" class="vsrv-rail-item vsrv-rail-add" data-vs="join-sheet" title="' + esc(tr("Join a server")) + '" aria-label="' + esc(tr("Join a server")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("compass") + "</span></button>";
@@ -840,7 +840,7 @@
   function sideInner() {
     var info = serverInfo(S.sid);
     if (!info) {
-      if (S.gone) return '<div class="vsrv-empty"><h2>' + esc(tr("Server not available")) + "</h2><p>" + esc(S.gone === "not_member" ? tr("You're not a member of this server.") : tr("It may have been deleted, or you were removed.")) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Messages")) + "</a></div>";
+      if (S.gone) return '<div class="vsrv-empty"><h2>' + esc(tr("Server not available")) + "</h2><p>" + esc(S.gone === "not_member" ? tr("You're not a member of this server.") : tr("It may have been deleted, or you were removed.")) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Inbox")) + "</a></div>";
       return '<div class="vsrv-side-skel" aria-busy="true"><span></span><span></span><span></span><span></span></div>';
     }
     var canChan = has(basePerms(), P.MANAGE_CHANNELS);
@@ -2419,7 +2419,7 @@
     var info = S.inviteInfo && S.inviteInfo.code === S.invite ? S.inviteInfo : null;
     var body;
     if (!info) body = '<div class="dmsgs-skel" aria-busy="true"><span></span><span></span></div>';
-    else if (info.error) body = '<div class="vsrv-join-card"><span class="vsrv-sicon vsrv-initials big">' + icon("compass") + "</span><h2>" + esc(tr("Invite invalid")) + "</h2><p>" + esc(errText({ status: 404, body: { error: info.error } })) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Messages")) + "</a></div>";
+    else if (info.error) body = '<div class="vsrv-join-card"><span class="vsrv-sicon vsrv-initials big">' + icon("compass") + "</span><h2>" + esc(tr("Invite invalid")) + "</h2><p>" + esc(errText({ status: 404, body: { error: info.error } })) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Inbox")) + "</a></div>";
     else {
       var s = info.server || {};
       body = '<div class="vsrv-join-card">' + (s.banner ? '<img class="vsrv-join-banner" src="' + esc(s.banner) + '" alt="">' : "") + serverIcon(s, "vsrv-sicon big") +

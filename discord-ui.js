@@ -122,6 +122,7 @@
   }
 
   const state = {
+    filter: "",
     servers: [],
     channels: [],
     serverName: "",
@@ -784,12 +785,25 @@
     return cmpId(rows[0].id, seenMap()[id] || "") > 0;
   }
 
+  // Inbox filter chip (?f=discord) and the test fixture flag ride along.
+  function hrefQuery() {
+    const parts = [];
+    if (state.fixture) parts.push("fixture=1");
+    if (state.filter === "discord") parts.push("f=discord");
+    return parts.length ? "?" + parts.join("&") : "";
+  }
+
+  function readFilter(route) {
+    const f = route && route.query && typeof route.query.get === "function" ? String(route.query.get("f") || "") : "";
+    return f === "discord" || f === "servers" ? f : "";
+  }
+
   function listHref() {
-    return "#/messages" + (state.fixture ? "?fixture=1" : "");
+    return "#/messages" + hrefQuery();
   }
 
   function channelHref(id) {
-    return "#/messages/discord/" + encodeURIComponent(id) + (state.fixture ? "?fixture=1" : "");
+    return "#/messages/discord/" + encodeURIComponent(id) + hrefQuery();
   }
 
   function emptyPrefs() {
@@ -1133,9 +1147,14 @@
   function listHtml(route) {
     const add = (root.DiscordPicks && root.DiscordPicks.addButtonHtml) ? root.DiscordPicks.addButtonHtml() : "";
     const warn = (root.DiscordPicks && root.DiscordPicks.keyBannerHtml) ? root.DiscordPicks.keyBannerHtml() : "";
-    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Messages") + "<" + "/h1>" + add + "</header>") + warn;
+    const chips = root.ViktorychInbox && root.ViktorychInbox.tabsHtml ? root.ViktorychInbox.tabsHtml() : "";
+    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Inbox") + "<" + "/h1>" + add + "</header>") + chips + warn;
     const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
-    const native = nativeServersHtml();
+    if (state.filter === "servers") {
+      const own = nativeServersHtml();
+      return head + (own || ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No servers yet") + "<" + "/h2><p" + ">" + tr("Servers you create or join show up here.") + "<" + "/p></div>"));
+    }
+    const native = state.filter === "discord" ? "" : nativeServersHtml();
     if (!text.length) {
       if (native) return head + native;
       return head + ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No conversations yet") + "<" + "/h2><p" + ">" + tr("Channels set to messages show up here. None are configured yet.") + "<" + "/p></div>");
@@ -1239,6 +1258,7 @@
 
   function page(route) {
     state.fixture = !!(route && route.query && typeof route.query.get === "function" && route.query.get("fixture") === "1");
+    state.filter = readFilter(route);
     if (state.fixture && !state.holdServers) {
       const kept = {};
       state.channels.forEach(function (ch) {
@@ -1604,6 +1624,7 @@
   function syncFromHash() {
     const route = routeFromLocation();
     state.fixture = !!(route.query && typeof route.query.get === "function" && route.query.get("fixture") === "1");
+    state.filter = readFilter(route);
     const id = snowflake(route.channel);
     const changed = state.open !== id;
     state.open = id;
@@ -1632,7 +1653,7 @@
     restoreWindow();
     try {
       const title = titleFor(route);
-      document.title = (title || tr("Messages")) + " / " + productName("app");
+      document.title = (title || tr("Inbox")) + " / " + productName("app");
     } catch (err) { /* ignore */ }
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(function () {
