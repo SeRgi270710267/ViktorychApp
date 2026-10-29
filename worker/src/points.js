@@ -2,6 +2,7 @@
    The ledger is append-only. A repeated ref does not pay twice. */
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
+import { GIFTS, SEASONS, FREE_PER_DAY, POPULAR } from "../../shared/gift-catalog.js";
 import { blocksEither } from "./social.js";
 import { planNotification } from "./notifications.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
@@ -98,7 +99,7 @@ const SVG = {
   candle: "M11 3h2v3h-2V3zm-5 6h12l-1 9H7L6 9zm-1 11h14v2H5v-2z"
 };
 
-export const GIFT_CATALOG = [
+const LEGACY_GIFTS = [
   { id: "heart", category: "kindness", price: 10, seasonal: false, svg: SVG.heart },
   { id: "star", category: "kindness", price: 25, seasonal: false, svg: SVG.star },
   { id: "spark", category: "celebrate", price: 50, seasonal: false, svg: SVG.spark },
@@ -108,6 +109,25 @@ export const GIFT_CATALOG = [
   { id: "cake", category: "birthday", price: 15, seasonal: false, svg: SVG.cake },
   { id: "candle", category: "birthday", price: 40, seasonal: false, svg: SVG.candle }
 ];
+
+const GIFT_BOX_SVG = "M4 10h16v10H4V10zm-1-4h18v4H3V6zm8 0h2v14h-2V6zm1 0c-2-4-6-3-5-1 1 1 3 1 5 1zm0 0c2-4 6-3 5-1-1 1-3 1-5 1z";
+
+/* The shared catalog adds art (cp) and shelves (cats). Legacy ids keep their
+   server category, so birthday-only gifts stay birthday-only. */
+export const GIFT_CATALOG = GIFTS.map((item) => {
+  const old = LEGACY_GIFTS.find((gift) => gift.id === item.id);
+  const seasonal = item.cats.some((cat) => SEASONS[cat]);
+  return {
+    id: item.id,
+    category: old ? old.category : (item.cats.find((cat) => !SEASONS[cat]) || "seasonal"),
+    price: old ? old.price : item.price,
+    seasonal: old ? old.seasonal : seasonal,
+    svg: old ? old.svg : GIFT_BOX_SVG,
+    cp: item.cp,
+    cats: item.cats
+  };
+});
+
 
 function giftById(id) {
   return GIFT_CATALOG.find((item) => item.id === id) || null;
@@ -290,6 +310,7 @@ function presentGift(row, viewerId, owner) {
     id: row.id,
     giftId: row.gift_id,
     svg: gift ? gift.svg : "",
+    cp: gift ? gift.cp : "",
     message: row.message || "",
     at: Number(row.created_at) || 0,
     hidden: row.hidden === 1,
@@ -315,6 +336,32 @@ async function listGifts(env, ownerId, viewerId, owner) {
     gifts.push(presentGift(row, viewerId, owner));
   });
   return { hidden: false, who: owner ? prefs.who : "", hideTab: owner ? prefs.hideTab : false, gifts: gifts };
+}
+
+/* Free gifts cost nothing, so each account gets a few a day. */
+async function takeFreeGift(env, publicId) {
+  const day = utcDay(Date.now());
+  const row = await env.DB.prepare(
+    "SELECT hits FROM point_daily WHERE public_id = ? AND day = ? AND action = 'free_gift'"
+  ).bind(publicId, day).first();
+  if (Number(row && row.hits) >= FREE_PER_DAY) return { ok: false, error: "free_limit", balance: await balanceOf(env, publicId) };
+  await env.DB.prepare(
+    "INSERT INTO point_daily (public_id, day, action, hits) VALUES (?, ?, 'free_gift', 1) ON CONFLICT(public_id, day, action) DO UPDATE SET hits = hits + 1"
+  ).bind(publicId, day).run();
+  return { ok: true, balance: await balanceOf(env, publicId) };
+}
+
+/* Most-sent gifts of the last two weeks, topped up from the house picks. */
+async function trendingGifts(env) {
+  let ids = [];
+  try {
+    const listed = await env.DB.prepare(
+      "SELECT gift_id, COUNT(*) AS n FROM gift_sends WHERE created_at > ? GROUP BY gift_id ORDER BY n DESC LIMIT 12"
+    ).bind(Date.now() - 14 * 86400000).all();
+    ids = rowsOf(listed).map((row) => row.gift_id).filter((id) => giftById(id));
+  } catch (err) { ids = []; }
+  POPULAR.forEach((id) => { if (ids.length < 12 && !ids.includes(id)) ids.push(id); });
+  return ids;
 }
 
 export async function dailyFreeGift() {
@@ -434,7 +481,11 @@ export async function handlePoints(request, env, path, deps) {
   const url = new URL(request.url);
   const viewer = await deps.sessionAccount(env, request);
   if (path === "/v1/gifts/catalog" && request.method === "GET") {
-    return deps.json(200, { gifts: GIFT_CATALOG.map((item) => ({ id: item.id, category: item.category, price: item.price, seasonal: item.seasonal, svg: item.svg })) });
+    return deps.json(200, {
+      gifts: GIFT_CATALOG.map((item) => ({ id: item.id, category: item.category, price: item.price, seasonal: item.seasonal, svg: item.svg, cp: item.cp, cats: item.cats })),
+      trending: await trendingGifts(env),
+      freePerDay: FREE_PER_DAY
+    });
   }
   if (path === "/v1/gifts/daily" && request.method === "GET") return deps.json(200, await dailyFreeGift());
   if (path === "/v1/points/board" && request.method === "GET") {
@@ -455,6 +506,27 @@ export async function handlePoints(request, env, path, deps) {
     return deps.json(200, await listGifts(env, ownerRow.public_id, viewer ? viewer.public_id : "", owner));
   }
   if (!viewer) return deps.json(401, { error: "unauthorized" });
+  if (path === "/v1/gifts/sent" && request.method === "GET") {
+    const listed = await env.DB.prepare(
+      "SELECT g.id, g.gift_id, g.recipient_id, g.message, g.privacy, g.context, g.created_at, a.handle AS recipient_handle, a.display_name AS recipient_name FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.recipient_id WHERE g.sender_id = ? ORDER BY g.created_at DESC LIMIT 80"
+    ).bind(viewer.public_id).all();
+    return deps.json(200, {
+      gifts: rowsOf(listed).map((row) => {
+        const gift = giftById(row.gift_id);
+        return {
+          id: row.id,
+          giftId: row.gift_id,
+          svg: gift ? gift.svg : "",
+          cp: gift ? gift.cp : "",
+          message: row.message || "",
+          privacy: row.privacy || "public",
+          context: row.context || "direct",
+          at: Number(row.created_at) || 0,
+          recipient: { handle: row.recipient_handle || "", name: row.recipient_name || "" }
+        };
+      })
+    });
+  }
   if (path === "/v1/points" && request.method === "GET") {
     return deps.json(200, {
       balance: await balanceOf(env, viewer.public_id),
@@ -547,8 +619,10 @@ export async function handlePoints(request, env, path, deps) {
     const parentId = String(body.parentId || "").replace(/[^\w.:-]/g, "").slice(0, 80);
     if (mode === "reply" && !parentId) return deps.json(400, { error: "parent" });
     const sendId = newId();
-    const paid = await spendPoints(env, viewer.public_id, gift.price, "gift", sendId);
-    if (!paid.ok) return deps.json(402, { error: paid.error, balance: paid.balance || 0 });
+    let paid;
+    if (gift.price > 0) paid = await spendPoints(env, viewer.public_id, gift.price, "gift", sendId);
+    else paid = await takeFreeGift(env, viewer.public_id);
+    if (!paid.ok) return deps.json(paid.error === "free_limit" ? 429 : 402, { error: paid.error, balance: paid.balance || 0 });
     const now = Date.now();
     const message = cleanMessage(body.message);
     let postId = "";
