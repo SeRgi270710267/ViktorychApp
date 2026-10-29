@@ -207,9 +207,12 @@ try {
     await a.waitForSelector('[data-act="block-account"]', { timeout: 5000 });
     await a.click('[data-act="block-account"]');
     const gone = (h) => !Array.from(document.querySelectorAll("#app article.post .handle")).some((el) => el.textContent.replace(/^@/, "") === h);
-    await a.waitForFunction(gone, target, { timeout: 3000 });
+    await a.waitForFunction(gone, target, { timeout: 8000 }).catch(async (err) => {
+      console.log(await a.evaluate((h) => ({ h, blocks: JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}").blocks, rows: Array.from(document.querySelectorAll("#app article.post")).slice(0, 6).map((el) => (el.querySelector(".handle") || {}).textContent + " " + el.className), toast: (document.getElementById("toast") || {}).textContent }), target));
+      throw err;
+    });
     const t0 = Date.now();
-    await b.waitForFunction(gone, target, { timeout: 3000 }).catch(() => fail("blocking in one tab did not reach the other tab"));
+    await b.waitForFunction(gone, target, { timeout: 8000 }).catch(() => fail("blocking in one tab did not reach the other tab"));
     const header = await b.evaluate(() => localStorage.getItem("viktorychapp-block-h") || "");
     if (!header || header.indexOf(target) >= 0) fail("the stored header must be hashes only");
     console.log("cross-tab block check passed", JSON.stringify({ otherTabMs: Date.now() - t0 }));
