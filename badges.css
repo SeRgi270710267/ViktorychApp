@@ -97,7 +97,7 @@
 .bdg-btn.ghost { background: transparent; color: var(--text, #e7e9ea); border: 1px solid var(--line, #536471); line-height: 38px; }
 .bdg-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 15px; text-align: left; }
 .bdg-field select { max-width: 60%; height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg, #000); color: var(--text, #e7e9ea); font: inherit; }
-.badge-note { color: var(--red, #f4212e); }
+.badge-note { color: var(--red-text, var(--red, #f4212e)); }
 /* Achievement unlocked: orb first, then the pill opens sideways. */
 .ach {
   --ach-accent: var(--blue, #1d9bf0);

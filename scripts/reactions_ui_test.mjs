@@ -86,3 +86,24 @@ test("wired into the page, the cache and every language", () => {
   assert.equal(data.length, 9);
   assert.ok(data.reduce((n, g) => n + g[1].length, 0) > 1500);
 });
+
+test("touch hold slides across the bar like Facebook", () => {
+  const rx = load();
+  assert.ok(rx.HOLD_MS >= 350 && rx.HOLD_MS <= 400);
+  const r = { left: 0, right: 300, top: 100, bottom: 150 };
+  assert.equal(rx.farFrom(r, 150, 120), false);
+  assert.equal(rx.farFrom(r, 150, 200), false);
+  assert.equal(rx.farFrom(r, 150, 400), true);
+  const js = read("reactions.js"), css = read("reactions.css");
+  assert.match(js, /passive: false/);
+  assert.match(js, /elementFromPoint/);
+  assert.match(js, /vibrate\(5\)/);
+  assert.match(css, /touch-action: none/);
+  assert.match(css, /rx-hot/);
+});
+
+test("reaction counts render only in the pop-up", () => {
+  const js = read("reactions.js");
+  assert.match(js, /rx-counts/);
+  assert.doesNotMatch(js, /insertBefore\(has, actions\)/);
+});

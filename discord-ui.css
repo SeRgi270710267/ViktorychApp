@@ -216,7 +216,7 @@
   flex: none;
 }
 .dmsgs-iconbtn svg { width: 16px; height: 16px; fill: currentColor; display: block; margin: 0 auto; }
-.dmsgs-iconbtn.on { color: var(--blue); }
+.dmsgs-iconbtn.on { color: var(--link, var(--blue)); }
 .dmsgs-iconbtn:hover { background: var(--hover); color: var(--text); }
 .dmsgs-sub { padding-bottom: 4px; }
 .dmsgs-srv:not(.open) .dmsgs-sub { display: none; }
@@ -563,10 +563,10 @@ a[href="#/messages"] .dmsgs-tab-badge {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.dmsg-text a { color: var(--blue); }
+.dmsg-text a { color: var(--link, var(--blue)); }
 .dmsg-text a:hover { text-decoration: underline; }
 .dmsg-mention {
-  color: var(--blue);
+  color: var(--link, var(--blue));
   background: var(--blue-dim);
   border-radius: 4px;
   padding: 0 2px;
@@ -651,7 +651,7 @@ a[href="#/messages"] .dmsgs-tab-badge {
 }
 .dmsg-embed-site { color: var(--muted); font-size: 12px; line-height: 16px; }
 .dmsg-embed-title { font-weight: 700; margin-top: 2px; }
-.dmsg-embed-title a { color: var(--blue); }
+.dmsg-embed-title a { color: var(--link, var(--blue)); }
 .dmsg-embed-desc { margin-top: 4px; font-size: 14px; line-height: 18px; }
 .dmsg-embed img { margin-top: 8px; }
 .dmsg-rxs { display: flex; flex-wrap: wrap; margin-top: 4px; }
@@ -778,7 +778,7 @@ body:has(.dmsgs) .fab { display: none; }
   font: 700 13px/16px inherit;
   cursor: pointer;
 }
-.dmsgs-add:hover { background: rgba(29, 155, 240, 0.1); border-color: var(--blue); color: var(--blue); }
+.dmsgs-add:hover { background: rgba(29, 155, 240, 0.1); border-color: var(--blue); color: var(--link, var(--blue)); }
 #dpick-host {
   position: fixed; inset: 0; z-index: 80;
   background: rgba(0,0,0,0.55);
@@ -805,7 +805,7 @@ body:has(.dmsgs) .fab { display: none; }
 }
 .dpick-hint, .dpick-note, .dpick-err { color: var(--muted); font-size: 13px; line-height: 18px; margin: 8px 0; }
 .dpick-err { color: #f4212e; }
-.dpick-note { color: var(--blue); }
+.dpick-note { color: var(--link, var(--blue)); }
 .dpick-paste { display: flex; gap: 8px; margin: 10px 0 16px; }
 .dpick-paste input {
   flex: 1; border: 1px solid var(--line); background: #000; color: var(--text);
@@ -818,7 +818,7 @@ body:has(.dmsgs) .fab { display: none; }
 .dpick-btn:disabled { opacity: 0.55; cursor: default; }
 .dpick-link {
   display: block; margin-top: 12px; border: 0; background: transparent;
-  color: var(--blue); font: 600 14px inherit; cursor: pointer; padding: 0;
+  color: var(--link, var(--blue)); font: 600 14px inherit; cursor: pointer; padding: 0;
 }
 .dpick-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 16px; }
 .dpick-row, .dpick-mgr {
