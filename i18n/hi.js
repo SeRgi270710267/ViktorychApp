@@ -3484,5 +3484,10 @@ SI18n.addPack("hi", {
   "This is how posts look with your choices. Pick a theme, a colour and a text size below, and this post changes right away.": "आपकी पसंद के साथ पोस्ट ऐसे दिखते हैं। नीचे थीम, रंग और टेक्स्ट आकार चुनें, यह पोस्ट तुरंत बदल जाएगा।",
   "Translate posts": "पोस्ट का अनुवाद",
   "Yellow": "पीला",
-  "Your feed": "आपकी फ़ीड"
+  "Your feed": "आपकी फ़ीड",
+  "Site health": "साइट की स्थिति",
+  "Site health: {count} problems need you": "साइट की स्थिति: {count} समस्याओं पर आपका ध्यान चाहिए",
+  "Site health: all good": "साइट की स्थिति: सब ठीक है",
+  "Site health not checked yet": "साइट की स्थिति अभी जाँची नहीं गई",
+  "Check now": "अभी जाँचें"
 });
