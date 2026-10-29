@@ -2498,5 +2498,8 @@ SI18n.addPack("ru", {
   "Paste a link or @handle": "Вставьте ссылку или @имя",
   "Select all": "Выбрать все",
   "Try another search or filter.": "Попробуйте другой запрос или фильтр.",
-  "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Разрешить приложениям Nostr находить ваш аккаунт по имени NIP-05. По умолчанию выключено."
+  "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Разрешить приложениям Nostr находить ваш аккаунт по имени NIP-05. По умолчанию выключено.",
+  "Search Settings": "Поиск по настройкам",
+  "Ask in your own words, like “make the text bigger”.": "Спросите своими словами, например «сделать текст крупнее».",
+  "Suggested by the on-device assistant": "Подсказка помощника на устройстве"
 });
