@@ -525,6 +525,15 @@
       try { window.dispatchEvent(new CustomEvent("viktorych-api-trouble", { detail: { on: now } })); } catch (err) { /* old browser */ }
     }
   }
+  /* Settings alerts watch for rate limits and expired sessions. Only the
+     status code leaves this function, never the path or the body. */
+  function noteApiStatus(code, authed, res) {
+    if (code !== 429 && code !== 401 && !(authed && code >= 200 && code < 300)) return;
+    var wait = 0;
+    try { wait = Number(res && res.headers && res.headers.get && res.headers.get("Retry-After")) * 1000 || 0; } catch (err) { wait = 0; }
+    try { document.dispatchEvent(new CustomEvent("viktorych-api-status", { detail: { status: code, authed: authed, retryAfter: wait } })); } catch (err) { /* alerts are optional */ }
+  }
+
   function api(path, opts) {
     var list = bySpeed(apiOrder());
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
@@ -575,6 +584,7 @@
         // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
         if (typeof body.status === "string") body.bodyStatus = body.status;
         body.status = code;
+        noteApiStatus(code, !!opts.token, res);
         return body;
       });
     }
@@ -1430,7 +1440,7 @@ var numberNote = form.passkey
     if (!reg) return [];
     return reg.localKeys({ allOff: !!settings && settings.syncUi === false, lookOwn: deviceOwnUi() });
   }
-  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "peopleLinks", "friendsRail", "brandLogo"];
+  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "notifPrivacy", "peopleLinks", "friendsRail", "brandLogo"];
   function pickPrefs(local, remote) {
     // Home pills and Stories: each key keeps the newer choice.
     var out = {};
@@ -4627,7 +4637,7 @@ function signupPayload() {
       sessionStorage.clear();
       sessionStorage.setItem(DELETED_KEY, "1");
     } catch (err) { /* the screen still replaces the page */ }
-    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord"];
+    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord", "viktorych-notes"];
     if (window.indexedDB && indexedDB.deleteDatabase) {
       databases.forEach(function (name) {
         try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
