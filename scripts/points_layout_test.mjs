@@ -26,7 +26,7 @@ function staticChecks() {
   if (!read("gifts-ui.js").includes('data-gift="dm"')) fail("messages need a direct gift action");
   const external = app.slice(app.indexOf("function profileView"), app.indexOf("function statusView"));
   if (external.includes("?tab=gifts") || external.includes("ProfileGifts")) fail("external profiles must not show gifts");
-  if (!read("sw.js").includes('VERSION = "viktorych-a110-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a111-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok points layout rules");
 }
 
@@ -35,7 +35,7 @@ function startServer() {
     const url = new URL(req.url, "http://127.0.0.1");
     if (url.pathname === "/") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end("<!doctype html><link rel=\"stylesheet\" href=\"/gifts.css\"><link rel=\"stylesheet\" href=\"/styles.css\"><div id=\"mount\"></div><article id=\"post\">post</article><script src=\"/gifts-ui.js\"></script>");
+      res.end("<!doctype html><link rel=\"stylesheet\" href=\"/gifts.css\"><link rel=\"stylesheet\" href=\"/styles.css\"><div id=\"mount\"></div><article id=\"post\">post</article><script src=\"/gifts-ui.js\"></script><script type=\"module\" src=\"/shared/gift-catalog.js\"></script>");
       return;
     }
     const file = path.normalize(path.join(root, decodeURIComponent(url.pathname)));
@@ -104,6 +104,39 @@ async function browserChecks() {
       if (box.overlap) fail(width + " points overlap the post");
       if (box.cards < 2) fail(width + " store grid missing");
       if (!box.text.includes("Viktorychs")) fail(width + " currency missing");
+      await page.waitForFunction(() => !!window.GiftCatalog);
+      const shelf = await page.evaluate(() => {
+        document.getElementById("mount").innerHTML = ProfileGifts.previewStore(null, { sub: "" });
+        const rows = Array.from(document.querySelectorAll(".vkg-chiprow"));
+        const shelves = Array.from(document.querySelectorAll(".vkg-shelf")).map((node) => node.getAttribute("data-shelf"));
+        const row = document.querySelector(".vkg-row");
+        const head = document.querySelector(".vkg-head");
+        const free = document.querySelectorAll(".vkg-price.is-free").length;
+        const seasons = GiftCatalog.activeSeasons();
+        const scrolls = row ? row.scrollWidth > row.clientWidth : false;
+        const chips = document.querySelectorAll(".vkg-chip").length;
+        document.getElementById("mount").innerHTML = ProfileGifts.previewStore(null, { sub: "flowers" });
+        const grid = document.querySelectorAll(".vkg-grid .vkg-item").length;
+        return {
+          chipRows: rows.length,
+          chips: chips,
+          shelves: shelves,
+          seasons: seasons,
+          scrolls: scrolls,
+          headIcons: head ? head.querySelectorAll(".vkg-btn").length : 0,
+          free: free,
+          grid: grid,
+          pageWidth: document.documentElement.scrollWidth
+        };
+      });
+      if (shelf.chipRows !== 2 || shelf.chips < 8) fail(width + " gifts need two chip rows");
+      if (shelf.headIcons !== 3) fail(width + " gifts header needs back, history and search");
+      if (shelf.shelves.length < 8) fail(width + " gifts shelves missing");
+      if (shelf.seasons.some((id) => !shelf.shelves.includes(id))) fail(width + " seasonal shelf missing");
+      if (!shelf.scrolls) fail(width + " a shelf should scroll sideways");
+      if (shelf.free < 1) fail(width + " free gifts need a label");
+      if (shelf.grid < 6) fail(width + " category grid missing");
+      if (shelf.pageWidth > width) fail(width + " gifts page overflows the screen");
       await page.close();
     }
   } finally {
