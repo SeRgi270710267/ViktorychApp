@@ -261,7 +261,8 @@ test("home and a community share one post and one reply", async () => {
   });
   assert.equal(grace.status, 201);
   const before = await call("/v1/posts", { ip: "203.0.113.84", token: grace.body.token });
-  assert.equal((before.body.posts || []).some((item) => item.id === post.body.post.id), false);
+  // For you carries anyone's top-level posts in public communities.
+  assert.equal((before.body.posts || []).some((item) => item.id === post.body.post.id), true);
 
   const joined = await call("/v1/communities/homefeed/join", {
     method: "POST",
@@ -360,7 +361,7 @@ test("home lists community posts for members, followers and the owner", async ()
   assert.equal(post.status, 200);
   const id = post.body.post.id;
   const dan = await sign("dan_home", "203.0.114.12");
-  assert.equal(await sees(dan.token, id, "203.0.114.13"), false);
+  assert.equal(await sees(dan.token, id, "203.0.114.13"), true, "public community posts reach For you");
 
   const follow = await call("/v1/follows", { method: "PUT", ip: "203.0.114.14", token: dan.token, body: { id: "app:" + cara.account.publicId } });
   assert.equal(follow.status, 200);
@@ -375,7 +376,8 @@ test("home lists community posts for members, followers and the owner", async ()
   assert.equal(await sees(cara.token, faySelf.body.post.id, "203.0.114.20"), true);
 
   const eve = await sign("eve_home", "203.0.114.21");
-  assert.equal(await sees(eve.token, id, "203.0.114.22"), false);
+  assert.equal(await sees(eve.token, id, "203.0.114.22"), true, "top-level public community posts reach For you");
+  assert.equal(await sees(eve.token, reply.body.post.id, "203.0.114.27"), false, "replies from strangers stay out of For you");
   const db = await mf.getD1Database("DB");
   const realOwner = await db.prepare("SELECT public_id FROM accounts WHERE owner = 1").first();
   if (realOwner) await db.prepare("UPDATE accounts SET owner = 0 WHERE public_id = ?").bind(realOwner.public_id).run();

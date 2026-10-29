@@ -477,9 +477,12 @@ async function listPosts(request, env, deps) {
   // ?by=<public id> lists one account's posts for its profile, with the same rules.
   const author = new URL(request.url).searchParams.get("by") || "";
   if (author && !/^\d{12}$/.test(author)) return deps.json(400, { error: "bad_author" });
+  // ?before=<ms> pages a profile back through all of the account's posts.
+  const before = author ? Math.max(0, Math.floor(Number(new URL(request.url).searchParams.get("before")) || 0)) : 0;
+  const upTo = before ? Math.min(now, before - 1) : now;
   const select = "SELECT p.id, p.author_id, p.body, p.parent_id, p.quote_id, p.created_at, p.hidden, p.audience, p.reply_control, p.location, p.poll_json, p.scheduled_at, p.ext_parent, a.handle, a.display_name, a.avatar FROM public_posts p JOIN accounts a ON a.public_id = p.author_id WHERE p.hidden = 0 AND (p.scheduled_at = 0 OR p.scheduled_at <= ?)";
   const listed = author
-    ? await env.DB.prepare(select + " AND p.author_id = ? ORDER BY p.created_at DESC LIMIT 60").bind(now, author).all()
+    ? await env.DB.prepare(select + " AND p.author_id = ? AND p.created_at <= ? ORDER BY p.created_at DESC LIMIT 60").bind(now, author, upTo).all()
     : await env.DB.prepare(select + " ORDER BY p.created_at DESC LIMIT 60").bind(now).all();
   const skip = await hiddenAuthors(env, session.public_id);
   const rows = ((listed && listed.results) || []).filter((row) => !skip.has(row.author_id));
@@ -507,15 +510,16 @@ async function listPosts(request, env, deps) {
     let list = stamped.slice();
     if (!skip.has(author)) {
       try {
-        const pack = await communityHomeRows(env, request, session, deps.presentAccount, { authorId: author });
+        const pack = await communityHomeRows(env, request, session, deps.presentAccount, { authorId: author, before: before });
         (pack.posts || []).forEach((post) => list.push({ at: Number(post.createdAt) || 0, post: post }));
       } catch (err) { /* public posts still list */ }
     }
     list.sort((a, b) => b.at - a.at);
-    const page = list.slice(0, 60).map((item) => item.post);
+    const page = list.slice(0, 40).map((item) => item.post);
     await withParents(env, request, session, page, skip);
     await decorate(env, page, session.public_id);
-    return deps.json(200, { posts: page, author: author });
+    const last = page.length ? Number(page[page.length - 1].createdAt) || 0 : 0;
+    return deps.json(200, { posts: page, author: author, more: list.length > 40 || visible.length > stamped.length || rows.length >= 60, before: last });
   }
   try {
     const pack = await communityHomeRows(env, request, session, deps.presentAccount);
