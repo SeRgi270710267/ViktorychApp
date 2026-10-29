@@ -1,0 +1,54 @@
+/* Sign in with your phone (tv-pair.js). X black theme, outline icons in currentColor. */
+.tvp-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; margin-top: 8px; }
+.tvp-qr { flex: 0 0 auto; width: 240px; height: 240px; background: #fff; border-radius: 16px; padding: 0; overflow: hidden; }
+.tvp-qr svg { display: block; width: 100%; height: 100%; }
+.tvp-side { flex: 1 1 240px; min-width: 0; }
+.tvp-steps { list-style: none; padding: 0; margin: 0 0 8px; color: #e7e9ea; font-size: 15px; line-height: 20px; }
+.tvp-steps li { display: flex; align-items: flex-start; gap: 10px; margin: 8px 0; }
+.tvp-ico { width: 22px; height: 22px; flex: 0 0 auto; color: #e7e9ea; }
+.tvp-ico.sm { width: 16px; height: 16px; color: #71767b; vertical-align: -3px; margin-right: 6px; }
+.tvp-ico.lg { width: 48px; height: 48px; color: #71767b; display: block; margin: 0 auto 8px; }
+.tvp-ico.hero { width: 56px; height: 56px; color: #e7e9ea; display: block; margin: 16px 0 8px; }
+.tvp-ico.ok, .tvp-ok .tvp-ico { color: #00ba7c; }
+.tvp-url { color: #1d9bf0; font-weight: 700; white-space: nowrap; }
+.tvp-code { white-space: nowrap; font: 800 48px/1.1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; color: #fff; margin: 10px 0; }
+.tvp-code.sm { font-size: 34px; margin: 8px 0; }
+.tvp-wait { display: flex; align-items: center; gap: 10px; color: #1d9bf0; font-size: 15px; margin: 8px 0; }
+.tvp-pulse { width: 10px; height: 10px; border-radius: 50%; background: #1d9bf0; flex: 0 0 auto; animation: tvp-pulse 1.6s ease-in-out infinite; }
+@keyframes tvp-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.15); } }
+.tvp-spin { display: block; width: 28px; height: 28px; margin: 24px auto 8px; border-radius: 50%; border: 3px solid #2f3336; border-top-color: #1d9bf0; animation: tvp-spin 0.9s linear infinite; }
+@keyframes tvp-spin { to { transform: rotate(360deg); } }
+.tvp-state { text-align: center; padding: 20px 0 8px; }
+.tvp-state .tvp-wait { justify-content: center; color: #e7e9ea; }
+.tvp-big { font-size: 26px; line-height: 1.2; font-weight: 800; color: #e7e9ea; margin: 6px 0; }
+.tvp-note, .tvp-lead, .tvp-warn { color: #71767b; font-size: 15px; line-height: 20px; margin: 8px 0; }
+.tvp-in { animation: tvp-in 0.28s ease-out both; }
+@keyframes tvp-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.tvp-phone { padding: 20px 16px 48px; color: #e7e9ea; max-width: 520px; }
+.tvp-title { font-size: 28px; line-height: 1.15; font-weight: 800; margin: 4px 0 6px; color: #e7e9ea; }
+.tvp-label { display: block; color: #71767b; font-size: 13px; margin-top: 12px; }
+.tvp-input { display: block; width: 100%; max-width: 280px; box-sizing: border-box; margin: 6px 0 12px; padding: 12px; background: #000; color: #fff; border: 1px solid #536471; border-radius: 8px; font: 700 28px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+.tvp-input:focus { outline: none; border-color: #1d9bf0; box-shadow: 0 0 0 1px #1d9bf0; }
+.tvp-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.tvp-col { display: flex; flex-direction: column; gap: 12px; margin: 16px 0 8px; max-width: 360px; }
+.tvp-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 22px; border-radius: 999px; font: 700 16px/1 inherit; font-family: inherit; text-decoration: none; cursor: pointer; border: 1px solid #536471; background: transparent; color: #e7e9ea; transition: background-color 0.2s, transform 0.12s; }
+.tvp-btn:active { transform: scale(0.98); }
+.tvp-btn.primary { background: #eff3f4; color: #0f1419; border-color: #eff3f4; }
+.tvp-btn[disabled] { opacity: 0.5; }
+.tvp-btn:focus-visible, .tvp-again:focus-visible { outline: 3px solid #1d9bf0; outline-offset: 3px; }
+.tvp-alt { color: #1d9bf0; text-decoration: none; }
+.tvp-status { min-height: 20px; font-size: 14px; color: #00ba7c; margin: 8px 0 0; }
+.tvp-status.bad { color: #f4212e; }
+.tvp-done { color: #00ba7c; font-size: 17px; font-weight: 700; }
+/* On a TV: bigger QR and code, a thick focus ring for the remote. */
+html.tv-on .tvp-qr { width: 300px; height: 300px; }
+html.tv-on .tvp-code { font-size: 64px; }
+html.tv-on .tvp-steps { font-size: 20px; line-height: 28px; }
+html.tv-on .tvp-steps .tvp-ico { width: 28px; height: 28px; }
+html.tv-on .tvp-ico.lg { width: 72px; height: 72px; }
+html.tv-on .tvp-big { font-size: 34px; }
+html.tv-on .tvp-wait, html.tv-on .tvp-note { font-size: 18px; }
+html.tv-on .tvp-again:focus, html.tv-on .tvp-btn:focus { outline: 5px solid #1d9bf0; outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .tvp-in, .tvp-pulse, .tvp-spin { animation: none; }
+}

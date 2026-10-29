@@ -27,6 +27,7 @@ import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDel
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
+import { handleTvPair } from "./tv-pair.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handlePool, notePoolDocument, poolSignable, poolUsage } from "./peer-pool.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
@@ -121,7 +122,7 @@ function originAllowed(env, origin) {
 
 function areaFor(path, method) {
   const text = String(path || "");
-  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/") || text.startsWith("/v1/webauthn/")) return "auth";
+  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/") || text.startsWith("/v1/tv-pair/") || text.startsWith("/v1/webauthn/")) return "auth";
   if (text === "/v1/sync" || text.startsWith("/v1/sync/")) return "sync";
   if (text === "/v1/owner/keys" || text.startsWith("/v1/owner/keys/")) return "owner-keys";
   if (text.startsWith("/v1/media/") || (text === "/v1/profile" && method === "PATCH")) return "upload";
@@ -5447,6 +5448,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/signup/challenge" && request.method === "GET") return json(200, await issueChallenge(env));
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
+  if (path.startsWith("/v1/tv-pair/")) return handleTvPair(request, env, { json, sha256Hex, rateHit, limited, clientIp, mintSession, sessionAccount, presentAccount, blockDeletedLogin });
   if (path === "/v1/recovery/restore" && request.method === "POST") return handleRecoveryRestore(request, env, recoveryDeps());
   if (path === "/v1/recovery/codes" && request.method === "POST") return handleRecoveryRegenerate(request, env, recoveryDeps());
   if (path.startsWith("/v1/webauthn/")) {

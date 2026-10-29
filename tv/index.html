@@ -38,12 +38,35 @@
     .icon { min-height: 56px; padding: 0 22px; border-radius: 999px; border: 1px solid #536471; background: transparent; color: #e7e9ea; font: inherit; font-weight: 700; cursor: pointer; }
     .icon[aria-pressed="true"] { background: #eff3f4; color: #0f1419; }
     .icon:focus { outline: 5px solid #1d9bf0; outline-offset: 4px; }
+    .pair { background: #000; border: 1px solid #2f3336; border-radius: 16px; padding: 20px; margin: 0 0 24px; animation: rise .28s ease-out both; }
+    .pair h2 { margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+    .pair svg { width: 28px; height: 28px; flex: 0 0 auto; }
+    .pair form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+    .pair input { font: 700 30px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; width: 9ch; min-height: 60px; padding: 0 14px; border-radius: 12px; border: 1px solid #536471; background: #000; color: #fff; }
+    .pair input:focus { outline: none; border-color: #1d9bf0; box-shadow: 0 0 0 1px #1d9bf0; }
+    .pair .btn { margin: 0; min-height: 60px; font-size: 20px; }
+    .pair .bad { color: #f4212e; min-height: 1.4em; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .pair { animation: none; } }
   </style>
 </head>
 <body>
 <main>
   <h1>ViktorychApp for Google TV and Android TV</h1>
   <p class="muted">An icon on your TV home screen that opens ViktorychApp full screen. It updates itself with the site.</p>
+
+  <section class="pair" id="pair" aria-labelledby="pair-h">
+    <h2 id="pair-h"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 2h8c1.1 0 2 .9 2 2v16c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm0 1.8c-.1 0-.2.1-.2.2v16c0 .1.1.2.2.2h8c.1 0 .2-.1.2-.2V4c0-.1-.1-.2-.2-.2H8zm2.5 13.4h3V19h-3v-1.8z"/></svg><span data-tp="pair-title">Sign in a TV</span></h2>
+    <p class="muted" data-tp="pair-intro">Enter the code your TV shows. You confirm on the next screen.</p>
+    <form id="pair-form" autocomplete="off">
+      <input id="pair-code" name="code" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" maxlength="7" placeholder="ABC 234" aria-labelledby="pair-h">
+      <button class="btn primary" type="submit" data-tp="Continue">Continue</button>
+    </form>
+    <p class="bad" id="pair-bad" role="status" aria-live="polite"></p>
+  </section>
+  <div id="tv-pair-cta" hidden>
+    <a class="btn primary" id="tv-pair-go" href="../?tv=1#/home" data-tp="Sign in with your phone">Sign in with your phone</a>
+  </div>
 
   <div class="card ok" id="have" hidden>
     <p><strong>The TV app is already on this TV.</strong> Open it from the Apps row on the home screen.</p>
@@ -101,6 +124,45 @@
 <script src="../accounts.config.js"></script>
 <script src="../shared/tv-boot.js"></script>
 <script src="../shared/tv-builder.js"></script>
+<script src="../shared/short-link.js"></script>
+<script>
+/* Phones: /tv?c=CODE or the typed code goes to the confirm screen.
+   TVs: the same page offers "Sign in with your phone" first. */
+(function () {
+  var S = window.ViktorychShort;
+  var WORDS = {
+    ru: { "pair-title": "Вход на телевизоре", "pair-intro": "Введите код с экрана телевизора. Подтвердите на следующем экране.", "Continue": "Продолжить", "bad": "Код состоит из 6 букв и цифр.", "Sign in with your phone": "Войти с телефона" },
+    es: { "pair-title": "Inicia sesión en una TV", "pair-intro": "Escribe el código que muestra tu TV. Lo confirmas en la siguiente pantalla.", "Continue": "Continuar", "bad": "Los códigos tienen 6 letras y números.", "Sign in with your phone": "Inicia sesión con tu teléfono" },
+    hi: { "pair-title": "TV पर साइन इन करें", "pair-intro": "अपने TV पर दिख रहा कोड डालें। अगली स्क्रीन पर पुष्टि करें।", "Continue": "जारी रखें", "bad": "कोड में 6 अक्षर और अंक होते हैं।", "Sign in with your phone": "अपने फ़ोन से साइन इन करें" },
+    en: { "bad": "Codes are 6 letters and numbers." }
+  };
+  var lang = "en";
+  try { lang = localStorage.getItem("superintelapp-lang") || ""; } catch (err) { lang = ""; }
+  if (!WORDS[lang]) lang = String(navigator.language || "en").slice(0, 2);
+  if (!WORDS[lang]) lang = "en";
+  function t(key, fallback) { return (WORDS[lang] && WORDS[lang][key]) || WORDS.en[key] || fallback || key; }
+  function go(code) { location.href = "../?pair=" + code; }
+  var m = /[?&]c=([^&#]+)/.exec(location.search || "");
+  var pre = m && S ? S.cleanCode(decodeURIComponent(m[1])) : "";
+  if (pre) { go(pre); return; }
+  var onTv = !!(window.ViktorychTVMode && window.ViktorychTVMode.on);
+  if (onTv) {
+    document.getElementById("pair").hidden = true;
+    document.getElementById("tv-pair-cta").hidden = false;
+  }
+  var bad = document.getElementById("pair-bad");
+  document.getElementById("pair-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = S ? S.cleanCode(document.getElementById("pair-code").value) : "";
+    if (!code) { bad.textContent = t("bad"); return; }
+    go(code);
+  });
+  if (lang !== "en") {
+    var nodes = document.querySelectorAll("[data-tp]");
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute("data-tp"), nodes[i].textContent);
+  }
+})();
+</script>
 <script>
 /* Words for the custom-name builder. The rest of this page is English. */
 (function () {
