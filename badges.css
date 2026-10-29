@@ -212,7 +212,7 @@ html.tv-on .ach-orb { width: 78px; height: 78px; }
 .ach-sub { font-size: 15px; font-weight: 700; margin: 16px 0 8px; }
 .ach-demo { margin: 8px 0 12px; }
 .ach-volume { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 15px; }
-.ach-volume input { flex: 1; accent-color: var(--blue, #1d9bf0); }
+.ach-volume input { flex: 1; }
 .ach-chimes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .ach-chime { display: flex; gap: 6px; }
 .ach-chime .outline { flex: 1; }

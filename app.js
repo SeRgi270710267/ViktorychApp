@@ -25956,6 +25956,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       if (event.touches.length !== 1) return;
+      /* Dragging a slider or typing must never count as an edge swipe Back:
+         a slider thumb at its lowest step sits inside the 28px edge zone. */
+      if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable="true"]')) { swipe = null; return; }
       if (event.target.closest && event.target.closest(".story-tray, .story-shell, #stories")) return;
       /* A sideways drag on a tab row or pill row scrolls that row. It must
          not switch Home tabs or refresh the feed. */

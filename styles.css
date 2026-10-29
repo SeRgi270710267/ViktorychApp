@@ -6513,3 +6513,98 @@ html[data-flag] a.entity { text-decoration: underline; text-decoration-color: va
 
 /* Notification privacy: locked switches while names are off. */
 .notif-privacy .tab-switch[disabled] { opacity: .5; cursor: default; }
+
+/* X-style range sliders (Display font size, video volume): a 4px track,
+   blue up to the thumb and border grey after it, a 16px solid blue thumb,
+   a soft halo on hover and press and a ring on keyboard focus. The input
+   is 24px tall (44px on touch screens) so it is easy to grab, and the
+   fill comes from --x-fill, kept current by shared/x-range.js. */
+input[type="range"] {
+  --x-range-fill: var(--blue, #1d9bf0);
+  --x-range-rest: var(--line, #2f3336);
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  box-sizing: border-box;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  accent-color: var(--x-range-fill);
+  cursor: pointer;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+input[type="range"]:focus { outline: none; }
+input[type="range"]:disabled { cursor: default; opacity: .5; }
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--x-range-fill) 0 var(--x-fill, 0%), var(--x-range-rest) var(--x-fill, 0%) 100%);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--x-range-fill);
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow .15s ease;
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--x-range-rest);
+}
+input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--x-range-fill);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--x-range-fill);
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow .15s ease;
+}
+input[type="range"]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 8px color-mix(in srgb, var(--x-range-fill) 10%, transparent); }
+input[type="range"]:hover::-moz-range-thumb { box-shadow: 0 0 0 8px color-mix(in srgb, var(--x-range-fill) 10%, transparent); }
+input[type="range"]:active::-webkit-slider-thumb { box-shadow: 0 0 0 10px color-mix(in srgb, var(--x-range-fill) 20%, transparent); }
+input[type="range"]:active::-moz-range-thumb { box-shadow: 0 0 0 10px color-mix(in srgb, var(--x-range-fill) 20%, transparent); }
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--bg, #000), 0 0 0 4px color-mix(in srgb, var(--x-range-fill) 60%, transparent); }
+input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--bg, #000), 0 0 0 4px color-mix(in srgb, var(--x-range-fill) 60%, transparent); }
+@media (pointer: coarse) {
+  input[type="range"] { height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  input[type="range"]::-webkit-slider-thumb, input[type="range"]::-moz-range-thumb { transition: none; }
+}
+
+/* A labelled slider row: title left, live value right, track, optional
+   step dots and the two ends of the scale underneath. */
+.x-range-row { position: relative; margin: 12px 0 8px; padding: 4px 0; border-radius: 12px; }
+.x-range-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.x-range-head h2 { margin: 0; }
+.x-range-value { flex: none; color: var(--blue, #1d9bf0); font-size: 15px; line-height: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.x-range-wrap { position: relative; margin: 2px 0 0; }
+.x-range-wrap input[type="range"] { width: 100%; position: relative; z-index: 1; }
+.x-range-ticks { position: absolute; left: 8px; right: 8px; top: 50%; height: 0; pointer-events: none; z-index: 2; }
+.x-range-ticks i { position: absolute; top: -2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--muted, #71767b); }
+.x-range-ticks i.on { background: #fff; opacity: .9; }
+.x-range-scale { display: flex; justify-content: space-between; color: var(--muted, #71767b); font-size: 13px; line-height: 16px; margin-top: -2px; }
+@media (pointer: coarse) { .x-range-scale { margin-top: -8px; } }
+
+/* Owner site-health pill: bottom centre like X's toasts, above the bottom
+   bar on phones, so it never sits on top of a page header or alert banner. */
+#owner-health-banner { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
+@media (max-width: 699px) {
+  #owner-health-banner { bottom: calc(env(safe-area-inset-bottom, 0px) + 76px); }
+}
