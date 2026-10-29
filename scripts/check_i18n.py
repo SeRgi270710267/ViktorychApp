@@ -54,6 +54,7 @@ UI_FILES = (
     "offline.html",
     "dock.js",
     "feeds-page.js",
+    "source-lists.js",
     "packages.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay

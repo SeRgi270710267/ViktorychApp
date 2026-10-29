@@ -179,6 +179,7 @@ const SHELL_FILES = [
   "./shared/for-you-weights.js",
   "./shared/feed-sources.js",
   "./feeds-page.js",
+  "./source-lists.js",
   "./shared/home-fresh.js",
   "./shared/pill-data.js",
   "./shared/tiktok-lock.js",
