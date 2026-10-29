@@ -894,3 +894,75 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
   background: var(--accent, #1d9bf0);
   color: #fff;
 }
+
+/* Temporary accounts */
+.temp-h { margin: 20px 0 8px; font-size: 15px; font-weight: 700; }
+.temp-picks { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.temp-chip {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.temp-chip:hover { background: var(--blue-dim); }
+.temp-chip.on { border-color: var(--blue); background: var(--blue-dim); color: var(--blue); }
+.temp-date input { color-scheme: dark light; }
+.temp-notes { margin: 12px 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 18px; }
+.temp-notes li { margin: 4px 0; }
+.temp-settings { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.temp-settings .acct-danger { color: var(--red); }
+.temp-pill, .temp-countdown {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.temp-countdown {
+  position: fixed;
+  z-index: 40;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.08);
+}
+.temp-countdown:hover { background: var(--blue-dim); }
+html[data-wall="1"] .temp-countdown { display: none; }
+.temp-label {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  vertical-align: middle;
+}
+.land-temp {
+  display: block;
+  margin-top: 16px;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0;
+}
+.land-temp:hover { text-decoration: underline; }
