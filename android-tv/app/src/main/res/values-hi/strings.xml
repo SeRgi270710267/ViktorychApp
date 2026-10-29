@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="name_media">मीडिया</string>
+    <string name="name_browser">ब्राउज़र</string>
+    <string name="name_player">प्लेयर</string>
+    <string name="name_notes">नोट्स</string>
+    <string name="name_saved">नाम सहेजा गया। होम स्क्रीन बदलने में थोड़ा समय लग सकता है।</string>
+    <string name="update_title">ऐप अपडेट</string>
+    <string name="update_downloading">अपडेट डाउनलोड हो रहा है…</string>
+    <string name="update_failed">अपडेट नहीं खुल सका। साइट से फिर कोशिश करें।</string>
+    <string name="allow_installs">इस ऐप से इंस्टॉल करने की अनुमति दें, फिर Back दबाएँ।</string>
+</resources>
