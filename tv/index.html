@@ -46,6 +46,8 @@
     .pair input:focus { outline: none; border-color: #1d9bf0; box-shadow: 0 0 0 1px #1d9bf0; }
     .pair .btn { margin: 0; min-height: 60px; font-size: 20px; }
     .pair .bad { color: #f4212e; min-height: 1.4em; }
+    .pair .hint { color: #71767b; margin: 8px 0 0; }
+    @media (min-width: 700px) { .pair input { font-size: 44px; width: 10ch; min-height: 76px; padding: 0 20px; letter-spacing: .24em; } .pair .btn { min-height: 76px; padding: 0 32px; } }
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     @media (prefers-reduced-motion: reduce) { .pair { animation: none; } }
   </style>
@@ -59,9 +61,10 @@
     <h2 id="pair-h"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 2h8c1.1 0 2 .9 2 2v16c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm0 1.8c-.1 0-.2.1-.2.2v16c0 .1.1.2.2.2h8c.1 0 .2-.1.2-.2V4c0-.1-.1-.2-.2-.2H8zm2.5 13.4h3V19h-3v-1.8z"/></svg><span data-tp="pair-title">Sign in a TV</span></h2>
     <p class="muted" data-tp="pair-intro">Enter the code your TV shows. You confirm on the next screen.</p>
     <form id="pair-form" autocomplete="off">
-      <input id="pair-code" name="code" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" maxlength="7" placeholder="ABC 234" aria-labelledby="pair-h">
+      <input id="pair-code" name="code" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABC234" aria-labelledby="pair-h" aria-describedby="pair-hint">
       <button class="btn primary" type="submit" data-tp="Continue">Continue</button>
     </form>
+    <p class="hint" id="pair-hint" data-tp="hint">Type or paste the code. It is sent as soon as all 6 characters are in.</p>
     <p class="bad" id="pair-bad" role="status" aria-live="polite"></p>
   </section>
   <div id="tv-pair-cta" hidden>
@@ -131,9 +134,9 @@
 (function () {
   var S = window.ViktorychShort;
   var WORDS = {
-    ru: { "pair-title": "Вход на телевизоре", "pair-intro": "Введите код с экрана телевизора. Подтвердите на следующем экране.", "Continue": "Продолжить", "bad": "Код состоит из 6 букв и цифр.", "Sign in with your phone": "Войти с телефона" },
-    es: { "pair-title": "Inicia sesión en una TV", "pair-intro": "Escribe el código que muestra tu TV. Lo confirmas en la siguiente pantalla.", "Continue": "Continuar", "bad": "Los códigos tienen 6 letras y números.", "Sign in with your phone": "Inicia sesión con tu teléfono" },
-    hi: { "pair-title": "TV पर साइन इन करें", "pair-intro": "अपने TV पर दिख रहा कोड डालें। अगली स्क्रीन पर पुष्टि करें।", "Continue": "जारी रखें", "bad": "कोड में 6 अक्षर और अंक होते हैं।", "Sign in with your phone": "अपने फ़ोन से साइन इन करें" },
+    ru: { "pair-title": "Вход на телевизоре", "pair-intro": "Введите код с экрана телевизора. Подтвердите на следующем экране.", "Continue": "Продолжить", "bad": "Код состоит из 6 букв и цифр.", "Sign in with your phone": "Войти с телефона", "hint": "Введите или вставьте код. Он отправится, как только будут все 6 символов." },
+    es: { "pair-title": "Inicia sesión en una TV", "pair-intro": "Escribe el código que muestra tu TV. Lo confirmas en la siguiente pantalla.", "Continue": "Continuar", "bad": "Los códigos tienen 6 letras y números.", "Sign in with your phone": "Inicia sesión con tu teléfono", "hint": "Escribe o pega el código. Se envía en cuanto estén los 6 caracteres." },
+    hi: { "pair-title": "TV पर साइन इन करें", "pair-intro": "अपने TV पर दिख रहा कोड डालें। अगली स्क्रीन पर पुष्टि करें।", "Continue": "जारी रखें", "bad": "कोड में 6 अक्षर और अंक होते हैं।", "Sign in with your phone": "अपने फ़ोन से साइन इन करें", "hint": "कोड टाइप या पेस्ट करें। सभी 6 वर्ण आते ही यह भेज दिया जाता है।" },
     en: { "bad": "Codes are 6 letters and numbers." }
   };
   var lang = "en";
@@ -151,6 +154,30 @@
     document.getElementById("tv-pair-cta").hidden = false;
   }
   var bad = document.getElementById("pair-bad");
+  var box = document.getElementById("pair-code");
+  var sent = "";
+  // Typed or pasted ("abc-234", "ABC 234"): letters and numbers only;
+  // six good characters go straight on.
+  function typed() {
+    var text = String(box.value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    if (box.value !== text) box.value = text;
+    bad.textContent = "";
+    if (text.length < 6) { sent = ""; return; }
+    var code = S ? S.cleanCode(text) : "";
+    if (!code) { bad.textContent = t("bad"); return; }
+    if (code === sent) return;
+    sent = code;
+    go(code);
+  }
+  box.addEventListener("input", typed);
+  box.addEventListener("paste", function (e) {
+    var data = e.clipboardData || window.clipboardData;
+    var text = data && data.getData ? data.getData("text") : "";
+    if (!text) return;
+    e.preventDefault();
+    box.value = text;
+    typed();
+  });
   document.getElementById("pair-form").addEventListener("submit", function (e) {
     e.preventDefault();
     var code = S ? S.cleanCode(document.getElementById("pair-code").value) : "";

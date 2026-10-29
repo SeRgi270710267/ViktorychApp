@@ -5452,7 +5452,12 @@ async function route(request, env, ctx) {
   if (path === "/v1/signup/challenge" && request.method === "GET") return json(200, await issueChallenge(env));
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
-  if (path.startsWith("/v1/tv-pair/")) return handleTvPair(request, env, { json, sha256Hex, rateHit, limited, clientIp, mintSession, sessionAccount, presentAccount, blockDeletedLogin });
+  if (path.startsWith("/v1/tv-pair/")) return handleTvPair(request, env, {
+    json, sha256Hex, rateHit, limited, clientIp, mintSession, sessionAccount, presentAccount, blockDeletedLogin,
+    notify: emitNotification,
+    findAccount: async (db, name) => { const found = await resolveName(db, name, ""); return found ? found.publicId : ""; },
+    waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null
+  });
   if (path === "/v1/recovery/restore" && request.method === "POST") return handleRecoveryRestore(request, env, recoveryDeps());
   if (path === "/v1/recovery/codes" && request.method === "POST") return handleRecoveryRegenerate(request, env, recoveryDeps());
   if (path.startsWith("/v1/webauthn/")) {
