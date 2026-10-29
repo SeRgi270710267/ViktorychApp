@@ -2501,5 +2501,22 @@ SI18n.addPack("en", {
   "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Let Nostr apps find your account by its NIP-05 name. Default is off.",
   "Search Settings": "Search Settings",
   "Ask in your own words, like “make the text bigger”.": "Ask in your own words, like “make the text bigger”.",
-  "Suggested by the on-device assistant": "Suggested by the on-device assistant"
+  "Suggested by the on-device assistant": "Suggested by the on-device assistant",
+  "Sign in to see your friends’ play time.": "Sign in to see your friends’ play time.",
+  "{n}-day streak": "{n}-day streak",
+  "Playing now": "Playing now",
+  "Invite": "Invite",
+  "Add friends to compete on play time and streaks.": "Add friends to compete on play time and streaks.",
+  "Friends leaderboard": "Friends leaderboard",
+  "Play time this week": "Play time this week",
+  "Streak": "Streak",
+  "Invited": "Invited",
+  "Best: {n}": "Best: {n}",
+  "Show controls": "Show controls",
+  "Turn your phone sideways to play": "Turn your phone sideways to play",
+  "Play full screen": "Play full screen",
+  "Controller connected. Tap the game, then press any button.": "Controller connected. Tap the game, then press any button.",
+  "Playing {game}": "Playing {game}",
+  "{name} invited you to play {game}": "{name} invited you to play {game}",
+  "{name} invited you to play": "{name} invited you to play"
 });

@@ -2501,5 +2501,22 @@ SI18n.addPack("ru", {
   "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Разрешить приложениям Nostr находить ваш аккаунт по имени NIP-05. По умолчанию выключено.",
   "Search Settings": "Поиск по настройкам",
   "Ask in your own words, like “make the text bigger”.": "Спросите своими словами, например «сделать текст крупнее».",
-  "Suggested by the on-device assistant": "Подсказка помощника на устройстве"
+  "Suggested by the on-device assistant": "Подсказка помощника на устройстве",
+  "Sign in to see your friends’ play time.": "Войдите, чтобы видеть, сколько играют ваши друзья.",
+  "{n}-day streak": "Серия: {n} дн.",
+  "Playing now": "Сейчас играет",
+  "Invite": "Пригласить",
+  "Add friends to compete on play time and streaks.": "Добавьте друзей, чтобы соревноваться по времени игры и сериям.",
+  "Friends leaderboard": "Рейтинг друзей",
+  "Play time this week": "Время игры за неделю",
+  "Streak": "Серия",
+  "Invited": "Приглашение отправлено",
+  "Best: {n}": "Рекорд: {n}",
+  "Show controls": "Показать элементы управления",
+  "Turn your phone sideways to play": "Поверните телефон горизонтально, чтобы играть",
+  "Play full screen": "Играть на весь экран",
+  "Controller connected. Tap the game, then press any button.": "Геймпад подключён. Коснитесь игры и нажмите любую кнопку.",
+  "Playing {game}": "Играет в {game}",
+  "{name} invited you to play {game}": "{name} приглашает вас сыграть в {game}",
+  "{name} invited you to play": "{name} приглашает вас сыграть"
 });
