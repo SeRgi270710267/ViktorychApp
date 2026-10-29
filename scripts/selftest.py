@@ -4879,6 +4879,8 @@ def feed_order_checks() -> None:
     check("shared/for-you.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/for-you.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "./shared/for-you-weights.js" in (ROOT / "sw.js").read_text(encoding="utf-8"), "the For You ranker is published with the shell")
     order_js = (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8")
     check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in order_js, "new posts merge in place and the Following tab uses the signed-in accounts")
+    unfurl_js = (ROOT / "worker" / "src" / "unfurl.js").read_text(encoding="utf-8")
+    check("function previewLinkOf(" in app and "function linkImagesBlocked(" in app and "lc-large" in app and "function fxCard(" in app and "/v1/unfurl?url=" in app and "handleUnfurl" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8") and "unfurl/" in unfurl_js and "safeTarget" in unfurl_js and "link_preview_test.mjs" in (ROOT / "scripts" / "boot_speed_test.mjs").read_text(encoding="utf-8"), "links show X-style preview cards, unfurled once through the Worker cache, with no pictures when saving data")
     check("function customTabFeeds(" in app and "function timelineFeeds(" in app and "timelineFeeds()" in app and "function hydrateTabSnapshots(" in app and "refreshTab" in order_js, "custom tabs use the same UTC refresh as Following")
     fresh_js = (ROOT / "shared" / "home-fresh.js").read_text(encoding="utf-8")
     page = (ROOT / "index.html").read_text(encoding="utf-8")
