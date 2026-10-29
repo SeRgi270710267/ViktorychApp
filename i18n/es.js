@@ -1,5 +1,11 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("es", {
+  "Data on this device": "Datos en este dispositivo",
+  "Drafts, messages and notifications saved here are encrypted with a key only the server keeps whenever the app is in the background. Signing out or removing this device from My devices erases them.": "Los borradores, mensajes y notificaciones guardados aquí se cifran con una clave que solo guarda el servidor cada vez que la app pasa a segundo plano. Al cerrar sesión o quitar este dispositivo en Mis dispositivos, se borran.",
+  "Encrypt data on this device": "Cifrar los datos en este dispositivo",
+  "Signs this device out and erases everything the app saved on it: drafts, messages, notifications, downloads and the offline copy.": "Cierra la sesión en este dispositivo y borra todo lo que la app guardó en él: borradores, mensajes, notificaciones, descargas y la copia sin conexión.",
+  "Remove this device and erase its data": "Quitar este dispositivo y borrar sus datos",
+  "Remove this device and erase its data?": "¿Quitar este dispositivo y borrar sus datos?",
   "Play with the X player": "Reproducir con el reproductor de X",
   "Play with the TikTok player": "Reproducir con el reproductor de TikTok",
   "3 months": "3 meses",

@@ -115,3 +115,24 @@ test("my devices: hello, list, rename, and remove signs that device out", async 
   assert.equal((await call("/v1/session", { token: laptop })).status, 401, "the removed device is signed out");
   assert.equal((await call("/v1/session", { token: phone })).status, 200, "this device stays signed in");
 });
+
+test("device data key: one per device, server-held, and gone after remove or sign-out", async () => {
+  const me = await signup(91, "Key User", "key_user");
+  const login = await call("/v1/login", { method: "POST", ip: "203.0.113.92", body: { accountNumber: me.accountNumber } });
+  const phone = me.token;
+  const laptop = login.body.token;
+  assert.equal((await call("/v1/devices/key")).status, 401, "no session, no key");
+  const first = await call("/v1/devices/key", { token: phone });
+  assert.equal(first.status, 200);
+  assert.match(first.body.key, /^[A-Za-z0-9_-]{43}$/, "a 256-bit key");
+  const again = await call("/v1/devices/key", { token: phone });
+  assert.equal(again.body.key, first.body.key, "the key stays the same for this device");
+  const other = await call("/v1/devices/key", { token: laptop });
+  assert.notEqual(other.body.key, first.body.key, "each device has its own key");
+  const removed = await call("/v1/devices/remove", { method: "POST", token: phone, body: { id: other.body.id } });
+  assert.equal(removed.status, 200);
+  assert.equal((await call("/v1/devices/key", { token: laptop })).status, 401, "a removed device cannot get its key back");
+  const out = await call("/v1/logout", { method: "POST", token: phone });
+  assert.equal(out.status, 200);
+  assert.equal((await call("/v1/devices/key", { token: phone })).status, 401, "signing out closes the key too");
+});
