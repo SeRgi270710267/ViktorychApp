@@ -1309,6 +1309,42 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
   pointer-events: none;
 }
 .player .vmute, .player .vleft { display: none !important; }
+/* Inline play controls (X style): expand next to mute, a seek strip on the
+   progress line, and the play button back while the user has paused. */
+.vexpand {
+  position: absolute;
+  right: 52px;
+  bottom: 8px;
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 20, 25, 0.75);
+  color: #fff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+.vexpand svg { width: 18px; height: 18px; fill: #fff; }
+.vplay.is-shown .vexpand, .vplay.is-inline .vexpand { display: flex; }
+.vseek {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  z-index: 3;
+  display: none;
+  cursor: pointer;
+  touch-action: none;
+}
+.vplay.is-inline .vseek { display: block; }
+.vplay.is-inline .vprog { height: 4px; }
+.vplay.is-user-paused > .play { visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; z-index: 4; }
+.player .vexpand, .player .vseek { display: none !important; }
 .vplay.is-failed { cursor: default; }
 .vplay.is-failed > .play,
 .vplay.is-failed .vdur { display: none; }
