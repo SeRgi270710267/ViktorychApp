@@ -88,6 +88,7 @@ const SHELL_FILES = [
   "./tv.js",
   "./tv.css",
   "./shared/tv-boot.js",
+  "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",
   "./split.js",

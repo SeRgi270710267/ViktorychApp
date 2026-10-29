@@ -97,6 +97,172 @@ To ship a new app version:
 Keep the package name `app.viktorych.tv` and the same signing key. Otherwise Android refuses to install
 over the old app and people would have to uninstall first.
 
+## TV app name (privacy)
+
+Android takes the home-screen name and icon from the installed APK, so an app cannot rename itself
+with free text. There are two ways to change it.
+
+### Presets (no rebuild)
+
+The app ships five launcher entries (activity aliases) and shows only one:
+**ViktorychApp** (default), **Media**, **Browser**, **Player** and **Notes**, each with a neutral
+icon and TV banner. Pick one in the site's Settings, under **TV app name**, while inside the app.
+The site tells the app through the `ViktorychTVApp` bridge (the no-Chrome app) or the link
+`intent://name?preset=media&title=…#Intent;scheme=viktorychtv;package=app.viktorych.tv;end`
+(Chrome TWA), and the app switches entries with `setComponentEnabledSetting`.
+
+**Name inside the app** is free text (up to 40 characters, no control or direction marks). It sets the
+page title and the recent-apps label (`setTaskDescription`). If the custom logo text setting
+(`brandLogo` text in `viktorychapp-settings-v1`) is set, it is the default.
+
+### Any name (custom build)
+
+On `/tv/#custom` a signed-in person types any name (up to 24 letters, numbers, spaces, `.`, `_`, `-`)
+and picks an icon. The site calls the accounts Worker (`POST /v1/tv/build`), which starts the
+`tv-custom.yml` workflow. The workflow builds the same app with the **same package and the same key**
+and **the same versionCode as the current app**, and saves the APK in a **draft** release (only repo
+writers can see drafts; no tag is made). The page polls every 10 seconds, then offers
+**Download my app**. The Worker serves the file through a signed link that works for 15 minutes.
+Drafts older than a day are deleted by the next build. The name is never committed.
+
+Limits: 3 builds per person per day and 40 per day for the whole site. A build takes 3 to 5 minutes.
+
+### Updates keep the custom name
+
+- A custom build opens the site with `tvcustom=1&tvlabel=…&tvicon=…`. The site remembers the name and
+  icon in `viktorychapp-tv-v1` (the wrapper has them built in).
+- When `tv/version.json` has a newer version, a custom install's **Update TV app** button does not
+  download the normal APK. It starts a new custom build with the same name and icon (from the current
+  code, so the versionCode is the new one), then hands that APK to the installer.
+- Same package and key, so Android installs over the old app and keeps all data (sign-in, settings).
+- Installing the normal app over a custom one is also allowed, but the name goes back to ViktorychApp.
+
+- Launcher entries that were switched on stay switched on across updates, so a custom build turns its
+  own entry back on right after it is installed (and again on every start). The chosen preset is kept
+  and comes back if the normal app is installed later.
+
+Checked: base v1, custom v1 "My Den" and custom v2 "My Den" all have package `app.viktorych.tv` and
+the same signing certificate; the custom ones are labelled "My Den" and the base one "ViktorychApp".
+Android installs an APK with the same package, key and an equal or higher versionCode as an update and
+keeps the app's data. The emulator run could not be done on the build box (its KVM fails), so do the
+on-device check once: install base, then custom, then the next custom version, and confirm the name
+and that you are still signed in.
+
+### Owner setup (once)
+
+The repo's automation cannot add workflow files, so the owner does these steps:
+
+1. Add `.github/workflows/tv-custom.yml` with the file below.
+2. Add two repository secrets on the build box (nothing is printed):
+
+   ```sh
+   base64 -w0 /workspace/secrets/viktorychtv.jks | gh secret set TV_KEYSTORE_B64 -R ViktorychGroup/ViktorychApp
+   gh secret set TV_KEYSTORE_PASS -R ViktorychGroup/ViktorychApp < /workspace/secrets/viktorychtv.pass
+   ```
+
+3. Create a fine-grained GitHub token for this repo only, with **Actions: Read and write** and
+   **Contents: Read and write**. Add it to the Worker as the secret `TV_BUILD_TOKEN`
+   (Cloudflare dashboard › Workers › viktorych-accounts › Settings › Variables and secrets, or
+   `cd worker && npx wrangler secret put TV_BUILD_TOKEN`).
+4. The Worker change deploys when this PR merges. Until step 3 is done, the form says the builder
+   is not switched on yet.
+
+```yaml
+name: TV custom build
+run-name: TV custom build
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: Build id from the accounts Worker
+        required: true
+      label:
+        description: Home-screen name (kept out of the logs)
+        required: true
+      icon:
+        description: default, media, browser, player or notes
+        required: false
+        default: default
+permissions:
+  contents: write
+concurrency:
+  group: tv-custom
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Read and hide the inputs
+        run: |
+          set -euo pipefail
+          LABEL="$(jq -r '.inputs.label // ""' "$GITHUB_EVENT_PATH")"
+          echo "::add-mask::$LABEL"
+          ID="$(jq -r '.inputs.build_id // ""' "$GITHUB_EVENT_PATH")"
+          ICON="$(jq -r '.inputs.icon // "default"' "$GITHUB_EVENT_PATH")"
+          [[ "$ID" =~ ^[0-9a-z]{36}$ ]] || { echo "bad build id"; exit 1; }
+          case "$ICON" in default|media|browser|player|notes) ;; *) echo "bad icon"; exit 1 ;; esac
+          [ -n "$LABEL" ] || { echo "empty label"; exit 1; }
+          {
+            echo "BUILD_ID=$ID"
+            echo "TV_APP_ICON=$ICON"
+            D="EOF_$(openssl rand -hex 8)"
+            echo "TV_APP_LABEL<<$D"; echo "$LABEL"; echo "$D"
+          } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build and sign
+        env:
+          TV_KEYSTORE_B64: ${{ secrets.TV_KEYSTORE_B64 }}
+          TV_KEYSTORE_PASS: ${{ secrets.TV_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TV_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/tv.jks"
+          export TV_KEYSTORE="$RUNNER_TEMP/tv.jks" TV_KEY_ALIAS=viktorychtv
+          cd android-tv
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          gradle --no-daemon -q assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/ViktorychTV.apk"
+          rm -f "$RUNNER_TEMP/tv.jks"
+      - name: Publish as a private draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cutoff="$(date -u -d '24 hours ago' +%s)"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft and (.tag_name | startswith("tv-custom-"))) | [.id, .created_at] | @tsv' |
+          while IFS=$'\t' read -r rid created; do
+            if [ "$(date -u -d "$created" +%s)" -lt "$cutoff" ]; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$rid" >/dev/null || true
+            fi
+          done
+          gh release create "tv-custom-$BUILD_ID" "$RUNNER_TEMP/ViktorychTV.apk#ViktorychTV.apk" \
+            --draft --title "TV custom build" --notes "Private build. Deleted after a day." --target main
+```
+
+### Honest limits
+
+- Only one copy of the app per TV (one package), so one name per TV.
+- Switching presets can drop the app from Favourites; add it again.
+- The first update from app v1 changes the launcher entry, so the Favourites shortcut may need re-adding once.
+- Any app on the TV could open the name link and switch the preset. It only changes which of the five names shows.
+- Recent-apps titles are best effort in the Chrome TWA.
+- Repo admins can see custom names in draft releases for up to a day. Run logs hide the name.
+- Android always asks to allow unknown sources once and to press Install; this cannot be skipped.
+- The site's language packs are English, Russian and Spanish. Hindi is in the app's own strings and the `/tv` page.
+
 ## Signing key
 
 The key is never in the repo (`android-tv/.gitignore` blocks `*.jks`, `*.keystore` and `*.pass`).
@@ -121,3 +287,4 @@ androidbrowserhelper 2.5.0. Set `sdk.dir` in `android-tv/local.properties` (not 
 - `node scripts/tv_boot_test.js`: TV detection, defaults, switches, in-app detection and the published files (in selftest).
 - `node scripts/tv_mode_test.mjs` (needs Playwright): a keyboard-only run on a Google TV user agent,
   covering the install card, D-pad focus, Enter, Back, the settings switches and the update banner.
+- `cd worker && npm test`: includes `test/tv-build.test.mjs` (sign-in, name rules, owner check, signed download, daily limit).

@@ -154,11 +154,145 @@
   function updateCardHtml(where) {
     var u = TV.update;
     if (!u) return "";
+    var b = boot();
+    var mine = b && b.custom ? b.custom() : null;
+    if (mine) {
+      // A custom-name install: rebuild with the same name so the label survives.
+      return '<div class="tv-app-card tv-update-card" data-tv-update-card="' + esc(where) + '">' +
+        '<div class="tv-app-copy"><strong>' + esc(tr("Update available")) + '</strong>' +
+        '<span>' + esc(tr("A newer TV app is ready. It is rebuilt with your home-screen name, then press Update. Your sign-in stays.")) + '</span>' +
+        '<span class="tv-build-state" data-tv-build-state="1" aria-live="polite">' + esc(TV.buildText || "") + '</span></div>' +
+        (TV.buildUrl
+          ? '<a class="tv-app-get" href="' + esc(TV.buildUrl) + '" data-tv-get="update">' + esc(tr("Update TV app")) + '</a>'
+          : '<button class="tv-app-get" type="button" data-tv-rebuild="1"' + (TV.building ? " disabled" : "") + '>' + esc(tr("Update TV app")) + '</button>') +
+        '</div>';
+    }
     return '<div class="tv-app-card tv-update-card" data-tv-update-card="' + esc(where) + '">' +
       '<div class="tv-app-copy"><strong>' + esc(tr("Update available")) + '</strong>' +
       '<span>' + esc(tr("A newer TV app is ready. Download it and press Update. Your sign-in stays.")) + '</span></div>' +
       '<a class="tv-app-get" href="' + esc(u.apk) + '" target="_blank" rel="noopener" data-tv-get="update">' + esc(tr("Update TV app")) + '</a>' +
       '</div>';
+  }
+
+  function withBuilder(done) {
+    if (window.ViktorychTVBuilder) { done(window.ViktorychTVBuilder); return; }
+    var el = document.createElement("script");
+    el.src = "shared/tv-builder.js";
+    el.onload = function () { if (window.ViktorychTVBuilder) done(window.ViktorychTVBuilder); };
+    document.head.appendChild(el);
+  }
+
+  function buildWords(state) {
+    if (state === "building") return tr("Building your app… usually 3 to 5 minutes.");
+    if (state === "ready") return tr("Ready. Press Update TV app, then Update.");
+    if (state === "signin") return tr("Sign in first, then press Update TV app again.");
+    if (state === "limit") return tr("No builds left today. Try again tomorrow.");
+    if (state === "not_ready") return tr("The custom-name builder is not switched on yet.");
+    return tr("The build did not finish. Try again.");
+  }
+
+  function paintBuild() {
+    var cards = document.querySelectorAll("[data-tv-update-card]");
+    for (var i = 0; i < cards.length; i++) {
+      var wrap = document.createElement("div");
+      wrap.innerHTML = updateCardHtml(cards[i].getAttribute("data-tv-update-card"));
+      if (wrap.firstChild) cards[i].parentNode.replaceChild(wrap.firstChild, cards[i]);
+    }
+    var get = document.querySelector('[data-tv-update-card] [data-tv-get="update"], [data-tv-update-card] [data-tv-rebuild]');
+    if (get && TV.on) setFocus(get, false);
+  }
+
+  function rebuild() {
+    var b = boot();
+    var mine = b && b.custom ? b.custom() : null;
+    if (!mine || TV.building) return;
+    TV.building = true;
+    TV.buildUrl = "";
+    withBuilder(function (B) {
+      var job = B.pending();
+      var onState = function (state, extra) {
+        TV.buildText = buildWords(state);
+        if (state !== "building") TV.building = false;
+        if (state === "ready" && extra && extra.download) {
+          TV.buildUrl = extra.download;
+          // The app hands the download straight to the Android installer.
+          try { location.href = extra.download; } catch (err) { /* the link stays */ }
+        }
+        paintBuild();
+      };
+      if (job && job.label === mine.label) B.poll(job, onState);
+      else B.start(mine.label, mine.icon, onState);
+    });
+  }
+
+  var NAME_PRESETS = ["default", "media", "browser", "player", "notes"];
+
+  function presetLabel(id) {
+    if (id === "media") return tr("Media");
+    if (id === "browser") return tr("Browser");
+    if (id === "player") return tr("Player");
+    if (id === "notes") return tr("Notes");
+    return tr("App name");
+  }
+
+  /* Tells the wrapper which home-screen entry to show and the in-app title.
+     The no-Chrome app has a JS bridge; in Chrome the intent link opens the
+     app's small name screen, which saves it and closes. */
+  function sendName(preset, title) {
+    var bridge = window.ViktorychTVApp;
+    if (bridge && bridge.setName) { try { bridge.setName(preset, title); return; } catch (err) { /* fall back to the link */ } }
+    var b = boot();
+    var pkg = b ? b.APP_PACKAGE : "app.viktorych.tv";
+    location.href = "intent://name?preset=" + encodeURIComponent(preset) + "&title=" + encodeURIComponent(title || "") +
+      "#Intent;scheme=viktorychtv;package=" + pkg + ";end";
+  }
+
+  function logoText() {
+    try {
+      var s = JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}");
+      var logo = s && s.brandLogo;
+      return logo && logo.mode === "text" && logo.text ? String(logo.text) : "";
+    } catch (err) { return ""; }
+  }
+
+  function appTitle() {
+    var b = boot();
+    if (!b || !b.inApp()) return "";
+    return b.title() || logoText();
+  }
+
+  function applyTitle() {
+    var want = appTitle();
+    if (!want) return;
+    if (document.title !== want) document.title = want;
+    if (TV.titleWatch || !window.MutationObserver) return;
+    var el = document.querySelector("title");
+    if (!el) return;
+    TV.titleWatch = new MutationObserver(function () {
+      var w = appTitle();
+      if (w && document.title !== w) document.title = w;
+    });
+    TV.titleWatch.observe(el, { childList: true, characterData: true, subtree: true });
+  }
+
+  function nameHtml() {
+    var b = boot();
+    if (!b || !b.inApp()) return "";
+    var pick = b.preset();
+    var mine = b.custom ? b.custom() : null;
+    var btn = function (id) {
+      var on = pick === id;
+      var label = id === "default" && mine ? mine.label : presetLabel(id);
+      return '<button class="outline' + (on ? " on" : "") + '" type="button" data-tv-preset="' + id + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(label) + '</button>';
+    };
+    return "<h2>" + esc(tr("TV app name")) + "</h2>" +
+      '<p class="tv-set-note">' + esc(tr("The name and icon on the TV home screen. Android only lets an app switch between these; for any other name, build your own copy.")) + "</p>" +
+      '<div class="theme-row tv-prefs">' + NAME_PRESETS.map(btn).join("") + "</div>" +
+      '<div class="theme-row"><a class="outline" href="' + TV_PAGE + '#custom">' + esc(tr("Any home-screen name")) + "</a></div>" +
+      "<h2>" + esc(tr("Name inside the app")) + "</h2>" +
+      '<p class="tv-set-note">' + esc(tr("Shown as the page title and in recent apps. Any text.")) + "</p>" +
+      '<div class="theme-row"><input class="tv-title-input" type="text" maxlength="40" data-tv-title="1" value="' + esc(b.title() || logoText()) + '" aria-label="' + esc(tr("Name inside the app")) + '">' +
+      '<button class="outline" type="button" data-tv-title-save="1">' + esc(tr("Save")) + "</button></div>";
   }
 
   function canInstallApp() {
@@ -216,6 +350,7 @@
         '<div class="theme-row">' + auto("off", tr("Off")) + auto("muted", tr("Muted")) + auto("on", tr("On")) + "</div>" +
         '<div class="theme-row"><button class="outline" type="button" data-tv-reset="1">' + esc(tr("Reset TV defaults")) + "</button></div>";
     }
+    html += nameHtml();
     html += appCardHtml("settings");
     return html;
   }
@@ -941,7 +1076,7 @@
     var t = event.target && event.target.closest ? event.target : null;
     if (!t) return;
     var b = boot();
-    var hit = t.closest("[data-tv-toggle], [data-tv-mode], [data-tv-pref], [data-tv-autoplay], [data-tv-reset], [data-tv-hint-close]");
+    var hit = t.closest("[data-tv-toggle], [data-tv-mode], [data-tv-pref], [data-tv-autoplay], [data-tv-reset], [data-tv-hint-close], [data-tv-rebuild], [data-tv-preset], [data-tv-title-save]");
     if (!hit) return;
     event.preventDefault();
     event.stopPropagation();
@@ -952,7 +1087,17 @@
       b.setPref(name, !b.prefs()[name]);
     } else if (b && hit.hasAttribute("data-tv-autoplay")) b.setPref("autoplay", hit.getAttribute("data-tv-autoplay"));
     else if (b && hit.hasAttribute("data-tv-reset")) b.resetPrefs();
-    else if (hit.hasAttribute("data-tv-hint-close")) {
+    else if (hit.hasAttribute("data-tv-rebuild")) { rebuild(); return; }
+    else if (b && hit.hasAttribute("data-tv-preset")) {
+      b.setPreset(hit.getAttribute("data-tv-preset"));
+      sendName(b.preset(), b.title());
+    } else if (b && hit.hasAttribute("data-tv-title-save")) {
+      var host = hit.closest(".tv-settings") || document;
+      var box = host.querySelector("[data-tv-title]");
+      b.setTitle(box ? box.value : "");
+      applyTitle();
+      sendName(b.preset(), b.title());
+    } else if (hit.hasAttribute("data-tv-hint-close")) {
       if (b) { var st = b.read(); st.hintAt = Date.now(); b.write(st); }
       var card = hit.closest("[data-tv-app-card]");
       if (card) card.remove();
@@ -1026,6 +1171,7 @@
     document.documentElement.classList.add("tv-on");
     checkInstalled();
     checkUpdate();
+    applyTitle();
     applyScale();
     TV.hash = location.hash || "#/";
     scheduleRestore();

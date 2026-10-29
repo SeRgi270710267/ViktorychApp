@@ -180,6 +180,41 @@ async function main() {
     const installCard = await app.page.evaluate(() => [...document.querySelectorAll("[data-tv-app-card]")].some((el) => getComputedStyle(el).display !== "none"));
     check(!installCard, "the app never offers to install itself");
     await app.context.close();
+
+    // 4. A custom-name install: Update rebuilds with the same name, then hands over the new APK.
+    const mine = await open(browser, port, "Mozilla/5.0 (Linux; Android 12; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36 ViktorychTV/1",
+      "/index.html?tv=1&src=tvapp&tvapp=1&tvcustom=1&tvlabel=My%20Den&tvicon=notes#/home",
+      { "viktorychapp-account-v1": JSON.stringify({ token: "test-session", account: { publicId: "t1" } }) });
+    let asked = null;
+    await mine.page.route("**/tv/version.json", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ versionCode: 99, versionName: "9.9.9" }) }));
+    await mine.page.route("**/api/v1/tv/build", (route) => {
+      asked = JSON.parse(route.request().postData() || "{}");
+      route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ id: "a".repeat(36), state: "building" }) });
+    });
+    await mine.page.route("**/api/v1/tv/build/" + "a".repeat(36), (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ state: "ready", download: "/v1/tv/build/" + "a".repeat(36) + "/apk?exp=1&sig=x" }) }));
+    await mine.page.route("**/apk?*", (route) => route.fulfill({ status: 200, contentType: "application/vnd.android.package-archive", headers: { "content-disposition": "attachment; filename=ViktorychTV.apk" }, body: "apk" }));
+    let rebuildBtn = true;
+    try { await mine.page.waitForSelector('[data-tv-update-card="home"] [data-tv-rebuild]', { timeout: 15000 }); } catch (err) { rebuildBtn = false; }
+    check(rebuildBtn, "a custom-name install offers Update that rebuilds with its name");
+    const kept = await mine.page.evaluate(() => window.ViktorychTVMode && window.ViktorychTVMode.custom());
+    check(kept && kept.label === "My Den" && kept.icon === "notes", "the site remembers the custom name and icon");
+    if (rebuildBtn) {
+      await mine.page.evaluate((port) => { window.VIKTORYCH_ACCOUNTS.api = "http://127.0.0.1:" + port + "/api"; }, port);
+      await mine.page.click('[data-tv-update-card="home"] [data-tv-rebuild]');
+      let got = true;
+      try { await mine.page.waitForSelector('[data-tv-update-card="home"] a[data-tv-get="update"][href*="/apk?"]', { timeout: 30000 }); } catch (err) { got = false; }
+      check(asked && asked.name === "My Den" && asked.icon === "notes", "the rebuild asks for the same name and icon");
+      check(got, "the rebuilt APK is one press away");
+    }
+    await mine.context.close();
+
+    // 5. The in-app title setting sets the page title.
+    const titled = await open(browser, port, "Mozilla/5.0 (Linux; Android 12; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36 ViktorychTV/1",
+      "/index.html?tv=1&src=tvapp&tvapp=1#/home", { "viktorychapp-tv-v1": JSON.stringify({ title: "Den" }) });
+    let titleOk = true;
+    try { await titled.page.waitForFunction(() => document.title === "Den", null, { timeout: 15000 }); } catch (err) { titleOk = false; }
+    check(titleOk, "the name inside the app becomes the page title");
+    await titled.context.close();
   } finally {
     await browser.close();
     server.close();

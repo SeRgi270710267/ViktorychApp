@@ -114,3 +114,7 @@ html.tv-on textarea {
 .tv-set-note { color: var(--muted, #71767b); font-size: 14px; margin: 4px 0 8px; }
 .tv-prefs { flex-wrap: wrap; }
 html.tv-app .tv-app-card:not(.tv-update-card) { display: none; }
+.tv-title-input { font: inherit; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line, #536471); background: transparent; color: inherit; min-width: 280px; }
+.tv-build-state { display: block; color: var(--muted, #71767b); font-size: 14px; margin-top: 4px; }
+.tv-build-state:empty { display: none; }
+.tv-settings [data-tv-preset].on { background: var(--text, #e7e9ea); color: var(--bg, #000); }
