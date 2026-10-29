@@ -596,6 +596,12 @@
   function api(path, opts) {
     opts = opts || {};
     var list = (!opts.method || opts.method === "GET") ? readOrder(true) : bySpeed(apiOrder());
+    // Owner usage and limits come from the main Worker's own analytics;
+    // a backup answering them would report only itself.
+    if (/^\/v1\/owner\/(usage|limits)/.test(String(path))) {
+      var mainRoot = String(config().api || "").replace(/\/$/, "");
+      if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
+    }
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     var headers = {};
     if (opts.body && !opts.form) headers["content-type"] = "application/json";
@@ -4259,7 +4265,14 @@ function signupPayload() {
     var origins = [];
     var L = u && u.limits || {};
     if (u && u.configured && !u.error) {
-      origins.push({ id: "worker", name: tr("Cloudflare Worker"), used: Number(u.workerRequestsToday) || 0, cap: Number(L.workerRequestsDay) || 100000, reset: nextUtcMidnight(at) });
+      origins.push({ id: "worker", name: tr("Cloudflare Worker"), used: Number(u.workerRequestsToday) || 0, cap: Number(L.workerRequestsDay) || 100000, reset: nextUtcMidnight(at), known: true });
+    } else if (u) {
+      // No analytics: keep the Worker in the pool from its last X-Quota-Pct
+      // today, or as unknown, so the headline never drops to one server.
+      var wq = quotaRead();
+      var wcap = Number(L.workerRequestsDay) || 100000;
+      var fresh = wq && Number(wq.pct) >= 0 && new Date(Number(wq.at) || 0).toISOString().slice(0, 10) === today;
+      origins.push({ id: "worker", name: tr("Cloudflare Worker"), used: fresh ? Math.round(Number(wq.pct) * wcap / 100) : 0, cap: wcap, reset: nextUtcMidnight(at), known: !!fresh, unknown: !fresh, estimated: !!fresh });
     }
     if (config().backupApi) {
       var t = backup && backup.today && backup.today.date === today ? backup.today : null;
@@ -4267,6 +4280,7 @@ function signupPayload() {
       origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down });
     }
     var used = 0, cap = 0;
+    var unknown = origins.some(function (o) { return o.unknown; });
     origins.forEach(function (o) {
       o.pct = o.cap ? Math.round(o.used * 100 / o.cap) : 0;
       o.out = o.pct >= 100 || !!o.down;
@@ -4275,7 +4289,7 @@ function signupPayload() {
     });
     // A Worker past its quota stops answering, so its overflow does not
     // fill the backup's share; the pool counts each origin up to its cap.
-    return { used: used, cap: cap, pct: cap ? Math.round(used * 100 / cap) : 0, origins: origins, bypassed: origins.filter(function (o) { return o.out; }).map(function (o) { return o.name; }) };
+    return { used: used, cap: cap, unknown: unknown, pct: cap ? Math.round(used * 100 / cap) : 0, origins: origins, bypassed: origins.filter(function (o) { return o.out; }).map(function (o) { return o.name; }) };
   }
   function poolCapacityHtml(pool) {
     if (!pool || !pool.origins.length) return "";
@@ -4285,17 +4299,18 @@ function signupPayload() {
     var rows = pool.origins.map(function (o) {
       var when = "";
       try { when = new Date(o.reset).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" }); } catch (err) { when = ""; }
-      var note = o.down ? tr("Not answering, reads skip it") : o.pct >= 100 ? tr("Used up, reads skip it") : !o.known && o.id === "render" ? tr("Counted since its last restart") : "";
+      var note = o.down ? tr("Not answering, reads skip it") : o.pct >= 100 ? tr("Used up, reads skip it") : o.unknown ? tr("Usage not available right now") : o.estimated ? tr("Estimated from the server's own count") : !o.known && o.id === "render" ? tr("Counted since its last restart") : "";
+      var shown = o.unknown ? "—" : o.pct + "%";
       return '<div class="pool-origin' + lvl(o.pct) + (o.out ? " out" : "") + '">' +
-        '<div class="usage-top"><span>' + esc(o.name) + '</span><b>' + esc(o.pct + "%") + "</b></div>" +
+        '<div class="usage-top"><span>' + esc(o.name) + '</span><b>' + esc(shown) + "</b></div>" +
         '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(o.pct) + '" aria-label="' + esc(o.name) + '"><i style="width:' + pctOf(o.pct) + '%"></i></div>' +
-        '<div class="pool-meta"><span>' + esc(tr("{used} of {limit}", { used: formatNum(o.used), limit: formatNum(o.cap) })) + "</span><span>" + esc(tr("Resets {time}", { time: when })) + "</span></div>" +
+        '<div class="pool-meta"><span>' + esc(o.unknown ? tr("— of {limit}", { limit: formatNum(o.cap) }) : tr("{used} of {limit}", { used: formatNum(o.used), limit: formatNum(o.cap) })) + "</span><span>" + esc(tr("Resets {time}", { time: when })) + "</span></div>" +
         (note ? '<p class="pool-note">' + esc(note) + "</p>" : "") + "</div>";
     }).join("");
     return '<section class="pool-cap' + lvl(pool.pct) + '" data-pool-cap>' +
       '<div class="pool-head"><span>' + esc(tr("Server pool today")) + '</span><b class="pool-pct">' + esc(pool.pct + "%") + "</b></div>" +
       '<div class="usage-bar pool-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(pool.pct) + '" aria-label="' + esc(tr("Server pool today")) + '"><i style="width:' + pctOf(pool.pct) + '%"></i></div>' +
-      '<p class="pool-sub">' + esc(tr("{used} of {limit} requests across {n} servers", { used: formatNum(pool.used), limit: formatNum(pool.cap), n: pool.origins.length })) + "</p>" +
+      '<p class="pool-sub">' + esc(tr("{used} of {limit} requests across {n} servers", { used: formatNum(pool.used), limit: formatNum(pool.cap), n: pool.origins.length })) + (pool.unknown ? " · " + tr("Some servers not counted yet") : "") + "</p>" +
       rows + "</section>";
   }
   function usageRow(label, used, limit) {
