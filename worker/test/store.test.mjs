@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
 import { stripeSignature, verifyStripe } from "../src/payments.js";
 import { keepOwnedStickers } from "../src/store.js";
+import { storeItem, STICKER_PACKS, LIMITED } from "../../shared/store-catalog.js";
+import { GIFTS, LOCAL_ART } from "../../shared/gift-catalog.js";
 
 const WEBHOOK_SECRET = "whsec_test_only";
 const stripeCalls = [];
@@ -202,4 +204,14 @@ test("money checkout, verified webhook, unopened refund", async () => {
   } finally {
     await mf.dispose();
   }
+});
+
+test("money is only taken for our own art", () => {
+  const own = new Set(LOCAL_ART);
+  for (const gift of GIFTS) {
+    const item = storeItem("gift", gift.id);
+    if (!own.has(gift.id)) assert.equal(item.cents, 0, gift.id + " uses Noto art and must not be sold for money");
+  }
+  for (const item of LIMITED) assert.ok(own.has(item.base), item.id);
+  for (const pack of STICKER_PACKS) for (const id of pack.items) assert.ok(own.has(id), pack.id + "/" + id);
 });

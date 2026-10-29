@@ -2,7 +2,7 @@
    Every item can be paid two separate ways:
    - money, through the payment adapter (off until the owner adds keys), by tier;
    - Viktorychs, the free points earned by real activity. Viktorychs are never sold.
-   Only our own art is used here (icons/gifts/*.webp). */
+   Money is only taken for our own art (icons/gifts/*.webp). */
 
 import { GIFTS, LOCAL_ART } from "./gift-catalog.js";
 
@@ -76,7 +76,9 @@ export function storeItem(kind, id) {
   const gift = GIFTS.find((item) => item.id === key);
   if (!gift) return null;
   const tier = giftTier(gift);
-  return { kind: "gift", id: gift.id, tier: tier, cents: TIERS[tier].cents, viktorychs: Number(gift.price) || 0, limit: 0, base: LOCAL.has(gift.id) ? gift.id : "", name: gift.name, cp: gift.cp };
+  /* Money is only taken for our own art. Gifts still drawn from Noto Emoji
+     stay Viktorych-only until they get original art (see docs/GIFTS-LICENSES.md). */
+  return { kind: "gift", id: gift.id, tier: tier, cents: LOCAL.has(gift.id) ? TIERS[tier].cents : 0, viktorychs: Number(gift.price) || 0, limit: 0, base: LOCAL.has(gift.id) ? gift.id : "", name: gift.name, cp: gift.cp };
 }
 
 export function limitedById(id) {
