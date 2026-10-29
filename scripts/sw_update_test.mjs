@@ -1,6 +1,7 @@
 /* Service worker update. An old worker can move to a new one, a file that
-   fails once is tried again, and Retry starts a fresh download after the
-   file is available. */
+   fails once is tried again, a file that keeps failing never shows an error
+   (the background download tries again later), and What's new shows only
+   once the new version's files are all in. */
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -204,7 +205,8 @@ async function registrationState(page) {
       phase: phase,
       installing: !!(registration && registration.installing),
       waiting: !!waiting,
-      failed: !!(root && go && !root.hidden && !go.hidden && phase === "error" && !(registration && registration.installing))
+      failed: !!(root && go && !root.hidden && !go.hidden && phase === "error" && !(registration && registration.installing)),
+      offer: !!(root && go && !root.hidden && !go.hidden && phase === "offer")
     };
   })).catch(() => null);
 }
@@ -221,7 +223,7 @@ async function waitSha(page, expected) {
     if (nudged < 5 && Date.now() - start > 12000 && Date.now() - nudgedAt > 12000) {
       nudgedAt = Date.now();
       detail = await registrationState(page);
-      if (detail && detail.failed) {
+      if (detail && (detail.failed || detail.offer)) {
         nudged += 1;
         await page.click("#upd-go").catch(() => {});
       }
@@ -252,7 +254,7 @@ async function testCleanUpdate(browser) {
   try {
     // Media saved under an older versioned cache name moves into the stable cache.
     await page.evaluate(async () => {
-      const old = await caches.open("media-viktorych-a121-old");
+      const old = await caches.open("media-viktorych-a126-old");
       await old.put("https://pbs.twimg.com/media/kept.jpg", new Response("img", { headers: { "content-type": "image/jpeg" } }));
     });
     state.version = NEW;
@@ -264,7 +266,7 @@ async function testCleanUpdate(browser) {
       moved = await page.evaluate(async () => {
         const keys = await caches.keys();
         const hit = await caches.match("https://pbs.twimg.com/media/kept.jpg", { cacheName: "media-v1" });
-        return { old: keys.includes("media-viktorych-a121-old"), hit: !!hit };
+        return { old: keys.includes("media-viktorych-a126-old"), hit: !!hit };
       }).catch(() => null);
       if (moved && moved.hit && !moved.old) break;
       await page.waitForTimeout(250);
@@ -296,40 +298,64 @@ async function testRetryRecovers(browser) {
   console.log("one failed file was retried and the update finished");
 }
 
-async function testRetryButton(browser) {
+async function workerLog(page) {
+  return page.evaluate(() => new Promise((resolve) => {
+    const timer = setTimeout(() => resolve([]), 4000);
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data && event.data.type === "update-log") { clearTimeout(timer); resolve(event.data.log || []); }
+    });
+    navigator.serviceWorker.controller.postMessage({ type: "update-log" });
+  })).catch(() => []);
+}
+
+async function waitLogged(page, file, reason) {
+  for (let i = 0; i < 120; i++) {
+    const log = await workerLog(page);
+    if (Array.isArray(log) && log.some((row) => row.path === file && row.reason === reason)) return log;
+    await page.waitForTimeout(1000);
+  }
+  throw new Error("the worker never logged " + file + " " + reason);
+}
+
+async function shownState(page) {
+  return page.evaluate(() => {
+    const root = document.getElementById("upd-root");
+    const go = document.getElementById("upd-go");
+    const title = document.getElementById("upd-title");
+    return {
+      visible: !!(root && !root.hidden && go && !go.hidden),
+      error: !!(title && /didn't finish/.test(title.textContent || "")),
+      notes: !!(document.getElementById("upd-notes") && !document.getElementById("upd-notes").hidden)
+    };
+  });
+}
+
+/* A file that keeps failing: nothing is shown (no error, no Retry, no
+   offer) while the new version downloads in the background. Once the file
+   is back, What's new shows and Update now finishes. */
+async function testSilentUntilReady(browser) {
   const { server, state, url } = await startServer();
   const { context, page } = await openApp(browser, url);
   try {
     state.version = NEW;
     state.built = NEW_BUILT;
     state.fail = { path: "/styles.css", sha: NEW, remaining: -1 };
-    await offerUpdate(page);
-    await page.waitForFunction(() => {
-      const title = document.getElementById("upd-title");
-      return title && /didn't finish/.test(title.textContent || "");
-    }, null, { timeout: 40000 });
-    const hiddenOnce = await page.$eval("#upd-reset", (el) => el.hidden);
-    assert(hiddenOnce, "reset was offered after a single failure");
-    await page.click("#upd-go");
-    await page.waitForFunction(() => {
-      const reset = document.getElementById("upd-reset");
-      const title = document.getElementById("upd-title");
-      return reset && !reset.hidden && title && /didn't finish/.test(title.textContent || "");
-    }, null, { timeout: 40000 });
-    const log = await page.evaluate(() => {
-      try { return JSON.parse(localStorage.getItem("viktorychapp-update-log") || "[]"); }
-      catch (err) { return []; }
-    });
-    assert(log.some((row) => row && row.url === "styles.css" && row.reason === "http-503"), "the failed file was not recorded");
-    assert(log.every((row) => row && Object.keys(row).sort().join(",") === "reason,t,url"), "the failure log has extra fields");
+    await page.evaluate(() => window.ViktorychUpdate.poke());
+    await waitLogged(page, "styles.css", "http-503");
+    const during = await shownState(page);
+    assert(!during.visible && !during.error, "an update that is still downloading was shown: " + JSON.stringify(during));
     state.fail = null;
+    await page.evaluate(() => window.ViktorychUpdate.poke());
+    await page.waitForSelector("#upd-go", { state: "visible", timeout: 60000 });
+    const ready = await shownState(page);
+    assert(ready.notes && !ready.error, "What's new did not show once the files were in: " + JSON.stringify(ready));
     await page.click("#upd-go");
     await waitSha(page, NEW);
   } finally {
     await context.close();
     server.close();
   }
-  console.log("retry succeeded after the file was fixed");
+  console.log("a failing file stayed silent, What's new showed once the files were in");
 }
 
 /* With a manifest, the next update downloads only the files that changed,
@@ -352,27 +378,18 @@ async function testOnlyChangedFiles(browser) {
     state.fail = { path: "/dock.css", sha: NEWER, remaining: -1 };
     await page.reload({ waitUntil: "domcontentloaded" });
     await waitControlled(page);
-    await offerUpdate(page);
-    await page.waitForFunction(() => {
-      const title = document.getElementById("upd-title");
-      return title && /didn't finish/.test(title.textContent || "");
-    }, null, { timeout: 60000 });
+    await page.evaluate(() => window.ViktorychUpdate.poke());
+    await waitLogged(page, "dock.css", "http-503");
     const first = Object.assign({}, state.hits);
     const pulled = Object.keys(first).filter((rel) => rel !== "/shell-manifest.json");
     assert(pulled.join() === "/styles.css", "an unchanged file was downloaded again: " + pulled.slice(0, 5).join(" "));
     state.fail = null;
     state.hits = {};
-    await page.click("#upd-go");
+    await offerUpdate(page);
     await waitSha(page, NEWER);
     const again = Object.keys(state.hits).filter((rel) => rel !== "/shell-manifest.json");
     assert(again.join() === "/dock.css", "Retry started over: " + again.slice(0, 5).join(" "));
-    const log = await page.evaluate(() => new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), 4000);
-      navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data && event.data.type === "update-log") { clearTimeout(timer); resolve(event.data.log); }
-      });
-      navigator.serviceWorker.controller.postMessage({ type: "update-log" });
-    }));
+    const log = await workerLog(page);
     assert(Array.isArray(log) && log.some((row) => row.path === "dock.css" && row.reason === "http-503"), "the worker did not log the failure");
   } finally {
     await context.close();
@@ -390,12 +407,19 @@ async function testDeployMidDownload(browser) {
   try {
     state.version = NEW;
     state.built = NEW_BUILT;
-    await offerUpdate(page);
+    state.hits = {};
+    // Hold one file so the deploy lands while the background download runs.
+    state.fail = { path: "/styles.css", sha: NEW, remaining: 2 };
+    await page.evaluate(() => window.ViktorychUpdate.poke());
     const NEWER = "d".repeat(40);
-    await page.waitForFunction(() => document.getElementById("upd-root") && document.getElementById("upd-root").getAttribute("data-phase") === "working", null, { timeout: 20000 });
+    for (let i = 0; i < 100 && !Object.keys(state.hits).some((rel) => rel !== "/shell-manifest.json"); i++) await page.waitForTimeout(100);
     state.version = NEWER;
     state.built = "2026-10-28T00:00:00Z";
+    state.patch["/styles.css"] = "/* newer */ body { color: inherit; }";
+    state.fail = null;
     await waitSha(page, NEWER);
+    const shown = await shownState(page);
+    assert(!shown.error, "a deploy mid-download showed an error");
   } finally {
     await context.close();
     server.close();
@@ -411,7 +435,7 @@ const browser = await chromium.launch({
 try {
   await testCleanUpdate(browser);
   await testRetryRecovers(browser);
-  await testRetryButton(browser);
+  await testSilentUntilReady(browser);
   await testOnlyChangedFiles(browser);
   await testDeployMidDownload(browser);
 } finally {

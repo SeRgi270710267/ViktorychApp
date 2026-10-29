@@ -22,7 +22,8 @@ import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlayl
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
-import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
+import { TEMP_SCHEMA, cleanDeviceKey, decorateTemporary, handleTemporary, markTemporary, sweepTemporary, tempBlockedPointsRoute, tempExpiry, tempSignupsPerDay, isTemporary } from "./temp-accounts.js";
+import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
@@ -36,6 +37,7 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleComments } from "./comments-edge.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
@@ -259,7 +261,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -539,6 +541,7 @@ async function presentAccount(env, request, row, own, opts) {
   const next = await ensureMediaKeys(env, row);
   const account = publicAccount(next, request, !!own);
   account.identities = await listAccountIdentities(env, next.public_id);
+  await decorateTemporary(env, next.public_id, account, !!own);
   if (opts && opts.skipMedia) {
     if (!own) {
       delete account.publicId;
@@ -693,8 +696,12 @@ async function handleSignup(request, env) {
   if (!attempts.ok) return limited(attempts);
   const body = await readJson(request, 8000);
   if (body.error) return json(400, { error: body.error });
-  const isProfileLess = !!body.profileLess;
+  const temporary = body.temporary === true;
+  const tempUntil = temporary ? tempExpiry(body, Date.now()) : 0;
+  if (temporary && !tempUntil) return json(400, { error: "bad_expiry" });
+  const isProfileLess = !temporary && !!body.profileLess;
   let displayName = cleanName(body.displayName);
+  if (!displayName && temporary) displayName = "Guest";
   if (!displayName) {
     if (isProfileLess) {
       displayName = "Anonymous";
@@ -702,7 +709,15 @@ async function handleSignup(request, env) {
       return json(400, { error: "invalid_name" });
     }
   }
-  let handleInput = body.handle;
+  let handleInput = temporary ? "" : body.handle;
+  if (temporary) {
+    for (let i = 0; i < 6 && !handleInput; i++) {
+      const candidate = "tmp_" + randomDigits(8);
+      const clash = await env.DB.prepare("SELECT public_id FROM accounts WHERE handle = ?").bind(candidate).first();
+      if (!clash) handleInput = candidate;
+    }
+    if (!handleInput) return json(503, { error: "unavailable" });
+  }
   if (!handleInput && isProfileLess) {
     for (let i = 0; i < 6; i++) {
       const candidate = "anon_" + randomDigits(8);
@@ -720,7 +735,7 @@ async function handleSignup(request, env) {
     if (checked.error === "reserved") return json(409, { error: "handle_reserved" });
     return json(400, { error: "invalid_handle" });
   }
-  if (isProfileLess && checked.owner) {
+  if ((isProfileLess || temporary) && checked.owner) {
     return json(400, { error: "invalid_handle" });
   }
   if (!(await verifyTurnstile(request, env, body.turnstileToken))) return json(403, { error: "turnstile" });
@@ -736,6 +751,17 @@ async function handleSignup(request, env) {
   }
   const taken = await nameTaken(env, checked.skeleton, "");
   if (taken) return json(409, { error: taken });
+  if (temporary) {
+    // A few temporary accounts per address and per device each day.
+    const perDay = tempSignupsPerDay(env);
+    const byIp = await rateHit(env, "su-tmp-ip:" + ip, perDay, 24 * 60 * 60 * 1000);
+    if (!byIp.ok) return limited(byIp);
+    const device = cleanDeviceKey(body.deviceKey);
+    if (device) {
+      const byDevice = await rateHit(env, "su-tmp-dev:" + (await sha256Hex(device)).slice(0, 32), perDay, 24 * 60 * 60 * 1000);
+      if (!byDevice.ok) return limited(byDevice);
+    }
+  }
   const prior = await env.DB.prepare("SELECT hits, reset_at FROM rate_limits WHERE bucket = ?").bind("su-ok:" + ip).first();
   if (prior && Number(prior.reset_at) > Date.now() && Number(prior.hits) >= 4) {
     return limited({ retry: Math.max(1, Math.ceil((Number(prior.reset_at) - Date.now()) / 1000)) });
@@ -749,6 +775,19 @@ async function handleSignup(request, env) {
   });
   if (created.error) return json(created.error === "handle_taken" ? 409 : 503, { error: created.error });
   await rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
+  if (temporary) {
+    try {
+      await markTemporary(env, created.account.publicId, tempUntil, Date.now());
+    } catch (err) {
+      // Never leave a temporary account without its delete time.
+      await deleteAccountById(env, created.account.publicId).catch(() => null);
+      return json(503, { error: "unavailable" });
+    }
+    created.account.temporary = { expiresAt: tempUntil };
+    try { await followOwnerAccounts(env, created.account.publicId); }
+    catch (err) { /* the account still exists without starter follows */ }
+    return json(201, { token: created.token, accountNumber: created.accountNumber, recoveryCodes: [], account: created.account, temporary: { expiresAt: tempUntil } });
+  }
   if (!checked.owner) {
     try { await followOwnerAccounts(env, created.account.publicId); }
     catch (err) { /* the account still exists without starter follows */ }
@@ -5267,6 +5306,9 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
     return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
   }
+  if (path === "/v1/comments" && request.method === "GET") {
+    return handleComments(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
   if (path === "/v1/unfurl" && request.method === "GET") {
     return handleUnfurl(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
@@ -5376,6 +5418,10 @@ async function route(request, env, ctx) {
       const posted = await handlePosts(request, env, path, recoveryDeps());
       if (posted) return posted;
     }
+  }
+  if (path === "/v1/account/temporary" || path.startsWith("/v1/account/temporary/") || path === "/v1/owner/temporary") {
+    const handled = await handleTemporary(request, env, path, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, issueRecoveryCodes: (e, id) => issueRecoveryCodes(e, id, recoveryDeps()) });
+    if (handled) return handled;
   }
   if (path === "/v1/account/inactivity") {
     return handleInactivity(request, env, { json, readJson, rateHit, limited, sessionAccount });
@@ -5537,6 +5583,10 @@ async function route(request, env, ctx) {
     if (listed) return listed;
   }
   if (path === "/v1/points" || path.startsWith("/v1/points/") || path === "/v1/gifts" || path.startsWith("/v1/gifts/")) {
+    if (tempBlockedPointsRoute(request.method, path)) {
+      const spender = await sessionAccount(env, request);
+      if (spender && await isTemporary(env, spender.public_id)) return json(403, { error: "temporary_account", message: "Save this account to send gifts." });
+    }
     const paid = await handlePoints(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (paid) return paid;
   }
@@ -5650,7 +5700,7 @@ export default {
     // Jobs the Render backup claimed in the last couple of minutes run there.
     const away = await claimedJobs(env, at);
     const minute = new Date(at).getUTCMinutes();
-    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), pollPackages(env, at, null, packageNotifier(emitNotification)).catch(() => null), sweepExpiredNotes(env, at)];
+    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)).catch((err) => logError("cron", err)).then(() => sweepTemporary(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), pollPackages(env, at, null, packageNotifier(emitNotification)).catch(() => null), sweepExpiredNotes(env, at)];
     const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
     run("ownerFeeds", () => sweepOwnerFeeds(env, at));
     if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
