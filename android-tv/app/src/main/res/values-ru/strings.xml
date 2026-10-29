@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="name_media">Медиа</string>
+    <string name="name_browser">Браузер</string>
+    <string name="name_player">Плеер</string>
+    <string name="name_notes">Заметки</string>
+    <string name="name_saved">Название сохранено. Главный экран может обновиться не сразу.</string>
+    <string name="update_title">Обновление приложения</string>
+    <string name="update_downloading">Загрузка обновления…</string>
+    <string name="update_failed">Не удалось открыть обновление. Попробуйте снова на сайте.</string>
+    <string name="allow_installs">Разрешите установку из этого приложения и нажмите «Назад».</string>
+</resources>
