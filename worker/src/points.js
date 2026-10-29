@@ -79,6 +79,8 @@ export const RULES = {
   profile: { points: 15, cap: 1 },
   invite: { points: 20, cap: 5 },
   game: { points: 4, cap: 5 },
+  game_time: { points: 2, cap: 6 },
+  game_streak: { points: 5, cap: 1 },
   birthday: { points: 25, cap: 1 }
 };
 

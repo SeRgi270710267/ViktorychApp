@@ -18,7 +18,7 @@ import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 import { actorHidden, canMention } from "./social.js";
 
 const encoder = new TextEncoder();
-const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1 };
+const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1, game_invite: 1 };
 const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms"];
 const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
 const BACKOFF_MS = [2000, 10000, 60000, 300000, 1800000];
@@ -739,6 +739,7 @@ function titleKeyFor(item) {
   if (kind === "birthday_self") return "Happy birthday";
   if (kind === "gift" && !(item && item.actorId)) return "You received a gift";
   if (kind === "gift") return "{name} sent you a gift";
+  if (kind === "game_invite") return "{name} invited you to play";
   return "New post notifications for @{handle}";
 }
 
