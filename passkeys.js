@@ -148,7 +148,7 @@ function loadList() {
 function whenText(ms) {
   const n = Number(ms) || 0;
   if (!n) return "";
-  try { return new Date(n).toLocaleDateString(); }
+  try { return new Date(n).toLocaleDateString((window.SI18n ? window.SI18n.locale() : undefined)); }
   catch (err) { return ""; }
 }
 

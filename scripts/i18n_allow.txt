@@ -1,0 +1,269 @@
+# Language check allow list. See read_allow() in check_i18n.py.
+# Files whose string tables are pack keys, translated with tr() where they render.
+keys: settings-assistant.js
+keys: settings-sync.js
+keys: shared/feed-sources.js
+keys: shared/gift-catalog.js
+keys: shared/presence.js
+keys: shared/pill-data.js
+keys: shared/owner-keys.js
+# Pack keys picked by a ternary inside tr().
+x-compose.js|Reply
+x-compose.js|5 minutes
+x-compose.js|1 hour
+x-compose.js|1 day
+x-compose.js|3 days
+x-compose.js|7 days
+x-compose.js|Everyone
+x-compose.js|Accounts you follow
+x-compose.js|Friends
+x-compose.js|Custom lists
+x-compose.js|Everyone can reply
+x-compose.js|Verified accounts
+x-compose.js|Only accounts you mention
+tv-page.js|🛡️ Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.
+# Model task names and stored account data, not UI.
+ondevice-ai.js|translation
+shared/reposts.js|Anonymous
+shared/webauthn.js|Account
+# Proper nouns, brands, demo content, model prompts, inline boot text in
+# other languages, and technical tokens found when this check started.
+accounts.js|English
+accounts.js|Español
+accounts.js|Fax
+accounts.js|Owner
+app.js|Discord
+app.js|Fediverse
+app.js|ViktorychGroup/ViktorychApp
+app.js|@data/archive/
+app.js|Android
+app.js|Windows
+app.js|Mac
+app.js|Linux
+app.js|Edge
+app.js|Opera
+app.js|Firefox
+app.js|Chrome
+app.js|Safari
+app.js|English
+app.js|Español
+communities.js|Goldthistle Motors
+communities.js|A community dedicated to Goldthistle, Inc., motor vehicles, and energy products.
+communities.js|GrapheneOS Discussion
+communities.js|The official discussion forum for GrapheneOS, a privacy and security focused mobile OS with Android app compatibility.
+device-ai.js|Llama-3.2-1B-Instruct-q4f32_1-MLC
+direct.js|Invidious
+direct.js|Internet Archive
+direct.js|Public Mastodon /api/v1 reads allow every origin and need no key. mastodon.social allows 300 requests per window, so this device waits 1.1s between calls.
+direct.js|Open-Meteo already runs in the browser from the weather pill. That file is left to the weather work.
+direct.js|The sports pills are being reworked separately, so their requests stay where they are.
+direct.js|Country and Tor flags come from Cloudflare on the Worker. No keyless browser API replaces the Tor flag.
+direct.js|Image CDNs do not allow browser reads. The Worker proxy remains the fallback when a network blocks them.
+direct.js|YouTube plays in the official player. Direct files are not read through the Worker, and this entry stays on the server list so the client does not treat YouTube media as a public device read.
+direct.js|Telegram file reads use the bot token, which stays on the Worker.
+direct.js|Sign-in, owner keys, and account routes are never fetched as public reads.
+discord-ui.js|Discord Town Hall
+discord-ui.js|Announcements
+discord-ui.js|Town Hall General
+discord-ui.js|Community Fun
+discord-ui.js|Ada
+discord-ui.js|Welcome in. The **rules** channel is the place to start.
+discord-ui.js|Wumpus
+discord-ui.js|Hello @Ada — glad you are here. Peek at ||the spoiler|| and `town-hall`.
+discord-ui.js|Same note, still me. *Town Hall* stays read-only on this page.
+discord-ui.js|Clyde
+discord-ui.js|Hello @Ada — glad you are here.
+discord-ui.js|Discord Safety
+discord-ui.js|A short **guide** for new members.
+discord-ui.js|Has anyone tried the new profile layout?
+discord-ui.js|Replying with a photo, a custom wave, and a link
+discord-ui.js|Welcome in. The rules channel is the place to start.
+discord-ui.js|Discord
+drive.js|Maps
+drive.js|Trips
+feeds-page.js|Fediverse
+games.js|ReGone · via NZlay
+i18n.js|Español
+i18n.js|English
+live-translate.js|Puck
+live-translate.js|Charon
+live-translate.js|Kore
+live-translate.js|Fenrir
+live-translate.js|Aoede
+live-translate.js|Leda
+live-translate.js|Orus
+live-translate.js|Zephyr
+live-translate.js|You are a simultaneous interpreter. Translate everything you hear into
+live-translate.js|Gemini Live
+nostr.js|BIP0340/aux
+nostr.js|BIP0340/nonce
+nostr.js|BIP0340/challenge
+ondevice-ai.js|Xenova/opus-mt
+ondevice-ai.js|CC-BY-4.0
+ondevice-ai.js|OPUS-MT models by the Helsinki-NLP group, CC-BY-4.0.
+ondevice-ai.js|Xenova/all-MiniLM-L6-v2
+ondevice-ai.js|Llama-3.2-1B-Instruct-q4f32_1-MLC
+ondevice-ai.js|I am
+ondevice-ai.js|Suggest three short replies, one per line, to this post:n
+ondevice-ai.js|Rewrite this text. Keep the language. Return only the rewritten text.
+ondevice-ai.js|Fix spelling and grammar. Keep the meaning and the language. Return only the corrected text.
+ondevice-ai.js|Rewrite this to sound more friendly. Keep the language. Return only the rewritten text.
+ondevice-ai.js|Rewrite this to sound more formal. Keep the language. Return only the rewritten text.
+ondevice-ai.js|Rewrite this to be shorter. Keep the language. Return only the rewritten text.
+ondevice-ai.js|Suggest short replies to a social post. One reply per line.
+ondevice-ai.js|Rewrite a short social post. Keep the language. Return only the rewritten text.
+ondevice-ai.js|Proofreader
+ondevice-ai.js|Rewriter
+ondevice-ai.js|Writer
+ondevice-ai.js|Xenova/opus-mt-
+ondevice-ai.js|Chrome and Edge 138 or newer expose Translator, LanguageDetector, Summarizer, Writer, Rewriter, and Proofreader when the device supports them. The Prompt API is used only when LanguageModel exists. A constructor without a downloaded model is skipped. Other browsers use the bundled models, then an optional download, then the free server path.
+people.js|Discord
+settings-assistant.js|Pick the one settings page that answers the request. Reply with its number only.n
+spaces.js|Harbor
+translate.js|English
+translate.js|Spanish
+translate.js|Portuguese
+translate.js|French
+translate.js|German
+translate.js|Italian
+translate.js|Dutch
+translate.js|Polish
+translate.js|Swedish
+translate.js|Turkish
+translate.js|Russian
+translate.js|Ukrainian
+translate.js|Arabic
+translate.js|Hindi
+translate.js|Indonesian
+translate.js|Vietnamese
+translate.js|Thai
+translate.js|Japanese
+translate.js|Korean
+translate.js|Chinese
+translate.js|Chrome
+translate.js|Device
+translate.js|Lingva
+translate.js|Mozhi
+translate.js|Google
+translate.js|350px 0px
+tv-page.js|Stream 1 · ESPN+ [HD]
+tv-page.js|English - ESPN+
+tv-page.js|Stream 2 · ESPN+
+tv-page.js|Stream 3 · Golf [HD]
+tv-page.js|English
+tv-page.js|Stream 4 · Golf
+tv-page.js|Stream 5 · Golf [HD]
+tv-page.js|Stream 6 · Golf
+tv-page.js|Stream 7 · Hotel Main [HD]
+tv-page.js|Main
+tv-page.js|Stream 8 · DAZN LaLiga [HD]
+tv-page.js|DAZN LaLiga
+tv-page.js|Spanish - DAZN
+tv-page.js|Stream 9 · LaLigaTV UK [HD]
+tv-page.js|LaLigaTV UK
+tv-page.js|English - LaLigaTV
+tv-page.js|Stream 10 · SuperSport LaLiga [HD]
+tv-page.js|English - SuperSport
+tv-page.js|Stream 11 · Easy Web TV - Spain Hub [HD]
+tv-page.js|EasyTV Spain
+tv-page.js|Spanish - RMTV & TDP
+tv-page.js|Stream 12 · Easy Web TV - Sports Hub [HD]
+tv-page.js|EasyTV Sports
+tv-page.js|Multi - Sports Hub
+tv-page.js|El Clásico day! Yamal vs Mbappé is going to be cinematic 🔥
+tv-page.js|Hala Madrid! Bernabéu will be buzzing tonight 🤍
+tv-page.js|Finally an ad-free stream with no ghost popups opening new tabs! 👏
+tv-page.js|Both teams in top form, 3 points at the top of La Liga at stake.
+tv-page.js|Flick's high line vs Vinicius speed will be the tactical battle.
+tv-page.js|Countdown is ticking down! Cannot wait for 21:00 ⏳
+tv-page.js|Lamine Yamal starting XI confirmed! Let's go Barça! 🔵🔴
+tv-page.js|Jude Bellingham in the #10 role behind Vinicius & Kylian ⚡
+tv-page.js|The native AdBlock sandbox is blocking all embed redirects! Pure gold 🛡️
+tv-page.js|Key matchup: Koundé vs Vinícius on the flank.
+tv-page.js|Streams 1-7 all tested healthy and ready for kickoff ⚽
+tv-page.js|Santiago Bernabéu under the lights is unmatched! 🏟️
+tv-page.js|1080p 60fps HD
+tv-page.js|Santiago Bernabéu
+tv-page.js|José María Sánchez Martínez
+tv-page.js|Iñaki Peña
+tv-page.js|Jules Koundé
+tv-page.js|Pau Cubarsí
+tv-page.js|Iñigo Martínez
+tv-page.js|Alejandro Balde
+tv-page.js|Marc Casadó
+tv-page.js|Pedri
+tv-page.js|Lamine Yamal
+tv-page.js|Dani Olmo
+tv-page.js|Raphinha
+tv-page.js|Robert Lewandowski
+tv-page.js|Andriy Lunin
+tv-page.js|Lucas Vázquez
+tv-page.js|Antonio Rüdiger
+tv-page.js|Ferland Mendy
+tv-page.js|Federico Valverde
+tv-page.js|Aurélien Tchouaméni
+tv-page.js|Eduardo Camavinga
+tv-page.js|Jude Bellingham
+tv-page.js|Vinícius Júnior
+tv-page.js|Kylian Mbappé
+tv-page.js|HD 1080p
+tv-page.js|SD 720p
+tv.js|Escape
+vault.js|Spotify
+vault.js|Netflix
+vault.js|Discord
+weather.js|London
+weather.js|Barcelona
+weather.js|Tokyo
+weather.js|New York
+weather.js|Tula
+weather.js|Paris
+weather.js|Rome
+weather.js|Kyiv
+shared/packages-carriers.js|DHL Freight
+shared/packages-carriers.js|DHL Express
+shared/packages-carriers.js|Bring
+shared/packages-carriers.js|Budbee
+shared/packages-carriers.js|Instabox
+shared/packages-carriers.js|Airmee
+shared/packages-carriers.js|DB Schenker
+shared/packages-carriers.js|Correos
+shared/packages-carriers.js|Correos Express
+shared/packages-carriers.js|Nacex
+shared/packages-carriers.js|Boxberry
+shared/packages-carriers.js|DPD RU
+shared/packages-carriers.js|Ozon
+shared/packages-carriers.js|Wildberries
+shared/tiktok-live.js|SIGI_STATE
+shared/tiktok-play.js|TikTok returned
+shared/webauthn.js|RSASSA-PKCS1-v1_5
+404.html|Open ViktorychApp
+404.html|Abrir ViktorychApp
+index.html|Elon Musk
+index.html|“Lack of electricity” is an oversimplification. Everything is hard about bringing massive compute online at extremely high speed. If there was twice as much time, this would be relatively easy, but there is not.
+index.html|Johann Sebastian Bach is the Shakespeare of music. Best there ever was.
+index.html|Something went wrong
+index.html|Reload
+index.html|Algo salió mal
+index.html|Recargar
+index.html|Restablecer los datos de la app
+index.html|Un hogar para publicaciones, historias y las personas que eliges.
+index.html|Regístrate
+index.html|Entrar
+reactions.js|Shift+F10
+reactions.js|800px 0px
+servers-ui.js|MENTION_EVERYONE
+servers-ui.js|CREATE_INVITE
+servers-ui.js|MANAGE_MESSAGES
+servers-ui.js|MANAGE_CHANNELS
+servers-ui.js|MANAGE_ROLES
+servers-ui.js|MANAGE_SERVER
+servers-ui.js|Files
+people.js|Fediverse
+# onboarding.js carries its own en/es/hi/ru string tables
+own: onboarding.js
+# data-saver.js: the fifth column of KEYS is a code note, never rendered
+data-saver.js|HD video variants
+data-saver.js|1.1 GB on-device model
+data-saver.js|113 MB translation model
+data-saver.js|23 MB search model

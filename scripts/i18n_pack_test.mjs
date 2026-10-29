@@ -58,6 +58,15 @@ try {
   const home = await ru.page.evaluate(() => window.SI18n.t("Home"));
   if (home === "Home") fail("Russian pack not applied");
   await ru.ctx.close();
+
+  const hi = await visit("hi");
+  if (hi.packs.sort().join(",") !== "en,hi") fail("Hindi boot downloaded " + hi.packs.join(","));
+  await hi.page.waitForFunction(() => window.SI18n.t("Home") !== "Home", null, { timeout: 10000 }).catch(() => {});
+  const hiHome = await hi.page.evaluate(() => ({ home: window.SI18n.t("Home"), lang: document.documentElement.lang, big: window.SI18n.formatInt(1234567) }));
+  if (!/[\u0900-\u097F]/.test(hiHome.home)) fail("Hindi pack not applied");
+  if (!/^hi\b/.test(hiHome.lang)) fail("Hindi did not set the page language");
+  if (hiHome.big !== "12,34,567") fail("Hindi numbers should use lakh grouping, got " + hiHome.big);
+  await hi.ctx.close();
   console.log("i18n pack check passed");
 } finally {
   await browser.close();

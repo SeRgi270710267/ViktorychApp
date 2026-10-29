@@ -38,7 +38,7 @@
   function when(value) {
     var n = Number(value) || 0;
     if (!n) return "";
-    try { return new Date(n).toLocaleString(); }
+    try { return new Date(n).toLocaleString((window.SI18n ? window.SI18n.locale() : undefined)); }
     catch (err) { return ""; }
   }
   function statusLabel(status, configured) {
