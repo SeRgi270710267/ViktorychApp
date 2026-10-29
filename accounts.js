@@ -216,6 +216,67 @@
     window.fetch = patchedFetch;
   }
   var activeApiRoot = "";
+  /* Circuit breaker per API root, shared by every tab through localStorage.
+     A 429, a 5xx gateway answer, or a network error opens the root for a
+     backoff with full jitter (Retry-After is the floor). While it is open,
+     calls go to the next root. The first root that is not open wins, so the
+     primary comes back on its own once its wait ends. */
+  var BREAKER_KEY = "viktorychapp-breaker-v1";
+  var breakerMemo = null;
+  function breakerRead() {
+    if (breakerMemo) return breakerMemo;
+    try { breakerMemo = JSON.parse(localStorage.getItem(BREAKER_KEY) || "{}") || {}; }
+    catch (err) { breakerMemo = {}; }
+    setTimeout(function () { breakerMemo = null; }, 1000);
+    return breakerMemo;
+  }
+  function breakerWrite(all) {
+    breakerMemo = all;
+    try {
+      if (Object.keys(all).length) localStorage.setItem(BREAKER_KEY, JSON.stringify(all));
+      else localStorage.removeItem(BREAKER_KEY);
+    } catch (err) { /* this tab still keeps it in memory */ }
+  }
+  function breakerOpenUntil(root) {
+    var row = breakerRead()[root];
+    return row && Number(row.until) > Date.now() ? Number(row.until) : 0;
+  }
+  function breakerFail(root, retryAfter) {
+    if (!root) return;
+    var all = breakerRead();
+    var row = all[root] || { n: 0 };
+    row.n = Math.min(Number(row.n || 0) + 1, 8);
+    var cap = Math.min(5 * 60 * 1000, 2000 * Math.pow(2, row.n - 1));
+    var floor = Math.max(1000, Number(retryAfter) || 0);
+    row.until = Date.now() + Math.max(floor, Math.floor(Math.random() * cap));
+    all[root] = row;
+    breakerWrite(all);
+  }
+  function breakerOk(root) {
+    var all = breakerRead();
+    if (!all[root]) return;
+    delete all[root];
+    breakerWrite(all);
+  }
+  function retryAfterMs(res) {
+    var raw = res && res.headers && res.headers.get ? res.headers.get("Retry-After") : "";
+    var secs = Number(raw);
+    if (raw && isFinite(secs)) return Math.min(10 * 60 * 1000, Math.max(0, secs * 1000));
+    var when = raw ? Date.parse(raw) : NaN;
+    return isFinite(when) ? Math.min(10 * 60 * 1000, Math.max(0, when - Date.now())) : 0;
+  }
+  function failoverStatus(code) {
+    return code === 429 || code === 502 || code === 503 || code === 504;
+  }
+  /* Roots in the order to try: closed ones first, in config order, then the
+     open one whose wait ends soonest so the app is never fully stuck. */
+  function apiOrder() {
+    var list = apiEndpoints();
+    var closed = list.filter(function (root) { return !breakerOpenUntil(root); });
+    if (closed.length) return closed;
+    var soonest = list.slice().sort(function (a, b) { return breakerOpenUntil(a) - breakerOpenUntil(b); });
+    return soonest.slice(0, 1);
+  }
   function apiEndpoints() {
     var c = config();
     var list = [];
@@ -225,17 +286,13 @@
     return list.map(function (u) { return String(u || "").replace(/\/$/, ""); }).filter(Boolean);
   }
   function currentApi() {
-    if (activeApiRoot) return activeApiRoot;
-    var list = apiEndpoints();
-    activeApiRoot = list[0] || String(config().api || "").replace(/\/$/, "");
+    var order = apiOrder();
+    activeApiRoot = order[0] || String(config().api || "").replace(/\/$/, "");
     return activeApiRoot;
   }
-  function rotateApi(failedRoot) {
-    var list = apiEndpoints();
-    if (list.length <= 1) return;
-    var idx = list.indexOf(failedRoot || activeApiRoot);
-    var nextIdx = (idx + 1) % list.length;
-    activeApiRoot = list[nextIdx];
+  function rotateApi(failedRoot, retryAfter) {
+    breakerFail(failedRoot || activeApiRoot, retryAfter);
+    activeApiRoot = "";
   }
   function hasApi() {
     return !!(currentApi() || (config().api || config().backupApi));
@@ -279,30 +336,63 @@
     if (!key || !config().gate) return mirrorPageFetch(input, init, url);
     var session = readSession();
     if (key === "BLOCK" || !session) return Promise.resolve(new Response("", { status: 401 }));
-    var apiRoot = currentApi();
-    if (!apiRoot) return Promise.resolve(new Response("", { status: 401 }));
+    var order = apiOrder();
+    if (!order.length) return Promise.resolve(new Response("", { status: 401 }));
     var headers = new Headers(init && init.headers || (typeof input !== "string" && input && input.headers) || {});
     headers.set("Authorization", "Bearer " + session.token);
-    return nativeFetch(apiRoot + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/"), {
-      method: "GET",
-      headers: headers,
-      credentials: "omit",
-      cache: "no-store"
-    }).then(function (res) {
-      if ((res.status === 429 || res.status === 502 || res.status === 503) && apiEndpoints().length > 1) {
-        rotateApi(apiRoot);
-        var fallbackRoot = currentApi();
-        if (fallbackRoot && fallbackRoot !== apiRoot) {
-          return nativeFetch(fallbackRoot + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/"), {
-            method: "GET",
-            headers: headers,
-            credentials: "omit",
-            cache: "no-store"
-          });
+    var held = pulseHeld(key);
+    if (held) return Promise.resolve(new Response(held.text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "x-pulse": "reuse" } }));
+    var mark = pulseMark(key);
+    var path = "/v1/data/" + key.split("/").map(encodeURIComponent).join("/");
+    function attempt(i) {
+      var apiRoot = order[i];
+      return nativeFetch(apiRoot + path, {
+        method: "GET",
+        headers: headers,
+        credentials: "omit",
+        cache: "no-store"
+      }).then(function (res) {
+        if (failoverStatus(res.status)) {
+          rotateApi(apiRoot, retryAfterMs(res));
+          if (i + 1 < order.length) return attempt(i + 1);
+          return res;
         }
-      }
-      return res;
-    });
+        breakerOk(apiRoot);
+        if (res.status === 200 && mark) pulseKeep(key, mark, res.clone());
+        return res;
+      }, function (err) {
+        rotateApi(apiRoot, 0);
+        if (i + 1 < order.length) return attempt(i + 1);
+        throw err;
+      });
+    }
+    return attempt(0);
+  }
+  /* Shared documents the pulse tracks. While the pulse is up and a
+     document's mark has not moved, the last copy answers without a request.
+     Every copy is read again after fifteen minutes regardless. */
+  var pulseBodies = {};
+  var PULSE_REUSE_MS = 15 * 60 * 1000;
+  function pulseMark(key) {
+    var p = window.ViktorychPulse;
+    return p && p.ok && p.ok() ? String(p.version(key) || "") : "";
+  }
+  function pulseHeld(key) {
+    var row = pulseBodies[key];
+    if (!row) return null;
+    var mark = pulseMark(key);
+    if (!mark || mark !== row.mark || Date.now() - row.at > PULSE_REUSE_MS || row.token !== sessionTail()) return null;
+    return row;
+  }
+  function pulseKeep(key, mark, res) {
+    res.text().then(function (text) {
+      if (typeof text !== "string" || text.length > 4 * 1024 * 1024) return;
+      pulseBodies[key] = { mark: mark, text: text, at: Date.now(), token: sessionTail() };
+    }).catch(function () {});
+  }
+  function sessionTail() {
+    var session = readSession();
+    return session && session.token ? String(session.token).slice(-12) : "";
   }
   /* Last ETag and body per GET, in memory, so repeat reads can answer 304. */
   var etagHeld = {};
@@ -317,7 +407,7 @@
     while (etagOrder.length > 60) delete etagHeld[etagOrder.shift()];
   }
   function api(path, opts) {
-    var list = apiEndpoints();
+    var list = apiOrder();
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     opts = opts || {};
     var headers = {};
@@ -347,10 +437,10 @@
         body: opts.form || (opts.body ? JSON.stringify(opts.body) : undefined),
         credentials: "omit"
       }).then(function (res) {
-        if ((res.status === 429 || (res.status >= 502 && res.status <= 504)) && endpointIndex + 1 < list.length) {
-          rotateApi(root);
-          return attempt(endpointIndex + 1);
-        }
+        if (failoverStatus(res.status)) {
+          rotateApi(root, retryAfterMs(res));
+          if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
+        } else breakerOk(root);
         activeApiRoot = root;
         // A 304 means nothing changed since the last read: reuse that body.
         var reused = res.status === 304 && !!held;
@@ -370,16 +460,13 @@
           return body;
         });
       }).catch(function (err) {
-        if (endpointIndex + 1 < list.length) {
-          rotateApi(root);
-          return attempt(endpointIndex + 1);
-        }
+        rotateApi(root, 0);
+        if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
         throw err;
       });
     }
 
-    var startIdx = Math.max(0, list.indexOf(currentApi()));
-    return attempt(startIdx);
+    return attempt(0);
   }
   function errorMessage(code) {
     if (code === "handle_reserved") return tr("That handle is reserved.");

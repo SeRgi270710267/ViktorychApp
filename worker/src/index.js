@@ -10,6 +10,7 @@ import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "./tel
 import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
+import { guardClass, guardKey, takeToken, publishPulse, pulseResponse } from "./guard.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
@@ -5209,6 +5210,7 @@ async function route(request, env, ctx) {
       }
     });
   }
+  if (path === "/v1/pulse" && request.method === "GET") return pulseResponse(env);
   // The X mirror only reads R2, so it answers before the schema check.
   if (path === "/v1/x" || path.startsWith("/v1/x/")) {
     return handleXProxy(request, env, url);
@@ -5538,6 +5540,13 @@ export default {
       path = url.pathname;
       const origin = request.headers.get("Origin");
       if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
+      // One client cannot spend the free daily budget alone. Sync jobs that
+      // sign with the bot secret are not counted. Tests leave REQUEST_GUARD unset.
+      const kind = guardClass(request.method, path);
+      if (kind && String(env.REQUEST_GUARD || "") === "on" && !bearerIsBot(env, request)) {
+        const take = takeToken(guardKey(request), kind, Date.now());
+        if (!take.ok) return withCors(request, env, json(429, { error: "rate_limited" }, { "retry-after": String(take.retry) }));
+      }
       const response = await withEtag(request, await route(request, env, ctx));
       return withCors(request, env, response);
     } catch (err) {
@@ -5564,6 +5573,7 @@ export default {
     // writes after 04:17 UTC, once a day.
     if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
+    jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));
     jobs.push(maybeBackupSettings(env, at));
     if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));

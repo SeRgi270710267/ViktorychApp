@@ -20954,6 +20954,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function catalogRequestUrl(key) {
     const cfg = window.VIKTORYCH_ACCOUNTS || {};
     const api = String(cfg.api || "").replace(/\/$/, "");
+    // With accounts.js loaded, its fetch wrapper adds the session, fails
+    // over between API roots, and reuses a copy the change signal says is
+    // still current.
+    if (cfg.gate && api && window.ViktorychAccounts && window.ViktorychAccounts.currentApi) return key;
     if (cfg.gate && api) return api + "/v1/data/" + String(key || "").split("/").map(encodeURIComponent).join("/");
     return key;
   }
@@ -21093,9 +21097,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return { doc: Object.assign({}, existing || {}, incoming || {}, { posts: current }), added: added, changed: changed };
   }
 
+  let feedsMark = "";
+  let feedsMarkAt = 0;
   async function refreshFeeds(apply) {
     try {
+      // The change signal says when feeds.json moved. With the same mark as
+      // the last merge there is nothing new to read or merge.
+      const pulse = window.ViktorychPulse;
+      const mark = pulse && pulse.ok && pulse.ok() && STATE.data ? pulse.version("feeds.json") : "";
+      if (mark && mark === feedsMark && Date.now() - feedsMarkAt < 15 * 60 * 1000) return;
       const doc = lockDocDates(await fetchFeeds(true));
+      if (mark && doc && Array.isArray(doc.posts) && !doc.missing) { feedsMark = mark; feedsMarkAt = Date.now(); }
       if (!doc || !Array.isArray(doc.posts) || doc.missing) return;
       const includeNew = arrivalMode() === "insert";
       const atTop = includeNew;
