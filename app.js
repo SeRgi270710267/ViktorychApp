@@ -16710,31 +16710,9 @@ if (STATE.histClear) {
     });
   }
 
-  /* Boot renders several times as cached data, the fresh catalog, stories
-     and the archive arrive; most of those produce the exact same Home markup.
-     Rebuilding identical DOM was the biggest cost of opening the app on a
-     phone (parse, swap, then a forced layout). When the markup matches the
-     last commit and the page still holds that commit, keep it. Anything with
-     live state (players, focus) always gets the normal swap. */
-  let COMMIT_LAST = { html: "", first: null, count: 0 };
-  function sameCommit(app, html) {
-    if (!COMMIT_LAST.first || html !== COMMIT_LAST.html) return false;
-    if (app.firstChild !== COMMIT_LAST.first || app.childNodes.length !== COMMIT_LAST.count) return false;
-    if (STATE.playing || STATE.autoEl || STATE.viewer || STATE.modal) return false;
-    const active = document.activeElement;
-    if (active && active !== document.body && app.contains(active)) return false;
-    if (app.querySelector("video, iframe, .is-playing, [open], .is-open")) return false;
-    return true;
-  }
-
   function commitApp(html) {
     const app = document.getElementById("app");
     if (!app) return;
-    if (sameCommit(app, html)) {
-      if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
-      return;
-    }
-    COMMIT_LAST = { html: "", first: null, count: 0 };
     hscrollHolding = true;
     hscrollHoldGen = STATE.renderGen || 0;
     hscrollRemember(app);
@@ -16743,7 +16721,6 @@ if (STATE.histClear) {
     hscrollReuse(app, tpl.content);
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
-    COMMIT_LAST = { html: html, first: app.firstChild, count: app.childNodes.length };
     hscrollSettle({ reveal: true });
     if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
@@ -24184,7 +24161,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
         followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
         sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
-        statusHash: statusHash, watchHash: watchHash, render: renderSoon,
+        statusHash: statusHash, watchHash: watchHash, render: render,
         connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
         extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
         ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
@@ -24255,7 +24232,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       window.Spaces.__shell = true;
       window.Spaces.bind({
         isFollowed: isFollowed,
-        render: renderSoon,
+        render: render,
         findFeed: findFeed,
         shareRoot: shareRoot,
         toast: toast
@@ -24419,7 +24396,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     showLocalNotification(note);
   });
   if (window.ViktorychAccounts) {
-    window.ViktorychAccounts.requestRender = function () { renderSoon(); };
+    window.ViktorychAccounts.requestRender = function () { render(); };
     window.ViktorychAccounts.followButton = followButtonClean;
     window.ViktorychFollows = {
       lookup: function (id) {
