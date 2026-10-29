@@ -23,6 +23,7 @@
       welcomeSub: "Let's get you set up. It takes about a minute.",
       start: "Get started",
       haveAccount: "I already have an account",
+      tryTemp: "Try a temporary account",
       langTitle: "Choose your language",
       langSub: "You can change it any time in Settings.",
       suggested: "Suggested for this device",
@@ -66,6 +67,7 @@
       welcomeSub: "Vamos a prepararlo todo. Tarda alrededor de un minuto.",
       start: "Empezar",
       haveAccount: "Ya tengo una cuenta",
+      tryTemp: "Probar una cuenta temporal",
       langTitle: "Elige tu idioma",
       langSub: "Puedes cambiarlo cuando quieras en Configuración.",
       suggested: "Sugerido para este dispositivo",
@@ -109,6 +111,7 @@
       welcomeSub: "चलिए सब कुछ तैयार करते हैं। इसमें लगभग एक मिनट लगेगा।",
       start: "शुरू करें",
       haveAccount: "मेरा पहले से खाता है",
+      tryTemp: "अस्थायी खाता आज़माएँ",
       langTitle: "अपनी भाषा चुनें",
       langSub: "आप इसे कभी भी सेटिंग्स में बदल सकते हैं।",
       suggested: "इस डिवाइस के लिए सुझाई गई",
@@ -152,6 +155,7 @@
       welcomeSub: "Давайте всё настроим. Это займёт около минуты.",
       start: "Начать",
       haveAccount: "У меня уже есть аккаунт",
+      tryTemp: "Попробовать временный аккаунт",
       langTitle: "Выберите язык",
       langSub: "Его можно сменить в любой момент в настройках.",
       suggested: "Подходит для этого устройства",
@@ -309,7 +313,7 @@
 
   function welcomeHtml() {
     var words = HELLO.map(function (w, i) { return '<span style="--i:' + i + '"' + (i ? ' aria-hidden="true"' : "") + ">" + esc(w) + "</span>"; }).join("");
-    return frame('<div class="onb-main onb-center"><div class="onb-hello" aria-live="off">' + words + '</div><h1 class="onb-title">' + esc(t("welcome", { app: appName() })) + '</h1><p class="onb-sub">' + esc(t("welcomeSub")) + '</p></div><div class="onb-foot">' + primary(t("start"), "next") + '<button class="onb-quiet" type="button" data-onb="login">' + esc(t("haveAccount")) + "</button></div>", { close: true, label: t("welcome", { app: appName() }) });
+    return frame('<div class="onb-main onb-center"><div class="onb-hello" aria-live="off">' + words + '</div><h1 class="onb-title">' + esc(t("welcome", { app: appName() })) + '</h1><p class="onb-sub">' + esc(t("welcomeSub")) + '</p></div><div class="onb-foot">' + primary(t("start"), "next") + '<button class="onb-quiet" type="button" data-onb="login">' + esc(t("haveAccount")) + '</button>' + (accounts() && accounts().openTemp ? '<button class="onb-quiet onb-temp" type="button" data-onb="temp">' + esc(t("tryTemp")) + "</button>" : "") + "</div>", { close: true, label: t("welcome", { app: appName() }) });
   }
   function languageHtml() {
     var picked = lang();
@@ -382,19 +386,39 @@
     } catch (err) { /* no connection info */ }
     return false;
   }
+  /* Themes come from window.ViktorychThemes: the three base looks plus any
+     flag themes (for example Russia). Without it, only the base three. */
+  function themes() {
+    var T = window.ViktorychThemes;
+    return T && T.base ? T : { base: { default: 1, dim: 1, lightsout: 1 }, flags: {} };
+  }
+  function knownTheme(mode) {
+    var T = themes();
+    return !!(mode && ((T.base && T.base[mode]) || (T.flags && T.flags[mode])));
+  }
+  function themeLabel(id) {
+    if (id === "default") return t("themeDefault");
+    if (id === "dim") return t("themeDim");
+    if (id === "lightsout") return t("themeDark");
+    var f = themes().flags[id] || {};
+    var name = f.name || id;
+    return typeof window.t === "function" ? window.t(name) : name;
+  }
   function themeNow() {
     var mode = document.documentElement.getAttribute("data-theme") || "lightsout";
-    return mode === "default" || mode === "dim" ? mode : "lightsout";
+    return knownTheme(mode) ? mode : "lightsout";
   }
   function prefsHtml() {
     var on = saverOn();
     var theme = themeNow();
     function themeBtn(mode, label) {
-      return '<button class="onb-theme t-' + mode + (theme === mode ? " on" : "") + '" type="button" role="radio" aria-checked="' + (theme === mode ? "true" : "false") + '" data-onb="theme" data-mode="' + mode + '"><span class="onb-theme-swatch" aria-hidden="true"><i></i><i></i></span>' + esc(label) + "</button>";
+      var flag = themes().flags[mode];
+      var swatch = flag && flag.flag ? '<span class="onb-theme-swatch onb-theme-flag" aria-hidden="true" style="background:linear-gradient(' + flag.flag.map(function (c, i, all) { var a = Math.round(i * 100 / all.length), b = Math.round((i + 1) * 100 / all.length); return esc(c) + " " + a + "% " + b + "%"; }).join(", ") + ')"></span>' : '<span class="onb-theme-swatch" aria-hidden="true"><i></i><i></i></span>';
+      return '<button class="onb-theme t-' + esc(mode) + (theme === mode ? " on" : "") + '" type="button" role="radio" aria-checked="' + (theme === mode ? "true" : "false") + '" data-onb="theme" data-mode="' + esc(mode) + '">' + swatch + esc(label) + "</button>";
     }
     return frame('<div class="onb-main"><h1 class="onb-title">' + esc(t("prefsTitle")) + '</h1><p class="onb-sub">' + esc(t("prefsSub")) + "</p>" +
       '<div class="onb-row"><span class="onb-row-text"><b>' + esc(t("saver")) + "</b><small>" + esc(t("saverSub")) + '</small></span><button class="onb-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" aria-label="' + esc(t("saver")) + '" data-onb="saver"><i></i></button></div>' +
-      '<h2 class="onb-h2">' + esc(t("theme")) + '</h2><div class="onb-themes" role="radiogroup" aria-label="' + esc(t("theme")) + '">' + themeBtn("default", t("themeDefault")) + themeBtn("dim", t("themeDim")) + themeBtn("lightsout", t("themeDark")) + "</div>" +
+      '<h2 class="onb-h2">' + esc(t("theme")) + '</h2><div class="onb-themes" role="radiogroup" aria-label="' + esc(t("theme")) + '">' + ["default", "dim", "lightsout"].concat(Object.keys(themes().flags || {})).map(function (id) { return themeBtn(id, themeLabel(id)); }).join("") + "</div>" +
       '</div><div class="onb-foot">' + primary(t("next"), "next") + "</div>", { back: true, skip: true, progress: true, label: t("prefsTitle") });
   }
   function confetti() {
@@ -591,7 +615,9 @@
     var api = setup();
     if (api && api.set) api.set({ appearance: mode });
     else {
-      document.documentElement.setAttribute("data-theme", mode);
+      var T = window.ViktorychThemes;
+      if (T && T.apply) T.apply(mode);
+      else document.documentElement.setAttribute("data-theme", mode);
       try {
         var raw = JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}") || {};
         raw.appearance = mode;
@@ -647,6 +673,11 @@
     else if (act === "back") back();
     else if (act === "finish") finish();
     else if (act === "close") close(true);
+    else if (act === "temp") {
+      close(true);
+      var tapi = accounts();
+      if (tapi && tapi.openTemp) tapi.openTemp();
+    }
     else if (act === "login") {
       close(true);
       var api = accounts();
@@ -659,7 +690,7 @@
       repaintQuiet();
     } else if (act === "theme") {
       var mode = el.getAttribute("data-mode");
-      setTheme(mode === "default" || mode === "dim" ? mode : "lightsout");
+      setTheme(knownTheme(mode) ? mode : "lightsout");
       repaintQuiet();
     } else if (act === "saver") {
       state.saver = !saverOn();
