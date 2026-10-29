@@ -1135,7 +1135,9 @@
     const warn = (root.DiscordPicks && root.DiscordPicks.keyBannerHtml) ? root.DiscordPicks.keyBannerHtml() : "";
     const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Messages") + "<" + "/h1>" + add + "</header>") + warn;
     const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
+    const native = nativeServersHtml();
     if (!text.length) {
+      if (native) return head + native;
       return head + ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No conversations yet") + "<" + "/h2><p" + ">" + tr("Channels set to messages show up here. None are configured yet.") + "<" + "/p></div>");
     }
     const rows = serverOrder().map(function (server) { return serverBlock(server, route); }).join("");
@@ -1143,7 +1145,20 @@
     return head + switcherHtml() +
       '<label class="search dmsgs-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20.3 16.7 16a7.5 7.5 0 1 0-.7.7L20.3 21 21 20.3zM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z"/></svg>' +
       ("<input id=\"dmsgs-q\" class=\"dmsgs-q\" type=\"search\" " + "placeholder=\"" + tr("Search Direct Messages") + "\"" + " " + "aria-label=\"" + tr("Search Direct Messages") + "\"" + " value=\"") + esc(state.query) + '"></label>' +
+      native +
       '<div class="dmsgs-channels' + filtering + '">' + rows + "</div>";
+  }
+
+  // App-native servers (servers-ui.js) sit above the mirrored Discord list.
+  function nativeServersHtml() {
+    const mod = window.ViktorychServers;
+    if (mod && mod.listHtml) {
+      try { return mod.listHtml(); } catch (err) { return ""; }
+    }
+    if (window.ViktorychLazy && window.ViktorychLazy.ensure) {
+      try { window.ViktorychLazy.ensure("servers"); } catch (err) { /* offline */ }
+    }
+    return "";
   }
 
   function conversationHtml(route) {
