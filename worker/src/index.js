@@ -57,6 +57,7 @@ import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { GAMES_SCHEMA, handleGames } from "./games.js";
+import { handleP2p } from "./p2p.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
 import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
@@ -5367,6 +5368,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/follows" && request.method === "DELETE") return handleFollowDelete(request, env);
   if (path === "/v1/follows/import" && request.method === "POST") return handleFollowImport(request, env);
   if (path === "/v1/handle" && request.method === "GET") return handleHandle(env, url);
+  if (path === "/v1/p2p/signal") {
+    const signaled = await handleP2p(request, env, path, url, recoveryDeps());
+    if (signaled) return signaled;
+  }
   if (path.startsWith("/v1/games/")) {
     const played = await handleGames(request, env, path, url, recoveryDeps());
     if (played) return played;
