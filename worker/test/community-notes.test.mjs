@@ -198,6 +198,12 @@ test("eligibility, rating-only start, own-note rule and owner final say", async 
   const rated = await call("/v1/cnotes/rate", { method: "POST", token: ben.token, body: { note: id, level: "not", tags: ["incorrect", "clear"] } });
   assert.equal(rated.status, 200, rated.text);
 
+  const q = await call("/v1/cnotes/queue", { token: ben.token });
+  assert.equal(q.body.help.length, 0, "already rated notes leave the queue");
+  const qa = await call("/v1/cnotes/queue", { token: ana.token });
+  assert.equal(qa.body.mine[0].id, id);
+  assert.equal(JSON.stringify(qa.body).indexOf(ana.account.publicId), -1);
+
   const pend = await call("/v1/cnotes/pending?refs=x:1111222233334444", { token: ben.token });
   assert.equal(pend.body.r["x:1111222233334444"].notes[0].rating.level, "not");
   assert.deepEqual(pend.body.r["x:1111222233334444"].notes[0].rating.tags, ["incorrect"]);

@@ -418,6 +418,7 @@ export async function handleCommunityNotes(request, env, path, url, deps, ctx) {
   if (path === "/v1/cnotes/rate" && m === "POST") return rate(request, env, viewer, deps);
   if (path === "/v1/cnotes/request" && m === "POST") return requestNote(request, env, viewer, deps);
   if (path === "/v1/cnotes/pending" && m === "GET") return pending(env, viewer, deps, url);
+  if (path === "/v1/cnotes/queue" && m === "GET") return queue(env, viewer, deps);
   if (path.startsWith("/v1/cnotes/admin")) {
     if (viewer.owner !== 1) return deps.json(403, { error: "forbidden" });
     if (path === "/v1/cnotes/admin" && m === "GET") return adminList(env, deps, url);
@@ -554,6 +555,29 @@ async function pending(env, viewer, deps, url) {
     out[n.post_ref].notes.push({ id: n.id, cls: n.classification, reasons: String(n.reasons || "").split(",").filter(Boolean), text: n.body, sources, media: Number(n.media_note) === 1, created: n.created_at, status: n.status === "crh" ? "crh" : n.status === "crnh" ? "crnh" : "nmr", mine: n.author_id === viewer.public_id, rating: mine[n.id] || null });
   });
   return okJson(deps, { r: out, contributor: presentContributor(env, c) });
+}
+
+function presentNote(n, rating) {
+  let sources = [];
+  try { sources = JSON.parse(n.sources || "[]"); } catch (err) { sources = []; }
+  return { id: n.id, ref: n.post_ref, cls: n.classification, reasons: String(n.reasons || "").split(",").filter(Boolean), text: n.body, sources, media: Number(n.media_note) === 1, created: n.created_at, status: n.status, rating: rating || null };
+}
+
+/* Contributors only: the "Needs your help" list (notes still needing
+   ratings that this contributor has not rated and did not write) and
+   their own notes with status. */
+async function queue(env, viewer, deps) {
+  const c = await contributor(env, viewer.public_id);
+  if (!c) return deps.json(403, { error: "not_contributor" });
+  const help = rows(await env.DB.prepare("SELECT n.* FROM cn_notes n WHERE n.deleted = 0 AND n.status = 'nmr' AND n.author_id != ? AND NOT EXISTS (SELECT 1 FROM cn_ratings r WHERE r.note_id = n.id AND r.rater_id = ?) ORDER BY n.created_at DESC LIMIT 30").bind(viewer.public_id, viewer.public_id).all());
+  const mine = rows(await env.DB.prepare("SELECT * FROM cn_notes WHERE author_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 50").bind(viewer.public_id).all());
+  const rated = rows(await env.DB.prepare("SELECT COUNT(*) AS n FROM cn_ratings WHERE rater_id = ?").bind(viewer.public_id).all());
+  return okJson(deps, {
+    help: help.map((n) => presentNote(n)),
+    mine: mine.map((n) => Object.assign(presentNote(n), { status: n.status === "hidden" ? "nmr" : n.status })),
+    rated: Number(rated[0] && rated[0].n) || 0,
+    contributor: presentContributor(env, c)
+  });
 }
 
 /* ---------- owner ---------- */
