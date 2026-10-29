@@ -4087,5 +4087,22 @@ SI18n.addPack("hi", {
   "{n} kills": "{n} किल",
   "{n} min left": "{n} मिनट बाकी",
   "{n} playing now": "{n} अभी खेल रहे हैं",
-  "ReGone": "ReGone"
+  "ReGone": "ReGone",
+  "Cloudflare Worker": "Cloudflare वर्कर",
+  "Render backup": "Render बैकअप",
+  "Not answering, reads skip it": "जवाब नहीं दे रहा, पढ़ना इसे छोड़ देता है",
+  "Used up, reads skip it": "खत्म हो गया, पढ़ना इसे छोड़ देता है",
+  "Counted since its last restart": "पिछले रीस्टार्ट से गिना गया",
+  "Resets {time}": "{time} पर रीसेट",
+  "Server pool today": "आज सर्वर पूल",
+  "{used} of {limit} requests across {n} servers": "{n} सर्वरों पर {limit} में से {used} अनुरोध",
+  "Server pool capacity": "सर्वर पूल क्षमता",
+  "{pct}% of today's server pool used": "आज के सर्वर पूल का {pct}% उपयोग हुआ",
+  "{used} of {limit} requests across {n} servers. Resets {reset}.": "{n} सर्वरों पर {limit} में से {used} अनुरोध। {reset} पर रीसेट।",
+  "See usage": "उपयोग देखें",
+  "The server pool is almost used up": "सर्वर पूल लगभग खत्म हो गया है",
+  "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{n} सर्वरों पर {limit} में से {used} अनुरोध ({pct}%)। {reset} पर रीसेट।",
+  "Today's server pool is used up": "आज का सर्वर पूल खत्म हो गया",
+  "All {n} servers reached their free daily requests. Resets {reset}.": "सभी {n} सर्वर अपने मुफ़्त दैनिक अनुरोधों तक पहुँच गए। {reset} पर रीसेट।",
+  "{name} is used up, so reads skip it.": "{name} खत्म हो गया है, इसलिए पढ़ना इसे छोड़ देता है।"
 });

@@ -259,6 +259,11 @@ async function main() {
 
   const server = http.createServer(async (req, res) => {
     stats.requests += 1;
+    // Requests per UTC day, so the app can show this origin's share of the
+    // server pool. Counted in memory: a restart starts it again.
+    const day = new Date().toISOString().slice(0, 10);
+    if (!stats.today || stats.today.date !== day) stats.today = { date: day, requests: 0, since: Date.now() };
+    stats.today.requests += 1;
     try {
       const hostHeader = req.headers.host || `localhost:${PORT}`;
       const url = new URL(req.url, `http://${hostHeader}`);
@@ -289,6 +294,8 @@ async function main() {
           d1: stats.d1DatabaseId || null,
           r2: stats.r2Bucket || null,
           requests: stats.requests,
+          today: stats.today || null,
+          dayCapacity: Number(process.env.BACKUP_DAY_REQUESTS) || 100000,
           jobs: stats.jobs || null,
           errors: stats.errors,
           timeouts: stats.timeouts,

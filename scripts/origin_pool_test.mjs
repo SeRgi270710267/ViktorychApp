@@ -58,4 +58,21 @@ await A.call("/v1/posts", { method: "POST", body: { a: 3 } });
 assert.equal(A.originPool.shifted(), false, "a low header from the main Worker ends the shift");
 await A.call("/v1/friends");
 assert.equal(calls.at(-1).url, MAIN + "/v1/friends");
+
+// Pool capacity: total used over total capacity, each origin up to its cap.
+const at = Date.UTC(2026, 9, 29, 21, 30);
+const pool = A.serverPoolFrom({ configured: true, limits: { workerRequestsDay: 100000 }, workerRequestsToday: 94000 },
+  { ok: true, today: { date: "2026-10-29", requests: 6000 }, dayCapacity: 100000 }, at);
+assert.equal(pool.origins.length, 2);
+assert.equal(pool.cap, 200000);
+assert.equal(pool.pct, 50, "94k + 6k of 200k");
+assert.equal(pool.origins[0].pct, 94);
+assert.equal(pool.origins[0].reset, Date.UTC(2026, 9, 30), "the Worker resets at 00:00 UTC");
+assert.deepEqual(Array.from(pool.bypassed), []);
+const over = A.serverPoolFrom({ configured: true, limits: { workerRequestsDay: 100000 }, workerRequestsToday: 130000 }, { ok: true, today: { date: "2026-10-29", requests: 10000 } }, at);
+assert.equal(over.used, 110000, "an origin counts at most its own cap");
+assert.equal(over.pct, 55);
+assert.deepEqual(Array.from(over.bypassed), ["Cloudflare Worker"]);
+const html = A.poolCapacityHtml(pool);
+assert.ok(html.includes("data-pool-cap") && html.includes("50%") && html.includes("94%"));
 console.log("ok origin pool");

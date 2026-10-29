@@ -112,6 +112,9 @@
     return tr("Heads up");
   }
 
+  function fmtCount(n) {
+    try { return Number(n || 0).toLocaleString(); } catch (err) { return String(n || 0); }
+  }
   function pctCopy(level, v, w, c, l) {
     var row = level === "limit" ? l : level === "critical" ? c : w;
     return row;
@@ -209,6 +212,19 @@
           [tr("{used} of {limit} custom tabs used", v), tr("This device can keep {limit} tabs.", v), tr("Manage tabs")],
           [tr("You're almost out of custom tabs", v), tr("{used} of {limit} tabs used ({pct}%).", v), tr("Manage tabs")],
           [tr("Tab limit reached", v), tr("This device can keep {limit} tabs. Remove some to add more.", v), tr("Manage tabs")]);
+      } },
+    /* Owner only: today's requests across every server that answers reads
+       (the Worker plus the backups), not one server's own quota. */
+    { id: "server-pool", icon: "gauge", kind: "percent", canAuto: false, href: "#/settings", target: "[data-pool-cap], .usage-panel",
+      label: function () { return tr("Server pool capacity"); },
+      page: function () { return tr("Account settings"); },
+      copy: function (level, v) {
+        var row = pctCopy(level, v,
+          [tr("{pct}% of today's server pool used", v), tr("{used} of {limit} requests across {n} servers. Resets {reset}.", v), tr("See usage")],
+          [tr("The server pool is almost used up", v), tr("{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.", v), tr("See usage")],
+          [tr("Today's server pool is used up", v), tr("All {n} servers reached their free daily requests. Resets {reset}.", v), tr("See usage")]);
+        if (v.bypass) row = [row[0], row[1] + " " + tr("{name} is used up, so reads skip it.", { name: v.bypass }), row[2]];
+        return row;
       } },
     /* A short pause, not a fault: shown at most once per 10 minutes, no buzz
        or tone, and removed from System notices once the pause is over. */
@@ -954,6 +970,18 @@
       try {
         var ps = pool.stats();
         out["pool-upload"] = ps && ps.uploadCap > 0 ? { used: ps.uploadToday || 0, limit: ps.uploadCap, pct: (ps.uploadToday || 0) / ps.uploadCap * 100 } : null;
+      } catch (err) { /* not measured */ }
+    }
+
+    var accounts = root.ViktorychAccounts;
+    if (accounts && accounts.serverPool) {
+      try {
+        var sp = accounts.serverPool();
+        var resetAt = sp && sp.origins.length ? Math.min.apply(null, sp.origins.map(function (o) { return o.reset; })) : 0;
+        var resetTxt = "";
+        try { resetTxt = resetAt ? new Date(resetAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : ""; } catch (err) { resetTxt = ""; }
+        out["server-pool"] = sp && sp.cap > 0 ? { used: sp.used, limit: sp.cap, pct: sp.used / sp.cap * 100, fmt: "count",
+          vars: { used: fmtCount(sp.used), limit: fmtCount(sp.cap), n: String(sp.origins.length), reset: resetTxt, bypass: sp.bypassed.join(", ") } } : null;
       } catch (err) { /* not measured */ }
     }
 
