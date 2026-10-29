@@ -3931,5 +3931,7 @@ SI18n.addPack("hi", {
   "{a} {b} and {c}": "{a} {b} और {c}",
   "{a} {b} and {others}": "{a} {b} और {others}",
   "reply.others.one": "{n} अन्य",
+  "reply.others.few": "{n} अन्य",
+  "reply.others.many": "{n} अन्य",
   "reply.others.other": "{n} अन्य"
 });

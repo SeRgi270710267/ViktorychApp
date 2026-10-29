@@ -3939,5 +3939,7 @@ SI18n.addPack("es", {
   "{a} {b} and {c}": "{a} {b} y {c}",
   "{a} {b} and {others}": "{a} {b} y {others}",
   "reply.others.one": "{n} más",
+  "reply.others.few": "{n} más",
+  "reply.others.many": "{n} más",
   "reply.others.other": "{n} más"
 });

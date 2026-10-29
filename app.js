@@ -3068,7 +3068,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const box = STATE.replyList || { platform: "x", handles: [] };
     const rows = (box.handles || []).map((h) => {
       const acct = catalogAccount(box.platform, h) || {};
-      return `<a class="acct-row" href="${esc(accountHash(box.platform, h))}" data-act="close-reply-list">${avatar(acct.avatar || "", acct.name || h)}<span class="who-copy"><span class="name">${esc(acct.name || h)}</span><span class="handle">@${esc(h)}</span></span></a>`;
+      return `<a class="acct-row" href="${esc(accountHash(box.platform, h))}" data-act="close-reply-list">${avatar(acct.avatar || "", acct.name || h)}<span class="rl-copy"><span class="rl-name">${esc(acct.name || h)}</span><span class="handle">@${esc(h)}</span></span></a>`;
     }).join("");
     return `<div class="modal-back" data-act="close-modal"><div class="modal reply-list-modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Replying to"))}" data-act="stop">
       <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Replying to")}</h2></div>
