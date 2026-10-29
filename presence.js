@@ -144,6 +144,7 @@ function phrase(view) {
 
 function statusText(view) {
   if (!view) return "";
+  if (view.playing) return tr("Playing {game}", { game: view.playing });
   return [view.emoji, view.text].filter(Boolean).join(" ");
 }
 
@@ -942,7 +943,8 @@ function loadFriends(force) {
         exact: person.exact,
         lastSeen: person.lastSeen,
         emoji: person.emoji,
-        text: person.text
+        text: person.text,
+        playing: person.playing || ""
       });
     });
     friendsAt = Date.now();
