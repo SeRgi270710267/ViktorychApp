@@ -478,6 +478,43 @@
       dock.setAttribute("data-corner", readCorner());
       root.setTimeout(fitMarquee, 0);
     }
+    placeDock();
+  }
+
+  /* The popout is one more small square in the corner row of chat squares
+     (#dock-root from dock.js), the same size and gap, so it never sits on
+     top of them. Phones hide that row, so there it stands on its own next
+     to the compose button. The full bar on the music pages stays in body. */
+  function placeDock() {
+    if (typeof document === "undefined" || !document.body) return;
+    var dock = document.getElementById("mu-dock");
+    if (!dock) return;
+    var row = document.getElementById("dock-root");
+    var wide = !!(root.matchMedia && root.matchMedia("(min-width: 500px)").matches);
+    if (docked && row && wide) {
+      if (dock.parentNode !== row) row.appendChild(dock);
+      dock.classList.add("in-row");
+    } else {
+      dock.classList.remove("in-row");
+      if (dock.parentNode !== document.body) document.body.insertBefore(dock, document.getElementById("mu-now"));
+    }
+  }
+
+  function watchRow() {
+    var queued = false;
+    var again = function () {
+      if (queued) return;
+      queued = true;
+      root.setTimeout(function () { queued = false; placeDock(); }, 0);
+    };
+    root.addEventListener("resize", again);
+    if (root.MutationObserver) {
+      new root.MutationObserver(function () {
+        var dock = document.getElementById("mu-dock");
+        var row = document.getElementById("dock-root");
+        if (docked && dock && row && dock.parentNode !== row && !dock.classList.contains("in-row")) again();
+      }).observe(document.body, { childList: true });
+    }
   }
 
   function readCorner() {
@@ -512,7 +549,7 @@
     var swallow = false;
     var fine = function () { return !!(root.matchMedia && root.matchMedia("(pointer: fine)").matches); };
     dock.addEventListener("pointerdown", function (event) {
-      if (!docked || !fine() || event.button !== 0) return;
+      if (!docked || dock.classList.contains("in-row") || !fine() || event.button !== 0) return;
       var hit = event.target && event.target.closest ? event.target.closest("button, input") : null;
       if (hit && !hit.classList.contains("mu-id")) return;
       var box = dock.getBoundingClientRect();
@@ -1775,7 +1812,7 @@
     now.id = "mu-now";
     now.className = "mu-now";
     now.hidden = true;
-    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="' + tr("Close") + '">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + productName("musicShort") + '</div><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="' + tr("Download for offline") + '">' + svg(CTRL.save) + '</button></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">' + tr("Not playing") + '</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + tr("Seek") + '"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="' + tr("Previous") + '">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="' + tr("Play") + '">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="' + tr("Next") + '">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="' + tr("Volume") + '">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="' + tr("Volume") + '"></div>';
+    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="' + tr("Close") + '">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + productName("musicShort") + '</div><span class="mu-now-tools"><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="' + tr("Download for offline") + '">' + svg(CTRL.save) + '</button><button class="mu-ctl" type="button" data-act="music-stop" aria-label="' + tr("Close player") + '">' + svg(CTRL.close) + '</button></span></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">' + tr("Not playing") + '</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + tr("Seek") + '"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="' + tr("Previous") + '">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="' + tr("Play") + '">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="' + tr("Next") + '">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="' + tr("Volume") + '">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="' + tr("Volume") + '"></div>';
     var host = document.createElement("div");
     host.id = "mu-yt-host";
     host.innerHTML = '<div id="mu-yt"></div>';
@@ -1789,6 +1826,7 @@
     document.body.appendChild(dock);
     wireDrag(dock);
     document.body.appendChild(now);
+    watchRow();
     document.body.appendChild(host);
     document.body.appendChild(audio);
     audio.addEventListener("timeupdate", paint);
