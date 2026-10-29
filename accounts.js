@@ -4328,9 +4328,32 @@ function signupPayload() {
       }).join("");
       if (week) rows += '<p class="set-sub">' + esc(tr("Worker requests, last 7 days")) + '</p><div class="usage-week">' + week + "</div>";
     }
-    rows += usageRow(tr("Backup server hours this month (at most)"), u.renderHoursCeiling, L.renderHoursMonth);
+    rows += renderHoursHtml(u.renderHours, L.renderHoursMonth);
     rows += poolUsageHtml(u.pool);
     return head + rows + "</div>";
+  }
+  /* Render's free plan: 750 instance hours a month, reset on the 1st. The
+     backup counts its own awake time. Near the end the app stops waking
+     it, which is normal and not an error, so it only turns red when the
+     hours are really almost gone. */
+  function renderHoursHtml(h, limit) {
+    var free = Number(h && h.free) || Number(limit) || 750;
+    var label = tr("Render backup free hours");
+    var resetDay = "";
+    try { resetDay = new Date(h && h.resetAt ? h.resetAt : Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toLocaleDateString((window.SI18n ? window.SI18n.locale() : undefined), { month: "short", day: "numeric" }); } catch (err) { resetDay = ""; }
+    if (!h) {
+      return '<div class="usage-row"><div class="usage-top"><span>' + esc(label) + '</span><b>' + esc(tr("{used} of {limit}", { used: "–", limit: formatNum(free) })) + "</b></div></div>" +
+        '<p class="set-sub">' + esc(tr("Render's free plan includes {limit} hours a month. Counting starts the next time the backup wakes up.", { limit: formatNum(free) })) + "</p>";
+    }
+    var used = Math.round(Number(h.used) || 0);
+    var pct = Math.max(0, Math.min(100, Number(h.pct) || 0));
+    var level = pct >= 97 ? " hot" : pct >= 80 ? " warm" : "";
+    var note = h.paused ?
+      tr("Resting until {date} to stay inside the free hours. The Worker handles everything until then.", { date: resetDay }) :
+      tr("Render's free plan includes {limit} hours a month. {left} left, resets {date}.", { limit: formatNum(free), left: formatNum(Math.floor(Number(h.left) || 0)), date: resetDay });
+    return '<div class="usage-row' + level + '"><div class="usage-top"><span>' + esc(label) + '</span><b>' + esc(tr("{used} of {limit}", { used: formatNum(used), limit: formatNum(free) })) + '</b></div>' +
+      '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-label="' + esc(label) + '"><i style="width:' + pct + '%"></i></div></div>' +
+      '<p class="set-sub">' + esc(note) + "</p>";
   }
   /* Sharing pool totals from the last 7 days, as the devices report them. */
   function poolUsageHtml(p) {
