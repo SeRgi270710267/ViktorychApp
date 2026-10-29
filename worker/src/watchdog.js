@@ -20,13 +20,13 @@
 
 import { usageReport, FREE_LIMITS } from "./usage.js";
 import { ownerKeyAlerts } from "./owner-keys.js";
+import { RENDER_BACKUP, quietHours } from "./render-warm.js";
 
 export const WATCH_KEY = "owner/watchdog.json";
 export const REPO = "ViktorychGroup/ViktorychApp";
 const API = "https://api.github.com/repos/" + REPO;
 const PAGES = "https://viktorychgroup.github.io/ViktorychApp/";
 const MIRROR = "https://viktorychapp.pages.dev/";
-const RENDER = "https://viktorych-backup.onrender.com";
 const HOUR = 36e5;
 const DAY = 24 * HOUR;
 
@@ -313,13 +313,20 @@ export async function runWatchdog(env, now, fetcher) {
   } catch (err) {
     add(problems, "mirror_down", "warn", "The Cloudflare Pages mirror did not answer.");
   }
-  // Render is only checked while backup-warmup keeps it awake, so the
-  // watchdog never spends free instance hours waking it.
-  if (hourUtc >= 6 && hourUtc <= 20) {
+  // Render is only checked in the hours the Worker keeps it warm
+  // (src/render-warm.js), so the watchdog never spends free instance hours
+  // waking it. Hourly: the cheap /backup/health. Once a day: /v1/health,
+  // which also proves the backup can reach D1 and R2.
+  if (String(env.RENDER_WARM || "1") !== "0" && !quietHours(env).includes(hourUtc)) {
+    const root = String(env.BACKUP_HEALTH_URL || RENDER_BACKUP).replace(/\/(v1\/health)?$/, "").replace(/\/$/, "");
     try {
-      const res = await timed(f, String(env.BACKUP_HEALTH_URL || RENDER).replace(/\/$/, "") + "/v1/health", 60000);
-      const body = res.ok ? await safeJson(res) : null;
-      if (!body || !body.ok || body.data === false) add(problems, "render_down", "warn", "The Render backup is down or cannot reach D1 and R2. Sign-in still works through the Worker (runbook section 6).");
+      const res = await timed(f, root + "/backup/health", 60000);
+      if (!res.ok) add(problems, "render_down", "warn", "The Render backup is down (HTTP " + res.status + "). Sign-in still works through the Worker (runbook section 6).");
+      else if (hourUtc === 12) {
+        const deep = await timed(f, root + "/v1/health", 60000);
+        const body = deep.ok ? await safeJson(deep) : null;
+        if (!body || !body.ok || body.data === false) add(problems, "render_down", "warn", "The Render backup cannot reach D1 and R2. Sign-in still works through the Worker (runbook section 6).");
+      }
     } catch (err) {
       add(problems, "render_down", "warn", "The Render backup did not answer.");
     }

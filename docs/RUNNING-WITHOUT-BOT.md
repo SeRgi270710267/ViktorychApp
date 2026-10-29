@@ -11,7 +11,7 @@ The short version: **the site runs itself.** GitHub Actions refreshes the feeds 
 | The app (static files) | GitHub Pages, plus a copy on Cloudflare Pages | A live deploy never expires. It stays up even if every workflow stops. |
 | Feed refresh and redeploy | GitHub Actions, `sync.yml`, every 30 minutes | The Worker watchdog turns workflows back on if GitHub switches them off. |
 | Accounts, posts, media, data | Cloudflare Worker `viktorych-accounts`, D1, R2 | Cloudflare never switches off a free Worker or its cron. |
-| Backup accounts API | Render free web service | `backup-warmup.yml` keeps it awake 05:00–21:50 UTC. |
+| Backup accounts API | Render free web service | The Worker cron pings `/backup/health` every 10 minutes except 21:00–00:59 UTC (`worker/src/render-warm.js`). |
 | Watchdog | Worker cron, minute 7 of every hour | `worker/src/watchdog.js` |
 
 ### What the watchdog does every hour
@@ -94,7 +94,7 @@ GitHub Pages keeps serving the last deployment indefinitely, so the site never g
 
 ## 6. Render backup
 
-Render's free plan sleeps after 15 minutes idle and allows 750 instance hours a month. The warm-up keeps it awake about 510 hours a month. Sign-in uses the Worker first, so Render being down only matters when the Worker is over its daily limit.
+Render's free plan sleeps after 15 minutes idle and allows 750 instance hours a month. The Worker ping keeps it awake about 620 hours a month. The watchdog checks it only in those warm hours, so the checks cost no extra instance hours. The app's account calls now time out (reads 15–20 s, writes 30 s, uploads 2 min) and move to the other server, so a stalled server never hangs the app. Sign-in uses the Worker first, so Render being down only matters when the Worker is over its daily limit.
 
 - Down: dashboard.render.com → viktorych-backup → Logs. "Suspended" means the month's hours ran out (it comes back on the 1st) or Render changed its free plan.
 - Manual redeploy: Manual Deploy → Deploy latest commit.
