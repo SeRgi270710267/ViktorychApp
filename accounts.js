@@ -4205,6 +4205,7 @@ function signupPayload() {
 
     var tabs = bar.html;
 
+    var gameInviteBtn = !mine && !account.viewerBlocks && account.publicId && window.ViktorychGameSocial ? window.ViktorychGameSocial.inviteButtonHtml(account.publicId, account.name || account.handle, false) : "";
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
     var top = window.ViktorychProfile && window.ViktorychProfile.top ? window.ViktorychProfile.top({
       name: account.displayName || account.handle || "",
@@ -4216,7 +4217,7 @@ function signupPayload() {
       count: count === "" ? "" : tn("posts", Number(count), { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
-    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
+    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + gameInviteBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + (window.ViktorychGameSocial ? window.ViktorychGameSocial.profileHtml(account, mine) : "") + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -5938,6 +5939,7 @@ else if (act === "copy-id") copyAccountId();
     requestRender: null,
     profilePostsHtml: null,
     call: api,
+    apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
     saveOwnAccount: applyOwnAccount,
     openSignupSetup: function () {
       view = "signup";
