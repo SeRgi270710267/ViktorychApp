@@ -15987,15 +15987,27 @@ if (STATE.histClear) {
     return [...root.querySelectorAll(HSCROLL_SELECTOR)];
   }
 
+  const HSCROLL_FLAT = new Set();
+  try { window.addEventListener("resize", () => HSCROLL_FLAT.clear(), { passive: true }); } catch (err) { /* no window */ }
+
   function hscrollMatches(el) {
     if (!el || el.nodeType !== 1 || !el.matches) return false;
     if (el.matches(HSCROLL_SELECTOR)) return true;
     if (el.id === "app" || el.classList.contains("center") || el.classList.contains("app")) return false;
     // Style first: most nodes are not scrollers, and reading the computed
     // overflow is far cheaper than measuring every div's layout box.
+    // Overflow comes from CSS classes, so a class pair (with the parent's) that
+    // did not scroll last time won't now: skip the style read. That read was the
+    // biggest desktop long task on every render (hundreds of feed divs).
+    const sig = el.tagName + "|" + el.className + "|" + (el.getAttribute("style") || "") + "|" + ((el.parentElement && el.parentElement.className) || "");
+    if (HSCROLL_FLAT.has(sig)) return false;
     let ox = "";
     try { ox = getComputedStyle(el).overflowX; } catch (err) { return false; }
-    if (ox !== "auto" && ox !== "scroll" && ox !== "overlay") return false;
+    if (ox !== "auto" && ox !== "scroll" && ox !== "overlay") {
+      if (HSCROLL_FLAT.size > 4000) HSCROLL_FLAT.clear();
+      HSCROLL_FLAT.add(sig);
+      return false;
+    }
     if (el.scrollWidth <= el.clientWidth + 8) return false;
     if (el.clientHeight > 180 && el.scrollHeight > el.clientHeight + 24) return false;
     return true;
@@ -19725,6 +19737,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!el) return;
     const off = el.getBoundingClientRect().top - anchor.top;
     if (Math.abs(off) > 2) window.scrollBy(0, off);
+    // Media frames above can still settle; keep lining up for a moment unless the reader touches the page.
+    let stop = false;
+    const quit = () => { stop = true; };
+    const evs = ["wheel", "touchstart", "keydown", "pointerdown"];
+    evs.forEach((ev) => window.addEventListener(ev, quit, { once: true, passive: true }));
+    [120, 350, 700].forEach((ms, i, all) => setTimeout(() => {
+      if (!stop && routeScrollKey() === key && el.isConnected) {
+        const late = el.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(late) > 2) window.scrollBy(0, late);
+      }
+      if (i === all.length - 1) evs.forEach((ev) => window.removeEventListener(ev, quit));
+    }, ms));
   }
   function cardHeightStyle(id) {
     const h = STATE.cardHeights ? STATE.cardHeights.get(String(id || "")) : 0;
