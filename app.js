@@ -6969,7 +6969,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     document.querySelectorAll("[data-hydrate]").forEach((el) => HYDRATE_OBS.observe(el));
     if (!ARCHIVE_OBS) {
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) revealMoreTimeline();
+        const hit = entries.filter((entry) => entry.isIntersecting);
+        hit.forEach((entry) => { if (entry.target.id === "author-more") loadOlderAuthorPosts(entry.target.getAttribute("data-id")); });
+        if (hit.some((entry) => entry.target.id !== "author-more")) revealMoreTimeline();
       }, { rootMargin: "600px" });
     }
     ARCHIVE_OBS.disconnect();
@@ -6977,6 +6979,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (sentinel) ARCHIVE_OBS.observe(sentinel);
     const liveSentinel = document.getElementById("live-more");
     if (liveSentinel) ARCHIVE_OBS.observe(liveSentinel);
+    const authorSentinel = document.getElementById("author-more");
+    if (authorSentinel) ARCHIVE_OBS.observe(authorSentinel);
   }
 
   function ensureYtSubs(feed) {
@@ -7312,7 +7316,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   // Reddit posts on Home get up and down votes with the score; internal posts do not.
   function redditVotes(post) {
-    if (!post || post.platform !== "reddit" || post.appPost || parseRoute().name !== "home") return "";
+    if (!post || post.platform !== "reddit" || post.appPost) return "";
     const votes = STATE.settings.redditVotes || {};
     const mine = Number(votes[post.id]) || 0;
     const base = Number(post.score != null ? post.score : (post.stats || {}).score) || 0;
@@ -8862,14 +8866,36 @@ const here = parseRoute();
         const next = mine && String(mine.publicId) === key ? keepOwnPosts(res.posts).filter((item) => String(item.authorId) === key) : res.posts;
         const sig = (list) => list.map((item) => [item.id, item.replyCount, item.quoteCount, item.likes, item.reposts, item.editedAt, item.body].join("|")).join(",");
         const before = sig(entry.posts);
-        entry.posts = next;
-        if (before !== sig(next)) render();
+        // Keep pages already read further back; the first page replaces only its own span.
+        const edge = Number(res.before) || 0;
+        const older = (entry.posts || []).filter((item) => edge && (Number(item.createdAt) || 0) < edge && !next.some((row) => row.id === item.id));
+        if (!older.length) { entry.more = !!res.more; entry.before = edge; }
+        entry.posts = next.concat(older);
+        if (before !== sig(entry.posts)) render();
       }).catch(() => { entry.loading = false; });
     }
     const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
     const ids = new Set(have.map((item) => item.id));
     const extra = publicPosts.filter((item) => item && String(item.authorId) === key && !ids.has(item.id));
     return have.concat(extra);
+  }
+
+  // The next page of one account's posts, when the profile scrolls to its end.
+  function loadOlderAuthorPosts(publicId) {
+    const key = String(publicId || "");
+    const entry = authorPostCache[key];
+    if (!entry || !entry.more || entry.loadingMore || !entry.before) return;
+    entry.loadingMore = true;
+    accountCall("/v1/posts?by=" + key + "&before=" + entry.before).then((res) => {
+      entry.loadingMore = false;
+      if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      const ids = new Set((entry.posts || []).map((item) => item.id));
+      const add = res.posts.filter((item) => item && !ids.has(item.id) && String(item.authorId) === key);
+      entry.posts = (entry.posts || []).concat(add);
+      entry.before = Number(res.before) || 0;
+      entry.more = !!res.more && add.length > 0 && !!entry.before;
+      render();
+    }).catch(() => { entry.loadingMore = false; });
   }
 
   function hydratePublicMedia() {
@@ -14361,7 +14387,9 @@ if (STATE.histClear) {
     if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
     else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
     else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
-    return { html: shown.map((post) => card(post, "")).join(""), count: postList.length };
+    const entry = account.publicId ? authorPostCache[String(account.publicId)] : null;
+    const more = entry && entry.more ? `<div id="author-more" class="reply-empty" data-id="${esc(account.publicId)}"><button type="button" class="link-btn" data-act="author-more" data-id="${esc(account.publicId)}">${tr("Show more")}</button></div>` : "";
+    return { html: shown.map((post) => card(post, "")).join("") + more, count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -17445,6 +17473,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       STATE.menu = null;
       toast(tr("We'll show you less of this."));
       render();
+      return;
+    }
+    if (act === "author-more") {
+      loadOlderAuthorPosts(el.dataset.id);
       return;
     }
     if (act === "reddit-vote") {
