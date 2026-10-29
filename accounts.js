@@ -4179,6 +4179,10 @@ function signupPayload() {
   /* The countdown chip, and a local wipe once the time has passed. The
      server deletes the account on its own schedule either way. */
   function tempTick() {
+    try { tempTickNow(); } catch (err) { /* a page without a full DOM */ }
+  }
+  function tempTickNow() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
     var session = readSession();
     var at = session && tempExpiresAt(session.account);
     var chip = document.getElementById("temp-countdown");
