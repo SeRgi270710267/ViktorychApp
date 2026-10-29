@@ -123,7 +123,7 @@ assert.ok(css.indexOf("--thread: #38444d") >= 0, "dim thread");
 assert.ok(css.indexOf("--thread: #cfd9de") >= 0, "light thread");
 assert.ok(css.indexOf(".thread > .post.continues { border-bottom: 0; }") >= 0, "no divider between a reply and its parent");
 assert.ok(css.indexOf(".replying { color: var(--muted); font-size: 15px; line-height: 20px;") >= 0, "replying line");
-assert.ok(css.indexOf(".replying a { color: var(--blue); }") >= 0, "replying handle");
+assert.ok(/\.replying a \{ color: var\((?:--link, var\()?--blue\)\)?; \}/.test(css), "replying handle");
 assert.ok(css.indexOf(".status-text { font-size: 17px; line-height: 24px;") >= 0, "focused post text");
 assert.ok(css.indexOf(".ancestor .post-text { font-size: 15px; line-height: 20px; }") >= 0, "ancestor text");
 assert.ok(css.indexOf(".media.m1 > .tile.has-ratio") >= 0 && css.indexOf("max-height: 125cqi") >= 0, "desktop clamp");

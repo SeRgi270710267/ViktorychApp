@@ -1459,16 +1459,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a136-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a137-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a136-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a137-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in deployed_paths() and "spaces.css" in deployed_paths() and "live/" in deployed_paths(), "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a136-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a137-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -1525,7 +1525,7 @@ def main() -> None:
     hidden_chips = css[css.index(".topbar.is-hidden ~ .yt-chips"):css.index(".topbar.is-hidden ~ .yt-chips") + 160]
     check("${head}${strip}${chips}${save}<div class=\"subs-feed\">" in subs_markup and "display: flow-root" in css[css.index(".subs-feed"):css.index(".subs-feed") + 80] and "z-index: 0" in css[css.index(".subs.grid .yt-grid"):css.index(".subs.grid .yt-grid") + 240], "the groups row sits under the channel strip and outside the video grid")
     check("top: env(safe-area-inset-top)" in hidden_chips, "the groups row sticks to the top when the phone header hides")
-    subs_strip = app[app.index("const strip = "):app.index("const strip = ") + 1100]
+    subs_strip = app[app.index("const strip = `<div class=\"yt-strip\""):app.index("const strip = `<div class=\"yt-strip\"") + 1100]
     ch_name = css[css.index(".yt-ch .ch-name"):css.index(".yt-ch .ch-name") + 420]
     subs_view = app[app.index("function subsView("):app.index("function revealSubsChannel(")]
     check("function subsChannelHash(" in app and "parts[1] || query.get(\"c\")" in app and "subsChannelHash" in subs_strip and "accountHash" not in subs_strip and "ch-name" in subs_strip and "creditCarried" in subs_view and "onChannel" in subs_view and "-webkit-line-clamp: 2" in ch_name and "height: 32px" in ch_name and "align-items: flex-start" in css[css.index(".yt-strip {"):css.index(".yt-strip {") + 180], "a channel in the subscription row filters that creator's videos and its name wraps to two lines")
@@ -4593,7 +4593,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "viktorych-a136-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-a137-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     lazy = (ROOT / "shared" / "lazy-modules.js").read_text(encoding="utf-8")
     check('shorts.js", "shorts.css"' in lazy and "shorts.js" in worker and "shorts.css" in worker and 'info.name === "shorts"' in app, "the page and the service worker load Shorts on demand")
     check('drive.js", "drive.css"' in lazy and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker and 'ensureLazy("drive")' in app, "the page and the service worker load Drive on demand")
@@ -4648,7 +4648,7 @@ def story_checks() -> None:
     shorts_js = (ROOT / "shorts.js").read_text(encoding="utf-8")
     check('tr("added accounts")' in shorts_js and 'data-shorts="remove-account"' in shorts_js and 'tr("Original quality")' in shorts_js and "tracked" not in shorts_js.lower(), "Shorts lets the owner add an account and does not call it tracked")
     check("isTikTokCdn(url)" in worker and "if (isTikTokCdn(url)) return;" in worker, "the service worker does not intercept TikTok CDN media")
-    check('VERSION = "viktorych-a136-__SW_VERSION__"' in worker, "the service worker cache stamp is a136")
+    check('VERSION = "viktorych-a137-__SW_VERSION__"' in worker, "the service worker cache stamp is a137")
     landing_css = (ROOT / "landing.css").read_text(encoding="utf-8")
     accounts_src = (ROOT / "accounts.js").read_text(encoding="utf-8")
     check("function showLanding(" in accounts_src and "function installedApp(" in accounts_src and "display-mode: standalone" in accounts_src and 'data-acct="signup"' in accounts_src and 'data-acct="login"' in accounts_src and "prefers-reduced-motion" in landing_css and "animation-timeline" in landing_css and "landing/timeline.webp" in accounts_src, "logged-out visitors get the marketing landing and an installed app skips it")
@@ -4669,7 +4669,7 @@ def story_checks() -> None:
     dispatch_wf = (ROOT / ".github" / "workflows" / "worker-dispatch-secret.yml").read_text(encoding="utf-8")
     check("WORKER_DISPATCH_TOKEN" in readme and "WORKER_DISPATCH_TOKEN" in wrangler and ".github/worker-dispatch-secret" in (ROOT / "worker" / "README.md").read_text(encoding="utf-8"), "WORKER_DISPATCH_TOKEN is the repo secret")
     check("not set yet" in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\" | npx wrangler secret put GITHUB_DISPATCH_TOKEN --name viktorych-accounts" in dispatch_wf, "an empty dispatch token is skipped and a set one is copied from stdin")
-    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha256sum" in dispatch_wf and "actions/cache/restore@v4" in dispatch_wf and "actions/cache/save@v4" in dispatch_wf, "the dispatch secret workflow retries itself and skips a value it already copied")
+    check('cron: "*/30 * * * *"' in dispatch_wf and "workflow_dispatch" in dispatch_wf and ".github/worker-dispatch-secret" in dispatch_wf and "sha256sum" in dispatch_wf and re.search(r"actions/cache/restore@(?:v4\b|[0-9a-f]{40} # v4)", dispatch_wf) is not None and re.search(r"actions/cache/save@(?:v4\b|[0-9a-f]{40} # v4)", dispatch_wf) is not None, "the dispatch secret workflow retries itself and skips a value it already copied")
     check('echo "$WORKER_DISPATCH_TOKEN"' not in dispatch_wf and "echo $WORKER_DISPATCH_TOKEN" not in dispatch_wf and "echo ${{ secrets" not in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\"" in dispatch_wf, "the dispatch secret workflow does not print the token")
     live_check = (ROOT / "worker" / "dispatch-live-check.mjs").read_text(encoding="utf-8")
     check("node dispatch-live-check.mjs" in dispatch_wf and "/tiktok-live.yml/dispatches" in live_check and "media-extract.yml" not in live_check and "tiktok-added.yml" not in live_check, "the worker dispatch check starts only tiktok-live.yml")
