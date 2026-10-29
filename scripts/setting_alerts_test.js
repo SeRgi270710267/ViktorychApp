@@ -8,6 +8,15 @@ const vm = require("vm");
 
 const root = path.resolve(__dirname, "..");
 const read = (name) => fs.readFileSync(path.join(root, name), "utf8");
+// The app's icon set (PATH in app.js), shared with modules as window.ViktorychIcons.
+const APP_PATH = (() => {
+  const src = read("app.js");
+  const start = src.indexOf("const PATH = {");
+  const end = src.indexOf("\n  };", start);
+  return vm.runInNewContext("(" + src.slice(start + "const PATH = ".length, end + 4) + ")");
+})();
+const APP_ICONS = { has: (n) => !!APP_PATH[n], svg: (n) => (APP_PATH[n] ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + APP_PATH[n] + '"/></svg>' : "") };
+const EMOJI = /[\u2190-\u2BFF\u2600-\u27BF\uFE0F]|[\uD83C-\uD83E][\uDC00-\uDFFF]/;
 
 /* A tiny DOM: enough for the pop-out, the banner and the highlighted row. */
 function attrsOf(html) {
@@ -134,6 +143,7 @@ function setup(opts) {
     addEventListener(type, fn) { (winListeners[type] = winListeners[type] || []).push(fn); },
     t: (key, vars) => key.replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? vars[k] : m)),
     ViktorychAccounts: { account: () => null, token: () => "", call: () => Promise.resolve({}) },
+    ViktorychIcons: APP_ICONS,
     __SA_NO_AUTOSTART: true
   };
   sandbox.window = sandbox;
@@ -424,5 +434,26 @@ const popsOf = (t, id) => t.shows.filter((s) => s.id === id);
     const pack = read("i18n/" + code + ".js");
     for (const key of ["Settings alerts", "Device storage is almost full", "Don't warn me about this", "Opening {page} in {n}…", "Data cap reached"]) assert(pack.includes(JSON.stringify(key) + ":"), code + " has " + key);
   }
+  // Icons: names from the app's icon set, drawn as one-colour 24px SVG, never emoji.
+  const ic = setup();
+  ic.sa.ALERTS.forEach((def) => {
+    assert(APP_PATH[def.icon], def.id + " uses an app icon, got " + def.icon);
+    assert(!EMOJI.test(def.icon), def.id + " has no emoji");
+  });
+  const appSrc = read("app.js");
+  assert(appSrc.includes("window.ViktorychIcons = "), "app shares its icon set");
+  ic.sa.evaluate(disk(96));
+  ["info", "warning", "critical", "limit"].forEach((v) => ic.sa.preview && ic.sa.preview(v));
+  ic.advance(60000);
+  const surfaces = ic.shows.map((x) => x.html).concat([ic.sa.notesHtml(), ic.sa.settingsHtml()]);
+  surfaces.forEach((html, i) => {
+    assert(!EMOJI.test(html.replace(/<path d="[^"]*"/g, "")), "no emoji in surface " + i);
+  });
+  assert(ic.shows.length && ic.shows.every((x) => /<span class="ach-ico"><svg viewBox="0 0 24 24"/.test(x.html)), "pop-outs draw an SVG glyph");
+  assert(/<span class="sa-note-ico" aria-hidden="true"><svg viewBox="0 0 24 24"/.test(ic.sa.notesHtml()), "System items draw an SVG glyph");
+  assert(/<span class="sa-row-ico" aria-hidden="true"><svg viewBox="0 0 24 24"/.test(ic.sa.settingsHtml()), "settings rows draw an SVG glyph");
+  const iconCss = read("setting-alerts.css") + read("badges.css");
+  assert(/\.sa-note-ico svg[^}]*\}/.test(iconCss) && iconCss.includes("fill: currentColor"), "glyphs fill with currentColor");
+  assert(!EMOJI.test(read("setting-alerts.js")), "setting-alerts.js has no emoji");
   console.log("ok setting alerts");
 })().catch((err) => { console.error(err); process.exit(1); });
