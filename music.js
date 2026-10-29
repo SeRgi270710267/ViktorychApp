@@ -2058,10 +2058,12 @@
     if (seek && document.activeElement !== seek) {
       seek.max = String(pos.dur || 0);
       seek.value = String(pos.cur || 0);
+      if (window.ViktorychRange) window.ViktorychRange.paint(seek);
     }
     if (nowSeek && document.activeElement !== nowSeek) {
       nowSeek.max = String(pos.dur || 0);
       nowSeek.value = String(pos.cur || 0);
+      if (window.ViktorychRange) window.ViktorychRange.paint(nowSeek);
     }
     text("mu-time", formatTime(pos.cur));
     text("mu-end", formatTime(pos.dur));
@@ -2265,6 +2267,7 @@
       if (yt && yt.setVolume) yt.setVolume(Math.round(local.volume * 100));
       var other = document.getElementById(target.id === "mu-volume" ? "mu-now-volume" : "mu-volume");
       if (other && other !== target) other.value = target.value;
+      if (other && other !== target && window.ViktorychRange) window.ViktorychRange.paint(other);
       save();
     }
   }
