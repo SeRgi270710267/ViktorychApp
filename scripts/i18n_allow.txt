@@ -267,3 +267,9 @@ data-saver.js|HD video variants
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
+inbox-mail.js|Yandex Mail
+inbox-mail.js|Gmail
+inbox-mail.js|Outlook
+inbox-mail.js|Mail.ru
+inbox-mail.js|ViktorychApp codes
+inbox-mail.js|from:(simplelogin.co OR simplelogin.io) OR to:(@{alias-domain})
