@@ -574,6 +574,7 @@
     const api = accountsApi();
     if (!api) return false;
     dev.rememberFail("media", src, Date.now(), "source");
+    noteHostFail(src);
     img.dataset.deviceRelay = "1";
     img.removeAttribute("srcset");
     img.src = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(src);
@@ -3391,7 +3392,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return chain;
   }
 
-  const BLOCKED_IN_RU = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com)\b/i;
+  // Hosts that are blocked or throttled for many readers in Russia or India.
+  // Only hosts the Worker's /v1/media relay allows are listed. The relay
+  // passes the original bytes through; nothing is re-encoded.
+  const BLOCKED_IN_RU = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|yt3\.ggpht\.com)$/i;
+  const BLOCKED_IN_IN = /(?:^|\.)(?:tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
+  const RELAYABLE = /(?:^|\.)(?:twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|ytimg\.com|yt3\.ggpht\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
 
   function isRuVisitor() {
     const mode = (STATE.settings && STATE.settings.networkMode) || localStorage.getItem("viktorychapp-network-mode") || "auto";
@@ -3400,43 +3406,106 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return typeof window !== "undefined" && (!!window.__VIKTORYCH_IS_RU || !!window.__VIKTORYCH_MAX_BYPASS);
   }
 
+  function isInVisitor() {
+    const mode = (STATE.settings && STATE.settings.networkMode) || localStorage.getItem("viktorychapp-network-mode") || "auto";
+    if (mode === "max") return true;
+    if (mode === "direct") return false;
+    return typeof window !== "undefined" && !!window.__VIKTORYCH_IS_IN;
+  }
+
+  function regionBlocked(host) {
+    if (!host) return false;
+    return (isRuVisitor() && BLOCKED_IN_RU.test(host)) || (isInVisitor() && BLOCKED_IN_IN.test(host));
+  }
+
+  /* Hosts that failed to load on this device lately, in any country. Two
+     failures within ten minutes send that host through our relay for half
+     an hour; then direct gets another chance. Only host names are kept. */
+  const BAD_HOSTS_KEY = "viktorychapp-blocked-hosts-v1";
+  let badHostsMemo = null;
+  let badHostsAt = 0;
+  function badHostsRead() {
+    const now = Date.now();
+    if (badHostsMemo && now - badHostsAt < 2000) return badHostsMemo;
+    let all = {};
+    try { all = JSON.parse(localStorage.getItem(BAD_HOSTS_KEY) || "{}") || {}; } catch (err) { all = {}; }
+    badHostsMemo = all;
+    badHostsAt = now;
+    return all;
+  }
+  function hostRelayed(host) {
+    const row = host ? badHostsRead()[host] : null;
+    return !!(row && Number(row.until) > Date.now());
+  }
+  function noteHostFail(url) {
+    let host = "";
+    try { host = new URL(String(url || "")).hostname; } catch (err) { return; }
+    if (!host || !RELAYABLE.test(host)) return;
+    const now = Date.now();
+    const all = Object.assign({}, badHostsRead());
+    const row = all[host] && now - Number(all[host].at || 0) < 10 * 60 * 1000 ? all[host] : { n: 0 };
+    row.n = Math.min(Number(row.n || 0) + 1, 9);
+    row.at = now;
+    if (row.n >= 2) row.until = now + 30 * 60 * 1000;
+    all[host] = row;
+    Object.keys(all).forEach((key) => {
+      if (now - Number(all[key].at || 0) > 24 * 3600 * 1000) delete all[key];
+    });
+    badHostsMemo = all;
+    badHostsAt = now;
+    try { localStorage.setItem(BAD_HOSTS_KEY, JSON.stringify(all)); } catch (err) { /* memory still has it */ }
+  }
+
+  function mediaRelayUrl(api, raw) {
+    return String(api || "").replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
+  }
+
   function ruSafeImageUrl(url) {
     const raw = String(url || "");
+    if (!raw || !/^https:\/\//i.test(raw)) return url;
     const dev = window.ViktorychDevice;
-    const failed = !!(dev && dev.sourceState && raw && dev.sourceState(raw) === "fail");
-    if (!isRuVisitor() && !failed) return url;
+    const failed = !!(dev && dev.sourceState && dev.sourceState(raw) === "fail");
+    let host = "";
+    try { host = new URL(raw).hostname; } catch (err) { return url; }
+    const preferRelay = RELAYABLE.test(host) && (regionBlocked(host) || hostRelayed(host));
+    if (!preferRelay && !failed) return url;
     const api = accountsApi();
-    if (!raw || !/^https:\/\//i.test(raw) || !api) return url;
-    let relay = "";
-    let preferRelay = false;
-    try {
-      const parsed = new URL(raw);
-      if (isRuVisitor() && BLOCKED_IN_RU.test(parsed.hostname)) {
-        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
-        preferRelay = true;
-      } else if (failed) {
-        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
-      }
-    } catch (err) { return url; }
+    if (!api) return url;
+    const relay = mediaRelayUrl(api, raw);
     if (dev && dev.playbackUrl) return dev.playbackUrl(raw, relay, { preferRelay: preferRelay, settings: dev.read(), signals: dev.signals() }) || url;
     return preferRelay ? relay : url;
   }
 
+  /* Direct load failed: send a known media host through our relay, in any
+     country. When the relay root itself fails, try the other API root. */
   function tryRuProxyFallback(img) {
-    if (!isRuVisitor()) return false;
-    if (!img || !img.isConnected || img.dataset.ruTried === "1") return false;
-    img.dataset.ruTried = "1";
+    if (!img || !img.isConnected) return false;
     const src = img.dataset.source || img.dataset.fallbackSrc || img.getAttribute("src") || "";
+    if (!src || !/^https:\/\//i.test(src)) return false;
+    const cur = img.getAttribute("src") || "";
+    const relayIdx = cur.indexOf("/v1/media?url=");
+    if (relayIdx > 0) {
+      if (img.dataset.relayAlt === "1") return false;
+      img.dataset.relayAlt = "1";
+      const usedRoot = cur.slice(0, relayIdx);
+      const roots = (window.ViktorychAccounts && window.ViktorychAccounts.apiEndpoints) ? window.ViktorychAccounts.apiEndpoints() : [];
+      const other = roots.find((root) => root && root !== usedRoot);
+      if (!other) return false;
+      img.removeAttribute("srcset");
+      img.src = mediaRelayUrl(other, src);
+      return true;
+    }
+    if (img.dataset.ruTried === "1") return false;
+    img.dataset.ruTried = "1";
+    let host = "";
+    try { host = new URL(src).hostname; } catch (err) { return false; }
+    noteHostFail(src);
+    if (!RELAYABLE.test(host)) return false;
     const api = accountsApi();
-    if (!api || !src || !/^https:\/\//i.test(src)) return false;
-    try {
-      const parsed = new URL(src);
-      if (BLOCKED_IN_RU.test(parsed.hostname)) {
-        img.src = api + "/v1/media?url=" + encodeURIComponent(src);
-        return true;
-      }
-    } catch (err) {}
-    return false;
+    if (!api) return false;
+    img.removeAttribute("srcset");
+    img.src = mediaRelayUrl(api, src);
+    return true;
   }
 
   function syncRuVisitorGeo() {
@@ -3445,6 +3514,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     const api = accountsApi();
     if (!api) return;
+    // One country check per browser session is enough; reloads skip it.
+    try { if (sessionStorage.getItem("viktorychapp-is-ru") != null && localStorage.getItem("viktorychapp-geo-v1")) return; } catch (err) {}
     fetch(api + "/v1/geo", { cache: "no-store", signal: AbortSignal.timeout(3500) })
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
@@ -3452,6 +3523,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           window.__VIKTORYCH_IS_TOR = true;
           try { sessionStorage.setItem("viktorychapp-is-tor", "1"); } catch (err) {}
           applyTorProtections();
+        }
+        if (data && typeof data.country === "string") {
+          const isIn = data.country.toUpperCase() === "IN";
+          window.__VIKTORYCH_IS_IN = isIn;
+          try { localStorage.setItem("viktorychapp-geo-v1", JSON.stringify({ c: data.country.toUpperCase().slice(0, 2), at: Date.now() })); } catch (err) {}
         }
         if (data && typeof data.isRu === "boolean") {
           window.__VIKTORYCH_IS_RU = data.isRu;
@@ -14332,8 +14408,8 @@ const here = parseRoute();
           <button class="outline${mode === "max" ? " on" : ""}" type="button" data-act="set-network-mode" data-mode="max">${esc(tr("Max Bypass (Always On)"))}</button>
           <button class="outline${mode === "direct" ? " on" : ""}" type="button" data-act="set-network-mode" data-mode="direct">${esc(tr("Direct (Off)"))}</button>
         </div>
-        <p class="phandle" style="margin-top:12px;">${mode === "max" ? esc(tr("Max level active: All media is routed through unblocked Telegram and Cloudflare Edge relays regardless of region.")) : (mode === "auto" ? esc(tr("Smart Auto: Proxy activates automatically only when connecting from restricted regions (Russia) or on connection failure.")) : esc(tr("Direct: All media connects directly with no relay.")))}</p>
-      </div>`;
+        <p class="phandle" style="margin-top:12px;">${mode === "max" ? esc(tr("Max level active: All media is routed through unblocked Telegram and Cloudflare Edge relays regardless of region.")) : (mode === "auto" ? esc(tr("Smart Auto: media from sites that are blocked in your country, or that failed to load on this device, comes through our servers. Photos and videos keep their original quality.")) : esc(tr("Direct: All media connects directly with no relay.")))}</p>
+      </div>${netHelpHtml()}`;
     }
     if (section === "resources") {
       return settingsHead(tr("Additional resources"), "#/settings") + `<div class="set-block">
@@ -22067,12 +22143,84 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     } catch (err) { /* metadata is optional */ }
   }
 
+  /* Help for slow or blocked connections, and a quick check of our own
+     servers. Nothing here needs a new site or account. */
+  function netHelpHtml() {
+    const check = STATE.netCheck || null;
+    const rows = check && check.rows ? check.rows.map((row) => `<li>${esc(row.label)}: ${row.ms >= 0 ? esc(tr("{ms} ms", { ms: row.ms })) : esc(tr("not reachable"))}</li>`).join("") : "";
+    return `<div class="set-block net-help">
+        <h2>${esc(tr("If the app is slow or won't load"))}</h2>
+        <p class="phandle">${esc(tr("The app keeps your feed on this device, so saved posts open even with a bad connection. When our main server stalls, it switches to the backup server by itself."))}</p>
+        <button class="outline" type="button" data-act="net-check"${check && check.busy ? " disabled" : ""}>${esc(check && check.busy ? tr("Checking…") : tr("Check connection"))}</button>
+        ${rows ? `<ul class="net-check">${rows}</ul>` : ""}
+        <h2>${esc(tr("In India"))}</h2>
+        <p class="phandle">${esc(tr("Some internet providers block sites through DNS. Turning on secure DNS usually fixes it:"))}</p>
+        <ul class="net-steps">
+          <li>${esc(tr("Android: Settings > Network & internet > Private DNS > enter dns.google or one.one.one.one"))}</li>
+          <li>${esc(tr("Chrome or Edge: Settings > Privacy and security > Use secure DNS"))}</li>
+          <li>${esc(tr("Firefox: Settings > Privacy & Security > DNS over HTTPS > Increased protection"))}</li>
+          <li>${esc(tr("iPhone: install a secure DNS app such as Cloudflare 1.1.1.1"))}</li>
+        </ul>
+        <h2>${esc(tr("In Russia"))}</h2>
+        <p class="phandle">${esc(tr("Smart Auto sends blocked photos and videos through our own servers, and friends who already have a post can pass it to you directly (peer sharing). This helps, but some blocks can't be avoided without a VPN, so we can't promise everything will load."))}</p>
+      </div>`;
+  }
+
+  function runNetCheck() {
+    if (STATE.netCheck && STATE.netCheck.busy) return;
+    const roots = window.ViktorychAccounts && window.ViktorychAccounts.apiEndpoints ? window.ViktorychAccounts.apiEndpoints() : [accountsApi()].filter(Boolean);
+    STATE.netCheck = { busy: true, rows: [] };
+    rerenderNetHelp();
+    const labels = [tr("Main server"), tr("Backup server")];
+    Promise.all(roots.slice(0, 3).map((root, i) => {
+      const started = Date.now();
+      return fetch(root + "/v1/health", { cache: "no-store", credentials: "omit", signal: AbortSignal.timeout(10000) })
+        .then((res) => ({ label: labels[i] || tr("Server {n}", { n: i + 1 }), ms: res.ok ? Date.now() - started : -1 }))
+        .catch(() => ({ label: labels[i] || tr("Server {n}", { n: i + 1 }), ms: -1 }));
+    })).then((rows) => {
+      STATE.netCheck = { busy: false, rows };
+      if (rows.some((row) => row.ms >= 0)) setLimited(false);
+      rerenderNetHelp();
+    });
+  }
+
+  function rerenderNetHelp() {
+    const box = document.querySelector(".net-help");
+    if (!box) return;
+    const holder = document.createElement("div");
+    holder.innerHTML = netHelpHtml();
+    if (holder.firstElementChild) box.replaceWith(holder.firstElementChild);
+  }
+
+  /* A calm note when our servers keep failing or stalling while the device
+     is online. The offline note wins when both apply. */
+  function setLimited(on) {
+    STATE.netLimited = !!on;
+    paintNetNote();
+  }
+
+  function paintNetNote() {
+    const el = document.getElementById("offline");
+    if (!el) return;
+    if (STATE.netOffline) return;
+    if (!STATE.netLimited) {
+      if (el.dataset.mode === "limited") { el.hidden = true; el.dataset.mode = ""; }
+      return;
+    }
+    el.dataset.mode = "limited";
+    el.hidden = false;
+    el.innerHTML = `${esc(tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>`;
+  }
+
   function setOffline(offline) {
     const el = document.getElementById("offline");
     if (!el) return;
-    const was = !el.hidden;
+    const was = !el.hidden && el.dataset.mode !== "limited";
+    STATE.netOffline = !!offline;
     el.hidden = !offline;
+    el.dataset.mode = offline ? "offline" : "";
     el.textContent = tr("Offline - showing saved");
+    if (!offline) paintNetNote();
     if (was && !offline) {
       toast(tr("You're back online"));
       flushBookmarkQueue();
@@ -23772,6 +23920,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     window.addEventListener("pageshow", () => wakeHome());
     window.addEventListener("offline", () => setOffline(true));
+    window.addEventListener("viktorych-api-trouble", (event) => setLimited(!!(event.detail && event.detail.on)));
+    document.addEventListener("click", (event) => {
+      const btn = event.target && event.target.closest ? event.target.closest('[data-act="net-retry"], [data-act="net-check"]') : null;
+      if (!btn) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (btn.dataset.act === "net-check") { runNetCheck(); return; }
+      setLimited(false);
+      wakeHome();
+    });
     setOffline(!navigator.onLine);
     const updateGo = document.getElementById("update-go");
     if (updateGo) updateGo.addEventListener("click", () => location.reload());
