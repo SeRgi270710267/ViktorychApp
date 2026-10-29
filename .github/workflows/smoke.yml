@@ -10,6 +10,13 @@ on:
       - ".github/workflows/actions-cleanup.yml"
       - "scripts/actions_cleanup.py"
 
+# A new push to a pull request cancels that pull request's older run, so
+# superseded commits stop holding runners. Pushes to main never cancel each
+# other (one group per run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
@@ -18,9 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
 
@@ -56,9 +65,23 @@ jobs:
       - name: Load the Pages upload fresh and with old saved data
         run: node scripts/smoke_page.mjs --site _mirror
 
+      # One Playwright install for every browser step below (they used to
+      # install it five times). The other prefixes are links to this one.
+      - name: Playwright
+        id: pw
+        run: |
+          for i in 1 2 3; do npm install --prefix /tmp/pw --no-fund --no-audit playwright && break; sleep 10; done
+          for p in pw-signup pw-compose pw-ios pw-live; do ln -sfn /tmp/pw /tmp/$p; done
+          echo "v=$(node -p "require('/tmp/pw/node_modules/playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the WebKit browser
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-webkit-${{ runner.os }}-${{ steps.pw.outputs.v }}
+
       - name: Service worker update
         run: |
-          npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
           PLAYWRIGHT_MJS=/tmp/pw/node_modules/playwright-core/index.js node scripts/sw_update_test.mjs
 
       - name: Notifications list is never blank
@@ -97,7 +120,6 @@ jobs:
       - name: Sign-up and first-run
         run: |
           npm ci --prefix worker --no-fund --no-audit
-          npm install --prefix /tmp/pw-signup --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw-signup/node_modules/playwright-core/index.js node scripts/signup_flow_test.mjs
 
       - name: On-device AI
@@ -110,18 +132,15 @@ jobs:
 
       - name: Composer writing tools
         run: |
-          npm install --prefix /tmp/pw-compose --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw-compose/node_modules/playwright-core/index.js node scripts/compose_ai_test.mjs
           PLAYWRIGHT_CORE=/tmp/pw-compose/node_modules/playwright-core/index.js node scripts/compose_page_test.mjs
 
       - name: iOS WebKit layout
         run: |
-          npm install --prefix /tmp/pw-ios --no-fund --no-audit playwright
           cd /tmp/pw-ios && npx playwright install --with-deps webkit
           cd "${GITHUB_WORKSPACE}"
           PLAYWRIGHT_CORE=/tmp/pw-ios/node_modules/playwright-core/index.js node scripts/ios_webkit_test.mjs
 
       - name: Peer-to-peer live
         run: |
-          npm install --prefix /tmp/pw-live --no-fund --no-audit playwright-core
           PLAYWRIGHT_CORE=/tmp/pw-live/node_modules/playwright-core/index.js node scripts/live_page_test.mjs
