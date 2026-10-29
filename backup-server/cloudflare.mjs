@@ -37,21 +37,36 @@ function normalizeParams(params) {
   });
 }
 
-export function createCloudflareClient({ token, accountId, fetchImpl, baseUrl }) {
+/* Bytes a request body sends out, for the backup's egress meter. */
+function bodyBytes(body) {
+  if (!body) return 0;
+  if (typeof body === "string") return Buffer.byteLength(body);
+  if (body.byteLength != null) return Number(body.byteLength) || 0;
+  return 0;
+}
+
+export function createCloudflareClient({ token, accountId, fetchImpl, baseUrl, timeoutMs, onSend }) {
   const doFetch = fetchImpl || fetch;
   const root = String(baseUrl || API_BASE).replace(/\/$/, "");
   const authHeaders = { Authorization: "Bearer " + token };
+  // A hung Cloudflare call used to hold the user's request open forever.
+  const limit = Number(timeoutMs) > 0 ? Number(timeoutMs) : 20000;
 
   async function call(path, init, attempt) {
     const tries = attempt == null ? 2 : attempt;
     let response;
     try {
+      const signal = (init && init.signal) || (typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(limit) : undefined);
+      if (onSend) onSend(bodyBytes(init && init.body) + path.length + 200);
       response = await doFetch(root + path, {
         ...init,
+        signal,
         headers: { ...authHeaders, ...((init && init.headers) || {}) }
       });
     } catch (err) {
-      if (tries > 0) return call(path, init, tries - 1);
+      // A timeout is not retried: the user is already waiting on it.
+      const timedOut = err && (err.name === "TimeoutError" || err.name === "AbortError");
+      if (tries > 0 && !timedOut) return call(path, init, tries - 1);
       throw new CloudflareError("cloudflare_unreachable: " + String(err && err.message || err), 0);
     }
     if ((response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) && tries > 0) {
@@ -173,8 +188,11 @@ export function createD1(client, databaseId) {
 }
 
 class RemoteR2Object {
+  /* bytes is either a Uint8Array or a fetch Response whose body is read
+     lazily, so a large file streams through instead of sitting in memory. */
   constructor(bytes, meta) {
-    this._bytes = bytes;
+    this._bytes = bytes instanceof Uint8Array ? bytes : null;
+    this._response = bytes && !(bytes instanceof Uint8Array) && typeof bytes.arrayBuffer === "function" ? bytes : null;
     this.size = meta.size;
     this.etag = meta.etag;
     this.httpEtag = meta.httpEtag;
@@ -183,15 +201,23 @@ class RemoteR2Object {
     this.uploaded = meta.uploaded;
   }
   get body() {
+    if (this._response) return this._response.body || new Response(new Uint8Array(0)).body;
     const bytes = this._bytes || new Uint8Array(0);
     return new Response(bytes).body;
   }
-  arrayBuffer() {
-    const bytes = this._bytes || new Uint8Array(0);
-    return Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  async _all() {
+    if (this._response) {
+      this._bytes = new Uint8Array(await this._response.arrayBuffer());
+      this._response = null;
+    }
+    return this._bytes || new Uint8Array(0);
   }
-  text() {
-    return Promise.resolve(new TextDecoder().decode(this._bytes || new Uint8Array(0)));
+  async arrayBuffer() {
+    const bytes = await this._all();
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+  async text() {
+    return new TextDecoder().decode(await this._all());
   }
   json() {
     return this.text().then((text) => JSON.parse(text));
@@ -241,22 +267,30 @@ class RemoteR2 {
       const length = Number(range.length) || 0;
       headers.Range = "bytes=" + start + "-" + Math.max(start, start + length - 1);
     }
-    const response = await this.client.call(this.base + "/" + encodeKey(key), { headers });
+    // Media can be large and slow: a longer limit than API calls.
+    const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(120000) : undefined;
+    const response = await this.client.call(this.base + "/" + encodeKey(key), { headers, signal });
     if (response.status === 404) return null;
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new CloudflareError("r2_get_failed: " + (text.slice(0, 160) || response.statusText), response.status);
     }
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    let bytes = buffer;
+    const etag = String(response.headers.get("etag") || "").replace(/^"|"$/g, "");
+    const declared = Number(response.headers.get("content-length"));
+    let bytes;
     if (range && response.status === 200) {
+      // The range was ignored: cut it out of the whole object.
+      const buffer = new Uint8Array(await response.arrayBuffer());
       const start = Number(range.offset) || 0;
       const length = Number(range.length) || 0;
       bytes = buffer.slice(start, start + length);
+    } else if (Number.isFinite(declared) && declared >= 0 && response.headers.get("content-length") !== null) {
+      bytes = response;
+    } else {
+      bytes = new Uint8Array(await response.arrayBuffer());
     }
-    const etag = String(response.headers.get("etag") || "").replace(/^"|"$/g, "");
     return new RemoteR2Object(bytes, {
-      size: bytes.byteLength,
+      size: bytes instanceof Uint8Array ? bytes.byteLength : declared,
       etag,
       httpEtag: etag ? '"' + etag + '"' : "",
       httpMetadata: { contentType: response.headers.get("content-type") || "application/octet-stream" }
@@ -294,25 +328,85 @@ export function createR2(client, bucket) {
   return new RemoteR2(client, bucket);
 }
 
-/* The Worker uses caches.default for GitHub API responses and Telegram
-   bodies. A process-local cache is enough for the backup. */
-export function createMemoryCache() {
+/* The Worker uses caches.default for GitHub API responses, presence,
+   previews and Telegram bodies. Cloudflare's edge cache expires entries and
+   evicts under pressure; the old Map here kept every response, media files
+   included, forever. On a 512 MB free instance that ended in an out of
+   memory restart, and stale entries never refreshed. This one keeps bytes
+   only, honours max-age, skips private/no-store and large bodies, and
+   evicts least recently used entries past a byte budget. */
+function cacheTtlMs(headers, now) {
+  const cc = String(headers.get("cache-control") || "").toLowerCase();
+  if (/\b(no-store|private)\b/.test(cc)) return 0;
+  const m = cc.match(/s-maxage=(\d+)/) || cc.match(/max-age=(\d+)/);
+  let secs = m ? Number(m[1]) : 300;
+  const expires = headers.get("expires");
+  if (!m && expires) {
+    const when = Date.parse(expires);
+    if (Number.isFinite(when)) secs = Math.max(0, Math.round((when - now) / 1000));
+  }
+  return Math.min(Math.max(secs, 0), 86400) * 1000;
+}
+
+export function createMemoryCache(options) {
+  const opts = options || {};
+  const maxBytes = Number(opts.maxBytes) > 0 ? Number(opts.maxBytes) : 32 * 1024 * 1024;
+  const maxEntry = Number(opts.maxEntryBytes) > 0 ? Number(opts.maxEntryBytes) : 2 * 1024 * 1024;
+  const clock = typeof opts.now === "function" ? opts.now : () => Date.now();
   const store = new Map();
-  return {
-    default: {
-      async match(request) {
-        const key = typeof request === "string" ? request : request.url;
-        const hit = store.get(key);
-        return hit ? hit.clone() : undefined;
-      },
-      async put(request, response) {
-        const key = typeof request === "string" ? request : request.url;
-        store.set(key, response.clone());
-      },
-      async delete(request) {
-        const key = typeof request === "string" ? request : request.url;
-        return store.delete(key);
+  const stats = { bytes: 0, entries: 0, hits: 0, misses: 0, skipped: 0, evicted: 0 };
+  const keyOf = (request) => (typeof request === "string" ? request : request.url);
+  function drop(key) {
+    const row = store.get(key);
+    if (!row) return false;
+    stats.bytes -= row.bytes.byteLength;
+    store.delete(key);
+    stats.entries = store.size;
+    return true;
+  }
+  const cache = {
+    async match(request) {
+      const key = keyOf(request);
+      const row = store.get(key);
+      if (!row) { stats.misses += 1; return undefined; }
+      if (row.until <= clock()) { drop(key); stats.misses += 1; return undefined; }
+      // Most recently used goes to the end.
+      store.delete(key);
+      store.set(key, row);
+      stats.hits += 1;
+      return new Response(row.bytes.slice(0), { status: row.status, headers: row.headers });
+    },
+    async put(request, response) {
+      const key = keyOf(request);
+      if (!response || response.status === 206 || (request && request.method && request.method !== "GET")) return;
+      const ttl = cacheTtlMs(response.headers, clock());
+      const declared = Number(response.headers.get("content-length"));
+      if (!ttl || (Number.isFinite(declared) && declared > maxEntry)) {
+        stats.skipped += 1;
+        if (response.body && !response.bodyUsed) await response.body.cancel().catch(() => {});
+        return;
       }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > maxEntry) { stats.skipped += 1; return; }
+      drop(key);
+      const headers = [];
+      response.headers.forEach((value, name) => headers.push([name, value]));
+      store.set(key, { bytes, status: response.status || 200, headers, until: clock() + ttl });
+      stats.bytes += bytes.byteLength;
+      while (stats.bytes > maxBytes && store.size) {
+        const oldest = store.keys().next().value;
+        drop(oldest);
+        stats.evicted += 1;
+      }
+      stats.entries = store.size;
+    },
+    async delete(request) {
+      return drop(keyOf(request));
     }
+  };
+  return {
+    default: cache,
+    async open() { return cache; },
+    stats
   };
 }
