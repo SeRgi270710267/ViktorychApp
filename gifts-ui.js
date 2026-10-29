@@ -199,6 +199,8 @@
   function artHtml(item, big) {
     var c = lib();
     if (!item) return "";
+    var own = c && c.localArt ? c.localArt(item.giftId || item.id) : "";
+    if (own) return '<img class="vkg-img is-own" src="' + esc(own) + '"' + (item.cp ? ' data-gift-art="' + esc(item.cp) + '"' : "") + ' alt="" loading="lazy" decoding="async" draggable="false">';
     if (!item.cp || !c) return item.svg ? svg(item.svg) : "";
     var src = big && item.anim ? c.animatedArt(item.cp) : c.staticArt(item.cp);
     return '<img class="vkg-img" src="' + esc(src) + '" data-gift-art="' + esc(item.cp) + '" alt="" loading="lazy" decoding="async" draggable="false" referrerpolicy="no-referrer">';
@@ -245,8 +247,14 @@
     return '<span class="vkg-price">' + esc(tr("{n} Viktorychs", { n: String(item.price) })) + "</span>";
   }
 
+  function hueStyle(item) {
+    var c = lib();
+    if (!c || !c.artHue || !item) return "";
+    return ' style="--h:' + Number(c.artHue(item.id)) + '"';
+  }
+
   function tile(item) {
-    return '<button type="button" class="gift-card vkg-item" data-gift="pick" data-gift-id="' + esc(item.id) + '" aria-label="' + esc(giftLabel(item)) + '"><span class="vkg-art">' + artHtml(item, false) + "</span>" + priceLabel(item) + "</button>";
+    return '<button type="button" class="gift-card vkg-item" data-gift="pick" data-gift-id="' + esc(item.id) + '" aria-label="' + esc(giftLabel(item)) + '"><span class="vkg-art"' + hueStyle(item) + '>' + artHtml(item, false) + "</span>" + priceLabel(item) + "</button>";
   }
 
   function headerHtml(title, backHref) {
@@ -357,7 +365,7 @@
       var shelves = c.activeSeasons().concat(["trending"]).concat(c.CATEGORIES.filter(function (id) { return id !== "trending"; }));
       body = chipsHtml() + balanceLine() + shelves.map(shelfHtml).join("");
     }
-    var credit = '<p class="vkg-credit">' + esc(tr("Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).")) + "</p>";
+    var credit = '<p class="vkg-credit">' + esc(tr("Gift art: original illustrations made for ViktorychApp, plus Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).")) + "</p>";
     return '<div class="store-page vkg-page">' + headerHtml(title, backHref) + body + credit + "</div>";
   }
 
@@ -365,7 +373,7 @@
     if (!sheet) return "";
     var gift = findGift(sheet.giftId);
     return '<div class="gift-sheet" role="dialog" aria-modal="true" aria-label="' + esc(tr("Send a gift")) + '"><div class="gift-sheet-bar"><button type="button" data-gift="close" aria-label="' + esc(tr("Close")) + '">×</button><h2>' + esc(tr("Send a gift")) + '</h2><button type="button" data-gift="confirm">' + esc(tr("Send")) + '</button></div><div class="gift-sheet-body">' +
-      (gift ? '<p class="gift-preview"><span class="vkg-art is-big">' + artHtml(gift, true) + "</span><b>" + esc(giftLabel(gift)) + "</b>" + priceLabel(gift) + "</p>" : "") +
+      (gift ? '<p class="gift-preview"><span class="vkg-art is-big"' + hueStyle(gift) + '>' + artHtml(gift, true) + "</span><b>" + esc(giftLabel(gift)) + "</b>" + priceLabel(gift) + "</p>" : "") +
       '<input data-gift-field="handle" value="' + esc(sheet.handle || "") + '" placeholder="' + esc(tr("Recipient")) + '" aria-label="' + esc(tr("Recipient")) + '">' +
       '<textarea data-gift-field="message" placeholder="' + esc(tr("Add a message")) + '" aria-label="' + esc(tr("Add a message")) + '">' + esc(sheet.message || "") + "</textarea>" +
       '<label><input type="radio" name="gift-privacy" data-gift-privacy="public"' + (sheet.privacy === "public" ? " checked" : "") + "> " + esc(tr("Public gift")) + "</label>" +
@@ -527,7 +535,7 @@
       if (!img || img.tagName !== "IMG" || !img.hasAttribute("data-gift-art")) return;
       var c = lib();
       var cp = img.getAttribute("data-gift-art");
-      if (c && img.src.indexOf("gstatic") >= 0) { img.src = c.staticArt(cp); return; }
+      if (c && (img.src.indexOf("gstatic") >= 0 || img.classList.contains("is-own"))) { img.classList.remove("is-own"); img.setAttribute("referrerpolicy", "no-referrer"); img.src = c.staticArt(cp); return; }
       var span = document.createElement("span");
       span.className = "vkg-emoji";
       span.textContent = c ? c.emojiChar(cp) : "";
