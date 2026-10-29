@@ -9994,7 +9994,9 @@ const here = parseRoute();
     const findAccounts = !list.length && (tab === "following" || tab === "foryou")
       ? `<p class="empty-action"><a class="save" href="#/feeds">${esc(tr("Find accounts to follow"))}</a></p>`
       : "";
-    const body = (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const tabLoading = !list.length && tabStillLoading(tab);
+    if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -21553,9 +21555,51 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       releaseDeviceFeeds();
       return pending.then(() => attachParents((STATE.pendingLive || []).slice(0, 4)).then(() => saveHomeSnapshot()));
     };
+    const covered = (wanted.length ? wanted : [currentHomeTab()]).filter((tab) => tab.indexOf("cat:") === 0 || tab.indexOf("list:") === 0);
+    covered.forEach((tab) => { tabFlights[tab] = (tabFlights[tab] || 0) + 1; });
     const job = STATE.catalog ? run(STATE.catalog) : loadCatalog().then(run);
-    homeTabJobs[key] = Promise.resolve(job).catch(() => {}).finally(() => { delete homeTabJobs[key]; });
+    homeTabJobs[key] = Promise.resolve(job).catch(() => {}).finally(() => {
+      delete homeTabJobs[key];
+      covered.forEach((tab) => {
+        tabFlights[tab] = Math.max(0, (tabFlights[tab] || 1) - 1);
+        tabTried[tab] = true;
+        retryEmptyTab(tab);
+      });
+      const route = parseRoute();
+      if (route && route.name === "home" && covered.indexOf(route.tab || "") >= 0) render({ y: window.scrollY });
+    });
     return homeTabJobs[key];
+  }
+
+  /* A custom tab is "still loading" (not empty) while its saved copy is
+     being read, a refresh for it is running, it was never refreshed this
+     session, or a retry is waiting. Retries back off: 4 s, 12 s, 36 s. */
+  const tabFlights = {};
+  const tabTried = {};
+  const tabRetries = {};
+  const TAB_RETRY_MS = [4000, 12000, 36000];
+  function tabHasPosts(tab) {
+    return posts().some((post) => homeShows(post, { name: "home", tab: tab }));
+  }
+  function retryEmptyTab(tab) {
+    const row = tabRetries[tab] || (tabRetries[tab] = { n: 0, timer: 0 });
+    if (tabHasPosts(tab)) { row.n = 0; return; }
+    if (row.timer || row.n >= TAB_RETRY_MS.length || !feedsForTab(tab).length) return;
+    const wait = TAB_RETRY_MS[row.n];
+    row.n += 1;
+    row.timer = setTimeout(() => {
+      row.timer = 0;
+      if (document.visibilityState === "hidden" || gameBusy()) { retryEmptyTab(tab); return; }
+      refreshHomeTabs([tab]);
+    }, wait);
+  }
+  function tabStillLoading(tab) {
+    if (!(tab.indexOf("cat:") === 0 || tab.indexOf("list:") === 0)) return false;
+    if (!feedsForTab(tab).length) return false;
+    if (!tabHydrated[tab]) { hydrateTab(tab); return true; }
+    if ((tabFlights[tab] || 0) > 0 || !tabTried[tab]) return true;
+    const row = tabRetries[tab];
+    return !!(row && row.timer);
   }
 
   function refreshLiveTimeline() {
@@ -23964,29 +24008,78 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return ids;
   }
 
+  /* Custom tab snapshots: a tab's saved copy is read before anything may
+     write it, a save merges with the last good rows (never shrinks to
+     nothing), and an empty or failed refresh never replaces saved posts. */
+  const tabSaved = {};
+  const tabHydrated = {};
+  const tabHydrateJobs = {};
+  function savedTab(tab) {
+    return tab.indexOf("cat:") === 0 || tab.indexOf("list:") === 0;
+  }
+
+  function keepTabRows(now, prev, tab) {
+    const kept = (prev || []).filter((post) => homeShows(post, { name: "home", tab: tab }));
+    if (!kept.length) return now;
+    return orderedUnique((now || []).concat(kept)).slice(0, 24);
+  }
+
   function saveFeedTab(local, tab) {
     const visible = posts().filter((post) => homeShows(post, { name: "home", tab: tab }));
-    const rows = orderedUnique(visible).slice(0, 24).map(cacheRow).filter(Boolean);
+    let rows = orderedUnique(visible).slice(0, 24).map(cacheRow).filter(Boolean);
+    if (savedTab(tab)) {
+      if (!tabHydrated[tab]) {
+        // The saved copy is not read yet: writing now would replace it.
+        hydrateTab(tab);
+        return rows.length ? rows : (tabSaved[tab] || []);
+      }
+      rows = keepTabRows(rows, tabSaved[tab], tab);
+    }
+    if (!rows.length) return rows;
+    if (savedTab(tab)) tabSaved[tab] = rows;
     local.saveDoc("feeds", "tab:" + tab, { tab: tab, order: "utc", posts: rows });
     return rows;
   }
 
-  function hydrateTabSnapshots() {
+  function adoptTabRows(tab, saved) {
+    if (!saved || !saved.length) return false;
+    const known = posts().filter((post) => homeShows(post, { name: "home", tab: tab }));
+    const merged = (window.FeedOrder && window.FeedOrder.refreshTab) ? window.FeedOrder.refreshTab(known, saved) : { added: saved };
+    if (!merged.added || !merged.added.length) return false;
+    rememberTimeline(merged.added);
+    if (STATE.data) STATE.data = withMemory(STATE.data);
+    return true;
+  }
+
+  function hydrateTab(tab) {
+    if (tabHydrateJobs[tab]) return tabHydrateJobs[tab];
     const local = window.ViktorychLocal;
-    if (!local || !local.readDoc || !window.FeedOrder || !window.FeedOrder.refreshTab) return Promise.resolve();
-    const tabs = homeTabIds().filter((id) => id.indexOf("cat:") === 0);
-    if (!tabs.length) return Promise.resolve();
-    return Promise.all(tabs.map((tab) => local.readDoc("feeds", "tab:" + tab).then((body) => {
+    if (!local || !local.readDoc) {
+      tabHydrated[tab] = true;
+      return Promise.resolve(false);
+    }
+    tabHydrateJobs[tab] = local.readDoc("feeds", "tab:" + tab).then((body) => {
       const saved = body && Array.isArray(body.posts) ? body.posts : [];
-      if (!saved.length) return;
-      const known = posts().filter((post) => homeShows(post, { name: "home", tab: tab }));
-      const merged = window.FeedOrder.refreshTab(known, saved);
-      if (!merged.added || !merged.added.length) return;
-      rememberTimeline(merged.added);
-      if (STATE.data) STATE.data = withMemory(STATE.data);
-    }).catch(() => {}))).then(() => {
+      if (saved.length) tabSaved[tab] = orderedUnique(saved.concat(tabSaved[tab] || [])).slice(0, 24);
+      return adoptTabRows(tab, saved);
+    }).catch(() => false).then((added) => {
+      tabHydrated[tab] = true;
       const route = parseRoute();
-      if (route && route.tab && route.tab.indexOf("cat:") === 0) render();
+      if (route && route.name === "home" && route.tab === tab) render({ y: window.scrollY });
+      return added;
+    });
+    return tabHydrateJobs[tab];
+  }
+
+  function hydrateTabSnapshots() {
+    const tabs = homeTabIds().filter(savedTab);
+    if (!tabs.length) return Promise.resolve();
+    // A second call (after the catalog arrives) merges the saved rows again.
+    return Promise.all(tabs.map((tab) => tabHydrateJobs[tab]
+      ? tabHydrateJobs[tab].then(() => adoptTabRows(tab, tabSaved[tab]))
+      : hydrateTab(tab))).then((done) => {
+      const route = parseRoute();
+      if (done.some(Boolean) && route && route.name === "home" && savedTab(route.tab || "")) render({ y: window.scrollY });
     });
   }
 
@@ -24244,6 +24337,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       render();
     }
     flushBookmarkQueue();
+    // Saved custom tab posts load from this device at once, not after the catalog.
+    hydrateTabSnapshots();
     const initRoute = parseRoute();
     if (initRoute.name === "status" && initRoute.id && !findPost(initRoute.platform, initRoute.handle, initRoute.id)) {
       const initKey = String(initRoute.id);
