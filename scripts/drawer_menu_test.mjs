@@ -3,6 +3,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -76,16 +77,23 @@ async function openDrawer(page) {
   return "phone";
 }
 
+async function openEditor(page, scope) {
+  /* The menu's Customize row opens the Customize page; its Edit menu row opens the editor. */
+  await page.locator(scope + " [data-act='customize-page']").first().click();
+  await page.waitForSelector(".pz-page [data-act='drawer-edit']");
+  await page.locator(".pz-page [data-act='drawer-edit']").click();
+}
+
 async function checkSidebar(page, label) {
   const before = await page.evaluate(() => ({
     drawer: !!document.querySelector(".drawer-x"),
-    customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='drawer-edit']"),
+    customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='customize-page']"),
     bookmarks: !!document.querySelector("header.nav a[href='#/bookmarks']"),
     profile: [...document.querySelectorAll("header.nav .nav-label")].some((node) => (node.textContent || "") === "Profile"),
     tv: !!document.querySelector("header.nav a[href='#/tv']")
   }));
   if (before.drawer || !before.customize || !before.bookmarks || !before.profile || !before.tv) fail(label + " sidebar is missing a core row");
-  await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
+  await openEditor(page, "header.nav:not(.nav-land)");
   await page.waitForSelector(".nav-customize-modal .drawer-edit-list");
   const listed = await page.evaluate(() => ({
     profile: !!document.querySelector("[data-drawer-key='profile']"),
@@ -119,12 +127,12 @@ async function checkSidebar(page, label) {
   const hidden = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
   if (hidden) fail(label + " hidden item is still shown");
   const back = await page.evaluate(() => ({
-    customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='drawer-edit']"),
+    customize: !!document.querySelector("header.nav:not(.nav-land) [data-act='customize-page']"),
     profile: [...document.querySelectorAll("header.nav .nav-label")].some((node) => (node.textContent || "") === "Profile"),
     drawer: !!document.querySelector(".drawer-x")
   }));
   if (!back.customize || !back.profile || back.drawer) fail(label + " core items disappeared");
-  await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
+  await openEditor(page, "header.nav:not(.nav-land)");
   await page.click("[data-act='drawer-add-section']");
   await page.waitForSelector(".drawer-section-name");
   await page.waitForSelector(".drawer-section-emoji");
@@ -132,7 +140,7 @@ async function checkSidebar(page, label) {
   await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
   const restored = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
   if (!restored) fail(label + " reset did not restore the menu");
-  await page.locator("header.nav:not(.nav-land) [data-act='drawer-edit']").click();
+  await openEditor(page, "header.nav:not(.nav-land)");
   await page.click("[data-drawer-key='bookmarks'] [data-act='drawer-place']");
   await page.locator(".drawer-edit-bar [data-act='drawer-edit-done']").click();
   const moved = await page.evaluate(() => !!document.querySelector("header.nav a[href='#/bookmarks']"));
@@ -150,7 +158,7 @@ async function check(page, label) {
     return;
   }
   const before = await page.evaluate(() => ({
-    customize: !!document.querySelector("[data-act='drawer-edit']"),
+    customize: !!document.querySelector(".drawer-x [data-act='customize-page']"),
     bookmarks: [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"),
     settings: [...document.querySelectorAll(".drawer-label")].some((node) => /Settings/.test(node.textContent || "")),
     fold: !!document.querySelector("[data-act='drawer-fold']"),
@@ -158,7 +166,7 @@ async function check(page, label) {
     logoutInBody: !!document.querySelector(".drawer-scroll [data-acct='logout']")
   }));
   if (!before.customize || !before.bookmarks || !before.settings || !before.fold || !before.tv || before.logoutInBody) fail(label + " menu is missing a core row");
-  await page.locator(".drawer-x [data-act='drawer-edit']").click();
+  await openEditor(page, ".drawer-x");
   await page.waitForSelector(".drawer-edit-list");
   const locked = await page.evaluate(() => {
     const row = (id) => document.querySelector(`[data-drawer-key="${id}"]`);
@@ -176,12 +184,12 @@ async function check(page, label) {
   const hidden = await page.evaluate(() => [...document.querySelectorAll(".drawer-label")].some((node) => node.textContent === "Bookmarks"));
   if (hidden) fail(label + " hidden item is still shown");
     const back = await page.evaluate(() => ({
-    customize: !!document.querySelector("[data-act='drawer-edit']"),
+    customize: !!document.querySelector(".drawer-x [data-act='customize-page']"),
     settings: [...document.querySelectorAll(".drawer-label")].some((node) => /Settings/.test(node.textContent || "")),
     fold: !!document.querySelector("[data-act='drawer-fold']")
   }));
   if (!back.customize || !back.settings || !back.fold) fail(label + " core items disappeared");
-  await page.locator(".drawer-x [data-act='drawer-edit']").click();
+  await openEditor(page, ".drawer-x");
   await page.click("[data-act='drawer-add-section']");
   await page.waitForSelector(".drawer-section-name");
   await page.waitForSelector(".drawer-section-emoji");
@@ -219,6 +227,9 @@ async function main() {
       }
     }
     console.log("drawer menu ok");
+    /* The menu's Customize row opens the Customize page; its own check runs here so CI covers it. */
+    const pz = spawnSync(process.execPath, [path.join(root, "scripts", "customize_page_test.mjs")], { stdio: "inherit", env: process.env });
+    if (pz.status !== 0) fail("customize page check failed");
   } finally {
     await browser.close();
     server.close();
