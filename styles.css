@@ -6313,7 +6313,7 @@ html[data-theme="default"] .logo-preview { color: #000; }
    subtext 13/16, 40px avatar in a 40px column, 8px gap, 16px side padding).
    Desktop (1000px and up) keeps its own X desktop rules above. */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-.redacted_handle-btn { display: none; }
+.explain-btn { display: none; }
 /* The handle shrinks first and never grows, so "· 12h" sits right after it. */
 .byline .handle { flex: 0 100 auto; }
 @media (max-width: 999px) {
@@ -6324,7 +6324,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .post:has(.ava-col:has(.ava-none)) .repost-line { margin-left: 0; }
   .byline { gap: 4px; height: 20px; }
   .byline .dot { margin: 0 -1px; }
-  .byline .redacted_handle-btn,
+  .byline .explain-btn,
   .byline .more-btn {
     display: inline-flex;
     align-items: center;
@@ -6341,14 +6341,14 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     color: var(--muted);
     border-radius: 9999px;
   }
-  .byline .redacted_handle-btn { margin-left: auto; }
-  .byline .redacted_handle-btn + .more-btn { margin-left: 2px; }
+  .byline .explain-btn { margin-left: auto; }
+  .byline .explain-btn + .more-btn { margin-left: 2px; }
   .byline .more-btn { margin-right: -6px; }
-  .byline .redacted_handle-btn::before,
+  .byline .explain-btn::before,
   .byline .more-btn::before { content: ""; position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; border-radius: 9999px; transform: translate(-50%, -50%); }
-  .byline .redacted_handle-btn svg, .byline .more-btn svg { width: 18.75px; height: 18.75px; fill: currentColor; }
+  .byline .explain-btn svg, .byline .more-btn svg { width: 18.75px; height: 18.75px; fill: currentColor; }
   .byline .more-btn svg { transform: rotate(90deg); }
-  .byline .redacted_handle-btn:active::before, .byline .more-btn:active::before { background: var(--blue-dim); }
+  .byline .explain-btn:active::before, .byline .more-btn:active::before { background: var(--blue-dim); }
   .post .post-main > .odai-btn[data-act="odai-summarize"],
   .post .quote > .odai-btn[data-act="odai-summarize"] { display: none; }
   .post-main > .post-text, .post-main > [data-tr] { margin-top: 0; }
