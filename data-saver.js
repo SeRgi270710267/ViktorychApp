@@ -18,6 +18,7 @@
   var STORAGE_KEY = "viktorychapp-storage";
   var P2P_KEY = "viktorychapp-friend-p2p";
   var LT_KEY = "viktorychapp-live-translate-v1";
+  var POOL_KEY = "viktorychapp-peer-pool-v1";
 
   /* [store, key, data-saving value, normal default, what it costs]. */
   var KEYS = [
@@ -66,6 +67,7 @@
     ["storage", "unlimited", false, false, "unlimited cache"],
     ["storage", "keep", "3d", "week", "how long media stays cached"],
     ["friendP2P", "on", false, true, "direct connections and media from friends"],
+    ["pool", "mode", "off", "auto", "sharing pool: feed files and app updates with nearby devices"],
     ["liveTranslate", "on", false, false, "live translation audio"],
     ["liveTranslate", "mode", "subtitles", "both", "translated voice audio"],
     ["liveTranslate", "sessionMin", 5, 10, "minutes per translation session"],
@@ -78,7 +80,7 @@
     settings: ["version", "initialized", "follows", "seenFeeds", "seenDefaults", "lists", "likes", "bookmarks", "reposts", "savedPosts",
       "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyZeroTrace", "privacyAntiFingerprint",
       "appearance", "mutedWords", "mutedAccounts", "repostOff", "groups", "groupsOwn", "subsGroup", "followingSort", "forYouReposts",
-      "forYouReplies", "tabViews", "translateTo", "translateNever", "bells", "bellNotes", "bellSeen", "bellRead", "historyPause",
+      "forYouReplies", "tabViews", "translateTo", "translateNever", "bells", "bellNotes", "bellSeen", "bellRead", "notifPrivacy", "historyPause",
       "feedTabs", "lastNoteTab", "networkMode", "navCustom", "bottomNav", "bottomNavCustom", "navLayout", "navLayoutLand", "navLayoutSync",
       "noteTabs", "noteTabsSame", "noteClearedAt", "noteDismissed", "drawerMenu", "devicePerf", "communitiesHome", "notePrefs", "profileTabs",
       "prefsAt", "syncUi", "syncUiAt", "historyCut", "accountFollows", "bellsAt", "builtinNoteRead", "redditVotes", "navCustomAt",
@@ -86,6 +88,7 @@
     device: ["profile", "webllmAccepted"],
     storage: [],
     friendP2P: [],
+    pool: ["smart"],
     liveTranslate: ["model", "engine", "target", "source", "voice", "duck", "chrome"]
   };
 
@@ -240,6 +243,7 @@
     if (store === "storage") return readJson(STORAGE_KEY) || {};
     if (store === "friendP2P") return readJson(P2P_KEY) || {};
     if (store === "liveTranslate") return readJson(LT_KEY) || {};
+    if (store === "pool") return readJson(POOL_KEY) || {};
     return {};
   }
 
@@ -299,6 +303,12 @@
     writeJson(P2P_KEY, p2p);
     var friends = typeof self !== "undefined" ? self.ViktorychFriendP2P : null;
     if (friends && friends.setEnabled && p2p.on === false) friends.setEnabled(false);
+
+    var poolMode = plan.pool && plan.pool.mode;
+    var sharing = typeof self !== "undefined" ? self.ViktorychPool : null;
+    if (sharing && sharing.setMode) sharing.setMode(poolMode || "auto");
+    else if (poolMode === undefined) { var poolPrefs = readStore("pool"); delete poolPrefs.mode; writeJson(POOL_KEY, poolPrefs); }
+    else writeJson(POOL_KEY, Object.assign({}, readStore("pool"), { mode: poolMode }));
 
     var lt = Object.assign({}, readStore("liveTranslate"));
     Object.keys(plan.liveTranslate).forEach(function (key) { if (plan.liveTranslate[key] === undefined) delete lt[key]; else lt[key] = plan.liveTranslate[key]; });

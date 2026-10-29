@@ -279,3 +279,5 @@ video-providers.js|Rumble
 video-providers.js|TikTok
 video-providers.js|Facebook
 video-providers.js|Instagram
+# The sharing pool public signing key (a technical token, not text).
+shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM

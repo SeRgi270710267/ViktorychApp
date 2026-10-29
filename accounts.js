@@ -398,6 +398,15 @@
         throw err;
       });
     }
+    // The sharing pool may answer from a nearby device first; it checks the
+    // bytes against the signed manifest and falls back to the normal read.
+    var pool = window.ViktorychPool;
+    if (pool && pool.wants && pool.wants(key)) {
+      return pool.fetchData(key, function () { return attempt(0); }).then(function (res) {
+        if (res && res.status === 200 && mark && res.headers.get("x-pool")) pulseKeep(key, mark, res.clone());
+        return res;
+      });
+    }
     return attempt(0);
   }
   /* Shared documents the pulse tracks. While the pulse is up and a
@@ -516,6 +525,15 @@
       try { window.dispatchEvent(new CustomEvent("viktorych-api-trouble", { detail: { on: now } })); } catch (err) { /* old browser */ }
     }
   }
+  /* Settings alerts watch for rate limits and expired sessions. Only the
+     status code leaves this function, never the path or the body. */
+  function noteApiStatus(code, authed, res) {
+    if (code !== 429 && code !== 401 && !(authed && code >= 200 && code < 300)) return;
+    var wait = 0;
+    try { wait = Number(res && res.headers && res.headers.get && res.headers.get("Retry-After")) * 1000 || 0; } catch (err) { wait = 0; }
+    try { document.dispatchEvent(new CustomEvent("viktorych-api-status", { detail: { status: code, authed: authed, retryAfter: wait } })); } catch (err) { /* alerts are optional */ }
+  }
+
   function api(path, opts) {
     var list = bySpeed(apiOrder());
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
@@ -566,6 +584,7 @@
         // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
         if (typeof body.status === "string") body.bodyStatus = body.status;
         body.status = code;
+        noteApiStatus(code, !!opts.token, res);
         return body;
       });
     }
@@ -775,6 +794,32 @@
     setupPainted = step;
     var backBtn = step < 2 ? '<button class="icon-btn" type="button" data-acct="setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button>' : "<span></span>";
     return '<div class="acct-back acct-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head">' + backBtn + '<div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button></div>" + (onb ? onb.progressHtml(2 + step) : "") + '<div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  }
+  /* The temporary account sheet in the phone-style setup look, with Back
+     returning to the screen it was opened from. */
+  function tempSetupModal(body) {
+    var title = tr("Temporary account");
+    var anim = setupPainted === "temp" ? "" : " acct-setup-in";
+    setupPainted = "temp";
+    return '<div class="acct-back acct-setup acct-temp-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head"><button class="icon-btn" type="button" data-acct="temp-setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button><div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button></div><div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  }
+  function openTemp(from) {
+    tempState.pick = "1d";
+    tempState.until = "";
+    tempState.saveData = null;
+    tempState.from = from || "";
+    setupPainted = -1;
+    openAuth("temp");
+  }
+  function tempSetupBack() {
+    var from = tempState.from;
+    tempState.from = "";
+    errorText = "";
+    if (from === "signup") { setupPainted = -1; openAuth("signup"); return; }
+    view = "";
+    paint();
+    var onb = window.ViktorychOnboarding;
+    if (onb) onb.start("pre", 0, -1);
   }
   function fieldCount(name, value, max) {
     var raw = name === "accountNumber" ? String(value || "").replace(/\D/g, "") : String(value || "");
@@ -1189,7 +1234,7 @@ var numberNote = form.passkey
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
     else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
-    else if (view === "temp") html += modal(tr("Temporary account"), tempBody());
+    else if (view === "temp") html += tempState.from ? tempSetupModal(tempBody()) : modal(tr("Temporary account"), tempBody());
     else if (view === "temp-saved") html += modal(tr("Account saved"), tempSavedBody());
     else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
     else if (view === "edit") html += editModal(editBody());
@@ -1274,6 +1319,7 @@ var numberNote = form.passkey
       return;
     }
     if (view === "signup" && step < 2 && setupOn()) writeOnb(null);
+    if (view === "temp") tempState.from = "";
     if (view === "signup" && step === 2 && readPending()) {
       view = "leave";
       paint();
@@ -1366,7 +1412,7 @@ var numberNote = form.passkey
     if (!reg) return [];
     return reg.localKeys({ allOff: !!settings && settings.syncUi === false, lookOwn: deviceOwnUi() });
   }
-  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "peopleLinks", "friendsRail", "brandLogo"];
+  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "notifPrivacy", "peopleLinks", "friendsRail", "brandLogo"];
   function pickPrefs(local, remote) {
     // Home pills and Stories: each key keeps the newer choice.
     var out = {};
@@ -4086,7 +4132,18 @@ function signupPayload() {
       if (week) rows += '<p class="set-sub">' + esc(tr("Worker requests, last 7 days")) + '</p><div class="usage-week">' + week + "</div>";
     }
     rows += usageRow(tr("Backup server hours this month (at most)"), u.renderHoursCeiling, L.renderHoursMonth);
+    rows += poolUsageHtml(u.pool);
     return head + rows + "</div>";
+  }
+  /* Sharing pool totals from the last 7 days, as the devices report them. */
+  function poolUsageHtml(p) {
+    if (!p) return "";
+    var mb = function (n) { return (Math.max(0, Number(n) || 0) / 1048576).toFixed(1) + " MB"; };
+    var pct = function (n) { return Math.round(Math.max(0, Math.min(1, Number(n) || 0)) * 100) + "%"; };
+    return '<p class="set-sub">' + esc(tr("Sharing pool, last 7 days")) + "</p>" +
+      '<p class="phandle">' + esc(tr("Peer hit rate {rate} ({hits} of {tries})", { rate: pct(p.hitRate), hits: formatNum(p.hits || 0), tries: formatNum(p.tries || 0) })) + "</p>" +
+      '<p class="phandle">' + esc(tr("Offloaded from the server {peer} of {total} ({share})", { peer: mb(p.peerBytes), total: mb((p.peerBytes || 0) + (p.originBytes || 0)), share: pct(p.byteShare) })) + "</p>" +
+      '<p class="phandle">' + esc(tr("Online in the pool now {n} · rejected chunks {bad}", { n: formatNum(p.online || 0), bad: formatNum(p.rejected || 0) })) + "</p>";
   }
   function healthWhen(value) {
     if (!value) return "";
@@ -4236,7 +4293,7 @@ function signupPayload() {
   /* Temporary accounts: one tap, no number to keep, and the account and its
      data are deleted at the time picked here. The server cron does the
      deletion even if this device never comes back. */
-  var tempState = { pick: "1d", until: "", busy: false, error: "", note: "", saveData: null, confirm: false, ownerLoaded: false, ownerLoading: false, ownerLabel: true, ownerCount: 0 };
+  var tempState = { pick: "1d", until: "", from: "", busy: false, error: "", note: "", saveData: null, confirm: false, ownerLoaded: false, ownerLoading: false, ownerLabel: true, ownerCount: 0 };
   function tempDeviceKey() {
     var key = "";
     try { key = localStorage.getItem("va-device-key") || ""; } catch (err) { key = ""; }
@@ -4552,7 +4609,7 @@ function signupPayload() {
       sessionStorage.clear();
       sessionStorage.setItem(DELETED_KEY, "1");
     } catch (err) { /* the screen still replaces the page */ }
-    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord"];
+    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord", "viktorych-notes"];
     if (window.indexedDB && indexedDB.deleteDatabase) {
       databases.forEach(function (name) {
         try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
@@ -4892,7 +4949,8 @@ function signupPayload() {
     }
     if (act === "signup") startSetup();
     else if (act === "setup-back") setupBack();
-    else if (act === "open-temp") { tempState.pick = "1d"; tempState.until = ""; tempState.saveData = null; openAuth("temp"); }
+    else if (act === "open-temp") openTemp(setupOn() ? "signup" : "");
+    else if (act === "temp-setup-back") tempSetupBack();
     else if (act === "temp-pick") {
       tempState.pick = acct.getAttribute("data-pick") || "1d";
       if (view === "temp") paint(); else tempRender();
@@ -5623,6 +5681,7 @@ else if (act === "copy-id") copyAccountId();
     saveOwnAccount: applyOwnAccount,
     openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
     openLogin: function () { openAuth("login"); },
+    openTemp: function () { openTemp("welcome"); },
     setReposts: setReposts,
     ensureProfile: loadProfile,
     profilePending: profilePending,
