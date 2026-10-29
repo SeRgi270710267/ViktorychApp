@@ -267,3 +267,15 @@ data-saver.js|HD video variants
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
+# Platform brand name in the link card video provider registry.
+video-providers.js|Kick
+video-providers.js|Vimeo
+video-providers.js|Dailymotion
+video-providers.js|Twitch
+video-providers.js|Streamable
+video-providers.js|Odysee
+video-providers.js|BitChute
+video-providers.js|Rumble
+video-providers.js|TikTok
+video-providers.js|Facebook
+video-providers.js|Instagram
