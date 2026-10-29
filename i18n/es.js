@@ -2905,5 +2905,20 @@ SI18n.addPack("es", {
   "TV video autoplay": "Reproducción automática en TV",
   "Update TV app": "Actualizar app para TV",
   "On. Big text, remote control, and light defaults for TVs.": "Activado. Texto grande, control remoto y ajustes ligeros para TV.",
-  "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.": "Texto grande y control remoto para navegadores de TV. Auto lo activa cuando detecta una TV."
+  "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.": "Texto grande y control remoto para navegadores de TV. Auto lo activa cuando detecta una TV.",
+  "A newer TV app is ready. It is rebuilt with your home-screen name, then press Update. Your sign-in stays.": "Hay una app de TV más nueva. Se vuelve a crear con tu nombre de inicio y luego pulsas Actualizar. Tu sesión se mantiene.",
+  "Building your app… usually 3 to 5 minutes.": "Creando tu app… suele tardar de 3 a 5 minutos.",
+  "Ready. Press Update TV app, then Update.": "Lista. Pulsa Actualizar app de TV y luego Actualizar.",
+  "Sign in first, then press Update TV app again.": "Inicia sesión y vuelve a pulsar Actualizar app de TV.",
+  "No builds left today. Try again tomorrow.": "No quedan compilaciones hoy. Inténtalo mañana.",
+  "The custom-name builder is not switched on yet.": "El creador de nombre propio aún no está activado.",
+  "The build did not finish. Try again.": "La compilación no terminó. Inténtalo de nuevo.",
+  "Browser": "Navegador",
+  "Player": "Reproductor",
+  "App name": "Nombre de la app",
+  "TV app name": "Nombre de la app de TV",
+  "The name and icon on the TV home screen. Android only lets an app switch between these; for any other name, build your own copy.": "El nombre y el icono en la pantalla de inicio de la TV. Android solo permite cambiar entre estos; para cualquier otro nombre, crea tu propia copia.",
+  "Any home-screen name": "Cualquier nombre en la pantalla de inicio",
+  "Name inside the app": "Nombre dentro de la app",
+  "Shown as the page title and in recent apps. Any text.": "Se muestra como título de la página y en apps recientes. Cualquier texto."
 });

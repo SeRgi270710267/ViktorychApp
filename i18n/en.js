@@ -2905,5 +2905,20 @@ SI18n.addPack("en", {
   "TV video autoplay": "TV video autoplay",
   "Update TV app": "Update TV app",
   "On. Big text, remote control, and light defaults for TVs.": "On. Big text, remote control, and light defaults for TVs.",
-  "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.": "Big text and remote control for TV browsers. Auto turns it on when a TV is detected."
+  "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.": "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.",
+  "A newer TV app is ready. It is rebuilt with your home-screen name, then press Update. Your sign-in stays.": "A newer TV app is ready. It is rebuilt with your home-screen name, then press Update. Your sign-in stays.",
+  "Building your app… usually 3 to 5 minutes.": "Building your app… usually 3 to 5 minutes.",
+  "Ready. Press Update TV app, then Update.": "Ready. Press Update TV app, then Update.",
+  "Sign in first, then press Update TV app again.": "Sign in first, then press Update TV app again.",
+  "No builds left today. Try again tomorrow.": "No builds left today. Try again tomorrow.",
+  "The custom-name builder is not switched on yet.": "The custom-name builder is not switched on yet.",
+  "The build did not finish. Try again.": "The build did not finish. Try again.",
+  "Browser": "Browser",
+  "Player": "Player",
+  "App name": "App name",
+  "TV app name": "TV app name",
+  "The name and icon on the TV home screen. Android only lets an app switch between these; for any other name, build your own copy.": "The name and icon on the TV home screen. Android only lets an app switch between these; for any other name, build your own copy.",
+  "Any home-screen name": "Any home-screen name",
+  "Name inside the app": "Name inside the app",
+  "Shown as the page title and in recent apps. Any text.": "Shown as the page title and in recent apps. Any text."
 });

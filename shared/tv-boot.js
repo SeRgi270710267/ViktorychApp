@@ -84,13 +84,55 @@
     var state = read();
     var ver = /[?&]tvapp=(\d+)/.exec(blob());
     var n = ver ? Number(ver[1]) : 0;
-    if (!state.app || (n && state.appVersion !== n)) {
-      state.app = 1;
-      if (n) state.appVersion = n;
-      write(state);
+    var before = JSON.stringify(state);
+    state.app = 1;
+    if (n) state.appVersion = n;
+    // A custom-name build tells the site its baked-in name and icon, so the
+    // Update button can rebuild with the same name. The wrapper keeps them too.
+    var q = params();
+    var label = cleanLabel(q.tvlabel);
+    if (q.tvcustom === "1" || label) {
+      state.custom = { label: label || (state.custom && state.custom.label) || "", icon: ICONS.indexOf(q.tvicon) >= 0 ? q.tvicon : ((state.custom && state.custom.icon) || "default") };
+    } else if (n && q.src === "tvapp") {
+      delete state.custom;
     }
+    if (ICONS.indexOf(q.tvpreset) >= 0) state.preset = q.tvpreset;
+    if (JSON.stringify(state) !== before) write(state);
     try { root.sessionStorage.setItem(KEY + "-app", "1"); } catch (err) { /* private mode */ }
     return true;
+  }
+
+  var ICONS = ["default", "media", "browser", "player", "notes"];
+
+  function params() {
+    var out = {};
+    var text = String((root.location && root.location.search) || "").replace(/^\?/, "");
+    text.split("&").forEach(function (pair) {
+      if (!pair) return;
+      var i = pair.indexOf("=");
+      var k = i < 0 ? pair : pair.slice(0, i);
+      var v = i < 0 ? "" : pair.slice(i + 1);
+      try { out[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, " ")); } catch (err) { /* bad escape */ }
+    });
+    return out;
+  }
+
+  // Home-screen labels: letters, digits, spaces and . - _ only, 24 characters.
+  // The same rule runs in the Worker and in android-tv/app/build.gradle.
+  function cleanLabel(value) {
+    var text = String(value == null ? "" : value);
+    try { text = text.normalize("NFC").replace(/[^\p{L}\p{M}\p{N} ._-]/gu, ""); }
+    catch (err) { text = text.replace(/[^A-Za-z0-9\u00C0-\uFFFF ._-]/g, ""); }
+    text = text.replace(/\s+/g, " ").trim();
+    var chars = Array.from ? Array.from(text) : text.split("");
+    return chars.length > 24 ? chars.slice(0, 24).join("").trim() : text;
+  }
+
+  // In-app title (page title and recents): free text, 40 characters.
+  function cleanTitle(value) {
+    var text = String(value == null ? "" : value).replace(/[\u0000-\u001F\u007F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "").replace(/\s+/g, " ").trim();
+    var chars = Array.from ? Array.from(text) : text.split("");
+    return chars.length > 40 ? chars.slice(0, 40).join("").trim() : text;
   }
 
   function inApp() {
@@ -136,6 +178,25 @@
     queryFlag: queryFlag,
     inApp: inApp,
     appVersion: function () { return Number(read().appVersion || 0); },
+    ICONS: ICONS,
+    cleanLabel: cleanLabel,
+    cleanTitle: cleanTitle,
+    // {label, icon} when this install is a custom-name build, else null.
+    custom: function () {
+      var c = read().custom;
+      return c && c.label ? { label: cleanLabel(c.label), icon: ICONS.indexOf(c.icon) >= 0 ? c.icon : "default" } : null;
+    },
+    setCustom: function (label, icon) {
+      var state = read();
+      state.wish = { label: cleanLabel(label), icon: ICONS.indexOf(icon) >= 0 ? icon : "default" };
+      write(state);
+    },
+    // The last name asked for in the builder (before the app reports it).
+    wish: function () { var w = read().wish; return w && w.label ? w : null; },
+    preset: function () { var p = read().preset; return ICONS.indexOf(p) >= 0 ? p : "default"; },
+    setPreset: function (p) { var state = read(); state.preset = ICONS.indexOf(p) >= 0 ? p : "default"; write(state); },
+    title: function () { return cleanTitle(read().title || ""); },
+    setTitle: function (t) { var state = read(); state.title = cleanTitle(t); write(state); },
     mode: mode,
     read: read,
     write: write,

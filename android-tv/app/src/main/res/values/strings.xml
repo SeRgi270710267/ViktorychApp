@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="asset_statements" translatable="false">[{ \"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": { \"namespace\": \"web\", \"site\": \"https://viktorychapp.pages.dev\" } }]</string>
+    <string name="name_media">Media</string>
+    <string name="name_browser">Browser</string>
+    <string name="name_player">Player</string>
+    <string name="name_notes">Notes</string>
+    <string name="name_saved">Name saved. The home screen may take a moment to update.</string>
+    <string name="update_title">App update</string>
+    <string name="update_downloading">Downloading the update…</string>
+    <string name="update_failed">The update could not be opened. Try again from the site.</string>
+    <string name="allow_installs">Allow installs from this app, then press Back.</string>
 </resources>
