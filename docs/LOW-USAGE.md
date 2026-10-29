@@ -41,12 +41,19 @@ For AI assistants continuing this project. Goal: do as much as possible while ke
 - Add free services alongside existing ones as backups; never replace what works.
 - No new hosts without the owner's OK.
 
-## 7. Owner-only steps
+## 7. Saving Cursor usage
+- Do routine work (merges, conflicts, CI reruns, small edits) on the persistent machine with `gh`, not Cursor cloud agents.
+- No Cursor review/Bugbot on every push; the `smoke` and `guard` checks cover it.
+- Batch asks instead of sending many small ones.
+- When Cursor is truly needed: one narrow task with exact files and done criteria, default model, no Max mode.
+- Stop looping runs. One agent per PR; never two on one branch.
+
+## 8. Owner-only steps
 - Secrets live only in GitHub/Worker secrets, added by the owner from exact steps.
 - Workflow-file changes go to the owner as a ready patch, or via a temporary Workflows: write token permission that goes back to read-only afterwards.
 - Never put passwords or tokens in chat.
 
-## 8. Checklist before ending a turn
+## 9. Checklist before ending a turn
 - PR link shared.
 - Nothing left running needlessly.
 - Temporary private data deleted.
