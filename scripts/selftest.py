@@ -544,20 +544,20 @@ def main() -> None:
     check(nit["profiles"][0]["avatar"].endswith("elon.jpg"), "nitter channel image")
 
     hub = parse_rsshub_x(
-        """<?xml version="1.0"?><rss><channel><title>Twitter @NASA</title>
+        """<?xml version="1.0"?><rss><channel><title>Twitter @SampleAgency</title>
         <item><title>kept</title><description>kept</description>
-        <link>https://x.com/NASA/status/123</link><pubDate>Wed, 21 Oct 2026 06:10:00 GMT</pubDate></item>
+        <link>https://x.com/SampleAgency/status/123</link><pubDate>Wed, 21 Oct 2026 06:10:00 GMT</pubDate></item>
         <item><title>no id</title><description>no id</description>
-        <link>https://x.com/NASA</link></item>
+        <link>https://x.com/SampleAgency</link></item>
         </channel></rss>""",
-        {"id": "x:NASA", "platform": "x", "handle": "NASA"},
+        {"id": "x:SampleAgency", "platform": "x", "handle": "SampleAgency"},
     )
     check(len(hub["posts"]) == 1 and hub["posts"][0]["statusId"] == "123", "the rsshub x lane keeps only a post with a status id")
-    check(hub["profiles"][0]["handle"] == "NASA" and hub["profiles"][0]["url"] == "https://x.com/NASA", "the rsshub x lane keeps the configured handle")
+    check(hub["profiles"][0]["handle"] == "SampleAgency" and hub["profiles"][0]["url"] == "https://x.com/SampleAgency", "the rsshub x lane keeps the configured handle")
 
     mirrors = {"rsshub": ["{rsshubBase}/twitter/user/{handle}"]}
     lanes = ensure_x_lanes(
-        {"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA"},
+        {"id": "x:SampleAgency", "platform": "x", "adapter": "fxtwitter", "handle": "SampleAgency"},
         {"xMirrors": mirrors},
     )["fallbacks"]
     check([row["adapter"] for row in lanes] == ["nitter_rss", "rsshub_x"], "an x feed gets the nitter and rsshub lanes")
@@ -565,12 +565,12 @@ def main() -> None:
         lanes[0]["source_urls"] == ["https://nitter.meowing.monster/{handle}/rss", "https://nitter.kareem.one/{handle}/rss", "https://nitter.jaydenha.uk/{handle}/rss"],
         "the nitter lane keeps the built-in hosts",
     )
-    again = ensure_x_lanes({"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA", "fallbacks": lanes}, {"xMirrors": mirrors})
+    again = ensure_x_lanes({"id": "x:SampleAgency", "platform": "x", "adapter": "fxtwitter", "handle": "SampleAgency", "fallbacks": lanes}, {"xMirrors": mirrors})
     check([row["adapter"] for row in again["fallbacks"]] == [row["adapter"] for row in lanes], "the lanes are not added twice")
     retired = x_fallback_rows({"xMirrors": {"nitter": ["https://nitter.one/"], "rsshub": []}})
     check([row["adapter"] for row in retired] == ["nitter_rss"] and retired[0]["source_urls"] == ["https://nitter.one/{handle}/rss"], "xMirrors is the list the lanes follow")
 
-    feed = {"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA", "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"]}
+    feed = {"id": "x:SampleAgency", "platform": "x", "adapter": "fxtwitter", "handle": "SampleAgency", "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"]}
     mirrored = x_source_urls(feed, {"xProxyBase": "https://mirror.test/v1/x"})
     check(
         mirrored[0] == "https://mirror.test/v1/x/2/profile/{handle}/statuses" and mirrored[1] == "{fxtwitterBase}/2/profile/{handle}/statuses",
@@ -580,9 +580,9 @@ def main() -> None:
     direct = x_source_urls(feed, {})
     check(len(direct) == 2 and direct[0].endswith("/v1/x/2/profile/{handle}/statuses"), "a worker mirror is added by default")
 
-    slow = urllib.error.HTTPError("https://nitter.one/NASA/rss", 429, "slow down", {"Retry-After": "7"}, None)
+    slow = urllib.error.HTTPError("https://nitter.one/SampleAgency/rss", 429, "slow down", {"Retry-After": "7"}, None)
     check(is_retryable(slow) and retry_delay(0, slow.headers) == 7, "a rate limit waits as long as the mirror asks")
-    check(not is_retryable(urllib.error.HTTPError("https://nitter.one/NASA/rss", 404, "no", {}, None)), "a missing profile is not retried")
+    check(not is_retryable(urllib.error.HTTPError("https://nitter.one/SampleAgency/rss", 404, "no", {}, None)), "a missing profile is not retried")
     check(is_retryable(urllib.error.URLError("reset")) and retry_delay(1, None) >= 2, "a dropped connection retries with backoff")
     check(not is_retryable(ValueError("refusing api.x.com: the paid X API is not used")), "the paid api refusal is not retried")
     check(status_of(slow) == 429 and status_of(ValueError("x")) == 0, "the retry status reader is safe")
@@ -774,7 +774,7 @@ def main() -> None:
     check(len(conv) >= 10, "conversation has replies")
     check(conversation_reply_count(conv_raw) == 3283 and len(conv) != 3283, "source reply count stays separate from the cap")
     check(scores == sorted(scores, reverse=True), "relevant order is engagement")
-    check(conv[0]["handle"] == "yesknow", "highest engagement leads")
+    check(conv[0]["handle"] == "replyuser01", "highest engagement leads")
     check(conv[0]["kind"] == "reply" and conv[0]["replyingTo"]["handle"] == "copperlane", "conversation reply target")
     check(conv[0]["replyingTo"]["id"] == "2112600761762717997", "conversation reply parent id")
     check(conv[0]["date"].startswith("2026-10-20T"), "conversation date is ISO")
@@ -876,7 +876,7 @@ def main() -> None:
 
     nit = parse_nitter_replies((FIX / "replies" / "nitter_sample.html").read_text(encoding="utf-8"), "2112600761762717997")
     check(len(nit) == 2, "nitter replies")
-    check(nit[0]["handle"] == "yesknow" and "Bach" in nit[0]["text"], "nitter first reply")
+    check(nit[0]["handle"] == "replyuser01" and "Bach" in nit[0]["text"], "nitter first reply")
     check(nit[0]["stats"]["likes"] == 40 and nit[0]["kind"] == "reply", "nitter reply stats")
 
     ig_replies = parse_ig_comments((FIX / "replies" / "ig_comments.json").read_text(encoding="utf-8"), {"handle": "birchlane", "author": "birchlane", "statusId": "1"})
@@ -1021,12 +1021,12 @@ def main() -> None:
     os.environ["X_PROXY_TOKEN"] = "mirror-secret"
     try:
         check(
-            proxy_token_header("https://viktorych-accounts.viktorych-accounts.workers.dev/v1/x/2/profile/NASA/statuses").get("X-Viktorych-Token") == "mirror-secret",
+            proxy_token_header("https://viktorych-accounts.viktorych-accounts.workers.dev/v1/x/2/profile/SampleAgency/statuses").get("X-Viktorych-Token") == "mirror-secret",
             "the cached mirror gets the optional token",
         )
-        check(proxy_token_header("https://api.fxtwitter.com/2/profile/NASA/statuses") == {}, "fxtwitter never gets the mirror token")
-        check(proxy_token_header("https://evil.example/v1/x/2/profile/NASA/statuses") == {}, "the mirror token stays off an unknown host")
-        check(proxy_token_header("http://127.0.0.1:8787/v1/x/2/profile/NASA/statuses").get("X-Viktorych-Token") == "mirror-secret", "a local worker still gets the token")
+        check(proxy_token_header("https://api.fxtwitter.com/2/profile/SampleAgency/statuses") == {}, "fxtwitter never gets the mirror token")
+        check(proxy_token_header("https://evil.example/v1/x/2/profile/SampleAgency/statuses") == {}, "the mirror token stays off an unknown host")
+        check(proxy_token_header("http://127.0.0.1:8787/v1/x/2/profile/SampleAgency/statuses").get("X-Viktorych-Token") == "mirror-secret", "a local worker still gets the token")
     finally:
         os.environ.pop("X_PROXY_TOKEN", None)
 
@@ -1611,14 +1611,14 @@ def main() -> None:
     import follow_request as follow_req
 
     check(not follow_req.allowed("stranger", "riverquoll") and follow_req.allowed("riverquoll", "riverquoll") and not follow_req.allowed("", "riverquoll"), "only the repository owner can change follows")
-    parsed_follow = follow_req.parse_issue("Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n")
-    check(parsed_follow == {"kind": "follow", "account": "nasa", "platform": "x"}, "a follow issue form is read")
-    x_spec = follow_req.normalize("https://x.com/nasa", "x")
-    check(x_spec["platform"] == "x" and x_spec["handle"] == "nasa" and x_spec["url"] == "https://x.com/nasa", "an x profile URL becomes a handle")
-    bare_spec = follow_req.normalize("@nasa", "")
-    check(bare_spec["platform"] == "x" and bare_spec["handle"] == "nasa", "a bare @handle is an X account")
-    yt_spec = follow_req.normalize("https://www.youtube.com/@LinusTechTips", "youtube")
-    check(yt_spec["handle"] == "LinusTechTips" and yt_spec["channelId"] == "", "a youtube @handle is kept")
+    parsed_follow = follow_req.parse_issue("Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n")
+    check(parsed_follow == {"kind": "follow", "account": "sampleagency", "platform": "x"}, "a follow issue form is read")
+    x_spec = follow_req.normalize("https://x.com/sampleagency", "x")
+    check(x_spec["platform"] == "x" and x_spec["handle"] == "sampleagency" and x_spec["url"] == "https://x.com/sampleagency", "an x profile URL becomes a handle")
+    bare_spec = follow_req.normalize("@sampleagency", "")
+    check(bare_spec["platform"] == "x" and bare_spec["handle"] == "sampleagency", "a bare @handle is an X account")
+    yt_spec = follow_req.normalize("https://www.youtube.com/@SampleTechChannel", "youtube")
+    check(yt_spec["handle"] == "SampleTechChannel" and yt_spec["channelId"] == "", "a youtube @handle is kept")
     yt_channel_spec = follow_req.normalize("https://www.youtube.com/channel/UCsyntheticmaple00005000", "youtube")
     check(yt_channel_spec["channelId"] == "UCsyntheticmaple00005000", "a youtube channel id is kept")
     check(follow_req.normalize("https://vk.com/vk", "vk")["handle"] == "vk", "a vk profile URL is a handle")
@@ -1646,8 +1646,8 @@ def main() -> None:
     check(public_ok and not loopback and not private_net and not link_local, "only public addresses can be fetched")
 
     def fake_follow_fetch(url):
-        if "fxtwitter.com/nasa" in url:
-            return 200, '{"user":"nasa"}'
+        if "fxtwitter.com/sampleagency" in url:
+            return 200, '{"user":"sampleagency"}'
         if "youtube.com/@" in url:
             return 200, 'href="https://www.youtube.com/channel/UCsyntheticmaple00005000"'
         if "videos.xml" in url:
@@ -1660,21 +1660,21 @@ def main() -> None:
     confirmed_yt = follow_req.confirm_source(dict(yt_spec), fake_follow_fetch, public_resolve)
     check(confirmed_yt["channelId"] == "UCsyntheticmaple00005000", "a youtube page supplies the channel id")
     follow_config = {"feeds": []}
-    added, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    added, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     added_row = follow_config["feeds"][0]
-    check(added.startswith("Added x:nasa") and added_row["adapter"] == "fxtwitter" and added_row["fallbacks"][0]["adapter"] == "nitter_rss", "a follow adds the fxtwitter source and nitter fallbacks")
+    check(added.startswith("Added x:sampleagency") and added_row["adapter"] == "fxtwitter" and added_row["fallbacks"][0]["adapter"] == "nitter_rss", "a follow adds the fxtwitter source and nitter fallbacks")
     duplicate_rejected = False
     try:
-        follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+        follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     except follow_req.Reject:
         duplicate_rejected = True
     check(duplicate_rejected, "a duplicate follow is rejected")
-    removed, follow_config = follow_req.run("riverquoll", "riverquoll", "Unfollow request: x nasa", "### Account\n\nx:nasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
-    check(removed.startswith("Removed x:nasa") and follow_config["feeds"] == [] and "x:nasa" in follow_config.get("removed", []), "an unfollow removes the account and blocks auto-add")
-    brought, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
-    check(brought.startswith("Added x:nasa") and follow_config["feeds"][0]["id"] == "x:nasa" and follow_config.get("removed") == [], "an explicit follow clears the auto-add block")
+    removed, follow_config = follow_req.run("riverquoll", "riverquoll", "Unfollow request: x sampleagency", "### Account\n\nx:sampleagency\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    check(removed.startswith("Removed x:sampleagency") and follow_config["feeds"] == [] and "x:sampleagency" in follow_config.get("removed", []), "an unfollow removes the account and blocks auto-add")
+    brought, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    check(brought.startswith("Added x:sampleagency") and follow_config["feeds"][0]["id"] == "x:sampleagency" and follow_config.get("removed") == [], "an explicit follow clears the auto-add block")
     untouched = {"feeds": [{"id": "x:keep"}]}
-    ignored, same_config = follow_req.run("someone", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
+    ignored, same_config = follow_req.run("someone", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
     check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
     group_body = "### Groups\n\n" + json.dumps([{"id": "grp_news", "name": "News", "icon": "https://example.com/a.png", "members": ["youtube:Someone"]}])
     saved, grouped = follow_req.run("riverquoll", "riverquoll", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
@@ -1715,7 +1715,7 @@ def main() -> None:
     check(sync_health.plan(stale, [])["action"] == "open", "the first problem opens one issue")
     check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": same_body}])["action"] == "none", "the same problem does not edit the issue")
     check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": "The sync is not healthy.\n\n- something else\n"}])["action"] == "edit", "a changed problem edits the same issue")
-    check(sync_health.plan(stale, [{"number": 3, "title": "Follow request: x nasa", "body": ""}])["action"] == "open", "a follow request is not the sync problem issue")
+    check(sync_health.plan(stale, [{"number": 3, "title": "Follow request: x sampleagency", "body": ""}])["action"] == "open", "a follow request is not the sync problem issue")
     import discord_alert
 
     stopped = discord_alert.SENTENCES["unauthorized"]
@@ -2170,7 +2170,7 @@ def main() -> None:
     check(not any(account["platform"] in ("threads", "telegram") for account in prepper["accounts"]), "Threads and Telegram are omitted when no source lists them")
     bad_id = empty_accounts = duplicate_account = False
     try:
-        people.validate_person({"id": "Bad", "name": "Nope", "accounts": [{"platform": "x", "handle": "nasa"}]})
+        people.validate_person({"id": "Bad", "name": "Nope", "accounts": [{"platform": "x", "handle": "sampleagency"}]})
     except people.SchemaError:
         bad_id = True
     try:
@@ -2179,8 +2179,8 @@ def main() -> None:
         empty_accounts = True
     try:
         people.validate_config({"people": [
-            {"id": "one", "name": "One", "accounts": [{"platform": "x", "handle": "nasa"}]},
-            {"id": "two", "name": "Two", "accounts": [{"platform": "x", "handle": "NASA"}]},
+            {"id": "one", "name": "One", "accounts": [{"platform": "x", "handle": "sampleagency"}]},
+            {"id": "two", "name": "Two", "accounts": [{"platform": "x", "handle": "SampleAgency"}]},
         ]})
     except people.SchemaError:
         duplicate_account = True
@@ -2281,16 +2281,16 @@ def main() -> None:
     mirrors = people.update_mirrors({}, {"threads:quillfern": 1.0}, {"threads:quillfern"}, now_ts)
     check(not people.mirror_due(mirrors, "threads:quillfern", now_ts + 60) and people.mirror_due(mirrors, "threads:quillfern", now_ts + 3 * 3600) and people.mirror_due(mirrors, "x:new", now_ts), "a mirror source is read every three hours and others every run")
 
-    link_body = "### Person\n\nNorth Lamp\n\n### Accounts\n\nx:nasa\n"
+    link_body = "### Person\n\nNorth Lamp\n\n### Accounts\n\nx:sampleagency\n"
     link_config = {"feeds": [{"id": "x:keep"}], "people": json.loads(json.dumps(site_config["people"]))}
     linked_msg, linked_config = follow_req.run("riverquoll", "riverquoll", "Link accounts: North Lamp", link_body, link_config, fake_follow_fetch, public_resolve)
     linked_person = next(person for person in linked_config["people"] if person["id"] == "canadian-prepper")
-    check(linked_msg.startswith("Linked x:nasa") and any(account["platform"] == "x" and account["handle"] == "nasa" for account in linked_person["accounts"]) and linked_config["feeds"] == [{"id": "x:keep"}], "the owner can link a confirmed account without adding a feed")
+    check(linked_msg.startswith("Linked x:sampleagency") and any(account["platform"] == "x" and account["handle"] == "sampleagency" for account in linked_person["accounts"]) and linked_config["feeds"] == [{"id": "x:keep"}], "the owner can link a confirmed account without adding a feed")
     stranger_link, stranger_people = follow_req.run("someone", "riverquoll", "Link accounts: North Lamp", link_body, {"feeds": [{"id": "x:keep"}], "people": []}, fake_follow_fetch, public_resolve)
     check(stranger_link == "" and stranger_people == {"feeds": [{"id": "x:keep"}], "people": []}, "a link issue from anyone else is ignored")
     owned_config = {"people": [
         {"id": "canadian-prepper", "name": "North Lamp", "accounts": [{"platform": "youtube", "handle": "northlamp"}]},
-        {"id": "other", "name": "Other", "accounts": [{"platform": "x", "handle": "nasa"}]},
+        {"id": "other", "name": "Other", "accounts": [{"platform": "x", "handle": "sampleagency"}]},
     ]}
     owned_rejected = False
     try:
@@ -2357,7 +2357,7 @@ if (P.hashFor("x", "cedarhill") !== hash) throw new Error("x");
 if (P.hashFor("youtube", "northlamp") !== hash) throw new Error("yt");
 if (P.hashFor("youtube", "UCsyntheticmaple00001000") !== hash) throw new Error("channel");
 if (P.hashFor("instagram", "orbitfox") !== hash) throw new Error("ig");
-if (P.hashFor("x", "nasa") !== "") throw new Error("other");
+if (P.hashFor("x", "sampleagency") !== "") throw new Error("other");
 const posts = [
   { id: "1", platform: "x", handle: "cedarhill", kind: "post", date: "2026-10-20T00:00:00Z", media: [{ type: "video", url: "https://example.test/a.mp4" }] },
   { id: "2", platform: "youtube", handle: "northlamp", kind: "post", date: "2026-10-21T00:00:00Z", url: "https://www.youtube.com/shorts/abc" },
@@ -2396,16 +2396,16 @@ if (profileHtml.indexOf("CARD1:author") < 0) throw new Error("own post " + profi
 const collapsed = P.collapse([
   { id: "youtube:northlamp", platform: "youtube", handle: "northlamp", name: "North Lamp" },
   { id: "x:cedarhill", platform: "x", handle: "cedarhill", name: "North Lamp" },
-  { id: "x:nasa", platform: "x", handle: "nasa", name: "NASA" }
+  { id: "x:sampleagency", platform: "x", handle: "sampleagency", name: "SampleAgency" }
 ]);
 if (collapsed.length !== 2 || collapsed[0].personId !== "canadian-prepper" || collapsed[0].name !== "North Lamp") throw new Error("collapse");
 const suggested = P.suggestions([
   { id: "youtube:northlamp", platform: "youtube", handle: "northlamp", configured: true },
   { id: "x:cedarhill", platform: "x", handle: "cedarhill", configured: true },
-  { id: "x:nasa", platform: "x", handle: "nasa", configured: true }
+  { id: "x:sampleagency", platform: "x", handle: "sampleagency", configured: true }
 ], (id) => id === "youtube:northlamp");
 if (suggested.some((feed) => feed.personId === "canadian-prepper" || feed.handle === "cedarhill")) throw new Error("followed person still suggested");
-if (!suggested.some((feed) => feed.handle === "nasa")) throw new Error("nasa missing");
+if (!suggested.some((feed) => feed.handle === "sampleagency")) throw new Error("sampleagency missing");
 """],
         cwd=ROOT,
         capture_output=True,
@@ -4508,7 +4508,7 @@ def story_checks() -> None:
 
     feeds = [
         {"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"},
-        {"id": "instagram:nasa", "platform": "instagram", "handle": "nasa"},
+        {"id": "instagram:sampleagency", "platform": "instagram", "handle": "sampleagency"},
         {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor"},
         {"id": "vk:vk", "platform": "vk", "handle": "vk"},
     ]
@@ -4848,7 +4848,7 @@ def story_checks() -> None:
             return 200, '{"screen_name":"riverquill","id":"1"}'
         if "fxtwitter.com/flintmoor" in url:
             return 200, '{"screen_name":"flintmoor"}'
-        if "fxtwitter.com/freshname" in url or "fxtwitter.com/nasa" in url:
+        if "fxtwitter.com/freshname" in url or "fxtwitter.com/sampleagency" in url:
             return 200, '{"screen_name":"freshname"}'
         if "t.me/s/foxglen" in url:
             return 200, '<div class="tgme_widget_message_wrap" data-post="foxglen/1">foxglen</div>'

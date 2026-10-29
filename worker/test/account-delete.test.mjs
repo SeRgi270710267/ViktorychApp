@@ -183,13 +183,13 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   });
   await sql("INSERT INTO sessions (token_hash, public_id, created_at, expires_at) VALUES (?, ?, ?, ?)", "extra-session-a", a, now, now + 100000);
   await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?)", a, payload, now);
-  await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?)", b, JSON.stringify({ follows: ["x:nasa"], bookmarks: { keep: 1 } }), now);
+  await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?)", b, JSON.stringify({ follows: ["x:sampleagency"], bookmarks: { keep: 1 } }), now);
   await sql("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, 'post-1', 'repost', '', '{}', ?)", a, now);
   await sql("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, 'post-2', 'repost', '', '{}', ?)", b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", a, "app:" + b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", a, "app:" + o, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", b, "app:" + a, now);
-  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:nasa', '', ?)", b, now);
+  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:sampleagency', '', ?)", b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", o, "app:" + b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", o, "app:" + a, now);
   await sql("INSERT INTO drive_vault (public_id, kdf, iterations, salt, verifier, verifier_iv, created_at, updated_at) VALUES (?, 'pbkdf2', 1, 's', 'v', 'i', ?, ?)", a, now, now);
@@ -269,8 +269,8 @@ test("deletes one account everywhere and leaves everyone else", async () => {
       { id: "keeper", name: "Keep" }
     ]
   }));
-  await bindings.DATA.put("follows.json", JSON.stringify(["x:nasa", "app:" + a, { id: "app:" + b }]));
-  await bindings.DATA.put("follows/home.json", JSON.stringify({ ids: ["app:" + a, "x:nasa"] }));
+  await bindings.DATA.put("follows.json", JSON.stringify(["x:sampleagency", "app:" + a, { id: "app:" + b }]));
+  await bindings.DATA.put("follows/home.json", JSON.stringify({ ids: ["app:" + a, "x:sampleagency"] }));
 
   const noOrigin = await del({ ip: "198.51.100.10", token: ada.token, body: { handle: "ada_wipe", accountNumber: ada.accountNumber }, origin: "" });
   assert.equal(noOrigin.status, 403);
@@ -345,7 +345,7 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   const adaSession = await call("/v1/session", { ip: "198.51.100.33", token: ada.token });
   assert.equal(adaSession.status, 401);
   const beeFollows = await bindings.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY target_id").bind(b).all();
-  assert.deepEqual(beeFollows.results.map((row) => row.target_id), ["x:nasa"]);
+  assert.deepEqual(beeFollows.results.map((row) => row.target_id), ["x:sampleagency"]);
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ? AND target_id = ?", o, "app:" + b), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ? OR target_id = ?", a, "app:" + a), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM community_posts WHERE id = 'post-bee'"), 1);
@@ -377,8 +377,8 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.deepEqual(people.people, [{ id: "keeper", name: "Keep" }]);
   assert.equal(JSON.stringify(people).includes(a), false);
   assert.equal(JSON.stringify(people).includes("ada_wipe"), false);
-  assert.deepEqual(await readJson("follows.json"), ["x:nasa", { id: "app:" + b }]);
-  assert.deepEqual(await readJson("follows/home.json"), { ids: ["x:nasa"] });
+  assert.deepEqual(await readJson("follows.json"), ["x:sampleagency", { id: "app:" + b }]);
+  assert.deepEqual(await readJson("follows/home.json"), { ids: ["x:sampleagency"] });
 
   const expected = userHash(a);
   assert.match(expected, /^[0-9a-f]{64}$/);
@@ -479,7 +479,7 @@ test("a stopped deletion resumes from the cron and drops rows written after the 
 
   const now = Date.now();
   await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, '{}', ?)", id, now);
-  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:nasa', '', ?)", id, now);
+  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:sampleagency', '', ?)", id, now);
   await sql("INSERT INTO sessions (token_hash, public_id, created_at, expires_at) VALUES ('stray-job', ?, ?, ?)", id, now, now + 1000);
 
   const cronTime = Date.UTC(2026, 0, 1, 0, 7, 0);

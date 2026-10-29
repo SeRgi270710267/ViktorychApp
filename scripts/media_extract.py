@@ -1115,13 +1115,13 @@ def selftest() -> int:
         [],
         None,
         {"added": [
-            {"handle": "NASA", "permanentId": "11348282"},
+            {"handle": "SampleAgency", "permanentId": "20000001"},
             {"handle": "copperlane", "permanentId": "10000000"},
             {"handle": "gone", "permanentId": "77"},
         ], "removed": ["oldname"], "removedIds": ["77"]},
     )
     x_urls = [row["url"] for row in x_rows if row["platform"] == "x"]
-    check(x_urls.count("https://x.com/NASA") == 1 and x_urls.count("https://x.com/copperlane") == 1 and "https://x.com/gone" not in x_urls, "a private X account is extracted once and a removed id stays out")
+    check(x_urls.count("https://x.com/SampleAgency") == 1 and x_urls.count("https://x.com/copperlane") == 1 and "https://x.com/gone" not in x_urls, "a private X account is extracted once and a removed id stays out")
     x_formats = [
         {"format_id": "hls-high", "ext": "mp4", "protocol": "m3u8_native", "vcodec": "avc1", "acodec": "none", "tbr": 8000},
         {"format_id": "low", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "tbr": 500, "height": 360},
@@ -1129,21 +1129,21 @@ def selftest() -> int:
         {"format_id": "audio", "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2", "tbr": 128},
     ]
     x_picked = x_video_selector(x_formats)
-    check(x_picked.startswith("high+audio/") and "hls-high" not in x_picked.split("/")[0] and "--recode-video" not in video_args("https://x.com/NASA/status/1", Path("out"), Path("archive.txt"), x_picked, 1), "X takes the highest-bitrate MP4 and remuxes it")
+    check(x_picked.startswith("high+audio/") and "hls-high" not in x_picked.split("/")[0] and "--recode-video" not in video_args("https://x.com/SampleAgency/status/1", Path("out"), Path("archive.txt"), x_picked, 1), "X takes the highest-bitrate MP4 and remuxes it")
     check(twimg_orig("https://pbs.twimg.com/media/abc.jpg?name=small") == "https://pbs.twimg.com/media/abc.jpg?name=orig", "an X photo asks for name=orig")
     check(twimg_orig("https://pbs.twimg.com/media/abc.jpg").endswith("name=orig") and twimg_orig("https://example.com/a.jpg") == "", "only a Twitter photo is rewritten to the original")
     from update_feeds import added_x_feeds, remember_private_x
     config = {"feeds": [{"id": "x:copperlane", "platform": "x", "handle": "copperlane", "permanentId": "10000000"}]}
     private_doc = {"added": [
-        {"id": "x:NASA", "handle": "NASA", "permanentId": "11348282", "name": "NASA"},
+        {"id": "x:SampleAgency", "handle": "SampleAgency", "permanentId": "20000001", "name": "SampleAgency"},
         {"id": "x:copperlane", "handle": "copperlane", "permanentId": "10000000"},
         {"id": "x:old", "handle": "renamed", "permanentId": "77"},
     ], "removed": [], "removedIds": ["77"]}
     built = added_x_feeds(config, private_doc)
-    check(len(built) == 1 and built[0]["handle"] == "NASA" and built[0]["adapter"] == "fxtwitter" and built[0]["source_urls"] == ["{fxtwitterBase}/2/profile/{handle}/statuses"] and built[0]["fallbacks"][0]["adapter"] == "nitter_rss" and "nitter.meowing.monster" in built[0]["fallbacks"][0]["source_urls"][0], "added X accounts use fxtwitter and the nitter fallbacks")
+    check(len(built) == 1 and built[0]["handle"] == "SampleAgency" and built[0]["adapter"] == "fxtwitter" and built[0]["source_urls"] == ["{fxtwitterBase}/2/profile/{handle}/statuses"] and built[0]["fallbacks"][0]["adapter"] == "nitter_rss" and "nitter.meowing.monster" in built[0]["fallbacks"][0]["source_urls"][0], "added X accounts use fxtwitter and the nitter fallbacks")
     check(config["feeds"][0]["handle"] == "copperlane" and "_privateAdded" not in config["feeds"][0], "private X rows are not written into the public config")
-    renamed = {"_privateAdded": True, "id": "x:NASA", "platform": "x", "handle": "NASANew", "permanentId": "11348282", "previousHandles": ["NASA"]}
-    check(remember_private_x(private_doc, renamed) and private_doc["added"][0]["handle"] == "NASANew" and private_doc["added"][0]["previousHandles"] == ["NASA"] and private_doc["added"][0]["id"] == "x:NASA", "a handle change stays on the private row and keeps the feed id")
+    renamed = {"_privateAdded": True, "id": "x:SampleAgency", "platform": "x", "handle": "sampleagencynew", "permanentId": "20000001", "previousHandles": ["SampleAgency"]}
+    check(remember_private_x(private_doc, renamed) and private_doc["added"][0]["handle"] == "sampleagencynew" and private_doc["added"][0]["previousHandles"] == ["SampleAgency"] and private_doc["added"][0]["id"] == "x:SampleAgency", "a handle change stays on the private row and keeps the feed id")
     sample = Path("gallery-sample.sqlite")
     try:
         blob = b"SQLite format 3\x00" + bytes(range(83)) + b"\x89"
