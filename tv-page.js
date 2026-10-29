@@ -3,6 +3,7 @@
 (function (root) {
   "use strict";
 
+  function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
     var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
     return fn ? fn(key, vars) : key;
@@ -390,14 +391,14 @@
       '<div class="tv-chat-content">' +
         badgeHtml +
         '<span class="tv-chat-author" style="color:' + esc(msg.color || "#1d9bf0") + '">' + esc(msg.author) + ':</span>' +
-        '<span class="tv-chat-text">' + esc(msg.text) + '</span>' +
+        '<span class="tv-chat-text">' + esc(msg.badge === "mod" ? tr(msg.text) : msg.text) + '</span>' +
       '</div>';
     box.appendChild(row);
     box.scrollTop = box.scrollHeight;
   }
 
   function triggerEmote(emoji) {
-    var author = "You";
+    var author = tr("You");
     try {
       if (window.ViktorychAccounts && window.ViktorychAccounts.profile) {
         var p = window.ViktorychAccounts.profile();
@@ -519,7 +520,7 @@
       : '<span class="tv-live-pill upcoming"><span class="tv-upcoming-dot"></span>' + tr("TONIGHT 21:00") + '</span>';
 
     var countdownPill = live
-      ? '<span class="tv-meta-pill">👁️ ' + tr("{n} viewers", { n: "84,219" }) + '</span>'
+      ? '<span class="tv-meta-pill">👁️ ' + tn("viewers", 84219, { count: (window.SI18n ? window.SI18n.formatInt(84219) : "84,219") }) + '</span>'
       : '<span id="tv-countdown-pill" class="tv-meta-pill">⏳ ' + tr("Kickoff in {time}", { time: formatTimeRemaining(rem) }) + '</span>';
 
     return '<div id="tv-stage" class="tv-stage' + (STATE.theaterMode ? ' theater-mode' : '') + '">' +
@@ -573,11 +574,11 @@
       '<div class="tv-info-top">' +
         '<div class="tv-match-headline">' +
           '<div class="tv-crests-pair">' +
-            '<div class="tv-crest-circle" title="FC Barcelona">' + CRESTS.barcelona + '</div>' +
-            '<div class="tv-crest-circle" title="Real Madrid">' + CRESTS.madrid + '</div>' +
+            '<div class="tv-crest-circle" title="' + esc(tr("FC Barcelona")) + '">' + CRESTS.barcelona + '</div>' +
+            '<div class="tv-crest-circle" title="' + esc(tr("Real Madrid")) + '">' + CRESTS.madrid + '</div>' +
           '</div>' +
           '<div class="tv-titles">' +
-            '<h1>Barcelona vs Real Madrid - Watch Live Stream</h1>' +
+            '<h1>' + esc(tr("FC Barcelona")) + ' — ' + esc(tr("Real Madrid")) + ' · ' + esc(tr("Watch live")) + '</h1>' +
             '<p>' +
               '<span>' + tr("Kickoff at 21:00") + '</span>' +
               '<span class="dot">·</span>' +
@@ -637,14 +638,14 @@
       '<div class="tv-scoreboard" style="width:100%;max-width:540px">' +
         '<div class="tv-team-side">' +
           '<div style="width:38px;height:38px">' + CRESTS.barcelona + '</div>' +
-          '<span>FC Barcelona</span>' +
+          '<span>' + esc(tr("FC Barcelona")) + '</span>' +
         '</div>' +
         '<div class="tv-score-mid">' +
           '<span class="tv-big-score" style="color:#ffd400">VS</span>' +
           '<span style="font-size:12px;color:var(--sub, #71767b);font-weight:700">Santiago Bernabéu</span>' +
         '</div>' +
         '<div class="tv-team-side">' +
-          '<span>Real Madrid</span>' +
+          '<span>' + esc(tr("Real Madrid")) + '</span>' +
           '<div style="width:38px;height:38px">' + CRESTS.madrid + '</div>' +
         '</div>' +
       '</div>' +
@@ -652,24 +653,24 @@
       '<div class="tv-countdown-grid">' +
         '<div class="tv-count-card">' +
           '<span id="tv-count-hours" class="tv-count-num">' + pad(rem.hours) + '</span>' +
-          '<span class="tv-count-label">Hours</span>' +
+          '<span class="tv-count-label">' + tr("Hours") + '</span>' +
         '</div>' +
         '<span class="tv-count-sep">:</span>' +
         '<div class="tv-count-card">' +
           '<span id="tv-count-mins" class="tv-count-num">' + pad(rem.minutes) + '</span>' +
-          '<span class="tv-count-label">Mins</span>' +
+          '<span class="tv-count-label">' + tr("Minutes") + '</span>' +
         '</div>' +
         '<span class="tv-count-sep">:</span>' +
         '<div class="tv-count-card">' +
           '<span id="tv-count-secs" class="tv-count-num">' + pad(rem.seconds) + '</span>' +
-          '<span class="tv-count-label">Secs</span>' +
+          '<span class="tv-count-label">' + tr("Seconds") + '</span>' +
         '</div>' +
       '</div>' +
 
       '<div class="tv-prematch-venue">' +
         '<span>🏟️ Santiago Bernabéu, Madrid</span>' +
         '<span class="dot">·</span>' +
-        '<span>Referee: José María Sánchez Martínez</span>' +
+        '<span>' + tr("Referee: {name}", { name: "José María Sánchez Martínez" }) + '</span>' +
       '</div>' +
     '</div>';
   }
@@ -679,14 +680,14 @@
       '<div class="tv-scoreboard">' +
         '<div class="tv-team-side">' +
           '<div style="width:32px;height:32px">' + CRESTS.barcelona + '</div>' +
-          '<span>FC Barcelona</span>' +
+          '<span>' + esc(tr("FC Barcelona")) + '</span>' +
         '</div>' +
         '<div class="tv-score-mid">' +
           '<span class="tv-big-score">2 : 1</span>' +
           '<span class="tv-match-clock">78\' ' + tr("LIVE") + '</span>' +
         '</div>' +
         '<div class="tv-team-side">' +
-          '<span>Real Madrid</span>' +
+          '<span>' + esc(tr("Real Madrid")) + '</span>' +
           '<div style="width:32px;height:32px">' + CRESTS.madrid + '</div>' +
         '</div>' +
       '</div>' +
@@ -701,7 +702,7 @@
     return '<div class="tv-lineups-grid">' +
       '<div class="tv-lineup-card">' +
         '<div class="tv-lineup-header">' +
-          '<div style="display:flex;align-items:center;gap:8px"><div style="width:20px;height:20px">' + CRESTS.barcelona + '</div><span>FC Barcelona</span></div>' +
+          '<div style="display:flex;align-items:center;gap:8px"><div style="width:20px;height:20px">' + CRESTS.barcelona + '</div><span>' + esc(tr("FC Barcelona")) + '</span></div>' +
           '<span style="font-size:12px;color:#EDBB00;font-weight:700">4-2-3-1</span>' +
         '</div>' +
         '<div class="tv-player-row"><span class="tv-player-num">13</span><span>Iñaki Peña</span><span style="color:var(--sub,#71767b);font-size:11px">GK</span></div>' +
@@ -718,7 +719,7 @@
       '</div>' +
       '<div class="tv-lineup-card">' +
         '<div class="tv-lineup-header">' +
-          '<div style="display:flex;align-items:center;gap:8px"><div style="width:20px;height:20px">' + CRESTS.madrid + '</div><span>Real Madrid</span></div>' +
+          '<div style="display:flex;align-items:center;gap:8px"><div style="width:20px;height:20px">' + CRESTS.madrid + '</div><span>' + esc(tr("Real Madrid")) + '</span></div>' +
           '<span style="font-size:12px;color:#fff;font-weight:700">4-3-3</span>' +
         '</div>' +
         '<div class="tv-player-row"><span class="tv-player-num">13</span><span>Andriy Lunin</span><span style="color:var(--sub,#71767b);font-size:11px">GK</span></div>' +
@@ -817,14 +818,14 @@
 
       '<div class="tv-chat-footer">' +
         '<div class="tv-chat-emotes">' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="⚽" title="Goal!">⚽</button>' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🔥" title="Fire!">🔥</button>' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🏆" title="Trophy">🏆</button>' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="👏" title="Applause">👏</button>' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="😱" title="Shocked">😱</button>' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🔵" title="Barca Blue">🔵</button>' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🔴" title="Barca Red">🔴</button>' +
-          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="⚪" title="Madrid White">⚪</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="⚽" title="' + tr("Goal!") + '">⚽</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🔥" title="' + tr("Fire!") + '">🔥</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🏆" title="' + tr("Trophy") + '">🏆</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="👏" title="' + tr("Applause") + '">👏</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="😱" title="' + tr("Shocked") + '">😱</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🔵" title="' + tr("Barça blue") + '">🔵</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="🔴" title="' + tr("Barça red") + '">🔴</button>' +
+          '<button class="tv-emote-btn" data-act="tv-emote" data-emoji="⚪" title="' + tr("Madrid white") + '">⚪</button>' +
         '</div>' +
         '<form id="tv-chat-form" class="tv-chat-form" data-act="tv-chat-submit">' +
           '<input id="tv-chat-text-input" class="tv-chat-input" type="text" placeholder="' + tr("Send a message…") + '" autocomplete="off" maxlength="240">' +
@@ -979,7 +980,7 @@
     if (!val) return;
     input.value = "";
 
-    var author = "You";
+    var author = tr("You");
     try {
       if (window.ViktorychAccounts && window.ViktorychAccounts.profile) {
         var p = window.ViktorychAccounts.profile();
