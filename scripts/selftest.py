@@ -1751,6 +1751,8 @@ def main() -> None:
     import subprocess
     update_flow = subprocess.run(["node", str(ROOT / "scripts" / "update_flow_test.js")], cwd=ROOT)
     check(update_flow.returncode == 0, "the update flow helpers pass")
+    comments_client = subprocess.run(["node", str(ROOT / "scripts" / "comments_client_test.mjs")], cwd=ROOT)
+    check(comments_client.returncode == 0, "comments share in-flight loads, cache for minutes, revalidate stale pages, and cancel on leave")
     check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "function frameSpec(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
     check("function stripLeadMentions(" in app and "function threadPair(" in app and "parentShown" in app and 'class="thread"' in app and "function quoteCard(" in app, "a reply with its parent is a thread and a quote stays a quote card")
     frame_test = subprocess.run(["node", str(ROOT / "scripts" / "media_frame_test.js")], cwd=ROOT)
