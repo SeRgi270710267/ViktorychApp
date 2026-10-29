@@ -179,12 +179,23 @@ async function main() {
     });
     await page.waitForFunction(ROUTES[2].ready, null, { timeout: 8000 });
     await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      window.__scrollTrace = [];
+      const t0 = performance.now();
+      const id = setInterval(() => {
+        window.__scrollTrace.push(Math.round(performance.now() - t0) + ":" + location.hash.slice(-4) + ":" + Math.round(window.scrollY) + "/" + document.documentElement.scrollHeight);
+        if (window.__scrollTrace.length > 40) clearInterval(id);
+      }, 50);
+    });
     await page.goBack();
     await page.waitForFunction(ROUTES[1].ready, null, { timeout: 4000 });
     await page.waitForFunction((y) => Math.abs(window.scrollY - y) <= 80, before, { timeout: 5000 }).catch(() => {});
     await page.waitForTimeout(300);
     const after = await page.evaluate(() => window.scrollY);
-    if (before < 300 || Math.abs(after - before) > 80) fail("scroll position was not kept: " + before + " -> " + after);
+    if (before < 300 || Math.abs(after - before) > 80) {
+      const info = await page.evaluate(() => location.hash + " height " + document.documentElement.scrollHeight + "/" + window.innerHeight + " trace " + (window.__scrollTrace || []).join(" "));
+      fail("scroll position was not kept: " + before + " -> " + after + " (" + info + ")");
+    }
 
     console.log("communities local-first ok (" + stored.keys.length + " cached entries, " + stored.bytes + " bytes)");
   } finally {
