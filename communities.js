@@ -187,7 +187,7 @@
     if (diff < 3600) return Math.floor(diff / 60) + "m";
     if (diff < 86400) return Math.floor(diff / 3600) + "h";
     if (diff < 2592000) return Math.floor(diff / 86400) + "d";
-    return new Date(ms).toLocaleDateString();
+    return new Date(ms).toLocaleDateString((window.SI18n ? window.SI18n.locale() : undefined));
   }
 
   /* SVG Icons */
@@ -740,7 +740,7 @@
     var h = Math.floor(m / 60);
     if (h < 24) return h + "h";
     var d = new Date(Number(ms) || 0);
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return d.toLocaleDateString((window.SI18n ? window.SI18n.locale() : undefined), { month: "short", day: "numeric" });
   }
   /* A post on Home: an X post card with the community it came from above. */
   function homeCard(item) {
