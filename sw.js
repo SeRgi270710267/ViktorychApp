@@ -4,12 +4,12 @@ const VERSION = "viktorych-a130-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T14:03:00Z-busy
+// cache-bust: 2026-10-29T13:54:00Z-i18n-hi
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./i18n/hi.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -22,7 +22,7 @@ async function ensureUiLang() {
   try {
     const db = await idb();
     const savedLang = await idbGet(db, "ui-lang");
-    if ((savedLang === "en" || savedLang === "ru" || savedLang === "es") && self.SI18n) self.SI18n.setLang(savedLang);
+    if ((savedLang === "en" || savedLang === "ru" || savedLang === "es" || savedLang === "hi") && self.SI18n) self.SI18n.setLang(savedLang);
   } catch (err) { /* English until the page sends a language */ }
 }
 async function brandManifestResponse(response) {
@@ -56,6 +56,7 @@ const SHELL_FILES = [
   "./i18n/en.js",
   "./i18n/ru.js",
   "./i18n/es.js",
+  "./i18n/hi.js",
   "./app.js",
   "./update.js",
   "./storage.js",
@@ -1840,7 +1841,7 @@ self.addEventListener("message", (event) => {
       if (Array.isArray(data.mutedAccounts)) await idbSet(db, "muted-accounts", data.mutedAccounts);
       if (Array.isArray(data.repostOff)) await idbSet(db, "repost-off", data.repostOff);
       if (typeof data.notifyAll === "boolean") await idbSet(db, "notify-all", data.notifyAll);
-      if (data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es") {
+      if (data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es" || data.uiLang === "hi") {
         await idbSet(db, "ui-lang", data.uiLang);
         if (self.SI18n) self.SI18n.setLang(data.uiLang);
       }

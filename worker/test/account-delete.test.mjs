@@ -254,6 +254,8 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + a, now + 100000);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + b, now + 100000);
   await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES ('shared.bin', 'file', 0, '', 'fid', 1, 4, 'abc', 'application/octet-stream', 0, 0, 0, 0, ?)", now);
+  await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, '', 'fid-a', 77, 4, 'sha-a', 'image/webp', 0, 1, 0, 0, 1)", "media/avatars/" + a + "/x.webp");
+  await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, '', 'fid-b', 78, 4, 'sha-b', 'image/webp', 0, 1, 0, 0, 1)", "media/avatars/" + b + "/keep.webp");
 
   await bindings.DATA.put("media/avatars/" + a + "/x.webp", "ava-a");
   await bindings.DATA.put("media/banners/" + a + "/y.webp", "ban-a");
@@ -361,7 +363,14 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_items WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_pace WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM rate_limits WHERE bucket = ?", "follow:" + b), 1);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files"), 1);
+  // The shared row and the other account's avatar stay; the deleted account's
+  // Telegram copy is dropped and queued for removal from the channel.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files"), 2);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files WHERE object_key LIKE ?", "media/avatars/" + a + "/%"), 0);
+  const forget = await bindings.DATA.list({ prefix: "backup/tg-forget/" });
+  assert.equal(forget.objects.length, 1);
+  const queued = await (await bindings.DATA.get(forget.objects[0].key)).json();
+  assert.deepEqual(queued.messages, [77]);
   const beeSync = await one("SELECT payload FROM sync_state WHERE public_id = ?", b);
   assert.equal(JSON.parse(beeSync.payload).bookmarks.keep, 1);
 

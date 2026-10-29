@@ -32,7 +32,7 @@
   --tooltip-bg: rgba(91, 112, 131, 0.88);
   --tooltip-text: #ffffff;
   --bell-border: #536471;
-  --font: TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font: TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, "Noto Sans Devanagari", "Nirmala UI", "Mangal", "Kohinoor Devanagari", "Devanagari Sangam MN", Arial, sans-serif;
   --top: 53px;
   color-scheme: dark;
 }
@@ -6420,6 +6420,11 @@ html[data-theme="default"] .logo-preview { color: #000; }
 @media (max-width: 499px) {
   .menu.bell-menu.busy-menu { transform: none; }
 }
+/* Hindi: Devanagari vowel signs sit above and below the Latin line box, so
+   give text a little more height where one-line labels clip with ellipsis. */
+html:lang(hi) body { line-height: 22px; }
+html:lang(hi) :is(.handle, .byline .name, .nav-label, .head-text h1, .notes-bar h1, .feeds-name, .feeds-sub, .feeds-status, .list-copy .name, .list-copy .meta, .who-copy .name, .who-copy .handle, .gsuggest-text, .gsuggest-copy .name, .friend-card-name, .pname .name-row-text, .profile-chrome-name, .pt-name, .pub-head .name, .composer-placeholder, .drawer-seg, .drawer-move, .file-title, .link-site, .link-chip span, .mention-name, .x-tooltip, .tab, .ptab, .settings-row, .set-row, .lang-row, button) { line-height: 1.45; }
+html:lang(hi) :is(h1, h2, h3) { line-height: 1.35; }
 /* ===== Flag themes =====
    Data-driven: the palette lives in window.ViktorychThemes (index.html), which sets
    data-flag plus --flag-1/2/3 (exact flag colours: top, accent, alert) and --flag-tint-1/2/3
