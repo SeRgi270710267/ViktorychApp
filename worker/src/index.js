@@ -37,6 +37,7 @@ import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
 import { handleXVideo } from "./xvideo.js";
+import { handleComments } from "./comments-edge.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
@@ -5269,6 +5270,9 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/xv" && request.method === "GET") {
     return handleXVideo(request, { fetch: (u, init) => fetch(u, init), cache: caches.default, waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
+  if (path === "/v1/comments" && request.method === "GET") {
+    return handleComments(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
   if (path === "/v1/unfurl" && request.method === "GET") {
     return handleUnfurl(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
