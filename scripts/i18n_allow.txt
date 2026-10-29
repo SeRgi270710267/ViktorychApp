@@ -279,3 +279,5 @@ inbox.js|SMS codes
 app.js|Servers
 app.js|Mail
 app.js|SMS codes
+# The sharing pool public signing key (a technical token, not text).
+shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM
