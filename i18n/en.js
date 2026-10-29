@@ -3648,5 +3648,12 @@ SI18n.addPack("en", {
   "Merge everything back into Inbox": "Merge everything back into Inbox",
   "Open as its own page": "Open as its own page",
   "Own page": "Own page",
-  "Sections with their own page are not shown here.": "Sections with their own page are not shown here."
+  "Sections with their own page are not shown here.": "Sections with their own page are not shown here.",
+  "Customize Discord": "Customize Discord",
+  "Hide channel": "Hide channel",
+  "Hide message previews": "Hide message previews",
+  "New message": "New message",
+  "Previews on": "Previews on",
+  "Saved on this device only. Private channels show “New message” in previews and alerts instead of the text. Nothing is sent to Discord.": "Saved on this device only. Private channels show “New message” in previews and alerts instead of the text. Nothing is sent to Discord.",
+  "Show message previews": "Show message previews"
 });

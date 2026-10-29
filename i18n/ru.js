@@ -3648,5 +3648,12 @@ SI18n.addPack("ru", {
   "Merge everything back into Inbox": "Вернуть всё во «Входящие»",
   "Open as its own page": "Открыть отдельной страницей",
   "Own page": "Отдельная страница",
-  "Sections with their own page are not shown here.": "Разделы с отдельной страницей здесь не показываются."
+  "Sections with their own page are not shown here.": "Разделы с отдельной страницей здесь не показываются.",
+  "Customize Discord": "Настроить Discord",
+  "Hide channel": "Скрыть канал",
+  "Hide message previews": "Скрыть текст в превью",
+  "New message": "Новое сообщение",
+  "Previews on": "Превью включены",
+  "Saved on this device only. Private channels show “New message” in previews and alerts instead of the text. Nothing is sent to Discord.": "Сохраняется только на этом устройстве. В приватных каналах превью и оповещения показывают «Новое сообщение» вместо текста. В Discord ничего не отправляется.",
+  "Show message previews": "Показывать текст в превью"
 });

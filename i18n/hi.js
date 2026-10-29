@@ -3642,5 +3642,12 @@ SI18n.addPack("hi", {
   "Merge everything back into Inbox": "सब कुछ वापस इनबॉक्स में मिलाएँ",
   "Open as its own page": "अलग पेज के रूप में खोलें",
   "Own page": "अलग पेज",
-  "Sections with their own page are not shown here.": "जिन सेक्शन का अपना पेज है, वे यहाँ नहीं दिखते।"
+  "Sections with their own page are not shown here.": "जिन सेक्शन का अपना पेज है, वे यहाँ नहीं दिखते।",
+  "Customize Discord": "Discord कस्टमाइज़ करें",
+  "Hide channel": "चैनल छिपाएँ",
+  "Hide message previews": "मैसेज प्रीव्यू छिपाएँ",
+  "New message": "नया मैसेज",
+  "Previews on": "प्रीव्यू चालू",
+  "Saved on this device only. Private channels show “New message” in previews and alerts instead of the text. Nothing is sent to Discord.": "सिर्फ़ इसी डिवाइस पर सेव होता है। प्राइवेट चैनल प्रीव्यू और अलर्ट में टेक्स्ट की जगह “नया मैसेज” दिखाते हैं। Discord को कुछ नहीं भेजा जाता।",
+  "Show message previews": "मैसेज प्रीव्यू दिखाएँ"
 });

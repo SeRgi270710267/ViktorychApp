@@ -3648,5 +3648,12 @@ SI18n.addPack("es", {
   "Merge everything back into Inbox": "Volver todo a Bandeja de entrada",
   "Open as its own page": "Abrir como página propia",
   "Own page": "Página propia",
-  "Sections with their own page are not shown here.": "Las secciones con página propia no se muestran aquí."
+  "Sections with their own page are not shown here.": "Las secciones con página propia no se muestran aquí.",
+  "Customize Discord": "Personalizar Discord",
+  "Hide channel": "Ocultar canal",
+  "Hide message previews": "Ocultar vista previa de mensajes",
+  "New message": "Mensaje nuevo",
+  "Previews on": "Vista previa activada",
+  "Saved on this device only. Private channels show “New message” in previews and alerts instead of the text. Nothing is sent to Discord.": "Se guarda solo en este dispositivo. Los canales privados muestran «Mensaje nuevo» en vistas previas y alertas en lugar del texto. No se envía nada a Discord.",
+  "Show message previews": "Mostrar vista previa de mensajes"
 });
