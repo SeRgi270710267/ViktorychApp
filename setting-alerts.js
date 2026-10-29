@@ -39,6 +39,13 @@
     });
   }
 
+  /* Icons come from the app's own set (window.ViktorychIcons): one colour,
+     24px grid, X outline weight. Only names are stored, never emoji. */
+  function glyph(name) {
+    var I = root.ViktorychIcons;
+    return I && I.svg && name ? I.svg(String(name)) : "";
+  }
+
   function ls() { try { return root.localStorage || null; } catch (err) { return null; } }
   function ss() { try { return root.sessionStorage || null; } catch (err) { return null; } }
   function readJson(store, key, fallback) {
@@ -109,7 +116,7 @@
   }
 
   var ALERTS = [
-    { id: "storage-quota", icon: "\uD83D\uDCBE", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: ".stor-usage, .stor-ring, .set-block",
+    { id: "storage-quota", icon: "database", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: ".stor-usage, .stor-ring, .set-block",
       label: function () { return tr("Device storage"); },
       page: function () { return tr("Storage settings"); },
       copy: function (level, v) {
@@ -118,7 +125,7 @@
           [tr("Device storage is almost full", v), tr("{used} of {limit} used ({pct}%). Clear old media now.", v), tr("Free up space")],
           [tr("Device storage is full", v), tr("{used} of {limit} used. New media won't be saved until you free up space.", v), tr("Free up space")]);
       } },
-    { id: "cache-limit", icon: "\uD83D\uDDC2\uFE0F", kind: "percent", canAuto: true, href: "#/settings/storage", target: "#stor-max",
+    { id: "cache-limit", icon: "layers", kind: "percent", canAuto: true, href: "#/settings/storage", target: "#stor-max",
       label: function () { return tr("Cache size limit"); },
       page: function () { return tr("Storage settings"); },
       copy: function (level, v) {
@@ -127,7 +134,7 @@
           [tr("Cache is almost at your limit", v), tr("{used} of {limit} ({pct}%). Raise the limit or clear the cache.", v), tr("Raise limit")],
           [tr("Cache limit reached", v), tr("{used} of {limit}. Older media is now removed to make room.", v), tr("Raise limit")]);
       } },
-    { id: "local-store", icon: "\u2699\uFE0F", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: ".set-block",
+    { id: "local-store", icon: "sliders", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: ".set-block",
       label: function () { return tr("Settings and sync storage"); },
       page: function () { return tr("Storage settings"); },
       copy: function (level, v) {
@@ -136,7 +143,7 @@
           [tr("Saved settings are almost full", v), tr("{used} of about {limit} ({pct}%). Clear saved data to keep syncing.", v), tr("Free up space")],
           [tr("Saved settings are full", v), tr("{used} of {limit}. New settings can't be saved on this device.", v), tr("Free up space")]);
       } },
-    { id: "data-cap", icon: "\uD83D\uDCF6", kind: "percent", canAuto: true, href: "#/settings/data", target: "[data-sa-cap]",
+    { id: "data-cap", icon: "signal", kind: "percent", canAuto: true, href: "#/settings/data", target: "[data-sa-cap]",
       label: function () { return tr("Data cap"); },
       page: function () { return tr("Data usage settings"); },
       copy: function (level, v) {
@@ -145,13 +152,13 @@
           [tr("You're almost at your data cap", v), tr("{used} of {limit} {when} ({pct}%). Resets {reset}.", v), tr("Turn on Data saver")],
           [tr("Data cap reached", v), tr("{used} of {limit} {when}. Turn on Max data saving or raise your cap. Resets {reset}.", v), tr("Raise limit")]);
       } },
-    { id: "data-burn", icon: "\uD83D\uDD25", kind: "flag", canAuto: false, href: "#/settings/data", target: "[data-sa-cap]",
+    { id: "data-burn", icon: "flame", kind: "flag", canAuto: false, href: "#/settings/data", target: "[data-sa-cap]",
       label: function () { return tr("Data cap pace"); },
       page: function () { return tr("Data usage settings"); },
       copy: function (level, v) {
         return [tr("At this rate you'll hit your cap in {days} days", v), tr("{used} of {limit} used, about {rate} a day. Your cap resets in {left} days.", v), tr("Turn on Data saver")];
       } },
-    { id: "mobile-data", icon: "\uD83D\uDCF1", kind: "flag", canAuto: false, href: "#/settings/data", target: "[data-act=\"data-saver\"]",
+    { id: "mobile-data", icon: "phone", kind: "flag", canAuto: false, href: "#/settings/data", target: "[data-act=\"data-saver\"]",
       label: function () { return tr("Mobile data tips"); },
       page: function () { return tr("Data usage settings"); },
       copy: function (level, v) {
@@ -159,13 +166,13 @@
         if (v.saveData) return [tr("Your browser asks to save data"), tr("Switch on Data saver here too, so this app downloads less."), tr("Turn on Data saver")];
         return [tr("You're on mobile data"), tr("Switch on Data saver to load lighter images and skip autoplay."), tr("Turn on Data saver")];
       } },
-    { id: "persist-denied", icon: "\uD83D\uDEE1\uFE0F", kind: "flag", canAuto: false, href: "#/settings/storage", target: "#stor-persist",
+    { id: "persist-denied", icon: "shield", kind: "flag", canAuto: false, href: "#/settings/storage", target: "#stor-persist",
       label: function () { return tr("Persistent storage"); },
       page: function () { return tr("Storage settings"); },
       copy: function () {
         return [tr("This browser may clear saved posts"), tr("Persistent storage was denied, so saved media can be removed when space is low. Installing the app usually keeps it."), tr("Open Storage")];
       } },
-    { id: "translate-daily", icon: "\uD83C\uDF10", kind: "percent", canAuto: false, href: "#/settings/live-translate", target: "[data-lt-field=\"dailyMin\"]",
+    { id: "translate-daily", icon: "globe", kind: "percent", canAuto: false, href: "#/settings/live-translate", target: "[data-lt-field=\"dailyMin\"]",
       label: function () { return tr("Live Translate daily limit"); },
       page: function () { return tr("Live Translate settings"); },
       copy: function (level, v) {
@@ -174,7 +181,7 @@
           [tr("Live Translate is almost out for today", v), tr("{used} of {limit} today ({pct}%).", v), tr("Raise limit")],
           [tr("Today's Live Translate time is used up", v), tr("{limit} used. It resets at midnight.", v), tr("Raise limit")]);
       } },
-    { id: "pool-upload", icon: "\uD83E\uDD1D", kind: "percent", canAuto: true, autoDefault: false, href: "#/settings/data", target: "[data-act=\"peer-upload\"]",
+    { id: "pool-upload", icon: "share", kind: "percent", canAuto: true, autoDefault: false, href: "#/settings/data", target: "[data-act=\"peer-upload\"]",
       label: function () { return tr("Sharing pool upload"); },
       page: function () { return tr("Data usage settings"); },
       copy: function (level, v) {
@@ -183,7 +190,7 @@
           [tr("Sharing upload is almost used up", v), tr("You shared {used} of {limit} today ({pct}%).", v), tr("Change sharing")],
           [tr("Sharing paused until tomorrow", v), tr("You shared {used} today, the daily maximum. Viewing is not affected.", v), tr("Change sharing")]);
       } },
-    { id: "screen-time", icon: "\u23F1\uFE0F", kind: "percent", canAuto: true, autoDefault: false, href: "#/settings/notifications", target: "[data-sa-screen]",
+    { id: "screen-time", icon: "timer", kind: "percent", canAuto: true, autoDefault: false, href: "#/settings/notifications", target: "[data-sa-screen]",
       label: function () { return tr("Daily screen time"); },
       page: function () { return tr("Notification settings"); },
       copy: function (level, v) {
@@ -192,7 +199,7 @@
           [tr("Your screen time is almost up", v), tr("{used} of {limit} today ({pct}%).", v), tr("Change limit")],
           [tr("Screen time limit reached", v), tr("You've used {limit} today. Take a break, or change your limit.", v), tr("Change limit")]);
       } },
-    { id: "feed-tabs", icon: "\uD83D\uDCD1", kind: "percent", canAuto: true, href: "#/settings/content", target: ".set-block, .tab-edit-row",
+    { id: "feed-tabs", icon: "lists", kind: "percent", canAuto: true, href: "#/settings/content", target: ".set-block, .tab-edit-row",
       label: function () { return tr("Custom tabs"); },
       page: function () { return tr("Custom tabs"); },
       copy: function (level, v) {
@@ -201,50 +208,50 @@
           [tr("You're almost out of custom tabs", v), tr("{used} of {limit} tabs used ({pct}%).", v), tr("Manage tabs")],
           [tr("Tab limit reached", v), tr("This device can keep {limit} tabs. Remove some to add more.", v), tr("Manage tabs")]);
       } },
-    { id: "rate-limit", icon: "\uD83D\uDEA6", kind: "flag", canAuto: false, href: "#/settings/network", target: ".set-block",
+    { id: "rate-limit", icon: "gauge", kind: "flag", canAuto: false, href: "#/settings/network", target: ".set-block",
       label: function () { return tr("Server rate limits"); },
       page: function () { return tr("Network settings"); },
       copy: function (level, v) {
         return [tr("You're being rate limited"), tr("The server asked this device to slow down. Try again in {wait}.", v), tr("Network settings")];
       } },
-    { id: "session-expired", icon: "\uD83D\uDD11", kind: "flag", canAuto: true, href: "#/settings", target: "[data-acct=\"login\"], .set-block",
+    { id: "session-expired", icon: "key", kind: "flag", canAuto: true, href: "#/settings", target: "[data-acct=\"login\"], .set-block",
       label: function () { return tr("Sign-in session"); },
       page: function () { return tr("Account settings"); },
       copy: function () {
         return [tr("Your session expired"), tr("Sign in again to keep syncing and posting."), tr("Sign in again")];
       } },
-    { id: "temp-expiry", icon: "\u23F3", kind: "flag", canAuto: true, href: "#/settings", target: "[data-acct=\"temp-keep\"]",
+    { id: "temp-expiry", icon: "hourglass", kind: "flag", canAuto: true, href: "#/settings", target: "[data-acct=\"temp-keep\"]",
       label: function () { return tr("Temporary account"); },
       page: function () { return tr("Account settings"); },
       copy: function (level, v) {
         if (level === "critical") return [tr("Your temporary account is deleted in {left}", v), tr("Everything on it will be gone. Save it now to keep it.", v), tr("Save this account")];
         return [tr("Your temporary account is deleted in {left}", v), tr("Save it to keep your posts, follows and settings.", v), tr("Save this account")];
       } },
-    { id: "push-revoked", icon: "\uD83D\uDD15", kind: "flag", canAuto: true, href: "#/settings/notifications", target: "[data-act=\"notify\"]",
+    { id: "push-revoked", icon: "bellOff", kind: "flag", canAuto: true, href: "#/settings/notifications", target: "[data-act=\"notify\"]",
       label: function () { return tr("Push permission"); },
       page: function () { return tr("Notification settings"); },
       copy: function () {
         return [tr("Notifications are blocked"), tr("Notifications are on in settings, but this browser blocked them. Allow them in the site settings, or turn them off here."), tr("Fix notifications")];
       } },
-    { id: "battery", icon: "\uD83D\uDD0B", kind: "flag", canAuto: false, href: "#/settings/device", target: "[data-level=\"light\"]",
+    { id: "battery", icon: "battery", kind: "flag", canAuto: false, href: "#/settings/device", target: "[data-level=\"light\"]",
       label: function () { return tr("Low battery"); },
       page: function () { return tr("Device performance"); },
       copy: function (level, v) {
         return [tr("Battery at {pct}%", v), tr("Switch to Light mode to share less and save power."), tr("Use Light mode")];
       } },
-    { id: "corrupt-store", icon: "\uD83E\uDDE9", kind: "flag", canAuto: true, href: "#/settings/storage", target: "[data-stor=\"clear-all\"]",
+    { id: "corrupt-store", icon: "fileAlert", kind: "flag", canAuto: true, href: "#/settings/storage", target: "[data-stor=\"clear-all\"]",
       label: function () { return tr("Damaged saved data"); },
       page: function () { return tr("Storage settings"); },
       copy: function (level, v) {
         return [tr("A saved setting is damaged"), tr("{name} couldn't be read on this device, so defaults are used. Clear saved data to start fresh.", v), tr("Open Storage")];
       } },
-    { id: "sync-failed", icon: "\uD83D\uDD04", kind: "flag", canAuto: true, href: "#/settings/devices", target: ".set-block",
+    { id: "sync-failed", icon: "sync", kind: "flag", canAuto: true, href: "#/settings/devices", target: ".set-block",
       label: function () { return tr("Settings sync"); },
       page: function () { return tr("My devices"); },
       copy: function () {
         return [tr("Settings sync failed"), tr("Your latest changes are only on this device. Check your connection and devices."), tr("Open devices")];
       } },
-    { id: "inbox-mail", icon: "\uD83D\uDCEC", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: ".set-block",
+    { id: "inbox-mail", icon: "mail", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: ".set-block",
       label: function () { return tr("Inbox mail storage"); },
       page: function () { return tr("Storage settings"); },
       copy: function (level, v) {
@@ -253,7 +260,7 @@
           [tr("Inbox mail storage is almost full", v), tr("{used} of {limit} ({pct}%). Older mail will stop saving offline.", v), tr("Free up space")],
           [tr("Inbox mail storage is full", v), tr("{used} of {limit}. New mail is not saved offline.", v), tr("Free up space")]);
       } },
-    { id: "smspool-balance", icon: "\uD83D\uDCB3", kind: "flag", canAuto: false, href: "#/messages", target: ".set-block",
+    { id: "smspool-balance", icon: "card", kind: "flag", canAuto: false, href: "#/messages", target: ".set-block",
       label: function () { return tr("SMS code balance"); },
       page: function () { return tr("Inbox"); },
       copy: function (level, v) {
@@ -524,7 +531,7 @@
     var def = byId(a.id);
     var why = a.auto ? tr("Opened automatically: {title}", { title: a.title }) : a.title;
     return '<div class="sa-banner v-' + variantOf(a.level) + '" data-sa-banner="' + esc(a.id) + '" role="status">' +
-      '<span class="sa-banner-ico" aria-hidden="true">' + esc(def ? def.icon : "") + "</span>" +
+      '<span class="sa-banner-ico" aria-hidden="true">' + glyph(def ? def.icon : "warning") + "</span>" +
       '<div class="sa-banner-copy"><b>' + esc(why) + "</b><p>" + esc(a.desc || "") + "</p></div>" +
       '<button class="outline sa-back" type="button" data-sa="back">' + esc(tr("Back to where you were")) + "</button></div>";
   }
@@ -582,7 +589,7 @@
     if (!a || !onTargetRoute()) return;
     var A = popoutApi();
     var def = byId(a.id);
-    if (A) A.popout({ id: "sa-fixed", variant: "info", icon: "\u2705", kicker: tr("Fixed"), title: tr("Fixed. Taking you back."), desc: def ? def.label() : "", dismiss: false, hold: 2200 });
+    if (A) A.popout({ id: "sa-fixed", variant: "info", icon: "checkCircle", kicker: tr("Fixed"), title: tr("Fixed. Taking you back."), desc: def ? def.label() : "", dismiss: false, hold: 2200 });
     setTimeout(function () { if (redirect.active === a) goBack(); }, 1200);
   }
 
@@ -893,7 +900,7 @@
     var rows = ALERTS.map(function (def) {
       var on = !p.off[def.id];
       var auto = def.canAuto ? '<span class="sa-auto">' + sw(autoOn(def.id), tr("Open settings"), 'data-sa="auto-one" data-id="' + def.id + '"', !on || !p.autoOpen) + "</span>" : "";
-      return '<div class="sa-row"><span class="sa-row-ico" aria-hidden="true">' + def.icon + "</span>" +
+      return '<div class="sa-row"><span class="sa-row-ico" aria-hidden="true">' + glyph(def.icon) + "</span>" +
         sw(on, def.label(), 'data-sa="alert" data-id="' + def.id + '"') + auto + "</div>";
     }).join("");
     return '<section class="sa-settings" data-sa-settings="1"><h2>' + esc(tr("Settings alerts")) + "</h2>" +
@@ -960,11 +967,11 @@
       var when = new Date(e.at);
       var time = when.toLocaleString ? when.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
       return '<article class="sa-note v-' + variantOf(e.level) + '" data-sa-note="' + e.at + '">' +
-        '<span class="sa-note-ico" aria-hidden="true">' + (def ? def.icon : "") + "</span>" +
+        '<span class="sa-note-ico" aria-hidden="true">' + glyph(def ? def.icon : "warning") + "</span>" +
         '<div class="sa-note-copy"><span class="sa-note-kicker">' + esc(tr("System")) + " · " + esc(kickerOf(e.level)) + " · " + esc(time) + "</span>" +
         "<b>" + esc(e.title) + "</b><p>" + esc(e.desc) + "</p>" +
         '<a class="sa-note-link" href="' + esc(e.href) + '" data-sa="note-open" data-id="' + esc(e.id) + '">' + esc(e.action || tr("Open settings")) + "</a></div>" +
-        '<button class="icon-btn sa-note-x" type="button" data-sa="note-dismiss" data-at="' + e.at + '" aria-label="' + esc(tr("Dismiss")) + '">\u00D7</button></article>';
+        '<button class="icon-btn sa-note-x" type="button" data-sa="note-dismiss" data-at="' + e.at + '" aria-label="' + esc(tr("Dismiss")) + '">' + glyph("close") + "</button></article>";
     }).join("") + "</section>";
   }
 
