@@ -365,6 +365,16 @@
     if (typeof setTimeout !== "function") return;
     refreshTimer = setTimeout(function () {
       refreshTimer = null;
+      // A hidden page waits; the first visible moment refreshes instead.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        var wake = function () {
+          if (document.visibilityState === "hidden") return;
+          document.removeEventListener("visibilitychange", wake);
+          refreshScores();
+        };
+        document.addEventListener("visibilitychange", wake);
+        return;
+      }
       refreshScores();
     }, wait);
   }

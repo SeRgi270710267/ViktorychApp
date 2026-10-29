@@ -2010,12 +2010,37 @@
     arm(wait < 1000 ? 1000 : wait);
   }
 
+  /* The catalog changes a few times a day. The status poll runs every 35
+     seconds, so the catalog is reused for five minutes (or until the change
+     signal says feeds.config.json moved) instead of read on every round. */
+  let catalogDoc = null;
+  let catalogAt = 0;
+  let catalogMark = "";
+  function catalogFresh(now) {
+    if (!catalogDoc) return false;
+    const pulse = root.ViktorychPulse;
+    if (pulse && pulse.ok && pulse.ok()) {
+      const mark = pulse.version("config");
+      if (mark && mark !== catalogMark) return false;
+      return now - catalogAt < 30 * 60 * 1000;
+    }
+    return now - catalogAt < 5 * 60 * 1000;
+  }
   async function loadCatalog() {
-    const url = new URL("feeds.config.json", new URL(".", location.href));
-    url.searchParams.set("_", String(Date.now()));
-    const res = await fetch(url.href, { cache: "no-store" });
-    if (!res.ok) throw new Error("config");
-    const doc = await res.json();
+    const now = Date.now();
+    let doc = catalogFresh(now) ? catalogDoc : null;
+    if (!doc) {
+      const pulse = root.ViktorychPulse;
+      const mark = pulse && pulse.version ? pulse.version("config") : "";
+      const url = new URL("feeds.config.json", new URL(".", location.href));
+      url.searchParams.set("_", String(now));
+      const res = await fetch(url.href, { cache: "no-store" });
+      if (!res.ok) throw new Error("config");
+      doc = await res.json();
+      catalogDoc = doc;
+      catalogAt = now;
+      catalogMark = mark || "";
+    }
     const list = Array.isArray(doc.spaces) ? doc.spaces : [];
     spaces = list.filter((item) => item && /^[A-Za-z0-9_-]{1,120}$/.test(String(item.id || ""))).map((item) => ({
       id: String(item.id),
