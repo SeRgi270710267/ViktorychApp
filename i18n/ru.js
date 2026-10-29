@@ -2661,5 +2661,12 @@ SI18n.addPack("ru", {
   "Only sound from playing videos counts. Translation stops when the video pauses.": "Учитывается только звук воспроизводимых видео. Перевод останавливается на паузе.",
   "Videos from sites that don’t share their sound, such as YouTube, can’t be translated.": "Видео с сайтов, которые не дают доступ к звуку, например YouTube, перевести нельзя.",
   "Couldn’t load voices. Check that your key allows Text-to-Speech.": "Не удалось загрузить голоса. Проверьте, что ваш ключ разрешает Text-to-Speech.",
-  "Hear and read videos in your language while they play.": "Слушайте и читайте видео на своём языке во время воспроизведения."
+  "Hear and read videos in your language while they play.": "Слушайте и читайте видео на своём языке во время воспроизведения.",
+  "New message: {text}": "Новое сообщение: {text}",
+  "typing…": "печатает…",
+  "Sent {n} waiting messages": "Отправлено ожидавших сообщений: {n}",
+  "Friends direct": "Напрямую с друзьями",
+  "Connect directly to friends": "Подключаться к друзьям напрямую",
+  "Messages, online status and typing go straight to friends who are online, and media they already loaded can come from their device. Friends can see your IP address while connected. Messages written offline are sent when you’re back online.": "Сообщения, статус в сети и набор текста идут напрямую друзьям в сети, а медиа, которые они уже загрузили, могут прийти с их устройства. Пока соединение активно, друзья видят ваш IP-адрес. Сообщения, написанные офлайн, отправятся, когда вы снова будете в сети.",
+  "You’re offline. It will send when you’re back online.": "Вы офлайн. Сообщение отправится, когда вы снова будете в сети."
 });
