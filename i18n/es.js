@@ -2729,5 +2729,6 @@ SI18n.addPack("es", {
   "In Messages": "En Mensajes",
   "Spare account’s servers": "Servidores de la cuenta de respaldo",
   "None listed yet. Press Check again after joining.": "Aún no hay. Pulsa Comprobar de nuevo tras unirte.",
-  "Asked the sync to re-list servers.": "Se pidió a la sync que vuelva a listar servidores."
+  "Asked the sync to re-list servers.": "Se pidió a la sync que vuelva a listar servidores.",
+  "Discord key stopped working, paste a new one": "La clave de Discord dejó de funcionar, pega una nueva"
 });

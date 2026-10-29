@@ -109,3 +109,13 @@ test("data keys: messages for signed-in readers, the catalog for the owner", () 
   assert.equal(ownerOnlyDiscordKey("discord/x/catalog.json"), true);
   assert.equal(ownerOnlyDiscordKey("discord/x/index.json"), false);
 });
+
+test("health status is owner-readable and never includes a key", async () => {
+  const env = { DATA: bucket() };
+  env.DATA.store.set("discord/x/health.json", JSON.stringify({ status: "invalid", reason: "unauthorized", keyHash: "abc", at: "2026-01-01T00:00:00Z", token: "nope" }));
+  const got = await (await handleDiscordPickRoutes(req("/v1/discord/picks"), env, "/v1/discord/picks", deps(true))).json();
+  assert.equal(got.health.status, "invalid");
+  assert.equal(got.health.reason, "unauthorized");
+  assert.equal(got.health.keyHash, undefined);
+  assert.equal(got.health.token, undefined);
+});

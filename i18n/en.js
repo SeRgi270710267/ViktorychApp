@@ -2729,5 +2729,6 @@ SI18n.addPack("en", {
   "In Messages": "In Messages",
   "Spare account’s servers": "Spare account’s servers",
   "None listed yet. Press Check again after joining.": "None listed yet. Press Check again after joining.",
-  "Asked the sync to re-list servers.": "Asked the sync to re-list servers."
+  "Asked the sync to re-list servers.": "Asked the sync to re-list servers.",
+  "Discord key stopped working, paste a new one": "Discord key stopped working, paste a new one"
 });

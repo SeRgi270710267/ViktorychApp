@@ -59,7 +59,8 @@
     note: "",
     err: "",
     loading: false,
-    focusOn: false
+    focusOn: false,
+    health: null
   };
 
   function defaults(server) {
@@ -99,6 +100,7 @@
       state.catalog = body.catalog;
       state.picks = body.picks;
       state.join = body.join || null;
+      state.health = body.health || null;
       if (state.waitId && state.join && state.join.id === state.waitId) {
         if (state.join.status === "joined") {
           state.waitGuild = snowflake(state.join.guild) || state.waitGuild;
@@ -441,6 +443,26 @@
     return '<button type="button" class="dmsgs-add" data-dpick="open">' + esc(tr("Add Discord")) + "</button>";
   }
 
+  function keyBannerHtml() {
+    if (!isOwner() || !state.health || state.health.status !== "invalid") return "";
+    return '<div class="dpick-keywarn" role="status">' +
+      "<p>" + esc(tr("Discord key stopped working, paste a new one")) + "</p>" +
+      '<a class="dpick-btn" href="#/settings/keys">' + esc(tr("Connected keys")) + "</a>" +
+      "</div>";
+  }
+
+  var healthAsked = 0;
+  function ensureHealth() {
+    if (!isOwner() || !token()) return;
+    if (Date.now() - healthAsked < 15000 && state.health) return;
+    healthAsked = Date.now();
+    api("/v1/discord/picks").then(function (body) {
+      if (!body || body.status >= 400) return;
+      state.health = body.health || null;
+      if (root.FeedsDiscord && root.FeedsDiscord._repaintKey) root.FeedsDiscord._repaintKey();
+    }).catch(function () {});
+  }
+
   if (typeof document !== "undefined") {
     document.addEventListener("click", onClick);
     document.addEventListener("visibilitychange", function () {
@@ -454,7 +476,12 @@
     close: close,
     addButtonHtml: addButtonHtml,
     isOwner: isOwner,
-    onSignal: function () { if (state.open) load(); },
+    onSignal: function () {
+      if (state.open) load();
+      else ensureHealth();
+    },
+    keyBannerHtml: keyBannerHtml,
+    ensureHealth: ensureHealth,
     _state: function () { return state; }
   };
 })(typeof window !== "undefined" ? window : globalThis);

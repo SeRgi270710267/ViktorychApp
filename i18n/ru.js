@@ -2729,5 +2729,6 @@ SI18n.addPack("ru", {
   "In Messages": "В Сообщениях",
   "Spare account’s servers": "Серверы запасного аккаунта",
   "None listed yet. Press Check again after joining.": "Пока пусто. Нажмите «Проверить снова» после присоединения.",
-  "Asked the sync to re-list servers.": "Синхронизация снова перечислит серверы."
+  "Asked the sync to re-list servers.": "Синхронизация снова перечислит серверы.",
+  "Discord key stopped working, paste a new one": "Ключ Discord перестал работать — вставьте новый"
 });

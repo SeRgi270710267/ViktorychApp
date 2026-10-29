@@ -702,6 +702,20 @@ def published_here(path: str):
     return data if isinstance(data, dict) else None
 
 
+
+def write_health(status: str, reason: str, token: str) -> None:
+    """Private key health. No ids, no token. Cached messages stay as they are."""
+    doc = discord_picks.health_doc(status, reason, token, iso_now())
+    payload = json.dumps(doc, separators=(",", ":")).encode("utf-8")
+    if token and token.encode("utf-8") in payload:
+        return
+    r2_put(discord_picks.HEALTH_KEY, payload)
+
+
+def read_health():
+    return r2_json(discord_picks.HEALTH_KEY)
+
+
 class Picks:
     """The owner's extra servers (scripts/discord_picks.py). Private bucket only."""
 
@@ -766,6 +780,7 @@ class Picks:
             return
         if self.put(discord_picks.CATALOG_KEY, payload):
             print(f"[discord-live] listed {len(doc['servers'])} servers")
+            write_health("ok", "", self.token)
 
     def write(self, board: Board) -> None:
         if not self.servers:
@@ -790,6 +805,16 @@ class Picks:
 def run(root: Path, server: dict | None, token: str, picks: Picks | None = None) -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
+    # Same bad key: keep cached messages, do not call Discord again.
+    if discord_picks.key_blocked(read_health(), token):
+        print("[discord-live] key invalid; waiting for a new key")
+        write_status(root, server, "unauthorized", "Discord key stopped working", token)
+        if server:
+            try:
+                deploy(root, token)
+            except Exception as exc:
+                print(public_error(exc))
+        return 0
     if server:
         try:
             _mirror_published(root, published_here, token)
@@ -819,6 +844,7 @@ def run(root: Path, server: dict | None, token: str, picks: Picks | None = None)
         except DiscordStop:
             raise
         if client.last_status == 200:
+            write_health("ok", "", token)
             _account_issue(False, "")
         print(f"[discord-live] {server['name']} {len(server['channels'])} channels")
     started = time.monotonic()
@@ -869,6 +895,7 @@ def run(root: Path, server: dict | None, token: str, picks: Picks | None = None)
                 print(f"[discord-live] {label(channel)} inaccessible")
             continue
         apply_messages(board, channel, messages, names, topic_for(channel), token, False)
+        write_health("ok", "", token)
         print(f"[discord-live] {label(channel)} history {len(board.rows(channel['id']))} gap {gap:.1f}s")
     write_all()
     ship()
@@ -1050,6 +1077,8 @@ def main() -> int:
         print("[discord-live] " + exc.text)
         write_status(ROOT, server, exc.reason, exc.text, token)
         deploy(ROOT, token)
+        if exc.reason in ("unauthorized", "forbidden"):
+            write_health("invalid", exc.reason, token)
         if exc.reason in ("unauthorized", "forbidden", "captcha", "verification"):
             if owned:
                 try:

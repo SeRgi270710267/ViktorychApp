@@ -3380,6 +3380,8 @@ def discord_picks_checks(discord_live) -> None:
         picker.upload()
         picker.upload()
         check(not (root / "discord").exists() and all(key.startswith("discord/x/") for key in sent) and sent[-1] == "discord/x/index.json" and len(sent) == 2, "picked servers go only to the private bucket and unchanged files are not sent again")
+        bad = discord_picks.health_doc("invalid", "unauthorized", "secret-token-value", "2026-01-01T00:00:00Z")
+        check(discord_picks.key_blocked(bad, "secret-token-value") and not discord_picks.key_blocked(bad, "other-token") and "secret" not in json.dumps(bad), "an invalid key is blocked by fingerprint until a new key is pasted")
         index = store["discord/x/index.json"]
         check(index["servers"][0]["channels"][0]["file"] == "discord/x/messages/300000000000000010.json" and index["servers"][0]["channels"][0]["last"] == "400000000000000001" and "secret-token-value" not in json.dumps(store), "the private index points at private files and never holds the token")
 

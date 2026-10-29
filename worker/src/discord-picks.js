@@ -14,6 +14,7 @@ export const CATALOG_KEY = "discord/x/catalog.json";
 export const REQUEST_KEY = "discord/x/request.json";
 export const PRIVATE_INDEX_KEY = "discord/x/index.json";
 export const JOIN_KEY = "discord/x/join.json";
+export const HEALTH_KEY = "discord/x/health.json";
 export const MAX_SERVERS = 12;
 export const MAX_CHANNELS = 40;
 
@@ -40,6 +41,13 @@ export function ownerOnlyDiscordKey(key) {
 }
 
 /* discord.gg/abc, discord.com/invite/abc, or the bare code. */
+export function cleanHealth(doc) {
+  if (!doc || typeof doc !== "object") return { status: "ok", reason: "", at: "" };
+  const status = doc.status === "invalid" ? "invalid" : "ok";
+  const reason = doc.reason === "unauthorized" || doc.reason === "forbidden" ? doc.reason : "";
+  return { status, reason: status === "invalid" ? reason : "", at: clip(doc.at, 40) };
+}
+
 export function inviteCode(value) {
   const text = String(value || "").trim().slice(0, 200);
   const match = text.match(/^(?:https?:\/\/)?(?:www\.)?(?:discord(?:app)?\.com\/invite|discord\.gg)\/([A-Za-z0-9-]{2,32})\/?(?:[?#].*)?$/i);
@@ -253,7 +261,7 @@ export async function handleDiscordPickRoutes(request, env, path, deps) {
     return json(200, { requestedAt: at });
   }
   if (method === "GET") {
-    const [catalog, picks, req, joined] = await Promise.all([readDoc(env, CATALOG_KEY), readDoc(env, PICKS_KEY), readDoc(env, REQUEST_KEY), readDoc(env, JOIN_KEY)]);
+    const [catalog, picks, req, joined, health] = await Promise.all([readDoc(env, CATALOG_KEY), readDoc(env, PICKS_KEY), readDoc(env, REQUEST_KEY), readDoc(env, JOIN_KEY), readDoc(env, HEALTH_KEY)]);
     const pending = req && req.join && typeof req.join === "object" ? req.join : null;
     return json(200, {
       catalog: catalog ? cleanCatalog(catalog) : null,
@@ -265,6 +273,7 @@ export async function handleDiscordPickRoutes(request, env, path, deps) {
         status: joined && joined.id === pending.id ? clip(joined.status, 20) : "pending",
         at: joined && joined.id === pending.id ? clip(joined.at, 40) : ""
       } : null,
+      health: cleanHealth(health),
       limits: { servers: MAX_SERVERS, channels: MAX_CHANNELS }
     });
   }
