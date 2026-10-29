@@ -889,7 +889,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -8912,7 +8912,13 @@ const here = parseRoute();
     return true;
   }
 
+  // A game is open: background feed work waits so the game gets the device.
+  function gameBusy() {
+    return !!(window.ViktorychGames && window.ViktorychGames.busy && window.ViktorychGames.busy());
+  }
+
   function schedulePublicPosts() {
+    if (gameBusy()) return;
     if (document.documentElement.getAttribute("data-wall") === "1") return;
     if (!accountToken()) return;
     const now = Date.now();
@@ -13125,6 +13131,7 @@ const here = parseRoute();
     if (kind === "friend_request") return tr("{name} sent you a friend request", { name: who });
     if (kind === "friend_accept") return tr("{name} accepted your friend request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
+    if (kind === "game_invite") return tr("{name} invited you to play {game}", { name: who, game: (note && note.text) || "ReGone" });
     if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
     if (kind === "gift") return tr("{name} sent you a gift", { name: who });
     if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
@@ -21274,6 +21281,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function prefetchHomeTabs() {
     const run = () => {
+      if (gameBusy()) return;
       const active = currentHomeTab();
       const rest = visibleHomeTabs().filter((id) => id !== active);
       if (rest.length) refreshHomeTabs(rest);
@@ -21569,7 +21577,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const go = () => {
       if (readStored(sessionStorage, "sw-reload") === "1") return;
       const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended) || !!(window.Spaces && window.Spaces.playing && window.Spaces.playing()) || !!(window.SIntelMusic && window.SIntelMusic.playing && window.SIntelMusic.playing());
-      if (busy && document.visibilityState === "visible") {
+      if ((busy && document.visibilityState === "visible") || gameBusy()) {
         timer = setTimeout(go, 4000);
         return;
       }
@@ -22710,6 +22718,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         stopPoll();
         return;
       }
+      if (gameBusy()) return;
       pullNotes();
     }, 60000);
   }
@@ -23174,6 +23183,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function scheduleDeviceIndex() {
     if (parseRoute().name !== "explore" && parseRoute().name !== "settings") return;
     const run = () => {
+      if (gameBusy()) return;
       loadDeviceCore().then((dev) => {
         if (!dev || !dev.featureOn(dev.read(), "search", dev.signals())) return;
         dev.ensure("search").then(() => {
@@ -23729,6 +23739,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function warmSavedMedia(local, rows) {
+    if (gameBusy()) return;
     if (!local || !local.cacheFirstSegment) return;
     if (!local.prefetchLimit(null, local.prefetchEnabled())) return;
     (rows || []).slice(0, 8).forEach((post) => {
@@ -23744,7 +23755,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function warmOpened(hash) {
     const local = window.ViktorychLocal;
-    if (!local || !STATE.data) return;
+    if (!local || !STATE.data || gameBusy()) return;
     const path = String(hash || "").split("?")[0].replace(/^#/, "");
     const parts = path.split("/").filter(Boolean).map((part) => {
       try { return decodeURIComponent(part); } catch (err) { return part; }
@@ -24042,7 +24053,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       if (!STATE.liveTimer) {
         STATE.liveTimer = setInterval(() => {
-          if (document.visibilityState === "visible") wakeHome();
+          if (document.visibilityState === "visible" && !gameBusy()) wakeHome();
         }, LIVE_REFRESH_MS);
       }
     } catch (err) {
