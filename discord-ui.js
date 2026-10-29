@@ -2601,6 +2601,25 @@
     page: page,
     titleFor: titleFor,
     inbox: inbox,
+    /* Newest chats from the local cache only (no network), for quick menus. */
+    recent: function (limit) {
+      warmCache();
+      const rows = (state.channels || []).filter(function (ch) {
+        return ch && ch.mode === "messages" && !ch.inaccessible;
+      }).map(function (ch) {
+        const last = messagesFor(ch.id)[0] || null;
+        return {
+          id: ch.id,
+          name: ch.name || "",
+          preview: last ? String(last.body || "") : "",
+          author: last ? String(last.name || "") : "",
+          lastId: last ? String(last.id || "") : "",
+          href: channelHref(ch.id)
+        };
+      });
+      rows.sort(function (a, b) { return cmpId(b.lastId, a.lastId); });
+      return rows.slice(0, Math.max(1, Number(limit) || 4));
+    },
     thread: sharedThread,
     unreadText: function (id) {
       const rows = messagesFor(id);

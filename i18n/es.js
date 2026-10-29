@@ -3378,5 +3378,10 @@ SI18n.addPack("es", {
   "Preview rumble": "Probar vibración",
   "This device can't vibrate.": "Este dispositivo no puede vibrar.",
   "Reduce motion is on, so achievements fade in quietly without sound or rumble.": "La reducción de movimiento está activada: los logros aparecen sin sonido ni vibración.",
-  "Gentle": "Suave"
+  "Gentle": "Suave",
+  "Haptics": "Vibración táctil",
+  "A light tap when you press and hold a tab or pick from a shortcut menu.": "Una vibración suave al mantener pulsada una pestaña o elegir en un menú de atajos.",
+  "Scroll to top & refresh": "Ir arriba y actualizar",
+  "No communities yet": "Aún no hay comunidades",
+  "{name} shortcuts": "Atajos de {name}"
 });

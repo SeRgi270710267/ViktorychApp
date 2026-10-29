@@ -3378,5 +3378,10 @@ SI18n.addPack("en", {
   "Preview rumble": "Preview rumble",
   "This device can't vibrate.": "This device can't vibrate.",
   "Reduce motion is on, so achievements fade in quietly without sound or rumble.": "Reduce motion is on, so achievements fade in quietly without sound or rumble.",
-  "Gentle": "Gentle"
+  "Gentle": "Gentle",
+  "Haptics": "Haptics",
+  "A light tap when you press and hold a tab or pick from a shortcut menu.": "A light tap when you press and hold a tab or pick from a shortcut menu.",
+  "Scroll to top & refresh": "Scroll to top & refresh",
+  "No communities yet": "No communities yet",
+  "{name} shortcuts": "{name} shortcuts"
 });

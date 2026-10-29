@@ -3378,5 +3378,10 @@ SI18n.addPack("ru", {
   "Preview rumble": "Проверить вибрацию",
   "This device can't vibrate.": "Это устройство не поддерживает вибрацию.",
   "Reduce motion is on, so achievements fade in quietly without sound or rumble.": "Включено уменьшение движения, поэтому достижения появляются плавно, без звука и вибрации.",
-  "Gentle": "Слабая"
+  "Gentle": "Слабая",
+  "Haptics": "Тактильный отклик",
+  "A light tap when you press and hold a tab or pick from a shortcut menu.": "Лёгкая вибрация, когда вы удерживаете вкладку или выбираете пункт в меню быстрых действий.",
+  "Scroll to top & refresh": "Наверх и обновить",
+  "No communities yet": "Пока нет сообществ",
+  "{name} shortcuts": "Быстрые действия: {name}"
 });

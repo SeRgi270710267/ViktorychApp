@@ -1978,6 +1978,14 @@
     note: null,
     snapshot: rememberCommunities,
     tabs: readTabs,
+    /* Cached only: saved tabs plus joined communities already on the device. */
+    mine: function () {
+      var rows = (state.index && state.index.communities) || [];
+      return {
+        tabs: readTabs(),
+        joined: joinedRows(rows).map(function (row) { return { name: row.name, label: communityLabel(row.name) }; })
+      };
+    },
     cleanTabs: cleanTabs,
     tabFeed: function (id) {
       var tab = tabById(id);
