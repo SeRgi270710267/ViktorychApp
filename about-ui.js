@@ -43,6 +43,7 @@
   var notesOn = true;
   var upcomingPack = null;
 
+  function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
     var fn = root.t || (typeof window !== "undefined" && window.t);
     var text = fn ? fn(key, vars) : key;
@@ -148,7 +149,7 @@
       var face = '<span class="about-ava">' + letter + "</span>";
       return href ? '<a href="' + esc(href) + '">' + face + "</a>" : face;
     }).join("");
-    var label = n === 1 ? tr("1 family member") : tr("{count} family members", { count: String(n) });
+    var label = (typeof window !== "undefined" && window.tn) ? tn("familyMembers", n, { count: String(n) }) : (n === 1 ? tr("1 family member") : tr("{count} family members", { count: String(n) }));
     return '<div class="about-row"><span class="about-ico">' + icon("people") + '</span><span class="about-copy"><span class="about-faces">' + faces + "</span><span>" + esc(label) + "</span></span></div>";
   }
 
