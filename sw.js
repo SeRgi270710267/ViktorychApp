@@ -4,7 +4,7 @@ const VERSION = "viktorych-a137-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T17:14:35Z-scroll-restore
+// cache-bust: 2026-10-29T20:05:00Z-a137-setting-alerts-feedback
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -121,6 +121,8 @@ const SHELL_FILES = [
   "./shared/gift-catalog.js",
   "./badges.js",
   "./badges.css",
+  "./setting-alerts.js",
+  "./setting-alerts.css",
   "./audience-ui.js",
   "./gifts.css",
   "./reactions.css",
