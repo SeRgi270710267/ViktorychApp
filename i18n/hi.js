@@ -3645,5 +3645,11 @@ SI18n.addPack("hi", {
   "Reset meter": "मीटर रीसेट करें",
   "Counted on this device only. Nothing is sent anywhere.": "सिर्फ़ इसी डिवाइस पर गिना जाता है। कुछ भी कहीं नहीं भेजा जाता।",
   "System": "सिस्टम",
-  "Don't warn me about this": "इसके बारे में चेतावनी न दें"
+  "Don't warn me about this": "इसके बारे में चेतावनी न दें",
+  "Sound and vibration": "ध्वनि और कंपन",
+  "Vibrate for alerts": "अलर्ट पर कंपन",
+  "Sound for alerts": "अलर्ट पर ध्वनि",
+  "Test sound and vibration": "ध्वनि और कंपन जांचें",
+  "Test": "जांचें",
+  "Critical and limit alerts vibrate and play a short tone. Warnings only vibrate. Never while you type, watch or call.": "गंभीर और सीमा वाले अलर्ट कंपन करते हैं और छोटी ध्वनि बजाते हैं। चेतावनियां सिर्फ़ कंपन करती हैं। टाइप करते, देखते या कॉल पर रहते समय कभी नहीं।"
 });

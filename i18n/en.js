@@ -3651,5 +3651,11 @@ SI18n.addPack("en", {
   "Reset meter": "Reset meter",
   "Counted on this device only. Nothing is sent anywhere.": "Counted on this device only. Nothing is sent anywhere.",
   "System": "System",
-  "Don't warn me about this": "Don't warn me about this"
+  "Don't warn me about this": "Don't warn me about this",
+  "Sound and vibration": "Sound and vibration",
+  "Vibrate for alerts": "Vibrate for alerts",
+  "Sound for alerts": "Sound for alerts",
+  "Test sound and vibration": "Test sound and vibration",
+  "Test": "Test",
+  "Critical and limit alerts vibrate and play a short tone. Warnings only vibrate. Never while you type, watch or call.": "Critical and limit alerts vibrate and play a short tone. Warnings only vibrate. Never while you type, watch or call."
 });

@@ -3651,5 +3651,11 @@ SI18n.addPack("es", {
   "Reset meter": "Reiniciar contador",
   "Counted on this device only. Nothing is sent anywhere.": "Se cuenta solo en este dispositivo. No se envía nada a ningún sitio.",
   "System": "Sistema",
-  "Don't warn me about this": "No avisarme de esto"
+  "Don't warn me about this": "No avisarme de esto",
+  "Sound and vibration": "Sonido y vibración",
+  "Vibrate for alerts": "Vibrar con las alertas",
+  "Sound for alerts": "Sonido con las alertas",
+  "Test sound and vibration": "Probar sonido y vibración",
+  "Test": "Probar",
+  "Critical and limit alerts vibrate and play a short tone. Warnings only vibrate. Never while you type, watch or call.": "Las alertas críticas y de límite vibran y suenan con un tono corto. Las advertencias solo vibran. Nunca mientras escribes, ves algo o estás en una llamada."
 });

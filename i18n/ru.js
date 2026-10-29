@@ -3651,5 +3651,11 @@ SI18n.addPack("ru", {
   "Reset meter": "Сбросить счётчик",
   "Counted on this device only. Nothing is sent anywhere.": "Считается только на этом устройстве. Ничего никуда не отправляется.",
   "System": "Система",
-  "Don't warn me about this": "Больше не предупреждать"
+  "Don't warn me about this": "Больше не предупреждать",
+  "Sound and vibration": "Звук и вибрация",
+  "Vibrate for alerts": "Вибрация при оповещениях",
+  "Sound for alerts": "Звук при оповещениях",
+  "Test sound and vibration": "Проверить звук и вибрацию",
+  "Test": "Проверить",
+  "Critical and limit alerts vibrate and play a short tone. Warnings only vibrate. Never while you type, watch or call.": "Критические оповещения и оповещения о лимите вибрируют и подают короткий сигнал. Предупреждения только вибрируют. Никогда — пока вы печатаете, смотрите видео или говорите по звонку."
 });
