@@ -106,6 +106,7 @@ const SHELL_FILES = [
   "./presence.js",
   "./pulse.js",
   "./presence.css",
+  "./shared/blocklist.js",
   "./shared/presence.js",
   "./about-ui.js",
   "./gifts-ui.js",

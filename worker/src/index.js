@@ -64,6 +64,7 @@ import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
 import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
 import { HIGHLIGHT_SCHEMA, handleHighlights } from "./highlights.js";
+import { parseHeader as parseBlockHeader, filterDoc as filterBlocked } from "../../shared/blocklist.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -152,8 +153,8 @@ function withCors(request, env, response) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
-  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent");
-  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag");
+  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent, X-Block");
+  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag, X-Block-Removed");
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
   headers.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
@@ -1553,7 +1554,15 @@ async function handleData(request, env, pathname) {
   let parsed = null;
   try { parsed = JSON.parse(text); }
   catch (err) { return json(502, { error: "bad_json" }); }
-  return json(200, stripOwnerOnly(parsed, env));
+  const doc = stripOwnerOnly(parsed, env);
+  // Blocked items are dropped on this same parse, so the body is never parsed twice.
+  const blocks = BLOCK_PATHS.test(pathname) ? parseBlockHeader(request.headers.get("x-block")) : null;
+  if (!blocks) return json(200, doc);
+  const removed = filterBlocked(blocks, doc);
+  const res = json(200, doc);
+  res.headers.set("x-block-removed", String(removed));
+  res.headers.append("vary", "X-Block");
+  return res;
 }
 
 const TIKTOK_HANDLE = /^[A-Za-z0-9._]{2,24}$/;
@@ -5513,6 +5522,34 @@ export { AccountChannel };
 /* JSON reads carry a short body hash. A client that sends it back gets an
    empty 304 instead of the same bytes again. */
 const ETAG_MAX = 262144;
+/* A reader's device sends X-Block: a short list of hashed keys for the
+   accounts, posts, comments and sources it has blocked (no raw handles or
+   ids). Feed pages and comment lists drop those items here, so their text,
+   avatars and media are never sent. */
+const BLOCK_PATHS = /^\/v1\/(?:data\/(?:feeds\.json|(?:comments|live|communities)\/.+\.json)|posts(?:\/thread)?|communities(?:\/.*)?|x\/thread|thread)$/;
+const BLOCK_MAX = 4 * 1024 * 1024;
+export async function withBlocks(request, response) {
+  if (!request || request.method !== "GET" || !response || response.status !== 200 || response.webSocket) return response;
+  if (response.headers.has("x-block-removed")) return response;
+  const set = parseBlockHeader(request.headers.get("x-block"));
+  if (!set) return response;
+  let path = "";
+  try { path = new URL(request.url).pathname; } catch (err) { return response; }
+  if (!BLOCK_PATHS.test(path)) return response;
+  if ((response.headers.get("content-type") || "").indexOf("json") < 0) return response;
+  if (Number(response.headers.get("content-length") || 0) > BLOCK_MAX) return response;
+  const text = await response.text();
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.append("vary", "X-Block");
+  let doc = null;
+  try { doc = JSON.parse(text); } catch (err) { return new Response(text, { status: 200, headers }); }
+  const removed = filterBlocked(set, doc);
+  headers.set("x-block-removed", String(removed));
+  return new Response(removed ? JSON.stringify(doc) : text, { status: 200, statusText: response.statusText, headers });
+}
+
 export async function withEtag(request, response) {
   if (!request || request.method !== "GET" || !response || response.status !== 200) return response;
   if (response.headers.has("etag") || response.webSocket) return response;
@@ -5576,7 +5613,7 @@ export default {
         const take = takeToken(guardKey(request), kind, Date.now());
         if (!take.ok) return withCors(request, env, json(429, { error: "rate_limited" }, { "retry-after": String(take.retry) }));
       }
-      const response = await withEtag(request, await route(request, env, ctx));
+      const response = await withEtag(request, await withBlocks(request, await route(request, env, ctx)));
       return withCors(request, env, response);
     } catch (err) {
       logError(areaFor(path, request.method), err);
