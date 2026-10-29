@@ -154,6 +154,11 @@ async function openSignup(page) {
   // Sign up opens the first-time setup: a welcome screen, then language,
   // then the account steps inside the same full-screen frame.
   await page.getByRole("button", { name: "Sign up" }).first().click();
+  // The welcome screen also offers a temporary account with its delete-time
+  // picker; Back returns to the welcome screen.
+  await page.locator("#onb-layer [data-step='welcome'] [data-onb='temp']").click({ timeout: 15000 });
+  await page.locator(".acct-temp-setup [data-acct='temp-pick'][data-pick='7d']").click();
+  await page.locator(".acct-temp-setup [data-acct='temp-setup-back']").click();
   await page.locator("#onb-layer [data-step='welcome'] [data-onb='next']").click({ timeout: 15000 });
   await page.locator("#onb-layer [data-step='language'] [data-onb='next']").click();
   await page.locator(".acct-setup .acct-modal").waitFor();

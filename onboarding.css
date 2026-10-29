@@ -418,3 +418,15 @@ html[data-ava-shape="square"] .onb-pic { border-radius: 8px; }
   .onb-switch i,
   .onb-follow { transition: none; }
 }
+
+/* Temporary account entry on the welcome screen: an outlined pill, X style. */
+.onb-quiet.onb-temp {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  border: 1px solid var(--line, #536471);
+  border-radius: 9999px;
+  color: var(--text, #e7e9ea);
+}
+.onb-quiet.onb-temp:hover { text-decoration: none; background: rgba(231, 233, 234, 0.1); }
+.acct-back.acct-temp-setup .acct-head { grid-template-columns: 36px 1fr 36px; }

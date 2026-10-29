@@ -23,6 +23,7 @@
       welcomeSub: "Let's get you set up. It takes about a minute.",
       start: "Get started",
       haveAccount: "I already have an account",
+      tryTemp: "Try a temporary account",
       langTitle: "Choose your language",
       langSub: "You can change it any time in Settings.",
       suggested: "Suggested for this device",
@@ -66,6 +67,7 @@
       welcomeSub: "Vamos a prepararlo todo. Tarda alrededor de un minuto.",
       start: "Empezar",
       haveAccount: "Ya tengo una cuenta",
+      tryTemp: "Probar una cuenta temporal",
       langTitle: "Elige tu idioma",
       langSub: "Puedes cambiarlo cuando quieras en Configuración.",
       suggested: "Sugerido para este dispositivo",
@@ -109,6 +111,7 @@
       welcomeSub: "चलिए सब कुछ तैयार करते हैं। इसमें लगभग एक मिनट लगेगा।",
       start: "शुरू करें",
       haveAccount: "मेरा पहले से खाता है",
+      tryTemp: "अस्थायी खाता आज़माएँ",
       langTitle: "अपनी भाषा चुनें",
       langSub: "आप इसे कभी भी सेटिंग्स में बदल सकते हैं।",
       suggested: "इस डिवाइस के लिए सुझाई गई",
@@ -152,6 +155,7 @@
       welcomeSub: "Давайте всё настроим. Это займёт около минуты.",
       start: "Начать",
       haveAccount: "У меня уже есть аккаунт",
+      tryTemp: "Попробовать временный аккаунт",
       langTitle: "Выберите язык",
       langSub: "Его можно сменить в любой момент в настройках.",
       suggested: "Подходит для этого устройства",
@@ -309,7 +313,7 @@
 
   function welcomeHtml() {
     var words = HELLO.map(function (w, i) { return '<span style="--i:' + i + '"' + (i ? ' aria-hidden="true"' : "") + ">" + esc(w) + "</span>"; }).join("");
-    return frame('<div class="onb-main onb-center"><div class="onb-hello" aria-live="off">' + words + '</div><h1 class="onb-title">' + esc(t("welcome", { app: appName() })) + '</h1><p class="onb-sub">' + esc(t("welcomeSub")) + '</p></div><div class="onb-foot">' + primary(t("start"), "next") + '<button class="onb-quiet" type="button" data-onb="login">' + esc(t("haveAccount")) + "</button></div>", { close: true, label: t("welcome", { app: appName() }) });
+    return frame('<div class="onb-main onb-center"><div class="onb-hello" aria-live="off">' + words + '</div><h1 class="onb-title">' + esc(t("welcome", { app: appName() })) + '</h1><p class="onb-sub">' + esc(t("welcomeSub")) + '</p></div><div class="onb-foot">' + primary(t("start"), "next") + '<button class="onb-quiet" type="button" data-onb="login">' + esc(t("haveAccount")) + '</button>' + (accounts() && accounts().openTemp ? '<button class="onb-quiet onb-temp" type="button" data-onb="temp">' + esc(t("tryTemp")) + "</button>" : "") + "</div>", { close: true, label: t("welcome", { app: appName() }) });
   }
   function languageHtml() {
     var picked = lang();
@@ -647,6 +651,11 @@
     else if (act === "back") back();
     else if (act === "finish") finish();
     else if (act === "close") close(true);
+    else if (act === "temp") {
+      close(true);
+      var tapi = accounts();
+      if (tapi && tapi.openTemp) tapi.openTemp();
+    }
     else if (act === "login") {
       close(true);
       var api = accounts();
