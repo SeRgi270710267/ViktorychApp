@@ -3831,7 +3831,6 @@ function signupPayload() {
   /* Temporary accounts: one tap, no number to keep, and the account and its
      data are deleted at the time picked here. The server cron does the
      deletion even if this device never comes back. */
-  var TEMP_PICKS = [["1h", "1 hour"], ["1d", "1 day"], ["7d", "7 days"], ["30d", "30 days"]];
   var tempState = { pick: "1d", until: "", busy: false, error: "", note: "", saveData: null, confirm: false, ownerLoaded: false, ownerLoading: false, ownerLabel: true, ownerCount: 0 };
   function tempDeviceKey() {
     var key = "";
@@ -3865,9 +3864,10 @@ function signupPayload() {
     return d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) + "T" + two(d.getHours()) + ":" + two(d.getMinutes());
   }
   function tempPickerHtml(prefix) {
-    var chips = TEMP_PICKS.concat([["custom", "Custom"]]).map(function (row) {
+    var picks = [["1h", tr("1 hour")], ["1d", tr("1 day")], ["7d", tr("7 days")], ["30d", tr("30 days")], ["custom", tr("Custom")]];
+    var chips = picks.map(function (row) {
       var on = tempState.pick === row[0];
-      return '<button class="temp-chip' + (on ? " on" : "") + '" type="button" role="radio" aria-checked="' + (on ? "true" : "false") + '" data-acct="temp-pick" data-pick="' + row[0] + '">' + esc(tr(row[1])) + "</button>";
+      return '<button class="temp-chip' + (on ? " on" : "") + '" type="button" role="radio" aria-checked="' + (on ? "true" : "false") + '" data-acct="temp-pick" data-pick="' + row[0] + '">' + esc(row[1]) + "</button>";
     }).join("");
     var custom = tempState.pick === "custom"
       ? '<label class="acct-field temp-date"><input type="datetime-local" name="tempUntil" data-temp-until min="' + localInputValue(Date.now() + 15 * 60000) + '" max="' + localInputValue(Date.now() + 89 * 86400000) + '" value="' + esc(tempState.until || localInputValue(Date.now() + 3 * 86400000)) + '" aria-label="' + esc(tr("Delete on")) + '"></label>'
