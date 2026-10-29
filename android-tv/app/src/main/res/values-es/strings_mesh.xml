@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nearby chat (Bitchat-compatible mesh). Kept apart from strings.xml. -->
+<resources>
+    <string name="mesh_title">Chat cercano (Bitchat)</string>
+    <string name="mesh_intro">Una forma de respaldo para hablar cuando internet o la app están bloqueados. Chatea con personas cercanas por Bluetooth y funciona con la app Bitchat en teléfonos. Los mensajes saltan entre dispositivos cercanos, hasta 7 saltos. Cualquiera cerca puede leer los mensajes públicos; los privados van cifrados de extremo a extremo. Solo funciona mientras esta pantalla está abierta, así que no gasta batería ni datos en otro momento.</string>
+    <string name="mesh_turned_off">El chat cercano está desactivado. La app no usará Bluetooth ni Nostr.</string>
+    <string name="mesh_on">Activar</string>
+    <string name="mesh_off">Desactivar</string>
+    <string name="mesh_back">Atrás</string>
+    <string name="mesh_allow">Permitir Bluetooth</string>
+    <string name="mesh_need_allow">Bluetooth aún no está permitido. Pulsa Permitir Bluetooth para chatear con personas cercanas.</string>
+    <string name="mesh_perm_denied">No se dio permiso de Bluetooth. Aún puedes usar el chat de zona por internet.</string>
+    <string name="mesh_location_note">En esta versión de Android, buscar dispositivos Bluetooth requiere el permiso de ubicación y tener la ubicación activada. Tu ubicación no se lee ni se envía.</string>
+    <string name="mesh_no_ble">Este dispositivo no tiene Bluetooth LE. Solo se puede usar el chat de zona por internet.</string>
+    <string name="mesh_bt_off">Bluetooth está apagado. Actívalo en los ajustes de la TV.</string>
+    <string name="mesh_central_only">Otros no pueden encontrar esta TV por Bluetooth (su chip Bluetooth no puede emitir), pero aún puede conectarse a teléfonos cercanos.</string>
+    <string name="mesh_status">Bluetooth: %1$d personas cerca, %2$d conexiones</string>
+    <string name="mesh_nostr_status">Chat de zona (internet): %1$d de %2$d relays conectados</string>
+    <string name="mesh_nostr_off">Chat de zona (internet): apagado. Elige una zona para usarlo.</string>
+    <string name="mesh_public">Para: todos los cercanos</string>
+    <string name="mesh_area_chat">Para: zona #%1$s</string>
+    <string name="mesh_private">Para: %1$s (privado)</string>
+    <string name="mesh_people">Enviar a</string>
+    <string name="mesh_no_people">Aún no hay nadie cerca.</string>
+    <string name="mesh_hint">Escribe un mensaje</string>
+    <string name="mesh_send">Enviar</string>
+    <string name="mesh_name">Nombre</string>
+    <string name="mesh_name_title">Tu nombre en el chat</string>
+    <string name="mesh_area">Zona</string>
+    <string name="mesh_area_title">Zona del chat por internet (geohash)</string>
+    <string name="mesh_area_help">Los canales de ubicación de Bitchat usan un geohash, como u3qc para una ciudad o u3qcn para un barrio. Déjalo vacío para apagar el chat por internet. Solo el chat de zona usa internet, a través de los relays públicos de Nostr de abajo.</string>
+    <string name="mesh_bad_area">Eso no es un geohash. Usa letras y números como u3qcn.</string>
+    <string name="mesh_relays">Relays</string>
+    <string name="mesh_relays_title">Relays de Nostr, uno por línea (wss://…)</string>
+    <string name="mesh_wipe">Nueva identidad</string>
+    <string name="mesh_wiped">Se creó una nueva identidad de chat.</string>
+    <string name="mesh_ok">Aceptar</string>
+    <string name="mesh_cancel">Cancelar</string>
+    <string name="mesh_unverified">sin verificar</string>
+    <string name="mesh_delivered">entregado a %1$s</string>
+</resources>
