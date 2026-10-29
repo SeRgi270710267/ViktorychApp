@@ -66,6 +66,8 @@
   }
 
   function genericText(kind) {
+    // No sender name or preview: it only asks to open the app and answer.
+    if (kind === "tv_signin") return t("Approve sign-in on TV?");
     var type = typeOf(kind);
     if (type === "messages") return t("New message");
     if (type === "mentions") return t("New mention");

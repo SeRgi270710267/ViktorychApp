@@ -954,7 +954,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -974,7 +974,8 @@
         feedId: String(item.feedId || "").slice(0, 120),
         platform: String(item.platform || "").slice(0, 24),
         ids: Array.isArray(item.ids) ? item.ids.map((id) => String(id || "").slice(0, 120)).filter(Boolean).slice(0, 12) : [],
-        handles: Array.isArray(item.handles) ? item.handles.map((id) => String(id || "").toLowerCase().slice(0, 120)).filter(Boolean).slice(0, 24) : []
+        handles: Array.isArray(item.handles) ? item.handles.map((id) => String(id || "").toLowerCase().slice(0, 120)).filter(Boolean).slice(0, 24) : [],
+        expiresAt: Math.max(0, Number(item.expiresAt) || 0)
       });
     });
     return out;
@@ -14560,6 +14561,7 @@ const here = parseRoute();
     if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
     if (kind === "birthday_self") return tr("Happy birthday");
     if (kind === "package") return tr("Package update: {name}", { name: (note && note.name) || tr("Packages") });
+    if (kind === "tv_signin") return esc(tr("Approve sign-in on TV?"));
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
@@ -14628,11 +14630,65 @@ const here = parseRoute();
     if (kind === "reply" || kind === "mention" || (note && note.mention)) return "reply";
     if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "user";
     if (kind === "live") return "mic";
+    if (kind === "tv_signin") return "tv";
     return "bellOn";
   }
 
+  /* "Approve sign-in on TV?": a TV asked to sign in to this account by
+     username. Approve signs the TV in; Deny turns it away. The buttons go
+     once the code expires or after an answer. */
+  const tvNoteDone = {};
+  function tvNoteCode(note) {
+    const code = String((note && note.text) || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return /^[A-HJKMNP-Z2-9]{6}$/.test(code) ? code : "";
+  }
+  function tvNoteRow(note, unreadIds) {
+    const unread = !!(unreadIds && unreadIds[note.id]);
+    const code = tvNoteCode(note);
+    const when = noteWhen(note);
+    const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
+    const done = tvNoteDone[code] || "";
+    const expired = !code || (Number(note.expiresAt) > 0 && Number(note.expiresAt) <= Date.now());
+    const shown = code ? code.slice(0, 3) + " " + code.slice(3) : "";
+    let tail = "";
+    if (done === "approved") tail = `<p class="tvn-state ok" role="status">${esc(tr("Approved. Your TV is signing in."))}</p>`;
+    else if (done === "denied") tail = `<p class="tvn-state" role="status">${esc(tr("Denied. The TV was not signed in."))}</p>`;
+    else if (done === "failed") tail = `<p class="tvn-state bad" role="status">${esc(tr("That request is no longer valid."))}</p>`;
+    else if (done === "busy") tail = `<p class="tvn-state" role="status">${esc(tr("Loading…"))}</p>`;
+    else if (expired) tail = `<p class="tvn-state" role="status">${esc(tr("This request expired."))}</p>`;
+    else tail = `<div class="tvn-actions"><button class="tvn-btn primary" type="button" data-tvnote="approve" data-code="${esc(code)}">${esc(tr("Approve"))}</button><button class="tvn-btn" type="button" data-tvnote="deny" data-code="${esc(code)}">${esc(tr("Deny"))}</button></div>`;
+    const copy = `<div class="note-copy"><p>${esc(tr("A TV asked to sign in to your account. Check that it shows this code:"))}</p><p class="tvn-code">${esc(shown)}</p><p class="tvn-warn">${esc(tr("Only approve if this TV is in front of you. If you didn't ask, choose Deny."))}</p></div>`;
+    return `<article class="note-row tvn${unread ? " is-unread" : ""}" data-note-ids="${esc(String(note.id || ""))}" data-tvn="${esc(code)}"><div class="note-ico">${icon("tv")}</div><div class="note-main"><p class="note-line"><b>${esc(tr("Approve sign-in on TV?"))}</b>${time}</p>${copy}${tail}</div>${note.id ? noteX([String(note.id)]) : ""}</article>`;
+  }
+  function tvNoteAnswer(btn) {
+    const act = btn.getAttribute("data-tvnote");
+    const code = tvNoteCode({ text: btn.getAttribute("data-code") });
+    const accounts = window.ViktorychAccounts;
+    const token = accounts && accounts.token ? accounts.token() : "";
+    if (!code || !token || !accounts.call || tvNoteDone[code] === "busy") return;
+    tvNoteDone[code] = "busy";
+    render();
+    const path = act === "approve" ? "/v1/tv-pair/approve" : "/v1/tv-pair/deny";
+    accounts.call(path, { method: "POST", body: { code }, token }).then((res) => {
+      tvNoteDone[code] = res && res.status === 200 ? (act === "approve" ? "approved" : "denied") : "failed";
+      render();
+    }, () => {
+      delete tvNoteDone[code];
+      toast(tr("Could not reach the server. Try again."));
+      render();
+    });
+  }
+  document.addEventListener("click", (event) => {
+    const btn = event.target && event.target.closest ? event.target.closest("[data-tvnote]") : null;
+    if (!btn) return;
+    event.preventDefault();
+    event.stopPropagation();
+    tvNoteAnswer(btn);
+  }, true);
+
   function noteRow(note, unreadIds) {
     if (!note) return "";
+    if (note.kind === "tv_signin") return tvNoteRow(note, unreadIds);
     const unread = !!(unreadIds && unreadIds[note.id]);
     const when = noteWhen(note);
     const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
