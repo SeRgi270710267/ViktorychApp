@@ -3340,5 +3340,16 @@ SI18n.addPack("en", {
   "Royal treasures": "Royal treasures",
   "Founders’ crown": "Founders’ crown",
   "Halloween 2026 pumpkin": "Halloween 2026 pumpkin",
-  "Golden unicorn": "Golden unicorn"
+  "Golden unicorn": "Golden unicorn",
+  "Also on {platforms}. Add them?": "Also on {platforms}. Add them?",
+  "Follow on {platform}": "Follow on {platform}",
+  "Follow {name} on": "Follow {name} on",
+  "Merge": "Merge",
+  "Merged into {name}’s profile": "Merged into {name}’s profile",
+  "Not the same person? Unmerge": "Not the same person? Unmerge",
+  "Posts from": "Posts from",
+  "Same person as {name}?": "Same person as {name}?",
+  "Undo": "Undo",
+  "Unmerged. Each account has its own profile again.": "Unmerged. Each account has its own profile again.",
+  "Merged profiles": "Merged profiles"
 });

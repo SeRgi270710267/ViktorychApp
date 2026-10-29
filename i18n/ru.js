@@ -3340,5 +3340,16 @@ SI18n.addPack("ru", {
   "Royal treasures": "Королевские сокровища",
   "Founders’ crown": "Корона основателей",
   "Halloween 2026 pumpkin": "Тыква Хэллоуина 2026",
-  "Golden unicorn": "Золотой единорог"
+  "Golden unicorn": "Золотой единорог",
+  "Also on {platforms}. Add them?": "Также в {platforms}. Добавить?",
+  "Follow on {platform}": "Читать в {platform}",
+  "Follow {name} on": "Читать {name} в",
+  "Merge": "Объединить",
+  "Merged into {name}’s profile": "Добавлено в профиль {name}",
+  "Not the same person? Unmerge": "Это разные люди? Разъединить",
+  "Posts from": "Посты из",
+  "Same person as {name}?": "Это тот же человек, что и {name}?",
+  "Undo": "Отменить",
+  "Unmerged. Each account has its own profile again.": "Разъединено. У каждого аккаунта снова свой профиль.",
+  "Merged profiles": "Объединённые профили"
 });

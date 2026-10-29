@@ -28,7 +28,7 @@ function staticChecks() {
   if (external.includes("?tab=gifts") || external.includes("ProfileGifts")) fail("external profiles must not show gifts");
   if (/gifts-mode|giftsWide/.test(app)) fail("the gifts page must stay in the standard X shell");
   if (/--vkg-[a-z-]+:\s*#/.test(css)) fail("the gifts page must use the app theme tokens");
-  if (!read("sw.js").includes('VERSION = "viktorych-a121-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a122-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok points layout rules");
 }
 
