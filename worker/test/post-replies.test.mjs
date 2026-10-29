@@ -225,3 +225,25 @@ test("a profile pages back through all of an account's posts", async () => {
   assert.ok(made.every((id) => ids.has(id)), "every post shows across the two pages");
   assert.equal(next.body.more, false);
 });
+
+test("a profile opened by username lists that account's own posts for other viewers", async () => {
+  const ipA = "203.0.113.181";
+  const ipB = "203.0.113.182";
+  const author = await signup("byname_writer", ipA);
+  const viewer = await signup("byname_reader", ipB);
+  const made = await call("/v1/posts", { method: "POST", ip: ipA, token: author.token, json: { body: "first post by name" } });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  // Other viewers get no public id on the profile, so the client asks by name.
+  const profile = await call("/v1/profile/byname_writer", { ip: ipB, token: viewer.token });
+  assert.equal(profile.status, 200, JSON.stringify(profile.body));
+  assert.ok(!profile.body.account.publicId);
+  for (const name of ["byname_writer", "@BYNAME_WRITER"]) {
+    const listed = await call("/v1/posts?handle=" + encodeURIComponent(name), { ip: ipB, token: viewer.token });
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.ok(listed.body.posts.some((post) => post.id === made.body.post.id), name);
+    assert.equal(listed.body.author, "");
+  }
+  const missing = await call("/v1/posts?handle=nobody_here_zz", { ip: ipB, token: viewer.token });
+  assert.equal(missing.status, 200);
+  assert.deepEqual(missing.body.posts, []);
+});

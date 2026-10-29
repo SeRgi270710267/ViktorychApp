@@ -370,9 +370,17 @@
     return isShortsLocked() && !isTiktokUnlocked(entity.handle || entity.account);
   }
 
+  // Notification privacy (notif-privacy.js): names, previews, banner text,
+  // icon badge and the tab title count follow the person's choices.
+  function notifPrivacy() {
+    const NP = window.ViktorychNotifPrivacy;
+    return NP ? NP.normalize(STATE.settings && STATE.settings.notifPrivacy) : null;
+  }
+
   function withUnreadTitle(text) {
     const base = String(text || "").replace(/^\((?:\d+|\d+\+|20\+)\)\s+/, "");
-    const count = bellUnread();
+    const np = notifPrivacy();
+    const count = np && np.count === false ? 0 : bellUnread();
     if (!count) return base;
     return "(" + (count > 20 ? "20+" : String(count)) + ") " + base;
   }
@@ -10325,16 +10333,32 @@ const here = parseRoute();
 
   /* One account's own posts for its profile: ?by= on /v1/posts. */
   const authorPostCache = {};
+  // Other viewers never get an account's public id, so their key is "@name"
+  // and the list is asked for by username (?handle=).
+  function authorQuery(key) {
+    return key.charAt(0) === "@" ? "handle=" + encodeURIComponent(key.slice(1)) : "by=" + key;
+  }
+  function authorKey(account) {
+    if (!account) return "";
+    if (/^\d{12}$/.test(String(account.publicId || ""))) return String(account.publicId);
+    const name = String(account.handle || "").replace(/^@/, "");
+    return name ? "@" + name.toLowerCase() : "";
+  }
+  function byAuthorKey(key) {
+    if (key.charAt(0) !== "@") return (item) => item && String(item.authorId) === key;
+    const name = key.slice(1);
+    return (item) => item && String(item.authorHandle || "").replace(/^@/, "").toLowerCase() === name;
+  }
   function authorPosts(publicId) {
     const key = String(publicId || "");
-    if (!/^\d{12}$/.test(key)) return [];
+    if (!/^\d{12}$/.test(key) && !/^@[^\s/?#]{1,64}$/.test(key)) return [];
     const cache = authorPostCache[key];
     const now = Date.now();
     if ((!cache || now - cache.at > 30000) && accountToken() && !(cache && cache.loading)) {
       const entry = authorPostCache[key] = cache || { at: 0, posts: [] };
       entry.loading = true;
       entry.at = now;
-      accountCall("/v1/posts?by=" + key).then((res) => {
+      accountCall("/v1/posts?" + authorQuery(key)).then((res) => {
         entry.loading = false;
         if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
         const mine = signedAccount();
@@ -10349,9 +10373,11 @@ const here = parseRoute();
         if (before !== sig(entry.posts)) render();
       }).catch(() => { entry.loading = false; });
     }
+    // Local first: posts already on this device (Home) paint before the server answers.
     const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
     const ids = new Set(have.map((item) => item.id));
-    const extra = publicPosts.filter((item) => item && String(item.authorId) === key && !ids.has(item.id));
+    const own = byAuthorKey(key);
+    const extra = publicPosts.filter((item) => own(item) && !ids.has(item.id));
     return have.concat(extra);
   }
 
@@ -10361,11 +10387,12 @@ const here = parseRoute();
     const entry = authorPostCache[key];
     if (!entry || !entry.more || entry.loadingMore || !entry.before) return;
     entry.loadingMore = true;
-    accountCall("/v1/posts?by=" + key + "&before=" + entry.before).then((res) => {
+    accountCall("/v1/posts?" + authorQuery(key) + "&before=" + entry.before).then((res) => {
       entry.loadingMore = false;
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
       const ids = new Set((entry.posts || []).map((item) => item.id));
-      const add = res.posts.filter((item) => item && !ids.has(item.id) && String(item.authorId) === key);
+      const own = byAuthorKey(key);
+      const add = res.posts.filter((item) => item && !ids.has(item.id) && own(item));
       entry.posts = (entry.posts || []).concat(add);
       entry.before = Number(res.before) || 0;
       entry.more = !!res.more && add.length > 0 && !!entry.before;
@@ -10876,6 +10903,8 @@ const here = parseRoute();
         quotes: Number(item.quoteCount) || 0
       },
       media: [],
+      // Site posts paint their media in appExtra; the profile Media tab counts them here.
+      appMediaCount: (item.media || []).length,
       appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : "") + edited,
       community: community,
       parentId: String(item.parentId || ""),
@@ -15267,6 +15296,7 @@ const here = parseRoute();
       const followOnly = prefs.mentionsFrom === "following";
       return settingsHead(tr("Notifications"), "#/settings") + `<div class="set-block">
         <button class="primary" type="button" data-act="notify">${esc(notifyOn ? tr("Notifications on") : tr("Notify me about new posts"))}</button>
+        ${window.ViktorychNotifPrivacy ? window.ViktorychNotifPrivacy.settingsHtml(STATE.settings && STATE.settings.notifPrivacy, esc) : ""}
         ${settingsRow("#/settings/notifications/discord", tr("Discord alerts"), tr("Mentions and keywords from channels this app already shows."))}
         ${prefRow("mentions", tr("Mentions"))}
         <button class="tab-switch${followOnly ? " on" : ""}" type="button" role="switch" aria-checked="${followOnly ? "true" : "false"}" data-act="note-mentions-from"><span>${esc(tr("Only from people you follow"))}</span><i></i></button>
@@ -16246,7 +16276,8 @@ if (STATE.histClear) {
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
     const identities = (account && account.identities) || [];
-    const ownApp = account.publicId ? authorPosts(account.publicId).map(appCardPost) : [];
+    const ownKey = authorKey(account);
+    const ownApp = ownKey ? authorPosts(ownKey).map(appCardPost) : [];
     if (!ownApp.length && !account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
       return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: null };
     }
@@ -16298,10 +16329,10 @@ if (STATE.histClear) {
     postList.sort(byStamp);
     let shown = postList;
     if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
-    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
+    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length || post.appMediaCount);
     else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
-    const entry = account.publicId ? authorPostCache[String(account.publicId)] : null;
-    const more = entry && entry.more ? `<div id="author-more" class="reply-empty" data-id="${esc(account.publicId)}"><button type="button" class="link-btn" data-act="author-more" data-id="${esc(account.publicId)}">${tr("Show more")}</button></div>` : "";
+    const entry = ownKey ? authorPostCache[ownKey] : null;
+    const more = entry && entry.more ? `<div id="author-more" class="reply-empty" data-id="${esc(ownKey)}"><button type="button" class="link-btn" data-act="author-more" data-id="${esc(ownKey)}">${tr("Show more")}</button></div>` : "";
     return { html: shown.map((post) => card(post, "")).join("") + more, count: postList.length };
   }
 
@@ -17631,6 +17662,40 @@ if (STATE.histClear) {
     return html;
   }
 
+  /* Local-first for every route: when a page would paint a loading
+     placeholder and this device has the last screen of that page, paint that
+     screen now; the live render replaces it in place when data arrives. Each
+     finished screen is saved (bounded, least recently used first out, wiped on
+     sign-out). Pages that hold secrets or live media are never saved. */
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1 };
+  function routeLoading(html) {
+    if (!html) return true;
+    if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
+    if (/class="reply-empty"[^>]*>[^<]*(?:Loading|\u2026|…)/.test(html)) return true;
+    const fetching = tr("Fetching posts…");
+    return !!fetching && html.indexOf(">" + esc(fetching) + "<") >= 0;
+  }
+  /* The snapshot only stands in until the route paints its own content once.
+     After that a progress state is part of the live page (a pending row, a
+     refresh) and must show as is. */
+  let lfKey = "";
+  let lfLive = false;
+  function localFirstView(route, html) {
+    const local = window.ViktorychLocal;
+    if (!local || !local.readRoute || !route || SNAP_SKIP[route.name]) return html;
+    const key = String(location.hash || "#/").slice(0, 300);
+    if (key !== lfKey) { lfKey = key; lfLive = false; }
+    if (routeLoading(html)) {
+      if (lfLive) return html;
+      const saved = local.readRoute(key);
+      return saved || html;
+    }
+    lfLive = true;
+    if (html.length < 150000 && !/type="password"|<script/i.test(html)) local.saveRoute(key, html);
+    return html;
+  }
+  window.ViktorychRouteSnap = { loading: routeLoading };
+
   function view(route) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
     if (route.name === "shorts") {
@@ -18527,7 +18592,7 @@ if (STATE.histClear) {
       /* The shell swap used to throw away every horizontal row. Tab rows are
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
-      commitApp(shell(view(route), route) + (window.ProfileGifts && window.ProfileGifts.overlay ? window.ProfileGifts.overlay() : ""));
+      commitApp(shell(localFirstView(route, view(route)), route) + (window.ProfileGifts && window.ProfileGifts.overlay ? window.ProfileGifts.overlay() : ""));
       paintProfileChrome();
       schedulePublicPosts();
       hydratePublicMedia();
@@ -18576,6 +18641,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       else document.title = withUnreadTitle(routeTitle(route, liveName, personName, discordTitle));
       setProfileShareMeta(route);
       window.scrollTo(0, y);
+      if (STATE.holdY != null && y > 4 && routeChanged) holdRestore(nextKey, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
           if (gen !== STATE.renderGen) return;
@@ -20112,6 +20178,18 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "notify") {
       enableNotifications();
+      return;
+    }
+    if (act === "notif-privacy") {
+      const NP = window.ViktorychNotifPrivacy;
+      if (!NP || !STATE.settings) return;
+      STATE.settings.notifPrivacy = NP.toggle(STATE.settings.notifPrivacy, el.dataset.key);
+      // Names off: drop the device's cached names right away.
+      if (!STATE.settings.notifPrivacy.names) NP.wipe();
+      saveSettings();
+      updateBadge(bellUnread());
+      document.title = withUnreadTitle(document.title);
+      render();
       return;
     }
     if (act === "note-pref") {
@@ -21939,6 +22017,44 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     matchMedia("(max-width: 699px)").addEventListener("change", () => refreshMediaFrames());
   } catch (err) { /* older webviews keep the ratio from the last render */ }
   let routing = false;
+  /* Going back to a page whose content arrives a moment after the route
+     paints (a module or cached data still loading) would clamp the saved
+     scroll to the short placeholder. Keep the target for a few seconds and
+     apply it once the page is tall enough, unless the reader scrolls first. */
+  var restoreTarget = null;
+  var restoreWatch = null;
+  function stopRestore() {
+    restoreTarget = null;
+    if (restoreWatch) { restoreWatch.disconnect(); restoreWatch = null; }
+  }
+  function tryRestore() {
+    const t = restoreTarget;
+    if (!t) return;
+    if (Date.now() > t.until || routeScrollKey() !== t.key) { stopRestore(); return; }
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    if (max < t.y - 4) return;
+    stopRestore();
+    window.scrollTo(0, t.y);
+    SCROLLS[t.key] = t.y;
+  }
+  function holdRestore(key, y) {
+    stopRestore();
+    if (!(y > 4) || Math.abs(pageY() - y) <= 4) return;
+    /* Only when the page was too short to reach it; a home anchor may
+       have moved the position on purpose. */
+    if (document.documentElement.scrollHeight - window.innerHeight >= y - 4) return;
+    restoreTarget = { key: key, y: y, until: Date.now() + 5000 };
+    const app = document.getElementById("app");
+    if (window.ResizeObserver && app) {
+      restoreWatch = new ResizeObserver(() => tryRestore());
+      restoreWatch.observe(app);
+    }
+    const mine = restoreTarget;
+    setTimeout(() => { if (restoreTarget === mine) stopRestore(); }, 5100);
+  }
+  ["wheel", "touchstart", "keydown", "mousedown"].forEach((type) => {
+    window.addEventListener(type, () => { if (restoreTarget) stopRestore(); }, { passive: true, capture: true });
+  });
   let scrollFreeze = false;
   window.addEventListener("scroll", () => {
     if (pageY() <= 4) STATE.snapTop = false;
@@ -22046,15 +22162,43 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     hscrollNav = true;
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
+    if (y > 0) restoreWhenTall(key, y);
     render({
       y: y,
       done: () => {
         if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
+        if (y > 0 && key !== leavingKey && !restoreTarget) holdRestore(key, y);
         routing = false;
         scrollFreeze = false;
       }
     });
   });
+
+  /* A route that paints its cached content a moment after the shell is too
+     short for the saved position at first, so the browser clamps it to the
+     top, and that later paint can replace the routing render before it
+     finishes. For a few seconds after a back or forward navigation, put the
+     saved position back whenever the page is tall enough but sits at the top,
+     until the user scrolls, touches the page or presses a key. */
+  function restoreWhenTall(key, y) {
+    let stop = false;
+    const quit = () => { stop = true; };
+    const opts = { passive: true, once: true, capture: true };
+    ["wheel", "touchstart", "keydown", "pointerdown"].forEach((name) => window.addEventListener(name, quit, opts));
+    const started = Date.now();
+    const tick = () => {
+      if (stop || Date.now() - started > 6000) return;
+      if (routeScrollKey() === key && !STATE.snapTop) {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        if (max >= y - 4 && window.scrollY <= 4) {
+          window.scrollTo(0, y);
+          SCROLLS[key] = window.scrollY;
+        }
+      }
+      setTimeout(tick, 100);
+    };
+    setTimeout(tick, 100);
+  }
 
   function resolvedTheme() {
     const mode = (STATE.settings && STATE.settings.appearance) || "lightsout";
@@ -22169,6 +22313,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function updateBadge(count) {
     if (!navigator.setAppBadge) return;
+    const np = notifPrivacy();
+    if (np && np.badge === false) count = 0;
     const op = count > 0 ? navigator.setAppBadge(count) : (navigator.clearAppBadge ? navigator.clearAppBadge() : Promise.resolve());
     Promise.resolve(op).catch(() => {});
   }
@@ -24438,6 +24584,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       else {
       notesPhase = "ready";
       applyServerNotes(res);
+      if (window.ViktorychNotifPrivacy) window.ViktorychNotifPrivacy.remember(res.items, notifPrivacy());
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
       const nowPending = notePending();
       if (sent.until && Number(nowPending.until) === Number(sent.until)) delete nowPending.until;
@@ -24556,7 +24703,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       let saved = null;
       try { saved = JSON.parse(readStored(localStorage, "push-sent") || "null"); } catch (err) { saved = null; }
       let sub = await reg.pushManager.getSubscription();
-      const fresh = saved && sub && saved.endpoint === sub.endpoint && Date.now() - Number(saved.at || 0) < 24 * 60 * 60 * 1000 && Number(saved.locked) === (isShortsLocked() ? 1 : 0);
+      const fresh = saved && sub && saved.endpoint === sub.endpoint && Date.now() - Number(saved.at || 0) < 24 * 60 * 60 * 1000 && Number(saved.locked) === (isShortsLocked() ? 1 : 0) && Number(saved.fmt) === 2;
       if (fresh && !(sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000)) {
         STATE.pushEndpoint = sub.endpoint || "";
         return;
@@ -24578,9 +24725,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!json.endpoint || !json.keys) return;
       const put = await accountCall("/v1/push/subscribe", {
         method: "PUT",
-        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0 }
+        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0, fmt: 2 }
       });
-      if (put && put.status === 200) writeStored(localStorage, "push-sent", JSON.stringify({ endpoint: json.endpoint, key: key, at: Date.now(), locked: isShortsLocked() ? 1 : 0 }));
+      if (put && put.status === 200) writeStored(localStorage, "push-sent", JSON.stringify({ endpoint: json.endpoint, key: key, at: Date.now(), locked: isShortsLocked() ? 1 : 0, fmt: 2 }));
     } catch (err) { /* in-app notes still sync */ }
   }
 
@@ -24671,20 +24818,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+    const NP = window.ViktorychNotifPrivacy;
+    const np = notifPrivacy();
     if (document.visibilityState === "visible") {
-      toast((note && note.text) || tr("New post"));
+      toast(NP && np ? NP.bannerText(Object.assign({ kind: "post" }, note), np) : ((note && note.text) || tr("New post")));
       return;
     }
     if (!note || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
-      const item = new Notification(note.name || ("@" + (note.handle || "post")), {
-        body: note.text || tr("New post"),
-        icon: note.avatar || "icons/icon-192.png",
+      const shown = NP && np ? NP.present(Object.assign({ kind: "post" }, note), np, { title: note.name || ("@" + (note.handle || "post")) }) : null;
+      const item = new Notification(shown ? shown.title : (note.name || ("@" + (note.handle || "post"))), {
+        body: shown ? shown.body : (note.text || tr("New post")),
+        icon: shown ? shown.icon : (note.avatar || "icons/icon-192.png"),
         tag: "note-" + note.id
       });
       item.onclick = () => {
         window.focus();
-        location.hash = note.hash || "#/";
+        location.hash = shown && shown.generic ? "#/notifications" : (note.hash || "#/");
         item.close();
       };
     } catch (err) { /* the in-app list still has the post */ }
@@ -24698,14 +24848,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+    const NP = window.ViktorychNotifPrivacy;
+    const np = notifPrivacy();
+    const shown = NP && np ? NP.present(Object.assign({ kind: "post" }, note), np, { title: note.name || ("@" + (note.handle || "post")) }) : null;
     const payload = {
-      body: note.text || tr("New post"),
-      icon: note.avatar || "icons/icon-192.png",
-      image: note.image || undefined,
+      body: shown ? shown.body : (note.text || tr("New post")),
+      icon: shown ? shown.icon : (note.avatar || "icons/icon-192.png"),
+      image: shown ? shown.image : (note.image || undefined),
       tag: "note-" + note.id,
-      data: { hash: note.hash || "#/" }
+      data: { hash: shown && shown.generic ? "#/notifications" : (note.hash || "#/") }
     };
-    const title = note.name || ("@" + (note.handle || "post"));
+    const title = shown ? shown.title : (note.name || ("@" + (note.handle || "post")));
     const viaRegistration = () => {
       if (!("serviceWorker" in navigator)) return Promise.reject();
       return navigator.serviceWorker.ready.then((reg) => {
@@ -24994,6 +25147,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function syncWorkerState() {
+    if (STATE.settings && window.ViktorychNotifPrivacy) window.ViktorychNotifPrivacy.persist(STATE.settings.notifPrivacy);
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
     if (!worker || !STATE.settings) return;
     worker.postMessage({
