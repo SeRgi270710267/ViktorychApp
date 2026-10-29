@@ -334,8 +334,10 @@
 
   function splitMastodon(text) {
     var raw = String(text || "").trim();
-    var url = raw.match(/^https?:\/\/([^/]+)\/@([^/?#]+)\/?$/i);
-    if (url) return { instance: url[1], acct: decodeURIComponent(url[2]) };
+    var remote = raw.match(/^https?:\/\/[^/]+\/@([^/?#@]+)@([^/?#@]+)\/?$/i);
+    if (remote) return { instance: remote[2].toLowerCase(), acct: decodeURIComponent(remote[1]) };
+    var url = raw.match(/^https?:\/\/([^/]+)\/(?:@|users\/|a\/|c\/|profile\/)([^/?#@]+)\/?$/i);
+    if (url) return { instance: url[1].toLowerCase(), acct: decodeURIComponent(url[2]) };
     var both = raw.match(/^@?([^@\s]+)@([^@\s]+)$/);
     if (both) return { instance: both[2], acct: both[1] };
     return { instance: "mastodon.social", acct: raw.replace(/^@/, "") };

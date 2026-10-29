@@ -1169,9 +1169,6 @@ SI18n.addPack("es", {
   "You don’t have any pending friend requests.": "No tienes solicitudes de amistad pendientes.",
   "No friends found": "No se encontraron amigos",
   "Couldn’t find any friends matching your search.": "No se encontraron amigos que coincidan con tu búsqueda.",
-  "Federation (Fediverse & Nostr)": "Federación (Fediverse y Nostr)",
-  "Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.": "Permitir que Mastodon, Fediverse y Nostr descubran y sigan tu cuenta interna. Desactivado por defecto.",
-  "Fediverse (ActivityPub)": "Fediverso (ActivityPub)",
   "Nostr (NIP-05)": "Red Nostr (NIP-05)",
   "Soccer Scores": "Marcadores de fútbol",
   "Latest Result": "Último resultado",
@@ -2501,6 +2498,7 @@ SI18n.addPack("es", {
   "Paste a link or @handle": "Pega un enlace o @usuario",
   "Select all": "Seleccionar todo",
   "Try another search or filter.": "Prueba otra búsqueda o filtro.",
+  "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Deja que las apps de Nostr encuentren tu cuenta por su nombre NIP-05. Desactivado por defecto.",
   "Search Settings": "Buscar configuración",
   "Ask in your own words, like “make the text bigger”.": "Pregunta con tus palabras, como «agrandar el texto».",
   "Suggested by the on-device assistant": "Sugerido por el asistente del dispositivo"

@@ -1169,9 +1169,6 @@ SI18n.addPack("en", {
   "You don’t have any pending friend requests.": "You don’t have any pending friend requests.",
   "No friends found": "No friends found",
   "Couldn’t find any friends matching your search.": "Couldn’t find any friends matching your search.",
-  "Federation (Fediverse & Nostr)": "Federation (Fediverse & Nostr)",
-  "Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.": "Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.",
-  "Fediverse (ActivityPub)": "Fediverse (ActivityPub)",
   "Nostr (NIP-05)": "Nostr (NIP-05)",
   "Soccer Scores": "Soccer Scores",
   "Latest Result": "Latest Result",
@@ -2501,6 +2498,7 @@ SI18n.addPack("en", {
   "Paste a link or @handle": "Paste a link or @handle",
   "Select all": "Select all",
   "Try another search or filter.": "Try another search or filter.",
+  "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Let Nostr apps find your account by its NIP-05 name. Default is off.",
   "Search Settings": "Search Settings",
   "Ask in your own words, like “make the text bigger”.": "Ask in your own words, like “make the text bigger”.",
   "Suggested by the on-device assistant": "Suggested by the on-device assistant"
