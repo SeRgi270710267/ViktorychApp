@@ -544,7 +544,13 @@ def emit(line: str) -> None:
 def main(argv: list[str] | None = None, fetch=None, root: Path | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if "--selftest" in args:
-        return selftest()
+        code = selftest()
+        if argv is None:
+            # The CI step that runs this self-test also runs the secret and
+            # personal-data scan of the tracked tree (paths and rules only).
+            import secret_scan
+            code = code or secret_scan.selftest() or secret_scan.report(secret_scan.scan(secret_scan.git_files(False), False))
+        return code
     mask_env_lists()
     tree = root or ROOT
     getter = fetch or r2_fetch
