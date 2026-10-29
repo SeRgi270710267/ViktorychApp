@@ -4,7 +4,7 @@ const VERSION = "viktorych-a124-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T11:56:00Z-busy
+// cache-bust: 2026-10-29T11:48:00Z-onboarding
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -212,7 +212,7 @@ let peerOn = false;
 const armedClients = new Set();
 const reloadingClients = new Set();
 const PRECACHE_TRIES = 4;
-const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inter-400.woff2", "./fonts/inter-900.woff2"];
+const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inter-400.woff2", "./fonts/inter-900.woff2", "./onboarding.js", "./onboarding.css"];
 
 function versionSha(version) {
   const text = String(version || "");
@@ -2049,7 +2049,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|busy\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|busy\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
