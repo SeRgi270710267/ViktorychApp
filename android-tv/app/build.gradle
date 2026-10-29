@@ -1,0 +1,83 @@
+// ViktorychTV: a Trusted Web Activity for Android TV and Google TV.
+// Chrome shows the site full screen without a URL bar once
+// /.well-known/assetlinks.json on the host matches the signing key. TVs
+// without Chrome open the same page in the built-in WebView fallback.
+// The signing key is never in this repo: pass its path and passwords in
+// TV_KEYSTORE, TV_KEYSTORE_PASS, TV_KEY_ALIAS, TV_KEY_PASS.
+plugins { id "com.android.application" }
+
+// Bump appVersion (and appVersionName) for a new APK, then update
+// tv/version.json in the site. The site reads ?tvapp=N to offer the update.
+def appVersion = 1
+def appVersionName = "1.0.0"
+def host = "viktorychapp.pages.dev"
+
+// A per-user build (the "Custom app name" builder) passes TV_APP_LABEL and
+// TV_APP_ICON. It keeps the same package, key and versionCode as the base
+// app, so it installs over it and later updates install over it too.
+// Only letters, digits, spaces and . - _ are kept, up to 24 characters.
+def icons = ["default", "media", "browser", "player", "notes"]
+def rawLabel = (System.getenv("TV_APP_LABEL") ?: "").replaceAll(/[^\p{L}\p{M}\p{N} ._-]/, "").replaceAll(/\s+/, " ").trim()
+def cps = rawLabel.codePoints().toArray()
+if (cps.length > 24) rawLabel = new String(cps, 0, 24).trim()
+def customLabel = rawLabel
+def customIcon = icons.contains(System.getenv("TV_APP_ICON") ?: "") ? System.getenv("TV_APP_ICON") : "default"
+def isCustom = customLabel.length() > 0
+def iconRes = customIcon == "default" ? "ic_launcher" : "ic_" + customIcon
+def bannerRes = customIcon == "default" ? "banner" : "banner_" + customIcon
+def startUrl = "https://" + host + "/?tv=1&src=tvapp&tvapp=" + appVersion + (isCustom ? "&tvcustom=1" : "") + "#/home"
+
+android {
+    namespace "app.viktorych.tv"
+    compileSdk 35
+    defaultConfig {
+        applicationId "app.viktorych.tv"
+        minSdk 21
+        targetSdk 35
+        versionCode appVersion
+        versionName appVersionName
+        manifestPlaceholders = [
+            hostName: host,
+            defaultUrl: startUrl,
+            launcherName: isCustom ? customLabel : "ViktorychApp",
+            appIcon: "@mipmap/" + iconRes,
+            appBanner: "@drawable/" + bannerRes,
+            themeColor: "#000000",
+            backgroundColor: "#000000"
+        ]
+        resValue "string", "app_host", host
+        buildConfigField "String", "START_URL", "\"" + startUrl + "\""
+        buildConfigField "String", "APP_HOST", "\"" + host + "\""
+        buildConfigField "boolean", "CUSTOM", isCustom ? "true" : "false"
+        // The label goes in as UTF-16 escapes so no character can break the Java source.
+        buildConfigField "String", "CUSTOM_LABEL", "\"" + customLabel.collect { String.format("\\u%04x", (int) it.charAt(0)) }.join("") + "\""
+        buildConfigField "String", "CUSTOM_ICON", "\"" + customIcon + "\""
+    }
+    signingConfigs {
+        release {
+            def ks = System.getenv("TV_KEYSTORE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("TV_KEYSTORE_PASS")
+                keyAlias System.getenv("TV_KEY_ALIAS") ?: "viktorychtv"
+                keyPassword System.getenv("TV_KEY_PASS") ?: System.getenv("TV_KEYSTORE_PASS")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv("TV_KEYSTORE")) signingConfig signingConfigs.release
+        }
+    }
+    buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    lint { abortOnError false; checkReleaseBuilds false }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0"
+}
