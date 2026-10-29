@@ -4,7 +4,7 @@ const VERSION = "viktorych-a144-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T20:13:08Z-tv-controller
+// cache-bust: 2026-10-29T20:45:00Z-cacheslider
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -94,6 +94,7 @@ const SHELL_FILES = [
   "./tv.css",
   "./shared/tv-boot.js",
   "./shared/short-link.js",
+  "./shared/x-range.js",
   "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",

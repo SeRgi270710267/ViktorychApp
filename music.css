@@ -359,31 +359,8 @@ html.ytm-card .center { padding-bottom: 320px; }
 .mu-play svg { width: 22px !important; height: 22px !important; fill: var(--on-fill) !important; }
 .mu-seek { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .mu-vol { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
-.mu-range, .mu-volume {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--line);
-  margin: 0;
-}
+.mu-range, .mu-volume { width: 100%; height: 24px; }
 .mu-volume { width: 92px; }
-.mu-range::-webkit-slider-thumb, .mu-volume::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 0;
-}
-.mu-range::-moz-range-thumb, .mu-volume::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 0;
-}
 .mu-rep { position: relative; }
 .mu-rep i {
   position: absolute;

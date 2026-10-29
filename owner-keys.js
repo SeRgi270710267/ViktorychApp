@@ -240,9 +240,11 @@
       return;
     }
     var bar = old || document.createElement("div");
+    /* Placed by styles.css at the bottom, like X's toasts, so it never
+       covers a page's own header or the alert banner under it. */
     bar.id = "owner-health-banner";
     bar.setAttribute("role", "status");
-    bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);z-index:9999;max-width:92vw;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;background:#f4212e;color:#fff;font:600 13px/1.3 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3)";
+    bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;background:#f4212e;color:#fff;font:600 13px/1.3 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3)";
     bar.innerHTML = '<a href="#/settings/keys" style="color:#fff;text-decoration:none">' + esc(tr("Site health: {count} problems need you", { count: list.length })) + "</a>" +
       '<button type="button" aria-label="' + esc(tr("Dismiss")) + '" style="background:none;border:0;color:#fff;font:inherit;cursor:pointer;padding:0 2px">✕</button>';
     bar.querySelector("button").onclick = function () {
