@@ -925,7 +925,17 @@
     if (opened("chat")) refreshChat(true);
     if (opened("ai")) loadAi();
     useIdb();
-    if (root.SI18n && root.SI18n.onChange) root.SI18n.onChange(function () { paint(false, true); });
+    /* This file runs before the language packs, so the first paint is in
+       English. Repaint once they land and on every later switch. */
+    var langHooked = false;
+    function hookLang() {
+      if (langHooked || !root.SI18n || !root.SI18n.onChange) return;
+      langHooked = true;
+      root.SI18n.onChange(function () { paint(true, true); });
+      paint(true, true);
+    }
+    hookLang();
+    if (!langHooked && root.addEventListener) root.addEventListener("viktorych-late", hookLang);
     document.addEventListener("pointerdown", function (event) {
       if (!ui.menu) return;
       if (event.target && event.target.closest && event.target.closest(".xdock-menu, [data-dock='menu']")) return;
