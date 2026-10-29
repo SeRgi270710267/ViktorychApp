@@ -154,6 +154,11 @@ async function openSignup(page) {
   // Sign up opens the first-time setup: a welcome screen, then language,
   // then the account steps inside the same full-screen frame.
   await page.getByRole("button", { name: "Sign up" }).first().click();
+  // The welcome screen also offers a temporary account with its delete-time
+  // picker; Back returns to the welcome screen.
+  await page.locator("#onb-layer [data-step='welcome'] [data-onb='temp']").click({ timeout: 15000 });
+  await page.locator(".acct-temp-setup [data-acct='temp-pick'][data-pick='7d']").click();
+  await page.locator(".acct-temp-setup [data-acct='temp-setup-back']").click();
   await page.locator("#onb-layer [data-step='welcome'] [data-onb='next']").click({ timeout: 15000 });
   await page.locator("#onb-layer [data-step='language'] [data-onb='next']").click();
   await page.locator(".acct-setup .acct-modal").waitFor();
@@ -368,6 +373,18 @@ async function firstRun(page) {
     else {
       await page.locator("#onb-layer [data-onb='skip']").click();
       await page.locator("#onb-layer [data-step='prefs']").waitFor();
+      // The theme picker lists every theme from window.ViktorychThemes,
+      // flag themes included, and picking one applies it.
+      const flagIds = await page.evaluate(() => Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}));
+      for (const id of flagIds) {
+        if (!(await page.locator(`#onb-layer [data-onb='theme'][data-mode='${id}']`).count())) notes.push(`setup theme picker is missing the ${id} theme`);
+      }
+      if (flagIds.length) {
+        await page.locator(`#onb-layer [data-onb='theme'][data-mode='${flagIds[0]}']`).click();
+        const applied = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+        if (applied !== flagIds[0]) notes.push("picking a flag theme in setup did not apply it");
+        await page.locator("#onb-layer [data-onb='theme'][data-mode='lightsout']").click();
+      }
       await page.locator("#onb-layer [data-onb='skip']").click();
       await page.locator("#onb-layer [data-step='done'] [data-onb='finish']").click();
       await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 });

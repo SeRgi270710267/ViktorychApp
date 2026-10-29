@@ -29,6 +29,7 @@ import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from 
 import { handleDevices } from "./devices.js";
 import { handleTvPair } from "./tv-pair.js";
 import { handleMediaSwarm } from "./media-swarm.js";
+import { handlePool, notePoolDocument, poolSignable, poolUsage } from "./peer-pool.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
 import { PRESENCE_SCHEMA, ensurePresenceColumns, handleFriendPresence, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, drainOutbox, handleNotificationRoutes, notifyFollow, planRepostNotification, notifyLiveStarted, emitNotification } from "./notifications.js";
@@ -38,6 +39,7 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
@@ -1570,13 +1572,25 @@ function catalogUnusable(key, text) {
 }
 
 async function readStoredText(env, key) {
-  if (!env || !env.DATA || !key) return "";
+  return (await readStoredEntry(env, key)).text;
+}
+
+/* The stored text and its R2 etag (the pulse mark). The etag is empty
+   when the last good copy had to answer. */
+async function readStoredEntry(env, key) {
+  if (!env || !env.DATA || !key) return { text: "", etag: "" };
   let text = "";
+  let etag = "";
   try {
     const object = await env.DATA.get(key);
     text = object ? await object.text() : "";
+    etag = object ? String(object.etag || "") : "";
   } catch (err) { text = ""; }
-  if (!catalogUnusable(key, text)) return text;
+  if (!catalogUnusable(key, text)) return { text: text, etag: etag };
+  return { text: await readLastGood(env, key), etag: "" };
+}
+
+async function readLastGood(env, key) {
   let backup = "";
   try {
     const object = await env.DATA.get("lastgood/" + key);
@@ -1633,7 +1647,7 @@ function catalogResponse(text) {
   });
 }
 
-async function handleData(request, env, pathname) {
+async function handleData(request, env, pathname, ctx) {
   const own = privateDiscordKey(String(pathname || "").replace(/^\/v1\/data\/?/, ""));
   if (own) {
     // Servers the owner picked in Messages. Signed-in readers see the
@@ -1665,13 +1679,25 @@ async function handleData(request, env, pathname) {
     }
     return discordData(request, object);
   }
-  const text = await readStoredText(env, key);
+  const stored = await readStoredEntry(env, key);
+  const text = stored.text;
   if (!text) return json(404, { error: "not_found" });
   if (row.owner === 1) return catalogResponse(text);
   let parsed = null;
   try { parsed = JSON.parse(text); }
   catch (err) { return json(502, { error: "bad_json" }); }
-  return json(200, stripOwnerOnly(parsed, env));
+  const body = JSON.stringify(stripOwnerOnly(parsed, env));
+  // The sharing pool signs the hash of exactly these bytes, once per version.
+  if (stored.etag && poolSignable(env, key, stored.etag, body)) {
+    const job = notePoolDocument(env, key, stored.etag, body).catch(() => false);
+    if (ctx && ctx.waitUntil) ctx.waitUntil(job);
+  }
+  return new Response(body, { status: 200, headers: {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
+  } });
 }
 
 const TIKTOK_HANDLE = /^[A-Za-z0-9._]{2,24}$/;
@@ -5364,6 +5390,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/yt/manifest" || path === "/v1/yt/media") {
     return handleYtRoute(request, env, url);
   }
+  if (path === "/v1/watchdog" || path === "/v1/owner/health") {
+    const watched = await handleWatchdog(request, env, path, { json, requireOwner });
+    if (watched) return watched;
+  }
   if (path === "/v1/health" && request.method === "GET") {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
   }
@@ -5376,7 +5406,7 @@ async function route(request, env, ctx) {
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   const viewMedia = path.match(/^\/v1\/media\/view\/([a-f0-9]{32})$/);
   if (viewMedia && request.method === "GET") return handleMediaView(request, env, viewMedia[1]);
-  if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path);
+  if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path, ctx);
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
   }
@@ -5386,7 +5416,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/usage" && request.method === "GET") {
     const gate = await requireOwner(request, env);
     if (gate.error) return gate.error;
-    return json(200, await usageReport(env, Date.now()));
+    const report = Object.assign({}, await usageReport(env, Date.now()));
+    report.pool = await poolUsage(env);
+    return json(200, report);
   }
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
@@ -5588,6 +5620,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/channel" || path === "/v1/channel/ticket") {
     return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
   }
+  if (path === "/v1/pool/room") return handlePool(request, env, url, { json });
   if (path === "/v1/media/swarm" || path === "/v1/media/swarm/ticket") {
     return handleMediaSwarm(request, env, url, { json, sessionAccount, rateHit, limited });
   }
@@ -5737,10 +5770,14 @@ export default {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
     // Features the owner turned off do no cron work at all.
-    const off = await readFlags(env, at);
+    const flags = await readFlags(env, at);
     // Jobs the Render backup claimed in the last couple of minutes run there.
     const away = await claimedJobs(env, at);
     const minute = new Date(at).getUTCMinutes();
+    // Near a free daily limit the watchdog pauses optional cron work.
+    const paused = await watchdogPause(env, at).catch(() => false);
+    // A copy: the memoised flags also answer requests.
+    const off = paused ? Object.assign({}, flags, { shorts: true }) : flags;
     const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)).catch((err) => logError("cron", err)).then(() => sweepTemporary(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), pollPackages(env, at, null, packageNotifier(emitNotification)).catch(() => null), sweepExpiredNotes(env, at)];
     const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
     run("ownerFeeds", () => sweepOwnerFeeds(env, at));
@@ -5750,7 +5787,10 @@ export default {
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
-    if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (minute % 15 === 0 && !paused) jobs.push(maybeDispatchDiscord(env));
+    // Hourly unattended watchdog: re-enables workflows, re-runs a stuck
+    // deploy and records health for the owner (src/watchdog.js).
+    if (minute === 7) jobs.push(runWatchdog(env, at));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));
