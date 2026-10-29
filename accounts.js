@@ -2522,6 +2522,50 @@ function signupPayload() {
       profiles[skel(account.publicId)] = account;
     }
   }
+  /* Last seen public header of app profiles (name, bio, avatar, banner,
+     counts), so reopening a profile paints at once and refreshes in place.
+     Bounded: 60 profiles, long fields such as inline images are left out. */
+  var HEADS_KEY = "viktorychapp-profile-heads-v1";
+  var HEADS_MAX = 60;
+  var HEAD_FIELDS = ["handle", "publicId", "displayName", "avatar", "avatarFace", "banner", "bannerFace", "bio", "location", "website", "verified", "verifiedType", "followersCount", "followingCount", "friendsCount", "postsCount"];
+  function readHeads() {
+    try { var raw = JSON.parse(localStorage.getItem(HEADS_KEY) || "{}"); return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}; }
+    catch (err) { return {}; }
+  }
+  function saveHead(account) {
+    if (!account || !account.handle || account.blockedBy || account.viewerBlocks || account.locked || account.profileLess) return;
+    var head = { at: Date.now() };
+    HEAD_FIELDS.forEach(function (k) {
+      var v = account[k];
+      if (v == null) return;
+      if (typeof v === "string" && v.length > 2000) return;
+      if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") head[k] = v;
+    });
+    var ref = accountRef(account);
+    var known = ref && graphCounts[ref];
+    if (known) {
+      if (known.followers != null) head.followersCount = known.followers;
+      if (known.following != null) head.followingCount = known.following;
+      if (known.friends != null) head.friendsCount = known.friends;
+    }
+    try {
+      var heads = readHeads();
+      heads[skel(account.handle)] = head;
+      var keys = Object.keys(heads).sort(function (a, b) { return (heads[b].at || 0) - (heads[a].at || 0); });
+      keys.slice(HEADS_MAX).forEach(function (k) { delete heads[k]; });
+      localStorage.setItem(HEADS_KEY, JSON.stringify(heads));
+    } catch (err) { /* storage full or blocked */ }
+  }
+  function cachedHead(key) {
+    var head = readHeads()[key];
+    if (!head || !head.handle) return null;
+    var copy = {};
+    HEAD_FIELDS.forEach(function (k) { if (head[k] != null) copy[k] = head[k]; });
+    copy.cachedHead = true;
+    copy.reposts = [];
+    copy.repostsLoaded = false;
+    return copy;
+  }
   function loadProfile(handle) {
     var key = skel(handle);
     var session = readSession();
@@ -2548,6 +2592,7 @@ function signupPayload() {
       // differ from the name in the link; keep it under the link's key too.
       if (profiles[key] !== body.account) profiles[key] = body.account;
       noteProfile(body.account);
+      saveHead(body.account);
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { profileLoads[key] = false; });
   }
@@ -2563,7 +2608,50 @@ function signupPayload() {
     profiles[key].reposts = Array.isArray(rows) ? rows : [];
     profiles[key].repostsLoaded = true;
   }
-  var graphCounts = {};
+  /* Last known follower, following and friend counts survive a reload so a
+     profile header paints real numbers at once; unknown counts render as a
+     blank placeholder, never as 0. Bounded: the most recent 200 accounts. */
+  var COUNTS_KEY = "viktorychapp-graph-counts-v1";
+  var COUNTS_MAX = 200;
+  var graphCounts = readSavedCounts();
+  var countsTimer = 0;
+  function readSavedCounts() {
+    var out = {};
+    try {
+      var raw = JSON.parse(localStorage.getItem(COUNTS_KEY) || "{}") || {};
+      Object.keys(raw).forEach(function (id) {
+        var row = raw[id];
+        if (!row || typeof row !== "object") return;
+        out[id] = { saved: true };
+        ["followers", "following", "friends"].forEach(function (k) { if (typeof row[k] === "number" && row[k] >= 0) out[id][k] = row[k]; });
+        out[id].at = Number(row.at) || 0;
+      });
+    } catch (err) { /* no saved counts */ }
+    return out;
+  }
+  function saveCounts() {
+    clearTimeout(countsTimer);
+    countsTimer = setTimeout(function () {
+      try {
+        var ids = Object.keys(graphCounts).filter(function (id) {
+          var row = graphCounts[id];
+          return row && (row.followers != null || row.following != null || row.friends != null);
+        }).sort(function (a, b) { return (graphCounts[b].at || 0) - (graphCounts[a].at || 0); }).slice(0, COUNTS_MAX);
+        var out = {};
+        ids.forEach(function (id) {
+          var row = graphCounts[id];
+          out[id] = { at: row.at || Date.now() };
+          ["followers", "following", "friends"].forEach(function (k) { if (row[k] != null) out[id][k] = row[k]; });
+        });
+        localStorage.setItem(COUNTS_KEY, JSON.stringify(out));
+      } catch (err) { /* storage full or blocked: counts stay in memory */ }
+    }, 300);
+  }
+  function countsChanged(id) {
+    if (!graphCounts[id]) return;
+    graphCounts[id].at = Date.now();
+    saveCounts();
+  }
   var followEpoch = 0;
   var listCache = {};
   var countLoads = {};
@@ -2613,7 +2701,12 @@ function signupPayload() {
     if (field === "following" && account && account.followingCount != null) return account.followingCount;
     if (field === "followers" && account && account.followersCount != null) return account.followersCount;
     if (field === "friends" && account && account.friendsCount != null) return account.friendsCount;
-    return 0;
+    return null;
+  }
+  /* An unknown count is a quiet placeholder, never a misleading 0. */
+  function countBold(n) {
+    if (n == null) return '<b class="count-skel" aria-label="' + esc(tr("Loading")) + '">\u2007\u2007</b>';
+    return "<b>" + esc(formatNum(n)) + "</b>";
   }
   function noteProfile(account) {
     var id = accountRef(account);
@@ -2629,12 +2722,15 @@ function signupPayload() {
     graphCounts[id].blockedBy = !!account.blockedBy;
     graphCounts[id].muted = !!account.viewerMutes;
     graphCounts[id].locked = !!account.locked;
+    if (account.followingCount != null || account.followersCount != null || account.friendsCount != null) countsChanged(id);
   }
   function countLink(account, tab, n, label) {
     var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
-    return '<a href="' + esc(href) + '"><b>' + esc(formatNum(n)) + "</b> <span>" + esc(label) + "</span></a>";
+    return '<a href="' + esc(href) + '">' + countBold(n) + " <span>" + esc(label) + "</span></a>";
   }
   function accountCountsHtml(account) {
+    var ref = accountRef(account);
+    if (ref && (accountStat(account, "following") == null || accountStat(account, "followers") == null)) ensureCounts(ref);
     return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + "</div>";
   }
   function followersOf(id) {
@@ -2654,6 +2750,7 @@ function signupPayload() {
       if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
       if (res.followingCount != null) graphCounts[id].following = res.followingCount;
       graphCounts[id].fresh = true;
+      countsChanged(id);
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { countLoads[id] = false; });
   }
@@ -2703,6 +2800,7 @@ function signupPayload() {
         if (res.followingCount != null) graphCounts[id].following = res.followingCount;
         if (res.requestsCount != null) graphCounts[id].requests = res.requestsCount;
         graphCounts[id].fresh = true;
+      countsChanged(id);
       }
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {
@@ -2801,6 +2899,7 @@ function signupPayload() {
         if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
         graphCounts[id].pending = true;
         graphCounts[id].fresh = true;
+      countsChanged(id);
         if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
         if (me && res.followingCount != null) {
           graphCounts[me] = graphCounts[me] || {};
@@ -2813,6 +2912,7 @@ function signupPayload() {
       graphCounts[id].pending = false;
       if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
       graphCounts[id].fresh = true;
+      countsChanged(id);
       if (me && res.followingCount != null) {
         graphCounts[me] = graphCounts[me] || {};
         graphCounts[me].following = res.followingCount;
@@ -3737,9 +3837,10 @@ function signupPayload() {
     var bar = profileTabBar(account, mine, requested, profileHref);
     var activeTab = bar.active;
 
-    var pack = { html: "", count: 0 };
+    var pack = { html: "", count: null };
     if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account, activeTab) || pack;
-    var count = String(pack.count || 0);
+    /* Unknown while posts load: leave the count out rather than show 0. */
+    var count = pack.count == null ? (account.postsCount != null ? String(account.postsCount) : "") : String(pack.count);
 
     var postsEmpty = activeTab === "replies"
       ? '<div class="empty"><h2>' + esc(tr("No replies yet")) + "</h2><p>" + esc(tr("Replies from this account will show up here.")) + "</p></div>"
@@ -3768,7 +3869,7 @@ function signupPayload() {
       feedId: account.publicId ? "app:" + account.publicId : "",
       url: "",
       own: !!mine,
-      count: tr("{count} posts", { count: count })
+      count: count === "" ? "" : tr("{count} posts", { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
     return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
@@ -3785,7 +3886,9 @@ function signupPayload() {
     }
     if (!account) {
       loadProfile(route.handle);
-      return "";
+      /* Seen before on this device: paint the last known header now. */
+      var head = cachedHead(key);
+      return head ? accountPage(head, route) : "";
     }
     if (!account.repostsLoaded) loadProfile(route.handle);
     if (account.handle && skel(account.handle) !== key) {
@@ -3852,12 +3955,13 @@ function signupPayload() {
     var following = accountStat(account, "following");
     var followers = accountStat(account, "followers");
     var followerLabel = followers === 1 ? tr("Follower") : tr("Followers");
+    if (accountRef(account) && myAccountId() === accountRef(account) && following == null) following = localFeedFollows().length + localAppFollows().length;
     if (accountRef(account)) ensureCounts(accountRef(account));
     return '<div class="drawer-id">' +
       '<div class="drawer-id-top"><a class="drawer-ava" href="' + esc(href) + '">' + photo + '</a>' + drawerTools() + '</div>' +
       '<a class="drawer-name pname" href="' + esc(href) + '">' + (isAnon ? '<span class="name-row-text">' + esc(name) + "</span>" : nameRowHtml(account)) + '</a>' +
       '<a class="drawer-handle" href="' + esc(href) + '">' + esc(sub) + '</a>' +
-      '<div class="drawer-counts"><a href="' + esc(href + "/following") + '"><b>' + esc(formatNum(following)) + '</b> ' + esc(tr("Following count")) + '</a><a href="' + esc(href + "/followers") + '"><b>' + esc(formatNum(followers)) + '</b> ' + esc(followerLabel) + '</a></div>' +
+      '<div class="drawer-counts"><a href="' + esc(href + "/following") + '">' + countBold(following) + ' ' + esc(tr("Following count")) + '</a><a href="' + esc(href + "/followers") + '">' + countBold(followers) + ' ' + esc(followerLabel) + '</a></div>' +
       '</div>';
   }
   var tiktokHealth = null;
