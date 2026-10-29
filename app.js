@@ -17596,6 +17596,32 @@ if (STATE.histClear) {
     return html;
   }
 
+  /* Local-first for every route: when a page would paint a loading
+     placeholder and this device has the last screen of that page, paint that
+     screen now; the live render replaces it in place when data arrives. Each
+     finished screen is saved (bounded, least recently used first out, wiped on
+     sign-out). Pages that hold secrets or live media are never saved. */
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1 };
+  function routeLoading(html) {
+    if (!html) return true;
+    if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
+    if (/class="reply-empty"[^>]*>[^<]*(?:Loading|\u2026|…)/.test(html)) return true;
+    const fetching = tr("Fetching posts…");
+    return !!fetching && html.indexOf(">" + esc(fetching) + "<") >= 0;
+  }
+  function localFirstView(route, html) {
+    const local = window.ViktorychLocal;
+    if (!local || !local.readRoute || !route || SNAP_SKIP[route.name]) return html;
+    const key = String(location.hash || "#/").slice(0, 300);
+    if (routeLoading(html)) {
+      const saved = local.readRoute(key);
+      return saved || html;
+    }
+    if (html.length < 150000 && !/type="password"|<script/i.test(html)) local.saveRoute(key, html);
+    return html;
+  }
+  window.ViktorychRouteSnap = { loading: routeLoading };
+
   function view(route) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
     if (route.name === "shorts") {
@@ -18486,7 +18512,7 @@ if (STATE.histClear) {
       /* The shell swap used to throw away every horizontal row. Tab rows are
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
-      commitApp(shell(view(route), route) + (window.ProfileGifts && window.ProfileGifts.overlay ? window.ProfileGifts.overlay() : ""));
+      commitApp(shell(localFirstView(route, view(route)), route) + (window.ProfileGifts && window.ProfileGifts.overlay ? window.ProfileGifts.overlay() : ""));
       paintProfileChrome();
       schedulePublicPosts();
       hydratePublicMedia();

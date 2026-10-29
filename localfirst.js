@@ -674,7 +674,11 @@
     if (!hash || !html || html.length > 150000 || /<script/i.test(html)) return false;
     clearTimeout(saveRoute.timers && saveRoute.timers[hash]);
     saveRoute.timers = saveRoute.timers || {};
-    saveRoute.timers[hash] = setTimeout(function () { swrPut("route:" + hash, html); }, 400);
+    saveRoute.timers[hash] = setTimeout(function () {
+      var memo = swrMemo["route:" + hash];
+      if (memo && memo.value === html) return;
+      swrPut("route:" + hash, html);
+    }, 400);
     return true;
   }
   function readRoute(hash) {
