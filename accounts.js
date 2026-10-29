@@ -1078,7 +1078,7 @@ var numberNote = form.passkey
     if (!reg) return [];
     return reg.localKeys({ allOff: !!settings && settings.syncUi === false, lookOwn: deviceOwnUi() });
   }
-  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "friendsRail"];
+  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "friendsRail", "brandLogo"];
   function pickPrefs(local, remote) {
     // Home pills and Stories: each key keeps the newer choice.
     var out = {};
@@ -1110,6 +1110,7 @@ var numberNote = form.passkey
       reposts: settings.reposts || {},
       savedPosts: settings.savedPosts || {},
       feedTabs: settings.feedTabs || [],
+      communityTabs: cleanCommunityTabs(settings.communityTabs),
       noteTabs: settings.noteTabs || [],
       lastNoteTab: settings.lastNoteTab || "all",
       mutedWords: settings.mutedWords || [],
@@ -1204,6 +1205,31 @@ var numberNote = form.passkey
     Object.keys(remote || {}).forEach(function (key) { out[key] = remote[key]; });
     Object.keys(local || {}).forEach(function (key) { out[key] = local[key]; });
     return out;
+  }
+  /* Communities custom tabs travel as one block with its own stamp: the
+     newer block wins whole, so a rename, a new order or a deleted tab is
+     not undone by an older device. */
+  function cleanCommunityTabs(bag) {
+    var list = bag && Array.isArray(bag.tabs) ? bag.tabs : [];
+    var tabs = [];
+    var seen = {};
+    list.forEach(function (tab) {
+      if (!tab || typeof tab !== "object" || tabs.length >= 12) return;
+      var id = String(tab.id || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
+      var name = String(tab.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40);
+      if (!id || !name || seen[id]) return;
+      seen[id] = true;
+      var sources = (Array.isArray(tab.sources) ? tab.sources : []).map(function (src) { return String(src || "").slice(0, 120); }).filter(function (src) {
+        return /^[cp]:./.test(src);
+      }).slice(0, 50);
+      tabs.push({ id: id, name: name, sources: sources, home: tab.home === true });
+    });
+    return { at: Number(bag && bag.at) || 0, tabs: tabs };
+  }
+  function pickCommunityTabs(local, remote) {
+    var l = cleanCommunityTabs(local);
+    var r = cleanCommunityTabs(remote);
+    return l.at >= r.at ? l : r;
   }
   function unionById(local, remote) {
     var map = {};
@@ -1323,6 +1349,7 @@ var numberNote = form.passkey
       reposts: unionObjects(local.reposts, remote.reposts),
       savedPosts: unionObjects(local.savedPosts, remote.savedPosts),
       feedTabs: unionById(local.feedTabs, remote.feedTabs),
+      communityTabs: pickCommunityTabs(local.communityTabs, remote.communityTabs),
       noteTabs: mergeNoteTabs(local.noteTabs, remote.noteTabs),
       noteTabsSame: local.noteTabsSame === true || local.noteTabsSame === false ? local.noteTabsSame !== false : remote.noteTabsSame !== false,
       lastNoteTab: local.lastNoteTab || remote.lastNoteTab || "all",
