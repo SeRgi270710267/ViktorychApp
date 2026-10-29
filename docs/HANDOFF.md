@@ -2,6 +2,8 @@
 
 A takeover guide for the next assistant or coding agent. Written from the state of the project on 2026-10-28. Anything marked "unverified" was not re-checked, so check it before you rely on it.
 
+> **Keep usage low:** read [LOW-USAGE.md](LOW-USAGE.md) before doing any work.
+
 ## 1. What the project is
 
 ViktorychApp is an X.com-clone PWA. The front end is static and served from GitHub Pages. The back end is a Cloudflare Worker with D1 (SQL) and R2 (object storage). Coding agents open PRs, and the owner's assistant reviews and merges them.
