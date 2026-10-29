@@ -1,4 +1,4 @@
-/* Interface language. English, Russian, and Spanish packs register with addPack. */
+/* Interface language. English, Russian, Spanish, and Hindi packs register with addPack. */
 (function (root) {
   var KEY = "superintelapp-lang";
   var PACKS = {};
@@ -9,7 +9,7 @@
 
   function valid(code) {
     code = String(code || "").toLowerCase().split("-")[0];
-    return code === "en" || code === "ru" || code === "es" ? code : "";
+    return code === "en" || code === "ru" || code === "es" || code === "hi" ? code : "";
   }
 
   function isRuRegion() {
@@ -41,7 +41,7 @@
       var i;
       for (i = 0; i < list.length; i++) {
         var code = valid(list[i]);
-        if (code === "ru" || code === "es") { picked = code; break; }
+        if (code === "ru" || code === "es" || code === "hi") { picked = code; break; }
       }
       try { localStorage.setItem(KEY, picked); } catch (err) { /* private mode */ }
       return picked;
@@ -66,6 +66,7 @@
   }
 
   function locale() {
+    if (lang === "hi") return "hi-IN";
     return lang === "ru" || lang === "es" ? lang : "en";
   }
 
@@ -73,7 +74,18 @@
     var key = valid(code);
     if (!key || !pack) return;
     PACKS[key] = pack;
+    /* Code that drew before this pack arrived gets one more paint. */
+    if (key === lang && listeners.length && !packNotice) {
+      packNotice = setTimeout(function () {
+        packNotice = 0;
+        var i;
+        for (i = 0; i < listeners.length; i++) {
+          try { listeners[i](lang); } catch (err) { /* keep going */ }
+        }
+      }, 0);
+    }
   }
+  var packNotice = 0;
 
   /* The saved language's pack may have been skipped at boot when the choice
      was not yet certain; fetch it once the page is up. */
@@ -149,6 +161,13 @@
       try { return intl("NumberFormat", loc, { maximumFractionDigits: 0 }).format(Math.trunc(n)); }
       catch (err) { return String(Math.trunc(n)); }
     }
+    if (lang === "hi") {
+      // Indian grouping: हज़ार, लाख, करोड़, अरब.
+      try {
+        return new Intl.NumberFormat("hi-IN", { notation: "compact", maximumFractionDigits: 1 }).format(n)
+          .replace("क॰", "करोड़").replace("अ॰", "अरब").replace("ख॰", "खरब");
+      } catch (err) { /* the generic suffixes below */ }
+    }
     var div = abs < 1e6 ? 1e3 : abs < 1e9 ? 1e6 : 1e9;
     var suffix = abs < 1e6 ? t("num.k") : abs < 1e9 ? t("num.m") : t("num.b");
     var scaled = Math.round((n / div) * 10) / 10;
@@ -222,6 +241,7 @@
   function endonym(code) {
     if (code === "ru") return "Русский";
     if (code === "es") return "Español";
+    if (code === "hi") return "हिन्दी";
     return "English";
   }
 
