@@ -1287,6 +1287,15 @@
           var top = topLevel(player);
           var pinRef = { level: top };
           player.capLevelToPlayerSize = false;
+          /* Save data with HD off: stay below 720p and let the player adapt. */
+          var saver = typeof window !== "undefined" ? window.ViktorychDataSaver : null;
+          if (saver && saver.allow && !saver.allow("hd")) {
+            var sd = 0;
+            (player.levels || []).forEach(function (level, index) { if ((Number(level && level.height) || 0) < 720 && (Number(level && level.height) || 0) > 0) sd = index; });
+            player.autoLevelCapping = sd;
+            player.capLevelToPlayerSize = true;
+            pin = false;
+          }
           if (pin && !qualityLock && top >= 0) {
             player.startLevel = top;
             player.currentLevel = top;

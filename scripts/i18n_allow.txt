@@ -262,3 +262,8 @@ servers-ui.js|Files
 people.js|Fediverse
 # onboarding.js carries its own en/es/hi/ru string tables
 own: onboarding.js
+# data-saver.js: the fifth column of KEYS is a code note, never rendered
+data-saver.js|HD video variants
+data-saver.js|1.1 GB on-device model
+data-saver.js|113 MB translation model
+data-saver.js|23 MB search model
