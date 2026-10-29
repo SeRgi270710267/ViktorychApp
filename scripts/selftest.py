@@ -69,6 +69,21 @@ def check(cond, message):
     print("ok", message)
 
 
+def x_notes_checks() -> None:
+    import subprocess
+
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "x_notes_mirror.py"), "--selftest"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        sys.stdout.write(proc.stdout)
+        sys.stdout.write(proc.stderr)
+    check(proc.returncode == 0, "the X Community Notes mirror self-test passes")
+
+
 def telegram_checks() -> None:
     import subprocess
 
@@ -1312,6 +1327,8 @@ def main() -> None:
     direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
     device_flow = subprocess.run(["node", str(ROOT / "scripts" / "device_test.js")], cwd=ROOT)
     check(local_flow.returncode == 0, "a blocked reload paints home, a profile, a post, and notifications from cache")
+    counts_flow = subprocess.run(["node", str(ROOT / "scripts" / "profile_counts_test.mjs")], cwd=ROOT)
+    check(counts_flow.returncode == 0, "profile headers never show 0 as a stand-in for unknown counts and paint last known counts from this device")
     swr_flow = subprocess.run(["node", str(ROOT / "scripts" / "swr_cache_test.js")], cwd=ROOT)
     check(swr_flow.returncode == 0, "the shared local-first cache stays under its byte budget and evicts least recently used pages")
     check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
@@ -1330,6 +1347,7 @@ def main() -> None:
     feed_order_checks()
     gdrive_checks()
     telegram_checks()
+    x_notes_checks()
 
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
