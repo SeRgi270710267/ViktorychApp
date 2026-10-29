@@ -15,3 +15,4 @@ owner/
 /data/communities/*
 !/data/communities/index.json
 .wrangler/
+.discord-x/
