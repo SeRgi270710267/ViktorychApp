@@ -2,6 +2,11 @@
 SI18n.addPack("en", {
   "Play with the X player": "Play with the X player",
   "Play with the TikTok player": "Play with the TikTok player",
+  "3 months": "3 months",
+  "6 months": "6 months",
+  "12 months": "12 months",
+  "If you’re away for": "If you’re away for",
+  "If you don’t use your account for this long, it and its data are deleted.": "If you don’t use your account for this long, it and its data are deleted.",
   "Technology": "Technology",
   "News": "News",
   "Gaming": "Gaming",

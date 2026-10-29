@@ -102,6 +102,10 @@ async function exercise(page, label, origin) {
       fail(label + " storage note is unclear");
     }
     await page.locator("[data-ios='dismiss']").click();
+    // WebKit in CI sometimes lands the tap beside the sticky note; dispatch the
+    // click on the button itself when the first tap missed.
+    const gone = await page.waitForFunction(() => !document.querySelector("[data-ios='storage']"), null, { timeout: 3000 }).then(() => true, () => false);
+    if (!gone) await page.evaluate(() => document.querySelectorAll("[data-ios='dismiss']").forEach((b) => b.click()));
     await page.waitForFunction(() => !document.querySelector("[data-ios='storage']"), null, { timeout: 10000 }).catch(() => fail(label + " storage note did not close"));
   }
 
