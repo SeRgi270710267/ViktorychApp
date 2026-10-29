@@ -14629,6 +14629,7 @@ const here = parseRoute();
         <div class="theme-row" role="group" aria-label="${esc(tr("Live previews"))}">
           ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
         </div>
+        ${window.ViktorychReactions ? window.ViktorychReactions.settingsHtml(STATE.settings && STATE.settings.reactionsData) : ""}
         ${peerMediaSettingsHtml()}
         ${window.ViktorychFriendP2P ? window.ViktorychFriendP2P.settingsHtml() : ""}
       </div>${ownerFeaturesSection()}`;
@@ -19323,6 +19324,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const mode = el.dataset.mode;
       STATE.settings.autoplay = mode === "wifi" || mode === "never" ? mode : "all";
       saveSettings();
+      render();
+      return;
+    }
+    if (act === "reactions-data") {
+      const mode = el.dataset.mode;
+      STATE.settings.reactionsData = mode === "full" || mode === "lite" ? mode : "auto";
+      saveSettings();
+      if (window.ViktorychReactions) window.ViktorychReactions.refreshSettings();
       render();
       return;
     }
@@ -25967,7 +25976,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
