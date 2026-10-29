@@ -123,6 +123,23 @@ def shard_bytes(feeds: list, posts: list) -> bytes:
     return (json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
+def normalized(posts: list) -> list:
+    """The same schema gate feeds.json uses; posts it cannot repair are dropped."""
+    try:
+        from normalize import repair_post
+    except Exception:
+        return posts
+    out = []
+    for post in posts or []:
+        try:
+            fixed, _reasons = repair_post(post)
+        except Exception:
+            fixed = None
+        if fixed:
+            out.append(fixed)
+    return out
+
+
 def build_shards(wanted: dict, fetched: dict, previous: dict) -> tuple[dict, dict]:
     """Shard bytes per list (by hash) and the next index. A failed source keeps its last posts."""
     old_sources = (previous or {}).get("sourcePosts") or {}
@@ -137,6 +154,7 @@ def build_shards(wanted: dict, fetched: dict, previous: dict) -> tuple[dict, dic
         got = fetched.get(sid)
         if got is not None:
             row, posts = got
+            posts = normalized(posts)
             keep_posts[sid] = posts
             profiles[sid] = profile_of(row, source, posts)
             index["sources"][sid] = {"ok": True, "count": len(posts), "at": index["at"]}
