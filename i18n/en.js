@@ -3676,5 +3676,8 @@ SI18n.addPack("en", {
   "Show unread count on the app icon": "Show unread count on the app icon",
   "Show unread count in the tab title": "Show unread count in the tab title",
   "Show names and previews for": "Show names and previews for",
-  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Pushes carry no names or text. This device fills them in from what it already has, which also saves data."
+  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.",
+  "Run setup again": "Run setup again",
+  "Theme, data usage, notifications, install and follows.": "Theme, data usage, notifications, install and follows.",
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "Theme, save data and notifications keep their defaults. Change them in Settings."
 });

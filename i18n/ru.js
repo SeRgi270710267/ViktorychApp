@@ -3676,5 +3676,8 @@ SI18n.addPack("ru", {
   "Show unread count on the app icon": "Показывать число непрочитанных на значке",
   "Show unread count in the tab title": "Показывать число непрочитанных в заголовке вкладки",
   "Show names and previews for": "Показывать имена и текст для",
-  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Push-уведомления не содержат имён и текста. Устройство подставляет их из того, что уже сохранено, и это экономит трафик."
+  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Push-уведомления не содержат имён и текста. Устройство подставляет их из того, что уже сохранено, и это экономит трафик.",
+  "Run setup again": "Пройти настройку заново",
+  "Theme, data usage, notifications, install and follows.": "Тема, трафик, уведомления, установка и подписки.",
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "Тема, экономия трафика и уведомления остаются по умолчанию. Их можно изменить в настройках."
 });

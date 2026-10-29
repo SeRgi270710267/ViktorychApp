@@ -3670,5 +3670,8 @@ SI18n.addPack("hi", {
   "Show unread count on the app icon": "ऐप आइकन पर अपठित संख्या दिखाएँ",
   "Show unread count in the tab title": "टैब के शीर्षक में अपठित संख्या दिखाएँ",
   "Show names and previews for": "इनके लिए नाम और प्रीव्यू दिखाएँ",
-  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "पुश में कोई नाम या टेक्स्ट नहीं होता। यह डिवाइस पहले से मौजूद जानकारी से उन्हें भरता है, जिससे डेटा भी बचता है।"
+  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "पुश में कोई नाम या टेक्स्ट नहीं होता। यह डिवाइस पहले से मौजूद जानकारी से उन्हें भरता है, जिससे डेटा भी बचता है।",
+  "Run setup again": "सेटअप फिर से चलाएँ",
+  "Theme, data usage, notifications, install and follows.": "थीम, डेटा उपयोग, सूचनाएँ, इंस्टॉल और फ़ॉलो।",
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "थीम, डेटा बचत और सूचनाएँ डिफ़ॉल्ट पर रहती हैं। इन्हें सेटिंग्स में बदलें।"
 });

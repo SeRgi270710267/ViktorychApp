@@ -3676,5 +3676,8 @@ SI18n.addPack("es", {
   "Show unread count on the app icon": "Mostrar no leídos en el icono de la app",
   "Show unread count in the tab title": "Mostrar no leídos en el título de la pestaña",
   "Show names and previews for": "Mostrar nombres y vistas previas de",
-  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Las notificaciones push no llevan nombres ni texto. Este dispositivo los completa con lo que ya tiene, lo que también ahorra datos."
+  "Pushes carry no names or text. This device fills them in from what it already has, which also saves data.": "Las notificaciones push no llevan nombres ni texto. Este dispositivo los completa con lo que ya tiene, lo que también ahorra datos.",
+  "Run setup again": "Volver a ejecutar la configuración",
+  "Theme, data usage, notifications, install and follows.": "Tema, uso de datos, notificaciones, instalación y cuentas que sigues.",
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "El tema, el ahorro de datos y las notificaciones quedan con sus valores predeterminados. Cámbialos en Configuración."
 });

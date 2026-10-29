@@ -730,7 +730,8 @@
      sits in localStorage so a reload resumes the same step. */
   var ONB_KEY = "viktorychapp-onboard-v1";
   var onbLoad = null;
-  var setupPainted = -1;
+  var setupMark = "";
+  var lastSetupError = "";
   function readOnb() {
     try {
       var doc = JSON.parse(localStorage.getItem(ONB_KEY) || "null");
@@ -764,62 +765,201 @@
     return onbLoad;
   }
   function setupOn() {
-    if (view !== "signup" || readSession() || !window.ViktorychOnboarding) return false;
+    if (view !== "signup" || readSession() || !window.ViktorychOnboarding || form.quick) return false;
     var doc = readOnb();
     return !!(doc && (doc.stage === "account" || doc.stage === "post"));
   }
+  /* Quick sign-up: one plain form instead of the guided steps. The choice
+     holds for this browser session, and Back returns to the welcome. */
+  var QUICK_KEY = "viktorychapp-setup-mode";
+  function quickPicked() {
+    try { return sessionStorage.getItem(QUICK_KEY) === "quick"; } catch (err) { return false; }
+  }
+  function openQuick() {
+    view = "signup";
+    step = 0;
+    errorText = "";
+    form = { profileLess: false, quick: true, saveData: false };
+    painted = "";
+    paint();
+  }
+  function quickBack() {
+    try { sessionStorage.removeItem(QUICK_KEY); } catch (err) { /* private mode */ }
+    errorText = "";
+    view = "";
+    form = { profileLess: false };
+    paint();
+    loadOnboarding().then(function (onb) { if (onb) onb.start("pre", 0, -1); else openAuth("signup"); });
+  }
+  function quickCreate(withPasskey) {
+    if (authBusy) return;
+    errorText = "";
+    var name = String(form.displayName || "").trim();
+    if (!name && !form.profileLess) {
+      errorText = tr("What should we call you?");
+      paint();
+      return;
+    }
+    if (!name) form.displayName = tr("Anonymous");
+    step = 1;
+    if (withPasskey) doPasskeySignup();
+    else nextSignup();
+  }
+  function quickBody() {
+    var passkeys = window.ViktorychPasskeys && window.ViktorychPasskeys.supported();
+    var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : "";
+    var profRow = '<div class="acct-pref-row acct-quick-row"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" aria-label="' + esc(tr("Profile-less account")) + '" data-acct="toggle-form-profileless"><i></i></button></div>';
+    return '<p class="acct-sub">' + esc(tr("Theme, save data and notifications keep their defaults. Change them in Settings.")) + "</p>" +
+      field("displayName", form.profileLess ? tr("Name (optional)") : tr("Name"), "text", 50) +
+      field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) +
+      claim + profRow + turnstileHtml() + honeypotHtml() + errorHtml() +
+      nextButton("quick-create", tr("Create account")) +
+      (passkeys ? '<button class="acct-line acct-quick-passkey" type="button" data-acct="quick-passkey"' + (authBusy ? " disabled" : "") + ">" + esc(tr("Create a passkey")) + "</button>" : "") +
+      '<p class="acct-switch">' + esc(tr("Already have an account?")) + ' <button type="button" data-acct="login">' + esc(tr("Sign in")) + '</button></p>' +
+      '<p class="acct-switch"><button type="button" data-acct="open-temp">' + esc(tr("Try a temporary account")) + "</button></p>";
+  }
+  function quickModal(body, heading, backAct) {
+    var title = heading || tr("Create your account");
+    return '<div class="acct-back acct-quick"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head"><button class="icon-btn" type="button" data-acct="' + (backAct || "quick-back") + '" aria-label="' + esc(tr("Back")) + '">' + backIcon() + '</button><div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button></div><div class="acct-body"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  }
+  function backIcon() {
+    return '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg>';
+  }
   function startSetup() {
     if (readPending()) { openAuth("signup"); return; }
+    if (quickPicked()) { openQuick(); return; }
     loadOnboarding().then(function (onb) {
       if (onb) onb.start("pre", 0);
       else openAuth("signup");
     });
   }
   function markSetupPost(account) {
+    if (form.quick) {
+      /* Quick sign-up keeps the defaults and skips the welcome sheet too. */
+      writeOnb(null);
+      try { localStorage.setItem("viktorychapp-welcome-v1", JSON.stringify({ step: 2, done: true })); } catch (err) { /* the sheet can still close */ }
+      return;
+    }
     var doc = readOnb() || {};
     writeOnb({ stage: "post", step: 0, lang: doc.lang || "", id: account && account.publicId ? String(account.publicId) : "", at: Date.now() });
   }
+  /* The account steps remember where they were, so a reload resumes the
+     same step. The account number is never stored here. */
+  function saveSetupStep() {
+    if (!setupOn() || step > 1) return;
+    var doc = readOnb() || {};
+    if (doc.stage !== "account") return;
+    doc.acct = { step: step, keyStep: !!form.keyStep, displayName: String(form.displayName || "").slice(0, 50), handle: String(form.handle || "").slice(0, 15), profileLess: !!form.profileLess };
+    doc.at = Date.now();
+    writeOnb(doc);
+  }
+  function restoreSetupStep() {
+    var doc = readOnb();
+    var a = doc && doc.stage === "account" && doc.acct;
+    if (!a || readPending()) return;
+    step = a.step === 1 ? 1 : 0;
+    form.keyStep = step === 1 && !!a.keyStep;
+    form.displayName = String(a.displayName || "");
+    form.handle = String(a.handle || "");
+    form.profileLess = !!a.profileLess;
+  }
+  function setupId() {
+    if (view === "temp") return "temp";
+    if (step === 2) return "secure";
+    if (step === 1) return form.keyStep ? "passkey" : "handle";
+    return "name";
+  }
   function setupBack() {
     errorText = "";
+    var onb = window.ViktorychOnboarding;
+    if (step === 1 && form.keyStep) { form.keyStep = false; paint(); return; }
     if (step === 1) { step = 0; paint(); return; }
-    view = "";
-    paint();
-    var onb = window.ViktorychOnboarding;
-    if (onb) onb.start("pre", 1, -1);
+    var run = function () {
+      view = "";
+      paint();
+      if (onb) onb.start("pre", 2, -1);
+    };
+    if (onb && onb.transition) onb.transition(run, -1); else run();
   }
-  function setupModal(body) {
-    var onb = window.ViktorychOnboarding;
-    var title = tr("Create your account");
-    var anim = setupPainted === step ? "" : " acct-setup-in" + (step < setupPainted ? " back" : "");
-    setupPainted = step;
-    var backBtn = step < 2 ? '<button class="icon-btn" type="button" data-acct="setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button>' : "<span></span>";
-    return '<div class="acct-back acct-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head">' + backBtn + '<div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button></div>" + (onb ? onb.progressHtml(2 + step) : "") + '<div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  /* Check the handle here first; the account is made on the next screen,
+     with or without a passkey. */
+  function handleNext() {
+    if (authBusy) return;
+    var body = signupPayload();
+    if (!body) return;
+    if (window.ViktorychPasskeys && window.ViktorychPasskeys.supported()) {
+      form.keyStep = true;
+      errorText = "";
+      paint();
+      return;
+    }
+    nextSignup();
   }
-  /* The temporary account sheet in the phone-style setup look, with Back
-     returning to the screen it was opened from. */
+  function setupParts() {
+    var onb = window.ViktorychOnboarding;
+    var t = onb.t;
+    if (step === 2) return { body: signupBody(), foot: "" };
+    if (step === 1 && form.keyStep) {
+      return {
+        body: '<p class="acct-sub">' + esc(t("passkeySub")) + "</p>" + '<div class="oobe-key" aria-hidden="true">' + onb.icon("key", "oobe-key-ico") + "</div>" + turnstileHtml() + honeypotHtml() + errorHtml(),
+        foot: '<button class="acct-next" type="button" data-acct="passkey-signup"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Create a passkey")) + '</button><button class="acct-quiet" type="button" data-acct="next"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(tr("Continue without a passkey")) + "</button>"
+      };
+    }
+    if (step === 1) {
+      var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
+      var handleSub = form.profileLess
+        ? tr("Choose a handle or leave blank to assign an anonymous identifier.")
+        : tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters.");
+      return {
+        body: '<p class="acct-sub">' + esc(handleSub) + "</p>" + field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) + claim + turnstileHtml() + honeypotHtml() + errorHtml(),
+        foot: nextButton("handle-next", t("next"))
+      };
+    }
+    var subText = form.profileLess ? tr("Your account will have no public profile. Interactions will be anonymous.") : tr("Your name is shown on your profile.");
+    var profRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" aria-label="' + esc(tr("Profile-less account")) + '" data-acct="toggle-form-profileless"><i></i></button></div>';
+    return {
+      body: '<p class="acct-sub">' + esc(subText) + "</p>" + field("displayName", form.profileLess ? tr("Name (optional)") : tr("Name"), "text", 50) + profRow + errorHtml(),
+      foot: nextButton("next", t("next"))
+    };
+  }
+  function setupModal() {
+    var onb = window.ViktorychOnboarding;
+    var id = setupId();
+    var titles = { name: "nameTitle", handle: "handleTitle", passkey: "passkeyTitle", secure: "secureTitle" };
+    var icons = { name: "user", handle: "at", passkey: "key", secure: "shield" };
+    var parts = setupParts();
+    var left = step < 2
+      ? '<button class="oobe-icon" type="button" data-acct="setup-back" aria-label="' + esc(tr("Back")) + '">' + onb.icon("back") + "</button>"
+      : '<button class="oobe-icon" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + onb.icon("close") + "</button>";
+    return onb.shell({ step: id, cls: "acct-back acct-setup", cardCls: "acct-modal", left: left, icon: icons[id], title: onb.t(titles[id]), body: parts.body, foot: parts.foot });
+  }
+  /* The temporary account in the setup look, with Back returning to the
+     screen it was opened from. */
   function tempSetupModal(body) {
-    var title = tr("Temporary account");
-    var anim = setupPainted === "temp" ? "" : " acct-setup-in";
-    setupPainted = "temp";
-    return '<div class="acct-back acct-setup acct-temp-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head"><button class="icon-btn" type="button" data-acct="temp-setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button><div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button></div><div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+    var onb = window.ViktorychOnboarding;
+    if (!onb || !onb.shell) return modal(tr("Temporary account"), body);
+    return onb.shell({ step: "temp", cls: "acct-back acct-setup acct-temp-setup", cardCls: "acct-modal", left: '<button class="oobe-icon" type="button" data-acct="temp-setup-back" aria-label="' + esc(tr("Back")) + '">' + onb.icon("back") + "</button>", icon: "clock", title: onb.t("tempTitle"), body: body });
   }
   function openTemp(from) {
     tempState.pick = "1d";
     tempState.until = "";
     tempState.saveData = null;
     tempState.from = from || "";
-    setupPainted = -1;
     openAuth("temp");
   }
   function tempSetupBack() {
     var from = tempState.from;
     tempState.from = "";
     errorText = "";
-    if (from === "signup") { setupPainted = -1; openAuth("signup"); return; }
-    view = "";
-    paint();
+    if (from === "signup") { openAuth("signup"); return; }
+    if (from === "quick") { openQuick(); return; }
     var onb = window.ViktorychOnboarding;
-    if (onb) onb.start("pre", 0, -1);
+    var run = function () {
+      view = "";
+      paint();
+      if (onb) onb.start("pre", from === "choose" ? 2 : 0, -1);
+    };
+    if (onb && onb.transition) onb.transition(run, -1); else run();
   }
   function fieldCount(name, value, max) {
     var raw = name === "accountNumber" ? String(value || "").replace(/\D/g, "") : String(value || "");
@@ -1226,15 +1366,25 @@ var numberNote = form.passkey
       paintLandingMeta();
       html += landing();
     }
-    if (view !== "signup") setupPainted = -1;
-    if (view === "signup") html += setupOn() ? setupModal(signupBody()) : modal(tr("Create your account"), signupBody());
+    var setupKey = "";
+    if (view === "signup" && setupOn()) {
+      if (form.keyStep && step === 1 && errorText && errorText !== tr("Could not create a passkey.") && errorText !== errorMessage("passkey_failed")) form.keyStep = false;
+      setupKey = setupId();
+      html += setupModal();
+      saveSetupStep();
+    } else if (view === "signup" && form.quick && step < 2) html += quickModal(quickBody());
+    else if (view === "signup") html += modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
     else if (view === "prefs") html += modal(tr("Settings"), prefsBody());
     else if (view === "emergency") html += modal(tr("Emergency Offline Access"), emergencyBody());
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
     else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
-    else if (view === "temp") html += tempState.from ? tempSetupModal(tempBody()) : modal(tr("Temporary account"), tempBody());
+    else if (view === "temp") {
+      if (tempState.from && tempState.from !== "quick" && window.ViktorychOnboarding) { setupKey = "temp"; html += tempSetupModal(tempBody()); }
+      else if (tempState.from === "quick") html += quickModal(tempBody(), tr("Temporary account"), "temp-setup-back");
+      else html += modal(tr("Temporary account"), tempBody());
+    }
     else if (view === "temp-saved") html += modal(tr("Account saved"), tempSavedBody());
     else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
     else if (view === "edit") html += editModal(editBody());
@@ -1243,48 +1393,71 @@ var numberNote = form.passkey
     else if (view === "unfriend") html += modal(tr("Unfriend @{handle}?", { handle: unfriendTarget ? unfriendTarget.handle : "" }), '<p class="acct-sub">' + esc(tr("This removes @{handle} from your friends.", { handle: unfriendTarget ? unfriendTarget.handle : "" })) + '</p><button class="acct-next acct-danger" type="button" data-friend-act="unfriend-confirm" style="background:#f4212e;border-color:#f4212e;color:#fff">' + esc(tr("Remove Friend")) + '</button><button class="acct-line" type="button" data-acct="close" style="width:100%;margin-top:12px">' + esc(tr("Cancel")) + '</button>');
     else if (view === "link-identity") html += modal(tr("Link social profile"), linkIdentityBody());
     else if (view === "leave") html += modal(tr("Save your account number"), '<p class="acct-sub">' + esc(tr("Leave without saving the account number?")) + '</p><button class="acct-next" type="button" data-acct="abandon">' + esc(tr("Close")) + '</button><button class="acct-line" type="button" data-acct="stay" style="width:100%;margin-top:12px">' + esc(tr("Back")) + "</button>");
-    var previous = document.activeElement;
-    var focusName = "";
-    var focusAct = "";
-    var caret = null;
-    if (previous && previous.closest && previous.closest("#account-layer")) {
-      focusName = previous.name || "";
-      focusAct = previous.getAttribute("data-acct") || "";
-      if (typeof previous.selectionStart === "number") caret = previous.selectionStart;
-    }
-    root.innerHTML = html;
-    var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0") + ":" + legalKey;
-    var focusEl = null;
-    if (focusName) focusEl = root.querySelector('[name="' + focusName.replace(/[^A-Za-z]/g, "") + '"]');
-    if (!focusEl && focusAct) focusEl = root.querySelector('[data-acct="' + focusAct.replace(/[^a-z-]/g, "") + '"]');
-    if (!focusEl && mark !== painted && view !== "edit" && view !== "crop") {
-      focusEl = form.claimOpen ? root.querySelector('input[name="claimCode"]') : root.querySelector(".acct-field input, .acct-field textarea");
-    }
-    painted = mark;
-    if (focusEl && view !== "edit" && view !== "crop") {
-      focusEl.focus();
-      if (caret != null && focusName && focusEl.setSelectionRange) {
-        try { focusEl.setSelectionRange(caret, caret); } catch (err) { /* a button has no caret */ }
+    var previousKey = setupMark;
+    var stepMoved = !!setupKey && setupKey !== previousKey;
+    setupMark = setupKey;
+    var order = ["", "name", "handle", "temp", "passkey", "secure"];
+    var dir = order.indexOf(setupKey) >= order.indexOf(previousKey) ? 1 : -1;
+    function apply() {
+      var previous = document.activeElement;
+      var focusName = "";
+      var focusAct = "";
+      var caret = null;
+      if (previous && previous.closest && previous.closest("#account-layer")) {
+        focusName = previous.name || "";
+        focusAct = previous.getAttribute("data-acct") || "";
+        if (typeof previous.selectionStart === "number") caret = previous.selectionStart;
+      }
+      root.innerHTML = html;
+      if (stepMoved) {
+        var onbApi = window.ViktorychOnboarding;
+        var titleEl = root.querySelector("#oobe-title");
+        if (onbApi && titleEl) {
+          onbApi.announce(onbApi.stepSaid(setupKey, titleEl.textContent));
+          onbApi.focusStep(root, setupKey !== "secure");
+        }
+        focusName = "";
+        focusAct = "";
+      } else if (setupKey && errorText && errorText !== lastSetupError && window.ViktorychOnboarding) {
+        window.ViktorychOnboarding.shake(root);
+      }
+      lastSetupError = setupKey ? errorText : "";
+      var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0") + ":" + legalKey;
+      var focusEl = null;
+      if (focusName) focusEl = root.querySelector('[name="' + focusName.replace(/[^A-Za-z]/g, "") + '"]');
+      if (!focusEl && focusAct) focusEl = root.querySelector('[data-acct="' + focusAct.replace(/[^a-z-]/g, "") + '"]');
+      if (!focusEl && !stepMoved && mark !== painted && view !== "edit" && view !== "crop") {
+        focusEl = form.claimOpen ? root.querySelector('input[name="claimCode"]') : root.querySelector(".acct-field input, .acct-field textarea");
+      }
+      painted = mark;
+      if (focusEl && view !== "edit" && view !== "crop") {
+        focusEl.focus();
+        if (caret != null && focusName && focusEl.setSelectionRange) {
+          try { focusEl.setSelectionRange(caret, caret); } catch (err) { /* a button has no caret */ }
+        }
+      }
+      if (view === "signup" && step === 2 && window.ViktorychPasskeys && window.ViktorychPasskeys.armConditionalCreate) {
+        var pendingPass = readPending();
+        if (pendingPass && pendingPass.token) window.ViktorychPasskeys.armConditionalCreate(pendingPass.token);
+      }
+      if (view === "crop" && !layoutCrop()) requestAnimationFrame(layoutCrop);
+      if (view === "login" && window.ViktorychPasskeys) {
+        window.ViktorychPasskeys.stopConditional();
+        window.ViktorychPasskeys.armConditional(function (json, id) { doPasskeyLogin(json, id); });
+      } else if (window.ViktorychPasskeys && view !== "login") {
+        window.ViktorychPasskeys.stopConditional();
+      }
+      if (config().turnstileSiteKey && !document.getElementById("turnstile-js")) {
+        var script = document.createElement("script");
+        script.id = "turnstile-js";
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+        script.async = true;
+        document.head.appendChild(script);
       }
     }
-    if (view === "signup" && step === 2 && window.ViktorychPasskeys && window.ViktorychPasskeys.armConditionalCreate) {
-      var pendingPass = readPending();
-      if (pendingPass && pendingPass.token) window.ViktorychPasskeys.armConditionalCreate(pendingPass.token);
-    }
-    if (view === "crop" && !layoutCrop()) requestAnimationFrame(layoutCrop);
-    if (view === "login" && window.ViktorychPasskeys) {
-      window.ViktorychPasskeys.stopConditional();
-      window.ViktorychPasskeys.armConditional(function (json, id) { doPasskeyLogin(json, id); });
-    } else if (window.ViktorychPasskeys && view !== "login") {
-      window.ViktorychPasskeys.stopConditional();
-    }
-    if (config().turnstileSiteKey && !document.getElementById("turnstile-js")) {
-      var script = document.createElement("script");
-      script.id = "turnstile-js";
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-      script.async = true;
-      document.head.appendChild(script);
-    }
+    var onbT = window.ViktorychOnboarding;
+    if (stepMoved && previousKey && onbT && onbT.transition) onbT.transition(apply, dir);
+    else apply();
   }
   function openAuth(next) {
     view = next;
@@ -4949,7 +5122,11 @@ function signupPayload() {
     }
     if (act === "signup") startSetup();
     else if (act === "setup-back") setupBack();
-    else if (act === "open-temp") openTemp(setupOn() ? "signup" : "");
+    else if (act === "quick-back") quickBack();
+    else if (act === "quick-create") quickCreate(false);
+    else if (act === "quick-passkey") quickCreate(true);
+    else if (act === "handle-next") handleNext();
+    else if (act === "open-temp") openTemp(setupOn() ? "signup" : (view === "signup" && form.quick ? "quick" : ""));
     else if (act === "temp-setup-back") tempSetupBack();
     else if (act === "temp-pick") {
       tempState.pick = acct.getAttribute("data-pick") || "1d";
@@ -5549,7 +5726,7 @@ else if (act === "copy-id") copyAccountId();
     if (event.key !== "Enter") return;
     var el = event.target;
     if (!el || !el.closest || !el.closest("#account-layer")) return;
-    if (el.tagName === "TEXTAREA") return;
+    if (el.tagName === "TEXTAREA" || el.tagName === "BUTTON" || el.tagName === "A") return;
     if (el.form && (el.form.id === "acct-login-form" || el.form.id === "acct-save-form" || el.form.id === "acct-recover-form")) return;
     event.preventDefault();
     if (view === "login") {
@@ -5560,6 +5737,8 @@ else if (act === "copy-id") copyAccountId();
       doRestoreSession();
     } else if (view === "signup") {
       if (step === 2) finishPending();
+      else if (form.quick) quickCreate(false);
+      else if (step === 1 && !form.keyStep && setupOn()) handleNext();
       else nextSignup();
     }
   }, true);
@@ -5568,7 +5747,12 @@ else if (act === "copy-id") copyAccountId();
     if (!modal) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      closeAuth();
+      /* In the setup Esc steps back; on the account number it still asks
+         before leaving. */
+      if (view === "signup" && step < 2 && setupOn()) setupBack();
+      else if (view === "signup" && step < 2 && form.quick) quickBack();
+      else if (view === "temp" && tempState.from && tempState.from !== "quick") tempSetupBack();
+      else closeAuth();
       return;
     }
     if (event.key !== "Tab") return;
@@ -5609,6 +5793,12 @@ else if (act === "copy-id") copyAccountId();
   (function resumeSetup() {
     var doc = readOnb();
     if (!doc) return;
+    if ((!mine || !mine.account) && (doc.stage === "pre" || doc.stage === "account") && !readPending()) {
+      /* A reload in the middle of the setup comes back to the same step. */
+      if (Date.now() - Number(doc.at || 0) > 86400000) { writeOnb(null); return; }
+      loadOnboarding().then(function (onb) { if (onb && !readSession()) onb.start(doc.stage, doc.step || 0); });
+      return;
+    }
     if (!mine || !mine.account) return;
     if (doc.stage !== "post" || (doc.id && doc.id !== String(mine.account.publicId || ""))) { writeOnb(null); return; }
     loadOnboarding().then(function (onb) { if (onb && readSession()) onb.start("post", doc.step || 0); });
@@ -5679,9 +5869,26 @@ else if (act === "copy-id") copyAccountId();
     profilePostsHtml: null,
     call: api,
     saveOwnAccount: applyOwnAccount,
-    openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
+    openSignupSetup: function () {
+      view = "signup";
+      step = readPending() ? 2 : 0;
+      errorText = "";
+      form = { profileLess: false, saveData: false };
+      restoreSetupStep();
+      paint();
+    },
+    openQuickSignup: function () { openQuick(); },
     openLogin: function () { openAuth("login"); },
-    openTemp: function () { openTemp("welcome"); },
+    openTemp: function (from) { openTemp(from === "choose" ? "choose" : "welcome"); },
+    runSetup: function () {
+      var own = readSession();
+      if (!own || !own.account) return;
+      loadOnboarding().then(function (onb) {
+        if (!onb || !readSession()) return;
+        writeOnb({ stage: "post", step: 1, lang: "", id: String(own.account.publicId || ""), at: Date.now() });
+        onb.start("post", 1);
+      });
+    },
     setReposts: setReposts,
     ensureProfile: loadProfile,
     profilePending: profilePending,

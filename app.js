@@ -15468,6 +15468,7 @@ const here = parseRoute();
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
       ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
+      ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Theme, data usage, notifications, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
     </div>${settingsSearchOut()}` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
@@ -19992,6 +19993,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       histRemove(tab, id);
       STATE.menu = null;
       render();
+      return;
+    }
+    if (act === "run-setup") {
+      const accts = window.ViktorychAccounts;
+      if (accts && accts.runSetup) accts.runSetup();
       return;
     }
     if (act === "install") {
@@ -26541,7 +26547,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       render();
     },
     skipWelcome: () => writeWelcome({ step: 2, done: true }),
-    done: () => render()
+    done: () => render(),
+    /* Notifications are explained first; the browser prompt comes only
+       after the button. */
+    notifyState: () => {
+      if (typeof Notification === "undefined") return "unsupported";
+      if (Notification.permission === "granted" && STATE.settings && STATE.settings.notify) return "on";
+      return Notification.permission;
+    },
+    enableNotifications: () => enableNotifications().then(() => window.ViktorychSetup.notifyState()),
+    installInfo: () => ({ standalone: isStandalone(), kind: installKindNow(), prompt: !!((STATE.installPrompt && STATE.installPrompt.prompt) || (window.__VIKTORYCH_INSTALL && window.__VIKTORYCH_INSTALL.prompt)) }),
+    promptInstall: () => {
+      const prompt = STATE.installPrompt || window.__VIKTORYCH_INSTALL;
+      if (!prompt || !prompt.prompt) return Promise.resolve(false);
+      STATE.installPrompt = null;
+      window.__VIKTORYCH_INSTALL = null;
+      return Promise.resolve().then(() => prompt.prompt()).then(() => prompt.userChoice).then((choice) => !!(choice && choice.outcome === "accepted")).catch(() => false);
+    },
+    installLater: () => {
+      const api = window.ViktorychNative;
+      if (api && api.writeInstallChoice) api.writeInstallChoice("later");
+    }
   };
   window.ViktorychFaces = {
     picture: function (src, accountFace) { return faceChoice("picture", src, accountFace); },
