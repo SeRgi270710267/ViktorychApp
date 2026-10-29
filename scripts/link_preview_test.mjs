@@ -183,7 +183,9 @@ async function main() {
     await helper.goto("http://127.0.0.1:" + port + "/offline.html");
     await helper.evaluate(() => {
       const raw = JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}");
+      // What the Save data switch writes: the master flag plus text-only link cards.
       raw.saveData = true;
+      raw.linkPreviews = "text";
       localStorage.setItem("viktorychapp-settings-v1", JSON.stringify(raw));
       // The shell repaints the last screen on boot; that copy predates the switch.
       localStorage.removeItem("viktorych-screen-v1");
