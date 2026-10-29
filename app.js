@@ -3204,6 +3204,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const embed = metaEmbedHtml(post);
       if (embed) return embed + files;
     }
+    if (list.length === 1 && list[0].type === "embed" && /(?:x|twitter)\.com\/(?:[\w]{1,20}|i(?:\/web)?)\/status(?:es)?\/\d{6,}|platform\.twitter\.com\/embed\/Tweet\.html/i.test(String(list[0].url || "") + " " + String(list[0].open || ""))) {
+      // An X post embed plays in our own player: the file is resolved on play.
+      const one = { type: "video", open: list[0].open || list[0].url, url: "", poster: list[0].poster || "" };
+      return `<div class="media m1">${playerTile(post || { media: [one] }, one, 0, "feed", true)}</div>` + files;
+    }
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
       let src = String(embed.url || "");
@@ -4666,43 +4671,49 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return true;
   }
 
+  /* Direct or relayed, by the network setting, plus the backup APIs. */
+  function xRouteFor(url) {
+    const helper = window.ViktorychEmbed;
+    const mode = (STATE.settings && STATE.settings.networkMode) || "auto";
+    const api = accountsApi();
+    const dev = window.ViktorychDevice;
+    let relay = "";
+    let backups = [];
+    try {
+      const host = new URL(url).hostname;
+      if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
+      if (/(^|\.)video\.twimg\.com$/i.test(host)) backups = backupApis(api).map((root) => root + "/v1/media?url=" + encodeURIComponent(url));
+    } catch (err) { relay = ""; }
+    if (!helper || !helper.xRoute) return { url: url, relay: relay, backups: backups };
+    const routed = helper.xRoute(url, {
+      networkMode: mode,
+      relay: relay,
+      preferRelay: mode === "auto" && isRuVisitor(),
+      playbackUrl: dev && dev.playbackUrl ? (direct, relayUrl) => dev.playbackUrl(direct, relayUrl, {
+        preferRelay: false,
+        settings: dev.read(),
+        signals: dev.signals()
+      }) : null
+    });
+    if (routed && typeof routed === "object") routed.backups = backups;
+    return routed;
+  }
+
   function xPlaybackPlan(post, media) {
     const helper = window.ViktorychEmbed;
     if (!helper || !helper.xPlan || !helper.xRoute) return null;
     if (youtubeId(post, media)) return null;
     const blob = [media && media.url, media && media.open, media && media.fallback, media && media.hls, post && post.url, post && post.link && post.link.url].join(" ");
     const platform = String((post && post.platform) || "");
-    const xish = platform === "x" || /video\.twimg\.com/i.test(blob) || /\/i\/spaces\//i.test(blob) || /\/i\/broadcasts\//i.test(blob) || /platform\.twitter\.com\/embed\/Tweet\.html/i.test(blob);
+    const mediaBlob = [media && media.url, media && media.open, media && media.fallback].join(" ");
+    const xish = platform === "x" || /video\.twimg\.com/i.test(blob) || /(?:^|\/\/)(?:www\.|mobile\.)?(?:x|twitter)\.com\/(?:[\w]{1,20}|i(?:\/web)?)\/status(?:es)?\/\d{6,}/i.test(mediaBlob) || /\/i\/spaces\//i.test(blob) || /\/i\/broadcasts\//i.test(blob) || /platform\.twitter\.com\/embed\/Tweet\.html/i.test(blob);
     if (!xish) return null;
-    const mode = (STATE.settings && STATE.settings.networkMode) || "auto";
-    const api = accountsApi();
-    const dev = window.ViktorychDevice;
     const plan = helper.xPlan({
       post: post,
       media: media,
       text: blob,
       expired: oePast,
-      route: (url) => {
-        let relay = "";
-        let backups = [];
-        try {
-          const host = new URL(url).hostname;
-          if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
-          if (/(^|\.)video\.twimg\.com$/i.test(host)) backups = backupApis(api).map((root) => root + "/v1/media?url=" + encodeURIComponent(url));
-        } catch (err) { relay = ""; }
-        const routed = helper.xRoute(url, {
-          networkMode: mode,
-          relay: relay,
-          preferRelay: mode === "auto" && isRuVisitor(),
-          playbackUrl: dev && dev.playbackUrl ? (direct, relayUrl) => dev.playbackUrl(direct, relayUrl, {
-            preferRelay: false,
-            settings: dev.read(),
-            signals: dev.signals()
-          }) : null
-        });
-        if (routed && typeof routed === "object") routed.backups = backups;
-        return routed;
-      }
+      route: xRouteFor
     });
     if (!plan || (!plan.primary && !plan.embedUrl && !plan.openUrl)) return null;
     return plan;
@@ -4766,7 +4777,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       linkLabel: tr("Open on X"),
       tapToLoad: true,
       tapLabel: tr("Play with the X player"),
-      refresh: () => xRefresh(post),
+      refresh: () => xRefresh(post, media),
       title: (post && (post.title || post.text)) || tr("Video"),
       active: opts.active,
       onFrame: (video) => {
@@ -4876,15 +4887,52 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }).catch(() => { if (el._gen === gen) giveUp(); });
   }
 
-  function xRefresh(post) {
-    const id = String((post && (post.statusId || post.id)) || "");
+  /* A fresh playable file for an X post, for our own player. Order:
+     fxtwitter (direct, cached), then our /v1/xv (X's syndication data read
+     on the edge, then fxtwitter and vxtwitter from there) on the main API and
+     the backup APIs, then vxtwitter direct. The best file is the highest
+     bitrate mp4, or the HLS playlist when that is the only one. Never stored. */
+  function xRefresh(post, media) {
+    const helper = window.ViktorychEmbed;
+    const fromMedia = helper && helper.xStatusId && media ? String(helper.xStatusId({ url: media.url, open: media.open, href: media.fallback }) || "") : "";
+    const fromPost = String((post && (post.statusId || (helper && helper.xStatusId ? helper.xStatusId(post) : "") || post.id)) || "");
+    const id = post && post.platform === "x" ? (fromPost || fromMedia) : (fromMedia || fromPost);
     if (!/^\d{6,}$/.test(id)) return Promise.resolve(null);
-    return fxStatusPost(id).then((extra) => {
-      const row = extra && (extra.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif"));
-      const url = row && (pickMp4(row.variants || []) || row.url);
-      if (!url || !playableFile(url) || oePast(url)) return null;
-      return { url: url };
-    }).catch(() => null);
+    const want = (() => {
+      const vids = ((post && post.media) || []).filter((item) => item && (item.type === "video" || item.type === "animated_gif"));
+      const at = media ? vids.indexOf(media) : -1;
+      return at > 0 ? at : 0;
+    })();
+    const pickFrom = (rows) => {
+      const list = (rows || []).filter((row) => row && (row.type === "video" || row.type === "animated_gif"));
+      const row = list[want] || list[0];
+      if (!row) return null;
+      const best = helper && helper.xPrimary ? helper.xPrimary(row, { expired: oePast }) : null;
+      if (best && best.url) return best;
+      const url = pickMp4(row.variants || []) || row.url;
+      return url && playableFile(url) && !oePast(url) ? { kind: /\.m3u8(\?|$)/i.test(url) ? "hls" : "mp4", url: url } : null;
+    };
+    const viaApi = (root) => fetchJson(String(root).replace(/\/$/, "") + "/v1/xv?id=" + encodeURIComponent(id)).then((data) => pickFrom((data && data.media) || [])).catch(() => null);
+    const viaVx = () => fetchJson("https://api.vxtwitter.com/Twitter/status/" + encodeURIComponent(id)).then((data) => pickFrom(((data && data.media_extended) || []).map((m) => ({
+      type: m && m.type === "gif" ? "animated_gif" : (m && m.type),
+      variants: m && m.url ? [{ url: m.url, bitrate: 1 }] : []
+    })))).catch(() => null);
+    const api = accountsApi();
+    const steps = [() => fxStatusPost(id).then((extra) => pickFrom((extra && extra.media) || [])).catch(() => null)];
+    if (api) steps.push(() => viaApi(api));
+    backupApis(api).forEach((root) => steps.push(() => viaApi(root)));
+    steps.push(viaVx);
+    const tryNext = (index) => {
+      if (index >= steps.length) return Promise.resolve(null);
+      return steps[index]().then((found) => (found && found.url ? found : tryNext(index + 1)));
+    };
+    return once("xrefresh:" + id + ":" + want, () => tryNext(0)).then((found) => {
+      if (!found) return null;
+      const routed = xRouteFor(found.url) || {};
+      const first = routed.url || found.url;
+      const alts = [found.url, routed.relay].concat(routed.backups || []).filter((url, i, all) => url && url !== first && all.indexOf(url) === i);
+      return { kind: found.kind, url: first, origin: found.url, alts: alts };
+    });
   }
 
   function recoverPreview(el, post, media, opts, gen) {
@@ -4920,7 +4968,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     el._recovered = 1;
     el._sources = [];
     notePlay(el, "refresh-" + platform);
-    const job = platform === "vk" ? vkRefresh(post, media) : platform === "x" ? xRefresh(post) : metaRefresh(post);
+    const job = platform === "vk" ? vkRefresh(post, media) : platform === "x" ? xRefresh(post, media) : metaRefresh(post);
     job.then((fresh) => {
       if (el._gen !== gen) return;
       if (!fresh || !fresh.url || !playableFile(fresh.url) || oePast(fresh.url)) { lastResort(); return; }

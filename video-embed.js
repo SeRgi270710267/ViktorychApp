@@ -654,16 +654,24 @@
       start();
     }
     if (plan.external === "space" || plan.external === "broadcast") { showLink(); return; }
-    if (!plan.primary || !plan.primary.url) {
-      if (plan.embedUrl) showEmbed();
-      else showLink();
-      return;
+    /* Direct file, then the relay, then each backup fetcher, then a fresh
+       file from the resolvers (fxtwitter, then our /v1/xv which reads X's
+       syndication data on the edge), each again direct then relayed. The
+       official embed is only the very last step. */
+    var tried = [];
+    function playChain(rows, done) {
+      var list = (rows || []).filter(function (row) {
+        if (!row || !row.url || tried.indexOf(row.url) >= 0) return false;
+        tried.push(row.url);
+        return true;
+      });
+      function go() {
+        var row = list.shift();
+        if (!row) { done(); return; }
+        playFile(row, go);
+      }
+      go();
     }
-    /* Direct file, then the relay, then each backup fetcher, then one fresh
-       short-lived URL from the resolver, and only then the official embed. */
-    var chain = [];
-    if (plan.relay && plan.relay.url && plan.relay.url !== plan.primary.url) chain.push(plan.relay);
-    (plan.backups || []).forEach(function (row) { if (row && row.url) chain.push(row); });
     var refreshed = false;
     function refresh() {
       if (refreshed || typeof opts.refresh !== "function") { showEmbed(); return; }
@@ -673,16 +681,35 @@
       if (!job || !job.then) { showEmbed(); return; }
       job.then(function (fresh) {
         if (!alive()) return;
-        if (!fresh || !fresh.url || fresh.url === plan.primary.url) { showEmbed(); return; }
-        playFile({ kind: fresh.kind || (/\.m3u8(\?|$)/i.test(fresh.url) ? "hls" : "mp4"), url: fresh.url, origin: fresh.url }, showEmbed);
+        if (!fresh || !fresh.url) { showEmbed(); return; }
+        var kind = fresh.kind || (/\.m3u8(\?|$)/i.test(fresh.url) ? "hls" : "mp4");
+        var rows = [{ kind: kind, url: fresh.url, origin: fresh.origin || fresh.url }];
+        (fresh.alts || []).forEach(function (url) { if (url) rows.push({ kind: kind, url: url, origin: fresh.origin || fresh.url }); });
+        playChain(rows, showEmbed);
       }, function () { if (alive()) showEmbed(); });
     }
-    function nextRoute() {
-      var row = chain.shift();
-      if (!row) { refresh(); return; }
-      playFile(row, nextRoute);
+    if (!plan.primary || !plan.primary.url) {
+      /* No file in the data we have: resolve one first, so the post plays
+         in our player. The poster stays up meanwhile; nothing blocks. */
+      if (plan.embedUrl && typeof opts.refresh === "function") {
+        host.classList.add("is-resolving");
+        var finish = function () { host.classList.remove("is-resolving"); };
+        var real = opts.refresh;
+        opts.refresh = function () {
+          var job = real();
+          if (job && job.then) job.then(finish, finish);
+          else finish();
+          return job;
+        };
+        refresh();
+      } else if (plan.embedUrl) showEmbed();
+      else showLink();
+      return;
     }
-    playFile(plan.primary, nextRoute);
+    var chain = [plan.primary];
+    if (plan.relay && plan.relay.url && plan.relay.url !== plan.primary.url) chain.push(plan.relay);
+    (plan.backups || []).forEach(function (row) { if (row && row.url) chain.push(row); });
+    playChain(chain, refresh);
   }
 
   function match(text, opts) {

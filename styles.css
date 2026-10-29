@@ -1303,6 +1303,10 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 }
 .player .vmute, .player .vleft { display: none !important; }
 .vplay.is-failed { cursor: default; }
+/* An X post with no file in our data: the file is being looked up. */
+.vplay.is-resolving > .play { animation: vresolve 1s ease-in-out infinite alternate; }
+@keyframes vresolve { from { opacity: 1; } to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .vplay.is-resolving > .play { animation: none; opacity: .6; } }
 .vplay.is-failed > .play,
 .vplay.is-failed .vdur { display: none; }
 .vretry {
