@@ -11,17 +11,18 @@
   var root = typeof window === "undefined" ? null : window;
   if (!root || root.ViktorychServers) return;
 
-  var P = { VIEW: 1, SEND: 2, MANAGE_MESSAGES: 4, MANAGE_CHANNELS: 8, KICK: 16, BAN: 32, MENTION_EVERYONE: 64, MANAGE_ROLES: 128, MANAGE_SERVER: 256, CREATE_INVITE: 512, REACT: 1024, ATTACH: 2048, MODERATE: 4096, MANAGE_EVENTS: 8192, CREATE_THREADS: 16384, MANAGE_THREADS: 32768, ADMIN: 1 << 20 };
+  var P = { VIEW: 1, SEND: 2, MANAGE_MESSAGES: 4, MANAGE_CHANNELS: 8, KICK: 16, BAN: 32, MENTION_EVERYONE: 64, MANAGE_ROLES: 128, MANAGE_SERVER: 256, CREATE_INVITE: 512, REACT: 1024, ATTACH: 2048, MODERATE: 4096, MANAGE_EVENTS: 8192, CREATE_THREADS: 16384, MANAGE_THREADS: 32768, CONNECT: 65536, SPEAK: 131072, VIDEO: 262144, MUTE_MEMBERS: 524288, ADMIN: 1 << 20 };
   function PERM_ROWS() {
     return [
     ["VIEW", tr("View channels")], ["SEND", tr("Send messages")], ["REACT", tr("Add reactions")], ["ATTACH", tr("Attach files")],
     ["MENTION_EVERYONE", tr("Mention @everyone and all roles")], ["CREATE_INVITE", tr("Create invites")], ["CREATE_THREADS", tr("Create threads and posts")],
     ["MANAGE_THREADS", tr("Manage threads and posts")], ["MANAGE_EVENTS", tr("Manage events")],
+    ["CONNECT", tr("Connect to voice")], ["SPEAK", tr("Speak in voice")], ["VIDEO", tr("Camera and screen share")], ["MUTE_MEMBERS", tr("Mute and disconnect members in voice")],
     ["MANAGE_MESSAGES", tr("Manage messages")], ["MANAGE_CHANNELS", tr("Manage channels")], ["MANAGE_ROLES", tr("Manage roles")],
     ["KICK", tr("Kick members")], ["BAN", tr("Ban members")], ["MODERATE", tr("Time out members")], ["MANAGE_SERVER", tr("Manage server")], ["ADMIN", tr("Administrator")]
     ];
   }
-  var CHANNEL_PERMS = ["VIEW", "SEND", "REACT", "ATTACH", "CREATE_THREADS", "MENTION_EVERYONE", "MANAGE_MESSAGES", "MANAGE_THREADS"];
+  var CHANNEL_PERMS = ["VIEW", "SEND", "REACT", "ATTACH", "CREATE_THREADS", "MENTION_EVERYONE", "MANAGE_MESSAGES", "MANAGE_THREADS", "CONNECT", "SPEAK", "VIDEO", "MUTE_MEMBERS"];
   var QUICK = ["\uD83D\uDC4D", "\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\uDE22", "\uD83D\uDD25"];
   var EMOJI = ("\uD83D\uDE00 \uD83D\uDE03 \uD83D\uDE04 \uD83D\uDE01 \uD83D\uDE06 \uD83D\uDE05 \uD83E\uDD23 \uD83D\uDE02 \uD83D\uDE42 \uD83D\uDE09 \uD83D\uDE0A \uD83D\uDE07 \uD83E\uDD70 \uD83D\uDE0D \uD83E\uDD29 \uD83D\uDE18 \uD83D\uDE0B \uD83D\uDE1B \uD83E\uDD14 \uD83E\uDD28 \uD83D\uDE10 \uD83D\uDE44 \uD83D\uDE0F \uD83D\uDE2C \uD83D\uDE34 \uD83D\uDE37 \uD83E\uDD12 \uD83E\uDD2F \uD83E\uDD73 \uD83D\uDE0E \uD83E\uDD13 \uD83D\uDE15 \uD83D\uDE1F \uD83D\uDE2E \uD83D\uDE33 \uD83E\uDD7A \uD83D\uDE22 \uD83D\uDE2D \uD83D\uDE31 \uD83D\uDE24 \uD83D\uDE21 \uD83D\uDC80 \uD83D\uDCA9 \uD83E\uDD21 \uD83D\uDC7B \uD83D\uDC7D \uD83E\uDD16 \uD83D\uDE48 " +
     "\uD83D\uDC4B \uD83D\uDC4C \u270C\uFE0F \uD83E\uDD1E \uD83E\uDD19 \uD83D\uDC4D \uD83D\uDC4E \uD83D\uDC4F \uD83D\uDE4C \uD83E\uDD1D \uD83D\uDE4F \uD83D\uDCAA \uD83D\uDC40 \uD83E\uDDE0 " +
@@ -40,7 +41,7 @@
     drafts: {}, reply: null, edit: "", files: [], sheet: null, membersOpen: true,
     socket: null, socketSid: "", socketWant: false, retry: 0, retryTimer: 0,
     unread: {}, flash: "", lastTyping: 0, mentionMap: {}, previews: {}, expanded: {}, collapsed: {},
-    threads: {}, active: {}, forum: {}, acts: {}, events: {}, forumTag: {}
+    threads: {}, active: {}, forum: {}, acts: {}, events: {}, forumTag: {}, voice: {}, vfocus: ""
   };
 
   function tr(key, vars) {
@@ -496,7 +497,7 @@
     if (!S.sid || !S.cid) return;
     var cc = channel(S.cid);
     if (cc && cc.kind === "forum") { loadForum(S.sid, S.cid); return; }
-    if (!cc) return;
+    if (!cc || cc.kind === "voice") return;
     openChannelData(S.sid, S.cid);
   }
 
@@ -710,6 +711,17 @@
 
   /* ---------- icons ---------- */
   var I = {
+    voice: "M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z",
+    volOff: "M16.5 12A4.5 4.5 0 0 0 14 8v2.2l2.45 2.45c.03-.2.05-.42.05-.65zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12a9 9 0 0 0-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9zM12 4 9.91 6.09 12 8.18z",
+    mic: "M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5.3-3a5.3 5.3 0 0 1-10.6 0H5a7 7 0 0 0 6 6.9V21h2v-3.1a7 7 0 0 0 6-6.9z",
+    micOff: "M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23A6.9 6.9 0 0 0 19 11zm-4.02.17V5a3 3 0 0 0-5.9-.7zM4.27 3 3 4.27l6.01 6.01V11a3 3 0 0 0 3 3c.22 0 .44-.03.65-.08l1.66 1.66A5.5 5.5 0 0 1 6.7 11H5a7 7 0 0 0 6 6.72V21h2v-3.28a6.9 6.9 0 0 0 2.54-.9L19.73 21 21 19.73z",
+    headphones: "M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h3v-8H5v-1a7 7 0 0 1 14 0v1h-3v8h3a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9z",
+    headOff: "M12 3a9 9 0 0 0-6.36 2.64l1.42 1.42A7 7 0 0 1 19 12v1h-3v.17l5 5V12a9 9 0 0 0-9-9zM3.27 2 2 3.27l2.07 2.07A8.9 8.9 0 0 0 3 12v7a2 2 0 0 0 2 2h3v-8H5v-1c0-1.1.25-2.13.7-3.06L16 19.27V21h1.73l3 3L22 22.73z",
+    video: "M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11z",
+    videoOff: "M21 6.5l-4 4V7a1 1 0 0 0-1-1H9.82L21 17.18zM3.27 2 2 3.27 4.73 6H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73z",
+    screen: "M20 18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2H0v2h24v-2zM4 6h16v10H4z",
+    hangup: "M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a1 1 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67a1 1 0 0 1 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.3 11.3 0 0 0-2.67-1.85.99.99 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z",
+    signal: "M2 22h3v-5H2zm5 0h3v-9H7zm5 0h3V8h-3zm5 0h3V2h-3z",
     hash: "M10.59 4l-.6 4H6v2h3.7l-.6 4H5v2h3.8l-.6 4h2l.6-4h3.9l-.6 4h2l.6-4H21v-2h-3.4l.6-4H22V8h-3.5l.6-4h-2l-.6 4h-3.9l.6-4h-2zm1.1 6h3.9l-.6 4h-3.9l.6-4z",
     news: "M3 10v4c0 .55.45 1 1 1h1l3 4h2v-4l8 4V5l-8 4H4c-.55 0-1 .45-1 1zm17-1v6c1.1-.4 2-1.6 2-3s-.9-2.6-2-3z",
     plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z",
@@ -868,7 +880,7 @@
       return g.items.some(function (c) {
         if (!has(Number(c.perms) || 0, P.VIEW) || c.kind === "category") return false;
         if (!any) any = c.id;
-        if (c.kind === "forum") return false;
+        if (c.kind === "forum" || c.kind === "voice") return false;
         out = c.id; return true;
       });
     });
@@ -898,7 +910,7 @@
     var invite = has(basePerms(), P.CREATE_INVITE) && !me().timeoutUntil ? '<button type="button" class="vsrv-side-invite" data-vs="invite-sheet">' + icon("users") + "<span>" + esc(tr("Invite people")) + "</span></button>" : "";
     var evN = (srv() && srv().events) || 0;
     var events = '<button type="button" class="vsrv-side-invite" data-vs="events">' + icon("calendar") + "<span>" + esc(evN ? trn(evN, "srvEventsN") : tr("Events")) + "</span></button>";
-    return head + '<div class="vsrv-chlist" role="list">' + invite + events + groups + (canChan ? '<button type="button" class="vsrv-side-add" data-vs="new-channel">' + icon("plus") + "<span>" + esc(tr("Create channel")) + "</span></button>" : "") + "</div>" + meBar();
+    return head + '<div class="vsrv-chlist" role="list">' + invite + events + groups + (canChan ? '<button type="button" class="vsrv-side-add" data-vs="new-channel">' + icon("plus") + "<span>" + esc(tr("Create channel")) + "</span></button>" : "") + "</div>" + voicePanel() + meBar();
   }
   function channelRow(c) {
     var on = c.id === S.cid;
@@ -908,11 +920,12 @@
     return '<a role="listitem" class="vsrv-ch' + (on ? " on" : "") + (unread ? " unread" : "") + (level === "none" ? " muted" : "") + '" href="#/messages/s/' + S.sid + "/" + c.id + '"' + (on ? ' aria-current="page"' : "") + ">" +
       icon(chanIcon(c), "vsrv-ch-ic") + (priv ? icon("lock", "vsrv-ch-lock") : "") +
       '<span class="vsrv-ch-name">' + esc(c.name) + "</span>" +
+      (c.kind === "voice" && voiceIn(S.sid, c.id).length ? '<span class="vsrv-vcount">' + voiceIn(S.sid, c.id).length + "/" + VOICE_CAP + "</span>" : "") +
       (c.mentions ? '<span class="vsrv-badge">' + (c.mentions > 99 ? "99+" : c.mentions) + "</span>" : "") +
       (has(basePerms(), P.MANAGE_CHANNELS) ? '<button type="button" class="vsrv-ch-gear" data-vs="channel-settings" data-id="' + c.id + '" aria-label="' + esc(tr("Edit channel")) + '">' + icon("gear") + "</button>" : "") +
-      "</a>" + threadRows(c);
+      "</a>" + (c.kind === "voice" ? voiceRows(c) : threadRows(c));
   }
-  function chanIcon(c) { return c.kind === "announcement" ? "news" : c.kind === "forum" ? "forum" : c.kind === "thread" ? "thread" : "hash"; }
+  function chanIcon(c) { return c.kind === "voice" ? "voice" : c.kind === "announcement" ? "news" : c.kind === "forum" ? "forum" : c.kind === "thread" ? "thread" : "hash"; }
   function threadRows(c) {
     if (c.kind !== "text" && c.kind !== "announcement") return "";
     var cur = S.threads[S.cid];
@@ -946,9 +959,211 @@
     return '<div class="vsrv-mebar"><button type="button" class="vsrv-mebar-who" data-vs="member" data-m="' + m.mid + '">' + avatar(m.mid, S.sid, "vsrv-ava sm") +
       '<span class="vsrv-mebar-txt"><span class="vsrv-mebar-name">' + esc(m.nick || (c && (c.name || c.handle)) || tr("You")) + "</span>" +
       (m.timeoutUntil && m.timeoutUntil > Date.now() ? '<span class="vsrv-mebar-sub warn">' + esc(tr("Timed out until {time}", { time: fullTime(m.timeoutUntil) })) + "</span>" : actOf(m.mid) ? '<span class="vsrv-mebar-sub">' + esc(actText(actOf(m.mid))) + "</span>" : c && c.handle ? '<span class="vsrv-mebar-sub">@' + esc(c.handle) + "</span>" : "") + "</span></button>" +
+      voiceMeButtons() +
       '<button type="button" class="vsrv-iconbtn" data-vs="notify-sheet" data-scope="' + S.sid + '" aria-label="' + esc(tr("Notification settings")) + '" title="' + esc(tr("Notification settings")) + '">' + icon(level === "none" ? "bellOff" : "bell") + "</button>" +
       (canManage() ? '<button type="button" class="vsrv-iconbtn" data-vs="settings" aria-label="' + esc(tr("Server settings")) + '" title="' + esc(tr("Server settings")) + '">' + icon("gear") + "</button>" : "") +
       "</div>";
+  }
+
+  /* ---------- voice (calls run in servers-voice.js) ---------- */
+  var VOICE_CAP = 8;
+  var voiceReady = false;
+  function vv() {
+    var v = root.ViktorychVoice || null;
+    if (v && !voiceReady) {
+      voiceReady = true;
+      v.init({ call: call, api: api, notice: voiceNotice });
+      v.on(function (st, kind) { if (kind === "speaking") paintSpeaking(); else paintVoice(); });
+    }
+    return v;
+  }
+  function voiceNotice(why) {
+    var text = {
+      full: tr("This voice channel is full ({n} people).", { n: VOICE_CAP }),
+      perm: tr("You can't join this voice channel."),
+      moved: tr("You joined voice on another device or tab."),
+      kicked: tr("A moderator disconnected you from voice."),
+      nomic: tr("No microphone. You joined muted."),
+      nocam: tr("Couldn't turn on the camera."),
+      noscreen: tr("Screen sharing isn't available on this device."),
+      unsupported: tr("Voice isn't supported in this browser.")
+    }[why] || tr("Voice disconnected.");
+    toast(text);
+  }
+  function vstate() { var v = vv(); return v ? v.state() : null; }
+  function inVoice(sid, cid) { var V = vstate(); return !!(V && V.status !== "idle" && V.sid === sid && (!cid || V.cid === cid)); }
+  function voiceBag(sid) {
+    var V = vstate();
+    var bag = S.voice[sid] || {};
+    if (V && V.sid === sid && V.status === "connected") {
+      var out = {};
+      Object.keys(bag).forEach(function (k) { if (bag[k].c !== V.cid) out[k] = bag[k]; });
+      Object.keys(V.roster).forEach(function (k) { out[k] = V.roster[k]; });
+      return out;
+    }
+    return bag;
+  }
+  function voiceIn(sid, cid) {
+    var bag = voiceBag(sid);
+    return Object.keys(bag).filter(function (k) { return bag[k] && bag[k].c === cid; }).sort(function (a, b) { return (bag[a].j || 0) - (bag[b].j || 0); });
+  }
+  function voiceSt(sid, mid) { var r = voiceBag(sid)[mid]; return (r && r.st) || {}; }
+  function isSpeaking(mid) {
+    var V = vstate();
+    if (!V || V.status !== "connected") return false;
+    return mid === V.mid ? !!V.speaking.me : !!V.speaking[mid];
+  }
+  function voiceFlags(st) {
+    return (st.sm ? icon("micOff", "vsrv-vflag sm") : st.mu ? icon("micOff", "vsrv-vflag") : "") + (st.df ? icon("headOff", "vsrv-vflag") : "") +
+      (st.cam ? icon("video", "vsrv-vflag") : "") + (st.scr ? '<span class="vsrv-live">' + esc(tr("LIVE")) + "</span>" : "");
+  }
+  function voiceRows(c) {
+    var list = voiceIn(S.sid, c.id);
+    if (!list.length) return "";
+    return '<div class="vsrv-vrows">' + list.map(function (mid) {
+      var st = voiceSt(S.sid, mid);
+      return '<button type="button" class="vsrv-vrow" data-vs="member" data-m="' + mid + '">' +
+        '<span class="vsrv-vring' + (isSpeaking(mid) ? " speaking" : "") + '" data-spk="' + mid + '">' + avatar(mid, S.sid, "vsrv-ava xs") + "</span>" +
+        '<span class="vsrv-vrow-name">' + esc(nameOf(mid)) + "</span>" + voiceFlags(st) + "</button>";
+    }).join("") + "</div>";
+  }
+  function voiceStatusText(V) {
+    return V.status === "connected" ? tr("Voice connected") : V.status === "reconnecting" ? tr("Reconnecting…") : tr("Connecting…");
+  }
+  function voicePanel() {
+    var V = vstate();
+    if (!V || V.status === "idle") return "";
+    var info = serverInfo(V.sid) || {};
+    var c = channel(V.cid, V.sid);
+    var v = vv();
+    return '<div class="vsrv-vpanel ' + esc(V.status) + '"><div class="vsrv-vpanel-top">' +
+      '<button type="button" class="vsrv-vpanel-info" data-vs="voice-open">' + icon("signal", "vsrv-vpanel-sig") + '<span><strong>' + esc(voiceStatusText(V)) + "</strong><small>" + esc((c ? c.name : "") + (info.name ? " / " + info.name : "")) + "</small></span></button>" +
+      '<button type="button" class="vsrv-iconbtn danger" data-vs="voice-leave" aria-label="' + esc(tr("Disconnect")) + '" title="' + esc(tr("Disconnect")) + '">' + icon("hangup") + "</button></div>" +
+      '<div class="vsrv-vpanel-acts">' +
+      '<button type="button" class="vsrv-vbtn' + (V.cam ? " on" : "") + '" data-vs="voice-cam" aria-pressed="' + (V.cam ? "true" : "false") + '">' + icon(V.cam ? "video" : "videoOff") + "<span>" + esc(tr("Camera")) + "</span></button>" +
+      (v.canScreen() ? '<button type="button" class="vsrv-vbtn' + (V.scr ? " on" : "") + '" data-vs="voice-screen" aria-pressed="' + (V.scr ? "true" : "false") + '">' + icon("screen") + "<span>" + esc(tr("Screen")) + "</span></button>" : "") +
+      "</div></div>";
+  }
+  function voiceMeButtons() {
+    var V = vstate();
+    if (!V || V.status === "idle") return "";
+    var mu = V.mu || V.sm;
+    return '<button type="button" class="vsrv-iconbtn' + (mu ? " danger-on" : "") + '" data-vs="voice-mute" aria-pressed="' + (mu ? "true" : "false") + '" aria-label="' + esc(mu ? tr("Unmute") : tr("Mute")) + '" title="' + esc(V.sm ? tr("Server muted") : mu ? tr("Unmute") : tr("Mute")) + '">' + icon(mu ? "micOff" : "mic") + "</button>" +
+      '<button type="button" class="vsrv-iconbtn' + (V.df ? " danger-on" : "") + '" data-vs="voice-deaf" aria-pressed="' + (V.df ? "true" : "false") + '" aria-label="' + esc(V.df ? tr("Undeafen") : tr("Deafen")) + '" title="' + esc(V.df ? tr("Undeafen") : tr("Deafen")) + '">' + icon(V.df ? "headOff" : "headphones") + "</button>";
+  }
+  function voiceHead(c) {
+    var n = voiceIn(S.sid, c.id).length;
+    return '<header class="vsrv-conv-head"><a class="vsrv-back" href="#/messages/s/' + S.sid + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>" +
+      icon("voice", "vsrv-conv-ic") + '<h2 class="vsrv-conv-name">' + esc(c.name) + "</h2>" +
+      '<span class="vsrv-conv-topic">' + (n ? esc(n + "/" + VOICE_CAP) : "") + "</span>" +
+      '<span class="vsrv-conv-acts"><button type="button" class="vsrv-iconbtn vsrv-mem-toggle' + (S.membersOpen ? " on" : "") + '" data-vs="members-toggle" aria-label="' + esc(tr("Members")) + '" title="' + esc(tr("Members")) + '">' + icon("users") + "</button></span></header>";
+  }
+  function stageTile(mid, kind, V) {
+    var self = mid === V.mid;
+    var st = self ? { mu: V.mu || V.sm, df: V.df, cam: V.cam, scr: V.scr, sm: V.sm } : voiceSt(V.sid, mid);
+    var key = mid + ":" + kind;
+    var video = kind === "scr" || st.cam;
+    var conn = self ? "connected" : vv().peerConn(mid);
+    var p = V.peers[mid];
+    var name = nameOf(mid) + (kind === "scr" ? " · " + tr("Screen") : "");
+    return '<div class="vsrv-vtile' + (video ? " video" : "") + (kind === "scr" ? " screen" : "") + (S.vfocus === key ? " focus" : "") + (kind === "cam" && isSpeaking(mid) ? " speaking" : "") + '"' + (kind === "cam" ? ' data-spk="' + mid + '"' : "") + ">" +
+      '<button type="button" class="vsrv-vtile-hit" data-vs="voice-tile" data-key="' + esc(key) + '" aria-label="' + esc(name) + '"></button>' +
+      (video ? '<div class="vsrv-vmedia" data-vmedia="' + (self ? "me" : mid) + ":" + kind + '"></div>' : '<span class="vsrv-vtile-ava">' + avatar(mid, V.sid, "vsrv-ava xl") + "</span>") +
+      '<span class="vsrv-vname">' + (kind === "cam" && (st.mu || st.sm) ? icon("micOff", "vsrv-vflag") : "") + (kind === "cam" && st.df ? icon("headOff", "vsrv-vflag") : "") + "<span>" + esc(name) + "</span></span>" +
+      (conn === "failed" ? '<span class="vsrv-vbad">' + esc(tr("Couldn't connect")) + "</span>" : conn !== "connected" ? '<span class="vsrv-vwait">' + esc(tr("Connecting…")) + "</span>" : "") +
+      (!self && kind === "cam" ? '<button type="button" class="vsrv-vtile-more" data-vs="voice-peer" data-m="' + mid + '" aria-label="' + esc(tr("More")) + '">' + icon(p && p.localMute ? "volOff" : "more") + "</button>" : "") +
+      "</div>";
+  }
+  function stageInner(c) {
+    var V = vstate();
+    var v = vv();
+    var people = voiceIn(S.sid, c.id);
+    if (!v || !inVoice(S.sid, c.id)) {
+      var perms = Number(c.perms) || 0;
+      var can = has(perms, P.CONNECT);
+      var full = people.length >= VOICE_CAP;
+      var ok = v && v.supported();
+      return '<div class="vsrv-stage-pre">' + icon("voice", "vsrv-stage-ic") + "<h2>" + esc(c.name) + "</h2>" +
+        (people.length ? '<div class="vsrv-stage-who">' + people.map(function (m) { return '<span class="vsrv-vring' + (isSpeaking(m) ? " speaking" : "") + '" title="' + esc(nameOf(m)) + '">' + avatar(m, S.sid, "vsrv-ava md") + "</span>"; }).join("") + "</div><p>" + esc(trn(people.length, "srvVoiceIn")) + "</p>" : "<p>" + esc(tr("No one is here yet.")) + "</p>") +
+        '<button type="button" class="vsrv-btn big" data-vs="voice-join" data-id="' + c.id + '"' + (can && !full && ok ? "" : " disabled") + ">" + esc(full ? tr("Channel is full") : tr("Join voice")) + "</button>" +
+        '<p class="vsrv-stage-note">' + esc(!ok ? tr("Voice isn't supported in this browser.") : !can ? tr("You can't join this voice channel.") : tr("Voice and video go straight between devices. Some strict networks block this.")) + "</p></div>";
+    }
+    var tiles = [];
+    people.forEach(function (mid) {
+      tiles.push(stageTile(mid, "cam", V));
+      var st = mid === V.mid ? { scr: V.scr } : voiceSt(V.sid, mid);
+      if (st.scr) tiles.push(stageTile(mid, "scr", V));
+    });
+    var mu = V.mu || V.sm;
+    return '<div class="vsrv-tiles' + (S.vfocus ? " has-focus" : "") + " n" + Math.min(tiles.length, 9) + '">' + tiles.join("") + "</div>" +
+      '<div class="vsrv-vbar">' +
+      '<button type="button" class="vsrv-vround' + (mu ? " off" : "") + '" data-vs="voice-mute" aria-pressed="' + (mu ? "true" : "false") + '" aria-label="' + esc(mu ? tr("Unmute") : tr("Mute")) + '">' + icon(mu ? "micOff" : "mic") + "</button>" +
+      '<button type="button" class="vsrv-vround' + (V.df ? " off" : "") + '" data-vs="voice-deaf" aria-pressed="' + (V.df ? "true" : "false") + '" aria-label="' + esc(V.df ? tr("Undeafen") : tr("Deafen")) + '">' + icon(V.df ? "headOff" : "headphones") + "</button>" +
+      '<button type="button" class="vsrv-vround' + (V.cam ? " on" : "") + '" data-vs="voice-cam" aria-pressed="' + (V.cam ? "true" : "false") + '" aria-label="' + esc(tr("Camera")) + '">' + icon(V.cam ? "video" : "videoOff") + "</button>" +
+      (v.canScreen() ? '<button type="button" class="vsrv-vround' + (V.scr ? " on" : "") + '" data-vs="voice-screen" aria-pressed="' + (V.scr ? "true" : "false") + '" aria-label="' + esc(tr("Share your screen")) + '">' + icon("screen") + "</button>" : "") +
+      '<button type="button" class="vsrv-vround leave" data-vs="voice-leave" aria-label="' + esc(tr("Disconnect")) + '">' + icon("hangup") + "</button></div>";
+  }
+  function mountStage() { var box = el("vsrv-stage"); var v = vv(); if (box && v) v.mount(box); }
+  function paintStage() {
+    var box = el("vsrv-stage");
+    var c = S.cid ? channel(S.cid) : null;
+    if (!box || !c || c.kind !== "voice") return;
+    box.innerHTML = stageInner(c);
+    mountStage();
+  }
+  function paintVoice() {
+    if (S.mode !== "server" || !rootEl()) return;
+    paintSide();
+    paintStage();
+    var c = S.cid ? channel(S.cid) : null;
+    var head = el("vsrv-conv") && el("vsrv-conv").querySelector(".vsrv-conv-head .vsrv-conv-topic");
+    if (c && c.kind === "voice" && head) { var n = voiceIn(S.sid, c.id).length; head.textContent = n ? n + "/" + VOICE_CAP : ""; }
+  }
+  function paintSpeaking() {
+    Array.prototype.forEach.call(document.querySelectorAll("#vsrv-root [data-spk]"), function (n) {
+      n.classList.toggle("speaking", isSpeaking(n.getAttribute("data-spk")));
+    });
+  }
+  function voiceJoin(cid) {
+    var v = vv();
+    if (!v) { toast(tr("Voice isn't supported in this browser.")); return; }
+    if (!v.supported()) { voiceNotice("unsupported"); return; }
+    S.vfocus = "";
+    v.join(S.sid, cid || S.cid);
+  }
+  function voiceToggle(what) {
+    var v = vv();
+    var V = vstate();
+    if (!v || !V || V.status === "idle") return;
+    if (what === "mute") { if (V.sm) { toast(tr("A moderator muted you, or you can't speak here.")); return; } v.setMute(!V.mu); }
+    else if (what === "deaf") v.setDeaf(!V.df);
+    else if (what === "cam") { if (!V.cam && !has(chanPerms(V.cid, V.sid), P.VIDEO)) { toast(tr("You can't use the camera or share your screen here.")); return; } v.setCamera(!V.cam); }
+    else if (what === "screen") { if (!V.scr && !has(chanPerms(V.cid, V.sid), P.VIDEO)) { toast(tr("You can't use the camera or share your screen here.")); return; } v.setScreen(!V.scr); }
+  }
+  function voiceFocus(key) {
+    S.vfocus = S.vfocus === key ? "" : key;
+    paintStage();
+  }
+  function voicePeerMenu(mid) {
+    var V = vstate();
+    if (!V || !mid) return;
+    var p = V.peers[mid] || {};
+    var st = voiceSt(V.sid, mid);
+    var mod = has(chanPerms(V.cid, V.sid), P.MUTE_MEMBERS);
+    var vol = Math.round((p.volume == null ? 1 : p.volume) * 100);
+    var sheet = openSheet(sheetHead(nameOf(mid)) + '<div class="vsrv-menu">' +
+      '<label class="vsrv-vvol"><span>' + esc(tr("User volume")) + '</span><input type="range" min="0" max="200" step="5" value="' + vol + '" data-k="vol"></label>' +
+      '<button type="button" class="vsrv-menu-item" data-vs="voice-peer-mute" data-id="' + mid + '" data-close="1">' + icon(p.localMute ? "voice" : "volOff") + "<span>" + esc(p.localMute ? tr("Unmute for me") : tr("Mute for me")) + "</span></button>" +
+      '<button type="button" class="vsrv-menu-item" data-vs="member" data-m="' + mid + '" data-close="1">' + icon("users") + "<span>" + esc(tr("Profile")) + "</span></button>" +
+      (mod ? '<button type="button" class="vsrv-menu-item" data-vs="voice-mod-mute" data-id="' + mid + '" data-on="' + (st.sm ? "1" : "0") + '" data-close="1">' + icon("micOff") + "<span>" + esc(st.sm ? tr("Remove server mute") : tr("Server mute")) + "</span></button>" +
+        '<button type="button" class="vsrv-menu-item danger" data-vs="voice-mod-kick" data-id="' + mid + '" data-close="1">' + icon("hangup") + "<span>" + esc(tr("Disconnect from voice")) + "</span></button>" : "") +
+      "</div>", "is-menu");
+    var range = sheet.querySelector('[data-k="vol"]');
+    range.addEventListener("input", function () { var v = vv(); if (v) v.setPeerVolume(mid, Number(range.value) / 100); });
+  }
+  function voiceModerate(mid, act) {
+    var v = vv();
+    if (!v || !v.moderate(mid, act)) toast(tr("Couldn't do that. Try again."));
   }
 
   /* ---------- conversation ---------- */
@@ -961,6 +1176,7 @@
       if (!srv() && !S.gone || srv() && /^[a-f0-9]{16}$/.test(S.cid) && !threadMiss[S.cid]) return '<div class="dmsgs-skel" aria-busy="true"><span></span><span></span><span></span></div>';
       return '<div class="vsrv-empty vsrv-conv-empty"><h2>' + esc(tr("Channel not found")) + "</h2><p>" + esc(tr("It may have been deleted, or you can't see it.")) + "</p></div>";
     }
+    if (c.kind === "voice") return voiceHead(c) + '<div class="vsrv-stage" id="vsrv-stage">' + stageInner(c) + "</div>";
     var level = effectiveLevel(c.kind === "thread" ? c.parentId : c.id);
     var th = c.kind === "thread" ? c.thread : null;
     var parent = th ? realChannel(th.parentId) : null;
@@ -1382,9 +1598,17 @@
       (msg.online || []).forEach(function (m) { on[m] = 1; });
       S.online[sid] = on;
       S.acts[sid] = msg.acts || {};
+      S.voice[sid] = msg.voice || {};
       paintMembers();
+      paintVoice();
       catchUp();
       flushOutbox();
+      return;
+    }
+    if (msg.op === "voice") {
+      var vb = S.voice[sid] || (S.voice[sid] = {});
+      if (msg.c) vb[msg.a] = { c: msg.c, st: msg.st || {}, j: msg.j || 0 }; else delete vb[msg.a];
+      paintVoice();
       return;
     }
     if (msg.op === "online") {
@@ -1572,7 +1796,7 @@
       var name = sheet.querySelector('[data-k="name"]').value.trim();
       if (!name) { sheet.querySelector('[data-k="name"]').focus(); return; }
       busy(go, true);
-      call("", { method: "POST", body: { name: name, categoryName: tr("Text channels") } }).then(function (res) {
+      call("", { method: "POST", body: { name: name, categoryName: tr("Text channels"), voiceCategoryName: tr("Voice channels"), voiceName: tr("General") } }).then(function (res) {
         if (res.status !== 200) { busy(go, false); toast(errText(res)); return; }
         var sid = res.body.server ? res.body.server.id : res.body.serverId || res.body.id;
         var cid = res.body.channelId || "";
@@ -2166,7 +2390,7 @@
   function newChannelSheet(parentId) {
     var cats = channelsOf().filter(function (c) { return c.kind === "category"; });
     var sheet = openSheet(sheetHead(tr("Create channel")) + '<div class="vsrv-sheet-body vsrv-radios">' +
-      [["text", "hash", tr("Text"), tr("Send messages, images, files and links")], ["announcement", "news", tr("Announcement"), tr("Important updates. Only moderators post by default")], ["forum", "forum", tr("Forum"), tr("Organized posts, each with its own thread")], ["category", "chev", tr("Category"), tr("Groups channels together")]].map(function (k, i) {
+      [["text", "hash", tr("Text"), tr("Send messages, images, files and links")], ["announcement", "news", tr("Announcement"), tr("Important updates. Only moderators post by default")], ["forum", "forum", tr("Forum"), tr("Organized posts, each with its own thread")], ["voice", "voice", tr("Voice"), tr("Talk, turn on your camera and share your screen")], ["category", "chev", tr("Category"), tr("Groups channels together")]].map(function (k, i) {
         return '<label class="vsrv-radio big"><input type="radio" name="vsrv-kind" value="' + k[0] + '"' + (i === 0 ? " checked" : "") + ">" + icon(k[1]) + "<span><strong>" + esc(k[2]) + "</strong><small>" + esc(k[3]) + "</small></span></label>";
       }).join("") +
       '<label class="vsrv-field"><span>' + esc(tr("Name")) + '</span><input type="text" maxlength="100" data-k="name" placeholder="new-channel" autofocus></label>' +
@@ -3373,6 +3597,18 @@
     if (b.getAttribute("data-close")) closeSheet(true);
     switch (a) {
       case "close-sheet": closeSheet(); break;
+      case "voice-join": voiceJoin(id); break;
+      case "voice-leave": if (vv()) vv().leave(); break;
+      case "voice-mute": voiceToggle("mute"); break;
+      case "voice-deaf": voiceToggle("deaf"); break;
+      case "voice-cam": voiceToggle("cam"); break;
+      case "voice-screen": voiceToggle("screen"); break;
+      case "voice-tile": voiceFocus(b.getAttribute("data-key") || ""); break;
+      case "voice-peer": voicePeerMenu(b.getAttribute("data-m") || ""); break;
+      case "voice-peer-mute": if (vv()) vv().setPeerMute(id, !(vv().state().peers[id] || {}).localMute); break;
+      case "voice-mod-mute": voiceModerate(id, b.getAttribute("data-on") === "1" ? "unmute" : "mute"); break;
+      case "voice-mod-kick": voiceModerate(id, "kick"); break;
+      case "voice-open": location.hash = "#/messages/s/" + (vv() ? vv().state().sid + "/" + vv().state().cid : ""); break;
       case "create-sheet": createSheet(); break;
       case "join-sheet": joinSheet(); break;
       case "invite-sheet": closeSheet(true); inviteSheet(); break;
@@ -3673,6 +3909,7 @@
       if (S.socket && S.socket.readyState === 1) { try { S.socket.send(JSON.stringify({ op: "view", c: viewId(S.cid) })); } catch (err) { /* closed */ } }
     }
     if (c.kind === "forum") { loadForum(S.sid, S.cid); return; }
+    if (c.kind === "voice") { mountStage(); return; }
     if (S.jump) { S.jumpTo = S.jump; S.jump = ""; loadMessages(S.sid, S.cid, { around: S.jumpTo }); return; }
     openChannelData(S.sid, S.cid);
   }

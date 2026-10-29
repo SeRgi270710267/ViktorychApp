@@ -75,7 +75,7 @@ const HEX16 = /^[a-f0-9]{16}$/;
 const MSG_ID = /^[0-9a-z]{16}$/;
 const ACCOUNT = /^\d{12}$/;
 const INVITE = /^[A-Za-z0-9]{6,16}$/;
-const KINDS = ["category", "text", "announcement", "forum"];
+const KINDS = ["category", "text", "announcement", "forum", "voice"];
 const THREAD_PARENTS = ["text", "announcement", "forum"];
 const TAGS_MAX = 20;
 const STICKERS_MAX = 60;
@@ -651,6 +651,8 @@ async function createServer(request, env, deps, viewer) {
   const cat = randomHex(8);
   const general = randomHex(8);
   const news = randomHex(8);
+  const vcat = randomHex(8);
+  const lounge = randomHex(8);
   const mid = await memberIdFor(deps, env, sid, viewer.public_id);
   const st = [
     env.DB.prepare("INSERT INTO srv_servers (id, owner_id, name, description, member_count, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)").bind(sid, viewer.public_id, name, clip(b.description, 500), now, now),
@@ -659,7 +661,9 @@ async function createServer(request, env, deps, viewer) {
     env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, position, created_at) VALUES (?, ?, 'category', ?, 0, ?)").bind(cat, sid, clip(b.categoryName, 100) || "Text channels", now),
     env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, parent_id, position, created_at) VALUES (?, ?, 'announcement', ?, ?, 1, ?)").bind(news, sid, cleanName(b.announcementName || "announcements", "text"), cat, now),
     env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, parent_id, position, created_at) VALUES (?, ?, 'text', ?, ?, 0, ?)").bind(general, sid, cleanName(b.generalName || "general", "text"), cat, now),
-    env.DB.prepare("INSERT INTO srv_overrides (channel_id, server_id, target_type, target_id, allow, deny) VALUES (?, ?, 'role', ?, 0, ?)").bind(news, sid, sid, PERM.SEND)
+    env.DB.prepare("INSERT INTO srv_overrides (channel_id, server_id, target_type, target_id, allow, deny) VALUES (?, ?, 'role', ?, 0, ?)").bind(news, sid, sid, PERM.SEND),
+    env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, position, created_at) VALUES (?, ?, 'category', ?, 1, ?)").bind(vcat, sid, clip(b.voiceCategoryName, 100) || "Voice channels", now),
+    env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, parent_id, position, created_at) VALUES (?, ?, 'voice', ?, ?, 0, ?)").bind(lounge, sid, cleanName(b.voiceName || "General", "voice"), vcat, now)
   ];
   await env.DB.batch(st);
   const ctx = await loadContext(env, sid, viewer.public_id);
@@ -1497,6 +1501,8 @@ async function deleteOverride(env, deps, ctx, channel, type, tid) {
 async function listMessages(request, env, url, deps, ctx, channel) {
   if (channel.kind === "category") return err(deps, 400, "category");
   if (channel.kind === "forum") return err(deps, 400, "forum");
+  /* Voice channels have no text chat yet. */
+  if (channel.kind === "voice") return err(deps, 400, "voice");
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") || 50)));
   const before = String(url.searchParams.get("before") || "");
   const after = String(url.searchParams.get("after") || "");
@@ -1551,6 +1557,7 @@ async function sendMessage(request, env, deps, ctx, channel, pre) {
   if (channel.kind === "category") return err(deps, 400, "category");
   /* Forum posts are threads; see createThread. */
   if (channel.kind === "forum") return err(deps, 400, "forum");
+  if (channel.kind === "voice") return err(deps, 400, "voice");
   const perms = ctx.perms(channel.id);
   if (ctx.timedOut) return err(deps, 403, "timed_out", { until: Number(ctx.member.timeout_until) });
   if (!has(perms, PERM.SEND)) return err(deps, 403, "perm");
@@ -1933,7 +1940,18 @@ async function socket(request, env, url, deps) {
   const headers = new Headers(request.headers);
   headers.set("x-account-id", row.public_id);
   headers.set("x-member-id", ctx.mid);
-  headers.set("x-srv-visible", visibleChannels(ctx).map((c) => c.id).join(","));
+  const seen = visibleChannels(ctx);
+  headers.set("x-srv-visible", seen.map((c) => c.id).join(","));
+  if (url.searchParams.get("k") === "v") {
+    headers.set("x-srv-kind", "v");
+    headers.set("x-srv-voice", seen.filter((c) => c.kind === "voice" && has(ctx.perms(c.id), PERM.CONNECT)).map((c) => {
+      const p = ctx.perms(c.id);
+      return c.id + ":" + ((has(p, PERM.SPEAK) ? 1 : 0) | (has(p, PERM.VIDEO) ? 2 : 0) | (has(p, PERM.MUTE_MEMBERS) ? 4 : 0));
+    }).join(","));
+  } else {
+    headers.delete("x-srv-kind");
+    headers.delete("x-srv-voice");
+  }
   return s.fetch(new Request(request.url, { method: "GET", headers }));
 }
 
