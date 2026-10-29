@@ -33,3 +33,7 @@ Regular and Black from https://github.com/rsms/inter, made with fontTools
 `pyftsubset`. Inter is licensed under the SIL Open Font License 1.1,
 Copyright (c) 2016 The Inter Project Authors; the full license is in
 `fonts/Inter-LICENSE.txt`.
+
+## Emoji picker data
+
+`data/emoji.json` lists emoji and their English names from the Unicode emoji test data (emoji-test.txt, Unicode 15.1 and earlier), used under the Unicode License (https://www.unicode.org/license.txt). The emoji are drawn by the device font; no image assets are shipped.
