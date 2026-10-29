@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseChannels, rowsFromWidget, rowsFromWall, widgetDate, syncVk, vkChannelId } from "../src/vk.js";
+import { parseChannels, rowsFromChannel, rowsFromWidget, rowsFromWall, widgetDate, syncVk, vkChannelId } from "../src/vk.js";
 
 test("channel list reads ids, links and labels", () => {
   const list = parseChannels("News=https://vk.com/club42\n-7, public7\nsome_name ; https://m.vk.com/other.name?w=1");
@@ -77,8 +77,54 @@ test("with a token the official API is used", async () => {
     return Response.json({ response: { items: [{ id: 3, from_id: -42, date: 1700000000, text: "API post" }], groups: [{ id: 42, name: "Test" }] } });
   };
   await syncVk({ DATA, VK_CHANNELS: "some_name", VK_TOKEN: "tok" }, 0, fetcher);
-  assert.deepEqual(calls.map((u) => u.split("/").pop()), ["groups.getById", "wall.get"]);
+  assert.deepEqual(calls.map((u) => u.split("/").pop()), ["groups.getById", "messages.getConversations", "wall.get"]);
   const doc = JSON.parse(store["discord/messages/99000000000042.json"]);
   assert.equal(doc.messages[0].text, "API post");
   assert.equal(doc.via, "api");
+});
+
+test("Messenger channel links parse to the community id", () => {
+  const list = parseChannels("https://vk.ru/im/channels/-42\nhttps://vk.com/im?sel=-43\nhttps://web.vk.me/x");
+  assert.deepEqual(list.map((c) => c.gid), [42, 43]);
+});
+
+test("a community key reads the Messenger channel, not the empty wall", async () => {
+  const store = {};
+  const DATA = { async get(key) { return key in store ? { text: async () => store[key] } : null; }, async put(key, value) { store[key] = String(value); } };
+  const calls = [];
+  const fetcher = async (url, init) => {
+    calls.push(url.split("/").pop());
+    const params = new URLSearchParams(String(init.body));
+    if (url.endsWith("groups.getById")) return Response.json({ response: { groups: [{ id: 42, name: "Test" }] } });
+    if (url.endsWith("messages.getConversations")) return Response.json({ response: { items: [
+      { conversation: { peer: { id: 2000000001, type: "chat" }, chat_settings: { title: "Chat" } } },
+      { conversation: { peer: { id: 2000000002, type: "chat" }, chat_settings: { title: "Channel", is_group_channel: true, photo: { photo_100: "https://sun1.userapi.com/c.jpg" } } } }
+    ] } });
+    if (url.endsWith("messages.getHistory")) {
+      assert.equal(params.get("peer_id"), "2000000002");
+      return Response.json({ response: { items: [
+        { id: 0, conversation_message_id: 7, from_id: -42, date: 1700000100, text: "Channel post", attachments: [{ type: "photo", photo: { sizes: [{ url: "https://sun1.userapi.com/p.jpg", width: 800, height: 600 }] } }], reactions: [{ count: 2 }, { count: 1 }] },
+        { id: 0, conversation_message_id: 6, from_id: -42, date: 1700000000, action: { type: "chat_create" } }
+      ], groups: [{ id: 42, name: "Test" }] } });
+    }
+    throw new Error("unexpected " + url);
+  };
+  await syncVk({ DATA, VK_CHANNELS: "https://vk.com/im/channels/-42", VK_TOKEN: "tok" }, 0, fetcher);
+  assert.deepEqual(calls, ["groups.getById", "messages.getConversations", "messages.getHistory"]);
+  const doc = JSON.parse(store["discord/messages/99000000000042.json"]);
+  assert.equal(doc.via, "channel");
+  assert.equal(doc.name, "Test");
+  assert.deepEqual(doc.messages.map((m) => [m.id, m.text]), [["7", "Channel post"]]);
+  assert.equal(doc.messages[0].attachments[0].url, "https://sun1.userapi.com/p.jpg");
+  assert.equal(doc.messages[0].reactions[0].count, 3);
+  assert.equal(rowsFromChannel(42, null).rows.length, 0);
+});
+
+test("a closed community with no token still lists the channel", async () => {
+  const store = {};
+  const DATA = { async get(key) { return key in store ? { text: async () => store[key] } : null; }, async put(key, value) { store[key] = String(value); } };
+  const fetcher = async () => new Response('<div class="wcommunity_closed">This is a closed community</div>', { headers: { "content-type": "text/html; charset=utf-8" } });
+  await syncVk({ DATA, VK_CHANNELS: "42" }, 0, fetcher);
+  assert.equal(JSON.parse(store["discord/vk.json"]).servers[0].channels[0].id, "99000000000042");
+  assert.equal(JSON.parse(store["discord/messages/99000000000042.json"]).via, "closed");
 });
