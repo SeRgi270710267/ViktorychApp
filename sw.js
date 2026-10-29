@@ -4,7 +4,7 @@ const VERSION = "viktorych-a113-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T09:14:00Z-regone-pad
+// cache-bust: 2026-10-29T09:14:00Z-discord-switch
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -91,6 +91,7 @@ const SHELL_FILES = [
   "./tv-page.css",
   "./split.js",
   "./discord-ui.js",
+  "./discord-picks.js",
   "./discord-ui.css",
   "./spaces.js",
   "./spaces.css",
