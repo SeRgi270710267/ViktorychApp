@@ -2498,5 +2498,8 @@ SI18n.addPack("en", {
   "Paste a link or @handle": "Paste a link or @handle",
   "Select all": "Select all",
   "Try another search or filter.": "Try another search or filter.",
-  "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Let Nostr apps find your account by its NIP-05 name. Default is off."
+  "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Let Nostr apps find your account by its NIP-05 name. Default is off.",
+  "Search Settings": "Search Settings",
+  "Ask in your own words, like “make the text bigger”.": "Ask in your own words, like “make the text bigger”.",
+  "Suggested by the on-device assistant": "Suggested by the on-device assistant"
 });
