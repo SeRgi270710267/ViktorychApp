@@ -2231,6 +2231,51 @@ def main() -> None:
     linked_before = json.dumps(linked_people)
     linked_suggestions = people.suggest(suggest_profiles, linked_people)
     check(suggestion_pair(linked_suggestions, ("x", "lefty"), ("youtube", "righty")) is None and json.dumps(linked_people) == linked_before, "suggestions never merge or rewrite people")
+    import subprocess as links_proc
+    links_run = links_proc.run(["node", str(ROOT / "scripts" / "people_links_test.js")], capture_output=True, text=True)
+    check(links_run.returncode == 0, "per-reader merge overrides: platform toggles, merge with Undo, unmerge: " + (links_run.stderr or "")[-300:])
+
+    auto_profiles = [
+        {"id": "instagram:quillfern", "platform": "instagram", "handle": "quillfern", "name": "Quill Fern"},
+        {"id": "threads:quillfern", "platform": "threads", "handle": "quillfern", "name": "Quill"},
+        {"id": "x:lefty", "platform": "x", "handle": "lefty", "name": "Left Side", "bio": "videos https://www.youtube.com/@righty"},
+        {"id": "youtube:righty", "platform": "youtube", "handle": "righty", "name": "Left Side"},
+        {"id": "vk:lonely", "platform": "vk", "handle": "lonely", "name": "Lonely", "bio": "https://x.com/someoneelse"},
+        {"id": "x:someoneelse", "platform": "x", "handle": "someoneelse", "name": "Other Name"},
+        {"id": "telegram:northlamp", "platform": "telegram", "handle": "northlamp", "name": "Canadian Prepper", "bio": "https://www.youtube.com/@northlamp"},
+    ]
+    owner_people = [{"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "northlamp"}]}]
+    auto_profiles.append({"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "name": "Canadian Prepper"})
+    merged, weak_rows, merge_counts = people.auto_people(auto_profiles, owner_people)
+    auto_ids = [person for person in merged if person.get("auto")]
+    pair_sets = [{(a["platform"], a["handle"]) for a in person["accounts"]} for person in auto_ids]
+    check({("instagram", "quillfern"), ("threads", "quillfern")} in pair_sets, "a Threads account merges with the Instagram account of the same handle")
+    check({("x", "lefty"), ("youtube", "righty")} in pair_sets, "a bio link plus the same name merges on its own")
+    check(not any(("vk", "lonely") in s for s in pair_sets) and any({a["handle"] for a in row["accounts"]} == {"lonely", "someoneelse"} for row in weak_rows), "a one-way link without a matching name is only suggested")
+    owner_row = next(person for person in merged if person["id"] == "canadian-prepper")
+    check(any(a["platform"] == "telegram" and a.get("auto") for a in owner_row["accounts"]) and owner_people[0]["accounts"] == [{"platform": "youtube", "handle": "northlamp"}], "a new source that links a hand-linked person joins that person and the owner config stays as is")
+    split_people, _w, _c = people.auto_people(auto_profiles, [], {"threads:quillfern"})
+    check(not any({a["handle"] for a in p["accounts"]} == {"quillfern"} for p in split_people), "an account the owner split out never merges again")
+    cross_people = [{"id": "q", "name": "Q", "accounts": [{"platform": "instagram", "handle": "quillfern", "feedId": "instagram:quillfern"}, {"platform": "threads", "handle": "quillfern", "feedId": "threads:quillfern"}, {"platform": "x", "handle": "quillx", "feedId": "x:quillx"}]}]
+    cross_rows = [
+        {"id": "i1", "platform": "instagram", "handle": "quillfern", "feedId": "instagram:quillfern", "date": "2026-10-20T10:00:00Z", "text": "New mural finished today, come see it downtown!", "media": [{"type": "photo", "url": "https://cdn.example/a.jpg", "width": 1080, "height": 1350}]},
+        {"id": "t1", "platform": "threads", "handle": "quillfern", "feedId": "threads:quillfern", "date": "2026-10-20T10:03:00Z", "text": "New mural finished today, come see it downtown! #art", "media": [{"type": "photo", "url": "https://cdn.example/b.jpg", "width": 640, "height": 800}]},
+        {"id": "x1", "platform": "x", "handle": "quillx", "feedId": "x:quillx", "date": "2026-10-20T11:00:00Z", "text": "New mural finished today, come see it downtown!"},
+        {"id": "y1", "platform": "youtube", "handle": "other", "statusId": "abcdefghijk", "date": "2026-10-20T09:00:00Z", "text": "a video"},
+    ]
+    folded, fold_stats = people.dedupe_cross_posts([dict(row) for row in cross_rows], cross_people)
+    first = next(row for row in folded if row["id"] == "i1")
+    check(fold_stats["dropped"] == 1 and [ref["platform"] for ref in first.get("crossPosts", [])] == ["threads"] and any(row["id"] == "x1" for row in folded), "the same post on two platforms within ten minutes shows once with the larger media, and a copy an hour later stays")
+    video_people = [{"id": "v", "name": "V", "accounts": [{"platform": "x", "handle": "vx", "feedId": "x:vx"}, {"platform": "youtube", "handle": "vy", "feedId": "youtube:vy"}]}]
+    video_rows = [
+        {"id": "xv", "platform": "x", "handle": "vx", "feedId": "x:vx", "date": "2026-10-20T10:00:00Z", "text": "new video", "links": [{"url": "https://youtu.be/abcdefghijk"}]},
+        {"id": "yv", "platform": "youtube", "handle": "vy", "feedId": "youtube:vy", "statusId": "abcdefghijk", "date": "2026-10-20T10:05:00Z", "text": "My video"},
+    ]
+    vfold, _vs = people.dedupe_cross_posts(video_rows, video_people)
+    check(len(vfold) == 1 and vfold[0]["platform"] == "youtube" and vfold[0]["crossPosts"][0]["platform"] == "x", "an X post sharing the person's own YouTube video folds into the video")
+    now_ts = 1_000_000.0
+    mirrors = people.update_mirrors({}, {"threads:quillfern": 1.0}, {"threads:quillfern"}, now_ts)
+    check(not people.mirror_due(mirrors, "threads:quillfern", now_ts + 60) and people.mirror_due(mirrors, "threads:quillfern", now_ts + 3 * 3600) and people.mirror_due(mirrors, "x:new", now_ts), "a mirror source is read every three hours and others every run")
 
     link_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\nx:nasa\n"
     link_config = {"feeds": [{"id": "x:keep"}], "people": json.loads(json.dumps(site_config["people"]))}
