@@ -76,7 +76,8 @@ relay, then peers.
   downloads: nothing is uploaded and nothing is announced. Save data, TV
   mode and Off keep it out. On mobile data, Auto keeps it out too.
 - **Two rooms.** The room runs on the Worker and, with the same rules and
-  code (`backup-server/pool-room.mjs`), on the Render backup. Tickets come
+  code (`backup-server/pool-room.mjs`, a small built-in WebSocket server, so
+  the backup still needs no npm packages), on the Render backup. Tickets come
   from the shared D1 table, so either server can issue one. Sharing devices
   join both rooms, so a reader who only reaches Render still finds someone
   with fresh copies. Readers in rescue join one, the first that answers.
