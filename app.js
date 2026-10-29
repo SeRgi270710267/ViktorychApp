@@ -4635,11 +4635,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     startPlayback(el, { muted: saved.muted, resume: saved.time });
   }
 
-  /* The other API hosts (the Render failover and any extra mirrors) run the
-     same Worker, so each one can fetch a video when the main relay fails. */
+  /* Extra API mirrors run the same Worker, so each one can fetch a video
+     when the main relay fails. The Render backup is left out on purpose:
+     its free plan has 5 GB of bandwidth a month, a few videos would use it
+     up and suspend sign-in failover, so it refuses video relays. */
   function backupApis(current) {
     const bag = window.VIKTORYCH_ACCOUNTS || {};
-    const list = [].concat(Array.isArray(bag.apis) ? bag.apis : [], bag.api || [], bag.backupApi || []);
+    const render = String(bag.backupApi || "").replace(/\/$/, "");
+    const list = [].concat(Array.isArray(bag.apis) ? bag.apis : [], bag.api || []).filter((root) => String(root || "").replace(/\/$/, "") !== render);
     const now = String(current || "").replace(/\/$/, "");
     const out = [];
     list.forEach((raw) => {

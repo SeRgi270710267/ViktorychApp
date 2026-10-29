@@ -40,6 +40,7 @@ import { handleNewsletter, sweepNewsletters } from "./newsletters.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
+import { warmRender } from "./render-warm.js";
 import { sealPayload, openPayload, maybeBackupSettings } from "./settings-vault.js";
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
@@ -5632,6 +5633,8 @@ export default {
     if (minute === 23) jobs.push(sweepNewsletters(env.DATA, at).catch(() => 0));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));
+    // Every ten minutes outside quiet hours: keep the Render backup awake.
+    jobs.push(warmRender(env, at).catch(() => null));
     jobs.push(maybeBackupSettings(env, at));
     if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {

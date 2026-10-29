@@ -300,6 +300,22 @@
   function rotateApi(failedRoot, retryAfter) {
     breakerFail(failedRoot || activeApiRoot, retryAfter);
     activeApiRoot = "";
+    wakeBackup(failedRoot);
+  }
+  /* The free Render backup sleeps when idle and takes up to a minute to
+     wake. The moment the main API stumbles, one tiny no-cors ping starts
+     that wake in the background, so by the time a retry or the next read
+     goes to the backup it answers at once. At most once per four minutes. */
+  var wakeAt = 0;
+  function wakeBackup(failedRoot) {
+    var backup = String(config().backupApi || "").replace(/\/$/, "");
+    if (!backup || backup === String(failedRoot || "").replace(/\/$/, "") || !nativeFetch) return;
+    var now = Date.now();
+    if (now - wakeAt < 4 * 60 * 1000) return;
+    wakeAt = now;
+    try {
+      nativeFetch(backup + "/backup/health", { mode: "no-cors", cache: "no-store", credentials: "omit", keepalive: true }).catch(function () {});
+    } catch (err) { /* best effort */ }
   }
   function hasApi() {
     return !!(currentApi() || (config().api || config().backupApi));
