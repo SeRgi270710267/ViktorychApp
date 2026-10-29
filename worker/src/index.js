@@ -41,6 +41,7 @@ import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
 import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
+import { handleYtm } from "./ytmusic.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
@@ -5378,6 +5379,9 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/unfurl" && request.method === "GET") {
     return handleUnfurl(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
+  if (path.startsWith("/v1/ytm/") && request.method === "GET") {
+    return handleYtm(request, env, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
   await ensureSchema(env);
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {
