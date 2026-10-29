@@ -8,7 +8,7 @@
    bookmarks, resume and history), rate_limits, account_reposts,
    account_follows (both directions), drive_vault, drive_items, drive_chunks,
    community_posts, community_likes, community_members, community_notes,
-   account_friend_requests, account_friends, account_federation, ap_followers,
+   account_friend_requests, account_friends, account_federation,
    account_identities, identity_challenges, vault_configs, vault_items,
    vault_shares, owner_keys, owner_key_items, owner_key_pace, account_reauths,
    account_presence, account_status, channel_tickets, notifications,
@@ -510,9 +510,6 @@ async function wipeDatabase(env, job) {
     if (name === "accounts") {
       push("DELETE FROM accounts WHERE public_id = ? AND owner != 1", publicId);
       continue;
-    }
-    if (name === "ap_followers" && cols.indexOf("actor_handle") >= 0 && handle) {
-      push("DELETE FROM ap_followers WHERE actor_handle = ?", handle);
     }
     for (let c = 0; c < USER_COLUMNS.length; c++) {
       const col = USER_COLUMNS[c];

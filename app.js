@@ -61,7 +61,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Mastodon" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -1854,7 +1854,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (/(?:youtube\.com|youtu\.be)\//i.test(text)) return { platform: "youtube", account: text };
     if (/vk\.com\/[A-Za-z0-9_.]+/i.test(text)) return { platform: "vk", account: text };
     if (/^https?:\/\/(?:www\.)?bsky\.app\/profile\/[A-Za-z0-9._:%-]+/i.test(text)) return { platform: "bsky", account: text };
-    if (/^https?:\/\/[A-Za-z0-9.-]+\/@[A-Za-z0-9_]{1,64}\/?$/i.test(text)) return { platform: "mastodon", account: text };
+    if (/^https?:\/\/[A-Za-z0-9.-]+\/@[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})?\/?$/i.test(text)) return { platform: "mastodon", account: text };
+    if (/^@?[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(text)) return { platform: "mastodon", account: text.replace(/^@/, "") };
+    if (/^https:\/\/[A-Za-z0-9.-]+\/(?:users|a|c|profile)\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}\/?$/i.test(text) && !/(?:x|twitter|instagram|threads|tiktok|youtube|vk|reddit|bsky)\.(?:com|net|app)\//i.test(text)) return { platform: "mastodon", account: text };
     if (/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?[A-Za-z][A-Za-z0-9_]{4,31}(?:\/\d+)?\/?$/i.test(text)) return { platform: "telegram", account: text };
     if (/^@?[A-Za-z][A-Za-z0-9_]{16,32}$/.test(text)) return { platform: "telegram", account: text.replace(/^@/, "") };
     if (/^(?:https?:\/\/)?(?:www\.|m\.)?tiktok\.com\/@[A-Za-z0-9._]{2,24}(?:[/?#].*)?$/i.test(text)) return { platform: "tiktok", account: text };
@@ -1877,7 +1879,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       youtube: /(?:youtube\.com\/(?:@|channel\/|c\/|user\/)?|youtu\.be\/)([A-Za-z0-9._-]+)/i,
       vk: /vk\.com\/([A-Za-z0-9_.]+)/i,
       bsky: /bsky\.app\/profile\/([A-Za-z0-9._:%-]+)/i,
-      mastodon: /\/@([A-Za-z0-9_]{1,64})/i
+      mastodon: /\/(?:@|users\/|a\/|c\/|profile\/)([A-Za-z0-9_][A-Za-z0-9_.-]{0,63}(?:@[A-Za-z0-9.-]+)?)/i
     };
     const pattern = patterns[parsed.platform];
     const fromUrl = pattern ? text.match(pattern) : null;
@@ -10346,6 +10348,51 @@ const here = parseRoute();
     }).catch(() => null);
   }
 
+  /* A fediverse status (Mastodon API, also served by Pixelfed, Pleroma,
+     Akkoma, GoToSocial and Friendica) as an X-style post. A boost shows the
+     original post with its own author. Read-only: nothing is sent back. */
+  function fediText(html) {
+    const raw = String(html || "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
+    try {
+      const doc = new DOMParser().parseFromString(raw, "text/html");
+      return String(doc.body.textContent || "").trim();
+    } catch (err) {
+      return raw.replace(/<[^>]*>/g, "").trim();
+    }
+  }
+
+  function fediPost(item, profile) {
+    if (!item || !item.id) return null;
+    const boosted = item.reblog && item.reblog.id ? item.reblog : null;
+    const src = boosted || item;
+    const who = (boosted && boosted.account) || null;
+    const media = (src.media_attachments || []).map((m) => {
+      const type = m.type === "image" ? "photo" : (m.type === "video" || m.type === "gifv") ? "video" : "";
+      const url = type === "photo" ? (m.url || m.preview_url) : m.url;
+      if (!type || !/^https:\/\//.test(String(url || ""))) return null;
+      return { type: type, url: url, poster: m.preview_url || "", alt: m.description || "" };
+    }).filter(Boolean);
+    const warn = String(src.spoiler_text || "").trim();
+    const body = fediText(src.content);
+    return {
+      id: item.id,
+      statusId: item.id,
+      platform: "mastodon",
+      kind: boosted ? "repost" : (item.in_reply_to_id ? "reply" : "post"),
+      author: who ? (who.display_name || who.username || who.acct || "") : profile.name,
+      handle: who ? (who.acct || who.username || "") : profile.handle,
+      avatar: who ? (who.avatar || "") : profile.avatar,
+      repostedBy: boosted ? { handle: profile.handle, name: profile.name, platform: "mastodon" } : null,
+      text: warn ? warn + (body ? "\n\n" + body : "") : body,
+      media: media,
+      likes: Number(src.favourites_count) || 0,
+      reposts: Number(src.reblogs_count) || 0,
+      replyCount: Number(src.replies_count) || 0,
+      date: src.created_at || item.created_at || "",
+      url: src.url || item.url || profile.url
+    };
+  }
+
   function loadMastodonLive(row, handle) {
     const who = window.ViktorychDirect ? window.ViktorychDirect.splitMastodon(handle) : { instance: "mastodon.social", acct: handle };
     return loadMastodonHeader(handle).then((profile) => {
@@ -10356,18 +10403,8 @@ const here = parseRoute();
         return null;
       }
       return publicJson(window.ViktorychDirect.mastodonStatuses(who.instance, profile.remoteId)).then((list) => {
-        row.posts = (list || []).map((item) => ({
-          id: item.id,
-          statusId: item.id,
-          platform: "mastodon",
-          kind: "post",
-          author: profile.name,
-          handle: profile.handle,
-          avatar: profile.avatar,
-          text: item.content || "",
-          date: item.created_at || "",
-          url: item.url || profile.url
-        }));
+        row.posts = (list || []).map((item) => fediPost(item, profile)).filter(Boolean);
+        row.media = row.posts.filter((post) => post.media && post.media.length);
         row.source = "mastodon";
         row.fetchedAt = Date.now();
         snapshotProfile("mastodon:" + who.instance + ":" + who.acct, row);
