@@ -434,6 +434,90 @@ const popsOf = (t, id) => t.shows.filter((s) => s.id === id);
     const pack = read("i18n/" + code + ".js");
     for (const key of ["Settings alerts", "Device storage is almost full", "Don't warn me about this", "Opening {page} in {n}…", "Data cap reached"]) assert(pack.includes(JSON.stringify(key) + ":"), code + " has " + key);
   }
+  // Vibration and sound: critical buzzes short-long and plays a tone, a warning
+  // only buzzes, info does neither; switches turn them off; a draft blocks both.
+  {
+    const rig = (prefs) => {
+      const f = setup(prefs ? { prefs } : undefined);
+      const buzzes = [];
+      const tones = [];
+      f.sandbox.navigator.vibrate = (pattern) => { buzzes.push(pattern); return true; };
+      f.sandbox.AudioContext = class {
+        constructor() { this.currentTime = 0; this.destination = {}; this.state = "suspended"; }
+        resume() { this.state = "running"; return Promise.resolve(); }
+        createOscillator() { const o = { type: "", frequency: { value: 0 }, connect() {}, start() {}, stop() { tones.push(o.frequency.value); } }; return o; }
+        createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+      };
+      return { f, buzzes, tones };
+    };
+    let r = rig();
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert.equal(r.buzzes.length, 1, "critical vibrates");
+    assert(r.buzzes[0].length >= 3 && r.buzzes[0][0] < r.buzzes[0][2], "critical buzz is short-long");
+    assert.equal(r.tones.length, 0, "no sound before a tap or key press unlocks audio");
+    r = rig();
+    assert(r.f.sa.unlockAudio(), "a gesture unlocks audio");
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert.equal(r.buzzes.length, 1, "critical vibrates once unlocked too");
+    assert(r.tones.length >= 2, "critical plays a short generated tone");
+    r.f.sa.evaluate(disk(100));
+    assert.equal(r.buzzes.length, 2, "limit vibrates");
+    assert(r.tones.length >= 5, "limit plays a tone");
+    r = rig(); r.f.sa.unlockAudio();
+    r.f.sa.evaluate(disk(85));
+    assert.equal(r.f.ach.popCurrent().variant, "warning");
+    assert.deepEqual(r.buzzes.map((b) => b.length), [1], "a warning is a single short buzz");
+    assert.equal(r.tones.length, 0, "a warning makes no sound");
+    r = rig(); r.f.sa.unlockAudio();
+    r.f.sa.evaluate({ "sync-failed": { level: "info", vars: {} } });
+    assert.equal(r.buzzes.length + r.tones.length, 0, "info is silent");
+    r = rig({ vibrate: false, sound: false }); r.f.sa.unlockAudio();
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert.equal(r.buzzes.length + r.tones.length, 0, "both switches off: nothing");
+    assert.equal(r.f.sa.lastFeedback().skipped, "off");
+    r = rig({ sound: false }); r.f.sa.unlockAudio();
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert.equal(r.buzzes.length, 1, "vibration stays on its own switch");
+    assert.equal(r.tones.length, 0, "sound off");
+    r = rig({ vibrate: false }); r.f.sa.unlockAudio();
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert.equal(r.buzzes.length, 0, "vibration off");
+    assert(r.tones.length >= 2, "sound stays on its own switch");
+    r = rig(); r.f.sa.unlockAudio();
+    const draft = r.f.dom.el("textarea");
+    draft.value = "half a post";
+    r.f.dom.body.appendChild(draft);
+    r.f.document.activeElement = draft;
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    r.f.sa.evaluate(disk(100));
+    assert.equal(r.buzzes.length + r.tones.length, 0, "nothing fires while a draft is focused");
+    assert.equal(r.f.sa.lastFeedback().skipped, "typing");
+    r = rig(); r.f.sa.unlockAudio();
+    r.f.sandbox.matchMedia = (q) => ({ matches: /reduced-motion/.test(q) });
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert.equal(r.buzzes.length, 0, "reduced motion: no vibration");
+    assert(r.tones.length >= 2, "reduced motion keeps the tone");
+    r = rig(); r.f.sa.unlockAudio();
+    delete r.f.sandbox.navigator.vibrate;
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert(r.tones.length >= 2, "no vibrate API (iOS): sound still plays, nothing throws");
+    // Hidden tab with notifications allowed: the system notification carries it.
+    r = rig(); r.f.sa.unlockAudio();
+    const sys = [];
+    r.f.sandbox.Notification = class { constructor(title, o) { sys.push({ title, o }); } };
+    r.f.sandbox.Notification.permission = "granted";
+    r.f.document.visibilityState = "hidden";
+    r.f.sa.evaluate({ "push-revoked": { level: "critical", vars: {} } });
+    assert.equal(r.buzzes.length + r.tones.length, 0, "hidden tab: no in-page buzz or tone");
+    assert.equal(sys.length, 1, "hidden tab: one system notification");
+    assert(sys[0].o.silent === false && Array.isArray(sys[0].o.vibrate) && sys[0].o.data.hash, "system notification vibrates, is not silent and links to the setting");
+    // Settings switches and the Test row.
+    r = rig();
+    const sh = r.f.sa.settingsHtml();
+    ["Vibrate for alerts", "Sound for alerts", 'data-sa="vibrate"', 'data-sa="sound"', 'data-sa="feedback-test"'].forEach((x) => assert(sh.includes(x), "settings show " + x));
+    ["vibrate", "sound"].forEach((n) => assert(APP_PATH[n] && sh.includes(APP_PATH[n]), n + " switch uses the app outline glyph"));
+  }
+
   // Icons: names from the app's icon set, drawn as one-colour 24px SVG, never emoji.
   const ic = setup();
   ic.sa.ALERTS.forEach((def) => {
