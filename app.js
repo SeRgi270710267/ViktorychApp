@@ -22020,7 +22020,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       restoreWatch = new ResizeObserver(() => tryRestore());
       restoreWatch.observe(app);
     }
-    setTimeout(stopRestore, 5100);
+    const mine = restoreTarget;
+    setTimeout(() => { if (restoreTarget === mine) stopRestore(); }, 5100);
   }
   ["wheel", "touchstart", "keydown", "mousedown"].forEach((type) => {
     window.addEventListener(type, () => { if (restoreTarget) stopRestore(); }, { passive: true, capture: true });
