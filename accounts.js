@@ -663,6 +663,75 @@
   function layer() {
     return document.getElementById("account-layer");
   }
+  /* First-time setup (onboarding.js) is loaded only for sign-up. Its progress
+     sits in localStorage so a reload resumes the same step. */
+  var ONB_KEY = "viktorychapp-onboard-v1";
+  var onbLoad = null;
+  var setupPainted = -1;
+  function readOnb() {
+    try {
+      var doc = JSON.parse(localStorage.getItem(ONB_KEY) || "null");
+      return doc && typeof doc === "object" ? doc : null;
+    } catch (err) { return null; }
+  }
+  function writeOnb(doc) {
+    try {
+      if (doc) localStorage.setItem(ONB_KEY, JSON.stringify(doc));
+      else localStorage.removeItem(ONB_KEY);
+    } catch (err) { /* private mode */ }
+  }
+  function loadOnboarding() {
+    if (window.ViktorychOnboarding) return Promise.resolve(window.ViktorychOnboarding);
+    if (onbLoad) return onbLoad;
+    onbLoad = new Promise(function (resolve) {
+      var timer = setTimeout(function () { onbLoad = null; resolve(window.ViktorychOnboarding || null); }, 4000);
+      if (!document.querySelector('link[href="onboarding.css"]')) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "onboarding.css";
+        document.head.appendChild(link);
+      }
+      var script = document.createElement("script");
+      script.src = "onboarding.js";
+      script.async = true;
+      script.onload = function () { clearTimeout(timer); resolve(window.ViktorychOnboarding || null); };
+      script.onerror = function () { clearTimeout(timer); onbLoad = null; resolve(null); };
+      document.head.appendChild(script);
+    });
+    return onbLoad;
+  }
+  function setupOn() {
+    if (view !== "signup" || readSession() || !window.ViktorychOnboarding) return false;
+    var doc = readOnb();
+    return !!(doc && (doc.stage === "account" || doc.stage === "post"));
+  }
+  function startSetup() {
+    if (readPending()) { openAuth("signup"); return; }
+    loadOnboarding().then(function (onb) {
+      if (onb) onb.start("pre", 0);
+      else openAuth("signup");
+    });
+  }
+  function markSetupPost(account) {
+    var doc = readOnb() || {};
+    writeOnb({ stage: "post", step: 0, lang: doc.lang || "", id: account && account.publicId ? String(account.publicId) : "", at: Date.now() });
+  }
+  function setupBack() {
+    errorText = "";
+    if (step === 1) { step = 0; paint(); return; }
+    view = "";
+    paint();
+    var onb = window.ViktorychOnboarding;
+    if (onb) onb.start("pre", 1, -1);
+  }
+  function setupModal(body) {
+    var onb = window.ViktorychOnboarding;
+    var title = tr("Create your account");
+    var anim = setupPainted === step ? "" : " acct-setup-in" + (step < setupPainted ? " back" : "");
+    setupPainted = step;
+    var backBtn = step < 2 ? '<button class="icon-btn" type="button" data-acct="setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button>' : "<span></span>";
+    return '<div class="acct-back acct-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head">' + backBtn + '<div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button></div>" + (onb ? onb.progressHtml(2 + step) : "") + '<div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  }
   function fieldCount(name, value, max) {
     var raw = name === "accountNumber" ? String(value || "").replace(/\D/g, "") : String(value || "");
     return Array.from(raw).length + " / " + max;
@@ -1053,7 +1122,8 @@ var numberNote = form.passkey
       paintLandingMeta();
       html += landing();
     }
-    if (view === "signup") html += modal(tr("Create your account"), signupBody());
+    if (view !== "signup") setupPainted = -1;
+    if (view === "signup") html += setupOn() ? setupModal(signupBody()) : modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
     else if (view === "prefs") html += modal(tr("Settings"), prefsBody());
     else if (view === "emergency") html += modal(tr("Emergency Offline Access"), emergencyBody());
@@ -1142,6 +1212,7 @@ var numberNote = form.passkey
       paint();
       return;
     }
+    if (view === "signup" && step < 2 && setupOn()) writeOnb(null);
     if (view === "signup" && step === 2 && readPending()) {
       view = "leave";
       paint();
@@ -1181,6 +1252,10 @@ var numberNote = form.passkey
     else document.documentElement.removeAttribute("data-wall");
     tellSW(false);
     paint();
+    var onbDoc = readOnb();
+    if (onbDoc && !readPending() && (onbDoc.stage === "pre" || onbDoc.stage === "account")) {
+      loadOnboarding().then(function (onb) { if (onb && !readSession()) onb.start(onbDoc.stage, onbDoc.step || 0); });
+    }
   }
   function finishAuth() {
     var back = "";
@@ -1826,6 +1901,7 @@ function signupPayload() {
           try { window.ViktorychAccounts.onSignup(res.account || {}); } catch (err) { /* the session still opens */ }
         }
         writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
+        markSetupPost(res.account);
         view = "signup";
         step = 2;
         form.saved = false;
@@ -1998,6 +2074,7 @@ function signupPayload() {
       }
       form.passkey = true;
       writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
+      markSetupPost(res.account);
       step = 2;
       form.saved = false;
       errorText = "";
@@ -4369,7 +4446,8 @@ function signupPayload() {
       if (window.ViktorychPresence) window.ViktorychPresence.open(acct);
       return;
     }
-    if (act === "signup") openAuth("signup");
+    if (act === "signup") startSetup();
+    else if (act === "setup-back") setupBack();
     else if (act === "login") openAuth("login");
     else if (act === "open-restore") openAuth("restore");
     else if (act === "open-emergency") openAuth("emergency");
@@ -5009,6 +5087,13 @@ else if (act === "copy-id") copyAccountId();
 
   var mine = readSession();
   if (mine && mine.account) remember(mine.account);
+  (function resumeSetup() {
+    var doc = readOnb();
+    if (!doc) return;
+    if (!mine || !mine.account) return;
+    if (doc.stage !== "post" || (doc.id && doc.id !== String(mine.account.publicId || ""))) { writeOnb(null); return; }
+    loadOnboarding().then(function (onb) { if (onb && readSession()) onb.start("post", doc.step || 0); });
+  })();
   if (config().gate) {
     installFetch();
     tellSW(!!mine);
@@ -5074,6 +5159,9 @@ else if (act === "copy-id") copyAccountId();
     requestRender: null,
     profilePostsHtml: null,
     call: api,
+    saveOwnAccount: applyOwnAccount,
+    openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
+    openLogin: function () { openAuth("login"); },
     setReposts: setReposts,
     ensureProfile: loadProfile,
     profilePending: profilePending,
