@@ -15064,9 +15064,10 @@ if (STATE.histClear) {
     else if (slimTabs && !musicHome) bar = 97;
     else if (tall && !musicHome) bar = 106;
     const top = bar + rowExtra + storyExtra + liveExtra;
-    const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
+    const giftsWide = route.name === "store";
+    const mode = (wide || giftsWide ? " wide" : "") + (giftsWide ? " gifts-mode" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
   }
 
   function toggleReaction(act, id) {
