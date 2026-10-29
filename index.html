@@ -657,6 +657,16 @@
     <script src="app.js" defer></script>
   </template>
   <script>
+    /* The saved screen can be scrolled and tapped before app.js is running.
+       Keep each page's last position so going back still lands there. */
+    (function () {
+      var early = window.__earlyScrolls = {};
+      window.addEventListener("scroll", function () {
+        if (!window.__appScrollLive) early[location.hash || "#/"] = window.scrollY;
+      }, { passive: true });
+    })();
+  </script>
+  <script>
     (function () {
       function mount() {
         var ids = ["late-scripts", "late-scripts-rest"];
