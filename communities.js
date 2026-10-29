@@ -480,10 +480,22 @@
   }
   function hubTabs() {
     var home = state.hubTab === "home";
-    return '<div class="tabs cm-hub-tabs" role="tablist">' +
+    var explore = state.hubTab === "explore";
+    var custom = readTabs();
+    if (state.hubTab.indexOf("tab:") === 0 && !currentTab()) {
+      state.hubTab = "home";
+      home = true;
+    }
+    var extra = custom.map(function (tab) {
+      var on = state.hubTab === "tab:" + tab.id;
+      return '<button class="tab' + (on ? " on" : "") + '" type="button" role="tab" aria-selected="' + (on ? "true" : "false") + '" data-cm="hub-tab" data-hub="tab:' + esc(tab.id) + '"><span>' + esc(tab.name) + "</span></button>";
+    }).join("");
+    return '<div class="tabs cm-hub-tabs' + (custom.length ? " has-custom" : "") + '" role="tablist">' +
       '<button class="tab' + (home ? " on" : "") + '" type="button" role="tab" aria-selected="' + (home ? "true" : "false") + '" data-cm="hub-tab" data-hub="home"><span>' + svgHome + esc(tr("Home")) +
         '<i class="cm-caret" data-cm="picker" role="button" aria-label="' + esc(tr("Switch community")) + '" aria-expanded="' + (state.picker ? "true" : "false") + '">' + svgCaret + "</i></span></button>" +
-      '<button class="tab' + (home ? "" : " on") + '" type="button" role="tab" aria-selected="' + (home ? "false" : "true") + '" data-cm="hub-tab" data-hub="explore"><span>' + esc(tr("Explore")) + "</span></button>" +
+      '<button class="tab' + (explore ? " on" : "") + '" type="button" role="tab" aria-selected="' + (explore ? "true" : "false") + '" data-cm="hub-tab" data-hub="explore"><span>' + esc(tr("Explore")) + "</span></button>" +
+      extra +
+      '<button class="cm-tab-add" type="button" data-cm="tab-new" aria-label="' + esc(tr("New tab")) + '" title="' + esc(tr("New tab")) + '">' + svgPlus + "</button>" +
     "</div>";
   }
 
@@ -895,14 +907,17 @@
       "</div></div>" : "";
     var rows = hubRows();
     var body;
+    var custom = currentTab();
     if (state.hubTab === "explore") {
       body = categoryBar() + exploreGrid(rows);
+    } else if (custom) {
+      body = customTabPage(custom);
     } else {
       var home = homeRows(rows);
       var recs = recordedRow(home);
       body = pickerSheet(rows) + coverRow(home) + (recs ? '<div class="cm-hub-sep"></div>' + recs : "") + '<div class="cm-hub-sep"></div>' + homeFeed(home);
     }
-    return hubHead() + addBar + searchBar + '<div class="cm-hub" data-hub="' + esc(state.hubTab) + '">' + body + "</div>";
+    return hubHead() + addBar + searchBar + '<div class="cm-hub" data-hub="' + esc(custom ? "tab" : state.hubTab) + '">' + body + "</div>";
   }
 
   /* Single Community Feed Page (X.com 1-to-1 Clone) */
@@ -987,6 +1002,7 @@
             avatarImg +
             '<div class="cm-hero-actions">' +
               shareBtn +
+              '<button class="cm-icon-btn" type="button" data-cm="more" data-sub="' + esc(name) + '" aria-label="' + esc(tr("More")) + '" aria-haspopup="menu">' + svgMore + '</button>' +
               removeBtn +
               joinBtn(name, joined) +
               (signedIn() && joined ? '<button type="button" class="cm-btn-join" data-cm="home-feed" data-sub="' + esc(name) + '" aria-pressed="' + ((bag && bag.showHome === false) ? "false" : "true") + '"><span>' + esc((bag && bag.showHome === false) ? tr("Hidden on Home") : tr("Show in Home")) + '</span></button><button type="button" class="cm-btn-join" data-cm="mute-community" data-sub="' + esc(name) + '"><span>' + esc((bag && bag.muted) ? tr("Unmute community") : tr("Mute community")) + '</span></button>' : "") +
@@ -1186,11 +1202,454 @@
     return true;
   }
 
+  /* Custom tabs. Each tab is one feed that mixes chosen communities
+     (subreddits and mirrored forums) with chosen profiles from any platform
+     the app follows. Tabs live in this user's settings: on this device, then
+     in the private account sync. Nothing is written to the repo or to a
+     public endpoint, and nothing polls: a tab reads what is cached and asks
+     the existing feed loaders for fresh posts at most once every few minutes
+     while it is on screen. */
+  var TAB_MAX = 12;
+  var SOURCE_MAX = 50;
+  var TABS_KEY = "va_cm_tabs";
+  var svgMore = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>';
+  var svgTick = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 20c-.264 0-.52-.104-.707-.293l-4.785-4.785 1.414-1.414L9 17.586 19.072 7.5l1.42 1.416L9.708 19.7c-.188.19-.442.3-.708.3z"/></svg>';
+  var svgPin = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 9.76V4.5C17 3.12 15.88 2 14.5 2h-5C8.12 2 7 3.12 7 4.5v5.26L3.88 16.1l.9 1.4H11v4.5h2v-4.5h6.22l.9-1.4L17 9.76zM6.86 15.5L9 11.24V4.5c0-.28.22-.5.5-.5h5c.28 0 .5.22.5.5v6.74l2.14 4.26H6.86z"/></svg>';
+
+  function hooks() {
+    return window.ViktorychCommunities || {};
+  }
+  function cleanSource(value) {
+    var text = String(value == null ? "" : value).replace(/[\u0000-\u001F\u007F]/g, "").trim();
+    if (text.indexOf("c:") === 0) {
+      var name = nameOf(text.slice(2));
+      return name ? "c:" + name : "";
+    }
+    if (text.indexOf("p:") === 0 && text.length > 2 && text.length <= 120) return text;
+    return "";
+  }
+  function cleanTabs(bag) {
+    var list = bag && Array.isArray(bag.tabs) ? bag.tabs : [];
+    var seen = {};
+    var tabs = [];
+    list.forEach(function (tab) {
+      if (!tab || typeof tab !== "object" || tabs.length >= TAB_MAX) return;
+      var id = String(tab.id || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
+      var name = String(tab.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40);
+      if (!id || !name || seen[id]) return;
+      seen[id] = true;
+      var sources = [];
+      (Array.isArray(tab.sources) ? tab.sources : []).forEach(function (src) {
+        var clean = cleanSource(src);
+        if (clean && sources.indexOf(clean) < 0 && sources.length < SOURCE_MAX) sources.push(clean);
+      });
+      tabs.push({ id: id, name: name, sources: sources, home: tab.home === true });
+    });
+    return { at: Number(bag && bag.at) || 0, tabs: tabs };
+  }
+  function readTabs() {
+    var h = hooks();
+    var bag = h.readTabs ? h.readTabs() : null;
+    if (!h.readTabs) {
+      try { bag = JSON.parse(localStorage.getItem(TABS_KEY) || "null"); } catch (_) { bag = null; }
+    }
+    return cleanTabs(bag).tabs;
+  }
+  function writeTabs(tabs) {
+    var bag = cleanTabs({ at: Date.now(), tabs: tabs });
+    var h = hooks();
+    if (h.writeTabs) h.writeTabs(bag);
+    else {
+      try { localStorage.setItem(TABS_KEY, JSON.stringify(bag)); } catch (_) {}
+    }
+    render();
+    return bag.tabs;
+  }
+  function tabById(id) {
+    var tabs = readTabs();
+    for (var i = 0; i < tabs.length; i++) if (tabs[i].id === id) return tabs[i];
+    return null;
+  }
+  function newTabId() {
+    return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+  function currentTab() {
+    return state.hubTab.indexOf("tab:") === 0 ? tabById(state.hubTab.slice(4)) : null;
+  }
+  function profileInfo(id) {
+    var h = hooks();
+    var info = h.profileInfo ? h.profileInfo(id) : null;
+    if (info) return info;
+    var cut = id.indexOf(":");
+    var handle = cut > 0 ? id.slice(cut + 1) : id;
+    return { id: id, name: handle, handle: handle, platform: cut > 0 ? id.slice(0, cut) : "", avatar: "" };
+  }
+  function sourceLabel(src) {
+    if (src.indexOf("c:") === 0) return communityLabel(src.slice(2));
+    var info = profileInfo(src.slice(2));
+    return info.name || info.handle || src.slice(2);
+  }
+  function sourceSub(src) {
+    if (src.indexOf("c:") === 0) return isForum(src.slice(2)) ? tr("Forum") : tr("Reddit");
+    var info = profileInfo(src.slice(2));
+    var handle = info.handle ? (info.platform === "reddit" ? "u/" : "@") + info.handle : "";
+    return [info.platformLabel || "", handle].filter(Boolean).join(" · ");
+  }
+  function sourceIcon(src) {
+    if (src.indexOf("c:") === 0) {
+      var row = indexRow(src.slice(2)) || {};
+      return row.icon ? '<img class="cm-src-ava" alt="" loading="lazy" decoding="async" src="' + esc(row.icon) + '">' : '<span class="cm-src-ava cm-src-ico">' + (isForum(src.slice(2)) ? svgCommunities : svgSnoo) + "</span>";
+    }
+    var info = profileInfo(src.slice(2));
+    if (info.avatar && /^https:\/\//.test(info.avatar)) return '<img class="cm-src-ava round" alt="" loading="lazy" decoding="async" src="' + esc(info.avatar) + '">';
+    return '<span class="cm-src-ava round cm-src-ico">' + esc(String(info.name || info.handle || "?").slice(0, 1).toUpperCase()) + "</span>";
+  }
+
+  /* One feed for a tab: community posts from the mirrored files plus posts
+     the app already has for the chosen profiles, newest first. */
+  function tabFeedItems(tab) {
+    var items = [];
+    var waiting = false;
+    var people = [];
+    var names = [];
+    tab.sources.forEach(function (src) {
+      if (src.indexOf("c:") === 0) names.push(src.slice(2));
+      else people.push(src.slice(2));
+    });
+    names.slice(0, 16).forEach(function (name) {
+      if (!state.docs[name]) {
+        waiting = true;
+        if (!state.loading[name]) {
+          state.loading[name] = true;
+          Promise.all([
+            loadDoc(name).catch(function () { return null; }),
+            loadInternal(name).catch(function () { return null; })
+          ]).finally(function () { state.loading[name] = false; render(); });
+        }
+        return;
+      }
+      var doc = state.docs[name];
+      if (doc.missing) return;
+      var bag = state.internal[name];
+      if (bag && bag.locked) return;
+      redditPosts(doc).forEach(function (post) {
+        var item = { source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, post: post };
+        items.push({ created: item.created, item: item });
+      });
+      internalPosts(name).filter(function (post) { return !post.parentId; }).forEach(function (post) {
+        var item = { source: "app", community: name, id: post.id, created: Number(post.createdAt) || 0, post: post };
+        items.push({ created: item.created, item: item });
+      });
+    });
+    var h = hooks();
+    if (people.length) {
+      state.profileLoads = state.profileLoads || {};
+      var key = tab.id + "|" + people.join(",");
+      if (h.loadProfiles && (!state.profileLoads[key] || Date.now() - state.profileLoads[key] > INDEX_TTL)) {
+        state.profileLoads[key] = Date.now();
+        state.profileWaiting = state.profileWaiting || {};
+        state.profileWaiting[key] = true;
+        Promise.resolve(h.loadProfiles(tab.id, people)).catch(function () {}).then(function () {
+          delete state.profileWaiting[key];
+          render();
+        });
+      }
+      if (state.profileWaiting && state.profileWaiting[key]) waiting = true;
+      if (h.profileItems) {
+        (h.profileItems(people) || []).forEach(function (row) {
+          if (row && row.html) items.push({ created: Number(row.created) || 0, html: row.html });
+        });
+      }
+    }
+    items.sort(function (a, b) { return b.created - a.created; });
+    return { items: items.slice(0, 60), waiting: waiting };
+  }
+  function tabFeedHtml(tab, home) {
+    if (!tab.sources.length) {
+      return '<div class="empty cm-tab-empty"><h2>' + esc(tr("Nothing in this tab yet")) + "</h2><p>" + esc(tr("Add communities and people to see their posts here.")) + "</p>" +
+        '<button class="cm-btn-join cm-tab-cta" type="button" data-cm="tab-edit" data-id="' + esc(tab.id) + '"><span>' + esc(tr("Add sources")) + "</span></button></div>";
+    }
+    var got = tabFeedItems(tab);
+    if (!got.items.length) {
+      return got.waiting ? '<div class="reply-empty">' + esc(tr("Loading")) + "</div>" : '<div class="empty"><h2>' + esc(tr("No posts in this tab")) + "</h2></div>";
+    }
+    return '<div class="cm-x-feed cm-tab-feed' + (home ? " cm-tab-home" : "") + '" data-tab-feed="' + esc(tab.id) + '">' + got.items.map(function (row) {
+      return row.html || homeCard(row.item);
+    }).join("") + "</div>";
+  }
+  function tabTools(tab) {
+    var pin = tab.home
+      ? '<button class="cm-btn-join cm-tab-pin on" type="button" data-cm="tab-pin" data-id="' + esc(tab.id) + '" aria-pressed="true">' + svgPin + "<span>" + esc(tr("Pinned to Home")) + "</span></button>"
+      : '<button class="cm-btn-join cm-tab-pin" type="button" data-cm="tab-pin" data-id="' + esc(tab.id) + '" aria-pressed="false">' + svgPin + "<span>" + esc(tr("Pin to Home")) + "</span></button>";
+    var n = tab.sources.length;
+    return '<div class="cm-tab-tools"><span class="cm-tab-count">' + esc(tr("Sources: {n}", { n: n })) + "</span>" + pin +
+      '<button class="cm-btn-join" type="button" data-cm="tab-edit" data-id="' + esc(tab.id) + '"><span>' + esc(tr("Edit tab")) + "</span></button></div>";
+  }
+  function customTabPage(tab) {
+    return tabTools(tab) + tabFeedHtml(tab, false);
+  }
+
+  /* The editor and the "Add to tab" sheet sit on top of whatever page is open
+     (a community, a profile, Home), so they draw themselves instead of going
+     through the page render. */
+  var editor = null;
+  var assign = null;
+  function layer(id) {
+    var el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id;
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function dropLayer(id) {
+    var el = document.getElementById(id);
+    if (el) el.remove();
+  }
+  function openEditor(id, seed) {
+    var tabs = readTabs();
+    var tab = id ? tabById(id) : null;
+    editor = {
+      id: tab ? tab.id : "",
+      name: tab ? tab.name : "",
+      home: tab ? tab.home : false,
+      sources: tab ? tab.sources.slice() : (seed || []).map(cleanSource).filter(Boolean),
+      order: tabs.map(function (item) { return item.id; }),
+      q: ""
+    };
+    if (!state.index) loadIndex().then(function () { if (editor) paintEditor(); });
+    paintEditor();
+    var name = document.getElementById("cm-ed-name");
+    if (name && !editor.id) name.focus();
+  }
+  function closeEditor() {
+    editor = null;
+    dropLayer("cm-tab-editor");
+  }
+  function editorResults() {
+    var q = String(editor.q || "").trim().toLowerCase();
+    var out = [];
+    var rows = (state.index && state.index.communities) || [];
+    var pickRows = q ? rows.filter(function (row) {
+      return [row.name, row.title, row.about].some(function (v) { return String(v || "").toLowerCase().indexOf(q.replace(/^r\//, "")) >= 0; });
+    }) : rows.slice().sort(function (a, b) { return (Number(b.subscribers) || 0) - (Number(a.subscribers) || 0); });
+    pickRows.slice(0, q ? 20 : 8).forEach(function (row) {
+      var src = cleanSource("c:" + row.name);
+      if (src) out.push(src);
+    });
+    var h = hooks();
+    if (q && h.profiles) {
+      (h.profiles(q) || []).slice(0, 30).forEach(function (row) {
+        var src = cleanSource("p:" + (row && row.id));
+        if (src && out.indexOf(src) < 0) out.push(src);
+      });
+    }
+    var user = q.match(/^(?:https?:\/\/(?:www\.|old\.)?reddit\.com)?\/?u(?:ser)?\/([a-z0-9_-]{3,20})\/?$/i);
+    if (user) {
+      var redditUser = "p:reddit:" + user[1];
+      if (out.indexOf(redditUser) < 0) out.push(redditUser);
+    }
+    return out;
+  }
+  function sourceRow(src, on) {
+    return '<div class="cm-src-row">' + sourceIcon(src) +
+      '<span class="cm-src-copy"><b>' + esc(sourceLabel(src)) + "</b><small>" + esc(sourceSub(src)) + "</small></span>" +
+      '<button class="cm-src-btn' + (on ? " on" : "") + '" type="button" data-cm="ed-src" data-src="' + esc(src) + '">' + esc(on ? tr("Remove") : tr("Add")) + "</button></div>";
+  }
+  function resultsHtml() {
+    var list = editorResults().filter(function (src) { return editor.sources.indexOf(src) < 0; });
+    if (!list.length) return String(editor.q || "").trim() ? '<p class="cm-ed-note">' + esc(tr("No results")) + "</p>" : "";
+    return list.map(function (src) { return sourceRow(src, false); }).join("");
+  }
+  function paintEditor() {
+    if (!editor) return closeEditor();
+    var root = layer("cm-tab-editor");
+    root.className = "cm-layer";
+    var tabs = readTabs();
+    var names = {};
+    tabs.forEach(function (tab) { names[tab.id] = tab.name; });
+    var order = editor.order.filter(function (id) { return names[id]; });
+    var orderHtml = order.length > 1 ? '<h3>' + esc(tr("Order")) + "</h3>" + order.map(function (id, i) {
+      return '<div class="cm-order-row"><span class="cm-order-name">' + esc(id === editor.id ? (editor.name || names[id]) : names[id]) + "</span>" +
+        '<button class="cm-icon-btn" type="button" data-cm="ed-move" data-id="' + esc(id) + '" data-dir="-1" aria-label="' + esc(tr("Move left")) + '"' + (i === 0 ? " disabled" : "") + ">↑</button>" +
+        '<button class="cm-icon-btn" type="button" data-cm="ed-move" data-id="' + esc(id) + '" data-dir="1" aria-label="' + esc(tr("Move right")) + '"' + (i === order.length - 1 ? " disabled" : "") + ">↓</button></div>";
+    }).join("") : "";
+    var title = editor.id ? tr("Edit tab") : tr("New tab");
+    root.innerHTML = '<div class="cm-sheet-back" data-cm="ed-close"><div class="cm-sheet cm-tab-editor" role="dialog" aria-modal="true" aria-label="' + esc(title) + '" data-cm="ed-stop">' +
+      '<div class="cm-sheet-head"><button class="cm-icon-btn" type="button" data-cm="ed-close" aria-label="' + esc(tr("Close")) + '">✕</button><h2>' + esc(title) + "</h2>" +
+        '<button class="cm-ed-save" type="button" data-cm="ed-save"' + (String(editor.name || "").trim() ? "" : " disabled") + ">" + esc(tr("Save")) + "</button></div>" +
+      '<div class="cm-sheet-body">' +
+        '<label class="cm-ed-field"><span>' + esc(tr("Name")) + '</span><input id="cm-ed-name" data-cm="ed-name" maxlength="40" value="' + esc(editor.name) + '" autocomplete="off"></label>' +
+        '<button class="cm-switch' + (editor.home ? " on" : "") + '" type="button" role="switch" aria-checked="' + (editor.home ? "true" : "false") + '" data-cm="ed-home"><span>' + esc(tr("Pin to Home")) + "<small>" + esc(tr("Show this tab next to For you and Following.")) + "</small></span><i></i></button>" +
+        "<h3>" + esc(tr("In this tab")) + "</h3>" +
+        (editor.sources.length ? editor.sources.map(function (src) { return sourceRow(src, true); }).join("") : '<p class="cm-ed-note">' + esc(tr("Search to add communities and people.")) + "</p>") +
+        "<h3>" + esc(tr("Add sources")) + "</h3>" +
+        '<input id="cm-ed-q" class="cm-ed-q" data-cm="ed-q" type="search" placeholder="' + esc(tr("Search communities and people")) + '" aria-label="' + esc(tr("Search communities and people")) + '" value="' + esc(editor.q) + '" autocomplete="off">' +
+        '<div id="cm-ed-results">' + resultsHtml() + "</div>" +
+        orderHtml +
+        (editor.id ? '<button class="cm-ed-delete" type="button" data-cm="ed-delete">' + esc(tr("Delete tab")) + "</button>" : "") +
+      "</div></div></div>";
+  }
+  function saveEditor() {
+    if (!editor) return;
+    var name = String(editor.name || "").trim().slice(0, 40);
+    if (!name) return;
+    var tabs = readTabs();
+    var id = editor.id || newTabId();
+    var row = { id: id, name: name, sources: editor.sources.slice(), home: !!editor.home };
+    var map = {};
+    tabs.forEach(function (tab) { map[tab.id] = tab; });
+    map[id] = row;
+    var next = [];
+    editor.order.forEach(function (key) { if (map[key]) { next.push(map[key]); delete map[key]; } });
+    Object.keys(map).forEach(function (key) { next.push(map[key]); });
+    if (!editor.id && tabs.length >= TAB_MAX) { toast(tr("You can have up to {n} tabs.", { n: TAB_MAX })); return; }
+    writeTabs(next);
+    var fresh = !editor.id;
+    closeEditor();
+    if (fresh && /^#\/communities\/?$/.test((location.hash || "").split("?")[0])) state.hubTab = "tab:" + id;
+    toast(tr("Tab saved"));
+    render();
+  }
+  function deleteTab(id) {
+    var tabs = readTabs().filter(function (tab) { return tab.id !== id; });
+    writeTabs(tabs);
+    if (state.hubTab === "tab:" + id) state.hubTab = "home";
+    var h = hooks();
+    if (h.tabGone) h.tabGone(id);
+    render();
+  }
+  function openAssign(src, label) {
+    var clean = cleanSource(src);
+    if (!clean) return;
+    assign = { src: clean, label: String(label || "") };
+    if (!state.index) loadIndex().then(function () { if (assign) paintAssign(); });
+    paintAssign();
+  }
+  function closeAssign() {
+    assign = null;
+    dropLayer("cm-tab-assign");
+  }
+  function paintAssign() {
+    if (!assign) return closeAssign();
+    var root = layer("cm-tab-assign");
+    root.className = "cm-layer";
+    var tabs = readTabs();
+    var rows = tabs.map(function (tab) {
+      var on = tab.sources.indexOf(assign.src) >= 0;
+      return '<button class="cm-assign-row" type="button" role="menuitemcheckbox" aria-checked="' + (on ? "true" : "false") + '" data-cm="as-toggle" data-id="' + esc(tab.id) + '"><span>' + esc(tab.name) + '</span><i class="cm-assign-mark">' + (on ? svgTick : "") + "</i></button>";
+    }).join("");
+    var label = assign.label || sourceLabel(assign.src);
+    root.innerHTML = '<div class="cm-sheet-back cm-assign-back" data-cm="as-close"><div class="cm-sheet cm-assign" role="menu" aria-label="' + esc(tr("Add to tab")) + '" data-cm="ed-stop">' +
+      '<div class="cm-assign-head"><b>' + esc(tr("Add to tab")) + "</b><small>" + esc(label) + "</small></div>" +
+      (rows || '<p class="cm-ed-note">' + esc(tr("Make a tab to group communities and people in one feed.")) + "</p>") +
+      '<button class="cm-assign-row cm-assign-new" type="button" data-cm="as-new">' + svgPlus + "<span>" + esc(tr("New tab")) + "</span></button>" +
+      "</div></div>";
+  }
+  function editorInput(el) {
+    if (!editor) return false;
+    if (el.dataset.cm === "ed-name") {
+      editor.name = el.value;
+      var save = document.querySelector("#cm-tab-editor .cm-ed-save");
+      if (save) save.disabled = !String(editor.name || "").trim();
+      return true;
+    }
+    if (el.dataset.cm === "ed-q") {
+      editor.q = el.value;
+      var box = document.getElementById("cm-ed-results");
+      if (box) box.innerHTML = resultsHtml();
+      return true;
+    }
+    return false;
+  }
+  function tabClick(act, el) {
+    if (act === "tab-new") { openEditor("", []); return true; }
+    if (act === "tab-edit") { openEditor(el.dataset.id || "", []); return true; }
+    if (act === "tab-pin") {
+      var tabs = readTabs();
+      tabs.forEach(function (tab) { if (tab.id === el.dataset.id) tab.home = !tab.home; });
+      writeTabs(tabs);
+      var pinned = tabById(el.dataset.id);
+      toast(pinned && pinned.home ? tr("Pinned to Home") : tr("Unpinned from Home"));
+      return true;
+    }
+    if (act === "more") { openAssign("c:" + (el.dataset.sub || ""), communityLabel(el.dataset.sub || "")); return true; }
+    if (act === "ed-stop") return true;
+    if (act === "ed-close") { closeEditor(); return true; }
+    if (act === "ed-save") { saveEditor(); return true; }
+    if (act === "ed-home") { if (editor) { editor.home = !editor.home; paintEditor(); } return true; }
+    if (act === "ed-src") {
+      if (!editor) return true;
+      var src = el.dataset.src || "";
+      var at = editor.sources.indexOf(src);
+      if (at >= 0) editor.sources.splice(at, 1);
+      else if (editor.sources.length < SOURCE_MAX) editor.sources.push(src);
+      paintEditor();
+      return true;
+    }
+    if (act === "ed-move") {
+      if (!editor) return true;
+      var names = {};
+      readTabs().forEach(function (tab) { names[tab.id] = true; });
+      var order = editor.order.filter(function (id) { return names[id]; });
+      var i = order.indexOf(el.dataset.id);
+      var j = i + (Number(el.dataset.dir) || 0);
+      if (i >= 0 && j >= 0 && j < order.length) {
+        order.splice(j, 0, order.splice(i, 1)[0]);
+        editor.order = order;
+      }
+      paintEditor();
+      return true;
+    }
+    if (act === "ed-delete") {
+      if (!editor || !editor.id) return true;
+      var askText = tr("Delete this tab? The communities and people in it stay as they are.");
+      if (window.confirm && !window.confirm(askText)) return true;
+      var gone = editor.id;
+      closeEditor();
+      deleteTab(gone);
+      return true;
+    }
+    if (act === "as-close") { closeAssign(); return true; }
+    if (act === "as-toggle") {
+      if (!assign) return true;
+      var list = readTabs();
+      list.forEach(function (tab) {
+        if (tab.id !== el.dataset.id) return;
+        var k = tab.sources.indexOf(assign.src);
+        if (k >= 0) tab.sources.splice(k, 1);
+        else if (tab.sources.length < SOURCE_MAX) tab.sources.push(assign.src);
+      });
+      writeTabs(list);
+      paintAssign();
+      return true;
+    }
+    if (act === "as-new") {
+      var seed = assign ? [assign.src] : [];
+      closeAssign();
+      openEditor("", seed);
+      return true;
+    }
+    return false;
+  }
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    if (editor) { closeEditor(); event.stopPropagation(); }
+    else if (assign) { closeAssign(); event.stopPropagation(); }
+  }, true);
+
+
   /* Global Click & Submit Event Handlers */
   document.addEventListener("click", function (event) {
     var el = event.target.closest("[data-cm]");
     if (!el) return;
     var act = el.dataset.cm;
+    if (tabClick(act, el)) {
+      if (act !== "ed-stop") event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     if (act === "picker") {
       state.hubTab = "home";
@@ -1396,6 +1855,12 @@
   }, true);
 
   document.addEventListener("input", function (event) {
+    var field = event.target.closest("[data-cm='ed-name'], [data-cm='ed-q']");
+    if (field) {
+      editorInput(field);
+      event.stopPropagation();
+      return;
+    }
     var el = event.target.closest("[data-cm='search-input']");
     if (!el) return;
     state.search = el.value;
@@ -1511,6 +1976,24 @@
     toast: null,
     hidden: null,
     note: null,
-    snapshot: rememberCommunities
+    snapshot: rememberCommunities,
+    tabs: readTabs,
+    cleanTabs: cleanTabs,
+    tabFeed: function (id) {
+      var tab = tabById(id);
+      return tab ? tabFeedHtml(tab, true) : "";
+    },
+    openTab: function (id) {
+      if (tabById(id)) state.hubTab = "tab:" + id;
+    },
+    editTab: function (id) { openEditor(id || "", []); },
+    openAssign: openAssign,
+    readTabs: null,
+    writeTabs: null,
+    profileInfo: null,
+    profiles: null,
+    profileItems: null,
+    loadProfiles: null,
+    tabGone: null
   };
 })();
