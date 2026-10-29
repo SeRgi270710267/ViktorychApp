@@ -22342,7 +22342,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       pullNotes();
-    }, 20000);
+    }, 60000);
   }
 
   function stopHub() {
@@ -22375,10 +22375,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     try {
       const reg = await navigator.serviceWorker.ready;
       if (!reg.pushManager) return;
-      const vapid = await accountCall("/v1/push/vapid");
-      const key = vapid && vapid.publicKey;
-      if (!key || vapid.status !== 200) return;
+      // The key and the server copy of this subscription rarely change, so
+      // focus and visibility only re-send them once a day or after a change.
+      let saved = null;
+      try { saved = JSON.parse(readStored(localStorage, "push-sent") || "null"); } catch (err) { saved = null; }
       let sub = await reg.pushManager.getSubscription();
+      const fresh = saved && sub && saved.endpoint === sub.endpoint && Date.now() - Number(saved.at || 0) < 24 * 60 * 60 * 1000 && Number(saved.locked) === (isShortsLocked() ? 1 : 0);
+      if (fresh && !(sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000)) {
+        STATE.pushEndpoint = sub.endpoint || "";
+        return;
+      }
+      let key = saved && saved.key;
+      if (!key) {
+        const vapid = await accountCall("/v1/push/vapid");
+        key = vapid && vapid.status === 200 ? vapid.publicKey : "";
+      }
+      if (!key) return;
       const soon = sub && sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000;
       if (sub && soon) {
         try { await sub.unsubscribe(); } catch (err) { /* a fresh subscription follows */ }
@@ -22388,10 +22400,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const json = sub.toJSON ? sub.toJSON() : {};
       STATE.pushEndpoint = json.endpoint || "";
       if (!json.endpoint || !json.keys) return;
-      await accountCall("/v1/push/subscribe", {
+      const put = await accountCall("/v1/push/subscribe", {
         method: "PUT",
         body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0 }
       });
+      if (put && put.status === 200) writeStored(localStorage, "push-sent", JSON.stringify({ endpoint: json.endpoint, key: key, at: Date.now(), locked: isShortsLocked() ? 1 : 0 }));
     } catch (err) { /* in-app notes still sync */ }
   }
 
@@ -22415,6 +22428,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     }
     removeStored(localStorage, "notes-server");
+    removeStored(localStorage, "push-sent");
     removeStored(localStorage, "notes-acked");
     removeStored(localStorage, "notes-pending");
     updateBadge(0);
