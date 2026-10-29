@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import urllib.parse
 
 KEY = "owner/feeds-catalog.json"
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@+-]{0,90}$")
@@ -150,10 +151,26 @@ def _feed(account: dict, ident: str, platform: str, handle: str) -> dict | None:
         })
         return base
     if platform == "mastodon":
+        # Any fediverse profile, followed by its public feed. Nothing is posted back.
         url = str(account.get("url") or "")
         if not url.startswith("https://"):
             return None
-        base.update({"adapter": "generic_rss", "source_urls": [url.rstrip("/") + ".rss"]})
+        host = str(account.get("host") or urllib.parse.urlsplit(url).hostname or "").lower()
+        user = str(account.get("handle") or "")
+        if not host or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}", user):
+            return None
+        quoted = urllib.parse.quote(user)
+        feeds = [
+            f"https://{host}/@{quoted}.rss",
+            f"https://{host}/users/{quoted}.atom",
+            f"https://{host}/users/{quoted}/feed.atom",
+            f"https://{host}/feeds/videos.xml?accountName={quoted}",
+        ]
+        base.update({
+            "adapter": "generic_rss",
+            "source_urls": feeds[:1],
+            "fallbacks": [{"adapter": "generic_rss", "source_urls": [feed]} for feed in feeds[1:]],
+        })
         return base
     if platform == "rss":
         url = str(account.get("url") or "")
@@ -245,6 +262,7 @@ def _selftest() -> None:
             {"id": "rss:samplefeed", "platform": "rss", "handle": "samplefeed", "url": "https://feeds.example/sample.xml"},
             {"id": "x:slowwind", "platform": "x", "handle": "slowwind", "paused": True},
             {"id": "mastodon:bad", "platform": "mastodon", "handle": "bad", "url": "http://social.example/@bad"},
+            {"id": "mastodon:pinewren@pix.example", "platform": "mastodon", "handle": "pinewren", "host": "pix.example", "url": "https://pix.example/users/pinewren"},
         ]
     }
     rows, ids = feed_rows(doc)
@@ -260,6 +278,9 @@ def _selftest() -> None:
     assert "x:slowwind" not in ids
     assert any(row["id"] == "rss:samplefeed" and row["source_urls"] == ["https://feeds.example/sample.xml"] for row in rows)
     assert all(row["id"] != "mastodon:bad" for row in rows)
+    fedi = next(row for row in rows if row["id"] == "mastodon:pinewren@pix.example")
+    assert fedi["source_urls"] == ["https://pix.example/@pinewren.rss"]
+    assert [f["source_urls"][0] for f in fedi["fallbacks"]][:1] == ["https://pix.example/users/pinewren.atom"]
     report = {"sourceHealth": {"x:northwind": {"ok": False, "detail": "429 slow down"}, "rss:public": {"ok": True, "detail": ""}}}
     private = drop_private_health(report, ["x:northwind"])
     assert "x:northwind" not in report["sourceHealth"]
