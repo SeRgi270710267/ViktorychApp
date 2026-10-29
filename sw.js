@@ -159,7 +159,7 @@ const SHELL_FILES = [
   "./communities.js",
   "./communities.css",
   "./inbox-sms.js",
-  "./inbox-sms.css",
+  "./inbox-sms.css", "./inbox-mail.js", "./inbox-mail.css",
   "./yt-player.js",
   "./yt-player.css",
   "./scores.js",
