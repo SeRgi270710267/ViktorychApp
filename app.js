@@ -10332,16 +10332,32 @@ const here = parseRoute();
 
   /* One account's own posts for its profile: ?by= on /v1/posts. */
   const authorPostCache = {};
+  // Other viewers never get an account's public id, so their key is "@name"
+  // and the list is asked for by username (?handle=).
+  function authorQuery(key) {
+    return key.charAt(0) === "@" ? "handle=" + encodeURIComponent(key.slice(1)) : "by=" + key;
+  }
+  function authorKey(account) {
+    if (!account) return "";
+    if (/^\d{12}$/.test(String(account.publicId || ""))) return String(account.publicId);
+    const name = String(account.handle || "").replace(/^@/, "");
+    return name ? "@" + name.toLowerCase() : "";
+  }
+  function byAuthorKey(key) {
+    if (key.charAt(0) !== "@") return (item) => item && String(item.authorId) === key;
+    const name = key.slice(1);
+    return (item) => item && String(item.authorHandle || "").replace(/^@/, "").toLowerCase() === name;
+  }
   function authorPosts(publicId) {
     const key = String(publicId || "");
-    if (!/^\d{12}$/.test(key)) return [];
+    if (!/^\d{12}$/.test(key) && !/^@[^\s/?#]{1,64}$/.test(key)) return [];
     const cache = authorPostCache[key];
     const now = Date.now();
     if ((!cache || now - cache.at > 30000) && accountToken() && !(cache && cache.loading)) {
       const entry = authorPostCache[key] = cache || { at: 0, posts: [] };
       entry.loading = true;
       entry.at = now;
-      accountCall("/v1/posts?by=" + key).then((res) => {
+      accountCall("/v1/posts?" + authorQuery(key)).then((res) => {
         entry.loading = false;
         if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
         const mine = signedAccount();
@@ -10356,9 +10372,11 @@ const here = parseRoute();
         if (before !== sig(entry.posts)) render();
       }).catch(() => { entry.loading = false; });
     }
+    // Local first: posts already on this device (Home) paint before the server answers.
     const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
     const ids = new Set(have.map((item) => item.id));
-    const extra = publicPosts.filter((item) => item && String(item.authorId) === key && !ids.has(item.id));
+    const own = byAuthorKey(key);
+    const extra = publicPosts.filter((item) => own(item) && !ids.has(item.id));
     return have.concat(extra);
   }
 
@@ -10368,11 +10386,12 @@ const here = parseRoute();
     const entry = authorPostCache[key];
     if (!entry || !entry.more || entry.loadingMore || !entry.before) return;
     entry.loadingMore = true;
-    accountCall("/v1/posts?by=" + key + "&before=" + entry.before).then((res) => {
+    accountCall("/v1/posts?" + authorQuery(key) + "&before=" + entry.before).then((res) => {
       entry.loadingMore = false;
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
       const ids = new Set((entry.posts || []).map((item) => item.id));
-      const add = res.posts.filter((item) => item && !ids.has(item.id) && String(item.authorId) === key);
+      const own = byAuthorKey(key);
+      const add = res.posts.filter((item) => item && !ids.has(item.id) && own(item));
       entry.posts = (entry.posts || []).concat(add);
       entry.before = Number(res.before) || 0;
       entry.more = !!res.more && add.length > 0 && !!entry.before;
@@ -10883,6 +10902,8 @@ const here = parseRoute();
         quotes: Number(item.quoteCount) || 0
       },
       media: [],
+      // Site posts paint their media in appExtra; the profile Media tab counts them here.
+      appMediaCount: (item.media || []).length,
       appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : "") + edited,
       community: community,
       parentId: String(item.parentId || ""),
@@ -16253,7 +16274,8 @@ if (STATE.histClear) {
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
     const identities = (account && account.identities) || [];
-    const ownApp = account.publicId ? authorPosts(account.publicId).map(appCardPost) : [];
+    const ownKey = authorKey(account);
+    const ownApp = ownKey ? authorPosts(ownKey).map(appCardPost) : [];
     if (!ownApp.length && !account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
       return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: null };
     }
@@ -16305,10 +16327,10 @@ if (STATE.histClear) {
     postList.sort(byStamp);
     let shown = postList;
     if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
-    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
+    else if (tab === "media") shown = postList.filter((post) => (post.media || []).length || post.appMediaCount);
     else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
-    const entry = account.publicId ? authorPostCache[String(account.publicId)] : null;
-    const more = entry && entry.more ? `<div id="author-more" class="reply-empty" data-id="${esc(account.publicId)}"><button type="button" class="link-btn" data-act="author-more" data-id="${esc(account.publicId)}">${tr("Show more")}</button></div>` : "";
+    const entry = ownKey ? authorPostCache[ownKey] : null;
+    const more = entry && entry.more ? `<div id="author-more" class="reply-empty" data-id="${esc(ownKey)}"><button type="button" class="link-btn" data-act="author-more" data-id="${esc(ownKey)}">${tr("Show more")}</button></div>` : "";
     return { html: shown.map((post) => card(post, "")).join("") + more, count: postList.length };
   }
 
@@ -22019,7 +22041,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       restoreWatch = new ResizeObserver(() => tryRestore());
       restoreWatch.observe(app);
     }
-    setTimeout(stopRestore, 5100);
+    const mine = restoreTarget;
+    setTimeout(() => { if (restoreTarget === mine) stopRestore(); }, 5100);
   }
   ["wheel", "touchstart", "keydown", "mousedown"].forEach((type) => {
     window.addEventListener(type, () => { if (restoreTarget) stopRestore(); }, { passive: true, capture: true });
@@ -22131,6 +22154,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     hscrollNav = true;
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
+    if (y > 0) restoreWhenTall(key, y);
     render({
       y: y,
       done: () => {
@@ -22141,6 +22165,32 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
     });
   });
+
+  /* A route that paints its cached content a moment after the shell is too
+     short for the saved position at first, so the browser clamps it to the
+     top, and that later paint can replace the routing render before it
+     finishes. For a few seconds after a back or forward navigation, put the
+     saved position back whenever the page is tall enough but sits at the top,
+     until the user scrolls, touches the page or presses a key. */
+  function restoreWhenTall(key, y) {
+    let stop = false;
+    const quit = () => { stop = true; };
+    const opts = { passive: true, once: true, capture: true };
+    ["wheel", "touchstart", "keydown", "pointerdown"].forEach((name) => window.addEventListener(name, quit, opts));
+    const started = Date.now();
+    const tick = () => {
+      if (stop || Date.now() - started > 6000) return;
+      if (routeScrollKey() === key && !STATE.snapTop) {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        if (max >= y - 4 && window.scrollY <= 4) {
+          window.scrollTo(0, y);
+          SCROLLS[key] = window.scrollY;
+        }
+      }
+      setTimeout(tick, 100);
+    };
+    setTimeout(tick, 100);
+  }
 
   function resolvedTheme() {
     const mode = (STATE.settings && STATE.settings.appearance) || "lightsout";
