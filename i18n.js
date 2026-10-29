@@ -52,6 +52,19 @@
 
   lang = readSaved();
 
+  /* Building an Intl formatter costs far more than using one, and a feed
+     render formats hundreds of times and counts. Reuse one per locale and
+     options. */
+  var INTL_CACHE = {};
+  function intl(kind, loc, opts) {
+    var key = kind + "|" + String(loc) + "|" + (opts ? JSON.stringify(opts) : "");
+    var hit = INTL_CACHE[key];
+    if (hit) return hit;
+    hit = new Intl[kind](loc, opts);
+    INTL_CACHE[key] = hit;
+    return hit;
+  }
+
   function locale() {
     if (lang === "hi") return "hi-IN";
     return lang === "ru" || lang === "es" ? lang : "en";
@@ -118,7 +131,7 @@
 
   function formatInt(n) {
     var value = Math.trunc(Number(n) || 0);
-    try { return new Intl.NumberFormat(locale()).format(value); }
+    try { return intl("NumberFormat", locale()).format(value); }
     catch (err) { return String(value); }
   }
 
@@ -126,7 +139,7 @@
     var value = Number(n);
     if (!isFinite(value)) value = 0;
     var cat = "other";
-    try { cat = new Intl.PluralRules(locale()).select(value); } catch (err) { /* one form */ }
+    try { cat = intl("PluralRules", locale()).select(value); } catch (err) { /* one form */ }
     var chosen = key + "." + cat;
     if (lookup(chosen) === chosen && cat !== "other") chosen = key + ".other";
     var data = { n: formatInt(value) };
@@ -145,7 +158,7 @@
     var loc = locale();
     var floor = Number(compactFrom) > 0 ? Number(compactFrom) : 10000;
     if (abs < floor) {
-      try { return new Intl.NumberFormat(loc, { maximumFractionDigits: 0 }).format(Math.trunc(n)); }
+      try { return intl("NumberFormat", loc, { maximumFractionDigits: 0 }).format(Math.trunc(n)); }
       catch (err) { return String(Math.trunc(n)); }
     }
     if (lang === "hi") {
@@ -161,7 +174,7 @@
     var digits = Math.abs(scaled) % 1 ? 1 : 0;
     var formatted;
     try {
-      formatted = new Intl.NumberFormat(loc, { minimumFractionDigits: digits, maximumFractionDigits: 1 }).format(scaled);
+      formatted = intl("NumberFormat", loc, { minimumFractionDigits: digits, maximumFractionDigits: 1 }).format(scaled);
     } catch (err) {
       formatted = digits ? scaled.toFixed(1) : String(Math.round(scaled));
     }
@@ -174,7 +187,7 @@
     var sec = Math.max(0, (Date.now() - then) / 1000);
     var loc = locale();
     var num = function (value) {
-      try { return new Intl.NumberFormat(loc).format(value); }
+      try { return intl("NumberFormat", loc).format(value); }
       catch (err) { return String(value); }
     };
     if (sec < 60) return num(Math.max(1, Math.floor(sec))) + t("time.s");
@@ -183,7 +196,7 @@
     var d = new Date(iso);
     var opts = { month: "short", day: "numeric" };
     if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
-    try { return new Intl.DateTimeFormat(loc, opts).format(d); }
+    try { return intl("DateTimeFormat", loc, opts).format(d); }
     catch (err) { return ""; }
   }
 
@@ -192,8 +205,8 @@
     if (isNaN(d.getTime())) return "";
     var loc = locale();
     try {
-      var clock = new Intl.DateTimeFormat(loc, { hour: "numeric", minute: "2-digit" }).format(d);
-      var date = new Intl.DateTimeFormat(loc, { month: "short", day: "numeric", year: "numeric" }).format(d);
+      var clock = intl("DateTimeFormat", loc, { hour: "numeric", minute: "2-digit" }).format(d);
+      var date = intl("DateTimeFormat", loc, { month: "short", day: "numeric", year: "numeric" }).format(d);
       return clock + " · " + date;
     } catch (err) {
       return "";
@@ -205,7 +218,7 @@
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
     var formatted;
-    try { formatted = new Intl.DateTimeFormat(locale(), { month: "long", year: "numeric" }).format(d); }
+    try { formatted = intl("DateTimeFormat", locale(), { month: "long", year: "numeric" }).format(d); }
     catch (err) { return ""; }
     return t("Joined {date}", { date: formatted });
   }
@@ -216,7 +229,7 @@
     var seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
     var loc = locale();
     var num = function (value) {
-      try { return new Intl.NumberFormat(loc).format(value); }
+      try { return intl("NumberFormat", loc).format(value); }
       catch (err) { return String(value); }
     };
     if (seconds < 45) return t("now");
