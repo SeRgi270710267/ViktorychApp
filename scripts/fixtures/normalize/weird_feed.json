@@ -1,0 +1,14 @@
+{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "Harborlight Notes",
+  "home_page_url": "https://notes.example.net/",
+  "icon": "https://notes.example.net/icon.png",
+  "items": [
+    {"id": "n1", "url": "https://notes.example.net/1", "title": "Episode one", "content_text": "Plain text body &amp; an entity", "date_published": "2026-10-22T09:30:00-07:00",
+     "authors": [{"name": "Ana Example", "avatar": "javascript:alert(1)"}],
+     "attachments": [{"url": "https://notes.example.net/ep1.mp3", "mime_type": "audio/mpeg"}, {"url": "https://notes.example.net/ep1.mp4", "mime_type": "video/mp4"}]},
+    {"id": "n2", "url": "https://notes.example.net/2", "content_html": "<p>Rich <b>body</b><br>line two</p>", "image": "https://notes.example.net/2.webp"},
+    {"id": "n3", "url": "not a url", "content_text": ""},
+    "not an object"
+  ]
+}
