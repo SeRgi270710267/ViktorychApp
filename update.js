@@ -7,7 +7,7 @@
   if (root) root.ViktorychUpdate = api;
   if (typeof document !== "undefined") api.start();
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var PREFIX = "viktorych-a115-";
+  var PREFIX = "viktorych-a118-";
   var SNOOZE_MS = 30 * 60 * 1000;
   var CHECK_MS = 3 * 60 * 1000;
   var RESTORE_MS = 2 * 60 * 1000;
@@ -818,9 +818,6 @@
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
       if (applying) return;
-      /* Save data: on mobile data the new build waits for Wi-Fi or a tap on Update. */
-      var saver = typeof window !== "undefined" ? window.ViktorychDataSaver : null;
-      if (saver && saver.allow && !saver.allow("update")) return;
       requestUpdate(state.reg);
     });
   }
