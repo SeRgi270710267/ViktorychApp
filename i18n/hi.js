@@ -3931,5 +3931,20 @@ SI18n.addPack("hi", {
   "Play with controller": "कंट्रोलर से खेलें",
   "Controller connected.": "कंट्रोलर कनेक्ट हो गया।",
   "Play with a controller in the ViktorychTV app.": "ViktorychTV ऐप में कंट्रोलर से खेलें।",
-  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation और दूसरे कंट्रोलर TV ऐप में काम करते हैं।"
+  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation और दूसरे कंट्रोलर TV ऐप में काम करते हैं।",
+  "Settings, drafts and sign-in": "सेटिंग्स, ड्राफ़्ट और साइन-इन",
+  "Saved screens": "सेव की गई स्क्रीन",
+  "Small caches": "छोटे कैश",
+  "Old copies": "पुरानी कॉपियाँ",
+  "Other pages on this address": "इस पते पर अन्य पेज",
+  "Never cleared here": "यहाँ कभी नहीं मिटाए जाते",
+  "Pages you opened, so they show at once. Rebuilt as you browse": "आपके खोले गए पेज, ताकि वे तुरंत दिखें। ब्राउज़ करते समय फिर से बन जाते हैं",
+  "Link previews, translations and profile headers. Rebuilt when needed": "लिंक प्रीव्यू, अनुवाद और प्रोफ़ाइल हेडर। ज़रूरत पड़ने पर फिर से बन जाते हैं",
+  "Duplicates left by older versions of the app": "ऐप के पुराने वर्ज़न से बचे डुप्लिकेट",
+  "Saved by other pages on the same address. Not cleared here": "उसी पते पर अन्य पेजों द्वारा सेव किया गया। यहाँ नहीं मिटाया जाता",
+  "Free up {size}": "{size} खाली करें",
+  "Nothing to clear. Only settings are saved here.": "मिटाने के लिए कुछ नहीं है। यहाँ सिर्फ़ सेटिंग्स सेव हैं।",
+  "Settings storage": "सेटिंग्स स्टोरेज",
+  "{used} of about {limit} ({pct}%)": "लगभग {limit} में से {used} ({pct}%)",
+  "Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay.": "सेटिंग्स स्टोरेज से सेव की गई स्क्रीन और कैश मिटाएँ? आपकी सेटिंग्स, ड्राफ़्ट और साइन-इन बने रहेंगे।"
 });

@@ -1333,6 +1333,8 @@ def main() -> None:
     check(feed_images.returncode == 0, "feed media URLs are real and a refused picture ends as the silhouette or the picture placeholder, never a broken frame")
     swr_flow = subprocess.run(["node", str(ROOT / "scripts" / "swr_cache_test.js")], cwd=ROOT)
     check(swr_flow.returncode == 0, "the shared local-first cache stays under its byte budget and evicts least recently used pages")
+    budget_flow = subprocess.run(["node", str(ROOT / "scripts" / "local_budget_test.js")], cwd=ROOT)
+    check(budget_flow.returncode == 0, "localStorage stays under 500 KB in a long session, old bloated keys move out, and Free up space keeps settings")
     check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
     check(device_flow.returncode == 0, "device performance levels, toggles, and fallbacks pass")
     tv_flow = subprocess.run(["node", str(ROOT / "scripts" / "tv_boot_test.js")], cwd=ROOT)

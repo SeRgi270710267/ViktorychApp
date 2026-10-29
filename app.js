@@ -2248,9 +2248,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }).filter(Boolean);
     const copy = { updated: doc.updated || "", savedAt: doc.savedAt || Date.now(), feeds: doc.feeds || [], posts: posts };
     try {
+      /* localStorage is for small things: the first screen of posts is
+         enough to paint before the feed loads. */
       let text = JSON.stringify(copy);
-      if (text.length > 400000) {
+      if (text.length > 80000) {
         copy.posts = copy.posts.slice(0, 20);
+        text = JSON.stringify(copy);
+      }
+      if (text.length > 80000) {
+        copy.posts = copy.posts.slice(0, 10);
         text = JSON.stringify(copy);
       }
       writeStored(localStorage, "timeline-v1", text);
@@ -3299,10 +3305,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const rows = Object.keys(LINK_PREVIEW.mem).map((url) => [url, LINK_PREVIEW.mem[url]]).filter((row) => row[1] && !row[1].pending)
         .sort((a, b) => b[1].at - a[1].at).slice(0, LINK_PREVIEW.max);
       const out = {};
-      rows.forEach((row) => {
+      // Bounded by size as well as count: newest cards first, stop near 100k characters.
+      let size = 2;
+      rows.some((row) => {
         const value = row[1];
         // Embedded posts live in the fx/status cache; keep the card only.
-        out[row[0]] = value.quote ? { at: value.at, quoteRef: true, none: false } : value;
+        const keep = value.quote ? { at: value.at, quoteRef: true, none: false } : value;
+        size += row[0].length + JSON.stringify(keep).length + 4;
+        if (size > 100000) return true;
+        out[row[0]] = keep;
+        return false;
       });
       try { localStorage.setItem(LINK_PREVIEW.lsKey, JSON.stringify(out)); } catch (err) { /* quota */ }
     }
