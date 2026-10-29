@@ -6239,3 +6239,65 @@ img, video { max-width: 100%; }
 .usage-panel .usage-week { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .usage-panel .usage-day { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line, rgba(127,127,127,.25)); }
 .usage-panel .usage-day.hot { border-color: #f4212e; color: #f4212e; }
+
+/* Personal sidebar logo text, set in the wordmark's own lockup: Inter Black
+   for the first letter at 1.1x, Inter Regular for the rest, currentColor so
+   every theme inverts it. The subset covers Latin, Cyrillic, Greek and
+   Vietnamese and downloads only when someone uses custom text; any other
+   script falls back to the system font at the same weights. */
+@font-face { font-family: "Viktorych Wordmark"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/inter-400.woff2") format("woff2"); unicode-range: U+0000-024F, U+0259, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0300-036F, U+0370-03FF, U+0400-052F, U+1C80-1C88, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2116, U+2122, U+2190-2193, U+2212, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: "Viktorych Wordmark"; font-style: normal; font-weight: 900; font-display: swap; src: url("fonts/inter-900.woff2") format("woff2"); unicode-range: U+0000-024F, U+0259, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0300-036F, U+0370-03FF, U+0400-052F, U+1C80-1C88, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2116, U+2122, U+2190-2193, U+2212, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+.logo-text {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: "Viktorych Wordmark", Inter, "Inter Variable", var(--font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Helvetica, Arial, sans-serif);
+  font-size: 27.8px;
+  font-weight: 400;
+  line-height: 28px;
+  letter-spacing: 0;
+  color: currentColor;
+  font-kerning: normal;
+  font-synthesis: none;
+}
+.logo-text[data-size="m"] { font-size: 21px; }
+.logo-text[data-size="s"] { font-size: 15.5px; }
+.logo-text-a { font-weight: 900; font-size: 1.1em; margin-right: 0.039em; flex: 0 0 auto; }
+.logo-text-b { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Inside the sidebar link the logo-full rules decide when it shows, so the
+   icon rail and narrow widths hide it exactly like the wordmark. */
+.logo .logo-text.logo-full { text-overflow: ellipsis; }
+.logo.logo-custom { max-width: 100%; }
+.logo-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0 4px; }
+.logo-label { flex: 1 0 100%; font-weight: 700; }
+.logo-input {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 16px;
+}
+.logo-input:focus { outline: 2px solid var(--accent, #1d9bf0); outline-offset: 1px; border-color: transparent; }
+.logo-count { font-variant-numeric: tabular-nums; }
+.logo-preview {
+  display: flex;
+  align-items: center;
+  width: 275px;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 56px;
+  margin: 12px 0 4px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 12px;
+  color: #fff;
+  overflow: hidden;
+}
+html[data-theme="default"] .logo-preview { color: #000; }
+.logo-preview .logo-preview-mark { display: block; height: 28px; width: auto; max-width: 100%; }
+.logo-preview-none { color: var(--muted); font-size: 14px; }
