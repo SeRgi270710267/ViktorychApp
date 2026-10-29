@@ -5433,8 +5433,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(handle || "").replace(/^@/, "");
   }
 
-  function quoteCard(quoted, parent) {
-    if (!quoted) return parent && parent.quoteBlocked ? `<div class="quote quote-gone">${esc(tr("This post is from an account you blocked."))}</div>` : "";
+  /* A quote the server dropped for this device's blocks: a stub, no fetch. */
+  function quoteBlockedStub(post) {
+    return post && !post.quoted && post.quoteBlocked ? `<div class="quote quote-gone">${esc(tr("This post is from an account you blocked."))}</div>` : "";
+  }
+  function quoteCard(quoted) {
+    if (!quoted) return "";
     if (quoteHidden(quoted) && !(STATE.revealedHidden && STATE.revealedHidden["q:" + String(quoted.statusId || quoted.id || "")])) {
       return `<div class="quote quote-gone">${esc(tr("This post is from an account you blocked."))} <button type="button" class="linkish" data-act="reveal-hidden" data-id="${esc("q:" + String(quoted.statusId || quoted.id || ""))}">${esc(tr("Show"))}</button></div>`;
     }
@@ -8858,7 +8862,7 @@ const here = parseRoute();
           ${mediaHtml(post.media, eager, post)}
           ${post.appPost ? (post.appExtra || "") : ""}
           ${postCards(post)}
-          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted, post)}
+          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
           ${giftChip(post)}
           ${threadLink}
           ${actionBar(post)}
@@ -12699,7 +12703,7 @@ const here = parseRoute();
         ${mediaHtml(post.media, false, post)}
         ${post.appPost ? (post.appExtra || "") : ""}
         ${postCards(post)}
-        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted, post)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
         ${statusMeta(post)}
         ${actionBar(post, true)}`;
     const face = authorFace(post);
@@ -17436,7 +17440,7 @@ if (STATE.histClear) {
         ${reply}
         ${textBlock(shown, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
-        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted, post)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
       </div>
     </article>`;
   }
