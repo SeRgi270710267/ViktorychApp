@@ -503,6 +503,12 @@ def selftest() -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     if "--selftest" in sys.argv:
         sys.exit(selftest())
     sys.exit(0)
