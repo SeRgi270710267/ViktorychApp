@@ -62,6 +62,7 @@ const SHELL_FILES = [
   "./storage.css",
   "./localfirst.js",
   "./direct.js",
+  "./comments-client.js",
   "./device.js",
   "./device-search.js",
   "./device-ai.js",

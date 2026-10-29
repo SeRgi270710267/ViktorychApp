@@ -2219,7 +2219,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (face === "none") return `<span class="ava-none"></span>`;
     if (face === "default") return silhouette(extra);
     const letter = initials(name);
-    const safeSrc = ruSafeImageUrl(src);
+    const lib = window.ViktorychComments;
+    const sized = lib && lib.smallAvatar && linkImagesBlocked() ? lib.smallAvatar(src, true) : src;
+    const safeSrc = ruSafeImageUrl(sized);
     return `<img decoding="async" class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
   }
 
@@ -5694,6 +5696,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (window.FeedsPeople && window.FeedsPeople.hidden && window.FeedsPeople.hidden(post)) return true;
     const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
     if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
+    // Hook for the shared blocklist (mute/block data): checked before a reply
+    // card or its media is built.
+    const list = window.ViktorychBlocklist;
+    if (list && typeof list.hides === "function") {
+      try { if (list.hides(post)) return true; } catch (err) { /* a broken list must not hide the thread */ }
+    }
     if (!blockReason(post)) return false;
     // Show hidden keeps the row as a placeholder that loads nothing.
     return !showHiddenOn();
@@ -5952,7 +5960,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function fetchJsonNow(url, opts) {
     let signal;
-    try {
+    const lib = window.ViktorychComments;
+    if (opts && opts.signal && lib && lib.withTimeout) signal = lib.withTimeout(opts.signal, 8000);
+    else try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
         signal = AbortSignal.timeout(8000);
       }
@@ -5988,7 +5998,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function fetchJson(url, opts) {
     const direct = window.ViktorychDirect;
     if (direct && direct.fetchSource && direct.allows && direct.allows(url)) {
-      return direct.fetchSource(url, function () { return fetchJsonNow(url, opts); }, opts && opts.fresh ? { fresh: true } : null);
+      // A comments read names its own server leg (the Worker edge cache) so a
+      // failed direct read is not sent to the same host a second time.
+      const server = opts && typeof opts.server === "function" ? opts.server : function () { return fetchJsonNow(url, opts); };
+      const init = opts && (opts.fresh || opts.signal) ? { fresh: !!opts.fresh, signal: opts.signal || undefined } : null;
+      return direct.fetchSource(url, server, init);
     }
     return fetchJsonNow(url, opts);
   }
@@ -6045,7 +6059,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }).catch(() => null);
   }
 
-  function rotate(basesPromise, path, limit, slot) {
+  function rotate(basesPromise, path, limit, slot, opts) {
+    const signal = opts && opts.signal;
     return loadStatus().then(() => basesPromise.then((bases) => {
       if (path.indexOf("/api/v1/videos/") === 0 && LIVE.videosDown) return null;
       const prefer = slot && LIVE[slot];
@@ -6061,10 +6076,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       function next() {
         if (index >= list.length) return Promise.resolve(null);
         const base = list[index++];
-        return fetchJson(base.replace(/\/$/, "") + path).then((data) => {
+        if (signal && signal.aborted) return Promise.reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        return fetchJson(base.replace(/\/$/, "") + path, signal ? { signal: signal } : undefined).then((data) => {
           if (slot) LIVE[slot] = base;
           return data;
         }).catch((err) => {
+          if (signal && signal.aborted) throw err;
           if (path.indexOf("/api/v1/videos/") === 0 && err && err.status >= 500) {
             LIVE.videosDown = true;
             return null;
@@ -6680,10 +6697,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return !!(payload.status || (payload.replies && payload.replies.length));
   }
 
-  function fxConversation(id, params) {
+  function fxConversation(id, params, opts) {
     const query = new URLSearchParams(params || {});
     const suffix = query.toString();
-    return fetchJson(FX + "/2/conversation/" + encodeURIComponent(id) + (suffix ? "?" + suffix : ""));
+    return fetchJson(FX + "/2/conversation/" + encodeURIComponent(id) + (suffix ? "?" + suffix : ""), opts);
   }
 
   function fxConversationPages(id) {
@@ -6889,7 +6906,485 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return STATE.replies[id];
   }
 
+  /* One comments client for every source (comments-client.js).
+     - A source adapter loads one fast first page of about 20 comments.
+     - Requests in flight are shared; pages stay 10 minutes in memory and
+       IndexedDB, and a page older than a minute shows at once while it is
+       refreshed in the background.
+     - Leaving a post aborts its loads; deeper pages and nested replies load
+       only when asked for. Prefetch waits for a pause on a post and idle time
+       and never runs with Save data on or on 2G/3G. */
+  const CMT_LIB = window.ViktorychComments || null;
+  const CMT = CMT_LIB ? CMT_LIB.create() : null;
+  const CMT_PAGE = 20;
+  const CMT_STALE_MS = 60 * 1000;
+  const CMT_PREFETCHED = {};
+  let cmtPrefetchAt = 0;
+  let cmtPrefetchCount = 0;
+
+  function cmtAbort(err) {
+    return !!(err && (err.name === "AbortError" || (CMT_LIB && CMT_LIB.isAbort(err))));
+  }
+
+  function commentSource(post) {
+    const p = String((post && post.platform) || "");
+    if (p === "x") return "x";
+    if (p === "youtube") return "youtube";
+    if (p === "bsky" || p === "bluesky") return "bsky";
+    if (p === "reddit") return "reddit";
+    return "snapshot";
+  }
+
+  function commentSort() {
+    return replySortMode() === "recent" ? "new" : "top";
+  }
+
+  function commentKey(post, sort) {
+    return "c1:" + commentSource(post) + ":" + postKey(post) + ":" + (sort || "top");
+  }
+
+  /* The Worker keeps public comment pages at the edge for 90 seconds; the
+     Render backup runs the same route. Same failover order as accounts. */
+  function edgeComments(src, id, sort, cursor, signal) {
+    const acc = window.ViktorychAccounts;
+    const list = [];
+    const add = (value) => {
+      const base = String(value || "").replace(/\/$/, "");
+      if (base && list.indexOf(base) < 0) list.push(base);
+    };
+    add(accountsApi());
+    if (acc && acc.apiEndpoints) acc.apiEndpoints().forEach(add);
+    const query = "/v1/comments?src=" + encodeURIComponent(src) + "&id=" + encodeURIComponent(id) + "&sort=" + (sort === "new" ? "new" : "top") + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
+    let index = 0;
+    const next = () => {
+      if (index >= list.length) return Promise.reject(new Error("edge"));
+      const base = list[index++];
+      const wait = CMT_LIB ? CMT_LIB.withTimeout(signal, 8000) : signal;
+      return fetch(base + query, { credentials: "omit", signal: wait || undefined }).then((res) => {
+        if (res.status === 200) {
+          return res.json().then((body) => {
+            if (!body || body.data == null) throw new Error("empty");
+            return body.data;
+          });
+        }
+        const err = new Error(String(res.status));
+        err.status = res.status;
+        throw err;
+      }).catch((err) => {
+        if (signal && signal.aborted) throw err;
+        // A network error or a 5xx from the Worker itself trips the breaker;
+        // a 502 only means the source was down from there.
+        if (acc && acc.rotateApi && (!err.status || (err.status >= 500 && err.status !== 502))) acc.rotateApi(base);
+        return next();
+      });
+    };
+    return next();
+  }
+
+  /* Synced copies, for sources with no public live API (Instagram, Threads,
+     RSS, VK) and as the last leg for the others. One file at a time. */
+  function snapshotPage(post, signal) {
+    const id = postKey(post);
+    const ownFirst = (post.platform || "") === "x";
+    const fromOwn = () => ownPack(id).then((own) => {
+      if (own && own.stats) applyLiveStats(id, own.stats);
+      return own && (own.replies || []).length ? { replies: own.replies.slice(), fetchedAt: own._at || Date.now(), source: "fallback" } : null;
+    });
+    const fromSnap = () => snapshotDoc(id).then((doc) => {
+      if (!commentsCurrent(post, doc) || !(doc.replies || []).length) return null;
+      const stamped = doc.fetchedAt ? Date.parse(doc.fetchedAt) : Date.now();
+      return { replies: doc.replies.slice(), fetchedAt: isFinite(stamped) ? stamped : Date.now(), source: "snapshot" };
+    }).catch(() => null);
+    const first = ownFirst ? fromOwn : fromSnap;
+    const second = ownFirst ? fromSnap : fromOwn;
+    return first().then((page) => {
+      if (signal && signal.aborted) throw Object.assign(new Error("aborted"), { name: "AbortError" });
+      return page || second();
+    }).then((page) => page || { replies: [], missing: true, fetchedAt: Date.now(), source: "none" });
+  }
+
+  function xPage(post, payload) {
+    const id = postKey(post);
+    if (!fxUsable(payload)) return null;
+    const author = ((payload.status || {}).author || {}).screen_name || post.handle || "";
+    let rows = [];
+    try { rows = fxExtract(payload, id); } catch (err) { rows = []; }
+    return {
+      replies: fxRank(rows, author, 1000),
+      stats: payload.status ? fxStats(payload.status) : null,
+      cursor: String(((payload.cursor || {}).bottom) || ""),
+      fetchedAt: Date.now(),
+      source: "fxtwitter"
+    };
+  }
+
+  function xFetch(post, sort, cursor, signal) {
+    const id = postKey(post);
+    const params = {};
+    if (sort === "new") params.ranking_mode = "recency";
+    if (cursor) params.cursor = cursor;
+    const viaEdge = () => edgeComments("x", id, sort, cursor, signal);
+    return loadStatus().then(() => (LIVE.fxDown ? viaEdge() : fxConversation(id, params, { signal: signal, server: viaEdge })));
+  }
+
+  function bskyUri(post) {
+    const raw = String((post && (post.statusId || post.id)) || "");
+    return /^at:\/\//.test(raw) ? raw : "";
+  }
+
+  function bskyReply(node, parent, rows, depth) {
+    const item = node && node.post;
+    if (!item || !item.uri) return;
+    const row = bskyPost(item);
+    if (!row) return;
+    row.kind = "reply";
+    row.stats = { likes: fxNum(item.likeCount), replies: fxNum(item.replyCount), reposts: fxNum(item.repostCount) };
+    row.replyingTo = { id: parent.id, handle: parent.handle || "" };
+    // Reply avatars are 40px: the thumbnail rendition is a fraction of the size.
+    if (row.avatar) row.avatar = String(row.avatar).replace("/img/avatar/", "/img/avatar_thumbnail/");
+    rows.push(row);
+    rememberLive(row);
+    if (depth < 1) (node.replies || []).slice(0, 6).forEach((child) => bskyReply(child, { id: row.id, handle: row.handle }, rows, depth + 1));
+  }
+
+  function bskyPage(post, data, sort) {
+    const thread = data && data.thread;
+    if (!thread || !thread.post) return { replies: [], missing: !thread, fetchedAt: Date.now(), source: "bsky" };
+    const top = (thread.replies || []).filter((node) => node && node.post);
+    top.sort(sort === "new"
+      ? (a, b) => String((b.post.record || {}).createdAt || "").localeCompare(String((a.post.record || {}).createdAt || ""))
+      : (a, b) => fxNum(b.post.likeCount) - fxNum(a.post.likeCount));
+    const rows = [];
+    top.forEach((node) => bskyReply(node, { id: postKey(post), handle: post.handle || "" }, rows, 0));
+    const stats = { replies: fxNum(thread.post.replyCount), likes: fxNum(thread.post.likeCount), reposts: fxNum(thread.post.repostCount) };
+    return { replies: rows, stats: stats, fetchedAt: Date.now(), source: "bsky" };
+  }
+
+  function redditId(post) {
+    const raw = String((post && (post.statusId || post.id)) || "").replace(/^(?:reddit:|t3_)/, "");
+    return /^[a-z0-9]{1,12}$/i.test(raw) ? raw.toLowerCase() : "";
+  }
+
+  function redditRows(children, parent, rows, depth) {
+    (children || []).forEach((child) => {
+      if (!child || child.kind !== "t1" || !child.data) return;
+      const d = child.data;
+      if (!d.body || d.body === "[deleted]" || d.body === "[removed]") return;
+      const kids = (d.replies && d.replies.data && d.replies.data.children) || [];
+      const row = {
+        id: "t1_" + d.id,
+        statusId: "t1_" + d.id,
+        platform: "reddit",
+        kind: "reply",
+        author: d.author || "",
+        handle: d.author || "",
+        avatar: "",
+        text: String(d.body || ""),
+        date: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : "",
+        stats: { likes: fxNum(d.score), replies: kids.filter((k) => k && k.kind === "t1").length },
+        replyingTo: { id: parent.id, handle: parent.handle || "" },
+        url: d.permalink ? "https://www.reddit.com" + d.permalink : ""
+      };
+      rows.push(row);
+      if (depth < 1) redditRows(kids.slice(0, 4), { id: row.id, handle: row.handle }, rows, depth + 1);
+    });
+  }
+
+  function redditPage(post, data) {
+    if (!Array.isArray(data) || data.length < 2) return null;
+    const rows = [];
+    redditRows(((data[1] || {}).data || {}).children || [], { id: postKey(post), handle: post.handle || "" }, rows, 0);
+    const head = (((data[0] || {}).data || {}).children || [])[0];
+    const stats = head && head.data ? { replies: fxNum(head.data.num_comments), likes: fxNum(head.data.score) } : null;
+    return { replies: rows, stats: stats, fetchedAt: Date.now(), source: "reddit" };
+  }
+
+  function redditFetch(post, sort, limit, signal) {
+    const rid = redditId(post);
+    const url = "https://www.reddit.com/comments/" + rid + ".json?limit=" + (limit || CMT_PAGE) + "&depth=2&raw_json=1&sort=" + (sort === "new" ? "new" : "top");
+    return fetchJson(url, { signal: signal, server: () => edgeComments("reddit", rid, sort, "", signal) });
+  }
+
+  function guardLive(promise, post, signal) {
+    return promise.then((page) => {
+      if (page) return page;
+      if (signal && signal.aborted) throw Object.assign(new Error("aborted"), { name: "AbortError" });
+      return snapshotPage(post, signal);
+    }, (err) => {
+      if (cmtAbort(err) || (signal && signal.aborted)) throw err;
+      return snapshotPage(post, signal);
+    });
+  }
+
+  const COMMENT_ADAPTERS = {
+    x: {
+      first: (post, sort, signal) => guardLive(xFetch(post, sort, "", signal).then((payload) => xPage(post, payload)), post, signal),
+      more: (post, sort, cursor, signal) => (cursor ? xFetch(post, sort, cursor, signal).then((payload) => xPage(post, payload)) : Promise.resolve(null))
+    },
+    youtube: {
+      first: (post, sort, signal) => loadYtComments(post, { sort: sort, signal: signal, page: true }).then((doc) => ytPageOf(doc)),
+      more: (post, sort, cursor, signal) => (cursor ? ytMore(post, sort, cursor, signal) : Promise.resolve(null))
+    },
+    bsky: {
+      first: (post, sort, signal) => {
+        const uri = bskyUri(post);
+        if (!uri) return snapshotPage(post, signal);
+        const url = "https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=" + encodeURIComponent(uri) + "&depth=2&parentHeight=0";
+        return guardLive(fetchJson(url, { signal: signal, server: () => edgeComments("bsky", uri, sort, "", signal) }).then((data) => bskyPage(post, data, sort)), post, signal);
+      }
+    },
+    reddit: {
+      first: (post, sort, signal) => (redditId(post) ? guardLive(redditFetch(post, sort, CMT_PAGE, signal).then((data) => redditPage(post, data)), post, signal) : snapshotPage(post, signal)),
+      more: (post, sort, cursor, signal) => (cursor ? redditFetch(post, sort, 100, signal).then((data) => redditPage(post, data)) : Promise.resolve(null))
+    },
+    snapshot: {
+      first: (post, sort, signal) => snapshotPage(post, signal)
+    }
+  };
+
+  function pageRows(page) {
+    if (!page) return [];
+    if (Array.isArray(page.replies)) return page.replies;
+    return (page.doc && page.doc.replies) || [];
+  }
+
+  function commentsGet(post, sort, meta) {
+    const src = commentSource(post);
+    const adapter = COMMENT_ADAPTERS[src] || COMMENT_ADAPTERS.snapshot;
+    const loader = (ctx) => adapter.first(post, sort, ctx && ctx.signal).then((page) => {
+      if (!page) throw new Error("empty");
+      if (src === "reddit" && (page.replies || []).length >= CMT_PAGE && !page.cursor) page.cursor = "all";
+      return page;
+    });
+    if (!CMT) return loader({}).then((value) => ({ at: Date.now(), value: value }));
+    return CMT.get(commentKey(post, sort), loader, Object.assign({ source: src }, meta || {}));
+  }
+
+  /* Start or refresh the first page for one post. The bucket keeps showing
+     what it has while a refresh runs; a failure is an error (with Retry), not
+     "no replies". */
+  function startComments(post, id, sort, fresh, scope) {
+    const prev = STATE.replies[id];
+    const keep = !!(prev && prev.sort === sort && (prev.replies || []).length);
+    const seed = keep ? prev.replies : (Array.isArray(post.replies) ? post.replies : []);
+    const epoch = (STATE.replyEpoch[id] || 0) + 1;
+    STATE.replyEpoch[id] = epoch;
+    const now = Date.now();
+    STATE.replies[id] = Object.assign({}, prev || {}, { loading: !keep, refreshing: keep, replies: seed, missing: false, error: false, cap: 1000, sort: sort, checkedAt: now, settled: keep, fetchedAt: keep ? prev.fetchedAt : 0 });
+    const apply = (row) => {
+      if (STATE.replyEpoch[id] !== epoch) return;
+      const page = (row && row.value) || {};
+      const rows = pageRows(page);
+      const replies = rows.length ? rows.slice() : seed;
+      if (page.stats) applyLiveStats(id, page.stats);
+      if (page.doc) STATE.ytDocs[id] = page.doc;
+      STATE.replies[id] = {
+        loading: false,
+        refreshing: !!(row && row.stale),
+        replies: replies,
+        missing: !!page.missing && !replies.length,
+        error: false,
+        cursor: page.cursor || "",
+        cap: 1000,
+        sort: sort,
+        source: page.source || "",
+        fetchedAt: typeof page.fetchedAt === "number" ? page.fetchedAt : (row && row.at) || Date.now(),
+        checkedAt: Date.now(),
+        settled: true
+      };
+      render();
+    };
+    commentsGet(post, sort, { fresh: !!fresh, scope: scope || "view", onUpdate: apply }).then(apply).catch((err) => {
+      if (STATE.replyEpoch[id] !== epoch) return;
+      if (cmtAbort(err)) {
+        if (keep) STATE.replies[id] = Object.assign({}, prev, { loading: false, refreshing: false });
+        else delete STATE.replies[id];
+        return;
+      }
+      STATE.replies[id] = { loading: false, refreshing: false, replies: seed, missing: false, error: !seed.length, cap: 1000, sort: sort, fetchedAt: keep ? prev.fetchedAt : 0, checkedAt: Date.now(), settled: true };
+      render();
+    });
+    return STATE.replies[id];
+  }
+
+  /* Next page for "Show more replies" once the loaded rows are all shown. */
+  function moreComments(post) {
+    const id = postKey(post);
+    const bucket = STATE.replies[id];
+    if (!bucket || bucket.loadingMore || !bucket.cursor) return;
+    const adapter = COMMENT_ADAPTERS[commentSource(post)] || {};
+    if (!adapter.more) return;
+    bucket.loadingMore = true;
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    STATE.replyMoreCtrl = ctrl;
+    const sort = bucket.sort || commentSort();
+    const cursor = bucket.cursor;
+    adapter.more(post, sort, cursor, ctrl ? ctrl.signal : null).then((page) => {
+      const cur = STATE.replies[id];
+      if (!cur || cur !== bucket) return;
+      const have = new Set((cur.replies || []).map(postKey));
+      const extra = ((page && page.replies) || []).filter((row) => row && !have.has(postKey(row)));
+      cur.replies = (cur.replies || []).concat(extra);
+      cur.cursor = page && page.cursor && page.cursor !== cursor ? page.cursor : "";
+      cur.loadingMore = false;
+      render();
+    }).catch((err) => {
+      bucket.loadingMore = false;
+      if (!cmtAbort(err)) {
+        bucket.moreError = true;
+        render();
+      }
+    });
+  }
+
+  function retryComments(id) {
+    const key = String(id || "");
+    delete STATE.replies[key];
+    const bare = key.replace(/^watch:(?:yt_)?/, "").replace(/:new$/, "");
+    const post = findAnyPost(bare);
+    if (post && CMT) CMT.drop(commentKey(post, commentSort()));
+    render();
+  }
+
+  function replyError(id) {
+    return `<div class="reply-empty reply-error" role="alert"><p>${tr("Couldn't load the comments.")}</p><button class="outline" type="button" data-act="reply-retry" data-id="${esc(id)}">${tr("Retry")}</button></div>`;
+  }
+
+  /* Leaving a post cancels its comment loads; prefetches keep running. */
+  function abortViewComments() {
+    if (CMT) CMT.abortScope("view");
+    if (STATE.replyMoreCtrl) {
+      try { STATE.replyMoreCtrl.abort(); } catch (err) {}
+      STATE.replyMoreCtrl = null;
+    }
+  }
+
+  function commentPrefetchable(post) {
+    if (!post || !CMT_LIB || !CMT) return false;
+    if (post.appPost || post._community || ["telegram", "discord", "nostr"].indexOf(post.platform || "") >= 0) return false;
+    if (!(Number((post.stats || {}).replies || 0) > 0)) return false;
+    return commentSource(post) !== "snapshot";
+  }
+
+  /* Top comments for a post the reader paused on: idle time only, at most one
+     every 3 seconds and 12 per session, never on Save data or 2G/3G. */
+  function prefetchComments(post) {
+    const id = postKey(post);
+    if (!id || CMT_PREFETCHED[id] || !commentPrefetchable(post)) return;
+    if (linkImagesBlocked() || !CMT_LIB.canPrefetch({ saveData: !!connectionInfo().saveData })) return;
+    const now = Date.now();
+    if (now - cmtPrefetchAt < 3000 || cmtPrefetchCount >= 12) return;
+    cmtPrefetchAt = now;
+    cmtPrefetchCount += 1;
+    CMT_PREFETCHED[id] = true;
+    CMT_LIB.idle(() => {
+      commentsGet(post, "top", { scope: "prefetch" }).catch(() => {});
+    }, 3000);
+  }
+
+  let CMT_DWELL_OBS = null;
+  const CMT_DWELL = new Map();
+  function watchCommentPrefetch() {
+    if (typeof IntersectionObserver !== "function" || !CMT) return;
+    const route = parseRoute();
+    if (route.name === "status" || route.name === "watch") {
+      if (CMT_DWELL_OBS) CMT_DWELL_OBS.disconnect();
+      return;
+    }
+    if (!CMT_DWELL_OBS) {
+      CMT_DWELL_OBS = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          const el = entry.target;
+          const timer = CMT_DWELL.get(el);
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            if (timer) return;
+            CMT_DWELL.set(el, setTimeout(() => {
+              CMT_DWELL.delete(el);
+              const key = el.getAttribute("data-post") || "";
+              const post = findAnyPost(key);
+              if (post) prefetchComments(post);
+            }, 1200));
+          } else if (timer) {
+            clearTimeout(timer);
+            CMT_DWELL.delete(el);
+          }
+        });
+      }, { threshold: [0, 0.6] });
+    }
+    CMT_DWELL_OBS.disconnect();
+    CMT_DWELL.forEach((timer) => clearTimeout(timer));
+    CMT_DWELL.clear();
+    document.querySelectorAll("article.post[data-post]:not(.reply-card)").forEach((el) => CMT_DWELL_OBS.observe(el));
+  }
+
+  let CMT_MORE_OBS = null;
+  function watchReplyMore() {
+    if (typeof IntersectionObserver !== "function") return;
+    if (!CMT_MORE_OBS) {
+      CMT_MORE_OBS = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const el = entry.target;
+          CMT_MORE_OBS.unobserve(el);
+          showMoreReplies(el.getAttribute("data-id"));
+        });
+      }, { rootMargin: "300px" });
+    }
+    CMT_MORE_OBS.disconnect();
+    document.querySelectorAll(".reply-more-sentinel[data-id]").forEach((el) => CMT_MORE_OBS.observe(el));
+  }
+
+  function showMoreReplies(id) {
+    const key = String(id || "");
+    if (!key) return;
+    const ui = STATE.replyUi[key] || {};
+    const bucket = STATE.replies[key] || {};
+    const limit = ui.limit || CMT_PAGE;
+    const total = ui.total || 0;
+    if (limit < total) {
+      ui.limit = limit + CMT_PAGE;
+      STATE.replyUi[key] = ui;
+      render();
+      return;
+    }
+    if (key.indexOf("watch:") === 0) {
+      const vid = key.replace(/^watch:(?:yt_)?/, "").replace(/:new$/, "");
+      const post = findAnyPost(vid);
+      const doc = bucket.doc;
+      if (!post || !doc || !doc.continuation || bucket.loadingMore) return;
+      bucket.loadingMore = true;
+      ytMore(post, key.slice(-4) === ":new" ? "new" : "top", doc.continuation, null).then((page) => {
+        bucket.loadingMore = false;
+        if (page && page.replies && doc !== STATE.ytDocs[vid]) {
+          const have = new Set((doc.replies || []).map(postKey));
+          page.replies.forEach((row) => { if (!have.has(postKey(row))) doc.replies.push(row); });
+        }
+        doc.continuation = (page && page.cursor) || "";
+        if (!doc.continuation) ui.done = true;
+        ui.limit = limit + CMT_PAGE;
+        STATE.replyUi[key] = ui;
+        render();
+      }).catch(() => { bucket.loadingMore = false; });
+      return;
+    }
+    if (bucket.cursor) {
+      ui.limit = limit + CMT_PAGE;
+      STATE.replyUi[key] = ui;
+      const post = findAnyPost(key);
+      if (post) moreComments(post);
+      render();
+    }
+  }
+
+  function replySkeleton(count) {
+    let rows = "";
+    for (let i = 0; i < (count || 3); i++) rows += `<div class="reply-skel" aria-hidden="true"><span class="reply-skel-ava"></span><span class="reply-skel-lines"><i></i><i></i></span></div>`;
+    return `<div class="reply-loading" role="status" aria-live="polite"><span class="sr-only">${tr("Loading replies…")}</span>${rows}</div>`;
+  }
+
   function replyBucket(post) {
+    // Every remote source goes through COMMENT_ADAPTERS; YouTube's adapter calls
+    // loadYtComments(post), the same loader the watch page uses.
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
     const focused = String(STATE.focusId || "") === id;
@@ -6915,96 +7410,26 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     if (post.appPost && isAppPostId(id) && !post.community) return appReplyBucket(post, id, want);
     if ((post.platform || "") === "nostr") return nostrReplyBucket(post, id, want);
+    const sort = commentSort();
     const fresh = String(STATE.forceReply || "") === id;
     if (fresh) STATE.forceReply = "";
     const bucket = STATE.replies[id];
-    const cachedAt = bucket && bucket.fetchedAt;
-    const stillFresh = cachedAt && Date.now() - cachedAt < COMMENT_TTL;
-    if (!fresh && bucket && !bucket.loading && (bucket.cap || 0) >= want && (stillFresh || bucket.settled)) return bucket;
-    if (!fresh && bucket && bucket.loading) return bucket;
-    const epoch = (STATE.replyEpoch[id] || 0) + 1;
-    STATE.replyEpoch[id] = epoch;
-    const seedReplies = (bucket && bucket.replies && bucket.replies.length) ? bucket.replies : (Array.isArray(post.replies) ? post.replies : []);
-    STATE.replies[id] = { loading: true, replies: seedReplies, missing: false, cap: want, fetchedAt: fresh ? 0 : cachedAt || 0 };
-    const finish = (replies, missing, cap, fetchedAt) => {
-      if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
-      STATE.replies[id] = { loading: false, replies: (replies && replies.length) ? replies : (seedReplies.length ? seedReplies : []), missing: !!missing && !seedReplies.length && (!replies || !replies.length), cap: cap || want, fetchedAt: typeof fetchedAt === "number" ? fetchedAt : Date.now(), settled: true };
-      render();
-    };
-    const snap = (ownAt) => snapshotDoc(id).then((doc) => {
-      if (!commentsCurrent(post, doc)) {
-        finish([], true, want, ownAt || Date.now());
-        return;
-      }
-      const stamped = doc && doc.fetchedAt ? Date.parse(doc.fetchedAt) : Date.now();
-      finish(((doc && doc.replies) || []).slice(), false, want, isFinite(stamped) ? stamped : Date.now());
-    }).catch(() => finish([], true, want, ownAt || Date.now()));
-    const ownThenSnap = () => ownPack(id).then((own) => {
-      if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
-      if (own && own.stats) applyLiveStats(id, own.stats);
-      if (own && (own.replies || []).length) {
-        finish(own.replies.slice(0, want), false, want, own._at || Date.now());
-        return;
-      }
-      snap(own && own._at);
-    }).catch(() => snap());
-
-    setTimeout(() => {
-      const cur = STATE.replies[id];
-      if (cur && cur.loading && STATE.replyEpoch[id] === epoch) {
-        snapshotDoc(id).then((doc) => {
-          if (STATE.replyEpoch[id] !== epoch) return;
-          if (doc && Array.isArray(doc.replies) && doc.replies.length) {
-            finish(doc.replies.slice(0, want), false, want, Date.now());
-          } else {
-            finish([], true, want, Date.now());
-          }
-        }).catch(() => {
-          if (STATE.replyEpoch[id] === epoch) finish([], true, want, Date.now());
-        });
-      }
-    }, 6000);
-
-    if ((post.platform || "") === "youtube") {
-      loadYtComments(post).then((doc) => {
-        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
-        const rows = (doc && doc.replies) || [];
-        const at = ytFetchedAt(doc);
-        if (!rows.length) finish([], !(doc && doc.commentCount != null), want, at);
-        else finish(rows.slice(0, want), false, want, at);
-      }).catch(() => {
-        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
-        ownThenSnap();
-      });
+    if (!fresh && bucket && bucket.sort === sort && (bucket.loading || bucket.settled)) {
+      // Stale-while-revalidate: the open post shows what it has and refreshes
+      // in the background once it is a minute old.
+      if (bucket.settled && !bucket.refreshing && !bucket.error && String(STATE.openReply || "") === id && Date.now() - (bucket.checkedAt || 0) > CMT_STALE_MS) startComments(post, id, sort, false);
       return STATE.replies[id];
     }
-    if ((post.platform || "") === "x") {
-      loadXThread(post, fresh || focused).then((pack) => {
-        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
-        if (pack && (pack.replies || []).length) {
-          applyLiveStats(id, pack.stats);
-          const capNow = String(STATE.focusId || "") === id ? 1000 : 20;
-          const rows = takeRanked(pack.replies, capNow);
-          if (capNow >= 60 && !PREFETCHED[id]) {
-            PREFETCHED[id] = true;
-            selectSubthreads(rows).forEach((reply) => {
-              const cid = postKey(reply);
-              if (cid && !(STATE.replies[cid] && (STATE.replies[cid].cap || 0) >= 20)) replyBucket(reply);
-            });
-          }
-          finish(rows, false, capNow, pack.fetchedAt || Date.now());
-          return;
-        }
-        if (pack && pack.stats) applyLiveStats(id, pack.stats);
-        ownThenSnap();
-      }).catch(() => {
-        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
-        ownThenSnap();
-      });
+    const hit = !fresh && CMT ? CMT.peek(commentKey(post, sort)) : null;
+    if (hit && hit.value) {
+      const page = hit.value;
+      if (page.stats) applyLiveStats(id, page.stats);
+      if (page.doc) STATE.ytDocs[id] = page.doc;
+      STATE.replies[id] = { loading: false, refreshing: false, replies: pageRows(page), missing: !!page.missing && !pageRows(page).length, error: false, cursor: page.cursor || "", cap: 1000, sort: sort, source: page.source || "", fetchedAt: page.fetchedAt || hit.at, checkedAt: hit.at, settled: true };
+      if (Date.now() - hit.at > CMT_STALE_MS) startComments(post, id, sort, false);
       return STATE.replies[id];
     }
-    ownThenSnap();
-    return STATE.replies[id];
+    return startComments(post, id, sort, fresh);
   }
 
   function ivIso(value) {
@@ -7070,10 +7495,49 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
-  function ivCommentPage(videoId, sort, continuation) {
+  function ivCommentPage(videoId, sort, continuation, signal) {
     let path = "/api/v1/comments/" + encodeURIComponent(videoId) + "?sort_by=" + encodeURIComponent(sort || "top");
     if (continuation) path += "&continuation=" + encodeURIComponent(continuation);
-    return rotate(ivBases(), path, 4, "ivBase");
+    return rotate(ivBases(), path, 3, "ivBase", signal ? { signal: signal } : null);
+  }
+
+  /* Replies under one YouTube comment, fetched only when someone opens them. */
+  function ytThreadReplies(comment, videoId, signal) {
+    if (!comment) return Promise.resolve([]);
+    if ((comment.replies || []).length) return Promise.resolve(comment.replies);
+    if (!comment.replyCursor || !videoId) return Promise.resolve([]);
+    if (comment._kids) return comment._kids;
+    comment._kids = ivCommentPage(videoId, "top", comment.replyCursor, signal).then((payload) => {
+      const kids = [];
+      ((payload && payload.comments) || []).slice(0, 20).forEach((child) => {
+        if (!String(child.content || "").trim()) return;
+        const kid = ivComment(child, comment.id || "", comment.handle || "");
+        delete kid._continuation;
+        kids.push(kid);
+      });
+      comment.replies = kids;
+      delete comment._kids;
+      return kids;
+    }).catch(() => {
+      delete comment._kids;
+      return [];
+    });
+    return comment._kids;
+  }
+
+  function ivDoc(id, handle, payload) {
+    if (!payload || !Array.isArray(payload.comments)) return null;
+    const top = [];
+    payload.comments.forEach((comment) => {
+      if (!String(comment.content || "").trim()) return;
+      const row = ivComment(comment, id, handle);
+      if (row._continuation) row.replyCursor = row._continuation;
+      top.push(row);
+    });
+    const doc = { postId: "yt_" + id, platform: "youtube", source: "invidious", replies: stripYt(top) };
+    if (payload.continuation) doc.continuation = String(payload.continuation);
+    if (payload.commentCount != null && isFinite(Number(payload.commentCount))) doc.commentCount = Number(payload.commentCount);
+    return doc;
   }
 
   function fillIvReplies(rows, videoId) {
@@ -7097,38 +7561,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return chain;
   }
 
-  function ivThread(id, handle) {
-    const top = [];
-    let count = null;
-    let continuation = "";
-    let pages = 0;
-    function pull() {
-      // One page, then reply threads. A later page must not run before those threads.
-      if (top.length >= 20 || pages >= 1) return Promise.resolve();
-      pages += 1;
-      return ivCommentPage(id, "top", continuation).then((payload) => {
-        if (!payload) return;
-        if (payload.commentCount != null && isFinite(Number(payload.commentCount))) count = Number(payload.commentCount);
-        const batch = payload.comments || [];
-        batch.forEach((comment) => {
-          if (String(comment.content || "").trim()) top.push(ivComment(comment, id, handle));
-        });
-        continuation = payload.continuation || "";
-        if (continuation && batch.length) return pull();
-      });
-    }
-    return pull().then(() => {
-      if (!top.length && count == null) return null;
-      return fillIvReplies(top, id).then(() => ivCommentPage(id, "new", "").then((fresh) => {
-        const newest = [];
-        ((fresh && fresh.comments) || []).slice(0, 60).forEach((comment) => {
-          if (String(comment.content || "").trim()) newest.push(ivComment(comment, id, handle));
-        });
-        const doc = { postId: "yt_" + id, platform: "youtube", source: "invidious", replies: stripYt(top) };
-        if (newest.length) doc.newest = stripYt(newest);
-        if (count != null) doc.commentCount = count;
-        return doc;
-      }));
+  function ivThread(id, handle, sort, signal) {
+    // One page only. Reply threads (fillIvReplies) and the other sort order
+    // load when someone asks for them.
+    return ivCommentPage(id, sort === "new" ? "new" : "top", "", signal).then((payload) => {
+      const doc = ivDoc(id, handle, payload);
+      if (!doc || (!doc.replies.length && doc.commentCount == null)) return null;
+      return doc;
     });
   }
 
@@ -7293,15 +7732,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     else if (!doc.fetchedAt && doc._at) doc.fetchedAt = new Date(doc._at).toISOString();
     if (doc.commentCount != null && isFinite(Number(doc.commentCount))) applyLiveStats(id, { replies: Number(doc.commentCount) });
     STATE.ytDocs[id] = doc;
-    return cacheSet("yt:doc:" + id, doc).then(() => doc);
+    return Promise.resolve(doc);
   }
 
-  function ivCommunityThread(post) {
+  function ivCommunityThread(post, signal) {
     const id = postKey(post);
     const ucid = (feedOf(post).channelId) || "";
     let path = "/api/v1/post/" + encodeURIComponent(id) + "/comments?sort_by=top";
     if (ucid) path += "&ucid=" + encodeURIComponent(ucid);
-    return rotate(ivBases(), path, 4, "ivBase").then((payload) => {
+    return rotate(ivBases(), path, 3, "ivBase", signal ? { signal: signal } : null).then((payload) => {
       if (!payload || !Array.isArray(payload.comments)) return null;
       const top = [];
       payload.comments.forEach((comment) => {
@@ -7328,29 +7767,85 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return snapshotDoc("ytpost_" + id).then((doc) => ytUsable(doc) ? doc : null).catch(() => null);
   }
 
-  function loadYtRoot(post) {
+  function loadYtRoot(post, opts) {
     const id = postKey(post);
     if (!id) return Promise.resolve(null);
+    const o = opts || {};
+    if (!o.page) {
+      // Every surface shares the comments client's cached first page.
+      const fresh = STATE.forceReply === id;
+      if (fresh) STATE.forceReply = "";
+      return commentsGet(post, o.sort || "top", { fresh: fresh, scope: o.scope || "view" }).then((row) => {
+        const doc = (row && row.value && row.value.doc) || null;
+        if (doc) STATE.ytDocs[id] = doc;
+        return doc;
+      }).catch(() => null);
+    }
     const community = post.kind === "community";
-    const fresh = STATE.forceWatch === id || STATE.forceReply === id;
-    if (STATE.forceWatch === id) STATE.forceWatch = "";
-    if (STATE.forceReply === id) STATE.forceReply = "";
-    if (fresh) cacheDrop("yt:doc:" + id);
-    return once((fresh ? "ytfresh:" : "yt:") + id, () => (fresh ? Promise.resolve(null) : cacheGet("yt:doc:" + id, COMMENT_TTL)).then((hit) => {
-      if (hit) {
-        if (hit.commentCount != null && isFinite(Number(hit.commentCount))) applyLiveStats(id, { replies: Number(hit.commentCount) });
-        STATE.ytDocs[id] = hit;
-        return hit;
-      }
-      const live = community ? ivCommunityThread(post) : ivThread(id, post.handle || "");
-      const stored = community
-        ? ownPack("ytpost_" + id).then((own) => ytUsable(own) ? own : ytPostStub(id))
-        : ownPack("yt_" + id).then((own) => ytUsable(own) ? own : ytStub(id));
-      return loadStatus().then(() => live.catch(() => null).then((doc) => {
-        if (ytUsable(doc)) return rememberYt(id, doc, true);
+    const sort = o.sort === "new" ? "new" : "top";
+    const signal = o.signal || null;
+    // When the public instances refuse this browser but the edge works, go
+    // straight to the edge for a while instead of paying for failed requests.
+    const skipLive = !community && LIVE.ytDirectDown > Date.now();
+    let liveFailed = false;
+    return once("yt:" + sort + ":" + id, () => (skipLive ? Promise.resolve() : loadStatus()).then(() => {
+      if (skipLive) return null;
+      const live = community ? ivCommunityThread(post, signal) : ivThread(id, post.handle || "", sort, signal);
+      return live.catch((err) => {
+        if (signal && signal.aborted) throw err;
+        return null;
+      });
+    }).then((doc) => {
+      if (ytUsable(doc)) return rememberYt(id, doc, true);
+      if (signal && signal.aborted) return null;
+      liveFailed = !skipLive;
+      // The Worker edge reads the same instances from another network.
+      const edge = community ? Promise.resolve(null) : edgeComments("yt", id, sort, "", signal).then((payload) => ivDoc(id, post.handle || "", payload)).catch(() => null);
+      return edge.then((viaEdge) => {
+        if (ytUsable(viaEdge)) {
+          if (liveFailed) LIVE.ytDirectDown = Date.now() + 10 * 60 * 1000;
+          return rememberYt(id, viaEdge, true);
+        }
+        // Synced copies only when the live sources failed, one file at a time.
+        const stored = community
+          ? ownPack("ytpost_" + id).then((own) => ytUsable(own) ? own : ytPostStub(id))
+          : ownPack("yt_" + id).then((own) => ytUsable(own) ? own : ytStub(id));
         return stored.then((own) => own ? rememberYt(id, own, false) : null);
-      }));
-    })).catch(() => null);
+      });
+    }));
+  }
+
+  function ytPageOf(doc) {
+    if (!doc) return { doc: null, replies: [], missing: true, fetchedAt: Date.now(), source: "none" };
+    if (doc.comment !== undefined && !doc.postId) {
+      // A reply post: its children come from the parent's thread.
+      return { replies: (doc.replies || []).slice(), fetchedAt: ytFetchedAt(doc) || Date.now(), source: doc.source || "", missing: false };
+    }
+    const page = { doc: doc, cursor: doc.continuation || "", fetchedAt: ytFetchedAt(doc) || Date.now(), source: doc.source || "", missing: !ytUsable(doc) };
+    if (doc.commentCount != null) page.stats = { replies: Number(doc.commentCount) };
+    return page;
+  }
+
+  function ytMore(post, sort, cursor, signal) {
+    const id = postKey(post);
+    const order = sort === "new" ? "new" : "top";
+    const viaEdge = () => edgeComments("yt", id, order, cursor, signal);
+    const load = LIVE.ytDirectDown > Date.now() ? viaEdge()
+      : ivCommentPage(id, order, cursor, signal).catch((err) => {
+        if (signal && signal.aborted) throw err;
+        return viaEdge();
+      });
+    return load.then((payload) => {
+      const doc = ivDoc(id, post.handle || "", payload);
+      if (!doc) return null;
+      const base = STATE.ytDocs[id];
+      if (base && base.replies) {
+        const have = new Set(base.replies.map(postKey));
+        doc.replies.forEach((row) => { if (!have.has(postKey(row))) base.replies.push(row); });
+        base.continuation = doc.continuation || "";
+      }
+      return { replies: doc.replies, cursor: doc.continuation || "" };
+    });
   }
 
   function commentInDocs(id) {
@@ -7403,7 +7898,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function loadYtReplies(post) {
     const id = postKey(post);
     const cached = commentInDocs(id);
-    if (cached) return Promise.resolve(packYtComment(cached.comment, cached.doc));
+    if (cached) return ytThreadReplies(cached.comment, cached.videoId).then(() => packYtComment(cached.comment, cached.doc));
     const parent = String((post.replyingTo || {}).id || "");
     const seeds = [];
     if (parent && (ytVideoId(parent) || posts().some((item) => item.platform === "youtube" && postKey(item) === parent))) seeds.push(parent);
@@ -7437,12 +7932,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return findComment(doc.replies || [], id) || findComment(doc.newest || [], id);
   }
 
-  function loadYtComments(post) {
+  function loadYtComments(post, opts) {
     const id = postKey(post);
     if (!id || !post || post.platform !== "youtube") return Promise.resolve(null);
     const known = posts().some((item) => item.platform === "youtube" && postKey(item) === id && item.kind !== "reply");
     if (post.kind === "reply" || (!known && !ytVideoId(id) && post.kind !== "community")) return loadYtReplies(post);
-    return loadYtRoot(post);
+    return loadYtRoot(post, opts);
   }
 
   function liveDuration(id) {
@@ -7759,6 +8254,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     HYDRATE_OBS.disconnect();
     document.querySelectorAll("[data-hydrate]").forEach((el) => HYDRATE_OBS.observe(el));
+    watchReplyMore();
+    watchCommentPrefetch();
     if (!ARCHIVE_OBS) {
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
         const hit = entries.filter((entry) => entry.isIntersecting);
@@ -7827,7 +8324,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const extras = threadChildren(post).filter((child) => !have.has(postKey(child)));
     const all = fetched.concat(extras);
     if (bucket.loading && !all.length) return { loading: true, shown: [], more: false, spam: false, missing: false };
-    if (!all.length) return { loading: false, shown: [], more: false, spam: false, missing: !!bucket.missing };
+    if (!all.length) return { loading: false, shown: [], more: false, spam: false, missing: !!bucket.missing, error: !!bucket.error };
     const ui = STATE.replyUi[postKey(post)] || {};
     const clean = all.filter((reply) => !reply.spam);
     const junk = all.filter((reply) => reply.spam && isDirect(post, reply));
@@ -7852,7 +8349,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const count = Number((reply.stats || {}).replies || 0);
     if ((reply.platform || "") === "youtube" && (reply.replies || []).length) return reply.replies;
     if (!(count > 0)) return siblings;
-    const bucket = replyBucket(reply);
+    // Nested replies load on demand ("Show replies"), never for every row.
+    const cid = postKey(reply);
+    const opened = STATE.replyOpen && STATE.replyOpen[cid];
+    const bucket = opened ? replyBucket(reply) : STATE.replies[cid];
+    if (!bucket) return siblings;
     if (bucket.loading || bucket.missing || !(bucket.replies || []).length) return siblings;
     const seen = new Set((bucket.replies || []).map(postKey));
     const extra = (siblings || []).filter((item) => item && !seen.has(postKey(item)));
@@ -7891,6 +8392,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const total = Number((reply.stats || {}).replies || 0);
     if (!(total > shown)) return "";
     const label = shown ? tr("Show more replies") : tr("Show replies");
+    const cid = postKey(reply);
+    const opened = STATE.replyOpen && STATE.replyOpen[cid];
+    const nested = opened ? STATE.replies[cid] : null;
+    if (opened && nested && nested.loading) return `<div class="show-replies is-loading" role="status">${tr("Loading replies…")}</div>`;
+    if (!opened && !shown) return `<button class="show-replies" type="button" data-act="reply-expand" data-id="${esc(cid)}">${label}</button>`;
     return `<a class="show-replies" data-act="stop" href="${esc(statusHash(reply))}">${label}</a>`;
   }
 
@@ -7958,13 +8464,22 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function replyList(post) {
     const tools = "";
     const slice = replySlice(post);
-    if (slice.loading) return tools + `<div class="reply-empty">${tr("Loading replies…")}</div>`;
+    if (slice.loading) return tools + replySkeleton(3);
+    if (slice.error) return tools + replyError(postKey(post));
     if (!slice.shown.length && !slice.more && !slice.spam) {
       return tools + `<div class="reply-empty">${slice.missing ? tr("Replies aren’t available for this post.") : tr("No replies yet.")}</div>`;
     }
     const id = postKey(post);
     const root = originalHandle(post);
-    const html = slice.shown.map((reply) => {
+    // Chunks of 20: the next chunk (or the next page from the source) comes
+    // on scroll or with "Show more replies".
+    const ui = STATE.replyUi[id] || {};
+    const limit = ui.limit || CMT_PAGE;
+    ui.total = slice.shown.length;
+    STATE.replyUi[id] = ui;
+    const bucketNow = STATE.replies[id] || {};
+    const moreRows = slice.shown.length > limit || !!bucketNow.cursor;
+    const html = slice.shown.slice(0, limit).map((reply) => {
       const pool = childPool(reply, slice.pool);
       let inline = [];
       if ((reply.platform || post.platform) === "youtube" && (reply.replies || []).length) {
@@ -7985,7 +8500,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         continues: index < cards.length - 1
       })).join("") + repliesLink(reply, inline.length);
     }).join("");
-    const more = slice.more ? `<button class="more-replies" type="button" data-act="more-replies" data-id="${esc(id)}">${tr("Show more replies")}</button>` : "";
+    const more = bucketNow.loadingMore ? replySkeleton(2)
+      : moreRows ? `<div class="reply-more-sentinel" data-id="${esc(id)}"></div><button class="more-replies" type="button" data-act="more-replies" data-id="${esc(id)}">${tr("Show more replies")}</button>` : "";
     const spam = slice.spam ? `<button class="more-replies spam" type="button" data-act="spam-replies" data-id="${esc(id)}">${tr("Show probable spam")}</button>` : "";
     return tools + html + more + spam;
   }
@@ -16568,35 +17084,25 @@ if (STATE.histClear) {
   function watchComments(post) {
     const id = postKey(post);
     const file = post.platform === "youtube" ? "yt_" + id : id;
-    const key = "watch:" + file;
-    if (STATE.forceWatch === id) delete STATE.replies[key];
-    if (STATE.replies[key]) return STATE.replies[key];
-    STATE.replies[key] = { loading: true, doc: null, missing: false };
-    const snap = () => snapshotDoc(file).then((doc) => {
-      STATE.replies[key] = { loading: false, doc: doc, missing: !doc, fetchedAt: ytFetchedAt(doc) };
+    const sort = commentSort();
+    const key = "watch:" + file + (sort === "new" ? ":new" : "");
+    if (STATE.forceWatch === id && STATE.forceReply === id) delete STATE.replies[key];
+    const cur = STATE.replies[key];
+    if (cur && (cur.loading || Date.now() - (cur.checkedAt || 0) < CMT_STALE_MS)) return cur;
+    const keep = !!(cur && cur.doc);
+    STATE.replies[key] = keep ? Object.assign({}, cur, { checkedAt: Date.now() }) : { loading: true, doc: null, missing: false, error: false, checkedAt: Date.now() };
+    const done = (doc, failed) => {
+      if (!doc && keep) return;
+      STATE.replies[key] = { loading: false, doc: doc, missing: !doc && !failed, error: !doc && !!failed, fetchedAt: ytFetchedAt(doc), checkedAt: Date.now() };
       render();
-    }).catch(() => {
-      STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: 0 };
-      render();
-    });
-    setTimeout(() => {
-      const cur = STATE.replies[key];
-      if (cur && cur.loading) snap();
-    }, 6000);
+    };
     if (post.platform === "youtube") {
-      loadYtComments(post).then((doc) => {
-        const at = ytFetchedAt(doc);
-        if (!ytUsable(doc)) snap();
-        else {
-          STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: at };
-          render();
-        }
-      }).catch(() => {
-        snap();
+      loadYtComments(post, { sort: sort }).then((doc) => done(ytUsable(doc) ? doc : null, false)).catch((err) => {
+        if (!cmtAbort(err)) done(null, true);
       });
       return STATE.replies[key];
     }
-    snap();
+    snapshotDoc(file).then((doc) => done(doc || null, false)).catch(() => done(null, false));
     return STATE.replies[key];
   }
 
@@ -16606,8 +17112,9 @@ if (STATE.histClear) {
     const when = comment.date ? relTime(comment.date) : (comment.timeLabel || "");
     const open = !!STATE.threadsOpen[comment.id];
     const kids = comment.replies || [];
+    const pending = open && !kids.length && !!comment.replyCursor && comment._kids;
     const toggle = count > 0 ? `<button class="yt-replies" type="button" data-act="yt-replies" data-id="${esc(comment.id)}">${open ? tr("Hide replies") : tr("{count} replies", { count: formatCount(count) || String(count) })}</button>` : "";
-    const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : `<div class="reply-empty">${tr("Replies aren’t available.")}</div>`}</div>` : "";
+    const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : (pending ? replySkeleton(2) : `<div class="reply-empty">${tr("Replies aren’t available.")}</div>`)}</div>` : "";
     const href = comment.channelId ? accountHash("youtube", comment.channelId) : "";
     const cardId = comment.channelId ? ` data-card="youtube:${esc(comment.channelId)}"` : "";
     const face = href ? `<a href="${esc(href)}"${cardId} aria-label="${esc(comment.author || comment.handle || tr("Profile"))}">${avatar(comment.avatar, comment.author || comment.handle)}</a>` : avatar(comment.avatar, comment.author || comment.handle);
@@ -16654,7 +17161,9 @@ if (STATE.histClear) {
     const bucket = watchComments(post);
     const sort = replySortMode();
     let comments = "";
-    if (bucket.loading) comments = `<div class="reply-empty">${tr("Loading comments…")}</div>`;
+    const watchKey = "watch:" + (post.platform === "youtube" ? "yt_" + id : id) + (commentSort() === "new" ? ":new" : "");
+    if (bucket.loading) comments = replySkeleton(4);
+    else if (bucket.error) comments = replyError(watchKey);
     else if (bucket.missing || !bucket.doc) comments = `<div class="reply-empty">${tr("Comments aren’t available for this video.")}</div>`;
     else {
       const top = (bucket.doc.replies || []).slice();
@@ -16677,7 +17186,13 @@ if (STATE.histClear) {
       const total = bucket.doc.commentCount != null ? bucket.doc.commentCount : rows.length;
       const stamped = bucket.fetchedAt || ytFetchedAt(bucket.doc);
       const label = freshLabel(stamped);
-      comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">${tr("No comments yet.")}</div>`);
+      // Render in pages of 20; the next page shows on scroll or "Show more".
+      const ui = STATE.replyUi[watchKey] || {};
+      const limit = ui.limit || CMT_PAGE;
+      ui.total = rows.length;
+      STATE.replyUi[watchKey] = ui;
+      const moreBtn = rows.length > limit || (bucket.doc.continuation && !ui.done) ? `<div class="reply-more-sentinel" data-id="${esc(watchKey)}"></div><button class="more-replies" type="button" data-act="more-replies" data-id="${esc(watchKey)}">${tr("Show more replies")}</button>` : "";
+      comments = (rows.length ? rows.slice(0, limit).map(ytComment).join("") + moreBtn : `<div class="reply-empty">${tr("No comments yet.")}</div>`);
       comments = `<h3>${tr("{count} comments", { count: formatCount(total) || "0" })}</h3><div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}${comments}`;
     }
     const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
@@ -17884,10 +18399,15 @@ if (STATE.histClear) {
     if (route.name === "status") {
       const sid = String(route.id || "");
       if (STATE.openReply !== sid) {
+        // Reopening uses the cached page (stale-while-revalidate) instead of
+        // a forced refetch; loads for the post we left are cancelled.
+        if (STATE.openReply) abortViewComments();
         STATE.openReply = sid;
-        STATE.forceReply = sid;
       }
-    } else STATE.openReply = "";
+    } else {
+      if (STATE.openReply) abortViewComments();
+      STATE.openReply = "";
+    }
     const wasWatch = !!STATE.openWatch;
     if (route.name === "watch") {
       const sid = String(route.id || "");
@@ -19269,6 +19789,25 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "yt-replies") {
       const id = el.dataset.id;
       STATE.threadsOpen[id] = !STATE.threadsOpen[id];
+      const found = STATE.threadsOpen[id] ? commentInDocs(id) : null;
+      if (found && !(found.comment.replies || []).length && found.comment.replyCursor) {
+        ytThreadReplies(found.comment, found.videoId).then(() => render());
+      }
+      render();
+      return;
+    }
+    if (act === "reply-retry") {
+      retryComments(el.dataset.id);
+      return;
+    }
+    if (act === "reply-expand") {
+      const id = el.dataset.id;
+      STATE.replyOpen = STATE.replyOpen || {};
+      STATE.replyOpen[id] = true;
+      const found = commentInDocs(id);
+      if (found && !(found.comment.replies || []).length && found.comment.replyCursor) {
+        ytThreadReplies(found.comment, found.videoId).then(() => render());
+      }
       render();
       return;
     }
@@ -19918,11 +20457,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
-    if (act === "more-replies" || act === "spam-replies") {
+    if (act === "more-replies") {
+      showMoreReplies(el.dataset.id);
+      return;
+    }
+    if (act === "spam-replies") {
       const id = el.dataset.id;
       const ui = STATE.replyUi[id] || {};
-      if (act === "more-replies") ui.more = true;
-      else ui.spam = true;
+      ui.spam = true;
       STATE.replyUi[id] = ui;
       render();
       return;
@@ -24672,6 +25214,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       STATE.forceReply = id;
       delete STATE.replies[id];
       cacheDrop("fx:conv:" + id);
+      const open = findAnyPost(id);
+      if (open && CMT) ["top", "new"].forEach((sort) => CMT.drop(commentKey(open, sort)));
       render();
     }
     if (route.name === "watch" && route.id) {
@@ -24681,6 +25225,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       delete STATE.replies["watch:yt_" + id];
       delete STATE.replies["watch:" + id];
       cacheDrop("yt:doc:" + id);
+      const video = findAnyPost(id);
+      if (video && CMT) ["top", "new"].forEach((sort) => CMT.drop(commentKey(video, sort)));
       render();
     }
   }
