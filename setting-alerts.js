@@ -20,7 +20,7 @@
   var LOCAL_LIMIT = 5 * MB;
   var TAB_LIMIT = 500;
   var RANK = { ok: 0, info: 1, warning: 2, critical: 3, limit: 4 };
-  var DEFAULTS = { warn: 80, crit: 95, autoOpen: true, quiet: false, quietFrom: 22, quietTo: 7, screenMin: 0, off: {}, autoOff: {} };
+  var DEFAULTS = { warn: 80, crit: 95, autoOpen: true, vibrate: true, sound: true, quiet: false, quietFrom: 22, quietTo: 7, screenMin: 0, off: {}, autoOff: {} };
   var CAP_STEPS = [500 * MB, 1 * GB, 2 * GB, 5 * GB, 10 * GB, 20 * GB, 50 * GB, 100 * GB];
   var WARN_STEPS = [50, 60, 70, 75, 80, 85, 90];
   var CRIT_STEPS = [85, 90, 95, 98, 99];
@@ -78,6 +78,8 @@
     if (out.crit <= out.warn) out.crit = Math.min(99, out.warn + 10);
     if (SCREEN_STEPS.indexOf(Number(out.screenMin)) < 0) out.screenMin = 0;
     out.autoOpen = out.autoOpen !== false;
+    out.vibrate = out.vibrate !== false;
+    out.sound = out.sound !== false;
     out.quiet = out.quiet === true;
     out.quietFrom = Math.max(0, Math.min(23, Number(out.quietFrom) || 0));
     out.quietTo = Math.max(0, Math.min(23, Number(out.quietTo) || 0));
@@ -359,6 +361,112 @@
     return "";
   }
 
+  /* ---------- vibration and sound ---------- */
+
+  /* Critical and limit alerts buzz short-long and play a short tone made right
+     here with Web Audio: no sound files, nothing fetched. Warnings buzz once,
+     info stays silent. Nothing fires while someone types, drafts, composes,
+     watches, listens or is in a call, or in quiet hours. Vibration is skipped
+     with reduced motion and where the browser has none (iOS). Sound only plays
+     once a tap or key press has unlocked audio. With the tab hidden and
+     notifications allowed, the system notification carries both instead. */
+  var BUZZ = { warning: [60], critical: [80, 70, 260], limit: [80, 70, 260, 70, 260] };
+  var TONES = { critical: [880, 660], limit: [880, 660, 880] };
+  var audio = { ctx: null, unlocked: false };
+  var lastFeedback = null;
+
+  function reducedMotion() {
+    try { return !!(root.matchMedia && root.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (err) { return false; }
+  }
+  function canVibrate() { var nav = root.navigator; return !!(nav && typeof nav.vibrate === "function"); }
+  function audioCtor() { return root.AudioContext || root.webkitAudioContext || null; }
+
+  /* Called from a real tap or key press only. */
+  function unlockAudio() {
+    if (audio.unlocked || !prefs().sound) return audio.unlocked;
+    var C = audioCtor();
+    if (!C) return false;
+    try {
+      audio.ctx = audio.ctx || new C();
+      if (audio.ctx.resume) { var r = audio.ctx.resume(); if (r && r.catch) r.catch(function () {}); }
+      audio.unlocked = true;
+    } catch (err) { audio.unlocked = false; }
+    return audio.unlocked;
+  }
+
+  function playTone(level) {
+    var notes = TONES[level];
+    var ctx = audio.ctx;
+    if (!notes || !audio.unlocked || !ctx || !ctx.createOscillator) return false;
+    try {
+      var t = Number(ctx.currentTime) || 0;
+      notes.forEach(function (hz, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        var at = t + i * 0.16;
+        osc.type = "sine";
+        osc.frequency.value = hz;
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(0.18, at + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.13);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(at);
+        osc.stop(at + 0.14);
+      });
+      return true;
+    } catch (err) { return false; }
+  }
+
+  function buzz(level) {
+    var pattern = BUZZ[level];
+    if (!pattern || !canVibrate() || reducedMotion()) return false;
+    try { return root.navigator.vibrate(pattern.slice()) !== false; } catch (err) { return false; }
+  }
+
+  function systemNote(def, level, entry, p) {
+    var N = root.Notification;
+    if (!N || N.permission !== "granted" || !def || !entry) return false;
+    var opts = { body: entry.desc || "", tag: "sa-" + def.id, renotify: true, silent: !p.sound, data: { hash: def.href, id: "sa-" + def.id } };
+    if (p.vibrate && !reducedMotion()) opts.vibrate = BUZZ[level].slice();
+    var plain = function () {
+      try { new N(entry.title, opts); }
+      catch (err) { try { delete opts.vibrate; new N(entry.title, opts); } catch (err2) { /* no system notice */ } }
+    };
+    var swc = root.navigator && root.navigator.serviceWorker;
+    if (swc && swc.getRegistration) {
+      swc.getRegistration().then(function (reg) {
+        if (reg && reg.showNotification) return reg.showNotification(entry.title, opts);
+        plain();
+      }).catch(plain);
+    } else plain();
+    return true;
+  }
+
+  function feedback(def, level, entry, opts) {
+    opts = opts || {};
+    var p = prefs();
+    var out = { level: level, vibrate: false, sound: false, system: false, skipped: "" };
+    lastFeedback = out;
+    var wantBuzz = p.vibrate && !!BUZZ[level];
+    var wantSound = p.sound && !!TONES[level];
+    if (!wantBuzz && !wantSound) { out.skipped = "off"; return out; }
+    if (!opts.test && quietNow(p)) { out.skipped = "quiet"; return out; }
+    var doc = root.document;
+    if (doc && doc.visibilityState === "hidden") {
+      if (TONES[level]) out.system = systemNote(def, level, entry, p);
+      out.skipped = "hidden";
+      return out;
+    }
+    if (!opts.test) {
+      var why = busyReason();
+      if (why && why !== "gesture") { out.skipped = why; return out; }
+    }
+    if (wantBuzz) out.vibrate = buzz(level);
+    if (wantSound) out.sound = playTone(level);
+    return out;
+  }
+
   /* ---------- firing ---------- */
 
   var externals = {};
@@ -399,6 +507,7 @@
     var entry = logAlert(def, level, v).log.pop();
     s.log.push(entry);
     var rank = RANK[level];
+    if (!(rank < RANK.critical && quietNow(p))) feedback(def, level, entry);
     var wantsRedirect = rank >= RANK.critical && autoOn(def.id) && !session().done[def.id];
     if (wantsRedirect) {
       redirect.pending = { id: def.id, level: level, title: entry.title, desc: entry.desc };
@@ -912,6 +1021,15 @@
       '<button class="outline" type="button" data-sa="preview" data-value="limit">' + esc(tr("Limit reached")) + "</button></div>" +
       sw(p.autoOpen, tr("Open settings automatically on critical issues"), 'data-sa="auto"') +
       '<p class="phandle">' + esc(tr("Waits until you stop typing, playing or calling, counts down 3 seconds, and brings you back after.")) + "</p>" +
+      '<h3 class="ach-sub">' + esc(tr("Sound and vibration")) + "</h3>" +
+      '<div class="sa-list sa-feel">' +
+      '<div class="sa-row"><span class="sa-row-ico" aria-hidden="true">' + glyph("vibrate") + "</span>" + sw(p.vibrate, tr("Vibrate for alerts"), 'data-sa="vibrate"') + "</div>" +
+      '<div class="sa-row"><span class="sa-row-ico" aria-hidden="true">' + glyph("sound") + "</span>" + sw(p.sound, tr("Sound for alerts"), 'data-sa="sound"') + "</div>" +
+      '<div class="sa-row sa-test"><span class="sa-row-ico" aria-hidden="true">' + glyph("bell") + "</span>" +
+      '<span class="sa-test-label">' + esc(tr("Test sound and vibration")) + "</span>" +
+      '<button class="outline" type="button" data-sa="feedback-test">' + esc(tr("Test")) + "</button></div></div>" +
+      '<p class="phandle">' + esc(tr("Critical and limit alerts vibrate and play a short tone. Warnings only vibrate. Never while you type, watch or call.")) +
+      (canVibrate() ? "" : " " + esc(tr("This device can't vibrate."))) + "</p>" +
       '<h3 class="ach-sub">' + esc(tr("Thresholds")) + "</h3>" +
       '<label class="sa-field"><span>' + esc(tr("Warn at")) + "</span>" + select("warn", p.warn, WARN_STEPS.map(function (n) { return [n, n + "%"]; }), tr("Warn at")) + "</label>" +
       '<label class="sa-field"><span>' + esc(tr("Critical at")) + "</span>" + select("crit", p.crit, CRIT_STEPS.map(function (n) { return [n, n + "%"]; }), tr("Critical at")) + "</label>" +
@@ -1018,6 +1136,9 @@
     else if (act === "auto-one") { var aid = el.getAttribute("data-id"); p.autoOff[aid] = autoOn(aid); setPrefs({ autoOff: p.autoOff }); }
     else if (act === "auto") setPrefs({ autoOpen: !p.autoOpen });
     else if (act === "quiet") setPrefs({ quiet: !p.quiet });
+    else if (act === "vibrate") setPrefs({ vibrate: !p.vibrate });
+    else if (act === "sound") { setPrefs({ sound: !p.sound }); if (!p.sound) unlockAudio(); }
+    else if (act === "feedback-test") { unlockAudio(); feedback(null, "critical", null, { test: true }); return true; }
     else if (act === "cap-on" || act === "cap-period" || act === "meter-reset") {
       var m = meter();
       if (act === "cap-on") m.cap.on = !m.cap.on;
@@ -1077,8 +1198,8 @@
         if (el && el.getAttribute && el.getAttribute("data-sa")) onSelect(el);
         if (redirect.active) setTimeout(check, 300);
       });
-      doc.addEventListener("keydown", function () { gesture.lastKey = now(); }, true);
-      doc.addEventListener("pointerdown", function () { gesture.down = true; }, true);
+      doc.addEventListener("keydown", function () { gesture.lastKey = now(); unlockAudio(); }, true);
+      doc.addEventListener("pointerdown", function () { gesture.down = true; unlockAudio(); }, true);
       doc.addEventListener("pointerup", function () { gesture.down = false; }, true);
       doc.addEventListener("pointercancel", function () { gesture.down = false; }, true);
       doc.addEventListener("touchmove", function () { gesture.lastMove = now(); }, { capture: true, passive: true });
@@ -1127,6 +1248,9 @@
     check: check,
     report: report,
     busyReason: busyReason,
+    feedback: feedback,
+    unlockAudio: unlockAudio,
+    lastFeedback: function () { return lastFeedback; },
     settingsHtml: settingsHtml,
     dataCapHtml: dataCapHtml,
     notesHtml: notesHtml,
