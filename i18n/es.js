@@ -2722,7 +2722,7 @@ SI18n.addPack("es", {
   "Sign in to see the gifts you sent and received.": "Inicia sesión para ver los regalos que enviaste y recibiste.",
   "You haven’t sent any gifts yet.": "Aún no has enviado regalos.",
   "No gifts here right now.": "Ahora no hay regalos aquí.",
-  "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Arte de los regalos: Noto Emoji de Google (Apache 2.0, animados CC BY 4.0).",
+  "Gift art: original illustrations made for ViktorychApp, plus Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Arte de los regalos: ilustraciones originales hechas para ViktorychApp y Noto Emoji de Google (Apache 2.0, animados CC BY 4.0).",
   "You’ve used today’s free gifts. Try again tomorrow.": "Ya usaste los regalos gratis de hoy. Vuelve a intentarlo mañana.",
   "Not enough Viktorychs for this gift.": "No tienes suficientes Viktorychs para este regalo.",
   "Jack-o’-lantern": "Calabaza de Halloween",
