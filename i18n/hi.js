@@ -3456,5 +3456,10 @@ SI18n.addPack("hi", {
   "Download app updates on Wi-Fi only": "ऐप अपडेट सिर्फ़ Wi-Fi पर डाउनलोड करें",
   "On mobile data, updates wait until you tap Update.": "मोबाइल डेटा पर अपडेट तब तक रुकते हैं जब तक आप अपडेट पर टैप न करें।",
   "Save data": "डेटा बचाएँ",
-  "Uses as little mobile data as possible. Change it any time in Settings.": "जितना हो सके कम मोबाइल डेटा इस्तेमाल करता है। सेटिंग्स में कभी भी बदलें।"
+  "Uses as little mobile data as possible. Change it any time in Settings.": "जितना हो सके कम मोबाइल डेटा इस्तेमाल करता है। सेटिंग्स में कभी भी बदलें।",
+  "Site health": "साइट की स्थिति",
+  "Site health: {count} problems need you": "साइट की स्थिति: {count} समस्याओं पर आपका ध्यान चाहिए",
+  "Site health: all good": "साइट की स्थिति: सब ठीक है",
+  "Site health not checked yet": "साइट की स्थिति अभी जाँची नहीं गई",
+  "Check now": "अभी जाँचें"
 });

@@ -706,6 +706,29 @@ def _fail(message: str) -> int:
     return 1
 
 
+
+def log_redact_checks() -> int:
+    """Scripts run by workflows mask catalog handles, names and ids in logs."""
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    workflows = "".join(path.read_text(encoding="utf-8") for path in sorted((root / ".github" / "workflows").glob("*.yml")))
+    # Imported by another script that already calls auto().
+    modules = {"discord_publish.py", "log_redact.py"}
+    missing = []
+    for name in sorted(set(re.findall(r"scripts/([a-z0-9_]+\.py)", workflows)) - modules):
+        path = root / "scripts" / name
+        if path.is_file() and "from log_redact import auto" not in path.read_text(encoding="utf-8"):
+            missing.append(name)
+    if missing:
+        return _fail("workflow scripts without log redaction: " + ", ".join(missing))
+    proc = subprocess.run([sys.executable, str(root / "scripts" / "log_redact.py"), "--selftest"], capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        sys.stdout.write(proc.stdout + proc.stderr)
+        return _fail("the log redaction self-test failed")
+    print("handle guard: workflow scripts redact account values in logs")
+    return 0
+
 def selftest() -> int:
     import io
     import tempfile
@@ -718,7 +741,8 @@ def selftest() -> int:
     try:
         for key in saved:
             os.environ.pop(key, None)
-        return _selftest(io, tempfile, redirect_stdout)
+        result = _selftest(io, tempfile, redirect_stdout)
+        return result or log_redact_checks()
     finally:
         for key, value in saved.items():
             if value is None:
@@ -859,4 +883,10 @@ def _capture(fn, root, fetch, redirect_stdout, io):
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     sys.exit(main())
