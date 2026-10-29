@@ -3500,5 +3500,10 @@ SI18n.addPack("hi", {
   "Copy didn't work. Type {host} on the TV instead.": "कॉपी नहीं हुआ। इसके बजाय टीवी पर {host} टाइप करें।",
   "Open on my TV": "मेरे टीवी पर खोलें",
   "Open this on the TV: {host}": "इसे टीवी पर खोलें: {host}",
-  "Open the app on your TV without typing a long address.": "लंबा पता टाइप किए बिना अपने टीवी पर ऐप खोलें।"
+  "Open the app on your TV without typing a long address.": "लंबा पता टाइप किए बिना अपने टीवी पर ऐप खोलें।",
+  "Site health": "साइट की स्थिति",
+  "Site health: {count} problems need you": "साइट की स्थिति: {count} समस्याओं पर आपका ध्यान चाहिए",
+  "Site health: all good": "साइट की स्थिति: सब ठीक है",
+  "Site health not checked yet": "साइट की स्थिति अभी जाँची नहीं गई",
+  "Check now": "अभी जाँचें"
 });
