@@ -214,6 +214,7 @@
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="customize.css">
   <script>
     (function () {
       try {
@@ -337,6 +338,11 @@
         document.documentElement.setAttribute("data-nav-layout", navLayout);
         if (navLayout === "bar" && savedNav.navLayoutLand === true) document.documentElement.setAttribute("data-nav-bar-land", "1");
         else document.documentElement.removeAttribute("data-nav-bar-land");
+        var accents = { yellow: "#ffd400", pink: "#f91880", purple: "#7856ff", orange: "#ff7a00", green: "#00ba7c" };
+        if (accents[savedNav.accent]) document.documentElement.style.setProperty("--blue", accents[savedNav.accent]);
+        if ([14, 16, 17, 18].indexOf(Number(savedNav.fontSize)) >= 0) document.documentElement.setAttribute("data-fs", String(savedNav.fontSize));
+        if (savedNav.density === "compact" || savedNav.density === "comfy") document.documentElement.setAttribute("data-density", savedNav.density);
+        if (savedNav.reduceMotion === true) document.documentElement.setAttribute("data-motion", "reduce");
         var metas = document.querySelectorAll('meta[name="theme-color"]');
         for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", themes.color(mode));
         var scheme = document.querySelector('meta[name="color-scheme"]');
@@ -582,6 +588,7 @@
     <link rel="stylesheet" href="translate.css">
     <link rel="stylesheet" href="live-translate.css">
     <link rel="stylesheet" href="people.css">
+    <link rel="stylesheet" href="pymk.css">
     <link rel="stylesheet" href="tv.css">
     <link rel="stylesheet" href="discord-ui.css">
     <link rel="stylesheet" href="spaces.css">
@@ -609,6 +616,7 @@
     <script src="shared/for-you.js" type="module"></script>
     <script src="shared/home-fresh.js" defer></script>
     <script src="people.js" defer></script>
+    <script src="pymk.js" defer></script>
     <script src="tv.js" defer></script>
     <script src="split.js" defer></script>
     <script src="discord-ui.js" defer></script>

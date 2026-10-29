@@ -62,6 +62,7 @@
   const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", nostr: "Nostr" };
 
   const PATH = {
+    image: "M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3-3 3 3 5-5 3 3V5.5c0-.276-.224-.5-.5-.5h-13zM19 15.414l-3-3-5 5-3-3-3 3V18.5c0 .276.224.5.5.5h13c.276 0 .5-.224.5-.5v-3.086zM9.75 7C8.784 7 8 7.784 8 8.75s.784 1.75 1.75 1.75 1.75-.784 1.75-1.75S10.716 7 9.75 7z",
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
     homeOn: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14a.93.93 0 0 0 .929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h5.653c.51 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.408-.758z",
     search: "M10.25 3.75c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5c1.795 0 3.419-.726 4.596-1.904 1.178-1.177 1.904-2.801 1.904-4.596 0-3.59-2.91-6.5-6.5-6.5zm-8.5 6.5c0-4.694 3.806-8.5 8.5-8.5s8.5 3.806 8.5 8.5c0 1.986-.682 3.815-1.824 5.262l4.781 4.781-1.414 1.414-4.781-4.781c-1.447 1.142-3.276 1.824-5.262 1.824-4.694 0-8.5-3.806-8.5-8.5z",
@@ -236,6 +237,7 @@
   Object.keys(THEMES.flags || {}).forEach((id) => { THEME_COLORS[id] = THEMES.flags[id].tint[0]; });
   const FLAG_THEME_IDS = Object.keys(THEMES.flags || {});
 
+  const SILHOUETTE_SVG = `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"/></svg>`;
   const icon = (name) => name === "clock"
     ? `<svg class="clock" viewBox="0 0 24 24" aria-hidden="true">${LINE.clock}</svg>`
     : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name] || ""}"/></svg>`;
@@ -579,10 +581,21 @@
     return "";
   }
 
+  /* The archive list arrives after the catalog. A picture that failed before
+     then waits for it only briefly: a slow or failed catalog used to leave the
+     broken picture on screen for good, with no relay try and no fallback. */
+  const IA_WAIT_MS = 2500;
   function useArchiveMedia(img) {
     if (!img || img.tagName !== "IMG") return false;
     if (!IA.ready) {
+      if (img.dataset.iaSkip === "1") return false;
       img.dataset.iaWait = "1";
+      setTimeout(() => {
+        if (!img.isConnected || !img.hasAttribute("data-ia-wait")) return;
+        img.removeAttribute("data-ia-wait");
+        img.dataset.iaSkip = "1";
+        finishMediaError(img);
+      }, IA_WAIT_MS);
       return true;
     }
     const next = nextIaUrl(img);
@@ -649,17 +662,66 @@
     if (tryDeviceRelay(img)) return;
     if (tryRuProxyFallback(img)) return;
     if (img.dataset.fallback === "avatar") {
+      /* Like X: a picture that cannot load shows the default silhouette. */
       const span = document.createElement("span");
-      span.className = String(img.className || "").replace("ava", "ava initials");
-      if (span.className.indexOf("initials") < 0) span.className += " initials";
-      span.textContent = img.dataset.initials || "?";
+      const cls = String(img.className || "").split(/\s+/).filter((name) => name && name !== "initials");
+      if (cls.indexOf("ava") < 0) cls.unshift("ava");
+      cls.push("silhouette");
+      span.className = cls.join(" ");
+      span.setAttribute("aria-hidden", "true");
+      span.innerHTML = SILHOUETTE_SVG;
       img.replaceWith(span);
       return;
     }
     if (tryMetaEmbed(img)) return;
     const tile = img.closest(".tile") || img.closest(".media") || img.closest(".yt-thumb");
-    if (tile) tile.classList.add("broken");
+    if (tile) markMediaGone(tile);
     img.remove();
+  }
+
+  /* A tile whose picture cannot load shows a quiet picture outline on the
+     banner colour, never an empty black frame. */
+  function markMediaGone(tile) {
+    tile.classList.add("broken");
+    if (!tile.querySelector(":scope > .media-gone")) tile.insertAdjacentHTML("afterbegin", `<span class="media-gone" aria-hidden="true">${icon("image")}</span>`);
+  }
+
+  /* Error events can be missed: a picture that failed while its row was
+     being swapped, or before this script listened. Any picture that is
+     finished but has no pixels goes through the same fallback chain. */
+  function sweepBrokenImages(root) {
+    const scope = root || document.getElementById("app");
+    if (!scope || !scope.querySelectorAll) return 0;
+    let n = 0;
+    scope.querySelectorAll("img[src]").forEach((img) => {
+      const src = img.getAttribute("src") || "";
+      if (!/^(?:https?:|blob:)/i.test(src) || /\.svg(?:[?#]|$)/i.test(src)) return;
+      if (!img.complete || img.naturalWidth > 0 || img.hasAttribute("data-ia-wait")) return;
+      if (img.dataset.swept === src) return;
+      img.dataset.swept = src;
+      n += 1;
+      handleMediaError(img);
+    });
+    return n;
+  }
+  let sweepTimer = 0;
+  function scheduleImageSweep(ms) {
+    clearTimeout(sweepTimer);
+    sweepTimer = setTimeout(() => sweepBrokenImages(), ms == null ? 1500 : ms);
+  }
+  window.ViktorychMediaFallback = { sweep: sweepBrokenImages };
+
+  /* Tell the service worker to forget a stored copy of a picture that did not
+     load, so a cached failure never sticks to this device. */
+  const DROPPED_MEDIA = {};
+  function dropCachedMedia(url) {
+    const raw = String(url || "");
+    if (!/^https:\/\//i.test(raw) || DROPPED_MEDIA[raw]) return;
+    DROPPED_MEDIA[raw] = 1;
+    try {
+      const ctl = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (ctl) ctl.postMessage({ type: "media-drop", url: raw });
+    } catch (err) { /* the next load still tries the network */ }
   }
 
   function archivedFromManifest(stub) {
@@ -2279,7 +2341,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function silhouette(extra) {
-    return `<span class="ava silhouette${extra}" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"/></svg></span>`;
+    return `<span class="ava silhouette${extra}" aria-hidden="true">${SILHOUETTE_SVG}</span>`;
   }
 
   function avatar(src, name, cls, accountFace) {
@@ -9195,6 +9257,7 @@ const here = parseRoute();
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "points") return { name: "points", query };
     if (parts[0] === "online") return { name: "online", query };
+    if (parts[0] === "connect") return { name: "connect", query };
     if (parts[0] === "store" || parts[0] === "gifts") return { name: "store", sub: parts[1] || "", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
@@ -9211,6 +9274,7 @@ const here = parseRoute();
     }
     if (parts[0] === "vault") return { name: "vault", tab: parts[1] || "my", query };
     if (parts[0] === "packages") return { name: "packages", tab: parts[1] || "active", query };
+    if (parts[0] === "customize") return { name: "customize", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
@@ -9726,6 +9790,10 @@ const here = parseRoute();
       ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
     </aside>`;
+  }
+
+  if (window.ViktorychPYMK && window.ViktorychPYMK.setHost) {
+    window.ViktorychPYMK.setHost({ esc, avatar, badge, icon, isFollowed, follow: followButtonClean, render: () => render() });
   }
 
   const BOTTOM_NAV_MIN = 2;
@@ -11321,7 +11389,7 @@ const here = parseRoute();
       : "";
     const tabLoading = !list.length && tabStillLoading(tab);
     if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
-    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(list.map((p, i) => card(p, null, { eager: i === 0 })), tab) : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -11330,6 +11398,13 @@ const here = parseRoute();
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
     return homeHeader(tab) + bar + inline + showPostsRowHtml() + body + timelineSentinel(list.length, sorted.length);
+  }
+
+  /* People you may know cards between Home posts (pymk.js). */
+  function withSuggestions(items, tab) {
+    const lib = window.ViktorychPYMK;
+    if (!lib || !lib.interleave || (tab !== "foryou" && tab !== "following")) return items.join("");
+    return lib.interleave(items, { tab });
   }
 
   function mobileLogo() {
@@ -15190,6 +15265,7 @@ const here = parseRoute();
     if (route.name === "home") key = tr("Home");
     else if (route.name === "status") key = tr("Post noun");
     else if (route.name === "incoming") key = tr("Add account");
+    else if (route.name === "customize") key = tr("Customize");
     else if (route.name === "settings") {
       const section = route.section || "";
       const sub = route.sub || "";
@@ -15205,6 +15281,7 @@ const here = parseRoute();
       else if (section === "nostr") key = tr("Nostr");
       else if (section === "live-translate") key = tr("Live Translate");
       else if (section === "content") key = tr("Custom tabs");
+      else if (section === "suggestions") key = tr("Suggestions in your feed");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
       else if (section === "storage" && sub === "usage") key = tr("Storage usage");
@@ -15234,7 +15311,8 @@ const here = parseRoute();
         communities: tr("Communities"),
         drive: route.section === "photos" ? tr("Photos") : tr("brand.storage"),
         vault: tr("Viktorych Vault"),
-        packages: tr("Packages")
+        packages: tr("Packages"),
+        connect: tr("People you may know")
       };
       key = map[route.name] || "";
     }
@@ -15288,6 +15366,153 @@ const here = parseRoute();
     const blocked = featureOn(key) !== on;
     return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="home-feature" data-key="${esc(key)}"${blocked ? " disabled" : ""}><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(blocked ? tr("Turned off for everyone by the owner.") : note)}</p>`;
   }
+
+  /* Customize: one full-screen page with every look and feed choice that
+     already lives somewhere in Settings, plus a live sample post on top.
+     The controls reuse the same actions as their Settings rows, so a choice
+     made here is the same setting, saved and synced the same way. */
+  const LOOK_ACCENTS = { blue: ["#1d9bf0", "29, 155, 240"], yellow: ["#ffd400", "255, 212, 0"], pink: ["#f91880", "249, 24, 128"], purple: ["#7856ff", "120, 86, 255"], orange: ["#ff7a00", "255, 122, 0"], green: ["#00ba7c", "0, 186, 124"] };
+  const LOOK_FONTS = [14, 15, 16, 17, 18];
+  function lookPrefs() {
+    const st = STATE.settings || {};
+    return {
+      accent: LOOK_ACCENTS[st.accent] ? st.accent : "blue",
+      fontSize: LOOK_FONTS.indexOf(Number(st.fontSize)) >= 0 ? Number(st.fontSize) : 15,
+      density: st.density === "compact" || st.density === "comfy" ? st.density : "default",
+      reduceMotion: !!st.reduceMotion
+    };
+  }
+  function applyLook() {
+    const root = document.documentElement;
+    if (!root) return;
+    const look = lookPrefs();
+    if (look.accent === "blue") {
+      root.style.removeProperty("--blue");
+      root.style.removeProperty("--blue-dim");
+      root.removeAttribute("data-accent");
+    } else {
+      const c = LOOK_ACCENTS[look.accent];
+      root.style.setProperty("--blue", c[0]);
+      root.style.setProperty("--blue-dim", "rgba(" + c[1] + ", 0.1)");
+      root.setAttribute("data-accent", look.accent);
+    }
+    if (look.fontSize === 15) root.removeAttribute("data-fs");
+    else root.setAttribute("data-fs", String(look.fontSize));
+    if (look.density === "default") root.removeAttribute("data-density");
+    else root.setAttribute("data-density", look.density);
+    if (look.reduceMotion) root.setAttribute("data-motion", "reduce");
+    else root.removeAttribute("data-motion");
+  }
+
+  function customizeSample() {
+    const name = productName("app") || "ViktorychApp";
+    const stat = (cls, path, count) => `<span class="action ${cls}"><span class="ic">${icon(path)}</span>${count ? `<span class="count">${esc(count)}</span>` : ""}</span>`;
+    return `<div class="pz-preview" aria-label="${esc(tr("Preview"))}"><article class="post pz-sample" aria-hidden="true">
+      <div class="post-row">
+        <span class="pz-sample-ava">${avatar("", name)}</span>
+        <div class="post-main">
+          <div class="byline"><span class="name">${esc(name)}</span><span class="handle">@${esc(String(name).toLowerCase().replace(/[^a-z0-9_]/g, ""))}</span><span class="dot">·</span><span class="time">${esc(relTime(new Date(Date.now() - 3600000).toISOString()))}</span></div>
+          <p class="post-text">${esc(tr("This is how posts look with your choices. Pick a theme, a colour and a text size below, and this post changes right away."))} <span class="entity">#${esc(tr("Customize"))}</span></p>
+          <div class="actions"><div class="action-stats">${stat("reply", "reply", "12")}${stat("repost", "repost", "48")}${stat("like on", "heartOn", "1.2K")}${stat("views", "views", "8.4K")}</div><div class="action-more">${stat("bookmark", "bookmark", "")}${stat("share", "share", "")}</div></div>
+        </div>
+      </div>
+    </article></div>`;
+  }
+
+  function customizeView() {
+    const st = STATE.settings || {};
+    const look = lookPrefs();
+    const appearance = st.appearance || "lightsout";
+    const sw = (act, on, label, note, extra) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"${extra || ""}><span>${esc(label)}</span><i></i></button>${note ? `<p class="phandle">${esc(note)}</p>` : ""}`;
+    const seg = (act, attrs, on, label) => `<button class="outline${on ? " on" : ""}" type="button" data-act="${act}" ${attrs} aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+    const sec = (title, body) => `<section class="pz-sec"><h2>${esc(title)}</h2>${body}</section>`;
+    const shownTheme = appearance === "auto" ? resolvedTheme() : appearance;
+    const themeTile = (id, label, style = "") => `<button class="pz-theme pz-theme-${id}${shownTheme === id ? " on" : ""}" type="button" data-act="theme" data-theme="${id}"${style} role="radio" aria-checked="${shownTheme === id ? "true" : "false"}"><span class="pz-radio" aria-hidden="true">${shownTheme === id ? icon("check") : ""}</span><span>${esc(label)}</span></button>`;
+    /* Every theme in the registry: the three base ones, then each flag theme drawn in its own colours. */
+    const baseNames = { default: tr("Default"), dim: tr("Dim"), lightsout: tr("Lights out") };
+    const themeTiles = Object.keys(THEMES.base || baseNames).map((id) => themeTile(id, baseNames[id] || id)).join("") +
+      FLAG_THEME_IDS.map((id) => {
+        const f = THEMES.flags[id];
+        const bands = `linear-gradient(180deg, ${f.tint[0]} 0 33.4%, ${f.tint[1]} 33.4% 66.7%, ${f.tint[2]} 66.7%)`;
+        return themeTile(id, tr(f.name), ` style="background:${esc(bands)};color:#fff;border-color:${esc(f.flag[1])}"`);
+      }).join("");
+    const accentNames = { blue: tr("Blue"), yellow: tr("Yellow"), pink: tr("Pink"), purple: tr("Purple"), orange: tr("Orange"), green: tr("Green") };
+    const accents = Object.keys(LOOK_ACCENTS).map((id) => `<button class="pz-accent${look.accent === id ? " on" : ""}" type="button" data-act="pz-look" data-key="accent" data-value="${id}" role="radio" aria-checked="${look.accent === id ? "true" : "false"}" aria-label="${esc(accentNames[id])}" style="--sw:${LOOK_ACCENTS[id][0]}">${look.accent === id ? icon("check") : ""}</button>`).join("");
+    const fonts = LOOK_FONTS.map((px) => `<button class="pz-dot${px <= look.fontSize ? " fill" : ""}${px === look.fontSize ? " on" : ""}" type="button" data-act="pz-look" data-key="fontSize" data-value="${px}" role="radio" aria-checked="${px === look.fontSize ? "true" : "false"}" aria-label="${esc(tr("Text size {n}", { n: String(px) }))}"><i></i></button>`).join("");
+    const face = (kind, mode, label) => seg("face-pref", `data-kind="${kind}" data-mode="${mode}"`, (kind === "banners" ? faceSetting("showBanners") : faceSetting("showPictures")) === mode, label);
+    /* Square pictures are their own setting (avatarShape); its row shows
+       once that setting exists on this build. */
+    const shapeRow = Object.prototype.hasOwnProperty.call(st, "avatarShape")
+      ? `<h3>${esc(tr("Profile picture shape"))}</h3><div class="theme-row" role="group" aria-label="${esc(tr("Profile picture shape"))}">${seg("ava-shape", `data-mode="round"`, st.avatarShape !== "square", tr("Round"))}${seg("ava-shape", `data-mode="square"`, st.avatarShape === "square", tr("Square"))}</div>`
+      : "";
+    const autoplay = st.autoplay || "all";
+    const livePreview = st.livePreview || "auto";
+    const sort = st.followingSort === "popular" ? "popular" : "recent";
+    const notesOn = st.storyNotes !== false;
+    const friendsOn = typeof st.friendsRail === "boolean" ? st.friendsRail : true;
+    const lang = window.SI18n ? window.SI18n.getLang() : "en";
+    const endonym = window.SI18n && window.SI18n.endonym ? window.SI18n.endonym(lang) : lang;
+    const collapsed = !!(window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200);
+    const enter = STATE.pzEnter && Date.now() - STATE.pzEnter < 600 ? " pz-enter" : "";
+    const back = `<button class="icon-btn" type="button" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button>`;
+    return `<div class="pz-page${enter}">
+      <div class="topbar tall pz-top"><div class="page-head settings-head">${back}<div class="head-text grow"><h1>${esc(tr("Customize"))}</h1></div></div></div>
+      ${customizeSample()}
+      <p class="phandle pz-note">${esc(tr("Choices apply right away and follow your account to your other devices."))}</p>
+      ${sec(tr("Theme"), `<div class="pz-themes" role="radiogroup" aria-label="${esc(tr("Theme"))}">${themeTiles}</div>
+        ${sw("theme", appearance === "auto", tr("Match my device"), tr("Light or dark follows your phone or computer."), ` data-theme="${appearance === "auto" ? shownTheme : "auto"}"`)}`)}
+      ${sec(tr("Color"), `<div class="pz-accents" role="radiogroup" aria-label="${esc(tr("Color"))}">${accents}</div>`)}
+      ${sec(tr("Font size"), `<div class="pz-fonts" role="radiogroup" aria-label="${esc(tr("Font size"))}"><span class="pz-aa small" aria-hidden="true">Aa</span><div class="pz-track">${fonts}</div><span class="pz-aa big" aria-hidden="true">Aa</span></div>`)}
+      ${sec(tr("Density"), `<div class="theme-row" role="group" aria-label="${esc(tr("Density"))}">${seg("pz-look", `data-key="density" data-value="compact"`, look.density === "compact", tr("Compact"))}${seg("pz-look", `data-key="density" data-value="default"`, look.density === "default", tr("Default"))}${seg("pz-look", `data-key="density" data-value="comfy"`, look.density === "comfy", tr("Comfortable"))}</div>`)}
+      ${sec(tr("Profile pictures"), `<div class="theme-row" role="group" aria-label="${esc(tr("Profile pictures"))}">${face("pictures", "show", tr("Show"))}${face("pictures", "default", tr("Default"))}${face("pictures", "none", tr("None"))}</div>
+        ${shapeRow}
+        <h3>${esc(tr("Banners"))}</h3><div class="theme-row" role="group" aria-label="${esc(tr("Banners"))}">${face("banners", "show", tr("Show"))}${face("banners", "default", tr("Default"))}${face("banners", "none", tr("None"))}</div>`)}
+      ${sec(tr("Home"), `${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
+        ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
+        ${sw("story-notes", notesOn, tr("Show notes"), tr("Notes sit above stories. Turn this off to hide them."))}
+        ${sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}`)}
+      ${sec(tr("Your feed"), `${sw("pz-feed", st.forYouReposts !== false, tr("Show reposts"), "", ` data-key="forYouReposts"`)}
+        ${sw("pz-feed", st.forYouReplies !== false, tr("Show replies in tab"), "", ` data-key="forYouReplies"`)}
+        ${sw("pz-feed", st.communitiesHome !== false, tr("Communities in Home"), "", ` data-key="communitiesHome"`)}
+        <h3>${esc(tr("Following options"))}</h3><div class="theme-row" role="group" aria-label="${esc(tr("Sort by"))}">${seg("pz-feed", `data-key="followingSort" data-value="recent"`, sort === "recent", tr("Recent"))}${seg("pz-feed", `data-key="followingSort" data-value="popular"`, sort === "popular", tr("Popular"))}</div>
+        <div class="set-list">${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}${settingsRow("#/settings/privacy", tr("Mute and block"), tr("Muted words, muted accounts, and reposts you turn off."))}</div>`)}
+      ${sec(tr("Media and data"), `<h3>${esc(tr("Autoplay videos"))}</h3><div class="theme-row" role="group" aria-label="${esc(tr("Autoplay videos"))}">${seg("autoplay", `data-mode="all"`, autoplay === "all", tr("On cellular and Wi-Fi"))}${seg("autoplay", `data-mode="wifi"`, autoplay === "wifi", tr("Wi-Fi only"))}${seg("autoplay", `data-mode="never"`, autoplay === "never", tr("Never"))}</div>
+        <h3>${esc(tr("Live previews"))}</h3><div class="theme-row" role="group" aria-label="${esc(tr("Live previews"))}">${["auto", "on", "off"].map((id) => seg("live-preview", `data-mode="${id}"`, livePreview === id, id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))).join("")}</div>
+        <div class="set-list">${settingsRow("#/settings/data", tr("Data usage"), tr("Save data, reactions and sharing between devices."))}${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}</div>`)}
+      ${sec(tr("Motion"), sw("pz-look", look.reduceMotion, tr("Reduce motion"), tr("Fewer animations and no sliding screens. Your device setting is always followed too."), ` data-key="reduceMotion"`))}
+      ${window.ViktorychAchievements && window.ViktorychAchievements.settingsHtml ? `<div class="pz-sec pz-ach">${window.ViktorychAchievements.settingsHtml()}</div>` : ""}
+      ${sec(tr("Menus and navigation"), `<div class="set-list"><button class="set-row" type="button" data-act="drawer-edit"><span class="set-copy"><b>${esc(tr("Edit menu"))}</b><span class="set-sub">${esc(tr("Reorder, hide and group the items in the side menu."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}</div>
+        <div class="pz-wide-only theme-row">${seg("nav-collapse", "", collapsed, tr("Collapse sidebar"))}</div>
+        ${logoSettingsHtml()}
+        ${window.ViktorychDock && window.ViktorychDock.settingsHtml ? window.ViktorychDock.settingsHtml() : ""}
+        ${window.FeedsTV ? `<div class="pz-tv">${window.FeedsTV.settingsHtml()}</div>` : ""}`)}
+      ${sec(tr("Language"), `<div class="set-list">${settingsRow("#/settings/display-language", tr("Display language"), endonym)}${settingsRow("#/settings/live-translate", tr("Live Translate"), tr("Hear and read videos in your language while they play."))}${settingsRow("#/settings/languages", tr("Translate posts"), tr("Automatically translate posts"))}</div>`)}
+      <div class="pz-end"><a class="outline" href="#/settings">${esc(tr("All settings"))}</a></div>
+    </div>`;
+  }
+
+  /* Swipe from the left edge goes back from the Customize page, like a
+     native settings screen. */
+  (function customizeSwipeBack() {
+    let start = null;
+    document.addEventListener("touchstart", (event) => {
+      start = null;
+      if (!event.touches || event.touches.length !== 1) return;
+      const t = event.touches[0];
+      if (t.clientX > 28 || !document.querySelector(".pz-page")) return;
+      start = { x: t.clientX, y: t.clientY };
+    }, { passive: true });
+    document.addEventListener("touchend", (event) => {
+      if (!start || !event.changedTouches || !event.changedTouches[0]) return;
+      const t = event.changedTouches[0];
+      const dx = t.clientX - start.x;
+      const dy = Math.abs(t.clientY - start.y);
+      start = null;
+      if (dx < 80 || dy > 60 || !document.querySelector(".pz-page")) return;
+      if (history.length > 1) history.back();
+      else goHash("#/settings");
+    }, { passive: true });
+  })();
 
   /* Search Settings, like X. Words match every page; a question in plain
      words also goes to the browser's built-in model when it has one. */
@@ -15418,6 +15643,7 @@ const here = parseRoute();
     }
     if (section === "accessibility" && !sub) {
       return settingsHead(tr("Accessibility, display and languages"), "#/settings") + `<div class="set-list">
+        ${settingsRow("#/customize", tr("Customize"), tr("Theme, colour, text size, profile pictures and your feed, all in one place."))}
         ${settingsRow("#/settings/display", tr("Display"))}
         ${settingsRow("#/settings/languages", tr("Languages"))}
         ${settingsRow("#/settings/data", tr("Data usage"))}
@@ -15536,7 +15762,7 @@ const here = parseRoute();
         ${sameSwitch}
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
-        ${window.ViktorychAchievements && window.ViktorychAchievements.settingsHtml ? window.ViktorychAchievements.settingsHtml() : ""}
+        ${window.ViktorychAchievements ? `<div class="set-list">${settingsRow("#/customize", tr("Achievements"), tr("A short animation plays when you earn a badge."))}</div>` : ""}
         ${window.ViktorychSettingAlerts ? window.ViktorychSettingAlerts.settingsHtml() : ""}
       </div>`;
     }
@@ -15572,6 +15798,7 @@ const here = parseRoute();
         ${presenceBlock}
         ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
+        ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
         ${window.ViktorychNostr && window.ViktorychNostr.allowed() ? `<div class="set-list">${settingsRow("#/settings/nostr", tr("Nostr"), tr("Follow Nostr profiles, send your posts to relays, and see Nostr replies."))}</div>` : ""}
         ${acct && window.ViktorychUsernames ? `<div class="set-list">${settingsRow("#/settings/usernames", tr("Usernames"), tr("Choose who sees which username, nicknames, and who can mention you."))}</div>` : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
@@ -15596,6 +15823,9 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("Immediately purges all stored accounts, history, bookmarks, and cached files from this device."))}</p>
         <button class="outline danger" type="button" data-act="shred-local-data">${esc(tr("Clear all local data"))}</button>
       </div>`;
+    }
+    if (section === "suggestions") {
+      return settingsHead(tr("Suggestions in your feed"), "#/settings") + (window.ViktorychPYMK ? window.ViktorychPYMK.settingsPageHtml() : "");
     }
     if (section === "content") {
       return settingsHead(tr("Custom tabs"), "#/settings") + `<div class="set-block">
@@ -15657,6 +15887,7 @@ const here = parseRoute();
       ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
       : "";
     return settingsHead(tr("Settings"), "") + settingsSearchHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
+      ${settingsRow("#/customize", tr("Customize"), tr("Theme, colour, text size, profile pictures and your feed, all in one place."))}
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
@@ -15665,6 +15896,7 @@ const here = parseRoute();
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
+      ${settingsRow("#/settings/suggestions", tr("Suggestions in your feed"), tr("People you may know, account types, and swipeable cards."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
@@ -15868,7 +16100,7 @@ const here = parseRoute();
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
     if (id === "logout") return { id: id, href: "", icon: "user", label: mine ? tr("Log out") : tr("Sign in"), locked: true, accountMenu: true };
-    if (id === "customize") return { id: id, href: "", icon: "sliders", label: tr("Customize"), locked: true, act: "drawer-edit" };
+    if (id === "customize") return { id: id, href: "", icon: "sliders", label: tr("Customize"), locked: true, act: "customize-page" };
     const def = navItemDef(id);
     if (!def) return null;
     if (def.visible && !def.visible()) return null;
@@ -17987,6 +18219,7 @@ if (STATE.histClear) {
     const params = new URLSearchParams(location.search);
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
+    if (route.name === "connect") return pageHead(window.ViktorychPYMK ? window.ViktorychPYMK.pageTitle(route) : tr("People you may know"), "", true) + (window.ViktorychPYMK ? window.ViktorychPYMK.pageHtml(route) : "");
     if (route.name === "online") return pageHead(tr("Friends")) + ((window.ViktorychPresence && window.ViktorychPresence.pageHtml && window.ViktorychPresence.pageHtml()) || "");
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces" && !route.id) {
@@ -18009,6 +18242,7 @@ if (STATE.histClear) {
     if (route.name === "subscriptions") return subsView(route);
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
+    if (route.name === "customize") return customizeView();
     if (route.name === "incoming") return incomingView();
     if (route.name === "messages" && nativeServerHash(location.hash)) {
       if (window.ViktorychServers) return window.ViktorychServers.page(route);
@@ -18451,6 +18685,7 @@ if (STATE.histClear) {
     hscrollReuse(app, tpl.content);
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
+    scheduleImageSweep();
     hscrollSettle({ reveal: true });
     if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
@@ -18706,6 +18941,99 @@ if (STATE.histClear) {
     else startPlayback(tile, {});
   }
 
+  /* Background renders (feed data arriving, modules refreshing) rebuild the
+     whole shell, sidebar included. While the feed loaded that happened many
+     times a second, so a press that started on a nav link ended on a brand-new
+     node and the browser dropped the click: the UI felt locked. Now a
+     background render waits while a pointer is held, and bursts merge into one
+     render with a gap for input while the feed loads. Renders from the
+     user's own input stay synchronous. */
+  var renderQ = { held: false, heldAt: 0, pending: false, opts: null, last: 0, scheduled: false, flushing: false };
+  const RENDER_GAP_MS = 120;
+  const RENDER_HOLD_MAX_MS = 1500;
+
+  function inUserInput() {
+    const ev = window.event;
+    return !!(ev && ev.type && /^(click|dblclick|auxclick|contextmenu|pointer|mouse|touch|key|input|change|submit|wheel|drag|drop|paste|cut|copy|composition|focus|blur|hashchange|popstate)/.test(ev.type));
+  }
+
+  function renderHeld() {
+    if (renderQ.held && performance.now() - renderQ.heldAt > RENDER_HOLD_MAX_MS) renderQ.held = false;
+    return renderQ.held;
+  }
+
+  function renderDeferred(opts) {
+    if (renderQ.flushing || inUserInput()) return false;
+    const held = renderHeld();
+    // Bursts only merge while the feed is still loading; after that every
+    // render stays synchronous, as callers expect.
+    const burst = !opts && !!(STATE && STATE.loading) && (renderQ.scheduled || performance.now() - renderQ.last < RENDER_GAP_MS);
+    if (!held && !burst) return false;
+    if (opts) renderQ.opts = opts;
+    renderQ.pending = true;
+    if (!held) scheduleRenderFlush();
+    return true;
+  }
+
+  function scheduleRenderFlush() {
+    if (renderQ.scheduled) return;
+    renderQ.scheduled = true;
+    const wait = Math.max(16, Math.round(renderQ.last + RENDER_GAP_MS - performance.now()));
+    setTimeout(() => {
+      renderQ.scheduled = false;
+      if (!renderQ.pending) return;
+      if (renderHeld()) return;
+      const queued = renderQ.opts;
+      renderQ.flushing = true;
+      try { render(queued || undefined); } finally { renderQ.flushing = false; }
+    }, wait);
+  }
+
+  function releaseRenderHold() {
+    setTimeout(() => {
+      renderQ.held = false;
+      if (renderQ.pending) scheduleRenderFlush();
+    }, 0);
+  }
+
+  /* A press whose node was swapped out by a render that still slipped in
+     (one from the user's own input) gets its click delivered to the matching
+     node that now sits under the pointer. */
+  const PRESS_SEL = "a[href], button, [data-act], [data-open], [role='tab']";
+  let pressRec = null;
+  function pressSig(el) {
+    return [el.tagName, el.getAttribute("href") || "", el.getAttribute("data-act") || "", el.getAttribute("data-open") || "", el.getAttribute("data-id") || "", el.getAttribute("data-tab") || "", el.getAttribute("aria-label") || "", String(el.textContent || "").trim().slice(0, 60)].join("|");
+  }
+  try {
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.isTrusted) return;
+      if (event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) { pressRec = null; return; }
+      renderQ.held = true;
+      renderQ.heldAt = performance.now();
+      const el = event.target && event.target.closest ? event.target.closest(PRESS_SEL) : null;
+      pressRec = el ? { el: el, sig: pressSig(el) } : null;
+    }, true);
+    document.addEventListener("pointerup", (event) => {
+      if (!event.isTrusted) return;
+      const rec = pressRec;
+      pressRec = null;
+      releaseRenderHold();
+      if (!rec || rec.el.isConnected || event.isPrimary === false) return;
+      const hit = document.elementFromPoint(event.clientX, event.clientY);
+      const twin = hit && hit.closest ? hit.closest(PRESS_SEL) : null;
+      if (!twin || pressSig(twin) !== rec.sig) return;
+      let clicked = false;
+      const mark = (ev) => { if (ev.target && twin.contains(ev.target)) clicked = true; };
+      document.addEventListener("click", mark, true);
+      setTimeout(() => {
+        document.removeEventListener("click", mark, true);
+        if (!clicked && twin.isConnected) twin.click();
+      }, 0);
+    }, true);
+    document.addEventListener("pointercancel", () => { pressRec = null; releaseRenderHold(); }, true);
+    window.addEventListener("blur", () => { pressRec = null; releaseRenderHold(); });
+  } catch (err) { /* no document */ }
+
   /* Background data (people, live rooms, a late script, storage) asks for a
      repaint. Several of those land during boot, each used to rebuild the
      whole page. Coalesce them into one render on the next frame, and skip it
@@ -18726,6 +19054,15 @@ if (STATE.histClear) {
   }
 
   function render(opts) {
+    if (!renderQ) return renderNow(opts);
+    if (renderDeferred(opts)) return;
+    if (!opts && renderQ.opts) opts = renderQ.opts;
+    renderQ.pending = false;
+    renderQ.opts = null;
+    try { return renderNow(opts); } finally { renderQ.last = performance.now(); }
+  }
+
+  function renderNow(opts) {
     if (document.documentElement.classList.contains("is-split-drag")) {
       STATE.splitRender = opts || STATE.splitRender || {};
       return;
@@ -18804,7 +19141,11 @@ if (STATE.histClear) {
     rememberPlayback();
     if (leavingWatch) STATE.playing = null;
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const transition = routeChanged && document.startViewTransition && !reduced;
+    /* No document.startViewTransition for route changes: while one runs the
+       browser hit-tests the whole page as <html>, so every click in the
+       ~250 ms after a tap (longer on slow CPUs) went nowhere. The centre
+       column fades in with .route-in instead, which never blocks input. */
+    const transition = false && routeChanged && !reduced;
     const apply = () => {
       if (gen !== STATE.renderGen) return;
       if (STATE.snapTop) y = 0;
@@ -19072,7 +19413,8 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       window.ViktorychXCompose.onAct(act, el);
       return;
     }
-    if ((act === "go-live" || (act && act.indexOf("live-") === 0)) && window.ViktorychLive && window.ViktorychLive.onAct) {
+    /* live-preview is the Data usage setting, not a Live action. */
+    if ((act === "go-live" || (act && act !== "live-preview" && act.indexOf("live-") === 0)) && window.ViktorychLive && window.ViktorychLive.onAct) {
       window.ViktorychLive.onAct(act, el);
       return;
     }
@@ -20021,6 +20363,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       applyFollow(ids, !on);
       return;
     }
+    if (act && act.indexOf("pymk-") === 0 && window.ViktorychPYMK) {
+      window.ViktorychPYMK.act(act, el);
+      return;
+    }
     if (act && act.indexOf("pm-") === 0 && window.FeedsPeople && window.FeedsPeople.act) {
       window.FeedsPeople.act(act, el);
       return;
@@ -20224,6 +20570,47 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const api = window.ViktorychNative;
       if (api && api.writeInstallChoice) api.writeInstallChoice(act === "install-never" ? "never" : "later");
       STATE.modal = null;
+      render();
+      return;
+    }
+    if (act === "customize-page") {
+      STATE.drawer = false;
+      STATE.drawerSheet = "";
+      STATE.drawerEdit = false;
+      STATE.accountMenu = false;
+      STATE.pzEnter = Date.now();
+      goHash("#/customize");
+      return;
+    }
+    if (act === "pz-look") {
+      const key = el.dataset.key;
+      const val = el.dataset.value;
+      if (key === "accent" && LOOK_ACCENTS[val]) STATE.settings.accent = val;
+      else if (key === "fontSize" && LOOK_FONTS.indexOf(Number(val)) >= 0) STATE.settings.fontSize = Number(val);
+      else if (key === "density" && (val === "compact" || val === "default" || val === "comfy")) STATE.settings.density = val;
+      else if (key === "reduceMotion") STATE.settings.reduceMotion = !STATE.settings.reduceMotion;
+      else return;
+      STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { [key]: Date.now() });
+      saveSettings();
+      applyLook();
+      render();
+      return;
+    }
+    if (act === "pz-feed") {
+      const key = el.dataset.key;
+      if (key === "followingSort") {
+        STATE.settings.followingSort = el.dataset.value === "popular" ? "popular" : "recent";
+      } else if (key === "forYouReposts" || key === "forYouReplies") {
+        STATE.settings[key] = STATE.settings[key] === false;
+        STATE.forYouSnap = null;
+      } else if (key === "communitiesHome") {
+        STATE.settings.communitiesHome = STATE.settings.communitiesHome === false;
+        accountCall("/v1/communities/home", { method: "POST", body: { showHome: STATE.settings.communitiesHome !== false } }).then(() => {
+          publicStamp = 0;
+          schedulePublicPosts();
+        }).catch(() => {});
+      } else return;
+      saveSettings();
       render();
       return;
     }
@@ -21894,6 +22281,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   document.addEventListener("error", (event) => {
     const img = event.target;
     if (!img || (img.tagName !== "IMG" && img.tagName !== "VIDEO")) return;
+    if (img.tagName === "IMG") img.dataset.swept = img.getAttribute("src") || "";
+    handleMediaError(img);
+  }, true);
+
+  window.addEventListener("pageshow", () => scheduleImageSweep(800));
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") scheduleImageSweep(800); });
+
+  function handleMediaError(img) {
+    if (img.tagName === "IMG") dropCachedMedia(img.getAttribute("src") || "");
     // Shorts and the feed player choose their own video sources. A poster image can still fall through.
     if (img.tagName === "VIDEO" && (img.closest(".shorts-slide") || img.closest(".vplay"))) return;
     if (img.tagName === "IMG" && img.dataset.fallback !== "avatar" && img.dataset.tgTried !== "1") {
@@ -21918,7 +22314,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
     }
     finishTelegramImage(img);
-  }, true);
+  }
 
   let lastY = 0;
   window.addEventListener("message", (event) => {
@@ -22387,17 +22783,45 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     hscrollNav = true;
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
+    // The tapped item lights up and the page answers on the next frame; the
+    // new view renders right after that paint instead of inside the click.
+    paintNavNow(nextRoute);
     if (y > 0) restoreWhenTall(key, y);
-    render({
-      y: y,
-      done: () => {
-        if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
-        if (y > 0 && key !== leavingKey && !restoreTarget) holdRestore(key, y);
-        routing = false;
-        scrollFreeze = false;
-      }
+    const token = ++routeRenderToken;
+    afterNextPaint(() => {
+      if (token !== routeRenderToken) return;
+      render({
+        y: y,
+        done: () => {
+          if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
+          if (y > 0 && key !== leavingKey && !restoreTarget) holdRestore(key, y);
+          routing = false;
+          scrollFreeze = false;
+        }
+      });
     });
   });
+
+  let routeRenderToken = 0;
+  function afterNextPaint(fn) {
+    let ran = false;
+    const go = () => { if (ran) return; ran = true; fn(); };
+    if (window.requestAnimationFrame && document.visibilityState !== "hidden") window.requestAnimationFrame(() => setTimeout(go, 0));
+    setTimeout(go, 100);
+  }
+
+  function paintNavNow(route) {
+    try {
+      document.querySelectorAll("a.nav-item[href], .bottom-nav a[href]").forEach((a) => {
+        const on = sameNavSection(route, a.getAttribute("href") || "");
+        a.classList.toggle("on", on);
+        if (on) a.setAttribute("aria-current", "page");
+        else a.removeAttribute("aria-current");
+      });
+      const center = document.querySelector("main.center");
+      if (center) center.classList.add("route-wait");
+    } catch (err) { /* the render paints it anyway */ }
+  }
 
   /* A route that paints its cached content a moment after the shell is too
      short for the saved position at first, so the browser clamps it to the
@@ -22450,6 +22874,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (scheme) scheme.setAttribute("content", theme === "default" ? "light" : "dark");
     const bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
     if (bar) bar.setAttribute("content", "black-translucent");
+    applyLook();
   }
 
   function slimPost(post) {
@@ -26318,6 +26743,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
     } catch (err) {
       STATE.loading = false;
+      /* The archive list does not depend on the catalog. Without it every
+         picture that failed would wait for a list that never comes. */
+      if (!IA.ready) loadNewestShard().catch(() => installIaManifest(null));
       if (window.ViktorychShorts && window.ViktorychShorts.visible()) {
         if (!STATE.data) STATE.data = { posts: [], feeds: [] };
         try { await window.ViktorychShorts.pull(); } catch (ignore) { /* shorts keeps the last copy */ }
@@ -27102,7 +27530,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
