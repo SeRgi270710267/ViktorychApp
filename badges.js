@@ -469,6 +469,14 @@
   var POP_HOLD = { info: 7000, warning: 9000, critical: 12000, limit: 12000, countdown: 3200 };
   var achCurrent = null;
 
+  /* Pop-out icons are names from the app's icon set, drawn as one-colour SVG in
+     the variant's accent, never emoji. */
+  var POP_GLYPH = { info: "info", warning: "warning", critical: "alert", limit: "block", countdown: "alert" };
+  function popGlyph(name) {
+    var I = root.ViktorychIcons;
+    return I && I.svg ? I.svg(String(name)) : "";
+  }
+
   function popHtml(notice) {
     var v = notice.variant;
     var label = (notice.kicker ? notice.kicker + ": " : "") + (notice.title || "");
@@ -478,7 +486,7 @@
     if (notice.dismiss !== false) buttons += '<button type="button" class="ach-btn" data-pop-act="dismiss">' + esc(notice.dismissLabel || tr("Dismiss")) + "</button>";
     if (notice.mute) buttons += '<button type="button" class="ach-btn ach-btn-quiet" data-pop-act="mute">' + esc(tr("Don't warn me about this")) + "</button>";
     return '<div class="ach-pill ach-card" data-pop-id="' + esc(notice.id || "") + '" aria-label="' + esc(label) + '">' +
-      '<span class="ach-orb" aria-hidden="true"><span class="ach-ring"></span><span class="ach-ico">' + esc(notice.icon || "\u26A0\uFE0F") + "</span></span>" +
+      '<span class="ach-orb" aria-hidden="true"><span class="ach-ring"></span><span class="ach-ico">' + popGlyph(notice.icon || POP_GLYPH[v] || "info") + "</span></span>" +
       '<span class="ach-copy"><span class="ach-kicker">' + esc(notice.kicker || "") + "</span>" +
       '<span class="ach-name" data-pop-title="1">' + esc(notice.title || "") + "</span>" +
       (notice.desc ? '<span class="ach-desc" data-pop-desc="1">' + esc(notice.desc) + "</span>" : "") +
