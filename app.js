@@ -111,6 +111,7 @@
     clock: "M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm1 11h-4V7h2v4h2v2z",
     plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z",
     play: "M8 5v14l11-7z",
+    expand: "M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z",
     vol: "M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z",
     volOff: "M16.5 12a4.5 4.5 0 0 0-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4 9.91 6.09 12 8.18V4z",
     pin: "M16 3H8v2l1 5-3 3v2h5v6l1 1 1-1v-6h5v-2l-3-3 1-5V3z",
@@ -210,7 +211,10 @@
   if (window.ProfileAbout) window.ProfileAbout.lists = function () { return (STATE.settings && STATE.settings.lists) || []; };
   let previewAnchor = 0;
   const SCROLLS = {};
-  const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
+  const THEMES = window.ViktorychThemes || { base: { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" }, flags: {} };
+  const THEME_COLORS = Object.assign({}, THEMES.base);
+  Object.keys(THEMES.flags || {}).forEach((id) => { THEME_COLORS[id] = THEMES.flags[id].tint[0]; });
+  const FLAG_THEME_IDS = Object.keys(THEMES.flags || {});
 
   const icon = (name) => name === "clock"
     ? `<svg class="clock" viewBox="0 0 24 24" aria-hidden="true">${LINE.clock}</svg>`
@@ -593,7 +597,12 @@
     const src = metaEmbedSrc(post);
     if (!src) return false;
     const frame = document.createElement("iframe");
-    frame.src = src;
+    const held = holdMedia(src);
+    if (held) {
+      frame.setAttribute("data-ds-src", src);
+      tile.setAttribute("data-ds-hold", "1");
+      tile.setAttribute("data-ds-label", tr("Tap to load"));
+    } else frame.src = src;
     frame.title = post.platform === "threads" ? "Threads" : "Instagram";
     frame.loading = "lazy";
     frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
@@ -1208,7 +1217,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", brandLogo: { mode: "default", text: "" } });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", saveData: false, videoHd: true, imageLoad: "always", imageSize: "auto", linkPreviews: "full", preload: "idle", syncEvery: "normal", backgroundLive: true, updateDownload: "always", brandLogo: { mode: "default", text: "" } });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1236,6 +1245,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       if (parsed.autoplay !== "wifi" && parsed.autoplay !== "never") parsed.autoplay = "all";
       if (parsed.networkMode !== "max" && parsed.networkMode !== "direct") parsed.networkMode = "auto";
       parsed.playbackSource = cleanPlaybackSource(parsed.playbackSource);
+      cleanDataPrefs(parsed);
       parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
       parsed.mutedAccounts = Array.isArray(parsed.mutedAccounts) ? parsed.mutedAccounts : [];
       parsed.repostOff = Array.isArray(parsed.repostOff) ? parsed.repostOff : [];
@@ -1287,6 +1297,35 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       removeStored(localStorage, "settings-v1");
       return fresh();
     }
+  }
+
+  /* Data settings added with Save data. Unknown values fall back to the
+     normal default, so an old settings blob behaves as before. */
+  function cleanDataPrefs(parsed) {
+    parsed.saveData = parsed.saveData === true;
+    parsed.videoHd = parsed.videoHd !== false;
+    parsed.imageLoad = parsed.imageLoad === "wifi" ? "wifi" : "always";
+    parsed.imageSize = parsed.imageSize === "small" ? "small" : "auto";
+    parsed.linkPreviews = parsed.linkPreviews === "text" ? "text" : "full";
+    parsed.preload = parsed.preload === "defer" ? "defer" : "idle";
+    parsed.syncEvery = parsed.syncEvery === "slow" ? "slow" : "normal";
+    parsed.backgroundLive = parsed.backgroundLive !== false;
+    parsed.updateDownload = parsed.updateDownload === "wifi" ? "wifi" : "always";
+    if (parsed.livePreview !== "on" && parsed.livePreview !== "off") delete parsed.livePreview;
+  }
+
+  function dataSaver() {
+    return window.ViktorychDataSaver || null;
+  }
+  /* Save data on mobile data: this photo or embed waits for Wi-Fi or a tap.
+     Once tapped it stays loaded through re-renders. */
+  function holdMedia(url) {
+    const saver = dataSaver();
+    return !!(saver && !dataAllow("images") && !(saver.shown && saver.shown(url)));
+  }
+  function dataAllow(what) {
+    const saver = dataSaver();
+    return saver ? saver.allow(what) : true;
   }
 
   function saveSettings() {
@@ -1610,6 +1649,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!pending()) return;
     let left = 45;
     ownerFetchTimer = setInterval(() => {
+      if (!dataAllow("background")) return;
       left -= 1;
       refreshFeeds(true).finally(() => {
         if (!pending() || left <= 0) {
@@ -2735,7 +2775,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function posterImg(post, media, cls) {
     const pack = posterOrder(post, media);
     if (!pack.urls.length) return "";
-    const first = ruSafeImageUrl(pack.urls[0]);
+    const first = ruSafeImageUrl(STATE.settings && STATE.settings.imageSize === "small" ? smallImageUrl(pack.urls[0]) : pack.urls[0]);
     const face = first === pack.avatar ? " face" : "";
     const stored = r2ObjectKey(first);
     const stills = stillCandidates(post, media);
@@ -2743,7 +2783,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!first || oePast(first) || (post && post.platform === "tiktok")));
     const tg = tgKey ? (lead ? tgLead(tgKey, stills.slice(1), first) : ` data-tg="${esc(tgKey)}"${stills.slice(1).length ? ` data-tg-alts="${esc(stills.slice(1).join(","))}"` : ""}`) : "";
     const src = lead ? "" : ` src="${esc(first)}"`;
-    return `<img decoding="async" class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
+    const img = `<img decoding="async" class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
+    /* Save data on mobile data: the poster waits for Wi-Fi or a tap. */
+    return cls === "vposter" && holdMedia(first) ? dataSaver().holdAttrs(img) : img;
   }
 
   function frameNarrow() {
@@ -2916,7 +2958,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const href = xId && window.ViktorychEmbed.xOpenUrl ? window.ViktorychEmbed.xOpenUrl(xId) : originalOf(post, media);
     const mode = preview === "feed" || preview === "subs" ? preview : "";
     const chrome = mode === "feed" && !gif
-      ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden>${esc(dur || "")}</span>`
+      ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><button class="vexpand" type="button" data-act="video-expand" aria-label="${tr("Full screen")}" title="${tr("Full screen")}">${icon("expand")}</button><span class="vleft" hidden>${esc(dur || "")}</span><span class="vseek" role="slider" aria-label="${tr("Seek")}" tabindex="-1"></span>`
       : "";
     const isYt = youtubeId(post, media);
     const shieldBadge = STATE.settings && STATE.settings.privacyEmbedShield && isYt
@@ -2928,8 +2970,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ? `<span class="vprog" style="width:${Math.max(0, Math.round(progress * 100))}%"></span>`
       : (progress > 0.02 ? `<span class="vprog" style="width:${Math.round(progress * 100)}%"></span>` : "");
     const framed = mode === "feed" && arguments[4] !== false ? frameAttrs(post, media) : { attr: "", cls: "" };
-    return `<div class="tile vplay${round}${framed.cls || ""}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}>
-      ${posterImg(post, media, "vposter")}
+    const poster = posterImg(post, media, "vposter");
+    const posterHeld = / data-ds-src="/.test(poster) ? ` data-ds-poster="1"` : "";
+    return `<div class="tile vplay${round}${framed.cls || ""}"${posterHeld}${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}>
+      ${poster}
       ${bar}
       ${shieldBadge}
       ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
@@ -2941,12 +2985,22 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     </div>`;
   }
 
+  /* Save data: use the smallest size the source already serves. Nothing is
+     re-encoded; the source keeps its own files. */
+  function smallImageUrl(url) {
+    const raw = String(url || "");
+    if (/pbs\.twimg\.com\/media\//.test(raw) && /[?&]name=/.test(raw)) return raw.replace(/([?&]name=)[^&]+/, "$1small");
+    if (/i\.ytimg\.com\/vi\//.test(raw) && /(?:mq|hq|sd|maxres)default\.jpg/.test(raw)) return raw.replace(/\/(?:mq|hq|sd|maxres)default\.jpg/, "/mqdefault.jpg");
+    return raw;
+  }
+
   function tvPref(name) {
     return window.ViktorychTVMode && window.ViktorychTVMode.pref ? window.ViktorychTVMode.pref(name) : false;
   }
 
   function imageSrcset(url) {
     const raw = String(url || "");
+    if (STATE.settings && STATE.settings.imageSize === "small") return "";
     const light = tvPref("lightImages") === true;
     if (/pbs\.twimg\.com\/media\//.test(raw) && /[?&]name=/.test(raw)) {
       const small = raw.replace(/([?&]name=)[^&]+/, "$1small");
@@ -3064,8 +3118,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function linkImagesBlocked() {
-    const s = STATE.settings || {};
-    if (s.saveData === true || s.dataSaver === true || s.saveData === "on" || s.dataSaver === "on") return true;
+    /* Save data: link pictures follow "Link preview images" and "Load photos on Wi-Fi only". */
+    if (!dataAllow("linkImages") || !dataAllow("images")) return true;
     if (window.matchMedia && window.matchMedia("(prefers-reduced-data: reduce)").matches) return true;
     const conn = connectionInfo();
     return conn.saveData || conn.effectiveType === "slow-2g" || conn.effectiveType === "2g";
@@ -3319,7 +3373,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!src) return "";
     const open = post.url ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("Open original")}</a>` : "";
     const title = post.platform === "threads" ? "Threads" : "Instagram";
-    return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(src)}" title="${esc(title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>${open}</div></div>`;
+    const frame = `<iframe src="${esc(src)}" title="${esc(title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+    /* Save data on mobile data: an embedded post loads on tap. */
+    const hold = holdMedia(src) ? ` data-ds-hold="1" data-ds-label="${esc(tr("Tap to load"))}"` : "";
+    return `<div class="media m1 embed-media"><div class="tile embed-tile"${hold}>${hold ? dataSaver().holdAttrs(frame) : frame}${open}</div></div>`;
   }
 
   function mediaHtml(items, eager, post) {
@@ -3339,7 +3396,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const open = embed.open ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(embed.open)}">${tr("Open original")}</a>` : "";
       const policy = embedPolicyAttr(src);
       const allow = policy ? ` allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen` : "";
-      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(src)}" title="${esc(embed.title || tr("Post noun"))}" loading="lazy"${policy}${allow}></iframe>${open}</div></div>` + files;
+      /* Save data on mobile data: an embedded post loads on tap. */
+      const embedHold = holdMedia(src) ? ` data-ds-hold="1" data-ds-label="${esc(tr("Tap to load"))}"` : "";
+      const frame = `<iframe src="${esc(src)}" title="${esc(embed.title || tr("Post noun"))}" loading="lazy"${policy}${allow}></iframe>`;
+      return `<div class="media m1 embed-media"><div class="tile embed-tile"${embedHold}>${embedHold ? dataSaver().holdAttrs(frame) : frame}${open}</div></div>` + files;
     }
     if (list.length === 1 && list[0].type === "placeholder") {
       return `<div class="media m1"><div class="tile broken"><a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(list[0].url || "#")}">${tr("Open original")}</a></div></div>` + files;
@@ -3353,9 +3413,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
       const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
       const first = eager && index === 0;
-      const rawSrc = m.url || m.poster || "";
+      const fullSrc = m.url || m.poster || "";
+      const rawSrc = STATE.settings && STATE.settings.imageSize === "small" ? smallImageUrl(fullSrc) : fullSrc;
       const src = ruSafeImageUrl(rawSrc);
-      const stored = r2ObjectKey(rawSrc);
+      const stored = r2ObjectKey(fullSrc);
       const stills = stillCandidates(post, m);
       const tgKey = stills[0] || stored;
       const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!rawSrc || oePast(rawSrc) || (post && post.platform === "tiktok")));
@@ -3367,7 +3428,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const priority = first ? ` fetchpriority="high"` : ` fetchpriority="low"`;
       const srcAttr = lead ? "" : ` src="${esc(src)}"${src === rawSrc ? imageSrcset(src) : ""}`;
       const framed = n === 1 ? frameAttrs(post, m) : { attr: "", cls: "" };
-      return `<div class="tile${framed.cls || ""}" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
+      let img = `<img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">`;
+      const hold = holdMedia(lead ? tgKey : src) ? ` data-ds-hold="1" data-ds-label="${esc(tr("Tap to load"))}"` : "";
+      if (hold) img = dataSaver().holdAttrs(img);
+      return `<div class="tile${framed.cls || ""}"${hold} data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}>${img}${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>` + files;
   }
@@ -3401,7 +3465,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function directYoutubeSources(id) {
-    const narrow = (window.innerWidth || 390) < 700 || !!(navigator.connection && navigator.connection.saveData);
+    const narrow = (window.innerWidth || 390) < 700 || !!(navigator.connection && navigator.connection.saveData) || !dataAllow("hd");
     const rows = [];
     const pushRow = (row) => { if (row && row.url && String(row.url).indexOf("/v1/yt/") < 0) rows.push(row); };
     return healthyIv().then((bases) => {
@@ -4075,13 +4139,29 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function hlsAhead(extra) {
-    const opts = { maxBufferLength: 30, maxMaxBufferLength: 30, capLevelToPlayerSize: false, startLevel: 99 };
+    const opts = dataAllow("hd")
+      ? { maxBufferLength: 30, maxMaxBufferLength: 30, capLevelToPlayerSize: false, startLevel: 99 }
+      : { maxBufferLength: 15, maxMaxBufferLength: 15, capLevelToPlayerSize: true, startLevel: 0 };
     if (extra) Object.keys(extra).forEach((name) => { opts[name] = extra[name]; });
     return opts;
   }
 
+  /* With HD off, the highest level below 720p is the top. */
+  function sdTop(levels) {
+    let pick = 0;
+    (levels || []).forEach((level, index) => {
+      const h = Number(level && level.height) || 0;
+      if (h && h < 720) pick = index;
+    });
+    return pick;
+  }
+
   function lockHlsTop(hls) {
     if (!hls) return;
+    if (!dataAllow("hd")) {
+      if ((hls.levels || []).length) { hls.autoLevelCapping = sdTop(hls.levels); hls.capLevelToPlayerSize = true; }
+      return;
+    }
     const top = (hls.levels || []).length - 1;
     if (top < 0) return;
     hls.capLevelToPlayerSize = false;
@@ -4927,7 +5007,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function startPlayback(el, opts) {
     if (!el) return;
     opts = opts || {};
-    const previewing = !!(opts.preview || (el.dataset && el.dataset.preview && !el.classList.contains("player")));
+    const previewing = !opts.inline && !!(opts.preview || (el.dataset && el.dataset.preview && !el.classList.contains("player")));
     if (previewing) {
       opts.preview = true;
       const early = playMedia(el, playPost(el) || {}) || {};
@@ -5325,7 +5405,167 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  /* Inline play, like X: a tap plays the clip in its card with sound, a tap
+     on a muted clip unmutes it, a tap on a clip playing with sound pauses it
+     (on a wide screen with a mouse it opens the media view instead, as on
+     x.com). Only the expand button opens the full-screen player. The tapped
+     clip is the one clip that plays; it pauses once it leaves the screen. */
+  function wideMouse() {
+    return (window.innerWidth || 0) >= 1000 && !!(window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches);
+  }
+
+  function setInlinePaused(tile, paused) {
+    tile._userPaused = !!paused;
+    tile.classList.toggle("is-user-paused", !!paused);
+    const play = tile.querySelector(":scope > .play");
+    if (play) play.setAttribute("aria-label", paused ? tr("Play") : tr("Pause"));
+  }
+
+  function inlineTap(tile) {
+    bindInlineSeek();
+    const post = playPost(tile) || {};
+    const media = playMedia(tile, post) || {};
+    const gif = media.type === "animated_gif" || !!tile.querySelector(".gif-badge");
+    const video = tile.querySelector("video");
+    const frame = tile.querySelector("iframe:not([src='about:blank'])");
+    const mine = STATE.inlineEl === tile;
+    if (mine && video && !video.error && (video.currentSrc || video.src)) {
+      if (tile._userPaused || video.paused) {
+        setInlinePaused(tile, false);
+        if (!gif) STATE.sound = true;
+        resumePreview(tile);
+        return;
+      }
+      if (!gif && video.muted) {
+        STATE.sound = true;
+        video.muted = false;
+        document.querySelectorAll(".vmute").forEach(paintMute);
+        return;
+      }
+      if (!gif && wideMouse()) { openFullVideo(tile); return; }
+      try { video.pause(); } catch (err) { /* already paused */ }
+      setInlinePaused(tile, true);
+      return;
+    }
+    if (mine && frame && !tile.querySelector(".vshield")) return;
+    if (STATE.inlineEl && STATE.inlineEl !== tile) {
+      setInlinePaused(STATE.inlineEl, false);
+      STATE.inlineEl.classList.remove("is-inline");
+    }
+    if (STATE.autoEl && STATE.autoEl !== tile) pausePreview(STATE.autoEl);
+    STATE.inlineEl = tile;
+    STATE.autoEl = tile;
+    tile.classList.add("is-inline");
+    setInlinePaused(tile, false);
+    if (!gif) STATE.sound = true;
+    document.querySelectorAll(".vmute").forEach(paintMute);
+    // A muted preview of a file keeps playing; it only gains sound.
+    if (video && !video.error && (video.currentSrc || video.src) && !youtubeId(post, media)) {
+      resumePreview(tile);
+      return;
+    }
+    const held = Number(tile._hold) > 0.25 ? Number(tile._hold) : (video && video.currentTime > 0.25 ? video.currentTime : 0);
+    // YouTube and other official players play inline with their own controls.
+    if (youtubeId(post, media) || (frame && !video)) {
+      tile._inlineFrame = true;
+      clearPlayer(tile);
+      tile.classList.remove("is-playing", "is-shown");
+      startPlayback(tile, { inline: true, resume: held });
+      return;
+    }
+    startPlayback(tile, { preview: true, loop: gif || clipLoops(media), muted: gif, resume: held });
+  }
+
+  /* Tap or drag the bottom strip of an inline clip to seek, like X. */
+  function bindInlineSeek() {
+    if (STATE.seekBound) return;
+    STATE.seekBound = true;
+    const seekTo = (event) => {
+      const strip = event.target && event.target.closest ? event.target.closest(".vseek") : null;
+      if (!strip) return false;
+      const tile = strip.closest(".vplay");
+      const video = tile && tile.querySelector("video");
+      event.preventDefault();
+      event.stopPropagation();
+      if (!video || !isFinite(video.duration) || video.duration <= 0) return true;
+      const box = strip.getBoundingClientRect();
+      const x = (event.touches && event.touches[0] ? event.touches[0].clientX : event.clientX) - box.left;
+      const at = Math.max(0, Math.min(1, x / Math.max(1, box.width)));
+      try { video.currentTime = at * video.duration; } catch (err) { /* not seekable yet */ }
+      const bar = tile.querySelector(".vprog");
+      if (bar) bar.style.width = (at * 100).toFixed(1) + "%";
+      return true;
+    };
+    document.addEventListener("click", seekTo, true);
+    document.addEventListener("pointermove", (event) => { if (event.buttons === 1) seekTo(event); }, { capture: true, passive: false });
+  }
+
+  /* A full render swaps the feed for fresh nodes; the tapped clip carries on
+     in its new card, from where it was, unless the user had paused it. */
+  function adoptInline(old) {
+    const pid = old.getAttribute("data-pid");
+    const mi = old.getAttribute("data-mi");
+    if (!pid) return null;
+    let fresh = null;
+    document.querySelectorAll('.vplay[data-preview="feed"]').forEach((node) => {
+      if (!fresh && node.getAttribute("data-pid") === pid && node.getAttribute("data-mi") === mi && !node.classList.contains("player")) fresh = node;
+    });
+    if (!fresh) return null;
+    const oldVideo = old.querySelector("video");
+    const at = oldVideo && oldVideo.currentTime > 0.25 ? oldVideo.currentTime : (Number(old._hold) > 0.25 ? Number(old._hold) : 0);
+    const paused = !!old._userPaused;
+    clearPlayer(old);
+    if (at > 0.25) fresh._hold = at;
+    STATE.inlineEl = fresh;
+    if (STATE.autoEl === old) STATE.autoEl = null;
+    fresh.classList.add("is-inline");
+    if (paused) { setInlinePaused(fresh, true); return fresh; }
+    const post = playPost(fresh) || {};
+    const media = playMedia(fresh, post) || {};
+    const gif = media.type === "animated_gif";
+    STATE.autoEl = fresh;
+    if (youtubeId(post, media) || old._inlineFrame) {
+      fresh._inlineFrame = true;
+      startPlayback(fresh, { inline: true, resume: at });
+    } else {
+      startPlayback(fresh, { preview: true, loop: gif || clipLoops(media), muted: gif || !STATE.sound, resume: at });
+    }
+    return fresh;
+  }
+
+  function inlineOwner() {
+    let el = STATE.inlineEl;
+    if (!el) return null;
+    if (!el.isConnected) {
+      const fresh = adoptInline(el);
+      if (fresh) el = fresh;
+    }
+    const metrics = el.isConnected ? visibleMetrics(el) : { ratio: 0, cover: 0 };
+    if (metrics.ratio >= 0.2 || metrics.cover >= 0.2) return el;
+    STATE.inlineEl = null;
+    setInlinePaused(el, false);
+    el.classList.remove("is-inline");
+    if (el.isConnected) pausePreview(el);
+    if (STATE.autoEl === el) STATE.autoEl = null;
+    return null;
+  }
+
   function syncPreview() {
+    if (STATE.viewer && STATE.viewer.video && STATE.inlineEl) {
+      pausePreview(STATE.inlineEl);
+      STATE.inlineEl.classList.remove("is-inline");
+      setInlinePaused(STATE.inlineEl, false);
+      STATE.inlineEl = null;
+    }
+    const own = inlineOwner();
+    if (own) {
+      if (STATE.autoEl && STATE.autoEl !== own) pausePreview(STATE.autoEl);
+      STATE.autoEl = own;
+      const current = own.querySelector("video");
+      if (!own._userPaused && current && current.paused && !current.error && (current.currentSrc || current.src)) resumePreview(own);
+      paintAutoplayDebug();
+      return;
+    }
     if (!autoplayAllowed() || (STATE.viewer && STATE.viewer.video)) {
       if (STATE.autoEl) pausePreview(STATE.autoEl);
       STATE.autoEl = null;
@@ -6136,7 +6376,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const files = (variants || []).filter((row) => row && playableFile(row.url) && !oePast(row.url));
     if (!files.length) return "";
     const narrow = (window.innerWidth || 390) < 700;
-    const target = narrow ? 900000 : 2500000;
+    const target = !dataAllow("hd") ? 0 : narrow ? 900000 : 2500000;
     let best = files[0];
     let score = Infinity;
     files.forEach((file) => {
@@ -12707,6 +12947,7 @@ const here = parseRoute();
     if (mode === "dim") return tr("Dim");
     if (mode === "default") return tr("Light");
     if (mode === "auto") return tr("Auto");
+    if (THEMES.flags && THEMES.flags[mode]) return tr(THEMES.flags[mode].name);
     return tr("Lights out");
   }
 
@@ -13023,7 +13264,7 @@ const here = parseRoute();
       return;
     }
     if (act === "explore-theme") {
-      const order = ["lightsout", "dim", "default"];
+      const order = ["lightsout", "dim", "default"].concat(FLAG_THEME_IDS);
       const cur = (STATE.settings && STATE.settings.appearance) || "lightsout";
       const at = order.indexOf(cur);
       const next = order[(at + 1) % order.length];
@@ -15119,6 +15360,7 @@ const here = parseRoute();
           ${themeBtn("default", tr("Default"))}
           ${themeBtn("dim", tr("Dim"))}
           ${themeBtn("lightsout", tr("Lights out"))}
+          ${FLAG_THEME_IDS.map((id) => themeBtn(id, tr(THEMES.flags[id].name))).join("")}
         </div>
         <h2>${esc(tr("Profile pictures"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Profile pictures"))}">
@@ -15148,7 +15390,23 @@ const here = parseRoute();
     }
     if (section === "data") {
       ensureDeviceModule();
+      const ds = STATE.settings || {};
+      const saverOn = ds.saveData === true;
+      const pref = (key, on, label, desc) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="data-pref" data-key="${key}"><span>${esc(label)}</span><i></i></button><p class="phandle set-desc">${esc(desc)}</p>`;
       return settingsHead(tr("Data usage"), "#/settings/accessibility") + `<div class="set-block">
+        <h2>${esc(tr("Max data saving"))}</h2>
+        <p class="phandle">${esc(tr("One tap sets every data setting below to its lowest-data choice. Turn it off to get your own choices back."))}</p>
+        <button class="tab-switch${saverOn ? " on" : ""}" type="button" role="switch" aria-checked="${saverOn ? "true" : "false"}" data-act="data-saver"><span>${esc(tr("Max data saving"))}</span><i></i></button>
+        <h2>${esc(tr("Images and video"))}</h2>
+        ${pref("imageLoad", ds.imageLoad === "wifi", tr("Load photos on Wi-Fi only"), tr("On mobile data, tap a photo to load it."))}
+        ${pref("imageSize", ds.imageSize === "small", tr("Smaller previews"), tr("Use the smaller size a site already offers. Photos are never re-encoded."))}
+        ${pref("linkPreviews", ds.linkPreviews !== "text", tr("Link preview images"), tr("Show the picture on link cards."))}
+        ${pref("videoHd", ds.videoHd !== false, tr("HD video"), tr("Off plays the highest quality below 720p."))}
+        <h2>${esc(tr("Background and updates"))}</h2>
+        ${pref("preload", ds.preload === "defer", tr("Wait for Wi-Fi to download ahead"), tr("Other tabs and pages download when you're on Wi-Fi or start scrolling."))}
+        ${pref("syncEvery", ds.syncEvery === "slow", tr("Check for new posts less often"), tr("New posts and notifications are checked every 3 minutes instead of every minute."))}
+        ${pref("backgroundLive", ds.backgroundLive !== false, tr("Live in the background"), tr("Off pauses video and live updates when the app is in the background."))}
+        ${pref("updateDownload", ds.updateDownload === "wifi", tr("Download app updates on Wi-Fi only"), tr("On mobile data, updates wait until you tap Update."))}
         <h2>${esc(tr("Autoplay videos"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Autoplay videos"))}">
           ${autoBtn("all", tr("On cellular and Wi-Fi"))}
@@ -19874,6 +20132,23 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "data-saver") {
+      const saver = dataSaver();
+      if (saver) saver.apply(!(STATE.settings && STATE.settings.saveData === true));
+      return;
+    }
+    if (act === "data-pref") {
+      const key = el.dataset.key;
+      const flip = {
+        imageLoad: ["wifi", "always"], imageSize: ["small", "auto"], linkPreviews: ["full", "text"], videoHd: [true, false],
+        preload: ["defer", "idle"], syncEvery: ["slow", "normal"], backgroundLive: [true, false], updateDownload: ["wifi", "always"]
+      }[key];
+      if (!flip || !STATE.settings) return;
+      STATE.settings[key] = STATE.settings[key] === flip[0] ? flip[1] : flip[0];
+      saveSettings();
+      render();
+      return;
+    }
     if (act === "reactions-data") {
       const mode = el.dataset.mode;
       STATE.settings.reactionsData = mode === "full" || mode === "lite" ? mode : "auto";
@@ -19957,7 +20232,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (tile && tile.querySelector(".gif-badge")) return;
       if (tile && tile.querySelector("iframe") && !tile.querySelector("video")) {
         STATE.sound = true;
-        openFullVideo(tile);
+        inlineTap(tile);
         return;
       }
       STATE.sound = !STATE.sound;
@@ -20357,6 +20632,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "video-expand") {
+      const tile = el.closest(".vplay");
+      if (tile) { STATE.sound = true; openFullVideo(tile); }
+      return;
+    }
     if (act === "play" || act === "video-retry") {
       const tile = el.closest(".vplay") || el;
       if (act === "video-retry") {
@@ -20371,6 +20651,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
         delete tile._prefetch;
         clearPlayer(tile);
         startPlayback(tile, tile.dataset.preview ? { preview: true } : {});
+        return;
+      }
+      if (tile.dataset.preview === "feed" && !tile.classList.contains("player") && !document.documentElement.classList.contains("tv-on")) {
+        inlineTap(tile);
         return;
       }
       if (tile.dataset.preview && !tile.classList.contains("player")) {
@@ -21934,7 +22218,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function applyTheme() {
     const theme = resolvedTheme();
-    document.documentElement.setAttribute("data-theme", theme);
+    if (THEMES.apply) THEMES.apply(theme);
+    else document.documentElement.setAttribute("data-theme", theme);
     applyNavLayout();
     const color = THEME_COLORS[theme] || "#000000";
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
@@ -22862,8 +23147,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const rest = visibleHomeTabs().filter((id) => id !== active);
       if (rest.length) refreshHomeTabs(rest);
     };
-    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 1500 });
-    else setTimeout(run, 800);
+    const go = () => {
+      if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 1500 });
+      else setTimeout(run, 800);
+    };
+    const saver = dataSaver();
+    if (saver) saver.whenRoomy(go);
+    else go();
   }
 
   function wakeHome() {
@@ -24358,6 +24648,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (hubPoll) { clearInterval(hubPoll); hubPoll = 0; }
   }
 
+  let hubTicks = 0;
   function startPoll() {
     if (hubPoll || document.visibilityState !== "visible" || channelOpen()) return;
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
@@ -24367,6 +24658,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       if (gameBusy()) return;
+      hubTicks += 1;
+      const saver = dataSaver();
+      if (saver && hubTicks % Math.round(saver.every(60000) / 60000)) return;
       pullNotes();
     }, 60000);
   }
@@ -25765,7 +26059,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         prefetchHomeTabs();
       }
       if (!STATE.liveTimer) {
+        let liveTicks = 0;
         STATE.liveTimer = setInterval(() => {
+          liveTicks += 1;
+          const saver = dataSaver();
+          if (saver && liveTicks % Math.round(saver.every(LIVE_REFRESH_MS) / LIVE_REFRESH_MS)) return;
           if (document.visibilityState === "visible" && !gameBusy()) wakeHome();
         }, LIVE_REFRESH_MS);
       }
@@ -26089,7 +26387,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
-      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive", "packages", "servers"]);
+      const saver = dataSaver();
+      const list = ["shorts", "communities", "games", "tv", "vault", "drive", "packages", "servers"];
+      if (saver) saver.whenRoomy(() => window.ViktorychLazy.preload(list));
+      else window.ViktorychLazy.preload(list);
     }
   }, 8000);
   window.addEventListener("viktorych-key-alert", function (event) {
@@ -26108,6 +26409,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     commitBellNotes([note]);
     showLocalNotification(note);
   });
+  if (window.ViktorychDataSaver) {
+    window.ViktorychDataSaver.bind({
+      settings: () => STATE.settings,
+      save: (next) => {
+        if (!STATE.settings) return;
+        if (next && next !== STATE.settings) Object.assign(STATE.settings, next);
+        saveSettings();
+        render();
+      },
+      reveal: (tile) => primeTelegramImages(tile)
+    });
+  }
   if (window.ViktorychAccounts) {
     window.ViktorychAccounts.requestRender = function () { render(); };
     window.ViktorychAccounts.followButton = followButtonClean;

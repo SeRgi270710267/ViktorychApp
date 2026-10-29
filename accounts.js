@@ -933,9 +933,20 @@ var numberNote = form.passkey
     var profRow = '<div class="acct-pref-row" style="margin:16px 0 8px"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" data-acct="toggle-form-profileless"><i></i></button></div>';
     return '<p class="acct-sub">' + subText + "</p>" +
       field("displayName", form.profileLess ? tr("Name (optional)") : tr("Name"), "text", 50) +
-      profRow +
+      profRow + saveDataRow() +
       errorHtml() + nextButton("next", tr("Next")) +
       '<p class="acct-switch"><button type="button" data-acct="open-temp">' + esc(tr("Try a temporary account")) + "</button></p>";
+  }
+  /* Save data at sign-up: on when this device already asks to save data. */
+  function saveDataWanted() {
+    if (typeof form.saveData === "boolean") return form.saveData;
+    var saver = window.ViktorychDataSaver;
+    return !!(saver && saver.detect && saver.detect().on);
+  }
+  function saveDataRow() {
+    if (!window.ViktorychDataSaver) return "";
+    var on = saveDataWanted();
+    return '<div class="acct-pref-row" style="margin:8px 0"><div class="acct-pref-text"><b>' + esc(tr("Save data")) + '</b><p>' + esc(tr("Uses as little mobile data as possible. Change it any time in Settings.")) + '</p></div><button class="tab-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" data-acct="toggle-form-savedata"><i></i></button></div>';
   }
   function loginBody() {
     var digits = String(form.accountNumber || "").replace(/\D/g, "");
@@ -1064,15 +1075,18 @@ var numberNote = form.passkey
   }
   function wallTheme() {
     var mode = document.documentElement.getAttribute("data-theme") || "lightsout";
-    if (mode !== "default" && mode !== "dim") mode = "lightsout";
+    var themes = window.ViktorychThemes;
+    if (themes ? !themes.known(mode) : (mode !== "default" && mode !== "dim")) mode = "lightsout";
     return mode;
   }
   function applyWallTheme(mode) {
-    if (mode !== "default" && mode !== "dim") mode = "lightsout";
-    document.documentElement.setAttribute("data-theme", mode);
+    var themes = window.ViktorychThemes;
+    if (themes ? !themes.known(mode) : (mode !== "default" && mode !== "dim")) mode = "lightsout";
+    if (themes) themes.apply(mode);
+    else document.documentElement.setAttribute("data-theme", mode);
     var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
     var metas = document.querySelectorAll('meta[name="theme-color"]');
-    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
+    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", themes ? themes.color(mode) : colors[mode]);
     try {
       var key = "viktorychapp-settings-v1";
       var raw = localStorage.getItem(key);
@@ -1093,7 +1107,7 @@ var numberNote = form.passkey
     }
     return '<p class="acct-sub">' + esc(tr("Language and appearance stay on this device.")) + "</p>" +
       '<div class="theme-row" role="group" aria-label="' + esc(tr("Display language")) + '">' + langBtn("en", "English") + langBtn("es", "Español") + langBtn("ru", "Русский") + "</div>" +
-      '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + "</div>" +
+      '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}).map(function (id) { return themeBtn(id, tr(window.ViktorychThemes.flags[id].name)); }).join("") + "</div>" +
       '<p class="acct-sub">' + esc(tr("Account settings are available after you sign in.")) + "</p>";
   }
   function deletedFlag() {
@@ -1902,6 +1916,9 @@ function signupPayload() {
         /* The server already follows the owner's accounts for a new account.
            Guest follows stay on this device and are not imported. */
         if (res.account && res.account.publicId) writeStored("follows-imported-v2-" + res.account.publicId, "1");
+        if (saveDataWanted() && window.ViktorychDataSaver) {
+          try { window.ViktorychDataSaver.apply(true); } catch (err) { /* the account still opens */ }
+        }
         if (typeof window.ViktorychAccounts.onSignup === "function") {
           try { window.ViktorychAccounts.onSignup(res.account || {}); } catch (err) { /* the session still opens */ }
         }
@@ -2078,6 +2095,9 @@ function signupPayload() {
         return;
       }
       form.passkey = true;
+      if (saveDataWanted() && window.ViktorychDataSaver) {
+        try { window.ViktorychDataSaver.apply(true); } catch (err) { /* the account still opens */ }
+      }
       writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
       markSetupPost(res.account);
       step = 2;
@@ -4929,6 +4949,7 @@ function signupPayload() {
     else if (act === "avatar-clear") { form.avatar = ""; form.avatarTouched = true; form.avatarEmpty = "default"; form.mediaMenu = ""; paint(); }
     else if (act === "toggle-form-private") { form.privateFollows = !form.privateFollows; paint(); }
     else if (act === "toggle-form-profileless") { form.profileLess = !form.profileLess; paint(); }
+    else if (act === "toggle-form-savedata") { form.saveData = !saveDataWanted(); paint(); }
     else if (act === "toggle-private-follows") { var s = readSession(); if (s && s.account) setPrivateFollows(!s.account.privateFollows); }
     else if (act === "toggle-protected") { var sp = readSession(); if (sp && sp.account) setProtected(!sp.account.protected); }
     else if (act === "unblock-account" || act === "unmute-account-server") {
