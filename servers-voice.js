@@ -79,6 +79,7 @@
     el.autoplay = true;
     el.muted = !!muted;
     el.className = "vsrv-vvideo";
+    el.setAttribute("data-voice", "");
     return el;
   }
   function playSoon(el) {
@@ -97,6 +98,7 @@
       p.audioEl = document.createElement("audio");
       p.audioEl.setAttribute("autoplay", "");
       p.audioEl.setAttribute("playsinline", "");
+      p.audioEl.setAttribute("data-voice", "");
       sinks().appendChild(p.audioEl);
     }
     return p.audioEl;
@@ -300,14 +302,14 @@
     if (msg.op === "vready") {
       V.status = "connected";
       V.joinedAt = V.joinedAt || Date.now();
-      var keep = {};
+      /* The room announces a leave whenever a voice socket closes, so the
+         others have already dropped their side: start every peer fresh. */
+      Object.keys(V.peers).forEach(dropPeer);
       (msg.peers || []).forEach(function (row) {
-        keep[row.a] = 1;
         V.roster[row.a] = { c: V.cid, st: row.st || {}, j: row.j || 0 };
-        var p = V.peers[row.a];
-        if (!p || p.conn === "failed") { if (p) dropPeer(row.a); p = peer(row.a, true); if (p) offer(p, false); }
+        var p = peer(row.a, true);
+        if (p) offer(p, false);
       });
-      Object.keys(V.peers).forEach(function (id) { if (!keep[id]) dropPeer(id); });
       V.roster[V.mid] = { c: V.cid, st: state(), j: V.joinedAt };
       emit();
       return;

@@ -331,7 +331,7 @@
       var keys = Object.keys(bag);
       if (keys.length > 600) keys.sort(function (a, b) { return (bag[a].at || 0) - (bag[b].at || 0); }).slice(0, keys.length - 600).forEach(function (k) { delete bag[k]; });
       lsSet("cards:" + sid, bag);
-      if (sid === S.sid) { paintLog(true); paintMembers(); }
+      if (sid === S.sid) { paintLog(true); paintMembers(); if (voiceAsked[sid]) paintVoice(); }
     });
   }
 
@@ -1003,9 +1003,15 @@
     }
     return bag;
   }
+  var voiceAsked = {};
   function voiceIn(sid, cid) {
     var bag = voiceBag(sid);
-    return Object.keys(bag).filter(function (k) { return bag[k] && bag[k].c === cid; }).sort(function (a, b) { return (bag[a].j || 0) - (bag[b].j || 0); });
+    var list = Object.keys(bag).filter(function (k) { return bag[k] && bag[k].c === cid; }).sort(function (a, b) { return (bag[a].j || 0) - (bag[b].j || 0); });
+    /* People in voice may not be in the loaded member list; fetch their cards once. */
+    var asked = voiceAsked[sid] || (voiceAsked[sid] = {});
+    var fresh = list.filter(function (m) { return !asked[m]; });
+    if (fresh.length) { fresh.forEach(function (m) { asked[m] = 1; }); needCards(fresh, sid); }
+    return list;
   }
   function voiceSt(sid, mid) { var r = voiceBag(sid)[mid]; return (r && r.st) || {}; }
   function isSpeaking(mid) {
@@ -1065,10 +1071,11 @@
     var video = kind === "scr" || st.cam;
     var conn = self ? "connected" : vv().peerConn(mid);
     var p = V.peers[mid];
-    var name = nameOf(mid) + (kind === "scr" ? " · " + tr("Screen") : "");
+    var name = nameOf(mid, V.sid) + (kind === "scr" ? " · " + tr("Screen") : "");
     return '<div class="vsrv-vtile' + (video ? " video" : "") + (kind === "scr" ? " screen" : "") + (S.vfocus === key ? " focus" : "") + (kind === "cam" && isSpeaking(mid) ? " speaking" : "") + '"' + (kind === "cam" ? ' data-spk="' + mid + '"' : "") + ">" +
       '<button type="button" class="vsrv-vtile-hit" data-vs="voice-tile" data-key="' + esc(key) + '" aria-label="' + esc(name) + '"></button>' +
-      (video ? '<div class="vsrv-vmedia" data-vmedia="' + (self ? "me" : mid) + ":" + kind + '"></div>' : '<span class="vsrv-vtile-ava">' + avatar(mid, V.sid, "vsrv-ava xl") + "</span>") +
+      (kind === "cam" ? '<span class="vsrv-vtile-ava">' + avatar(mid, V.sid, "vsrv-ava xl") + "</span>" : "") +
+      (video ? '<div class="vsrv-vmedia" data-vmedia="' + (self ? "me" : mid) + ":" + kind + '"></div>' : "") +
       '<span class="vsrv-vname">' + (kind === "cam" && (st.mu || st.sm) ? icon("micOff", "vsrv-vflag") : "") + (kind === "cam" && st.df ? icon("headOff", "vsrv-vflag") : "") + "<span>" + esc(name) + "</span></span>" +
       (conn === "failed" ? '<span class="vsrv-vbad">' + esc(tr("Couldn't connect")) + "</span>" : conn !== "connected" ? '<span class="vsrv-vwait">' + esc(tr("Connecting…")) + "</span>" : "") +
       (!self && kind === "cam" ? '<button type="button" class="vsrv-vtile-more" data-vs="voice-peer" data-m="' + mid + '" aria-label="' + esc(tr("More")) + '">' + icon(p && p.localMute ? "volOff" : "more") + "</button>" : "") +

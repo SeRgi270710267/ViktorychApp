@@ -598,6 +598,81 @@ button.vsrv-pill.on { background: var(--text); color: var(--bg); border-color: v
 .vsrv-act svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
 .vsrv-act span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Voice: sidebar roster, connection panel, stage */
+.vsrv-ava.md { width: 48px; height: 48px; }
+.vsrv-vcount { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.vsrv-vrows { display: flex; flex-direction: column; margin: 0 0 4px 30px; }
+.vsrv-vrow { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 3px 8px; border: 0; background: none; border-radius: 8px; cursor: pointer; text-align: left; color: var(--muted); font-size: 14px; }
+.vsrv-vrow:hover { background: var(--hover-soft); color: var(--text); }
+.vsrv-vrow-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vsrv-vring { display: inline-flex; border-radius: 50%; box-shadow: 0 0 0 2px transparent; transition: box-shadow .12s; flex: none; }
+.vsrv-vring.speaking { box-shadow: 0 0 0 2px #00ba7c; }
+.vsrv-vflag { width: 15px; height: 15px; color: var(--muted); flex: none; }
+.vsrv-vflag.sm { color: #f4212e; }
+.vsrv-live { background: #f4212e; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .03em; padding: 1px 5px; border-radius: 4px; flex: none; }
+.vsrv-vpanel { border-top: 1px solid var(--line); padding: 8px 8px 6px; flex: none; }
+.vsrv-vpanel-top { display: flex; align-items: center; gap: 4px; }
+.vsrv-vpanel-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px; border-radius: 10px; cursor: pointer; text-align: left; }
+.vsrv-vpanel-info:hover { background: var(--hover-soft); }
+.vsrv-vpanel-info > span { display: flex; flex-direction: column; min-width: 0; line-height: 18px; }
+.vsrv-vpanel-info strong { font-size: 14px; color: #00ba7c; }
+.vsrv-vpanel.connecting .vsrv-vpanel-info strong, .vsrv-vpanel.reconnecting .vsrv-vpanel-info strong { color: #ffad1f; }
+.vsrv-vpanel-info small { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vsrv-vpanel-sig { color: #00ba7c; width: 18px; height: 18px; }
+.vsrv-vpanel.connecting .vsrv-vpanel-sig, .vsrv-vpanel.reconnecting .vsrv-vpanel-sig { color: #ffad1f; }
+.vsrv-vpanel-acts { display: flex; gap: 6px; margin-top: 6px; }
+.vsrv-vbtn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; border: 1px solid var(--line); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; font-weight: 700; }
+.vsrv-vbtn .vsrv-ic { width: 17px; height: 17px; }
+.vsrv-vbtn:hover { background: var(--hover); }
+.vsrv-vbtn.on { background: var(--text); color: var(--bg) !important; border-color: var(--text); }
+.vsrv-iconbtn.danger { color: #f4212e; }
+.vsrv-iconbtn.danger:hover { background: rgba(244, 33, 46, .1); color: #f4212e; }
+.vsrv-iconbtn.danger-on { color: #f4212e; }
+.vsrv-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #000; color: #fff; position: relative; }
+.vsrv-stage-pre { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; background: var(--bg); color: var(--text); }
+.vsrv-stage-pre h2 { margin: 0; font-size: 23px; font-weight: 800; }
+.vsrv-stage-pre p { margin: 0; color: var(--muted); font-size: 15px; }
+.vsrv-stage-ic { width: 56px; height: 56px; color: var(--muted); }
+.vsrv-stage-who { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+.vsrv-btn.big { min-height: 44px; padding: 0 28px; font-size: 16px; margin-top: 6px; }
+.vsrv-stage-note { font-size: 13px !important; max-width: 340px; }
+.vsrv-tiles { flex: 1; min-height: 0; display: grid; gap: 8px; padding: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); grid-auto-rows: minmax(140px, 1fr); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.vsrv-tiles.n1 { grid-template-columns: 1fr; }
+.vsrv-tiles.has-focus { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); grid-auto-rows: 100px; }
+.vsrv-tiles.has-focus .vsrv-vtile.focus { grid-column: 1 / -1; grid-row: span 4; }
+.vsrv-vtile { position: relative; border-radius: 14px; background: #16181c; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .12s; }
+.vsrv-vtile.speaking { box-shadow: inset 0 0 0 3px #00ba7c; }
+.vsrv-vtile-hit { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border: 0; background: transparent; cursor: pointer; z-index: 1; }
+.vsrv-vtile-ava .vsrv-ava.xl { width: 80px; height: 80px; }
+.vsrv-vmedia { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+.vsrv-vvideo { width: 100%; height: 100%; object-fit: cover; display: block; background: transparent; }
+.vsrv-vtile.screen .vsrv-vvideo { object-fit: contain; }
+.vsrv-vvideo.mirror { transform: scaleX(-1); }
+.vsrv-vname { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 16px); padding: 3px 8px; border-radius: 999px; background: rgba(0, 0, 0, .6); font-size: 13px; font-weight: 700; z-index: 2; pointer-events: none; }
+.vsrv-vname > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vsrv-vname .vsrv-vflag { color: #f4212e; width: 14px; height: 14px; }
+.vsrv-vbad, .vsrv-vwait { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; z-index: 2; pointer-events: none; }
+.vsrv-vbad { background: #f4212e; }
+.vsrv-vwait { background: rgba(0, 0, 0, .6); color: #ffad1f; }
+.vsrv-vtile-more { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff !important; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2; }
+.vsrv-vbar { display: flex; justify-content: center; gap: 12px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); flex: none; }
+.vsrv-vround { width: 52px; height: 52px; border-radius: 50%; border: 0; background: #2f3336; color: #fff !important; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.vsrv-vround .vsrv-ic { width: 24px; height: 24px; }
+.vsrv-vround:hover { background: #3e4144; }
+.vsrv-vround.on { background: #fff; color: #000 !important; }
+.vsrv-vround.off { background: rgba(244, 33, 46, .18); color: #f4212e !important; }
+.vsrv-vround.leave { background: #f4212e; }
+.vsrv-vround.leave:hover { background: #dc1e29; }
+.vsrv-vvol { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 12px; font-size: 14px; font-weight: 600; }
+.vsrv-vvol input { width: 100%; accent-color: var(--blue); }
+@media (max-width: 499px) {
+  .vsrv-tiles { grid-template-columns: repeat(2, 1fr); grid-auto-rows: minmax(120px, 1fr); gap: 6px; padding: 6px; }
+  .vsrv-tiles.n1 { grid-template-columns: 1fr; }
+  .vsrv-tiles.n2 { grid-template-columns: 1fr; }
+  .vsrv-vround { width: 48px; height: 48px; }
+  .vsrv-vbar { gap: 10px; }
+}
+
 @media (max-width: 699px) {
   .vsrv-side { flex: 1; width: auto; border-right: 0; }
   .vsrv.has-channel .vsrv-rail, .vsrv.has-channel .vsrv-side { display: none; }

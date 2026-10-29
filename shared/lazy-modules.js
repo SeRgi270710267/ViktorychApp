@@ -12,7 +12,7 @@
     packages: { classic: false, scripts: ["packages.js", "packages.css"] },
     drive: { classic: false, scripts: ["drive.js", "drive.css"] },
     communities: { classic: true, scripts: ["communities.js", "communities.css"] },
-    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] }
+    servers: { classic: true, scripts: ["servers-voice.js", "servers-ui.js", "servers.css"] }
   };
   var loads = {};
   var preloadStarted = false;
