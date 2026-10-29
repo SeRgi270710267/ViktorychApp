@@ -3252,5 +3252,16 @@ SI18n.addPack("en", {
   "Backup server": "Backup server",
   "Server {n}": "Server {n}",
   "Connection is slow - showing saved posts": "Connection is slow - showing saved posts",
-  "Help": "Help"
+  "Help": "Help",
+  "Also on {platforms}. Add them?": "Also on {platforms}. Add them?",
+  "Follow on {platform}": "Follow on {platform}",
+  "Follow {name} on": "Follow {name} on",
+  "Merge": "Merge",
+  "Merged into {name}’s profile": "Merged into {name}’s profile",
+  "Not the same person? Unmerge": "Not the same person? Unmerge",
+  "Posts from": "Posts from",
+  "Same person as {name}?": "Same person as {name}?",
+  "Undo": "Undo",
+  "Unmerged. Each account has its own profile again.": "Unmerged. Each account has its own profile again.",
+  "Merged profiles": "Merged profiles"
 });
