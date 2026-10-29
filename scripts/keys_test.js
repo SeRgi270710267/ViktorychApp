@@ -257,6 +257,18 @@ assert(K.menus.open("home", fakeEl("a")));
 assert.equal(opened, "home:a");
 K.menus.unregister("home");
 assert(!K.menus.has("home"));
+/* Sidebar tab menus from the nav (openNavMenu / navMenuIds) */
+const nm = makeSandbox();
+let navOpened = "";
+nm.navMenuIds = () => ["explore", "messages"];
+nm.openNavMenu = (id, opts) => { navOpened = id + ":" + (opts && "anchor" in opts ? "opts" : ""); };
+assert(nm.ViktorychKeys.menus.open("explore", null), "nav menu opens through openNavMenu");
+assert.equal(navOpened, "explore:opts");
+const menuRows = nm.ViktorychKeysUi.paletteItems().filter((it) => it.kind === "Menus");
+assert.equal(menuRows.length, 2, "palette lists the nav menus");
+menuRows[1].run();
+assert.equal(navOpened, "messages:opts");
+assert(!/shift\+f10|contextmenu/.test(JSON.stringify(nm.ViktorychKeys.commands().filter((c) => c.id !== "app.menu").map((c) => nm.ViktorychKeys.bindingsOf(c.id)))), "only app.menu lists the menu keys");
 
 /* ---------- Palette fuzzy search ---------- */
 const fz = sb.ViktorychKeysUi.fuzzy;
@@ -275,7 +287,7 @@ const strings = new Set(K.commands().map((c) => c.label).concat(Object.values(K.
   for (const m of read(f).matchAll(/\btr\("((?:[^"\\]|\\.)*)"/g)) strings.add(JSON.parse('"' + m[1] + '"'));
   for (const m of read(f).matchAll(/^\s*\["([^"]+)", "#\//gm)) strings.add(m[1]);
 });
-["Sidebar items 1–9", "Home tabs 1–9", "Commands", "Pages", "Settings", "Accounts", "Communities", "Chats", "Themes", "Navigation", "Keyboard shortcuts"].forEach((s) => strings.add(s));
+["Sidebar items 1–9", "Home tabs 1–9", "Commands", "Pages", "Settings", "Accounts", "Communities", "Chats", "Themes", "Menus", "Menu: {name}", "Navigation", "Keyboard shortcuts"].forEach((s) => strings.add(s));
 strings.forEach((s) => {
   ["en", "ru", "es", "hi"].forEach((code) => assert(packs[code][s], code + " pack has: " + s));
 });

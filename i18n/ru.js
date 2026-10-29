@@ -3536,5 +3536,7 @@ SI18n.addPack("ru", {
   "Commands": "Команды",
   "Pages": "Страницы",
   "Chats": "Чаты",
-  "Themes": "Темы"
+  "Themes": "Темы",
+  "Menus": "Меню разделов",
+  "Menu: {name}": "Меню: {name}"
 });

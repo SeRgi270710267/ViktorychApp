@@ -3536,5 +3536,7 @@ SI18n.addPack("es", {
   "Commands": "Comandos",
   "Pages": "Páginas",
   "Chats": "Conversaciones",
-  "Themes": "Temas"
+  "Themes": "Temas",
+  "Menus": "Menús",
+  "Menu: {name}": "Menú: {name}"
 });

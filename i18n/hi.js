@@ -3530,5 +3530,7 @@ SI18n.addPack("hi", {
   "Commands": "कमांड",
   "Pages": "पेज",
   "Chats": "चैट",
-  "Themes": "थीम"
+  "Themes": "थीम",
+  "Menus": "मेन्यू",
+  "Menu: {name}": "मेन्यू: {name}"
 });

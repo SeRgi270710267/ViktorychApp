@@ -129,6 +129,8 @@
     run: function (ctx) {
       var a = ctx && ctx.active;
       var id = a ? K.menus.idFor(a) : "";
+      // Sidebar tabs own Shift+F10 and the Menu key (openNavMenu): leave the key alone.
+      if (id && navMenuIds().indexOf(id) >= 0 && !K.menus.has(id)) return false;
       if (id && K.menus.has(id)) return K.menus.open(id, a);
       return click(inPost('[data-act="menu"]'));
     } });
@@ -432,6 +434,30 @@
     ["Live Translate", "#/settings/translate"], ["Keyboard shortcuts", "#/settings/keyboard"]
   ];
 
+  function navMenuIds() {
+    try { return typeof root.navMenuIds === "function" ? (root.navMenuIds() || []).map(String) : []; } catch (err) { return []; }
+  }
+  function navItemFor(id) {
+    var list = doc.querySelectorAll("header.nav .nav-item, nav.bottom-nav a, nav.bottom-nav button, [data-menu-id]");
+    for (var i = 0; i < list.length; i++) if (K.menus.idFor(list[i]) === id && shown(list[i])) return list[i];
+    return null;
+  }
+  // Sidebar tab menus from the nav (openNavMenu) plus menus registered with K.menus.
+  function menuItems() {
+    var seen = {};
+    return navMenuIds().concat(K.menus.ids()).filter(function (id) {
+      if (seen[id]) return false;
+      seen[id] = true;
+      return true;
+    }).map(function (id) {
+      var item = navItemFor(id);
+      var name = item ? (item.getAttribute("aria-label") || item.textContent || "").replace(/\s+/g, " ").trim() : "";
+      name = name || id;
+      return { kind: "Menus", label: tr("Menu: {name}", { name: name }), hay: name + " " + id + " menu",
+        run: function () { K.menus.open(id, navItemFor(id)); } };
+    });
+  }
+
   function paletteItems() {
     var out = [];
     var ctx = K.context();
@@ -446,12 +472,13 @@
     (call("themes") || []).forEach(function (id) {
       out.push({ kind: "Themes", label: call("themeLabel", id) || id, hay: id + " theme", run: function () { call("act", "theme", { theme: id }); } });
     });
+    menuItems().forEach(function (it) { out.push(it); });
     cache.communities.forEach(function (c) { out.push({ kind: "Communities", label: c.title, sub: "#" + c.name, hay: c.title + " #" + c.name, href: "#/communities/" + encodeURIComponent(c.name) }); });
     cache.chats.forEach(function (c) { out.push({ kind: "Chats", label: c.name, hay: c.name, href: "#/messages/discord/" + encodeURIComponent(c.id) }); });
     cache.accounts.forEach(function (a) { out.push({ kind: "Accounts", label: a.name || a.handle, sub: "@" + a.handle, hay: a.name + " @" + a.handle, href: a.hash }); });
     return out;
   }
-  var KIND_ORDER = ["Commands", "Pages", "Settings", "Accounts", "Communities", "Chats", "Themes"];
+  var KIND_ORDER = ["Commands", "Pages", "Settings", "Menus", "Accounts", "Communities", "Chats", "Themes"];
 
   var palette = (function () {
     var items = [];

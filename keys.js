@@ -717,6 +717,10 @@
     },
     open: function (id, anchor) {
       var fn = menuOpeners[String(id)];
+      if (!fn && typeof root.openNavMenu === "function") {
+        // Sidebar tab menus (nav menus) open through the nav's own API.
+        try { root.openNavMenu(String(id), { anchor: anchor || null }); return true; } catch (err) { return false; }
+      }
       if (!fn) return false;
       try { return fn(anchor || null) !== false; } catch (err) { return false; }
     }
