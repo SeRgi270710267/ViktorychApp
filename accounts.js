@@ -495,6 +495,9 @@
     if (code === "too_fast") return tr("Wait a moment and try again.");
     if (code === "guard_required" || code === "rejected") return tr("Sign-up could not be checked. Try again.");
     if (code === "recovery_invalid") return tr("That recovery code did not work.");
+    if (code === "bad_expiry") return tr("Pick a time between 15 minutes and 90 days from now.");
+    if (code === "temporary_account") return tr("Temporary accounts can't do this. Save the account first.");
+    if (code === "temporary_dm_limit") return tr("Temporary accounts can only send a few messages a day to people they don't know.");
     return tr("Something went wrong. Try again.");
   }
   function layer() {
@@ -599,7 +602,7 @@
       return '<section class="land-block' + flip + '"><div class="land-copy"><h2>' + esc(row[1]) + "</h2><p>" + esc(row[2]) + '</p></div><div class="land-frame"><div class="land-device"><img alt="' + esc(row[3]) + '" src="' + row[0] + '" width="414" height="896" loading="lazy" decoding="async"></div></div></section>';
     }).join("");
     var actions = '<button class="land-btn land-btn-line" type="button" data-acct="login">' + esc(tr("Log in")) + '</button><button class="land-btn land-btn-fill" type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button>";
-    return '<div class="x-shell land-page"><header class="land-bar"><a class="land-brand" href="./">' + mark("land-mark") + "<span>" + esc(appName()) + '</span></a><div class="land-bar-actions"><div class="land-langs" role="group" aria-label="' + esc(tr("Display language")) + '">' + langs + "</div>" + actions + '</div></header><main><section class="land-hero x-land-copy"><p class="land-kicker">' + esc(appName()) + "</p><h1>" + esc(appName()) + '</h1><p class="land-tag">' + esc(tr("A home for posts, stories, and the people you choose.")) + '</p><p class="land-lead">' + esc(tr("The timeline, stories, notes, live video, and gifts. It runs in the browser and as an installed app.")) + '</p><div class="land-hero-actions">' + actions + "</div></section>" + blocks + '</main><footer class="x-foot land-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
+    return '<div class="x-shell land-page"><header class="land-bar"><a class="land-brand" href="./">' + mark("land-mark") + "<span>" + esc(appName()) + '</span></a><div class="land-bar-actions"><div class="land-langs" role="group" aria-label="' + esc(tr("Display language")) + '">' + langs + "</div>" + actions + '</div></header><main><section class="land-hero x-land-copy"><p class="land-kicker">' + esc(appName()) + "</p><h1>" + esc(appName()) + '</h1><p class="land-tag">' + esc(tr("A home for posts, stories, and the people you choose.")) + '</p><p class="land-lead">' + esc(tr("The timeline, stories, notes, live video, and gifts. It runs in the browser and as an installed app.")) + '</p><div class="land-hero-actions">' + actions + '</div><button class="land-temp" type="button" data-acct="open-temp">' + esc(tr("Try a temporary account")) + "</button></section>" + blocks + '</main><footer class="x-foot land-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
   }
   function honeypotHtml() {
     return '<div class="acct-hp" aria-hidden="true"><label>Fax<input name="fax" tabindex="-1" autocomplete="off" value=""></label></div>';
@@ -700,7 +703,8 @@ var numberNote = form.passkey
     return '<p class="acct-sub">' + subText + "</p>" +
       field("displayName", form.profileLess ? tr("Name (optional)") : tr("Name"), "text", 50) +
       profRow +
-      errorHtml() + nextButton("next", tr("Next"));
+      errorHtml() + nextButton("next", tr("Next")) +
+      '<p class="acct-switch"><button type="button" data-acct="open-temp">' + esc(tr("Try a temporary account")) + "</button></p>";
   }
   function loginBody() {
     var digits = String(form.accountNumber || "").replace(/\D/g, "");
@@ -897,6 +901,8 @@ var numberNote = form.passkey
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
     else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
+    else if (view === "temp") html += modal(tr("Temporary account"), tempBody());
+    else if (view === "temp-saved") html += modal(tr("Account saved"), tempSavedBody());
     else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
     else if (view === "edit") html += editModal(editBody());
     else if (view === "crop") html += cropModal();
@@ -3559,7 +3565,8 @@ function signupPayload() {
   function nameRowHtml(account) {
     var name = account.displayName || account.handle || "";
     var lock = (account.privateFollows || account.locked) ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
-    return '<span class="name-row-text">' + esc(name) + "</span>" + lock + (account.owner ? badge() : "") + (window.ViktorychAffiliations ? window.ViktorychAffiliations.slot(account.publicId) : "");
+    var temp = account.temporary ? '<span class="temp-label">' + esc(tr("Temporary")) + "</span>" : "";
+    return '<span class="name-row-text">' + esc(name) + "</span>" + lock + temp + (account.owner ? badge() : "") + (window.ViktorychAffiliations ? window.ViktorychAffiliations.slot(account.publicId) : "");
   }
   function drawerHead() {
     var session = readSession();
@@ -3794,6 +3801,274 @@ function signupPayload() {
     if (isOwnerAccount(account)) return "";
     return '<h2>' + esc(tr("Delete account")) + '</h2><p class="set-sub">' + esc(tr("Permanently delete this account and the data tied to it.")) + '</p><button class="outline acct-danger" type="button" data-acct="open-delete">' + esc(tr("Delete account")) + "</button>";
   }
+  /* Temporary accounts: one tap, no number to keep, and the account and its
+     data are deleted at the time picked here. The server cron does the
+     deletion even if this device never comes back. */
+  var TEMP_PICKS = [["1h", "1 hour"], ["1d", "1 day"], ["7d", "7 days"], ["30d", "30 days"]];
+  var tempState = { pick: "1d", until: "", busy: false, error: "", note: "", saveData: null, confirm: false, ownerLoaded: false, ownerLoading: false, ownerLabel: true, ownerCount: 0 };
+  function tempDeviceKey() {
+    var key = "";
+    try { key = localStorage.getItem("va-device-key") || ""; } catch (err) { key = ""; }
+    if (/^[A-Za-z0-9_-]{16,128}$/.test(key)) return key;
+    var bytes = new Uint8Array(18);
+    try { crypto.getRandomValues(bytes); } catch (err) { for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256); }
+    key = Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    try { localStorage.setItem("va-device-key", key); } catch (err) { /* the server still limits by address */ }
+    return key;
+  }
+  function tempExpiresAt(account) {
+    var t = account && account.temporary;
+    return t && typeof t === "object" ? Number(t.expiresAt) || 0 : 0;
+  }
+  function tempLeft(ms) {
+    var mins = Math.max(1, Math.ceil(ms / 60000));
+    if (mins < 60) return tr("{n} min", { n: mins });
+    var hours = Math.round(mins / 60);
+    if (hours < 48) return tr("{n} h", { n: hours });
+    return tr("{n} days", { n: Math.round(hours / 24) });
+  }
+  function tempChipText(account) {
+    var at = tempExpiresAt(account);
+    if (!at) return "";
+    return tr("Temporary · deletes in {time}", { time: tempLeft(at - Date.now()) });
+  }
+  function localInputValue(ms) {
+    var d = new Date(ms);
+    function two(n) { return ("0" + n).slice(-2); }
+    return d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) + "T" + two(d.getHours()) + ":" + two(d.getMinutes());
+  }
+  function tempPickerHtml(prefix) {
+    var chips = TEMP_PICKS.concat([["custom", "Custom"]]).map(function (row) {
+      var on = tempState.pick === row[0];
+      return '<button class="temp-chip' + (on ? " on" : "") + '" type="button" role="radio" aria-checked="' + (on ? "true" : "false") + '" data-acct="temp-pick" data-pick="' + row[0] + '">' + esc(tr(row[1])) + "</button>";
+    }).join("");
+    var custom = tempState.pick === "custom"
+      ? '<label class="acct-field temp-date"><input type="datetime-local" name="tempUntil" data-temp-until min="' + localInputValue(Date.now() + 15 * 60000) + '" max="' + localInputValue(Date.now() + 89 * 86400000) + '" value="' + esc(tempState.until || localInputValue(Date.now() + 3 * 86400000)) + '" aria-label="' + esc(tr("Delete on")) + '"></label>'
+      : "";
+    return '<div class="temp-picks" role="radiogroup" aria-label="' + esc(tr("Delete after")) + '" id="' + prefix + '-picks">' + chips + "</div>" + custom;
+  }
+  function tempChoiceBody() {
+    if (tempState.pick !== "custom") return { expiresIn: tempState.pick };
+    var raw = tempState.until || localInputValue(Date.now() + 3 * 86400000);
+    var when = new Date(raw).getTime();
+    if (!isFinite(when)) return null;
+    return { expiresAt: when };
+  }
+  function dataSaverOn() {
+    var saver = window.ViktorychDataSaver;
+    if (tempState.saveData != null) return !!tempState.saveData;
+    try { return !!(saver && saver.detect && saver.detect().on); } catch (err) { return false; }
+  }
+  function tempBody() {
+    var saver = window.ViktorychDataSaver && window.ViktorychDataSaver.apply
+      ? '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Use less data")) + "</b><p>" + esc(tr("Lighter images and no autoplay.")) + '</p></div><button class="tab-switch' + (dataSaverOn() ? " on" : "") + '" type="button" role="switch" aria-checked="' + (dataSaverOn() ? "true" : "false") + '" data-acct="temp-savedata"><i></i></button></div>'
+      : "";
+    var notes = [tr("No email, phone, or password. This device keeps the key."), tr("Gifts and points spending are off, and messages to people you don't know are limited."), tr("Others may see a Temporary label on your profile.")];
+    return '<p class="acct-sub">' + esc(tr("Try the app without signing up. The account and everything you post are deleted at the time you pick.")) + "</p>" +
+      field("displayName", tr("Name (optional)"), "text", 50) +
+      '<h2 class="temp-h">' + esc(tr("Delete after")) + "</h2>" + tempPickerHtml("temp-new") + saver +
+      '<ul class="temp-notes">' + notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>" +
+      honeypotHtml() + errorHtml() + nextButton("do-temp", tr("Start temporary account")) +
+      '<p class="acct-switch"><button type="button" data-acct="signup">' + esc(tr("Create a full account instead")) + "</button></p>";
+  }
+  function doTempSignup() {
+    if (authBusy) return;
+    errorText = "";
+    var choice = tempChoiceBody();
+    if (!choice) { errorText = errorMessage("bad_expiry"); paint(); return; }
+    var body = {
+      temporary: true,
+      displayName: String(form.displayName || "").trim(),
+      deviceKey: tempDeviceKey(),
+      turnstileToken: turnstileToken()
+    };
+    Object.keys(choice).forEach(function (k) { body[k] = choice[k]; });
+    var wantSaver = dataSaverOn();
+    authBusy = true;
+    paint();
+    ensureGuard().then(function (pow) {
+      body.pow = pow;
+      body.fax = faxValue();
+      return api("/v1/signup", { method: "POST", body: body });
+    }).then(function (res) {
+      authBusy = false;
+      if (res.status === 201 && res.token && res.account) {
+        var id = res.account.publicId || "";
+        if (id) {
+          writeStored("follows-imported-v2-" + id, "1");
+          if (res.accountNumber) writeStored("temp-number-" + id, String(res.accountNumber));
+        }
+        if (wantSaver && window.ViktorychDataSaver && window.ViktorychDataSaver.apply) {
+          try { window.ViktorychDataSaver.apply(true); } catch (err) { /* the account still opens */ }
+        }
+        if (typeof window.ViktorychAccounts.onSignup === "function") {
+          try { window.ViktorychAccounts.onSignup(res.account); } catch (err) { /* the session still opens */ }
+        }
+        commitSession(res.token, res.account);
+        return;
+      }
+      if (view !== "temp") return;
+      errorText = res.status === 429 && res.error !== "rate_limited" ? tr("Too many temporary accounts today. Try again tomorrow.") : errorMessage(res.error);
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      if (view !== "temp") return;
+      errorText = offlineMessage();
+      paint();
+    });
+  }
+  function updateTempAccount(expiresAt) {
+    var session = readSession();
+    if (!session || !session.account) return;
+    if (expiresAt) session.account.temporary = { expiresAt: expiresAt };
+    else delete session.account.temporary;
+    writeSession(session);
+    tempTick();
+  }
+  function tempSettingsHtml(account) {
+    var at = tempExpiresAt(account);
+    if (!at) return "";
+    var when = new Date(at);
+    var whenText = when.toLocaleString(readLang(), { dateStyle: "medium", timeStyle: "short" });
+    if (tempState.confirm) {
+      return '<div class="temp-settings"><h2>' + esc(tr("Delete this account now?")) + '</h2><p class="set-sub">' + esc(tr("The account, its posts, messages, and files are deleted right away. This cannot be undone.")) + '</p><button class="acct-next acct-danger" type="button" data-acct="temp-delete-go"' + (tempState.busy ? " disabled" : "") + ">" + esc(tr("Delete now")) + '</button><button class="outline" type="button" data-acct="temp-delete-cancel">' + esc(tr("Cancel")) + "</button></div>";
+    }
+    return '<div class="temp-settings"><h2>' + esc(tr("Temporary account")) + '</h2><p class="temp-badge-line"><span class="temp-pill">' + esc(tempChipText(account)) + '</span></p><p class="set-sub">' + esc(tr("Deletes on {date}.", { date: whenText })) + "</p>" +
+      '<h2>' + esc(tr("Change the delete time")) + '</h2><p class="set-sub">' + esc(tr("Counted from now.")) + "</p>" + tempPickerHtml("temp-set") +
+      '<button class="outline" type="button" data-acct="temp-extend"' + (tempState.busy ? " disabled" : "") + ">" + esc(tr("Save delete time")) + "</button>" +
+      '<h2>' + esc(tr("Save this account")) + '</h2><p class="set-sub">' + esc(tr("Keep it for good. You get an account number and recovery codes to sign in on other devices.")) + '</p><button class="outline" type="button" data-acct="temp-keep"' + (tempState.busy ? " disabled" : "") + ">" + esc(tr("Save this account")) + "</button>" +
+      '<button class="outline acct-danger" type="button" data-acct="temp-delete">' + esc(tr("Delete now")) + "</button>" +
+      (tempState.error ? '<p class="acct-error" role="alert">' + esc(tempState.error) + "</p>" : "") +
+      (tempState.note ? '<p class="set-sub" role="status">' + esc(tempState.note) + "</p>" : "") + "</div>";
+  }
+  function tempRender() {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function tempExtend() {
+    var session = readSession();
+    var choice = tempChoiceBody();
+    if (!session || tempState.busy) return;
+    if (!choice) { tempState.error = errorMessage("bad_expiry"); tempRender(); return; }
+    tempState.busy = true;
+    tempState.error = "";
+    tempState.note = "";
+    api("/v1/account/temporary", { method: "PUT", token: session.token, body: choice }).then(function (res) {
+      tempState.busy = false;
+      if (res.status === 200 && res.expiresAt) {
+        updateTempAccount(Number(res.expiresAt));
+        tempState.note = tr("Delete time saved.");
+      } else tempState.error = errorMessage(res.error);
+      tempRender();
+    }, function () { tempState.busy = false; tempState.error = offlineMessage(); tempRender(); });
+  }
+  function tempKeep() {
+    var session = readSession();
+    if (!session || tempState.busy) return;
+    tempState.busy = true;
+    tempState.error = "";
+    api("/v1/account/temporary/keep", { method: "POST", token: session.token, headers: { "X-Viktorych-Intent": "account-keep" }, body: {} }).then(function (res) {
+      tempState.busy = false;
+      if (res.status !== 200 || !res.ok) { tempState.error = errorMessage(res.error); tempRender(); return; }
+      var id = session.account.publicId || "";
+      var number = id ? readStored("temp-number-" + id) : "";
+      updateTempAccount(0);
+      openAuth("temp-saved");
+      form.savedNumber = number || "";
+      form.recoveryCodes = res.recoveryCodes || [];
+      if (id) removeStored("temp-number-" + id);
+      paint();
+      tempRender();
+    }, function () { tempState.busy = false; tempState.error = offlineMessage(); tempRender(); });
+  }
+  function tempSavedBody() {
+    var digits = String(form.savedNumber || "").replace(/\D/g, "");
+    var number = digits ? '<p class="acct-sub">' + esc(tr("This number is shown once. Save it now. It is the only way back into this account.")) + '</p><div class="acct-number" role="status">' + esc(grouped(digits)) + '</div><div class="acct-row"><button type="button" data-acct="temp-copy-number">' + esc(tr("Copy")) + "</button></div>" : "";
+    return '<p class="acct-sub">' + esc(tr("This account is no longer temporary.")) + "</p>" + number + recoveryShownBody();
+  }
+  function tempDeleteNow() {
+    var session = readSession();
+    if (!session || tempState.busy) return;
+    tempState.busy = true;
+    tempRender();
+    api("/v1/account/temporary/delete", { method: "POST", token: session.token, headers: { "X-Viktorych-Intent": "account-delete" }, body: {} }).then(function (res) {
+      tempState.busy = false;
+      if (res.status === 200 && res.ok) {
+        wipeDevice();
+        showDeleted();
+        return;
+      }
+      tempState.confirm = false;
+      tempState.error = res.error === "not_temporary" ? tr("This account is no longer temporary.") : deleteError(res.error);
+      tempRender();
+    }, function () { tempState.busy = false; tempState.error = offlineMessage(); tempRender(); });
+  }
+  var tempChecking = false;
+  /* The countdown chip, and a local wipe once the time has passed. The
+     server deletes the account on its own schedule either way. */
+  function tempTick() {
+    var session = readSession();
+    var at = session && tempExpiresAt(session.account);
+    var chip = document.getElementById("temp-countdown");
+    if (!at) { if (chip) chip.remove(); return; }
+    if (Date.now() >= at) {
+      if (tempChecking) return;
+      tempChecking = true;
+      api("/v1/account/temporary", { token: session.token }).then(function (res) {
+        tempChecking = false;
+        if (res.status === 200 && res.temporary && Number(res.expiresAt) > Date.now()) { updateTempAccount(Number(res.expiresAt)); return; }
+        if (res.status === 200 && !res.temporary) { updateTempAccount(0); return; }
+        if (res.status === 401 || res.status === 200) { wipeDevice(); showDeleted(); }
+      }, function () { tempChecking = false; });
+      return;
+    }
+    if (!document.body) return;
+    if (!chip) {
+      chip = document.createElement("a");
+      chip.id = "temp-countdown";
+      chip.className = "temp-countdown";
+      chip.href = "#/settings";
+      document.body.appendChild(chip);
+    }
+    var text = tempChipText(session.account);
+    if (chip.textContent !== text) chip.textContent = text;
+  }
+  try {
+    if (typeof setInterval === "function") setInterval(tempTick, 30000);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tempTick);
+    else if (typeof setTimeout === "function") setTimeout(tempTick, 0);
+  } catch (err) { /* no timers here; settings still show the time */ }
+  function loadOwnerTemp() {
+    var session = readSession();
+    if (!session || tempState.ownerLoading) return;
+    tempState.ownerLoading = true;
+    api("/v1/owner/temporary", { token: session.token }).then(function (res) {
+      tempState.ownerLoading = false;
+      tempState.ownerLoaded = true;
+      if (res.status === 200) { tempState.ownerLabel = res.label !== false; tempState.ownerCount = Number(res.accounts) || 0; }
+      tempRender();
+    }, function () { tempState.ownerLoading = false; tempState.ownerLoaded = true; });
+  }
+  function ownerTempHtml() {
+    if (!tempState.ownerLoaded && !tempState.ownerLoading) loadOwnerTemp();
+    var on = tempState.ownerLabel;
+    return '<h2>' + esc(tr("Temporary accounts")) + '</h2><p class="set-sub">' + esc(tr("{n} temporary accounts right now. Show a Temporary label on their profiles to everyone else.", { n: tempState.ownerCount })) + '</p><button class="tab-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" data-acct="toggle-temp-label"><span>' + esc(tr("Temporary label")) + "</span><i></i></button>";
+  }
+  function toggleTempLabel() {
+    var session = readSession();
+    if (!session) return;
+    var next = !tempState.ownerLabel;
+    tempState.ownerLabel = next;
+    tempRender();
+    api("/v1/owner/temporary", { method: "PUT", token: session.token, body: { label: next } }).then(function (res) {
+      if (res.status !== 200) tempState.ownerLabel = !next;
+      tempRender();
+    }, function () { tempState.ownerLabel = !next; tempRender(); });
+  }
+  document.addEventListener("input", function (event) {
+    var el = event.target;
+    if (!el || !el.hasAttribute || !el.hasAttribute("data-temp-until")) return;
+    tempState.until = el.value;
+  }, true);
   function deleteReady() {
     var session = readSession();
     var account = session && session.account;
@@ -4109,9 +4384,9 @@ function signupPayload() {
     }
     if (window.ProfileAbout) window.ProfileAbout.ensure(account, "");
     var aboutPrivacy = window.ProfileAbout && window.ProfileAbout.privacyOpen() ? window.ProfileAbout.privacyHtml(account.about || { sections: [] }) : "";
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
+    return '<div class="set-block acct-settings">' + tempSettingsHtml(account) + '<h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
       '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + inactivityHtml(account) + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? ownerTempHtml() + '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + (tempExpiresAt(account) ? "" : inactivityHtml(account) + deleteEntryHtml(account)) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
     var reqKind = event.target && event.target.closest ? event.target.closest("[data-req-kind]") : null;
     if (reqKind) {
@@ -4180,6 +4455,22 @@ function signupPayload() {
       return;
     }
     if (act === "signup") openAuth("signup");
+    else if (act === "open-temp") { tempState.pick = "1d"; tempState.until = ""; tempState.saveData = null; openAuth("temp"); }
+    else if (act === "temp-pick") {
+      tempState.pick = acct.getAttribute("data-pick") || "1d";
+      if (view === "temp") paint(); else tempRender();
+    }
+    else if (act === "temp-savedata") { tempState.saveData = !dataSaverOn(); paint(); }
+    else if (act === "do-temp") doTempSignup();
+    else if (act === "temp-extend") tempExtend();
+    else if (act === "temp-keep") tempKeep();
+    else if (act === "temp-delete") { tempState.confirm = true; tempState.error = ""; tempRender(); }
+    else if (act === "temp-delete-cancel") { tempState.confirm = false; tempRender(); }
+    else if (act === "temp-delete-go") tempDeleteNow();
+    else if (act === "toggle-temp-label") toggleTempLabel();
+    else if (act === "temp-copy-number") {
+      try { navigator.clipboard.writeText(String(form.savedNumber || "").replace(/\D/g, "")); } catch (err) { /* select it by hand */ }
+    }
     else if (act === "login") openAuth("login");
     else if (act === "open-restore") openAuth("restore");
     else if (act === "open-emergency") openAuth("emergency");
