@@ -7483,7 +7483,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const born = Number(item && item.createdAt) || Date.parse(post.date || "") || 0;
       const editable = Date.now() - born < 3600000;
       const sub = post.community ? ` data-sub="${esc(post.community.name)}"` : "";
-      return `<button type="button" class="menu-danger" data-act="app-delete" data-id="${esc(post.id)}"${sub}>${icon("trash")}<span>${esc(tr("Delete"))}</span></button>`
+      return `<button type="button" class="menu-danger" data-act="app-delete" data-id="${esc(post.id)}"${sub}>${esc(tr("Delete"))}</button>`
         + (editable ? `<button type="button" data-act="app-edit" data-id="${esc(post.id)}"${sub}>${icon("pencil")}<span>${esc(tr("Edit"))}</span></button>` : "")
         + quote;
     }
