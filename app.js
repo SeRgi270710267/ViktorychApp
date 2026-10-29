@@ -23909,8 +23909,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const keys = window.ViktorychKeys;
     if (!keys || typeof keys.register !== "function" || xvKeys.done) return !!xvKeys.done;
     const inViewer = () => !!(STATE.viewer && STATE.viewer.video);
-    keys.register({ id: "video.next", keys: ["j", "down"], scope: "media", label: "Next video", group: "Media and video", when: inViewer, run: () => xvStep(1) });
-    keys.register({ id: "video.prev", keys: ["k", "up"], scope: "media", label: "Previous video", group: "Media and video", when: inViewer, run: () => xvStep(-1) });
+    keys.register({ id: "video.next", keys: ["j", "down"], scope: "media", label: "Next video", when: inViewer, run: () => xvStep(1) });
+    keys.register({ id: "video.prev", keys: ["k", "up"], scope: "media", label: "Previous video", when: inViewer, run: () => xvStep(-1) });
     xvKeys.done = true;
     return true;
   }
