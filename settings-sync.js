@@ -19,7 +19,7 @@
       ["followingSort", "Following options"], ["forYouReposts", "Show reposts"], ["forYouReplies", "Show replies in tab"],
       ["livePreview", "Live previews"], ["friendsRail", "Friends panel"], ["translateTo", "Translate to"],
       ["translateAuto", "Automatically translate posts"], ["translateNever", "Never translate"],
-      ["peopleLinks", "Merged profiles"]
+      ["peopleLinks", "Merged profiles"], ["busyPrefs", "Posting volume"]
     ] },
     { id: "notifications", label: "Notifications", keys: [["notify", "Notifications"], ["bells", "Account alerts"]] },
     { id: "privacy", label: "Privacy and mentions", keys: [
@@ -34,7 +34,7 @@
   // keep their union merge in accounts.js.
   var LWW = ["appearance", "showPictures", "showBanners", "autoplay", "followingSort", "forYouReposts", "forYouReplies",
     "storyNotes", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells",
-    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "peopleLinks", "musicPrefs", "brandLogo"];
+    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "peopleLinks", "busyPrefs", "musicPrefs", "brandLogo"];
   var CAT_OF = {};
   CATS.forEach(function (cat) { cat.keys.forEach(function (row) { CAT_OF[row[0]] = cat.id; }); });
   // Companion keys travel with their setting.
