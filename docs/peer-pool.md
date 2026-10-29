@@ -145,3 +145,64 @@ the Worker writes no manifests and the pool only shares app files.
   server both fail, and a phone on mobile data that joins only while
   blocked, gets the feed in rescue mode and uploads nothing. It uses real WebRTC
   where the sandbox allows it, and a stand-in transport otherwise.
+
+## Carrying anything: opaque blobs
+
+The pool is content-agnostic. Any module (private list shards, quoted or
+referenced items, media references) can hand it bytes, and any peer may
+cache, request, advertise and relay them. What a user's feed *shows* is
+decided by that feed's own code, never by what the pool carries.
+
+```js
+const pool = window.ViktorychPool;
+const h = await pool.putBlob(bytes);            // SHA-256 hex, "" if too big (> 6 MB)
+pool.hasBlob(h);                                // held here or by a connected peer
+const got = await pool.getBlob(h, size, {       // Uint8Array or null
+  priority: "visible",                          // "visible" | "next" | "likely" | "background"
+  waitMs: 1500                                  // how long to wait for a holder to show up
+});
+```
+
+- The only name on the wire is the content id (SHA-256 of the bytes). Room
+  announcements carry `{h, size}` only; manifest requests carry a 32-hex
+  key id (`keyId(key)` in `shared/peer-pool.js`), never a file, account or
+  list name. Put no names inside the bytes either: encrypt private shards
+  before `putBlob`, so a relaying peer holds ciphertext it cannot read.
+- Every blob is checked against its hash before `getBlob` returns it; a bad
+  copy is counted as rejected and the caller gets `null` and falls back to
+  its own fetch. The pool never decides what is current: the caller passes
+  the hash it got from a source it trusts (a signed index, the server).
+- `getBlob` only reads from peers. It is a fallback or a race partner for
+  the caller's own request, never a replacement for it.
+
+## Local scheduler (`shared/pool-scheduler.js`)
+
+All decisions are made on the device from what it measured. There is no
+coordinator. Settings has a switch, "Choose sources and sharing
+automatically" (on by default). Off means every peer is equal, the flat
+20 MB/day cap, and oldest-first eviction.
+
+- **Source scores.** Each peer (`peer:<id>`) and the normal request chain
+  (`origin`) keep a moving average of latency, throughput and failures,
+  which fades back to a prior over 30 minutes. Peers are pulled from in score
+  order. `pool.scheduler.race([{name, run(signal)}])` starts the two best
+  sources together, takes the first good answer, aborts the other, and
+  falls back to the rest. `pool.scheduler.record(name, {ms, bytes, ok})`
+  and `rank(names)` are there for other chains. The API chain from #341
+  keeps its own Worker/Render speed order (`bySpeed`); the pool compares
+  peers against that chain as one source.
+- **Priorities.** `getBlob` work runs at most 3 at a time: visible, then
+  next screen, then likely next, then background. Background work is
+  dropped when the budget says no prefetch.
+- **Device budget.** Seeding is off with Save data, mobile data, a metered link, or
+  battery under 15% when not charging. It is low (5 MB/day, 2 peers) in a
+  background tab, on 3G or under 30% battery. It is normal (20 MB/day,
+  3 peers) otherwise, and high (40 MB/day, 4 peers) on unmetered Wi-Fi or
+  wired while charging or on a desktop. Prefetch is only allowed at normal
+  or high in a visible tab. Rescue still downloads with seeding off.
+- **Cache.** The memory store is 2% of free quota, between 4 and 32 MB
+  (16 MB when unknown). It evicts by recency weighted by how often peers
+  asked for an item.
+- **Seeding.** Announcements list the rarest items first and collapse
+  duplicate content ids. A peer that asks for the same chunk twice gets a
+  miss.

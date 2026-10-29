@@ -203,6 +203,7 @@ const SHELL_FILES = [
   "./shared/peer-media.js",
   "./peer-pool.js",
   "./shared/peer-pool.js",
+  "./shared/pool-scheduler.js",
   "./shared/device-performance.js"
 ];
 

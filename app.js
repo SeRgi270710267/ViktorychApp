@@ -4259,12 +4259,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const line = tr("Saved {saved} from peers, shared {shared}").replace("{saved}", mb(st && st.saved)).replace("{shared}", mb(st && st.shared));
     const rescued = st && st.rescued ? `<p class="phandle" data-pool-rescued>${esc(tr("Got {n} updates from peers while the server was out of reach").replace("{n}", String(st.rescued)))}</p>` : "";
     return `<h2>${esc(tr("Sharing pool"))}</h2>
-      <p class="phandle">${esc(tr("Devices that turned this on pass each other the public feed files and app files they already have, so pages load from nearby and the server works less. Every file is checked against a signed fingerprint before it is used."))}</p>
+      <p class="phandle">${esc(tr("Devices that turned this on pass each other files they already have: feed files, app files and other posts, each named only by its fingerprint, never by an account or list name. Pages load from nearby and the server works less. Every file is checked against its fingerprint before it is used."))}</p>
       <p class="phandle">${esc(tr("When our servers are blocked or failing, devices in the pool can still pass you the newest posts, checked against the same signed fingerprint. On mobile data this needs On, and nothing is uploaded from mobile data. Photos and videos from other sites can't be checked, so they aren't shared."))}</p>
-      <p class="phandle">${esc(tr("Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device."))}</p>
+      <p class="phandle">${esc(tr("Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device, 40 MB on Wi-Fi while charging, and less on low battery or in the background."))}</p>
       <div class="theme-row" role="group" aria-label="${esc(tr("Sharing pool"))}">
         ${["auto", "on", "off"].map((id) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="peer-pool" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
       </div>
+      <div class="theme-row"><button class="outline${!st || st.smart !== false ? " on" : ""}" type="button" data-act="pool-smart" aria-pressed="${!st || st.smart !== false ? "true" : "false"}">${esc(tr("Choose sources and sharing automatically"))}</button></div>
+      <p class="phandle">${esc(tr("Uses the fastest of nearby devices and our servers, loads what is on screen first, and shares less on low battery, mobile data or in the background."))}</p>
       <p class="phandle" data-pool-status>${esc(status)}</p>
       <p class="phandle" data-pool-stats>${esc(line)}</p>${rescued}`;
   }
@@ -19809,6 +19811,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "peer-media") {
       const mode = el.dataset.mode === "on" || el.dataset.mode === "off" ? el.dataset.mode : "auto";
       writeDevicePerf({ peerMedia: mode });
+      render();
+      return;
+    }
+    if (act === "pool-smart") {
+      const pool = window.ViktorychPool;
+      if (pool && pool.setSmart) pool.setSmart(!(pool.stats().smart !== false));
       render();
       return;
     }

@@ -88,7 +88,7 @@
     device: ["profile", "webllmAccepted"],
     storage: [],
     friendP2P: [],
-    pool: [],
+    pool: ["smart"],
     liveTranslate: ["model", "engine", "target", "source", "voice", "duck", "chrome"]
   };
 

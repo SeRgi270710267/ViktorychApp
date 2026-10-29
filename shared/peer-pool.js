@@ -127,6 +127,12 @@ export async function chunkHashes(value) {
 }
 
 /* The exact text a manifest signature covers. */
+/* A content id for a manifest key, so peers ask for "the newest version of
+   this document" without a readable name on the wire. */
+export async function keyId(key) {
+  return (await sha256Hex("viktorych-pool-key:" + String(key || ""))).slice(0, 32);
+}
+
 export function manifestText(entry) {
   const e = entry || {};
   return ["vk-pool-v1", String(e.key || ""), String(e.mark || ""), String(e.h || ""), String(Number(e.size) || 0), String(Number(e.at) || 0), (Array.isArray(e.c) ? e.c : []).join(",")].join("\n");

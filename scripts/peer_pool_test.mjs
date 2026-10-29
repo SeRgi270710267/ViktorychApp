@@ -137,7 +137,7 @@ async function main() {
     const url = new URL(req.url, "http://x");
     const p = url.pathname;
     if (p === "/p.html") { res.writeHead(200, { "content-type": "text/html" }); res.end(PAGE(base)); return; }
-    if (p === "/peer-pool.js" || p === "/shared/peer-pool.js") { res.writeHead(200, { "content-type": "text/javascript" }); res.end(fs.readFileSync(path.join(root, p.slice(1)))); return; }
+    if (p === "/peer-pool.js" || p === "/shared/peer-pool.js" || p === "/shared/pool-scheduler.js") { res.writeHead(200, { "content-type": "text/javascript" }); res.end(fs.readFileSync(path.join(root, p.slice(1)))); return; }
     if (p === "/api/v1/media/swarm/ticket") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ticket: "mt1.test" })); return; }
     if (p.startsWith("/blocked/")) { hits.blocked = (hits.blocked || 0) + 1; res.writeHead(503); res.end(); return; }
     if (p.startsWith("/api/v1/data/")) {
@@ -237,6 +237,29 @@ async function main() {
     const sc = await C.evaluate(() => window.ViktorychPool.stats());
     console.log("stats A shared " + sa.shared + " B saved " + sb.saved + " shared " + sb.shared + " C saved " + sc.saved + " tries/hits B " + sb.tries + "/" + sb.hits);
     check(sb.saved >= DOCS["feeds.json"].length && sa.shared > 0, "stats count bytes saved and shared");
+
+    // Opaque blobs: any module can hand the pool content-addressed bytes.
+    const blob = await A.evaluate(async () => {
+      const bytes = new Uint8Array(150000);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 2654435761) >>> 24;
+      const h = await window.ViktorychPool.putBlob(bytes);
+      return { h, size: bytes.length };
+    });
+    const gotBlob = await B.evaluate(async ([h, size]) => {
+      const bytes = await window.ViktorychPool.getBlob(h, size, { waitMs: 3000 });
+      if (!bytes) return null;
+      const d = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      return Array.from(d, (x) => x.toString(16).padStart(2, "0")).join("");
+    }, [blob.h, blob.size]);
+    check(gotBlob === blob.h, "an opaque blob put on one page is fetched by its hash from another");
+    await A.evaluate((h) => { window.ViktorychPool._state.store.get(h).bytes[1000] ^= 1; }, blob.h);
+    await B.evaluate((h) => { const st = window.ViktorychPool._state; st.storeBytes -= st.store.get(h).bytes.byteLength; st.store.delete(h); }, blob.h);
+    const badBlob = await C.evaluate(async ([h, size]) => {
+      const r0 = window.ViktorychPool.stats().rejected;
+      const bytes = await window.ViktorychPool.getBlob(h, size, { waitMs: 3000 });
+      return { got: !!bytes, rejected: window.ViktorychPool.stats().rejected - r0 };
+    }, [blob.h, blob.size]);
+    check(!badBlob.got, "a tampered blob is refused (" + badBlob.rejected + " rejection counted)");
 
     // ----- blocked: no change signal, the server fails -----
     await C.evaluate(() => { window.ViktorychPulse.ok = () => false; });

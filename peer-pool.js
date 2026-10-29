@@ -22,6 +22,7 @@
      so there is nothing to hash or pass on. */
 
 import * as R from "./shared/peer-pool.js";
+import * as Q from "./shared/pool-scheduler.js";
 
 // Three unrelated free STUN services; the last one answers on port 443,
 // which networks that block odd UDP ports usually leave open.
@@ -39,6 +40,12 @@ const NEWS_EVERY_MS = 60000;
 const MF_RATE = 30;
 
 const S = {
+  kids: new Map(),
+  smart: true,
+  scores: new Map(),
+  budget: { seed: 2, why: "normal", uploadCap: R.UPLOAD_DAY_CAP, maxPeers: R.MAX_PEERS, prefetch: true },
+  cap: R.STORE_MAX,
+  battery: null,
   mode: "auto",
   facts: null,
   on: false,
@@ -82,6 +89,7 @@ function writeJson(key, value) {
 function loadPrefs() {
   const saved = readJson(R.POOL_KEY, {});
   S.mode = R.normalizeMode(saved.mode);
+  S.smart = saved.smart !== false;
   const st = readJson(R.POOL_STATS_KEY, {});
   ["saved", "shared", "origin", "hits", "tries", "rejected", "rescued"].forEach((k) => { S.stats[k] = Math.max(0, Number(st[k]) || 0); });
   if (st.upload && typeof st.upload === "object") S.upload = { day: String(st.upload.day || ""), used: Number(st.upload.used) || 0 };
@@ -133,6 +141,10 @@ function evaluate() {
   // servers keep failing. On mobile data it needs the switch set to On.
   S.rescue = !S.on && signedIn && R.poolRescue(S.mode, S.facts, troubled());
   if (!signedIn) S.reason = "signedOut";
+  const conn = (scope.navigator && scope.navigator.connection) || {};
+  S.budget = S.smart
+    ? Q.deviceBudget(S.facts, { battery: S.battery, hidden: !visible(), effectiveType: conn.effectiveType, rescue: S.rescue })
+    : { seed: 2, why: "flat", uploadCap: R.UPLOAD_DAY_CAP, maxPeers: R.MAX_PEERS, prefetch: true };
   syncRooms();
   return S.on;
 }
@@ -257,14 +269,14 @@ function onRoom(room, raw) {
     announceAll(room);
     const list = (Array.isArray(msg.peers) ? msg.peers : []).filter((id) => /^[a-f0-9]{8,32}$/.test(id));
     for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = list[i]; list[i] = list[j]; list[j] = t; }
-    list.slice(0, R.MAX_PEERS).forEach((id) => openLink(id, true, room));
+    list.slice(0, peerCap()).forEach((id) => openLink(id, true, room));
     return;
   }
   if (msg.op === "peer") {
     announceAll(room);
     // A reader in rescue does not announce anything, so reach out to new
     // peers instead of waiting to hear what they have.
-    if (S.rescue && msg.id && S.links.size < R.MAX_PEERS) openLink(String(msg.id), true, room);
+    if (S.rescue && msg.id && S.links.size < peerCap()) openLink(String(msg.id), true, room);
     return;
   }
   if (msg.op === "have" && msg.from) {
@@ -272,7 +284,7 @@ function onRoom(room, raw) {
     let set = S.haves.get(from);
     if (!set || msg.reset) { set = new Map(); S.haves.set(from, set); }
     (msg.items || []).forEach((it) => { if (it && /^[a-f0-9]{64}$/.test(it.h)) set.set(it.h, Number(it.size) || 0); });
-    if (!S.links.has(from) && S.links.size < R.MAX_PEERS && (wantsAny(set) || S.rescue)) openLink(from, true, room);
+    if (!S.links.has(from) && S.links.size < peerCap() && (wantsAny(set) || S.rescue)) openLink(from, true, room);
     return;
   }
   if (msg.op === "signal" && msg.from) { takeSignal(String(msg.from), msg.signal, room); return; }
@@ -289,12 +301,12 @@ function wantsAny(set) {
 function rtc() { return scope._origRTCPeerConnection || scope.RTCPeerConnection || null; }
 
 function openLink(id, offer, room) {
-  if (!id || !room || selfIds().has(id) || S.links.has(id) || S.links.size >= R.MAX_PEERS) return null;
+  if (!id || !room || selfIds().has(id) || S.links.has(id) || S.links.size >= peerCap()) return null;
   const Ctor = rtc();
   if (!Ctor) return null;
   let pc;
   try { pc = new Ctor({ iceServers: [{ urls: STUN }], iceTransportPolicy: "all" }); } catch (err) { return null; }
-  const link = { id: id, room: room, pc: pc, ch: null, rtt: 0, wait: new Map(), bad: 0, mf: { at: 0, n: 0 } };
+  const link = { id: id, room: room, pc: pc, ch: null, rtt: 0, wait: new Map(), bad: 0, mf: { at: 0, n: 0 }, sent: new Set() };
   S.links.set(id, link);
   pc.onicecandidate = (ev) => {
     if (!ev || !ev.candidate || !ev.candidate.candidate || /typ relay/i.test(ev.candidate.candidate)) return;
@@ -375,6 +387,11 @@ function dropAll() {
   S.haves.clear();
 }
 
+function peerCap() {
+  const n = Number(S.budget.maxPeers) || 0;
+  return Math.max(S.on || S.rescue ? 1 : 0, Math.min(R.MAX_PEERS, n || (S.rescue ? 2 : 0)));
+}
+
 function openLinks() {
   return Array.from(S.links.values()).filter((l) => l.ch && l.ch.readyState === "open" && l.bad < 2);
 }
@@ -383,7 +400,7 @@ function openLinks() {
 
 async function bytesFor(h) {
   const held = S.store.get(h);
-  if (held) return held.bytes;
+  if (held) { held.last = Date.now(); return held.bytes; }
   const shell = S.shell.get(h);
   if (!shell || typeof caches === "undefined") return null;
   try {
@@ -401,11 +418,16 @@ async function serve(link, msg) {
   const o = Math.max(0, Number(msg.o) || 0);
   const n = Math.min(R.CHUNK, Math.max(1, Number(msg.n) || R.CHUNK));
   const miss = () => { try { link.ch.send(JSON.stringify({ op: "miss", r: r })); } catch (err) { /* closed */ } };
-  if (!S.on || !/^[a-f0-9]{64}$/.test(h) || !link.ch || link.ch.readyState !== "open" || link.ch.bufferedAmount > 1024 * 1024) return miss();
+  if (!S.on || !S.budget.seed || !/^[a-f0-9]{64}$/.test(h) || !link.ch || link.ch.readyState !== "open" || link.ch.bufferedAmount > 1024 * 1024) return miss();
+  // Never the same chunk to the same peer twice: a repeat is a broken or
+  // greedy peer, and the bytes are better spent on someone else.
+  if (S.smart && !Q.firstSend(link.sent, h, o)) return miss();
   const bytes = await bytesFor(h);
   if (!bytes || o >= bytes.byteLength) return miss();
+  const held = S.store.get(h);
+  if (held && o === 0) held.asks = (held.asks || 0) + 1;
   const part = bytes.subarray(o, Math.min(o + n, bytes.byteLength));
-  const ok = R.admitUpload(S.upload, part.byteLength, Date.now());
+  const ok = R.admitUpload(S.upload, part.byteLength, Date.now(), S.budget.uploadCap);
   if (!ok.ok) return miss();
   S.upload = ok.state;
   const out = new Uint8Array(4 + part.byteLength);
@@ -442,15 +464,24 @@ function onPeer(link, data) {
 function askChunk(link, h, o, n) {
   return new Promise((resolve) => {
     const r = (S.reqSeq = (S.reqSeq + 1) >>> 0 || 1);
+    const t0 = Date.now();
     const timer = setTimeout(() => done(null), GET_TIMEOUT_MS);
-    const done = (bytes) => { clearTimeout(timer); link.wait.delete(r); resolve(bytes); };
+    const done = (bytes) => {
+      clearTimeout(timer);
+      link.wait.delete(r);
+      Q.recordSource(S.scores, "peer:" + link.id, { ms: Date.now() - t0, bytes: bytes ? bytes.byteLength : 0, ok: !!bytes });
+      resolve(bytes);
+    };
     link.wait.set(r, { done: done });
     try { link.ch.send(JSON.stringify({ op: "get", r: r, h: h, o: o, n: n })); } catch (err) { done(null); }
   });
 }
 
 function holders(h) {
-  return openLinks().filter((l) => { const set = S.haves.get(l.id); return set && set.has(h); }).sort((a, b) => (a.rtt || 999) - (b.rtt || 999));
+  const list = openLinks().filter((l) => { const set = S.haves.get(l.id); return set && set.has(h); });
+  if (!S.smart) return list.sort((a, b) => (a.rtt || 999) - (b.rtt || 999));
+  const now = Date.now();
+  return list.sort((a, b) => Q.sourceScore(S.scores, "peer:" + a.id, now) - Q.sourceScore(S.scores, "peer:" + b.id, now));
 }
 
 /* Pulls one item from the peers that have it, chunk by chunk. Returns the
@@ -506,12 +537,23 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function keep(h, bytes, key) {
   if (!bytes || bytes.byteLength > R.ITEM_MAX || S.store.has(h)) return;
   if (key) S.store.forEach((v, k) => { if (v.key === key && k !== h) { S.store.delete(k); S.storeBytes -= v.bytes.byteLength; } });
-  while (S.storeBytes + bytes.byteLength > R.STORE_MAX && S.store.size) {
+  const cap = S.smart ? S.cap : R.STORE_MAX;
+  if (S.smart) {
+    const entries = [];
+    S.store.forEach((v, k) => entries.push({ h: k, size: v.bytes.byteLength, last: v.last, asks: v.asks }));
+    Q.evictList(entries, S.storeBytes, bytes.byteLength, cap, Date.now()).forEach((k) => {
+      S.storeBytes -= S.store.get(k).bytes.byteLength;
+      S.store.delete(k);
+    });
+  }
+  while (S.storeBytes + bytes.byteLength > cap && S.store.size) {
     const oldest = S.store.keys().next().value;
     S.storeBytes -= S.store.get(oldest).bytes.byteLength;
     S.store.delete(oldest);
   }
-  S.store.set(h, { bytes: bytes, key: key || "" });
+  if (bytes.byteLength > cap) return;
+  S.store.set(h, { bytes: bytes, key: key || "", last: Date.now(), asks: 0 });
+  if (key) learnKid(key);
   S.storeBytes += bytes.byteLength;
   if (S.on) roomSend({ op: "have", items: [{ h: h, size: bytes.byteLength }] });
 }
@@ -521,6 +563,9 @@ function announceAll(room) {
   const items = [];
   S.store.forEach((v, h) => items.push({ h: h, size: v.bytes.byteLength }));
   S.shell.forEach((v, h) => items.push({ h: h, size: v.size }));
+  const order = S.smart ? Q.rarestFirst(items, S.haves) : items;
+  items.length = 0;
+  order.forEach((it) => items.push(it));
   for (let i = 0; i < items.length; i += 24) roomSend({ op: "have", items: items.slice(i, i + 24), reset: i === 0 }, room);
 }
 
@@ -556,8 +601,9 @@ function pushManifest(key) {
   openLinks().forEach((link) => sendManifest(link, entry));
 }
 
-function offerManifest(link, key) {
-  if (!S.on || !R.POOL_DATA_KEYS.test(key)) return;
+function offerManifest(link, kid) {
+  const key = /^[a-f0-9]{32}$/.test(kid) ? S.kids.get(kid) : "";
+  if (!S.on || !key || !R.POOL_DATA_KEYS.test(key)) return;
   const entry = newestEntry(key);
   if (entry && S.store.has(entry.h)) sendManifest(link, entry);
 }
@@ -720,8 +766,16 @@ async function loadManifestDirect(key) {
   } catch (err) { return null; }
 }
 
-function askLatest(key) {
-  openLinks().forEach((link) => { try { link.ch.send(JSON.stringify({ op: "want", k: key })); } catch (err) { /* closed */ } });
+function learnKid(key) {
+  if (!key || !R.POOL_DATA_KEYS.test(key)) return Promise.resolve("");
+  for (const [kid, k] of S.kids) if (k === key) return Promise.resolve(kid);
+  return R.keyId(key).then((kid) => { S.kids.set(kid, key); return kid; });
+}
+
+async function askLatest(key) {
+  const kid = await learnKid(key);
+  if (!kid) return;
+  openLinks().forEach((link) => { try { link.ch.send(JSON.stringify({ op: "want", k: kid })); } catch (err) { /* closed */ } });
 }
 
 /* The server failed or stalls: the newest signed copy a peer holds. */
@@ -770,8 +824,25 @@ async function guarded(key, origin) {
 }
 
 /* origin() is the normal request. Returns a Response. */
+/* Times the normal request chain as one source, so peers are compared
+   with how fast our servers answer right now. */
+function timed(origin) {
+  return () => {
+    const t0 = Date.now();
+    return Promise.resolve().then(origin).then((res) => {
+      const len = Number(res && res.headers && res.headers.get && res.headers.get("content-length")) || 32768;
+      Q.recordSource(S.scores, "origin", { ms: Date.now() - t0, bytes: len, ok: !!res && res.ok !== false });
+      return res;
+    }, (err) => {
+      Q.recordSource(S.scores, "origin", { ms: Date.now() - t0, bytes: 0, ok: false });
+      throw err;
+    });
+  };
+}
+
 async function fetchData(key, origin) {
   if (!wants(key)) return origin();
+  origin = timed(origin);
   S.used.add(key);
   if (!S.on && !S.rescue) return guarded(key, origin);
   const mark = pulseMark(key);
@@ -904,12 +975,26 @@ function flushStats() {
 }
 
 function stats() {
-  return Object.assign({}, S.stats, { on: S.on, rescue: S.rescue, rooms: openRooms().length, mode: S.mode, reason: S.reason, peers: openLinks().length, uploadToday: S.upload.day === R.dayKey(Date.now()) ? S.upload.used : 0, uploadCap: R.UPLOAD_DAY_CAP });
+  return Object.assign({}, S.stats, { on: S.on, rescue: S.rescue, rooms: openRooms().length, mode: S.mode, reason: S.reason, peers: openLinks().length, uploadToday: S.upload.day === R.dayKey(Date.now()) ? S.upload.used : 0, uploadCap: S.budget.uploadCap, smart: S.smart, seed: S.budget.seed, budget: S.budget.why });
+}
+
+function savePrefs() {
+  const out = { mode: S.mode };
+  if (!S.smart) out.smart = false;
+  writeJson(R.POOL_KEY, out);
 }
 
 function setMode(mode) {
   S.mode = R.normalizeMode(mode);
-  writeJson(R.POOL_KEY, { mode: S.mode });
+  savePrefs();
+  return evaluate();
+}
+
+/* The local scheduler can be switched off: then every peer is equal, the
+   cap is the flat 20 MB a day, and eviction is plain oldest-first. */
+function setSmart(on) {
+  S.smart = on !== false;
+  savePrefs();
   return evaluate();
 }
 
@@ -919,9 +1004,10 @@ function readBattery() {
   const nav = scope.navigator;
   if (!nav || !nav.getBattery) return;
   nav.getBattery().then((b) => {
-    const set = () => { S.charging = !!b.charging; evaluate(); };
+    const set = () => { S.charging = !!b.charging; S.battery = typeof b.level === "number" ? b.level : null; evaluate(); };
     set();
     b.addEventListener && b.addEventListener("chargingchange", set);
+    b.addEventListener && b.addEventListener("levelchange", set);
   }).catch(() => {});
 }
 
@@ -930,6 +1016,10 @@ function start() {
   scope.__viktorychPoolStarted = true;
   loadPrefs();
   readBattery();
+  try {
+    const st = scope.navigator && scope.navigator.storage;
+    if (st && st.estimate) st.estimate().then((e) => { S.cap = Q.storeCap(e, R.STORE_MAX); }).catch(() => {});
+  } catch (err) { /* default cap */ }
   evaluate();
   const nav = scope.navigator || {};
   const conn = nav.connection;
@@ -949,7 +1039,66 @@ function start() {
   setTimeout(indexShell, 4000);
 }
 
-const api = { wants, fetchData, prefillShell, stats, setMode, mode: () => S.mode, evaluate, indexShell, _state: S };
+/* ---------- opaque blobs ----------
+   Any content-addressed bytes another module wants carried: private list
+   shards, quoted or referenced items, media references. The pool never
+   reads them; the SHA-256 of the bytes is the only name on the wire, and
+   the reader checks it. Encrypt before putBlob if the bytes are private. */
+async function putBlob(bytes) {
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || 0);
+  if (!data.byteLength || data.byteLength > R.ITEM_MAX) return "";
+  const h = await R.sha256Hex(data);
+  keep(h, data, "");
+  return h;
+}
+
+function hasBlob(h) {
+  return S.store.has(String(h || "")) || holders(String(h || "")).length > 0;
+}
+
+const queue = Q.createQueue(3, () => S.budget);
+
+/* opts.priority: "visible" (default), "next", "likely" or "background".
+   Background reads are skipped when the device budget says no prefetch. */
+function getBlob(h, size, opts) {
+  return queue.run(opts && opts.priority, () => pullBlob(h, size, opts));
+}
+
+async function pullBlob(h, size, opts) {
+  h = String(h || "").toLowerCase();
+  size = Number(size) || 0;
+  if (!/^[a-f0-9]{64}$/.test(h) || !size || size > R.ITEM_MAX) return null;
+  const held = S.store.get(h);
+  if (held) return held.bytes;
+  if (!S.on && !S.rescue) return null;
+  const waitMs = Math.max(0, Math.min(5000, Number(opts && opts.waitMs) || 0));
+  for (const end = Date.now() + waitMs; !holders(h).length && Date.now() < end;) await sleep(100);
+  if (!holders(h).length) return null;
+  S.stats.tries += 1;
+  S.unsent.tries += 1;
+  const signal = { stop: false };
+  const bytes = await Promise.race([pullItem(h, size, null, signal), sleep(RESCUE_DEADLINE_MS).then(() => { signal.stop = true; return null; })]);
+  if (!bytes) return null;
+  S.stats.hits += 1;
+  S.unsent.hits += 1;
+  S.stats.saved += bytes.byteLength;
+  S.unsent.peer += bytes.byteLength;
+  saveStatsSoon();
+  if (S.on) keep(h, bytes, "");
+  return bytes;
+}
+
+const api = { wants, fetchData, prefillShell, stats, setMode, mode: () => S.mode, evaluate, indexShell, putBlob, getBlob, hasBlob, setSmart,
+  scheduler: {
+    record: (name, sample) => Q.recordSource(S.scores, name, sample),
+    rank: (names) => (S.smart ? Q.rankSources(S.scores, names) : names.slice()),
+    race: (tasks, opts) => Q.raceTop(S.smart ? Q.rankSources(S.scores, tasks.map((t) => t.name)).map((n) => tasks.find((t) => t.name === n)) : tasks, Object.assign({
+      onResult: (out) => Q.recordSource(S.scores, out.task.name, { ms: out.ms, bytes: 32768, ok: out.ok })
+    }, opts || {})),
+    budget: () => Object.assign({}, S.budget),
+    PRIORITY: Q.PRIORITY
+  },
+  _state: S };
 if (typeof window !== "undefined") {
   window.ViktorychPool = api;
   start();
