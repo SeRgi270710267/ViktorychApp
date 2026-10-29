@@ -1318,6 +1318,8 @@ def main() -> None:
     check(busy_flow.returncode == 0, "busy accounts are detected, folded, and interleaved on the device")
     busy_sync = subprocess.run([sys.executable, str(ROOT / "scripts" / "busy_sources.py")], cwd=ROOT)
     check(busy_sync.returncode == 0, "the sync trims busy sources' replies and reads their replies hourly")
+    tv_flow = subprocess.run(["node", str(ROOT / "scripts" / "tv_boot_test.js")], cwd=ROOT)
+    check(tv_flow.returncode == 0, "TV mode detects TVs, keeps its light defaults switchable, and publishes the TV app files")
     page_html = (ROOT / "index.html").read_text(encoding="utf-8")
     published = deployed_paths()
     check('src="storage.js"' in page_html and "storage.js" in published and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
