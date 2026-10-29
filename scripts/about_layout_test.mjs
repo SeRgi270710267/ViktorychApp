@@ -114,7 +114,7 @@ async function browserChecks() {
       if (box.pencil < 1) fail(width + " missing edit pencil");
       if (box.lock < 1) fail(width + " missing privacy icon");
       if (!box.text.includes("sample one · sample two")) fail(width + " languages were not dotted");
-      if (!box.text.includes("3 family members") && !box.text.includes("3 familiares") && !box.text.includes("3 родственников")) fail(width + " family count missing");
+      if (!box.text.includes("3 family members") && !box.text.includes("3 familiares") && !box.text.includes("3 родственников") && !box.text.includes("3 родственника")) fail(width + " family count missing");
       await page.close();
     }
     const hidden = await (async () => {

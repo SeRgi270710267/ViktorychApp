@@ -58,8 +58,6 @@
     const klass = cls ? ' class="' + cls + '"' : "";
     return '<svg' + klass + ' viewBox="' + mark.box + '" fill="currentColor" aria-hidden="true">' + mark.body + "</svg>";
   }
-  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
   const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", nostr: "Nostr" };
 
@@ -7708,7 +7706,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const who = handle
       ? `<a data-act="stop" data-card="${esc("telegram:" + handle)}" href="${esc(accountHash("telegram", handle))}">${esc(label)}</a>`
       : esc(label);
-    return `<div class="repost-line">${icon("repost")}<span>Forwarded from ${who}</span></div>`;
+    return `<div class="repost-line">${icon("repost")}<span>${tr("Forwarded from {name}", { name: "\u0000" }).split("\u0000").map((part) => esc(part)).join(who)}</span></div>`;
   }
 
   function threadParent(post) {
@@ -11340,7 +11338,7 @@ const here = parseRoute();
       profile.joined ? `<span>${icon("cal")}${esc(joinedLabel(profile.joined))}</span>` : ""
     ].join("");
     const counts = audienceCounts(profile);
-    const count = profile.postsCount != null ? tr("{count} posts", { count: formatCount(profile.postsCount) }) : "";
+    const count = profile.postsCount != null ? trn("posts", profile.postsCount, { count: formatCount(profile.postsCount) }) : "";
     const tabHtml = tabs.map((pair) => {
       const href = accountHash(profile.platform, profile.channelId || profile.handle) + (pair[0] === tabs[0][0] ? "" : "?tab=" + pair[0]);
       return `<a class="tab${tab === pair[0] ? " on" : ""}" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
@@ -11589,7 +11587,7 @@ const here = parseRoute();
       feedId: feed.id,
       url: profileOpenUrl(feed),
       own: false,
-      count: tr("{count} posts", { count: count })
+      count: trn("posts", total, { count: count })
     }, banner)}
     <div class="pinfo">
       <div class="pava-row">
@@ -12198,7 +12196,7 @@ const here = parseRoute();
     const open = !!STATE.exploreTrends;
     const trends = trendTopics().slice(0, 8);
     const chips = trends.map((item) => `<button type="button" class="gchip" data-act="explore-pick" data-q="${esc(item.q)}">${esc(item.label)}</button>`).join("");
-    const trend = trends.length ? `<div class="gtrend"><button type="button" class="gtrend-toggle" data-act="explore-trends" aria-expanded="${open ? "true" : "false"}">Trending ${icon("caret")}</button><div class="gtrend-chips"${open ? "" : " hidden"}>${chips}</div></div>` : "";
+    const trend = trends.length ? `<div class="gtrend"><button type="button" class="gtrend-toggle" data-act="explore-trends" aria-expanded="${open ? "true" : "false"}">${tr("Trending")} ${icon("caret")}</button><div class="gtrend-chips"${open ? "" : " hidden"}>${chips}</div></div>` : "";
     return `<div class="ghome"><div class="ghome-mid"><div class="ghome-logo">${wordmarkSvg("ghome-mark")}</div><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField("")}</form><div class="gactions"><button class="gbtn fill" type="submit" form="explore-form">${tr("Search {app}", { app: productName("app") })}</button><button class="gbtn line" type="button" data-act="explore-lucky">${tr("Surprise me")}</button></div>${trend}</div><footer class="ghome-foot"><a href="#/settings">${tr("About")}</a><a href="#/settings">${tr("Settings")}</a><button type="button" data-act="explore-theme" aria-label="${tr("Theme")}"><span class="gtheme-label">${esc(themeLabel(mode))}</span></button></footer></div>`;
   }
 
@@ -13085,7 +13083,11 @@ const here = parseRoute();
   function articleDate(iso) {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+    try {
+      return new Intl.DateTimeFormat(window.SI18n ? window.SI18n.locale() : undefined, { month: "short", day: "numeric", year: "numeric" }).format(d);
+    } catch (err) {
+      return d.toDateString();
+    }
   }
 
   function articleView(route) {
@@ -14070,6 +14072,7 @@ const here = parseRoute();
       const choices = [
         { code: "en", name: "English", find: "english английский ingles inglés" },
         { code: "es", name: "Español", find: "spanish español espanol испанский" },
+        { code: "hi", name: "हिन्दी", find: "hindi हिन्दी हिंदी хинди" },
         { code: "ru", name: "Русский", find: "russian русский ruso" }
       ].filter((row) => !q || (row.name + " " + row.find).toLowerCase().indexOf(q) >= 0);
       const radios = choices.map((row) => {
@@ -15717,7 +15720,7 @@ if (STATE.histClear) {
   }
 
   function videoMeta(post) {
-    const views = post.stats && post.stats.views != null ? tr("{count} views", { count: formatCount(post.stats.views) }) : "";
+    const views = post.stats && post.stats.views != null ? trn("views", post.stats.views, { count: formatCount(post.stats.views) }) : "";
     const when = relTime(post.date);
     return [views, when].filter(Boolean).join(" • ");
   }
@@ -16074,7 +16077,7 @@ if (STATE.histClear) {
     const when = comment.date ? relTime(comment.date) : (comment.timeLabel || "");
     const open = !!STATE.threadsOpen[comment.id];
     const kids = comment.replies || [];
-    const toggle = count > 0 ? `<button class="yt-replies" type="button" data-act="yt-replies" data-id="${esc(comment.id)}">${open ? tr("Hide replies") : tr("{count} replies", { count: formatCount(count) || String(count) })}</button>` : "";
+    const toggle = count > 0 ? `<button class="yt-replies" type="button" data-act="yt-replies" data-id="${esc(comment.id)}">${open ? tr("Hide replies") : trn("replies", count, { count: formatCount(count) || String(count) })}</button>` : "";
     const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : `<div class="reply-empty">${tr("Replies aren’t available.")}</div>`}</div>` : "";
     const href = comment.channelId ? accountHash("youtube", comment.channelId) : "";
     const cardId = comment.channelId ? ` data-card="youtube:${esc(comment.channelId)}"` : "";
@@ -16111,7 +16114,7 @@ if (STATE.histClear) {
       ? playerTile(post, media, mediaIndex).replace('class="tile vplay"', 'class="player vplay"')
       : ((media.poster || media.url) ? `<div class="player"><img decoding="async" src="${esc(media.poster || media.url)}" alt="" referrerpolicy="no-referrer"></div>` : "");
     const pip = clip && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} ${tr("Picture in picture")}</button>` : "";
-    const subs = creator.platform === "youtube" && creator.followers != null ? tr("{count} subscribers", { count: formatCount(creator.followers) }) : (creator.followers != null ? tr("{count} followers", { count: formatCount(creator.followers) }) : "");
+    const subs = creator.platform === "youtube" && creator.followers != null ? trn("subscribers", creator.followers, { count: formatCount(creator.followers) }) : (creator.followers != null ? trn("followers", creator.followers, { count: formatCount(creator.followers) }) : "");
     const liked = !!STATE.settings.likes[post.id];
     const booked = !!STATE.settings.bookmarks[post.id];
     const disliked = !!STATE.disliked[post.id];
@@ -16146,7 +16149,7 @@ if (STATE.histClear) {
       const stamped = bucket.fetchedAt || ytFetchedAt(bucket.doc);
       const label = freshLabel(stamped);
       comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">${tr("No comments yet.")}</div>`);
-      comments = `<h3>${tr("{count} comments", { count: formatCount(total) || "0" })}</h3><div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}${comments}`;
+      comments = `<h3>${trn("comments", total, { count: formatCount(total) || "0" })}</h3><div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}${comments}`;
     }
     const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
     const upHtml = up.length ? `<aside class="upnext"><h2>${tr("Up next")}</h2>${up.map((item) => {
@@ -20084,7 +20087,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       try {
         const data = JSON.parse(String(reader.result));
         if (!data || !Array.isArray(data.follows) || !Array.isArray(data.lists)) throw new Error("bad");
-        if ((data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es") && window.SI18n) window.SI18n.setLang(data.uiLang);
+        if ((data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es" || data.uiLang === "hi") && window.SI18n) window.SI18n.setLang(data.uiLang);
         STATE.settings.follows = data.follows;
         STATE.settings.lists = data.lists;
         STATE.settings.likes = data.likes || {};
