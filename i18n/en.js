@@ -2722,5 +2722,22 @@ SI18n.addPack("en", {
   "This is the official account of this site.": "This is the official account of this site.",
   "Unpin from top": "Unpin from top",
   "Verified account": "Verified account",
-  "Who can see it": "Who can see it"
+  "Who can see it": "Who can see it",
+  "A newer TV app is ready. Download it and press Update. Your sign-in stays.": "A newer TV app is ready. Download it and press Update. Your sign-in stays.",
+  "Fewer posts in memory": "Fewer posts in memory",
+  "Get the TV app": "Get the TV app",
+  "How to install": "How to install",
+  "Install TV app": "Install TV app",
+  "Light defaults for low-power TVs. Turn any of them off.": "Light defaults for low-power TVs. Turn any of them off.",
+  "Lighter images": "Lighter images",
+  "Lighter start-up": "Lighter start-up",
+  "No blur effects": "No blur effects",
+  "Put ViktorychApp on your TV home screen. One download, then press Install.": "Put ViktorychApp on your TV home screen. One download, then press Install.",
+  "Reduce motion": "Reduce motion",
+  "Reset TV defaults": "Reset TV defaults",
+  "TV performance": "TV performance",
+  "TV video autoplay": "TV video autoplay",
+  "Update TV app": "Update TV app",
+  "On. Big text, remote control, and light defaults for TVs.": "On. Big text, remote control, and light defaults for TVs.",
+  "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.": "Big text and remote control for TV browsers. Auto turns it on when a TV is detected."
 });

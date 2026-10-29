@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a109-__SW_VERSION__";
+const VERSION = "viktorych-a112-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T08:33:00Z-link-previews
+// cache-bust: 2026-10-29T09:06:00Z-tv
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -87,6 +87,7 @@ const SHELL_FILES = [
   "./people.css",
   "./tv.js",
   "./tv.css",
+  "./shared/tv-boot.js",
   "./tv-page.js",
   "./tv-page.css",
   "./split.js",
@@ -209,7 +210,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js"];
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a109-";
+  const prefix = "viktorych-a112-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1798,6 +1799,8 @@ self.addEventListener("fetch", (event) => {
   }
   if (request.method !== "GET") return;
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  // The TV install page, the APK, and assetlinks go straight to the network.
+  if (url.origin === self.location.origin && (/\.apk$/i.test(url.pathname) || /\/tv\/(?:index\.html)?$/.test(url.pathname) || url.pathname.indexOf("/.well-known/") >= 0)) return;
   if (url.origin === self.location.origin && url.pathname.toLowerCase().endsWith("/version.json")) {
     event.respondWith((async () => {
       const res = await mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" }));
@@ -1975,6 +1978,7 @@ function shellDocument(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
   if (/\/(?:s|u)\//.test(path)) return false;
+  if (/\/tv\/(?:index\.html)?$/.test(path)) return false;
   return /\/(?:index\.html)?$/.test(path);
 }
 

@@ -2722,5 +2722,22 @@ SI18n.addPack("ru", {
   "This is the official account of this site.": "Это официальный аккаунт этого сайта.",
   "Unpin from top": "Открепить сверху",
   "Verified account": "Подтверждённый аккаунт",
-  "Who can see it": "Кто может видеть"
+  "Who can see it": "Кто может видеть",
+  "A newer TV app is ready. Download it and press Update. Your sign-in stays.": "Вышла новая версия приложения для ТВ. Скачайте её и нажмите «Обновить». Вход сохранится.",
+  "Fewer posts in memory": "Меньше постов в памяти",
+  "Get the TV app": "Приложение для ТВ",
+  "How to install": "Как установить",
+  "Install TV app": "Установить приложение для ТВ",
+  "Light defaults for low-power TVs. Turn any of them off.": "Лёгкие настройки для слабых телевизоров. Любую можно выключить.",
+  "Lighter images": "Облегчённые изображения",
+  "Lighter start-up": "Быстрый запуск",
+  "No blur effects": "Без размытия",
+  "Put ViktorychApp on your TV home screen. One download, then press Install.": "Добавьте ViktorychApp на главный экран телевизора. Одна загрузка — и нажмите «Установить».",
+  "Reduce motion": "Меньше анимации",
+  "Reset TV defaults": "Сбросить настройки ТВ",
+  "TV performance": "Быстродействие на ТВ",
+  "TV video autoplay": "Автовоспроизведение видео на ТВ",
+  "Update TV app": "Обновить приложение для ТВ",
+  "On. Big text, remote control, and light defaults for TVs.": "Включён. Крупный текст, управление пультом и лёгкие настройки для ТВ.",
+  "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.": "Крупный текст и управление пультом для браузеров на ТВ. «Авто» включает режим, когда найден телевизор."
 });

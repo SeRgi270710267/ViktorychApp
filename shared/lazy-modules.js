@@ -84,6 +84,8 @@
   /* Idle preloading is skipped on metered or slow connections. */
   function lightNetwork() {
     var c = navigator.connection || {};
+    var tv = window.ViktorychTVMode;
+    if (tv && tv.on && tv.pref("lazyStart") === true) return true;
     return !!c.saveData || /(^|-)(2g|3g)$/.test(String(c.effectiveType || ""));
   }
 

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#000000">
+  <title>ViktorychApp for TV</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="icon" href="../favicon.svg">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #000; color: #e7e9ea; font: 18px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 5vh 5vw; }
+    h1 { font-size: 40px; line-height: 1.15; margin: 0 0 8px; font-weight: 800; }
+    h2 { font-size: 24px; margin: 32px 0 10px; font-weight: 800; }
+    p { margin: 6px 0; color: #e7e9ea; }
+    .muted { color: #71767b; }
+    .row { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+    .col { flex: 1 1 520px; min-width: 0; }
+    .qr { flex: 0 0 auto; text-align: center; }
+    .qr img { width: 200px; height: 200px; background: #fff; border-radius: 16px; padding: 8px; display: block; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 64px; padding: 0 36px; border-radius: 999px; font-size: 24px; font-weight: 800; text-decoration: none; border: 0; cursor: pointer; margin: 16px 16px 0 0; }
+    .primary { background: #eff3f4; color: #0f1419; }
+    .ghost { background: transparent; color: #e7e9ea; border: 1px solid #536471; }
+    .btn:focus, .btn:focus-visible { outline: 5px solid #1d9bf0; outline-offset: 4px; }
+    ol { padding-left: 28px; margin: 8px 0; }
+    li { margin: 8px 0; }
+    code, .url { font-family: ui-monospace, Menlo, Consolas, monospace; background: #16181c; border: 1px solid #2f3336; border-radius: 8px; padding: 2px 8px; color: #fff; }
+    .card { background: #16181c; border: 1px solid #2f3336; border-radius: 16px; padding: 16px 20px; margin-top: 16px; }
+    .ok { border-color: #00ba7c; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>ViktorychApp for Google TV and Android TV</h1>
+  <p class="muted">An icon on your TV home screen that opens ViktorychApp full screen. It updates itself with the site.</p>
+
+  <div class="card ok" id="have" hidden>
+    <p><strong>The TV app is already on this TV.</strong> Open it from the Apps row on the home screen.</p>
+  </div>
+  <div class="card" id="update" hidden>
+    <p><strong>A newer TV app is ready.</strong> Download it and press Update. Your sign-in stays.</p>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <a class="btn primary" id="get" href="ViktorychTV.apk" download="ViktorychTV.apk" type="application/vnd.android.package-archive" autofocus>Install TV app</a>
+      <a class="btn ghost" href="../?tv=1#/home">Open in browser</a>
+      <p class="muted" id="ver">Version 1.0.0, about 0.5 MB.</p>
+
+      <h2>On this TV</h2>
+      <ol>
+        <li>Press <strong>Install TV app</strong>. The file downloads in a few seconds.</li>
+        <li>Open the download. The first time, Android asks to <strong>allow installs from this app</strong>: choose <strong>Settings</strong>, turn on <strong>Allow from this source</strong>, then press Back.</li>
+        <li>Press <strong>Install</strong>, then <strong>Open</strong>. The ViktorychApp icon is now in the Apps row on the home screen. Hold OK on it to move it to Favourites.</li>
+      </ol>
+
+      <h2>If the download does not open</h2>
+      <ol>
+        <li>Install the free <strong>Downloader</strong> app (by AFTVnews) from Google Play on the TV.</li>
+        <li>Open it and type <span class="url">viktorychapp.pages.dev/tv</span> in the address box.</li>
+        <li>Press <strong>Install TV app</strong> on this page, then follow step 2 above. Android asks once to allow installs from Downloader.</li>
+      </ol>
+      <p class="muted">If Android shows no switch: open Settings &rsaquo; Apps &rsaquo; Security &amp; restrictions &rsaquo; Unknown sources (on Fire TV: Settings &rsaquo; My Fire TV &rsaquo; Developer options &rsaquo; Install unknown apps), turn on the browser or Downloader, then try again.</p>
+    </div>
+    <div class="qr">
+      <img src="qr.svg" alt="QR code for this page" width="200" height="200">
+      <p class="muted">Scan to open these steps on a phone.</p>
+      <p><span class="url">viktorychapp.pages.dev/tv</span></p>
+    </div>
+  </div>
+</main>
+<script>
+(function () {
+  var have = false;
+  try {
+    var st = JSON.parse(localStorage.getItem("viktorychapp-tv-v1") || "{}");
+    have = !!st.app;
+    var m = /[?&]tvapp=(\d+)/.exec(location.search);
+    var current = m ? Number(m[1]) : Number(st.appVersion || 0);
+    fetch("version.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (v) {
+      if (!v || !v.versionCode) return;
+      document.getElementById("ver").textContent = "Version " + v.versionName + ", about 0.5 MB.";
+      if (have && current && current < v.versionCode) {
+        document.getElementById("update").hidden = false;
+        document.getElementById("have").hidden = true;
+        document.getElementById("get").textContent = "Update TV app";
+      }
+    }).catch(function () {});
+  } catch (err) { /* private mode */ }
+  if (have) document.getElementById("have").hidden = false;
+  if (navigator.getInstalledRelatedApps) {
+    navigator.getInstalledRelatedApps().then(function (apps) {
+      if (apps && apps.length) document.getElementById("have").hidden = false;
+    }).catch(function () {});
+  }
+  var get = document.getElementById("get");
+  try { get.focus(); } catch (err) {}
+  document.addEventListener("keydown", function (e) {
+    var code = e.keyCode || 0;
+    if (e.key === "Escape" || code === 10009 || code === 461 || code === 4) {
+      if (history.length > 1) history.back();
+    }
+  });
+})();
+</script>
+</body>
+</html>
