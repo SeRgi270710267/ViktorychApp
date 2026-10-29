@@ -169,9 +169,12 @@ async function main() {
   const browser = await chromium.launch({ headless: true, channel: "chrome" });
   try {
     const port = server.address().port;
+    /* Two pages at a time: six pages booting at once on a busy CI runner
+       took past the 20 s wait while each one was still re-rendering. */
     const jobs = [];
-    for (const lang of ["en", "es", "ru"]) for (const size of SIZES) jobs.push(check(browser, port, size, lang));
-    await Promise.all(jobs);
+    for (const lang of ["en", "es", "ru"]) for (const size of SIZES) jobs.push(() => check(browser, port, size, lang));
+    const lanes = Array.from({ length: 2 }, async () => { while (jobs.length) await jobs.shift()(); });
+    await Promise.all(lanes);
     console.log("usernames settings ok");
   } finally {
     await browser.close();

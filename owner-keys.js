@@ -208,8 +208,39 @@
   var health = null;
   var healthLoading = false;
   var healthAt = 0;
-  function serious(doc) {
+  /* The Worker's own request quota is one origin of the server pool; while
+     the pool has room, an exhausted Worker is only skipped (Usage shows a
+     quiet note), so its alert stays out of the banner and the list. */
+  function poolHasRoom() {
+    var acc = window.ViktorychAccounts;
+    var sp = null;
+    try { sp = acc && acc.serverPool ? acc.serverPool() : null; } catch (err) { sp = null; }
+    if (sp && sp.cap > 0) return sp.pct < 100 && sp.origins.some(function (o) { return !o.out; });
+    var cfg = window.ViktorychAccountsConfig || window.VIKTORYCH_ACCOUNTS || {};
+    return !!cfg.backupApi;
+  }
+  function problemsOf(doc) {
     var list = doc && Array.isArray(doc.problems) ? doc.problems : [];
+    var room = poolHasRoom();
+    return list.filter(function (p) { return !(p && p.code === "usage_worker_requests" && room); });
+  }
+  /* Each entry calls tr() itself so the phrase is translated when shown. */
+  var USAGE_TEXT = {
+    usage_worker_requests: function (v) { return tr("Worker requests today are at {pct}% of the free limit.", v); },
+    usage_d1_reads: function (v) { return tr("Database rows read today are at {pct}% of the free limit.", v); },
+    usage_d1_writes: function (v) { return tr("Database rows written today are at {pct}% of the free limit.", v); },
+    usage_durable: function (v) { return tr("Durable Object requests today are at {pct}% of the free limit.", v); },
+    usage_r2_class_a: function (v) { return tr("Storage writes this month are at {pct}% of the free limit.", v); },
+    usage_r2_class_b: function (v) { return tr("Storage reads this month are at {pct}% of the free limit.", v); },
+    usage_r2_storage: function (v) { return tr("File storage is at {pct}% of the free limit.", v); },
+    usage_d1_storage: function (v) { return tr("Database size is at {pct}% of the free limit.", v); }
+  };
+  function problemText(p) {
+    if (p && USAGE_TEXT[p.code] && Number.isFinite(Number(p.ratio))) return USAGE_TEXT[p.code]({ pct: Math.round(Number(p.ratio) * 100) });
+    return p ? p.text || p.code : "";
+  }
+  function serious(doc) {
+    var list = problemsOf(doc);
     var now = Date.now();
     return list.filter(function (p) {
       return p.level === "down" || now - (Number(p.since) || now) > 2 * 3600 * 1000;
@@ -232,32 +263,35 @@
     var list = serious(health);
     var old = document.getElementById("owner-health-banner");
     var key = "viktorych-health-dismissed";
-    var sig = list.map(function (p) { return p.code; }).sort().join(",");
+    // One dismissal per day per problem and threshold (warn or down).
+    var sig = new Date().toISOString().slice(0, 10) + "|" + list.map(function (p) { return p.code + ":" + p.level; }).sort().join(",");
     var dismissed = "";
-    try { dismissed = sessionStorage.getItem(key) || ""; } catch (err) { dismissed = ""; }
+    try { dismissed = localStorage.getItem(key) || ""; } catch (err) { dismissed = ""; }
     if (!list.length || !visible() || dismissed === sig) {
       if (old) old.remove();
       return;
     }
     var bar = old || document.createElement("div");
+    /* Placed by styles.css at the bottom, like X's toasts, so it never
+       covers a page's own header or the alert banner under it. */
     bar.id = "owner-health-banner";
     bar.setAttribute("role", "status");
-    bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);z-index:9999;max-width:92vw;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;background:#f4212e;color:#fff;font:600 13px/1.3 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3)";
+    bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;background:#f4212e;color:#fff;font:600 13px/1.3 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3)";
     bar.innerHTML = '<a href="#/settings/keys" style="color:#fff;text-decoration:none">' + esc(tr("Site health: {count} problems need you", { count: list.length })) + "</a>" +
       '<button type="button" aria-label="' + esc(tr("Dismiss")) + '" style="background:none;border:0;color:#fff;font:inherit;cursor:pointer;padding:0 2px">✕</button>';
     bar.querySelector("button").onclick = function () {
-      try { sessionStorage.setItem(key, sig); } catch (err) { /* hides until reload */ }
+      try { localStorage.setItem(key, sig); } catch (err) { /* hides until reload */ }
       bar.remove();
     };
     if (!old) document.body.appendChild(bar);
   }
   function healthHtml() {
     loadHealth(false);
-    var list = health && Array.isArray(health.problems) ? health.problems : [];
+    var list = problemsOf(health);
     var when2 = health && health.at ? when(health.at) : "";
     var head = !health ? tr("Site health not checked yet") : (list.length ? tr("Site health: {count} problems need you", { count: list.length }) : tr("Site health: all good"));
     var items = list.map(function (p) {
-      return '<p class="phandle keys-status">' + esc(p.level === "down" ? "⛔ " : "⚠️ ") + esc(p.text || p.code) + "</p>";
+      return '<p class="phandle keys-status">' + esc(p.level === "down" ? "⛔ " : "⚠️ ") + esc(problemText(p)) + "</p>";
     }).join("");
     return '<section class="keys-slot"><h2>' + esc(tr("Site health")) + '</h2><p class="phandle">' + esc(head) + (when2 ? " · " + esc(when2) : "") + "</p>" + items +
       '<button class="outline" type="button" data-act="keys-health-check" data-slot="health">' + esc(tr("Check now")) + "</button></section>";
