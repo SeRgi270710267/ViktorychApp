@@ -356,11 +356,11 @@
     if (!member.loaded) loadMember().then(function () { if (root.dispatchEvent) root.dispatchEvent(new Event("vklazy")); });
     if (isSetup()) {
       stop();
-      return '<div class="inbox-sms" data-inbox-sms><header class="dmsgs-head"><h1>' + esc(tr("Inbox")) + "</h1></header>" + chips + '<div data-sms-setup-root>' + setupHtml() + "</div></div>";
+      return '<div class="inbox-sms" data-inbox-sms><header class="dmsgs-head"><h1>' + esc((root.ViktorychInbox && root.ViktorychInbox.title ? root.ViktorychInbox.title() : tr("Inbox"))) + "</h1></header>" + chips + '<div data-sms-setup-root>' + setupHtml() + "</div></div>";
     }
     if (canSee()) setTimeout(start, 0);
     else if (member.loaded) { stop(); state.data = null; dropCache(); }
-    return '<div class="inbox-sms" data-inbox-sms><header class="dmsgs-head"><h1>' + esc(tr("Inbox")) + "</h1></header>" + chips +
+    return '<div class="inbox-sms" data-inbox-sms><header class="dmsgs-head"><h1>' + esc((root.ViktorychInbox && root.ViktorychInbox.title ? root.ViktorychInbox.title() : tr("Inbox"))) + "</h1></header>" + chips +
       '<section class="sms-section" aria-live="polite">' + sectionHtml() + "</section></div>";
   }
 
