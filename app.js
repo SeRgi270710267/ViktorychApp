@@ -3780,7 +3780,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const body = myDevices && myDevices.loaded
       ? (rows || `<div class="set-block"><p class="phandle">${esc(myDevices.failed ? tr("Could not load your devices.") : tr("No devices yet."))}</p></div>`)
       : `<div class="set-block"><p class="phandle">${esc(tr("Loading…"))}</p></div>`;
-    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div><div class="set-block device-wipe"><p class="phandle">${esc(tr("Signs this device out and erases everything the app saved on it: drafts, messages, notifications, downloads and the offline copy."))}</p><button class="outline danger" type="button" data-act="device-wipe-self">${esc(tr("Remove this device and erase its data"))}</button></div>`;
+    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div><div class="set-block"><a class="outline" href="#/link-tv">${esc(tr("Link a TV"))}</a></div><div class="set-block device-wipe"><p class="phandle">${esc(tr("Signs this device out and erases everything the app saved on it: drafts, messages, notifications, downloads and the offline copy."))}</p><button class="outline danger" type="button" data-act="device-wipe-self">${esc(tr("Remove this device and erase its data"))}</button></div>`;
   }
 
   function accountsApi() {
@@ -8931,6 +8931,7 @@ const here = parseRoute();
     if (parts[0] === "online") return { name: "online", query };
     if (parts[0] === "store" || parts[0] === "gifts") return { name: "store", sub: parts[1] || "", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
+    if (parts[0] === "link-tv") return { name: "linktv", query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
       if (parts[1] === "trash") return { name: "drive", section: "files", trash: true, folder: "", view: "", album: "", query };
@@ -15371,6 +15372,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
+      ${accountToken() ? settingsRow("#/link-tv", tr("Link a TV"), tr("Sign a TV in with the code it shows. Nothing to type on the TV.")) : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
@@ -17636,6 +17638,12 @@ if (STATE.histClear) {
       if (lazyHtml) return snapRoute(lazyHtml);
       ensureLazy("communities");
       return lazySkeleton(tr("Communities"));
+    }
+    if (route.name === "linktv") {
+      const lazyHtml = window.ViktorychTVPair ? window.ViktorychTVPair.linkPage(route) : "";
+      if (lazyHtml) return lazyHtml;
+      ensureLazy("tvpair");
+      return lazySkeleton(tr("Link a TV"));
     }
     if (route.name === "tv") {
       const lazyHtml = window.ViktorychTV ? window.ViktorychTV.page(route) : "";

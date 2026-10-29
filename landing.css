@@ -204,3 +204,20 @@
     animation: none;
   }
 }
+
+/* The landing on a TV (TV mode on): one screen, no hover, big focus targets.
+   TV mode zooms the body, so sizes here are before that zoom. */
+.x-shell.tv-land { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; min-height: 0; padding: 40px 24px; box-sizing: border-box; }
+.tv-land-main { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 32px; width: 100%; max-width: 860px; }
+.tv-land-copy { flex: 1 1 280px; min-width: 0; }
+.tv-land-mark { width: 52px; height: 52px; fill: #e7e9ea; display: block; }
+.tv-land-copy h1 { font-size: 40px; line-height: 1.1; font-weight: 800; color: #e7e9ea; margin: 16px 0 8px; }
+.tv-land-tag { font-size: 18px; line-height: 1.35; color: #71767b; margin: 0; }
+.tv-land-actions { flex: 0 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.tv-land-btn { min-height: 48px; padding: 0 24px; border-radius: 999px; border: 1px solid #536471; background: transparent; color: #e7e9ea; font: 700 17px/1 inherit; font-family: inherit; cursor: pointer; text-align: center; }
+.tv-land-btn.primary { background: #eff3f4; color: #0f1419; border-color: #eff3f4; }
+.tv-land-btn:focus, .tv-land-lang:focus { outline: 3px solid #1d9bf0; outline-offset: 3px; }
+.tv-land-hint { color: #71767b; font-size: 14px; margin: 6px 0 0; text-align: center; }
+.tv-land-langs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.tv-land-lang { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #2f3336; background: transparent; color: #71767b; font: 600 14px/1 inherit; font-family: inherit; }
+.tv-land-lang.on { color: #e7e9ea; border-color: #536471; }

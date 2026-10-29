@@ -52,6 +52,12 @@ Queued work, in order:
 - The owner tests the password-manager prompt and Notifications on a phone.
 - Cleanup and account deletion only with an explicit owner go-ahead and a full backup.
 
+## TV sign-in
+
+On a TV, the signed-out landing is a 10-foot screen led by "Sign in with your phone".
+It uses a QR code plus a 6-character code, one use and five minutes, through `/v1/tv-pair/*`.
+Phones approve the code in Settings → Link a TV. See [TV-SIGN-IN.md](TV-SIGN-IN.md).
+
 ## 6. Gotchas
 
 - `scripts/handle_guard.py` rejects any token from the private owner catalog, including product and assistant names used as handles. Keep docs neutral.

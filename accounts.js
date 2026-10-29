@@ -803,7 +803,32 @@
     setMeta('meta[name="twitter:title"]', title);
     setMeta('meta[name="twitter:description"]', desc);
   }
+  function tvOn() {
+    return !!(window.ViktorychTVMode && window.ViktorychTVMode.on);
+  }
+  // The landing on a TV: one screen, big targets, remote arrows and OK.
+  // Signing in with a phone comes first, so nobody types an account number with a remote.
+  function tvLanding() {
+    var langs = [["en", "English"], ["es", "Español"], ["hi", "हिन्दी"], ["ru", "Русский"]].map(function (pair) {
+      var on = readLang() === pair[0] ? " on" : "";
+      return '<button class="tv-land-lang' + on + '" type="button" data-acct="lang" data-lang="' + pair[0] + '">' + esc(pair[1]) + "</button>";
+    }).join("");
+    return '<div class="x-shell land-page tv-land"><main class="tv-land-main"><div class="tv-land-copy">' + mark("tv-land-mark") + "<h1>" + esc(appName()) + '</h1><p class="tv-land-tag">' + esc(tr("A home for posts, stories, and the people you choose.")) + '</p></div><div class="tv-land-actions">' +
+      '<button class="tv-land-btn primary" type="button" data-acct="tv-pair" data-tv-first="1">' + esc(tr("Sign in with your phone")) + "</button>" +
+      '<button class="tv-land-btn" type="button" data-acct="open-temp">' + esc(tr("Try a temporary account")) + "</button>" +
+      '<button class="tv-land-btn" type="button" data-acct="login">' + esc(tr("Log in")) + "</button>" +
+      '<button class="tv-land-btn" type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button>" +
+      '<p class="tv-land-hint">' + esc(tr("Use the arrows on your remote, then press OK.")) + '</p><div class="tv-land-langs" role="group" aria-label="' + esc(tr("Display language")) + '">' + langs + "</div></div></main></div>";
+  }
+  function tvPairBody() {
+    if (window.ViktorychTVPair) return window.ViktorychTVPair.tvBody();
+    if (window.ViktorychLazy && window.ViktorychLazy.ensure) {
+      window.ViktorychLazy.ensure("tvpair").then(function () { if (view === "tv-pair" && window.ViktorychTVPair) { painted = ""; paint(); } });
+    }
+    return '<p class="acct-sub">' + esc(tr("Loading…")) + "</p>";
+  }
   function landing() {
+    if (tvOn()) return tvLanding();
     var year = String(new Date().getFullYear());
     var pages = [["about", tr("About")], ["help", tr("Help Center")], ["terms", tr("Terms of Service")], ["privacy", tr("Privacy Policy")], ["cookie", tr("Cookie Policy")], ["accessibility", tr("Accessibility")], ["blog", tr("Blog")], ["developers", tr("Developers")]];
     var foot = pages.map(function (page) {
@@ -1148,6 +1173,7 @@ var numberNote = form.passkey
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
     else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
+    else if (view === "tv-pair") html += modal(tr("Sign in with your phone"), tvPairBody());
     else if (view === "temp") html += modal(tr("Temporary account"), tempBody());
     else if (view === "temp-saved") html += modal(tr("Account saved"), tempSavedBody());
     else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
@@ -1174,6 +1200,8 @@ var numberNote = form.passkey
     if (!focusEl && mark !== painted && view !== "edit" && view !== "crop") {
       focusEl = form.claimOpen ? root.querySelector('input[name="claimCode"]') : root.querySelector(".acct-field input, .acct-field textarea");
     }
+    if (view === "tv-pair" && window.ViktorychTVPair && mark !== painted) window.ViktorychTVPair.tvStart();
+    else if (view !== "tv-pair" && window.ViktorychTVPair) window.ViktorychTVPair.tvStop();
     painted = mark;
     if (focusEl && view !== "edit" && view !== "crop") {
       focusEl.focus();
@@ -4747,6 +4775,7 @@ function signupPayload() {
     }
     if (act === "signup") startSetup();
     else if (act === "setup-back") setupBack();
+    else if (act === "tv-pair") openAuth("tv-pair");
     else if (act === "open-temp") { tempState.pick = "1d"; tempState.until = ""; tempState.saveData = null; openAuth("temp"); }
     else if (act === "temp-pick") {
       tempState.pick = acct.getAttribute("data-pick") || "1d";
@@ -5478,6 +5507,11 @@ else if (act === "copy-id") copyAccountId();
     saveOwnAccount: applyOwnAccount,
     openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
     openLogin: function () { openAuth("login"); },
+    commitTvSession: function (token, account) {
+      if (!token || readSession()) return;
+      view = "";
+      commitSession(token, account);
+    },
     setReposts: setReposts,
     ensureProfile: loadProfile,
     profilePending: profilePending,
