@@ -69,6 +69,21 @@ def check(cond, message):
     print("ok", message)
 
 
+def x_notes_checks() -> None:
+    import subprocess
+
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "x_notes_mirror.py"), "--selftest"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        sys.stdout.write(proc.stdout)
+        sys.stdout.write(proc.stderr)
+    check(proc.returncode == 0, "the X Community Notes mirror self-test passes")
+
+
 def telegram_checks() -> None:
     import subprocess
 
@@ -1330,6 +1345,7 @@ def main() -> None:
     feed_order_checks()
     gdrive_checks()
     telegram_checks()
+    x_notes_checks()
 
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
