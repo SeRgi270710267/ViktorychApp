@@ -136,6 +136,17 @@ async function check(browser, origin, size) {
     if (portrait && view.rotate !== "flex") fail(label + ": no rotate prompt in portrait");
     if (!portrait && view.rotate !== "none") fail(label + ": rotate prompt shows in landscape");
     if (!portrait) {
+      /* With our bar showing, ReGone's own Menu and Fullscreen (top right)
+         and its joystick, buttons and weapon slots still get the touch. */
+      const blocked = await page.evaluate((s) => {
+        const spots = [[s.w - 30, 30], [s.w - 60, 60], [80, s.h - 60], [s.w - 80, s.h - 60], [s.w / 2, s.h - 20], [s.w / 2, s.h - 50]];
+        return spots.filter((pt) => { const el = document.elementFromPoint(pt[0], pt[1]); return !el || el.tagName !== "IFRAME"; }).map((pt) => pt.join(",") + ":" + (document.elementFromPoint(pt[0], pt[1]) || {}).className);
+      }, { w: size.width, h: size.height });
+      if (blocked.length) fail(label + ": our overlay covers the game's controls at " + blocked.join(" "));
+      const tip = await page.evaluate(() => document.querySelector("#game-host .game-pad-note").textContent);
+      if (!/joystick/i.test(tip)) fail(label + ": no tip about the in-match touch controls");
+      const small = await page.evaluate(() => [...document.querySelectorAll("#game-host .game-bar a, #game-host .game-bar button")].filter((el) => el.getBoundingClientRect().height < 44).length);
+      if (small) fail(label + ": " + small + " bar buttons are under 44px");
       await page.waitForFunction(() => document.getElementById("game-host").classList.contains("chrome-hidden"), null, { timeout: 8000 }).catch(() => fail(label + ": the bar never hides"));
       await page.touchscreen.tap(size.width / 2, size.height / 2);
       const frame = await (await page.$("#game-host iframe")).contentFrame();
