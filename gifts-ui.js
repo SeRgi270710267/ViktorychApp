@@ -178,7 +178,7 @@
       var sign = item.delta > 0 ? "+" : "";
       return '<div class="points-row"><span>' + esc(reasonLabel(item.reason)) + '</span><b>' + esc(sign + item.delta) + "</b></div>";
     }).join("");
-    return '<div class="points-page"><div class="topbar"><div class="page-head"><h1>' + esc(tr("Viktorychs")) + '</h1></div></div><div class="points-balance">' + coin() + '<b data-points-balance>' + esc(balance == null ? "0" : String(balance)) + '</b><span>' + esc(tr("Viktorychs")) + '</span></div><p class="points-note">' + esc(tr("Viktorychs are earned by real effort and are never sold. They have no cash value and can only be spent on gifts and stickers.")) + '</p><a class="points-store" href="#/store">' + esc(tr("Gifts")) + '</a><h2>' + esc(tr("How to earn")) + '</h2><ul class="points-earn">' + earn + '</ul><p class="points-note">' + esc(tr("Only people other than you count, and their accounts must be at least a week old. New accounts start earning after 3 days. Daily caps apply.")) + "</p><h2>" + esc(tr("History")) + "</h2>" + (rows || '<p class="points-note">' + esc(tr("No points yet")) + "</p>") + "</div>";
+    return '<div class="points-page"><div class="topbar"><div class="page-head"><button type="button" class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '">' + icon("back") + '</button><h1 class="grow">' + esc(tr("Viktorychs")) + '</h1></div></div><div class="points-balance">' + coin() + '<b data-points-balance>' + esc(balance == null ? "0" : String(balance)) + '</b><span>' + esc(tr("Viktorychs")) + '</span></div><p class="points-note">' + esc(tr("Viktorychs are earned by real effort and are never sold. They have no cash value and can only be spent on gifts and stickers.")) + '</p><a class="points-store" href="#/store">' + esc(tr("Gifts")) + '</a><h2>' + esc(tr("How to earn")) + '</h2><ul class="points-earn">' + earn + '</ul><p class="points-note">' + esc(tr("Only people other than you count, and their accounts must be at least a week old. New accounts start earning after 3 days. Daily caps apply.")) + "</p><h2>" + esc(tr("History")) + "</h2>" + (rows || '<p class="points-note">' + esc(tr("No points yet")) + "</p>") + "</div>";
   }
 
   /* ---- Gifts page (VK-style shelves). Art comes from shared/gift-catalog.js. ---- */
@@ -502,14 +502,15 @@
     return '<p class="vkg-soon">' + esc(tr("Card payments are coming soon. You can already pay with Viktorychs.")) + "</p>";
   }
 
+  /* The same sticky X page header as Settings and Notifications: back arrow, title, icon buttons. */
   function headerHtml(title, backHref) {
     var back = backHref
-      ? '<a class="vkg-btn" href="' + esc(backHref) + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>"
-      : '<button type="button" class="vkg-btn" data-act="back" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</button>";
+      ? '<a class="icon-btn" href="' + esc(backHref) + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>"
+      : '<button type="button" class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</button>";
     if (store.searching) {
-      return '<div class="topbar vkg-top"><div class="vkg-head">' + back + '<input class="vkg-search" type="search" data-gift-search value="' + esc(store.query) + '" placeholder="' + esc(tr("Search gifts")) + '" aria-label="' + esc(tr("Search gifts")) + '" autocomplete="off" enterkeyhint="search"><button type="button" class="vkg-btn" data-gift="search-close" aria-label="' + esc(tr("Close")) + '">' + icon("close") + "</button></div></div>";
+      return '<div class="topbar vkg-top"><div class="page-head">' + back + '<input class="vkg-search" type="search" data-gift-search value="' + esc(store.query) + '" placeholder="' + esc(tr("Search gifts")) + '" aria-label="' + esc(tr("Search gifts")) + '" autocomplete="off" enterkeyhint="search"><button type="button" class="icon-btn" data-gift="search-close" aria-label="' + esc(tr("Close")) + '">' + icon("close") + "</button></div></div>";
     }
-    return '<div class="topbar vkg-top"><div class="vkg-head">' + back + '<h1 class="vkg-title">' + esc(title) + '</h1><a class="vkg-btn" href="#/store/history" aria-label="' + esc(tr("Gift history")) + '">' + icon("clock") + '</a><button type="button" class="vkg-btn" data-gift="search" aria-label="' + esc(tr("Search gifts")) + '">' + icon("search") + "</button></div></div>";
+    return '<div class="topbar vkg-top"><div class="page-head">' + back + '<h1 class="grow">' + esc(title) + '</h1><a class="icon-btn" href="#/store/history" aria-label="' + esc(tr("Gift history")) + '">' + icon("clock") + '</a><button type="button" class="icon-btn" data-gift="search" aria-label="' + esc(tr("Search gifts")) + '">' + icon("search") + "</button></div></div>";
   }
 
   function chipsHtml() {
@@ -579,7 +580,7 @@
     loadHistory();
     var sent = store.histTab === "sent";
     var list = sent ? store.sent : store.received;
-    var tabs = '<div class="vkg-tabs" role="tablist"><button type="button" role="tab" data-gift="hist" data-tab="received" aria-selected="' + (!sent) + '"' + (!sent ? ' class="is-on"' : "") + ">" + esc(tr("Received")) + '</button><button type="button" role="tab" data-gift="hist" data-tab="sent" aria-selected="' + sent + '"' + (sent ? ' class="is-on"' : "") + ">" + esc(tr("Sent")) + "</button></div>";
+    var tabs = '<div class="tabs-bar"><div class="tabs" role="tablist"><button type="button" role="tab" class="tab' + (!sent ? " on" : "") + '" data-gift="hist" data-tab="received" aria-selected="' + (!sent) + '"><span>' + esc(tr("Received")) + '</span></button><button type="button" role="tab" class="tab' + (sent ? " on" : "") + '" data-gift="hist" data-tab="sent" aria-selected="' + sent + '"><span>' + esc(tr("Sent")) + "</span></button></div></div>";
     var body;
     if (list === "loading" || list == null) body = '<p class="points-note vkg-empty">' + esc(tr("Loading…")) + "</p>";
     else if (!list.length) body = '<p class="points-note vkg-empty">' + esc(sent ? tr("You haven’t sent any gifts yet.") : tr("No gifts yet")) + "</p>";
@@ -692,7 +693,7 @@
     } else if (options[0] !== "free") {
       note = '<p class="vkg-fine">' + esc(tr("Viktorychs have no cash value and can’t be refunded once spent.")) + ' <a href="#/store/terms" data-gift="terms">' + esc(tr("Purchase terms")) + "</a></p>";
     }
-    return '<div class="gift-sheet" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="gift-sheet-bar"><button type="button" data-gift="close" aria-label="' + esc(tr("Close")) + '">×</button><h2>' + esc(title) + '</h2><button type="button" data-gift="confirm"' + (disabled ? ' disabled aria-disabled="true"' : "") + ">" + esc(confirmLabel) + '</button></div><div class="gift-sheet-body">' +
+    return '<div class="gift-sheet" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="gift-sheet-bar"><button type="button" class="icon-btn" data-gift="close" aria-label="' + esc(tr("Close")) + '">' + icon("close") + '</button><h2>' + esc(title) + '</h2><button type="button" data-gift="confirm"' + (disabled ? ' disabled aria-disabled="true"' : "") + ">" + esc(confirmLabel) + '</button></div><div class="gift-sheet-body">' +
       preview + modes + recipient + pay + note +
       (errorText ? '<p class="gift-error" role="alert">' + esc(errorText) + "</p>" : "") +
       "</div></div>";
@@ -707,7 +708,7 @@
       var edition = gift.edition ? '<span class="vkg-edition">' + esc(tr("No. {n}", { n: String(gift.edition) })) + "</span>" : "";
       if (gift.wrapped) {
         var open = mine ? '<button type="button" class="gift-unwrap" data-gift="unwrap" data-id="' + esc(gift.id) + '">' + esc(tr("Open gift")) + "</button>" : "";
-        return '<article class="gift-tile is-wrapped"><span class="gift-art"><span class="gift-box" aria-hidden="true"></span></span><b>' + esc(mine ? who : tr("Wrapped gift")) + "</b>" + open + "</article>";
+        return '<article class="gift-tile is-wrapped"><span class="gift-art"><span class="gift-box" aria-hidden="true">' + icon("birthday") + '</span></span><b>' + esc(mine ? who : tr("Wrapped gift")) + "</b>" + open + "</article>";
       }
       return '<article class="gift-tile' + (gift.hidden ? " is-hidden" : "") + '"><span class="gift-art">' + artHtml(gift, false) + edition + '</span><b>' + esc(who) + "</b><p>" + esc(gift.message || "") + "</p>" + hide + "</article>";
     }).join("");

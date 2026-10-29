@@ -101,6 +101,54 @@ async function check(page, origin, vp) {
     if (hash === "#/points" && text.indexOf("never sold") < 0) fail(vp.name + " points page missing the earn rules");
     if (/buy viktorychs|viktorych pack/i.test(text)) fail(vp.name + " a buy-Viktorychs path is visible on " + hash);
   }
+  await page.goto(origin + "/#/settings", { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("main.center .topbar", { timeout: 20000 });
+  const base = await page.evaluate(() => Math.round(document.querySelector("main.center").getBoundingClientRect().width));
+  for (const hash of ["#/store", "#/store/stickers", "#/points"]) {
+    for (const theme of ["lightsout", "dim", "default"]) {
+      await page.goto(origin + "/" + hash, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => document.querySelector(".store-page, .points-page"), null, { timeout: 20000 });
+      await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+      const shell = await page.evaluate(() => {
+        const center = document.querySelector("main.center");
+        const page = document.querySelector(".store-page, .points-page");
+        const head = page.querySelector(".topbar .page-head");
+        const back = head && head.querySelector("[data-act='back'], a.icon-btn");
+        const css = (el, prop) => el ? getComputedStyle(el).getPropertyValue(prop) : "";
+        const bottom = document.querySelector(".bottom-nav");
+        return {
+          app: document.querySelector(".app").className,
+          nav: !!document.querySelector(".app > nav, .app > header, .app .left-nav, .app nav"),
+          side: !!document.querySelector(".app > aside.side"),
+          centerWidth: center ? Math.round(center.getBoundingClientRect().width) : 0,
+          pageWidth: Math.round(page.getBoundingClientRect().width),
+          head: !!head,
+          back: !!back,
+          sticky: css(page.querySelector(".topbar"), "position"),
+          pageBg: css(page, "background-color"),
+          bodyBg: css(document.body, "background-color"),
+          rootBg: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
+          headFont: css(head, "font-family"),
+          gradient: Array.from(page.querySelectorAll("*")).filter((el) => !el.classList.contains("topbar") && getComputedStyle(el).backgroundImage.indexOf("gradient") >= 0).map((el) => el.tagName + "." + el.className).join(" "),
+          bottom: bottom ? getComputedStyle(bottom).display !== "none" && bottom.getBoundingClientRect().height > 0 : false
+        };
+      });
+      const tag = vp.name + " " + theme + " " + hash;
+      if (/gifts-mode|\bwide\b/.test(shell.app)) fail(tag + " leaves the standard shell: " + shell.app);
+      if (!shell.head || !shell.back) fail(tag + " has no X header with a back arrow");
+      if (shell.sticky !== "sticky" && shell.sticky !== "fixed") fail(tag + " header is not sticky: " + shell.sticky);
+      if (shell.pageBg !== "rgba(0, 0, 0, 0)" && shell.pageBg !== shell.bodyBg) fail(tag + " page background " + shell.pageBg + " is not the theme background " + shell.bodyBg);
+      if (theme === "lightsout" && shell.bodyBg !== "rgb(0, 0, 0)") fail(tag + " is not pure black: " + shell.bodyBg);
+      if (shell.gradient) fail(tag + " uses a gradient: " + shell.gradient);
+      if (shell.headFont.indexOf("TwitterChirp") < 0) fail(tag + " header font is not the X font");
+      if (vp.name === "desktop") {
+        if (!shell.side) fail(tag + " lost the right sidebar");
+        if (shell.centerWidth !== base) fail(tag + " primary column is " + shell.centerWidth + "px, Settings is " + base + "px");
+        if (shell.pageWidth > base) fail(tag + " page is wider than the column");
+      } else if (!shell.bottom) fail(tag + " hides the bottom tab bar");
+    }
+  }
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "lightsout"));
   await page.goto(origin + "/#/store", { waitUntil: "domcontentloaded" });
   const tile = page.locator("[data-gift='pick']").first();
   await tile.waitFor({ timeout: 20000 });
