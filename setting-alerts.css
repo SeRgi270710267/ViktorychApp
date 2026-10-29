@@ -1,6 +1,7 @@
 /* Settings alerts: the settings section, the data cap meter, the banner and
    pulse on a page opened for a problem, and System items in Notifications. */
 .sa-settings, .sa-cap { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line, #2f3336); }
+.sa-cap { margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--line, #2f3336); }
 .sa-settings h2, .sa-cap h2 { font-size: 20px; font-weight: 800; margin: 0 0 4px; }
 .sa-preview { margin: 8px 0 12px; }
 .sa-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; font-size: 15px; }
@@ -17,10 +18,12 @@
 .sa-hours { display: flex; gap: 16px; flex-wrap: wrap; }
 .sa-hours .sa-field { flex: 1 1 140px; }
 .sa-list { display: flex; flex-direction: column; }
-.sa-row { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line, #2f3336); }
-.sa-row > .tab-switch { flex: 1 1 auto; border-bottom: 0; }
+.sa-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; border-bottom: 1px solid var(--line, #2f3336); }
+.sa-row > .tab-switch { flex: 1 1 0; min-width: 0; border-bottom: 0; }
 .sa-row-ico { width: 24px; text-align: center; font-size: 18px; }
+.sa-auto { flex: 1 1 100%; padding-left: 34px; margin-top: -10px; }
 .sa-auto .tab-switch { border-bottom: 0; font-size: 13px; color: var(--muted, #71767b); gap: 8px; }
+.sa-auto .tab-switch span { white-space: nowrap; }
 .sa-meter { height: 8px; margin: 12px 0 6px; border-radius: 9999px; background: #2f3336; overflow: hidden; }
 .sa-meter i { display: block; height: 100%; border-radius: inherit; background: #1d9bf0; transition: width 300ms ease; }
 .sa-meter.v-warning i { background: #ffad1f; }
