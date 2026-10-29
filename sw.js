@@ -4,7 +4,7 @@ const VERSION = "viktorych-a134-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T15:28:00Z-x-native-video
+// cache-bust: 2026-10-29T15:27:00Z-p2p-pool
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -202,6 +202,9 @@ const SHELL_FILES = [
   "./icons/music-maskable-512.png",
   "./peer-media.js",
   "./shared/peer-media.js",
+  "./peer-pool.js",
+  "./shared/peer-pool.js",
+  "./shared/pool-scheduler.js",
   "./shared/device-performance.js"
 ];
 

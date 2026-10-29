@@ -11,6 +11,7 @@ COPY shared/ ./shared/
 COPY backup-server/package.json ./package.json
 COPY backup-server/server.mjs ./server.mjs
 COPY backup-server/cloudflare.mjs ./cloudflare.mjs
+COPY backup-server/pool-room.mjs ./pool-room.mjs
 
 ENV NODE_ENV=production
 ENV PORT=10000
