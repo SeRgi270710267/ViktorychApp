@@ -37,6 +37,7 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
@@ -5363,6 +5364,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/yt/manifest" || path === "/v1/yt/media") {
     return handleYtRoute(request, env, url);
   }
+  if (path === "/v1/watchdog" || path === "/v1/owner/health") {
+    const watched = await handleWatchdog(request, env, path, { json, requireOwner });
+    if (watched) return watched;
+  }
   if (path === "/v1/health" && request.method === "GET") {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
   }
@@ -5735,10 +5740,14 @@ export default {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
     // Features the owner turned off do no cron work at all.
-    const off = await readFlags(env, at);
+    const flags = await readFlags(env, at);
     // Jobs the Render backup claimed in the last couple of minutes run there.
     const away = await claimedJobs(env, at);
     const minute = new Date(at).getUTCMinutes();
+    // Near a free daily limit the watchdog pauses optional cron work.
+    const paused = await watchdogPause(env, at).catch(() => false);
+    // A copy: the memoised flags also answer requests.
+    const off = paused ? Object.assign({}, flags, { shorts: true }) : flags;
     const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)).catch((err) => logError("cron", err)).then(() => sweepTemporary(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), pollPackages(env, at, null, packageNotifier(emitNotification)).catch(() => null), sweepExpiredNotes(env, at)];
     const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
     run("ownerFeeds", () => sweepOwnerFeeds(env, at));
@@ -5748,7 +5757,10 @@ export default {
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
-    if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    if (minute % 15 === 0 && !paused) jobs.push(maybeDispatchDiscord(env));
+    // Hourly unattended watchdog: re-enables workflows, re-runs a stuck
+    // deploy and records health for the owner (src/watchdog.js).
+    if (minute === 7) jobs.push(runWatchdog(env, at));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));

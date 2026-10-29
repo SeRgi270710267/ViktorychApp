@@ -3473,5 +3473,10 @@ SI18n.addPack("hi", {
   "{up} of {all} relays connected": "{all} में से {up} रिले जुड़े",
   "No messages in the last hour yet.": "पिछले एक घंटे में अभी कोई संदेश नहीं।",
   "Location is not available. Type an area instead.": "लोकेशन उपलब्ध नहीं है। क्षेत्र लिखें।",
-  "You are offline. The browser area chat needs some internet; the TV app can use Bluetooth.": "आप ऑफ़लाइन हैं। ब्राउज़र की क्षेत्र चैट को थोड़ा इंटरनेट चाहिए; TV ऐप ब्लूटूथ इस्तेमाल कर सकता है।"
+  "You are offline. The browser area chat needs some internet; the TV app can use Bluetooth.": "आप ऑफ़लाइन हैं। ब्राउज़र की क्षेत्र चैट को थोड़ा इंटरनेट चाहिए; TV ऐप ब्लूटूथ इस्तेमाल कर सकता है।",
+  "Site health": "साइट की स्थिति",
+  "Site health: {count} problems need you": "साइट की स्थिति: {count} समस्याओं पर आपका ध्यान चाहिए",
+  "Site health: all good": "साइट की स्थिति: सब ठीक है",
+  "Site health not checked yet": "साइट की स्थिति अभी जाँची नहीं गई",
+  "Check now": "अभी जाँचें"
 });
