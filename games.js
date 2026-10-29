@@ -238,7 +238,7 @@
     var favs = GAMES.filter(function (item) { return stat(item.id).fav; });
     return rail(tr("Recently played"), recent, tr("Nothing played yet.")) +
       rail(tr("Favourites"), favs, tr("No favourites yet.")) +
-      '<section class="games-rail"><h2>' + esc(tr("Games")) + '</h2>' + streakLine() + '<div class="games-grid">' + GAMES.map(card).join("") + "</div></section>" +
+      '<section class="games-rail"><h2>' + esc(tr("Games")) + '</h2>' + streakLine() + (tvPad() ? '<div class="games-tvpad">' + tvPadLink("games-pad-play") + '<p class="games-empty">' + esc(tr("Xbox, PlayStation and other controllers work in the TV app.")) + "</p></div>" : "") + '<div class="games-grid">' + GAMES.map(card).join("") + "</div></section>" +
       boardSection();
   }
   function page(route) {
@@ -427,11 +427,12 @@
     if (!host.classList.contains("immersive")) return;
     chromeTimer = setTimeout(function () { host.classList.add("chrome-hidden"); }, 4000);
   }
-  function padNote(text) {
+  function padNote(text, html) {
     var host = hostEl();
     var el = host && host.querySelector(".game-pad-note");
     if (!el) return;
-    el.textContent = text;
+    if (html) el.innerHTML = text;
+    else el.textContent = text;
     el.classList.add("on");
     if (padTimer) clearTimeout(padTimer);
     padTimer = setTimeout(function () { el.classList.remove("on"); }, 6000);
@@ -448,11 +449,30 @@
     } catch (err) { /* private mode: show it anyway */ }
     padNote(tr("The joystick and buttons appear once you join a match. Tap menus directly."));
   }
+  /* The ViktorychTV app (1.2.0, versionCode 3 and up) plays ReGone with a
+     controller in its own screen: viktorychtv://game/regone. */
+  var TV_PAD_VERSION = 3;
+  function tvPad() {
+    var b = window.ViktorychTVMode;
+    try { return !!(b && b.inApp && b.inApp() && b.appVersion() >= TV_PAD_VERSION); } catch (err) { return false; }
+  }
+  function tvPadHref() {
+    var b = window.ViktorychTVMode;
+    var pkg = (b && b.APP_PACKAGE) || "app.viktorych.tv";
+    return "intent://game/regone#Intent;scheme=viktorychtv;package=" + pkg + ";end";
+  }
+  function tvPadLink(cls) {
+    return '<a class="' + cls + '" href="' + esc(tvPadHref()) + '" data-game-tvpad="regone">' + svg(PAD) + "<span>" + esc(tr("Play with controller")) + "</span></a>";
+  }
+  function padMessage() {
+    if (tvPad()) return esc(tr("Controller connected.")) + " " + tvPadLink("game-pad-go");
+    return esc(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse.")) + " " + esc(tr("Play with a controller in the ViktorychTV app."));
+  }
   function padCheck() {
     var pads = [];
     try { pads = navigator.getGamepads ? Array.prototype.slice.call(navigator.getGamepads() || []) : []; } catch (err) { pads = []; }
     var pad = pads.filter(Boolean)[0];
-    if (pad) padNote(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse."));
+    if (pad) padNote(padMessage(), true);
   }
   function toggleFull() {
     var host = hostEl();
@@ -509,7 +529,7 @@
     else if (playing) beat();
   });
   window.addEventListener("gamepadconnected", function () {
-    if (playing) padNote(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse."));
+    if (playing) padNote(padMessage(), true);
   });
   window.addEventListener("resize", function () {
     var host = hostEl();

@@ -3922,5 +3922,9 @@ SI18n.addPack("hi", {
   "This request expired.": "इस अनुरोध की समय-सीमा खत्म हो गई।",
   "Approve": "मंज़ूर करें",
   "A TV asked to sign in to your account. Check that it shows this code:": "एक TV ने आपके खाते में साइन इन करने को कहा है। देखें कि उस पर यही कोड है:",
-  "Only approve if this TV is in front of you. If you didn't ask, choose Deny.": "सिर्फ़ तभी मंज़ूर करें जब यह TV आपके सामने हो। अगर आपने नहीं माँगा, तो रोकें चुनें।"
+  "Only approve if this TV is in front of you. If you didn't ask, choose Deny.": "सिर्फ़ तभी मंज़ूर करें जब यह TV आपके सामने हो। अगर आपने नहीं माँगा, तो रोकें चुनें।",
+  "Play with controller": "कंट्रोलर से खेलें",
+  "Controller connected.": "कंट्रोलर कनेक्ट हो गया।",
+  "Play with a controller in the ViktorychTV app.": "ViktorychTV ऐप में कंट्रोलर से खेलें।",
+  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation और दूसरे कंट्रोलर TV ऐप में काम करते हैं।"
 });
