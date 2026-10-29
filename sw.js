@@ -4,7 +4,7 @@ const VERSION = "viktorych-a100-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T03:56:00Z-usage-panel
+// cache-bust: 2026-10-29T03:56:00Z-p2p-direct
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -77,6 +77,9 @@ const SHELL_FILES = [
   "./logo/viktorychmusic-short.svg",
   "./translate.js",
   "./translate.css",
+  "./live-translate.js",
+  "./live-translate.css",
+  "./friend-p2p.js",
   "./people.js",
   "./people.css",
   "./tv.js",
