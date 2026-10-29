@@ -3272,5 +3272,16 @@ SI18n.addPack("ru", {
   "One grouped card a day": "Одна общая карточка в день",
   "Folded posts load nothing until you open them. Your choice follows your account.": "Свёрнутые посты ничего не загружают, пока вы их не откроете. Выбор сохраняется в вашем аккаунте.",
   "Muted for now. Change it any time in Posting volume.": "Пока скрыто. Изменить можно в любой момент в разделе «Частота постов».",
-  "Unmuted": "Снова показывается"
+  "Unmuted": "Снова показывается",
+  "Also on {platforms}. Add them?": "Также в {platforms}. Добавить?",
+  "Follow on {platform}": "Читать в {platform}",
+  "Follow {name} on": "Читать {name} в",
+  "Merge": "Объединить",
+  "Merged into {name}’s profile": "Добавлено в профиль {name}",
+  "Not the same person? Unmerge": "Это разные люди? Разъединить",
+  "Posts from": "Посты из",
+  "Same person as {name}?": "Это тот же человек, что и {name}?",
+  "Undo": "Отменить",
+  "Unmerged. Each account has its own profile again.": "Разъединено. У каждого аккаунта снова свой профиль.",
+  "Merged profiles": "Объединённые профили"
 });

@@ -3272,5 +3272,16 @@ SI18n.addPack("en", {
   "One grouped card a day": "One grouped card a day",
   "Folded posts load nothing until you open them. Your choice follows your account.": "Folded posts load nothing until you open them. Your choice follows your account.",
   "Muted for now. Change it any time in Posting volume.": "Muted for now. Change it any time in Posting volume.",
-  "Unmuted": "Unmuted"
+  "Unmuted": "Unmuted",
+  "Also on {platforms}. Add them?": "Also on {platforms}. Add them?",
+  "Follow on {platform}": "Follow on {platform}",
+  "Follow {name} on": "Follow {name} on",
+  "Merge": "Merge",
+  "Merged into {name}’s profile": "Merged into {name}’s profile",
+  "Not the same person? Unmerge": "Not the same person? Unmerge",
+  "Posts from": "Posts from",
+  "Same person as {name}?": "Same person as {name}?",
+  "Undo": "Undo",
+  "Unmerged. Each account has its own profile again.": "Unmerged. Each account has its own profile again.",
+  "Merged profiles": "Merged profiles"
 });

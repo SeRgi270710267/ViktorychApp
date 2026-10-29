@@ -3272,5 +3272,16 @@ SI18n.addPack("es", {
   "One grouped card a day": "Una tarjeta agrupada al día",
   "Folded posts load nothing until you open them. Your choice follows your account.": "Las publicaciones plegadas no cargan nada hasta que las abres. Tu elección se guarda en tu cuenta.",
   "Muted for now. Change it any time in Posting volume.": "Silenciada por ahora. Puedes cambiarlo cuando quieras en Volumen de publicaciones.",
-  "Unmuted": "Ya no está silenciada"
+  "Unmuted": "Ya no está silenciada",
+  "Also on {platforms}. Add them?": "También en {platforms}. ¿Añadirlos?",
+  "Follow on {platform}": "Seguir en {platform}",
+  "Follow {name} on": "Seguir a {name} en",
+  "Merge": "Unir",
+  "Merged into {name}’s profile": "Unido al perfil de {name}",
+  "Not the same person? Unmerge": "¿No es la misma persona? Separar",
+  "Posts from": "Posts de",
+  "Same person as {name}?": "¿Es la misma persona que {name}?",
+  "Undo": "Deshacer",
+  "Unmerged. Each account has its own profile again.": "Separados. Cada cuenta vuelve a tener su propio perfil.",
+  "Merged profiles": "Perfiles unidos"
 });
