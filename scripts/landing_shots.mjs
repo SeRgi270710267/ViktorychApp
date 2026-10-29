@@ -590,7 +590,7 @@ async function captureBadges(browser, origin, outDir) {
     else route.abort();
   });
   await page.goto(origin + "/#/@lumen?tab=about", { waitUntil: "domcontentloaded" });
-  await waitFor(page, () => /Badges/.test(document.body.innerText || "") && document.querySelector(".badge-tile"), "badges");
+  await waitFor(page, () => /Badges/.test(document.body.innerText || "") && document.querySelector(".bdg-row"), "badges");
   const png = join(tmpdir(), "land-badges.png");
   await shoot(page, png);
   toWebp(png, join(outDir, "badges.webp"));
