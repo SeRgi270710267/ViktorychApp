@@ -2063,7 +2063,9 @@
       if (!vk.length) return;
       state.vkServers = vk;
       const before = state.channels.map(function (ch) { return ch.id; }).join(",");
-      applyConfig((state.configList || []).concat(vk));
+      // Keep whatever Discord servers are already listed when feeds.config.json gave none.
+      const base = (state.configList && state.configList.length) ? state.configList : (state.servers || []).filter(function (server) { return !/^99\d{13}$/.test(String(server.id || "")); });
+      applyConfig(base.concat(vk));
       // VK has no index.json, so read each channel once for its preview.
       state.channels.forEach(function (ch) { if (isVk(ch.id) && !state.files[ch.id]) ensureChannel(ch.id); });
       if (!onMessages()) return;
@@ -2073,7 +2075,8 @@
     });
   }
   function vkTick() {
-    if (typeof document === "undefined" || document.visibilityState !== "visible" || !onMessages() || !state.vkServers) return;
+    if (typeof document === "undefined" || document.visibilityState !== "visible" || !onMessages()) return;
+    // Also when the first read missed (signed in later, or VK set up since).
     loadVk();
     (state.channels || []).forEach(function (ch) {
       if (!isVk(ch.id) || state.open !== ch.id) return;
@@ -2082,6 +2085,11 @@
     });
   }
   if (typeof setInterval === "function") setInterval(vkTick, 60000);
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("hashchange", function () {
+      if (!state.vkServers && state.loadStarted && !state.fixture && onMessages() && !paced()) loadVk();
+    });
+  }
 
   function onMessages() {
     try { return /^#\/messages(?:\/|\?|$)/.test(location.hash || ""); }
