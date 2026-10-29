@@ -1,4 +1,5 @@
-/* Lazy route modules. The pages Shorts, Games, TV, Vault, Drive, and Communities
+/* Lazy route modules. The pages Shorts, Games, TV, Vault, Drive, Communities and
+   Messages servers
    load only when the user actually opens them; during idle time the browser
    quietly preloads them one by one so the first click is instant. Classic
    scripts are injected as <script>, ES modules come through import(). */
@@ -10,7 +11,8 @@
     vault: { classic: false, scripts: ["vault.js", "vault.css"] },
     packages: { classic: false, scripts: ["packages.js", "packages.css"] },
     drive: { classic: false, scripts: ["drive.js", "drive.css"] },
-    communities: { classic: true, scripts: ["communities.js", "communities.css"] }
+    communities: { classic: true, scripts: ["communities.js", "communities.css"] },
+    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] }
   };
   var loads = {};
   var preloadStarted = false;

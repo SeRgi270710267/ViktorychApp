@@ -4629,11 +4629,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     startPlayback(el, { muted: saved.muted, resume: saved.time });
   }
 
-  /* The other API hosts (the Render failover and any extra mirrors) run the
-     same Worker, so each one can fetch a video when the main relay fails. */
+  /* Extra API mirrors run the same Worker, so each one can fetch a video
+     when the main relay fails. The Render backup is left out on purpose:
+     its free plan has 5 GB of bandwidth a month, a few videos would use it
+     up and suspend sign-in failover, so it refuses video relays. */
   function backupApis(current) {
     const bag = window.VIKTORYCH_ACCOUNTS || {};
-    const list = [].concat(Array.isArray(bag.apis) ? bag.apis : [], bag.api || [], bag.backupApi || []);
+    const render = String(bag.backupApi || "").replace(/\/$/, "");
+    const list = [].concat(Array.isArray(bag.apis) ? bag.apis : [], bag.api || []).filter((root) => String(root || "").replace(/\/$/, "") !== render);
     const now = String(current || "").replace(/\/$/, "");
     const out = [];
     list.forEach((raw) => {
@@ -8015,7 +8018,8 @@ const here = parseRoute();
     }
     if (parts[0] === "messages") {
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
-      return { name: "messages", channel: channel, query };
+      const server = (parts[1] === "s" || parts[1] === "join") && parts[2] ? parts[2] : "";
+      return { name: "messages", channel: channel, server: server, query };
     }
     if (parts[0] === "spaces") return { name: "spaces", id: parts[1] || "", query };
     if (parts[0] === "live" && /^[a-f0-9]{32}$/.test(parts[1] || "")) return { name: "live", id: parts[1], query };
@@ -16782,6 +16786,10 @@ if (STATE.histClear) {
   function ensureLazy(name) {
     if (window.ViktorychLazy && window.ViktorychLazy.ensure) window.ViktorychLazy.ensure(name);
   }
+  /* #/messages/s/… and #/messages/join/… belong to the app's own servers (servers-ui.js). */
+  function nativeServerHash(hash) {
+    return /^#\/messages\/(?:s|join)\//.test(hash || "");
+  }
   function lazySkeleton(title) {
     return pageHead(title) + `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`;
   }
@@ -16870,6 +16878,11 @@ if (STATE.histClear) {
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
+    if (route.name === "messages" && nativeServerHash(location.hash)) {
+      if (window.ViktorychServers) return window.ViktorychServers.page(route);
+      ensureLazy("servers");
+      return `<div class="dmsgs"><div class="dmsgs-skel" style="flex:1"><span></span><span></span><span></span><span></span></div></div>`;
+    }
     if (route.name === "messages" && window.FeedsDiscord) return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + window.FeedsDiscord.page(route);
     if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
@@ -17737,6 +17750,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       placeFloatMenu(".tab-context");
       syncTabArrows();
       if (window.FeedsDiscord && window.FeedsDiscord.mount) window.FeedsDiscord.mount(route);
+      if (window.ViktorychServers && window.ViktorychServers.mount) window.ViktorychServers.mount(route);
       if (route.name === "explore") bindExploreSearchFit();
       else clearExploreSearchFit();
       bindNavSplit();
@@ -21037,7 +21051,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     showPill(pendingPillPosts());
     const nextHash = location.hash || "#/";
     const prevHash = lastKey || "";
-    if (/^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
+    const nativePrev = nativeServerHash(prevHash);
+    const nativeNext = nativeServerHash(nextHash);
+    if (nativePrev && nativeNext && window.ViktorychServers && window.ViktorychServers.syncFromHash && window.ViktorychServers.syncFromHash()) {
+      lastKey = nextHash;
+      STATE.scrollKey = "#/messages";
+      routing = false;
+      scrollFreeze = false;
+      return;
+    }
+    if (!nativePrev && !nativeNext && /^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
       lastKey = nextHash;
       STATE.scrollKey = "#/messages";
       routing = false;
@@ -25236,13 +25259,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const info = event.detail || {};
     if (info.name === "shorts") bindShortsModule();
     if (info.name === "communities") bindCommunitiesModule();
-    if (!info.silent) render();
+    if (!info.silent || (info.name === "servers" && parseRoute().name === "messages")) render();
   });
   setTimeout(deviceHello, 6000);
   syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
-      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive", "packages"]);
+      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive", "packages", "servers"]);
     }
   }, 8000);
   window.addEventListener("viktorych-key-alert", function (event) {
