@@ -61,7 +61,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Mastodon" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -79,6 +79,7 @@
     lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
     bookmark: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z",
     storage: "M12 5c3.2 0 5.7 2 6.4 4.6 2.4.4 4.1 2.4 4.1 4.8 0 2.7-2.2 4.8-4.9 4.8H7C4.4 19.2 2.3 17.1 2.3 14.5c0-2.3 1.6-4.2 3.8-4.7C6.9 7 9.2 5 12 5zm0 2c-2.2 0-3.9 1.5-4.5 3.6l-.3.8-.8.2c-1.6.4-2.7 1.8-2.7 3.4 0 1.9 1.5 3.4 3.4 3.4h10.5c1.6 0 2.9-1.3 2.9-2.9 0-1.5-1.1-2.7-2.5-2.9l-.8-.1-.2-.8C16 8.4 14.2 7 12 7z",
+    packages: "M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z",
     vault: "M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
     games: "M8 8.5h8c1.9 0 3.5 1.3 3.9 3.1l.7 3.6c.2 1.1-.6 2.1-1.7 2.1-.5 0-1-.2-1.3-.6L16.4 15H7.6l-1.2 1.7c-.3.4-.8.6-1.3.6-1.1 0-1.9-1-1.7-2.1l.7-3.6C4.5 9.8 6.1 8.5 8 8.5zm.2 1.7c-1.1 0-2 .8-2.2 1.8l-.7 3.6c-.1.4.2.7.6.7.2 0 .3-.1.4-.2l1.3-1.6h7.8l1.3 1.6c.1.1.2.2.4.2.4 0 .7-.3.6-.7l-.7-3.6c-.2-1-1.1-1.8-2.2-1.8H8.2zM9 11.6h1.1v1.1h1.1v1.1H10.1v1.1H9v-1.1H7.9v-1.1H9v-1.1zm5.6.9a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7zm1.7-.9a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7z",
     communities: "M9 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm6 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM4 18v-1.2C4 14.6 6.4 13 9 13s5 1.6 5 3.8V18H4zm10.5 0v-1.1c0-.7-.2-1.4-.6-2 .9-.4 2-.6 3.1-.6 2.4 0 5 1.4 5 3.5V18h-7.5z",
@@ -1070,7 +1071,7 @@
   const DEFAULT_NAV_CUSTOM = {
     folders: [
       { id: "media", name: tr("Media"), items: ["music", "shorts", "tv", "games"] },
-      { id: "library", name: tr("Library"), items: ["history", "communities", "subscriptions", "vault"] }
+      { id: "library", name: tr("Library"), items: ["history", "communities", "subscriptions", "vault", "packages"] }
     ],
     order: ["home", "explore", "notifications", "messages", "feeds", "lists", "folder:media", "folder:library", "settings"],
     hidden: []
@@ -1079,7 +1080,7 @@
   const ALL_NAV_IDS = [
     "home", "explore", "notifications", "messages", "online", "feeds", "lists",
     "history", "music", "shorts", "games", "tv", "communities",
-    "subscriptions", "vault", "settings"
+    "subscriptions", "vault", "packages", "settings"
   ];
 
   function cleanNavCustom(custom) {
@@ -1854,7 +1855,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (/(?:youtube\.com|youtu\.be)\//i.test(text)) return { platform: "youtube", account: text };
     if (/vk\.com\/[A-Za-z0-9_.]+/i.test(text)) return { platform: "vk", account: text };
     if (/^https?:\/\/(?:www\.)?bsky\.app\/profile\/[A-Za-z0-9._:%-]+/i.test(text)) return { platform: "bsky", account: text };
-    if (/^https?:\/\/[A-Za-z0-9.-]+\/@[A-Za-z0-9_]{1,64}\/?$/i.test(text)) return { platform: "mastodon", account: text };
+    if (/^https?:\/\/[A-Za-z0-9.-]+\/@[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})?\/?$/i.test(text)) return { platform: "mastodon", account: text };
+    if (/^@?[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(text)) return { platform: "mastodon", account: text.replace(/^@/, "") };
+    if (/^https:\/\/[A-Za-z0-9.-]+\/(?:users|a|c|profile)\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}\/?$/i.test(text) && !/(?:x|twitter|instagram|threads|tiktok|youtube|vk|reddit|bsky)\.(?:com|net|app)\//i.test(text)) return { platform: "mastodon", account: text };
     if (/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?[A-Za-z][A-Za-z0-9_]{4,31}(?:\/\d+)?\/?$/i.test(text)) return { platform: "telegram", account: text };
     if (/^@?[A-Za-z][A-Za-z0-9_]{16,32}$/.test(text)) return { platform: "telegram", account: text.replace(/^@/, "") };
     if (/^(?:https?:\/\/)?(?:www\.|m\.)?tiktok\.com\/@[A-Za-z0-9._]{2,24}(?:[/?#].*)?$/i.test(text)) return { platform: "tiktok", account: text };
@@ -1877,7 +1880,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       youtube: /(?:youtube\.com\/(?:@|channel\/|c\/|user\/)?|youtu\.be\/)([A-Za-z0-9._-]+)/i,
       vk: /vk\.com\/([A-Za-z0-9_.]+)/i,
       bsky: /bsky\.app\/profile\/([A-Za-z0-9._:%-]+)/i,
-      mastodon: /\/@([A-Za-z0-9_]{1,64})/i
+      mastodon: /\/(?:@|users\/|a\/|c\/|profile\/)([A-Za-z0-9_][A-Za-z0-9_.-]{0,63}(?:@[A-Za-z0-9.-]+)?)/i
     };
     const pattern = patterns[parsed.platform];
     const fromUrl = pattern ? text.match(pattern) : null;
@@ -7573,6 +7576,7 @@ const here = parseRoute();
       return { name: "drive", section: "files", trash: false, folder: "", view: "", album: "", query };
     }
     if (parts[0] === "vault") return { name: "vault", tab: parts[1] || "my", query };
+    if (parts[0] === "packages") return { name: "packages", tab: parts[1] || "active", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
@@ -7741,6 +7745,8 @@ const here = parseRoute();
         return { id: "communities", href: "#/communities", icon: "communities", label: tr("Communities"), active: (r) => r.name === "communities" };
       case "subscriptions":
         return { id: "subscriptions", href: subsHash((STATE.settings && STATE.settings.subsGroup) || ""), icon: "subs", label: tr("Subscriptions"), active: (r) => r.name === "subscriptions" };
+      case "packages":
+        return { id: "packages", href: "#/packages", icon: "packages", label: tr("Packages"), active: (r) => r.name === "packages", visible: () => !!(window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account()) };
       case "vault":
         return { id: "vault", href: "#/vault", icon: "vault", label: tr("Vault"), active: (r) => r.name === "vault", visible: () => !!(window.ViktorychVault && window.ViktorychVault.visible()) };
       case "storage":
@@ -8086,7 +8092,7 @@ const here = parseRoute();
   const BOTTOM_NAV_IDS = [
     "home", "explore", "tv", "communities", "notifications", "messages", "online",
     "feeds", "lists", "history", "music", "shorts", "games",
-    "subscriptions", "vault", "storage", "settings"
+    "subscriptions", "vault", "packages", "storage", "settings"
   ];
   const BOTTOM_NAV_DEFAULT_ON = ["home", "explore", "tv", "communities", "notifications", "messages"];
 
@@ -10346,6 +10352,51 @@ const here = parseRoute();
     }).catch(() => null);
   }
 
+  /* A fediverse status (Mastodon API, also served by Pixelfed, Pleroma,
+     Akkoma, GoToSocial and Friendica) as an X-style post. A boost shows the
+     original post with its own author. Read-only: nothing is sent back. */
+  function fediText(html) {
+    const raw = String(html || "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
+    try {
+      const doc = new DOMParser().parseFromString(raw, "text/html");
+      return String(doc.body.textContent || "").trim();
+    } catch (err) {
+      return raw.replace(/<[^>]*>/g, "").trim();
+    }
+  }
+
+  function fediPost(item, profile) {
+    if (!item || !item.id) return null;
+    const boosted = item.reblog && item.reblog.id ? item.reblog : null;
+    const src = boosted || item;
+    const who = (boosted && boosted.account) || null;
+    const media = (src.media_attachments || []).map((m) => {
+      const type = m.type === "image" ? "photo" : (m.type === "video" || m.type === "gifv") ? "video" : "";
+      const url = type === "photo" ? (m.url || m.preview_url) : m.url;
+      if (!type || !/^https:\/\//.test(String(url || ""))) return null;
+      return { type: type, url: url, poster: m.preview_url || "", alt: m.description || "" };
+    }).filter(Boolean);
+    const warn = String(src.spoiler_text || "").trim();
+    const body = fediText(src.content);
+    return {
+      id: item.id,
+      statusId: item.id,
+      platform: "mastodon",
+      kind: boosted ? "repost" : (item.in_reply_to_id ? "reply" : "post"),
+      author: who ? (who.display_name || who.username || who.acct || "") : profile.name,
+      handle: who ? (who.acct || who.username || "") : profile.handle,
+      avatar: who ? (who.avatar || "") : profile.avatar,
+      repostedBy: boosted ? { handle: profile.handle, name: profile.name, platform: "mastodon" } : null,
+      text: warn ? warn + (body ? "\n\n" + body : "") : body,
+      media: media,
+      likes: Number(src.favourites_count) || 0,
+      reposts: Number(src.reblogs_count) || 0,
+      replyCount: Number(src.replies_count) || 0,
+      date: src.created_at || item.created_at || "",
+      url: src.url || item.url || profile.url
+    };
+  }
+
   function loadMastodonLive(row, handle) {
     const who = window.ViktorychDirect ? window.ViktorychDirect.splitMastodon(handle) : { instance: "mastodon.social", acct: handle };
     return loadMastodonHeader(handle).then((profile) => {
@@ -10356,18 +10407,8 @@ const here = parseRoute();
         return null;
       }
       return publicJson(window.ViktorychDirect.mastodonStatuses(who.instance, profile.remoteId)).then((list) => {
-        row.posts = (list || []).map((item) => ({
-          id: item.id,
-          statusId: item.id,
-          platform: "mastodon",
-          kind: "post",
-          author: profile.name,
-          handle: profile.handle,
-          avatar: profile.avatar,
-          text: item.content || "",
-          date: item.created_at || "",
-          url: item.url || profile.url
-        }));
+        row.posts = (list || []).map((item) => fediPost(item, profile)).filter(Boolean);
+        row.media = row.posts.filter((post) => post.media && post.media.length);
         row.source = "mastodon";
         row.fetchedAt = Date.now();
         snapshotProfile("mastodon:" + who.instance + ":" + who.acct, row);
@@ -12775,6 +12816,7 @@ const here = parseRoute();
     if (kind === "gift") return tr("{name} sent you a gift", { name: who });
     if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
     if (kind === "birthday_self") return tr("Happy birthday");
+    if (kind === "package") return tr("Package update: {name}", { name: (note && note.name) || tr("Packages") });
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
@@ -13248,7 +13290,8 @@ const here = parseRoute();
         games: route.game === "regone" ? "ReGone" : tr("Games"),
         communities: tr("Communities"),
         drive: route.section === "photos" ? tr("Photos") : tr("brand.storage"),
-        vault: tr("Viktorych Vault")
+        vault: tr("Viktorych Vault"),
+        packages: tr("Packages")
       };
       key = map[route.name] || "";
     }
@@ -13615,7 +13658,7 @@ const here = parseRoute();
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
   const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
-  const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
+  const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "packages", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
     home: "home",
@@ -13631,6 +13674,7 @@ const here = parseRoute();
     shorts: "shorts",
     subscriptions: "subscriptions",
     vault: "vault",
+    packages: "packages",
     games: "games",
     tv: "tv",
     settings: "settings",
@@ -13945,7 +13989,7 @@ const here = parseRoute();
   }
 
   function drawerExtraRows() {
-    const ids = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "storage", "games", "music"];
+    const ids = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "packages", "storage", "games", "music"];
     const rows = ids.map((id) => {
       const def = navItemDef(id);
       if (!def) return "";
@@ -14281,7 +14325,7 @@ if (STATE.histClear) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
@@ -15824,6 +15868,11 @@ if (STATE.histClear) {
       if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
       return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
     }
+    if (route.name === "packages") {
+      if (window.ViktorychPackages && window.ViktorychPackages.visible()) return window.ViktorychPackages.page(route);
+      if (!window.ViktorychPackages) { ensureLazy("packages"); return lazySkeleton(tr("Packages")); }
+      return pageHead(tr("Packages")) + emptyBlock(tr("Packages"), tr("Sign in to track your packages."));
+    }
     if (route.name === "vault") {
       if (window.ViktorychVault && window.ViktorychVault.visible()) return window.ViktorychVault.page(route);
       if (!window.ViktorychVault) { ensureLazy("vault"); return lazySkeleton(tr("Vault")); }
@@ -16672,6 +16721,10 @@ if (STATE.histClear) {
       if (window.ViktorychVault) {
         if (route.name === "vault") window.ViktorychVault.mount(route);
         else window.ViktorychVault.unmount();
+      }
+      if (window.ViktorychPackages) {
+        if (route.name === "packages") window.ViktorychPackages.mount(route);
+        else window.ViktorychPackages.unmount();
       }
       if (window.ViktorychTV) {
         if (route.name === "tv") window.ViktorychTV.mount(route);
@@ -23887,7 +23940,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   syncServerFeatures();
   setTimeout(() => {
     if (window.ViktorychLazy && window.ViktorychLazy.preload) {
-      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
+      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive", "packages"]);
     }
   }, 8000);
   window.addEventListener("viktorych-key-alert", function (event) {
