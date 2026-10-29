@@ -1,5 +1,7 @@
 /* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("ru", {
+  "Play with the X player": "Смотреть в плеере X",
+  "Play with the TikTok player": "Смотреть в плеере TikTok",
   "3 months": "3 месяца",
   "6 months": "6 месяцев",
   "12 months": "12 месяцев",
