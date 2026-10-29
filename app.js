@@ -61,7 +61,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", nostr: "Nostr" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -889,7 +889,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -1572,7 +1572,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1635,7 +1635,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       stories: [tr("Stories"), tr("Story uploads, the story bar and expiry sweeps.")],
       lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
       telegram: [tr("Telegram ingest"), tr("The Telegram bot webhook and media relay.")],
-      pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")]
+      pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")],
+      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -1846,6 +1847,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function parseAccountInput(raw) {
     const text = String(raw || "").trim();
     if (!text || text.length > 300) return null;
+    if (/^(?:nostr:)?(?:npub1|nprofile1)[02-9ac-hj-np-z]{20,}$/i.test(text)) return { platform: "nostr", account: text.replace(/^nostr:/i, "") };
+    if (/^nostr:[A-Za-z0-9._-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/i.test(text)) return { platform: "nostr", account: text.slice(6) };
     const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok|bsky|mastodon):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
     if (/^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}(?:\/[A-Za-z0-9_/%?&=.+~-]*)?$/i.test(text)) return { platform: "x", account: text };
@@ -1863,6 +1866,37 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (/^(?:https?:\/\/)?(?:www\.|m\.)?tiktok\.com\/@[A-Za-z0-9._]{2,24}(?:[/?#].*)?$/i.test(text)) return { platform: "tiktok", account: text };
     if (/^https:\/\/\S+$/i.test(text)) return { platform: "rss", account: text };
     return null;
+  }
+
+  /* A fediverse or Nostr profile that is not in the site's feed list is
+     followed on this device and read live from its own server or relays. */
+  function followOnDevice(parsed) {
+    if (parsed.platform === "nostr") {
+      if (!nostrOn()) {
+        toast(tr("Turn on Nostr in Settings first."));
+        location.hash = "#/settings/nostr";
+        return Promise.resolve(false);
+      }
+      return window.ViktorychNostr.resolveProfile(parsed.account).then((who) => {
+        if (!who) { toast(tr("Couldn’t find that Nostr profile.")); return false; }
+        const npub = window.ViktorychNostr.npub(who.pubkey);
+        applyFollow(["nostr:" + npub], true);
+        location.hash = "#/nostr/" + encodeURIComponent(npub);
+        return true;
+      }).catch(() => { toast(tr("Couldn’t find that Nostr profile.")); return false; });
+    }
+    const who = window.ViktorychDirect ? window.ViktorychDirect.splitMastodon(String(parsed.account || "").replace(/^(?:mastodon|fediverse|fedi):/i, "")) : null;
+    if (!who || !who.acct || !who.instance) {
+      toast(tr("Use a profile URL, @handle, or an https feed"));
+      return Promise.resolve(false);
+    }
+    const handle = who.acct + "@" + who.instance;
+    return loadMastodonHeader(handle).then((profile) => {
+      if (!profile) { toast(tr("Couldn’t reach that fediverse server.")); return false; }
+      applyFollow(["mastodon:" + handle], true);
+      location.hash = "#/mastodon/" + encodeURIComponent(handle);
+      return true;
+    });
   }
 
   function feedIdFromPaste(parsed) {
@@ -6110,6 +6144,56 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  /* Nostr replies come straight from relays and are checked on this device. */
+  function nostrReplyBucket(post, id, want) {
+    const bucket = STATE.replies[id];
+    if (bucket && (bucket.loading || (bucket.fetchedAt && Date.now() - bucket.fetchedAt < COMMENT_TTL))) return bucket;
+    if (!nostrOn() || !window.ViktorychNostr.prefs().replies) {
+      STATE.replies[id] = { loading: false, replies: [], missing: true, cap: want, fetchedAt: Date.now(), settled: true };
+      return STATE.replies[id];
+    }
+    STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want, fetchedAt: 0 };
+    window.ViktorychNostr.loadReplies(post.statusId || id, { limit: want }).then((rows) => {
+      rows.forEach((reply) => { reply.replyingTo = { id: id, handle: post.handle || "" }; rememberLive(reply); });
+      STATE.replies[id] = { loading: false, replies: rows.slice(0, want), missing: false, cap: want, fetchedAt: Date.now(), settled: true };
+      render();
+    }).catch(() => {
+      STATE.replies[id] = { loading: false, replies: [], missing: true, cap: want, fetchedAt: Date.now(), settled: true };
+      render();
+    });
+    return STATE.replies[id];
+  }
+  /* Replies on Nostr to one of our posts that was sent to relays. */
+  const nostrLinks = {};
+  function nostrLinkOf(id) {
+    const key = String(id || "");
+    if (nostrLinks[key] && Date.now() - nostrLinks[key].at < 5 * 60 * 1000) return nostrLinks[key].task;
+    const api = accountsApi();
+    const task = !api || !nostrOn() ? Promise.resolve(null) : fetch(api + "/v1/nostr/posts/" + encodeURIComponent(key), { credentials: "omit" })
+      .then((res) => (res.status === 200 ? res.json() : null)).catch(() => null);
+    nostrLinks[key] = { at: Date.now(), task: task };
+    return task;
+  }
+  function addNostrReplies(id, post) {
+    if (!nostrOn() || !window.ViktorychNostr.prefs().replies) return;
+    nostrLinkOf(id).then((link) => {
+      if (!link || !link.event_id) return null;
+      return window.ViktorychNostr.loadReplies(link.event_id, { limit: 200, skipProxy: location.origin }).then((rows) => {
+        const cur = STATE.replies[id];
+        if (!cur || !rows.length) return;
+        const have = {};
+        (cur.replies || []).forEach((reply) => { have[reply.id] = true; });
+        rows.forEach((reply) => {
+          if (have[reply.id]) return;
+          reply.replyingTo = { id: id, handle: post.handle || "" };
+          rememberLive(reply);
+          cur.replies.push(reply);
+        });
+        render();
+      });
+    }).catch(() => {});
+  }
+
   function appReplyBucket(post, id, want) {
     const fresh = String(STATE.forceReply || "") === id;
     if (fresh) STATE.forceReply = "";
@@ -6142,6 +6226,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         return card;
       });
       STATE.replies[id] = { loading: false, replies: replies.slice(0, want), missing: false, cap: want, fetchedAt: Date.now(), settled: true };
+      addNostrReplies(id, post);
       render();
     }).catch(() => {
       STATE.replies[id] = { loading: false, replies: (bucket && bucket.replies) || [], missing: true, cap: want, fetchedAt: Date.now(), settled: true };
@@ -6175,6 +6260,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       return { loading: false, replies: Array.isArray(post.replies) ? post.replies : [], missing: false, cap: want };
     }
     if (post.appPost && isAppPostId(id) && !post.community) return appReplyBucket(post, id, want);
+    if ((post.platform || "") === "nostr") return nostrReplyBucket(post, id, want);
     const fresh = String(STATE.forceReply || "") === id;
     if (fresh) STATE.forceReply = "";
     const bucket = STATE.replies[id];
@@ -7587,6 +7673,10 @@ const here = parseRoute();
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
+    } else if (["bsky", "mastodon", "nostr"].includes(parts[0]) && parts[1]) {
+      // Profiles followed on this device (fediverse, Bluesky, Nostr) open live.
+      if (parts[2] === "status" && parts[3]) return { name: "status", platform: parts[0], handle: parts[1], id: parts.slice(3).join("/"), query };
+      return { name: "user", platform: parts[0], handle: parts[1], query };
     } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram", "tiktok", "app"].includes(parts[0])) {
       platform = parts[0];
       handle = parts[1] || "";
@@ -8822,7 +8912,13 @@ const here = parseRoute();
     return true;
   }
 
+  // A game is open: background feed work waits so the game gets the device.
+  function gameBusy() {
+    return !!(window.ViktorychGames && window.ViktorychGames.busy && window.ViktorychGames.busy());
+  }
+
   function schedulePublicPosts() {
+    if (gameBusy()) return;
     if (document.documentElement.getAttribute("data-wall") === "1") return;
     if (!accountToken()) return;
     const now = Date.now();
@@ -9132,6 +9228,7 @@ const here = parseRoute();
         if (res && res.status === 201 && res.post) {
           if (!(res.scheduled || part.scheduleAt) && res.post.id) {
             rememberOwnPost(res.post);
+            nostrMirror(res.post, index === 0 ? payload.extParent : null);
             if (!firstSent) firstSent = res.post;
           }
           if (res.post.community && res.post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(res.post.community.name);
@@ -9192,13 +9289,139 @@ const here = parseRoute();
     }, true));
   }
 
+  /* With Nostr on and a key on this device, a public post or reply is signed
+     here and sent to the person's relays. Replies go out only when the post
+     they answer is on Nostr too, so nothing lands there without its context. */
+  const NOSTR_SENT_KEY = "viktorychapp-nostr-sent";
+  function nostrSent() {
+    try { return JSON.parse(localStorage.getItem(NOSTR_SENT_KEY) || "{}") || {}; } catch (err) { return {}; }
+  }
+  function rememberNostrSent(id, eventId) {
+    const map = nostrSent();
+    if (eventId) map[id] = eventId; else delete map[id];
+    const keys = Object.keys(map);
+    if (keys.length > 500) keys.slice(0, keys.length - 500).forEach((key) => { delete map[key]; });
+    try { localStorage.setItem(NOSTR_SENT_KEY, JSON.stringify(map)); } catch (err) { /* private mode */ }
+  }
+  function nostrMirror(post, extParent) {
+    const N = window.ViktorychNostr;
+    if (!post || !post.id || !nostrOn() || !N.prefs().publish || !N.keyInfo()) return;
+    if ((post.audience || "everyone") !== "everyone" || post.community || Number(post.scheduledAt) > Date.now()) return;
+    const ext = extParent || post.extParent || null;
+    let target = Promise.resolve(null);
+    if (ext && ext.platform === "nostr") {
+      const who = N.decode(ext.handle);
+      const seen = STATE.shared[String(ext.statusId || ext.id || "")] || {};
+      target = Promise.resolve({ id: String(ext.statusId || ext.id || ""), pubkey: who && who.type === "npub" ? who.data : "", root: seen.nostrRoot || "" });
+    } else if (post.parentId) {
+      target = nostrLinkOf(post.parentId).then((link) => (link && link.event_id ? { id: link.event_id, pubkey: link.pubkey } : false));
+    } else if (ext) {
+      return;
+    }
+    const api = accountsApi() || "";
+    const media = (post.media || []).map((item) => ({
+      url: /^https:\/\//.test(String(item.url || "")) ? item.url : (api && String(item.url || "").charAt(0) === "/" ? api.replace(/\/+$/, "") + item.url : ""),
+      mime: item.mime || "",
+      alt: item.alt || ""
+    })).filter((item) => item.url);
+    target.then((reply) => {
+      if (reply === false) return null;
+      const link = sitePermalink("#/app/" + encodeURIComponent(post.authorHandle || "") + "/status/" + encodeURIComponent(post.id));
+      const tpl = N.postTemplate({ text: post.body || "", media: media }, { reply: reply, link: link });
+      if (!tpl.content) return null;
+      return N.sign(tpl).then((ev) => N.publish(ev).then((sent) => {
+        if (!sent.ok) { toast(tr("Couldn’t reach your Nostr relays.")); return; }
+        rememberNostrSent(post.id, ev.id);
+        nostrLinks[post.id] = { at: Date.now(), task: Promise.resolve({ event_id: ev.id, pubkey: ev.pubkey }) };
+        accountCall("/v1/nostr/posts/" + encodeURIComponent(post.id), { method: "POST", body: { event_id: ev.id, pubkey: ev.pubkey } });
+      }));
+    }).catch(() => toast(tr("Couldn’t sign that for Nostr.")));
+  }
+  /* Deleting a post also asks relays to drop its Nostr copy (NIP-09). */
+  function nostrRetract(id) {
+    const N = window.ViktorychNostr;
+    const eventId = nostrSent()[id];
+    if (!eventId || !N || !N.allowed() || !N.keyInfo()) return;
+    rememberNostrSent(id, "");
+    delete nostrLinks[id];
+    N.sign({ kind: 5, tags: [["e", eventId]], content: "" }).then((ev) => N.publish(ev)).catch(() => {});
+    accountCall("/v1/nostr/posts/" + encodeURIComponent(id), { method: "DELETE" });
+  }
+
+  function nostrSwitch(on, act, label, desc) {
+    return `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(desc)}</p>`;
+  }
+  function nostrSettingsHtml() {
+    const N = window.ViktorychNostr;
+    if (!N) return emptyBlock(tr("Nostr isn’t available"), "");
+    if (!N.allowed()) return `<p class="phandle">${esc(tr("Nostr is off on this site. The site owner can turn it on in Settings."))}</p>`;
+    const prefs = N.prefs();
+    const key = N.keyInfo();
+    let out = nostrSwitch(prefs.on, "nostr-on", tr("Use Nostr"), tr("Off by default. When on, this device talks to the Nostr relays below."));
+    if (!prefs.on) return out;
+    out += `<h2>${esc(tr("Your key"))}</h2>`;
+    if (key) {
+      const npub = N.npub(key.pubkey);
+      out += `<p class="phandle">${esc(key.mode === "nip07" ? tr("Signing with your browser extension.") : tr("Your secret key stays on this device and is never sent to our servers."))}</p>
+        <label class="search"><input readonly value="${esc(npub)}" aria-label="${esc(tr("Public key"))}"></label>
+        <button class="outline" type="button" data-act="nostr-copy" data-text="${esc(npub)}">${esc(tr("Copy public key"))}</button>`;
+      if (key.mode === "local") {
+        out += STATE.nostrReveal
+          ? `<p class="phandle">${esc(tr("Anyone with this secret key can post as you. Keep it private."))}</p><label class="search"><input readonly value="${esc(N.exportSecret())}" aria-label="${esc(tr("Secret key"))}"></label><button class="outline" type="button" data-act="nostr-copy" data-text="${esc(N.exportSecret())}">${esc(tr("Copy secret key"))}</button><button class="outline" type="button" data-act="nostr-reveal">${esc(tr("Hide secret key"))}</button>`
+          : `<button class="outline" type="button" data-act="nostr-reveal">${esc(tr("Back up secret key"))}</button>`;
+      }
+      out += STATE.nostrForget
+        ? `<p class="phandle">${esc(tr("This removes the key from this device. Back it up first or you lose this Nostr identity."))}</p><button class="outline danger" type="button" data-act="nostr-forget" data-sure="1">${esc(tr("Remove key"))}</button><button class="outline" type="button" data-act="nostr-forget">${esc(tr("Cancel"))}</button>`
+        : `<button class="outline" type="button" data-act="nostr-forget">${esc(tr("Remove key from this device"))}</button>`;
+    } else {
+      out += `<p class="phandle">${esc(tr("Create a key on this device, use a Nostr browser extension, or bring your own secret key."))}</p>
+        <button class="outline" type="button" data-act="nostr-new">${esc(tr("Create a key"))}</button>
+        ${N.hasExtension() ? `<button class="outline" type="button" data-act="nostr-ext">${esc(tr("Use browser extension"))}</button>` : ""}
+        <form class="mute-form" data-mute="nostr-import"><label class="search"><input type="password" autocomplete="off" placeholder="nsec1…" aria-label="${esc(tr("Secret key"))}"></label><button class="follow" type="submit">${esc(tr("Import"))}</button></form>`;
+    }
+    out += `<h2>${esc(tr("Posting and replies"))}</h2>`
+      + nostrSwitch(prefs.publish, "nostr-publish", tr("Send my posts to Nostr"), tr("Public posts and replies are signed on this device and sent to your relays. Friends-only posts never go."))
+      + nostrSwitch(prefs.replies, "nostr-replies", tr("Show Nostr replies"), tr("Replies from Nostr appear in threads under your posts."));
+    out += `<h2>${esc(tr("Relays"))}</h2><p class="phandle">${esc(tr("Up to 12 relays. Only secure wss:// addresses."))}</p><div class="set-list">`
+      + prefs.relays.map((relay) => `<div class="set-row"><span class="grow">${esc(relay)}</span><button class="outline" type="button" data-act="nostr-relay-drop" data-relay="${esc(relay)}">${esc(tr("Remove"))}</button></div>`).join("")
+      + `</div><form class="mute-form" data-mute="nostr-relay"><label class="search"><input type="url" placeholder="wss://" aria-label="${esc(tr("Add relay"))}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      <button class="outline" type="button" data-act="nostr-relay-reset">${esc(tr("Use default relays"))}</button>`;
+    return out;
+  }
+  function nostrAct(act, el) {
+    const N = window.ViktorychNostr;
+    if (!N) return;
+    const prefs = N.prefs();
+    if (act === "nostr-on") N.setPrefs({ on: !prefs.on });
+    else if (act === "nostr-publish") N.setPrefs({ publish: !prefs.publish });
+    else if (act === "nostr-replies") N.setPrefs({ replies: !prefs.replies });
+    else if (act === "nostr-new") { N.generateKey(); toast(tr("Key created. Back it up.")); }
+    else if (act === "nostr-ext") {
+      N.useExtension().then((got) => { toast(got ? tr("Using your browser extension.") : tr("The extension didn’t share a key.")); render({ y: window.scrollY }); });
+      return;
+    } else if (act === "nostr-reveal") STATE.nostrReveal = !STATE.nostrReveal;
+    else if (act === "nostr-forget") {
+      if (el.dataset.sure) { N.forgetKey(); STATE.nostrReveal = false; STATE.nostrForget = false; toast(tr("Key removed")); }
+      else STATE.nostrForget = !STATE.nostrForget;
+    } else if (act === "nostr-copy") {
+      const text = el.dataset.text || "";
+      const write = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject();
+      write.then(() => toast(tr("Copied")), () => toast(tr("Could not copy")));
+      return;
+    } else if (act === "nostr-relay-drop") {
+      const rest = prefs.relays.filter((relay) => relay !== el.dataset.relay);
+      N.setPrefs({ relays: rest.length ? rest : N.DEFAULT_RELAYS.slice() });
+    } else if (act === "nostr-relay-reset") N.setPrefs({ relays: N.DEFAULT_RELAYS.slice() });
+    render({ y: window.scrollY });
+  }
+
   function publishPublicPost(text, parentId, quoteId, file) {
     const token = accountToken();
     const root = accountsApi();
     const finishOk = (post) => {
       if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
       if (tempId) forgetOwnPost(tempId);
-      if (post && post.id) rememberOwnPost(post);
+      if (post && post.id) { rememberOwnPost(post); nostrMirror(post, null); }
       if (post && post.community && post.community.name && window.ViktorychCommunities && window.ViktorychCommunities.invalidate) window.ViktorychCommunities.invalidate(post.community.name);
       publicStamp = Date.now();
       sentToast(post);
@@ -9479,7 +9702,7 @@ const here = parseRoute();
 
   function homeView(route) {
     const tab = route.tab || "foryou";
-    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab));
+    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
@@ -9559,6 +9782,7 @@ const here = parseRoute();
   }
 
   function needsSyncNote(profile) {
+    if (DEVICE_FOLLOW.indexOf(profile && profile.platform) >= 0) return false;
     const feed = catalogFeed(profile);
     if (feed && (feed.configured || feed.origin === "repost")) return false;
     return true;
@@ -10408,12 +10632,104 @@ const here = parseRoute();
       }
       return publicJson(window.ViktorychDirect.mastodonStatuses(who.instance, profile.remoteId)).then((list) => {
         row.posts = (list || []).map((item) => fediPost(item, profile)).filter(Boolean);
+        row.posts.forEach(rememberLive);
         row.media = row.posts.filter((post) => post.media && post.media.length);
         row.source = "mastodon";
         row.fetchedAt = Date.now();
         snapshotProfile("mastodon:" + who.instance + ":" + who.acct, row);
       });
     });
+  }
+
+  /* A Nostr profile and its notes, read from relays on this device. Only when
+     the owner has Nostr on and this person opted in. */
+  function nostrOn() {
+    return !!(window.ViktorychNostr && window.ViktorychNostr.enabled());
+  }
+  function nostrProfile(got, handle) {
+    const N = window.ViktorychNostr;
+    const meta = got.meta || {};
+    return {
+      id: "nostr:" + got.npub,
+      platform: "nostr",
+      handle: got.npub,
+      displayHandle: got.nip05 || N.shortNpub(got.pubkey),
+      name: meta.name || got.nip05 || N.shortNpub(got.pubkey),
+      avatar: meta.picture || "",
+      banner: meta.banner || "",
+      bio: meta.about || "",
+      url: "https://njump.me/" + got.npub,
+      pubkey: got.pubkey,
+      relays: got.relays || [],
+      asked: handle
+    };
+  }
+  function loadNostrLive(row, handle) {
+    if (!nostrOn()) {
+      row.profile = limitedProfile("nostr", handle);
+      row.posts = [];
+      row.fetchedAt = Date.now();
+      return Promise.resolve(null);
+    }
+    return window.ViktorychNostr.loadProfile(handle, { limit: 40 }).then((got) => {
+      if (!got) {
+        row.profile = limitedProfile("nostr", handle);
+        row.posts = [];
+        row.fetchedAt = Date.now();
+        return;
+      }
+      row.profile = nostrProfile(got, handle);
+      row.posts = got.posts;
+      row.posts.forEach(rememberLive);
+      row.media = row.posts.filter((post) => post.media && post.media.length);
+      row.source = "nostr";
+      row.fetchedAt = Date.now();
+    });
+  }
+  function nostrStatus(id) {
+    const key = String(id || "");
+    STATE.nostrAsked = STATE.nostrAsked || {};
+    if (!nostrOn() || !/^[0-9a-f]{64}$/.test(key) || STATE.nostrAsked[key]) return;
+    STATE.nostrAsked[key] = true;
+    const N = window.ViktorychNostr;
+    N.query([{ ids: [key] }], { timeout: 5000, max: 1 }).then((list) => {
+      const ev = list[0];
+      if (!ev) return;
+      return N.query([{ kinds: [0], authors: [ev.pubkey], limit: 1 }], { timeout: 3000 }).then((metas) => {
+        const map = {};
+        if (metas[0]) map[ev.pubkey] = N.profileOf(metas[0]);
+        const post = N.toPost(ev, map);
+        if (post) { rememberLive(post); render(); }
+      });
+    }).catch(() => {});
+  }
+
+  /* Profiles followed on this device that are not in the site's feed list
+     (fediverse, Bluesky, Nostr) are read live here and join Home. */
+  const DEVICE_FOLLOW = ["mastodon", "bsky", "nostr"];
+  function deviceFollowPosts(tab) {
+    if (tab !== "foryou" && tab !== "following") return [];
+    const out = [];
+    let kicked = 0;
+    (STATE.settings.follows || []).forEach((id) => {
+      const cut = String(id).indexOf(":");
+      const platform = cut > 0 ? String(id).slice(0, cut) : "";
+      const handle = cut > 0 ? String(id).slice(cut + 1) : "";
+      if (DEVICE_FOLLOW.indexOf(platform) < 0 || !handle || feedById(id) || catalogAccount(platform, handle)) return;
+      if (platform === "nostr" && !nostrOn()) return;
+      const row = STATE.liveUsers[liveKey(platform, handle)];
+      if ((!row || !row.fetchedAt || Date.now() - row.fetchedAt > 10 * 60 * 1000) && kicked < 12 && !(row && row.pageTask)) {
+        kicked += 1;
+        ensureLiveUser(platform, handle);
+      }
+      ((row && row.posts) || []).slice(0, 20).forEach((post) => {
+        if (!post || hiddenPost(post)) return;
+        if (tab === "following" && post.kind === "reply") return;
+        post.feedId = id;
+        out.push(post);
+      });
+    });
+    return out;
   }
 
   function ensureLiveHeader(platform, handle) {
@@ -10425,6 +10741,7 @@ const here = parseRoute();
     const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
       : platform === "bsky" ? loadBskyHeader(clean)
       : platform === "mastodon" ? loadMastodonHeader(clean)
+      : platform === "nostr" ? Promise.resolve(null)
       : platform === "vk" ? Promise.resolve(limitedProfile("vk", clean))
       : platform === "telegram" ? Promise.resolve(limitedProfile("telegram", clean))
       : (platform === "instagram" || platform === "threads") ? Promise.resolve(limitedProfile(platform, clean))
@@ -10449,6 +10766,7 @@ const here = parseRoute();
     const job = platform === "youtube" ? loadYtLive(row, clean)
       : platform === "bsky" ? loadBskyLive(row, clean)
       : platform === "mastodon" ? loadMastodonLive(row, clean)
+      : platform === "nostr" ? loadNostrLive(row, clean)
       : platform === "vk" ? loadVkSaved(row, clean)
       : platform === "telegram" ? loadTelegramSaved(row, clean)
       : (platform === "instagram" || platform === "threads") ? loadLimited(row, platform, clean)
@@ -10983,6 +11301,7 @@ const here = parseRoute();
       return pageHead(tr("Post noun"), "", true) + emptyBlock(tr("Post unavailable"), tr("This post isn’t in the current snapshot."));
     }
     let post = findPost(route.platform, route.handle, route.id);
+    if (!post && route.platform === "nostr") nostrStatus(route.id);
     if (!post && (route.platform === "instagram" || route.platform === "threads" || route.platform === "youtube")) {
       const archived = (ARCHIVE.posts || []).find((item) => item && item.p === route.platform && String(item.id) === String(route.id));
       const knownShape = route.platform !== "youtube" || ytVideoId(route.id) || !!(archived && archived.k);
@@ -12812,6 +13131,7 @@ const here = parseRoute();
     if (kind === "friend_request") return tr("{name} sent you a friend request", { name: who });
     if (kind === "friend_accept") return tr("{name} accepted your friend request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
+    if (kind === "game_invite") return tr("{name} invited you to play {game}", { name: who, game: (note && note.text) || "ReGone" });
     if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
     if (kind === "gift") return tr("{name} sent you a gift", { name: who });
     if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
@@ -13261,6 +13581,7 @@ const here = parseRoute();
       else if (section === "notifications") key = tr("Notifications");
       else if (section === "privacy") key = tr("Privacy and safety");
       else if (section === "usernames") key = tr("Usernames");
+      else if (section === "nostr") key = tr("Nostr");
       else if (section === "content") key = tr("Custom tabs");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
@@ -13533,6 +13854,7 @@ const here = parseRoute();
       const screen = window.ViktorychPrivacy && window.ViktorychPrivacy.settingsHtml ? window.ViktorychPrivacy.settingsHtml() : "";
       return settingsHead(tr("Security"), "#/settings") + `<div class="set-block">${pass}${lock}${screen}</div>`;
     }
+    if (section === "nostr") return settingsHead(tr("Nostr"), "#/settings/privacy") + `<div class="set-block">${nostrSettingsHtml()}</div>`;
     if (section === "usernames") {
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
       return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
@@ -13557,6 +13879,7 @@ const here = parseRoute();
         ${presenceBlock}
         ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
+        ${window.ViktorychNostr && window.ViktorychNostr.allowed() ? `<div class="set-list">${settingsRow("#/settings/nostr", tr("Nostr"), tr("Follow Nostr profiles, send your posts to relays, and see Nostr replies."))}</div>` : ""}
         ${acct && window.ViktorychUsernames ? `<div class="set-list">${settingsRow("#/settings/usernames", tr("Usernames"), tr("Choose who sees which username, nicknames, and who can mention you."))}</div>` : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
@@ -17695,6 +18018,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (/^nostr-/.test(act || "")) {
+      nostrAct(act, el);
+      return;
+    }
     if (act === "toggle-private-follows") {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       if (acct && window.ViktorychAccounts.setPrivateFollows) {
@@ -19273,6 +19600,23 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       return;
     }
     const muteForm = event.target.closest("form.mute-form");
+    if (muteForm && (muteForm.dataset.mute === "nostr-import" || muteForm.dataset.mute === "nostr-relay") && window.ViktorychNostr) {
+      event.preventDefault();
+      const N = window.ViktorychNostr;
+      const input = muteForm.querySelector("input");
+      const value = input ? input.value.trim() : "";
+      if (input) input.value = "";
+      if (muteForm.dataset.mute === "nostr-import") {
+        toast(N.importKey(value) ? tr("Key saved on this device") : tr("That isn’t a valid secret key."));
+      } else {
+        const relay = value.replace(/\/+$/, "");
+        if (!N.goodRelay(relay)) { toast(tr("Use a wss:// relay address.")); return; }
+        if (N.prefs().relays.length >= 12) { toast(tr("Up to 12 relays.")); return; }
+        N.setPrefs({ relays: N.prefs().relays.concat([relay]) });
+      }
+      render({ y: window.scrollY });
+      return;
+    }
     if (muteForm && muteForm.dataset.mute === "discord-keyword") {
       event.preventDefault();
       const input = muteForm.querySelector("input");
@@ -19319,6 +19663,10 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       const parsed = parseAccountInput(input && input.value);
       if (!parsed) {
         toast(tr("Use a profile URL, @handle, or an https feed"));
+        return;
+      }
+      if ((parsed.platform === "mastodon" || parsed.platform === "nostr") && !feedIdFromPaste(parsed)) {
+        followOnDevice(parsed).then((ok) => { if (ok) addForm.reset(); });
         return;
       }
       if (signedOwner() && accountsApi() && accountToken()) {
@@ -20933,6 +21281,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function prefetchHomeTabs() {
     const run = () => {
+      if (gameBusy()) return;
       const active = currentHomeTab();
       const rest = visibleHomeTabs().filter((id) => id !== active);
       if (rest.length) refreshHomeTabs(rest);
@@ -20970,6 +21319,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function catalogRequestUrl(key) {
     const cfg = window.VIKTORYCH_ACCOUNTS || {};
     const api = String(cfg.api || "").replace(/\/$/, "");
+    // With accounts.js loaded, its fetch wrapper adds the session, fails
+    // over between API roots, and reuses a copy the change signal says is
+    // still current.
+    if (cfg.gate && api && window.ViktorychAccounts && window.ViktorychAccounts.currentApi) return key;
     if (cfg.gate && api) return api + "/v1/data/" + String(key || "").split("/").map(encodeURIComponent).join("/");
     return key;
   }
@@ -21109,9 +21462,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return { doc: Object.assign({}, existing || {}, incoming || {}, { posts: current }), added: added, changed: changed };
   }
 
+  let feedsMark = "";
+  let feedsMarkAt = 0;
   async function refreshFeeds(apply) {
     try {
+      // The change signal says when feeds.json moved. With the same mark as
+      // the last merge there is nothing new to read or merge.
+      const pulse = window.ViktorychPulse;
+      const mark = pulse && pulse.ok && pulse.ok() && STATE.data ? pulse.version("feeds.json") : "";
+      if (mark && mark === feedsMark && Date.now() - feedsMarkAt < 15 * 60 * 1000) return;
       const doc = lockDocDates(await fetchFeeds(true));
+      if (mark && doc && Array.isArray(doc.posts) && !doc.missing) { feedsMark = mark; feedsMarkAt = Date.now(); }
       if (!doc || !Array.isArray(doc.posts) || doc.missing) return;
       const includeNew = arrivalMode() === "insert";
       const atTop = includeNew;
@@ -21216,7 +21577,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const go = () => {
       if (readStored(sessionStorage, "sw-reload") === "1") return;
       const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended) || !!(window.Spaces && window.Spaces.playing && window.Spaces.playing()) || !!(window.SIntelMusic && window.SIntelMusic.playing && window.SIntelMusic.playing());
-      if (busy && document.visibilityState === "visible") {
+      if ((busy && document.visibilityState === "visible") || gameBusy()) {
         timer = setTimeout(go, 4000);
         return;
       }
@@ -22357,8 +22718,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         stopPoll();
         return;
       }
+      if (gameBusy()) return;
       pullNotes();
-    }, 20000);
+    }, 60000);
   }
 
   function stopHub() {
@@ -22391,10 +22753,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     try {
       const reg = await navigator.serviceWorker.ready;
       if (!reg.pushManager) return;
-      const vapid = await accountCall("/v1/push/vapid");
-      const key = vapid && vapid.publicKey;
-      if (!key || vapid.status !== 200) return;
+      // The key and the server copy of this subscription rarely change, so
+      // focus and visibility only re-send them once a day or after a change.
+      let saved = null;
+      try { saved = JSON.parse(readStored(localStorage, "push-sent") || "null"); } catch (err) { saved = null; }
       let sub = await reg.pushManager.getSubscription();
+      const fresh = saved && sub && saved.endpoint === sub.endpoint && Date.now() - Number(saved.at || 0) < 24 * 60 * 60 * 1000 && Number(saved.locked) === (isShortsLocked() ? 1 : 0);
+      if (fresh && !(sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000)) {
+        STATE.pushEndpoint = sub.endpoint || "";
+        return;
+      }
+      let key = saved && saved.key;
+      if (!key) {
+        const vapid = await accountCall("/v1/push/vapid");
+        key = vapid && vapid.status === 200 ? vapid.publicKey : "";
+      }
+      if (!key) return;
       const soon = sub && sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000;
       if (sub && soon) {
         try { await sub.unsubscribe(); } catch (err) { /* a fresh subscription follows */ }
@@ -22404,10 +22778,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const json = sub.toJSON ? sub.toJSON() : {};
       STATE.pushEndpoint = json.endpoint || "";
       if (!json.endpoint || !json.keys) return;
-      await accountCall("/v1/push/subscribe", {
+      const put = await accountCall("/v1/push/subscribe", {
         method: "PUT",
         body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0 }
       });
+      if (put && put.status === 200) writeStored(localStorage, "push-sent", JSON.stringify({ endpoint: json.endpoint, key: key, at: Date.now(), locked: isShortsLocked() ? 1 : 0 }));
     } catch (err) { /* in-app notes still sync */ }
   }
 
@@ -22431,6 +22806,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     }
     removeStored(localStorage, "notes-server");
+    removeStored(localStorage, "push-sent");
     removeStored(localStorage, "notes-acked");
     removeStored(localStorage, "notes-pending");
     updateBadge(0);
@@ -22807,6 +23183,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function scheduleDeviceIndex() {
     if (parseRoute().name !== "explore" && parseRoute().name !== "settings") return;
     const run = () => {
+      if (gameBusy()) return;
       loadDeviceCore().then((dev) => {
         if (!dev || !dev.featureOn(dev.read(), "search", dev.signals())) return;
         dev.ensure("search").then(() => {
@@ -23174,6 +23551,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const parentId = String((item && item.parentId) || "");
     goneOwn[id] = Date.now();
     forgetOwnPost(id);
+    nostrRetract(id);
     dropAppItem(id);
     if (ask.sub) publicPosts = publicPosts.filter((row) => row && row.id !== id);
     if (parentId) {
@@ -23361,6 +23739,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function warmSavedMedia(local, rows) {
+    if (gameBusy()) return;
     if (!local || !local.cacheFirstSegment) return;
     if (!local.prefetchLimit(null, local.prefetchEnabled())) return;
     (rows || []).slice(0, 8).forEach((post) => {
@@ -23376,7 +23755,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function warmOpened(hash) {
     const local = window.ViktorychLocal;
-    if (!local || !STATE.data) return;
+    if (!local || !STATE.data || gameBusy()) return;
     const path = String(hash || "").split("?")[0].replace(/^#/, "");
     const parts = path.split("/").filter(Boolean).map((part) => {
       try { return decodeURIComponent(part); } catch (err) { return part; }
@@ -23674,7 +24053,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       if (!STATE.liveTimer) {
         STATE.liveTimer = setInterval(() => {
-          if (document.visibilityState === "visible") wakeHome();
+          if (document.visibilityState === "visible" && !gameBusy()) wakeHome();
         }, LIVE_REFRESH_MS);
       }
     } catch (err) {

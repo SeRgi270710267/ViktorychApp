@@ -65,6 +65,8 @@
   var friendRequestsLoaded = false;
   var friendReqTriedAt = 0;
   var friendRequestsLoading = false;
+  var friendReqFetchedAt = 0;
+  var friendsFailedAt = {};
   var friendsSearchQuery = "";
   var friendsSubTab = "all";
   var unfriendTarget = null;
@@ -216,6 +218,72 @@
     window.fetch = patchedFetch;
   }
   var activeApiRoot = "";
+  /* Circuit breaker per API root, shared by every tab through localStorage.
+     A 429, a 5xx gateway answer, or a network error opens the root for a
+     backoff with full jitter (Retry-After is the floor). While it is open,
+     calls go to the next root. The first root that is not open wins, so the
+     primary comes back on its own once its wait ends. */
+  var BREAKER_KEY = "viktorychapp-breaker-v1";
+  var breakerMemo = null;
+  var breakerMemoAt = 0;
+  function breakerRead() {
+    var now = Date.now();
+    if (breakerMemo && now - breakerMemoAt < 1000) return breakerMemo;
+    var all = null;
+    try { all = JSON.parse(localStorage.getItem(BREAKER_KEY) || "{}"); }
+    catch (err) { all = null; }
+    breakerMemo = all && typeof all === "object" ? all : {};
+    breakerMemoAt = now;
+    return breakerMemo;
+  }
+  function breakerWrite(all) {
+    breakerMemo = all;
+    breakerMemoAt = Date.now();
+    try {
+      if (Object.keys(all).length) localStorage.setItem(BREAKER_KEY, JSON.stringify(all));
+      else localStorage.removeItem(BREAKER_KEY);
+    } catch (err) { /* this tab still keeps it in memory */ }
+  }
+  function breakerOpenUntil(root) {
+    var row = breakerRead()[root];
+    return row && Number(row.until) > Date.now() ? Number(row.until) : 0;
+  }
+  function breakerFail(root, retryAfter) {
+    if (!root) return;
+    var all = breakerRead();
+    var row = all[root] || { n: 0 };
+    row.n = Math.min(Number(row.n || 0) + 1, 8);
+    var cap = Math.min(5 * 60 * 1000, 2000 * Math.pow(2, row.n - 1));
+    var floor = Math.max(1000, Number(retryAfter) || 0);
+    row.until = Date.now() + Math.max(floor, Math.floor(Math.random() * cap));
+    all[root] = row;
+    breakerWrite(all);
+  }
+  function breakerOk(root) {
+    var all = breakerRead();
+    if (!all[root]) return;
+    delete all[root];
+    breakerWrite(all);
+  }
+  function retryAfterMs(res) {
+    var raw = res && res.headers && res.headers.get ? res.headers.get("Retry-After") : "";
+    var secs = Number(raw);
+    if (raw && isFinite(secs)) return Math.min(10 * 60 * 1000, Math.max(0, secs * 1000));
+    var when = raw ? Date.parse(raw) : NaN;
+    return isFinite(when) ? Math.min(10 * 60 * 1000, Math.max(0, when - Date.now())) : 0;
+  }
+  function failoverStatus(code) {
+    return code === 429 || code === 502 || code === 503 || code === 504;
+  }
+  /* Roots in the order to try: closed ones first, in config order, then the
+     open one whose wait ends soonest so the app is never fully stuck. */
+  function apiOrder() {
+    var list = apiEndpoints();
+    var closed = list.filter(function (root) { return !breakerOpenUntil(root); });
+    if (closed.length) return closed;
+    var soonest = list.slice().sort(function (a, b) { return breakerOpenUntil(a) - breakerOpenUntil(b); });
+    return soonest.slice(0, 1);
+  }
   function apiEndpoints() {
     var c = config();
     var list = [];
@@ -225,17 +293,13 @@
     return list.map(function (u) { return String(u || "").replace(/\/$/, ""); }).filter(Boolean);
   }
   function currentApi() {
-    if (activeApiRoot) return activeApiRoot;
-    var list = apiEndpoints();
-    activeApiRoot = list[0] || String(config().api || "").replace(/\/$/, "");
+    var order = apiOrder();
+    activeApiRoot = order[0] || String(config().api || "").replace(/\/$/, "");
     return activeApiRoot;
   }
-  function rotateApi(failedRoot) {
-    var list = apiEndpoints();
-    if (list.length <= 1) return;
-    var idx = list.indexOf(failedRoot || activeApiRoot);
-    var nextIdx = (idx + 1) % list.length;
-    activeApiRoot = list[nextIdx];
+  function rotateApi(failedRoot, retryAfter) {
+    breakerFail(failedRoot || activeApiRoot, retryAfter);
+    activeApiRoot = "";
   }
   function hasApi() {
     return !!(currentApi() || (config().api || config().backupApi));
@@ -279,30 +343,63 @@
     if (!key || !config().gate) return mirrorPageFetch(input, init, url);
     var session = readSession();
     if (key === "BLOCK" || !session) return Promise.resolve(new Response("", { status: 401 }));
-    var apiRoot = currentApi();
-    if (!apiRoot) return Promise.resolve(new Response("", { status: 401 }));
+    var order = apiOrder();
+    if (!order.length) return Promise.resolve(new Response("", { status: 401 }));
     var headers = new Headers(init && init.headers || (typeof input !== "string" && input && input.headers) || {});
     headers.set("Authorization", "Bearer " + session.token);
-    return nativeFetch(apiRoot + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/"), {
-      method: "GET",
-      headers: headers,
-      credentials: "omit",
-      cache: "no-store"
-    }).then(function (res) {
-      if ((res.status === 429 || res.status === 502 || res.status === 503) && apiEndpoints().length > 1) {
-        rotateApi(apiRoot);
-        var fallbackRoot = currentApi();
-        if (fallbackRoot && fallbackRoot !== apiRoot) {
-          return nativeFetch(fallbackRoot + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/"), {
-            method: "GET",
-            headers: headers,
-            credentials: "omit",
-            cache: "no-store"
-          });
+    var held = pulseHeld(key);
+    if (held) return Promise.resolve(new Response(held.text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "x-pulse": "reuse" } }));
+    var mark = pulseMark(key);
+    var path = "/v1/data/" + key.split("/").map(encodeURIComponent).join("/");
+    function attempt(i) {
+      var apiRoot = order[i];
+      return nativeFetch(apiRoot + path, {
+        method: "GET",
+        headers: headers,
+        credentials: "omit",
+        cache: "no-store"
+      }).then(function (res) {
+        if (failoverStatus(res.status)) {
+          rotateApi(apiRoot, retryAfterMs(res));
+          if (i + 1 < order.length) return attempt(i + 1);
+          return res;
         }
-      }
-      return res;
-    });
+        breakerOk(apiRoot);
+        if (res.status === 200 && mark) pulseKeep(key, mark, res.clone());
+        return res;
+      }, function (err) {
+        rotateApi(apiRoot, 0);
+        if (i + 1 < order.length) return attempt(i + 1);
+        throw err;
+      });
+    }
+    return attempt(0);
+  }
+  /* Shared documents the pulse tracks. While the pulse is up and a
+     document's mark has not moved, the last copy answers without a request.
+     Every copy is read again after fifteen minutes regardless. */
+  var pulseBodies = {};
+  var PULSE_REUSE_MS = 15 * 60 * 1000;
+  function pulseMark(key) {
+    var p = window.ViktorychPulse;
+    return p && p.ok && p.ok() ? String(p.version(key) || "") : "";
+  }
+  function pulseHeld(key) {
+    var row = pulseBodies[key];
+    if (!row) return null;
+    var mark = pulseMark(key);
+    if (!mark || mark !== row.mark || Date.now() - row.at > PULSE_REUSE_MS || row.token !== sessionTail()) return null;
+    return row;
+  }
+  function pulseKeep(key, mark, res) {
+    res.text().then(function (text) {
+      if (typeof text !== "string" || text.length > 4 * 1024 * 1024) return;
+      pulseBodies[key] = { mark: mark, text: text, at: Date.now(), token: sessionTail() };
+    }).catch(function () {});
+  }
+  function sessionTail() {
+    var session = readSession();
+    return session && session.token ? String(session.token).slice(-12) : "";
   }
   /* Last ETag and body per GET, in memory, so repeat reads can answer 304. */
   var etagHeld = {};
@@ -317,7 +414,7 @@
     while (etagOrder.length > 60) delete etagHeld[etagOrder.shift()];
   }
   function api(path, opts) {
-    var list = apiEndpoints();
+    var list = apiOrder();
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     opts = opts || {};
     var headers = {};
@@ -347,10 +444,10 @@
         body: opts.form || (opts.body ? JSON.stringify(opts.body) : undefined),
         credentials: "omit"
       }).then(function (res) {
-        if ((res.status === 429 || (res.status >= 502 && res.status <= 504)) && endpointIndex + 1 < list.length) {
-          rotateApi(root);
-          return attempt(endpointIndex + 1);
-        }
+        if (failoverStatus(res.status)) {
+          rotateApi(root, retryAfterMs(res));
+          if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
+        } else breakerOk(root);
         activeApiRoot = root;
         // A 304 means nothing changed since the last read: reuse that body.
         var reused = res.status === 304 && !!held;
@@ -370,16 +467,13 @@
           return body;
         });
       }).catch(function (err) {
-        if (endpointIndex + 1 < list.length) {
-          rotateApi(root);
-          return attempt(endpointIndex + 1);
-        }
+        rotateApi(root, 0);
+        if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
         throw err;
       });
     }
 
-    var startIdx = Math.max(0, list.indexOf(currentApi()));
-    return attempt(startIdx);
+    return attempt(0);
   }
   function errorMessage(code) {
     if (code === "handle_reserved") return tr("That handle is reserved.");
@@ -2600,10 +2694,11 @@ function signupPayload() {
     if (key.charAt(0) === "@") key = "app:" + key;
     if (!session || !hasApi()) return;
     if (friendsLoads[key] || friendsCache[key]) return;
+    if (friendsFailedAt[key] && Date.now() - friendsFailedAt[key] < 30000) return;
     friendsLoads[key] = true;
     api("/v1/friends?id=" + encodeURIComponent(key) + "&tab=friends", { token: session.token }).then(function (res) {
       friendsLoads[key] = false;
-      if (!res || res.status !== 200) return;
+      if (!res || res.status !== 200) { friendsFailedAt[key] = Date.now(); return; }
       friendsCache[key] = Array.isArray(res.friends) ? res.friends : [];
       var id = key;
       graphCounts[id] = graphCounts[id] || {};
@@ -2611,13 +2706,17 @@ function signupPayload() {
       if (friendWord(res)) graphCounts[id].friendStatus = friendWord(res);
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-    }).catch(function () { friendsLoads[key] = false; });
+    }).catch(function () { friendsLoads[key] = false; friendsFailedAt[key] = Date.now(); });
   }
 
-  function ensureFriendRequests() {
+  function ensureFriendRequests(force) {
     var session = readSession();
     if (!session || !hasApi() || friendRequestsLoading) return;
+    // Renders call this; a fresh copy (or a recent failure) is reused so a
+    // render after the answer does not start the next request.
+    if (!force && Date.now() - friendReqFetchedAt < (friendRequestsLoaded ? 60000 : 30000)) return;
     friendRequestsLoading = true;
+    friendReqFetchedAt = Date.now();
     api("/v1/friends?tab=requests", { token: session.token }).then(function (res) {
       friendRequestsLoading = false;
       if (!res || res.status !== 200) return;
@@ -2638,7 +2737,8 @@ function signupPayload() {
     friendRequestsLoading = false;
     friendsCache = {};
     friendsLoads = {};
-    ensureFriendRequests();
+    friendsFailedAt = {};
+    ensureFriendRequests(true);
     var session = readSession();
     if (session && session.account) ensureFriends(accountRef(session.account));
     if (window.ViktorychPresence && window.ViktorychPresence.reloadFriends) window.ViktorychPresence.reloadFriends();
@@ -2707,7 +2807,7 @@ function signupPayload() {
         graphCounts[idKey].friendStatus = prevStatus;
         graphCounts[idKey].friendAt = 0;
         friendRequestsLoading = false;
-        ensureFriendRequests();
+        ensureFriendRequests(true);
         graphCounts[idKey].friends = prevCount;
         if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
         if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -2729,7 +2829,7 @@ function signupPayload() {
       graphCounts[idKey].friendStatus = prevStatus;
       graphCounts[idKey].friendAt = 0;
       friendRequestsLoading = false;
-      ensureFriendRequests();
+      ensureFriendRequests(true);
       graphCounts[idKey].friends = prevCount;
       if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -4011,7 +4111,7 @@ function signupPayload() {
     var aboutPrivacy = window.ProfileAbout && window.ProfileAbout.privacyOpen() ? window.ProfileAbout.privacyHtml(account.about || { sections: [] }) : "";
     return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
       '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + inactivityHtml(account) + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + inactivityHtml(account) + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
     var reqKind = event.target && event.target.closest ? event.target.closest("[data-req-kind]") : null;
     if (reqKind) {
@@ -4326,7 +4426,8 @@ else if (act === "copy-id") copyAccountId();
     var session = readSession();
     if (!session || !session.token) return;
     var next = !federationState.enabled_nostr;
-    var pubkey = federationState.nostr_pubkey;
+    var deviceKey = window.ViktorychNostr && window.ViktorychNostr.keyInfo();
+    var pubkey = (next && deviceKey && deviceKey.pubkey) || federationState.nostr_pubkey;
     if (next && !pubkey) {
       var entered = window.prompt("Enter your Nostr public key (npub or hex):", "");
       if (!entered) return;
