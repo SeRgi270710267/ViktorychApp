@@ -5,6 +5,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -290,6 +291,9 @@ async function main() {
     if (pinned.lift < 16) fail("account ignores the bottom inset " + JSON.stringify(pinned));
     console.log("safe area ok", pinned.standalone ? "standalone" : "coarse");
     console.log("landscape layout ok");
+    // The personal sidebar logo runs here because this step has Playwright.
+    const logo = spawnSync(process.execPath, [path.join(root, "scripts", "logo_text_test.mjs")], { stdio: "inherit", env: process.env });
+    if (logo.status !== 0) fail("logo text checks failed");
   } finally {
     await browser.close();
     server.close();
