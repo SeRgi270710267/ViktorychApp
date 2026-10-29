@@ -14871,6 +14871,7 @@ const here = parseRoute();
       <div class="install-grab" aria-hidden="true"></div>
       <h2>${esc(tr("Install app"))}</h2>
       ${body}
+      ${window.ViktorychDeviceData ? `<p class="install-note">${esc(window.ViktorychDeviceData.tipText())}</p>` : ""}
       ${pointer}
       <div class="install-actions">
         <button type="button" data-act="install-later">${esc(tr("Later"))}</button>
@@ -15365,7 +15366,7 @@ const here = parseRoute();
         <label class="primary import-btn">${esc(tr("Import settings"))}<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
         <h2>${esc(tr("About"))}</h2>
         <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
-      </div>`;
+      </div>${window.ViktorychDeviceData ? window.ViktorychDeviceData.helpHtml() : ""}`;
     }
     if (section === "storage" && sub === "usage") {
       const body = window.ViktorychStorage ? window.ViktorychStorage.usageHtml() : "";
@@ -15373,7 +15374,8 @@ const here = parseRoute();
     }
     if (section === "storage") {
       const body = window.ViktorychStorage ? window.ViktorychStorage.dataHtml() : "";
-      return settingsHead(tr("Data and storage"), "#/settings") + body;
+      const device = window.ViktorychDeviceData ? window.ViktorychDeviceData.sectionHtml() : "";
+      return settingsHead(tr("Data and storage"), "#/settings") + device + body;
     }
     if (section === "delete-account") {
       const body = window.ViktorychAccounts && window.ViktorychAccounts.deleteAccountHtml
@@ -15741,7 +15743,7 @@ const here = parseRoute();
       return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Accounts"))}">${current}<button type="button" data-acct="login">${esc(tr("Add account"))}</button></div>`;
     }
     const status = mine ? `<button type="button" data-acct="presence-open">${esc(tr("Set a status"))}</button>` : "";
-    const leave = mine ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>` : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+    const leave = mine ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button><button type="button" data-acct="logout-wipe">${esc(tr("Sign out and delete data on this device"))}</button>` : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
     return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Account menu"))}">${status}${leave}</div>`;
   }
 
@@ -15781,7 +15783,7 @@ const here = parseRoute();
       if (!item) return "";
       if (id === "logout") {
         return mine
-          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button><button type="button" data-acct="logout-wipe">${esc(tr("Sign out and delete data on this device"))}</button>`
           : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
       }
       if (item.act) return `<button type="button" data-act="${esc(item.act)}">${esc(item.label)}</button>`;

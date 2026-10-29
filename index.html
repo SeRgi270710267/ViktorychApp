@@ -5,6 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="format-detection" content="telephone=no">
+  <script src="device-seal.js"></script>
   <script src="shared/ios.js"></script>
   <script src="shared/tv-boot.js"></script>
   <script>
@@ -164,6 +165,8 @@
       var signed = false;
       try {
         signed = !!(localStorage.getItem("viktorychapp-account-v1") || localStorage.getItem("superintelapp-account-v1") || localStorage.getItem("rss-" + "feeds-account-v1"));
+        // The session can still be decrypting (device-seal.js).
+        if (!signed && window.ViktorychSeal && window.ViktorychSeal.has("viktorychapp-account-v1")) signed = true;
       } catch (err) { signed = false; }
       var installed = false;
       try {
@@ -199,12 +202,15 @@
         var gated = !!(cfg.gate && api);
         var url = gated ? api + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/") : key;
         var headers = { "X-Feed-Refresh": "1" };
+        var seal = window.ViktorychSeal;
+        return Promise.resolve(gated && seal ? seal.ready() : null).then(function () {
         var auth = gated ? sessionToken() : "";
         if (auth) headers.Authorization = "Bearer " + auth;
         return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
           if (!res || !res.ok) return emptyBody(key);
           return res;
         }).catch(function () { return emptyBody(key); });
+        });
       }
       var boot = window.__homeFreshBoot || {};
       if (boot.feeds) return;
@@ -637,6 +643,7 @@
     <script src="update.js" defer></script>
     <script src="storage.js" defer></script>
     <script src="localfirst.js" defer></script>
+    <script src="device-data.js" defer></script>
     <script src="direct.js" defer></script>
     <script src="comments-client.js" defer></script>
     <script src="native.js" defer></script>
