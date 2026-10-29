@@ -214,6 +214,14 @@ try {
     const t0 = Date.now();
     await b.waitForFunction(gone, target, { timeout: 8000 }).catch(() => fail("blocking in one tab did not reach the other tab"));
     const header = await b.evaluate(() => localStorage.getItem("viktorychapp-block-h") || "");
+    const hook = await b.evaluate((h) => {
+      const list = window.ViktorychBlocklist;
+      if (!list || typeof list.hides !== "function") return "missing";
+      const reply = { id: "r1", platform: "x", handle: h, feedId: "x:" + h, kind: "reply", text: "a reply" };
+      const other = { id: "r2", platform: "x", handle: "sample_other", kind: "reply", text: "a reply" };
+      return list.hides(reply) && !list.hides(other) ? "ok" : "wrong";
+    }, target);
+    if (hook !== "ok") fail("window.ViktorychBlocklist.hides must hide a blocked account's reply and keep others (" + hook + ")");
     if (!header || header.indexOf(target) >= 0) fail("the stored header must be hashes only");
     console.log("cross-tab block check passed", JSON.stringify({ otherTabMs: Date.now() - t0 }));
     await ctx.close();

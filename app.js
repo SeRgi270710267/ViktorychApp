@@ -5690,6 +5690,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return wordMuted(quoted.text);
   }
 
+  /* The comments hook (window.ViktorychBlocklist.hides): true when this
+     device's blocks hide a post or reply, so the comments client drops it
+     before its card, avatar or media is built. Show hidden keeps it. */
+  window.ViktorychBlocklist = {
+    hides(post) {
+      if (!post || !STATE.settings) return false;
+      return !!blockReason(post) && !showHiddenOn();
+    },
+    reason(post) { return post && STATE.settings ? blockReason(post) || "" : ""; }
+  };
   function hiddenPost(post) {
     if (!post) return false;
     if (catalogRowHidden(post)) return true;
