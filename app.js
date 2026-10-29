@@ -1660,7 +1660,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "bitchat"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1724,7 +1724,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
       telegram: [tr("Telegram ingest"), tr("The Telegram bot webhook and media relay.")],
       pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")],
-      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")]
+      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")],
+      bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -23205,6 +23206,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         </ul>
         <h2>${esc(tr("In Russia"))}</h2>
         <p class="phandle">${esc(tr("Smart Auto sends blocked photos and videos through our own servers, and friends who already have a post can pass it to you directly (peer sharing). This helps, but some blocks can't be avoided without a VPN, so we can't promise everything will load."))}</p>
+        ${window.ViktorychMesh && window.ViktorychMesh.settingsHtml ? window.ViktorychMesh.settingsHtml() : ""}
       </div>`;
   }
 
@@ -23251,7 +23253,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     el.dataset.mode = "limited";
     el.hidden = false;
-    el.innerHTML = `${esc(tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>`;
+    el.innerHTML = `${esc(tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>${meshOffer("limited")}`;
+  }
+
+  /* Nearby chat (Bitchat): offered only once every normal path has failed. */
+  function meshOffer(kind) {
+    return window.ViktorychMesh && window.ViktorychMesh.buttonHtml ? window.ViktorychMesh.buttonHtml(kind) : "";
   }
 
   function setOffline(offline) {
@@ -23262,6 +23269,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     el.hidden = !offline;
     el.dataset.mode = offline ? "offline" : "";
     el.textContent = tr("Offline - showing saved");
+    if (offline) { const mesh = meshOffer("offline"); if (mesh) el.insertAdjacentHTML("beforeend", mesh); }
     if (!offline) paintNetNote();
     if (was && !offline) {
       toast(tr("You're back online"));

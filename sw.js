@@ -169,6 +169,7 @@ const SHELL_FILES = [
   "./mention-suggest.js",
   "./settings-assistant.js",
   "./nostr.js",
+  "./mesh-chat.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/x-compose.js",

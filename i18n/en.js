@@ -3374,5 +3374,7 @@ SI18n.addPack("en", {
   "Preview rumble": "Preview rumble",
   "This device can't vibrate.": "This device can't vibrate.",
   "Reduce motion is on, so achievements fade in quietly without sound or rumble.": "Reduce motion is on, so achievements fade in quietly without sound or rumble.",
-  "Gentle": "Gentle"
+  "Gentle": "Gentle",
+  "Nearby chat (Bitchat)": "Nearby chat (Bitchat)",
+  "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.": "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers."
 });

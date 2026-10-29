@@ -3374,5 +3374,7 @@ SI18n.addPack("es", {
   "Preview rumble": "Probar vibración",
   "This device can't vibrate.": "Este dispositivo no puede vibrar.",
   "Reduce motion is on, so achievements fade in quietly without sound or rumble.": "La reducción de movimiento está activada: los logros aparecen sin sonido ni vibración.",
-  "Gentle": "Suave"
+  "Gentle": "Suave",
+  "Nearby chat (Bitchat)": "Chat cercano (Bitchat)",
+  "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.": "El chat de respaldo que se ofrece cuando nada más carga: Bluetooth en la app de TV y chat de zona público por Nostr en navegadores."
 });

@@ -3374,5 +3374,7 @@ SI18n.addPack("ru", {
   "Preview rumble": "Проверить вибрацию",
   "This device can't vibrate.": "Это устройство не поддерживает вибрацию.",
   "Reduce motion is on, so achievements fade in quietly without sound or rumble.": "Включено уменьшение движения, поэтому достижения появляются плавно, без звука и вибрации.",
-  "Gentle": "Слабая"
+  "Gentle": "Слабая",
+  "Nearby chat (Bitchat)": "Чат рядом (Bitchat)",
+  "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.": "Запасной чат, который предлагается, когда ничего не грузится: Bluetooth в ТВ-приложении и публичный чат района через Nostr в браузерах."
 });

@@ -10,7 +10,9 @@ export const FEATURES = {
   telegram: { paths: ["/tg"] },
   pills: { paths: ["/v1/pills"] },
   // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
-  nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true }
+  nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true },
+  // Nearby chat (Bitchat). No server endpoints; clients stop offering it when off.
+  bitchat: { paths: [] }
 };
 export const FEATURE_NAMES = Object.keys(FEATURES);
 
