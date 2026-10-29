@@ -3,7 +3,7 @@
    Block, mute, and a hidden flag keep people and reported posts out of the
    timeline. The moderation list is owner-only. */
 
-import { viewerHandle } from "./usernames.js";
+import { resolveName, viewerHandle } from "./usernames.js";
 import { viewerDisplay } from "./name-rules.js";
 import { awardActivity, clawback, giftForPost } from "./points.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
@@ -486,8 +486,21 @@ async function listPosts(request, env, deps) {
   if (!session) return deps.json(401, { error: "unauthorized" });
   const now = Date.now();
   // ?by=<public id> lists one account's posts for its profile, with the same rules.
-  const author = new URL(request.url).searchParams.get("by") || "";
+  let author = new URL(request.url).searchParams.get("by") || "";
   if (author && !/^\d{12}$/.test(author)) return deps.json(400, { error: "bad_author" });
+  // ?handle=<name> is the same list for a profile opened by its username:
+  // other viewers never get the account's public id, so they ask by name.
+  const byName = author ? "" : String(new URL(request.url).searchParams.get("handle") || "").replace(/^@/, "").slice(0, 64);
+  if (byName) {
+    const found = await resolveName(env, byName, session.public_id);
+    let shown = !!found;
+    if (found && found.publicId !== session.public_id) {
+      const owner = await env.DB.prepare("SELECT profile_less FROM accounts WHERE public_id = ?").bind(found.publicId).first();
+      shown = !!owner && owner.profile_less !== 1;
+    }
+    if (!shown) return deps.json(200, { posts: [], author: "", more: false, before: 0 });
+    author = found.publicId;
+  }
   // ?before=<ms> pages a profile back through all of the account's posts.
   const before = author ? Math.max(0, Math.floor(Number(new URL(request.url).searchParams.get("before")) || 0)) : 0;
   const upTo = before ? Math.min(now, before - 1) : now;
@@ -530,7 +543,7 @@ async function listPosts(request, env, deps) {
     await withParents(env, request, session, page, skip);
     await decorate(env, page, session.public_id);
     const last = page.length ? Number(page[page.length - 1].createdAt) || 0 : 0;
-    return deps.json(200, { posts: page, author: author, more: list.length > 40 || visible.length > stamped.length || rows.length >= 60, before: last });
+    return deps.json(200, { posts: page, author: byName ? "" : author, more: list.length > 40 || visible.length > stamped.length || rows.length >= 60, before: last });
   }
   try {
     const pack = await communityHomeRows(env, request, session, deps.presentAccount);
