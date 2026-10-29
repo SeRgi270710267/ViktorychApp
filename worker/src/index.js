@@ -10,6 +10,7 @@ import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "./tel
 import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
+import { usageReport } from "./usage.js";
 import { guardClass, guardKey, takeToken, publishPulse, pulseResponse } from "./guard.js";
 import { handleNostr } from "./nostr.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
@@ -5252,6 +5253,11 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/owner/feeds" || path.startsWith("/v1/owner/feeds/")) {
     return handleOwnerFeeds(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
+  }
+  if (path === "/v1/owner/usage" && request.method === "GET") {
+    const gate = await requireOwner(request, env);
+    if (gate.error) return gate.error;
+    return json(200, await usageReport(env, Date.now()));
   }
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
