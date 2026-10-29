@@ -299,6 +299,7 @@
       failTimer = 0;
       host.classList.add("is-loaded");
       host.classList.remove("is-failed");
+      touchTip();
     });
     frame.addEventListener("error", fail);
     slot.appendChild(frame);
@@ -433,7 +434,19 @@
     el.textContent = text;
     el.classList.add("on");
     if (padTimer) clearTimeout(padTimer);
-    padTimer = setTimeout(function () { el.classList.remove("on"); }, 3500);
+    padTimer = setTimeout(function () { el.classList.remove("on"); }, 6000);
+  }
+  /* ReGone's own joystick and buttons only show during a match; its menus
+     are tapped directly. Say so once per device so a bare menu does not
+     look broken. */
+  var TIP_KEY = "viktorychapp-regone-touch-tip";
+  function touchTip() {
+    if (!coarse()) return;
+    try {
+      if (localStorage.getItem(TIP_KEY)) return;
+      localStorage.setItem(TIP_KEY, "1");
+    } catch (err) { /* private mode: show it anyway */ }
+    padNote(tr("The joystick and buttons appear once you join a match. Tap menus directly."));
   }
   function padCheck() {
     var pads = [];
