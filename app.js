@@ -22270,7 +22270,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.addEventListener(type, () => { if (restoreTarget) stopRestore(); }, { passive: true, capture: true });
   });
   let scrollFreeze = false;
-  window.__appScrollLive = true;
   window.addEventListener("scroll", () => {
     if (pageY() <= 4) STATE.snapTop = false;
     if (parseRoute().name === "home" && pageY() >= 40) homeRead = true;
@@ -26117,13 +26116,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const savedScrolls = window.ViktorychLocal.readScrolls();
       if (savedScrolls) Object.assign(SCROLLS, savedScrolls);
     }
-    /* Positions from scrolling the saved screen before the app was running.
-       Home and the tabbed pages keep their own keys, so only plain routes. */
-    Object.keys(window.__earlyScrolls || {}).forEach((hash) => {
-      if (/^#\/(?:home|notifications|messages)?(?:[/?]|$)|^#?$/.test(hash)) return;
-      const y = window.__earlyScrolls[hash];
-      if (hash !== (location.hash || "#/") && y > 0) SCROLLS[hash] = y;
-    });
+    const early = window.__earlyScroll;
+    window.__earlyScroll = null;
+    if (early && early.y > 0 && !/^#\/(?:home|notifications|messages)?(?:[/?]|$)/.test(early.hash)) SCROLLS[early.hash] = early.y;
     if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
       registerSW();
       applyTheme();
