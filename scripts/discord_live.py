@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from site_paths import pages_base  # noqa: E402
+import discord_picks  # noqa: E402
 from adapters.discord import (  # noqa: E402
     MENTION_CHANNEL,
     MENTION_ROLE,
@@ -59,6 +60,7 @@ PAGE = 50
 BUSY_GAP = (10.0, 15.0)
 QUIET_GAP = (120.0, 300.0)
 DEPLOY_EVERY = 600
+ASK_EVERY = 60
 RUN_LIMIT = (5 * 60 + 40) * 60
 NTFY_LIMIT = 3800
 DEFAULT_TOPIC = "superintelmusic-discord-th-7f3a91c2"
@@ -291,8 +293,8 @@ class Board:
             if isinstance(row, dict) and snowflake(row.get("id")):
                 bucket[str(row["id"])] = row
 
-    def load_dir(self, root: Path) -> None:
-        folder = root / "discord" / "messages"
+    def load_dir(self, root: Path, base: Path | None = None) -> None:
+        folder = (base or (root / "discord")) / "messages"
         if not folder.is_dir():
             return
         paths = list(folder.glob("*.json"))
@@ -474,7 +476,8 @@ def _page_body(server: dict, channel: dict, rows: list, authors: dict, fetched: 
     return payload
 
 
-def _write_channel(root: Path, server: dict, channel: dict, board: Board, fetched: str, token: str) -> None:
+def _write_channel(root: Path, server: dict, channel: dict, board: Board, fetched: str, token: str, base: Path | None = None) -> None:
+    base = base or (root / "discord")
     cid = channel["id"]
     rows = board.rows(cid)
     authors = board.authors.get(cid) or {}
@@ -482,11 +485,11 @@ def _write_channel(root: Path, server: dict, channel: dict, board: Board, fetche
     rest = rows[PAGE:]
     chunks = [rest[index:index + PAGE] for index in range(0, len(rest), PAGE)]
     _write_json(
-        root / "discord" / "messages" / f"{cid}.json",
+        base / "messages" / f"{cid}.json",
         _page_body(server, channel, hot, authors, fetched, bool(chunks)),
         token,
     )
-    folder = root / "discord" / "messages" / cid / "p"
+    folder = base / "messages" / cid / "p"
     keep = set()
     for number, chunk in enumerate(chunks, start=1):
         name = f"{number}.json"
@@ -599,11 +602,11 @@ def r2_json(key: str):
     return data if isinstance(data, dict) else None
 
 
-def restore_from(root: Path, token: str, fetch) -> None:
+def restore_from(root: Path, token: str, fetch, dest: Path | None = None, prefix: str = "discord/") -> None:
     """Copy missing Discord files from fetch(key). Existing files stay."""
     if fetch is None:
         return
-    dest = root / "discord"
+    dest = dest or (root / "discord")
     index_path = dest / "index.json"
     index = None
     if index_path.is_file():
@@ -612,14 +615,14 @@ def restore_from(root: Path, token: str, fetch) -> None:
         except (OSError, UnicodeError, json.JSONDecodeError):
             index = None
     if not isinstance(index, dict):
-        index = fetch("discord/index.json")
+        index = fetch(prefix + "index.json")
         if isinstance(index, dict):
             _write_json(index_path, index, token)
     if not isinstance(index, dict):
         return
     state_path = dest / "state.json"
     if not state_path.is_file():
-        state = fetch("discord/state.json")
+        state = fetch(prefix + "state.json")
         if isinstance(state, dict):
             _write_json(state_path, state, token)
     for server in index.get("servers") or []:
@@ -633,7 +636,7 @@ def restore_from(root: Path, token: str, fetch) -> None:
                 continue
             hot_path = dest / "messages" / f"{cid}.json"
             if not hot_path.is_file():
-                hot = fetch(f"discord/messages/{cid}.json")
+                hot = fetch(f"{prefix}messages/{cid}.json")
                 if isinstance(hot, dict):
                     _write_json(hot_path, hot, token)
             if not hot_path.is_file():
@@ -654,7 +657,7 @@ def restore_from(root: Path, token: str, fetch) -> None:
                     if isinstance(current, dict) and not current.get("older"):
                         break
                     continue
-                fetched = fetch(f"discord/messages/{cid}/p/{number}.json")
+                fetched = fetch(f"{prefix}messages/{cid}/p/{number}.json")
                 if not isinstance(fetched, dict):
                     break
                 _write_json(page_path, fetched, token)
@@ -699,30 +702,132 @@ def published_here(path: str):
     return data if isinstance(data, dict) else None
 
 
-def run(root: Path, server: dict, token: str) -> int:
+class Picks:
+    """The owner's extra servers (scripts/discord_picks.py). Private bucket only."""
+
+    def __init__(self, root: Path, token: str, skip=(), get=None, put=None):
+        self.root = root
+        self.token = token
+        self.skip = set(skip)
+        self.get = get or r2_json
+        self.put = put or r2_put
+        self.joined = set()
+        self.join_transport = None
+        self.servers = []
+        self.uploader = discord_picks.Uploader(self.put)
+
+    def channels(self) -> list:
+        return [channel for server in self.servers for channel in server["channels"]]
+
+    def restore(self) -> None:
+        try:
+            restore_from(self.root, self.token, self.get, discord_picks.local_root(self.root), discord_picks.PREFIX)
+        except Exception as exc:
+            print(public_error(exc))
+
+    def reload(self) -> set:
+        """Re-read the pick list. Returns the channel ids that are new."""
+        before = {channel["id"] for channel in self.channels()}
+        doc = self.get(discord_picks.PICKS_KEY)
+        if isinstance(doc, dict):
+            self.servers = discord_picks.picked_servers(doc, self.skip)
+        now = {channel["id"] for channel in self.channels()}
+        if now != before:
+            print(f"[discord-live] picked {len(self.servers)} servers {len(now)} channels")
+        return now - before
+
+    def join(self, request) -> None:
+        """The owner's one confirmed join. Done once per request id."""
+        ask = discord_picks.join_request(request)
+        if not ask or ask["id"] in self.joined:
+            return
+        done = self.get(discord_picks.JOIN_KEY)
+        if isinstance(done, dict) and str(done.get("id") or "") == ask["id"]:
+            self.joined.add(ask["id"])
+            return
+        self.joined.add(ask["id"])
+        status, guild = discord_picks.join_invite(self.token, ask["code"], self.join_transport)
+        print(f"[discord-live] join {status}")
+        result = {"id": ask["id"], "status": status, "guild": guild or ask["guild"], "at": iso_now()}
+        self.put(discord_picks.JOIN_KEY, json.dumps(result, separators=(",", ":")).encode("utf-8"))
+
+    def catalog(self, client, stop) -> None:
+        request = self.get(discord_picks.REQUEST_KEY)
+        self.join(request)
+        current = self.get(discord_picks.CATALOG_KEY)
+        task, want = discord_picks.catalog_task(current, request)
+        if not task:
+            return
+        doc = discord_picks.build_catalog(client, iso_now(), stop, current if task == "guild" else None, want)
+        if not isinstance(doc, dict):
+            return
+        payload = json.dumps(_redact(doc, self.token), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if self.token and self.token.encode("utf-8") in payload:
+            return
+        if self.put(discord_picks.CATALOG_KEY, payload):
+            print(f"[discord-live] listed {len(doc['servers'])} servers")
+
+    def write(self, board: Board) -> None:
+        if not self.servers:
+            return
+        fetched = iso_now()
+        base = discord_picks.local_root(self.root)
+        for server in self.servers:
+            for channel in server["channels"]:
+                _write_channel(self.root, server, channel, board, fetched, self.token, base)
+        index = discord_picks.private_index(self.servers, board.inaccessible, fetched, "ok", board.cursor)
+        _write_json(base / "index.json", index, self.token)
+
+    def upload(self) -> None:
+        if not self.servers:
+            return
+        try:
+            self.uploader.push(self.root, discord_picks.private_keys(self.root, self.servers), self.token)
+        except Exception as exc:
+            print(public_error(exc))
+
+
+def run(root: Path, server: dict | None, token: str, picks: Picks | None = None) -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
-    try:
-        _mirror_published(root, published_here, token)
-        restore_from(root, token, r2_json)
-    except Exception as exc:
-        print(public_error(exc))
+    if server:
+        try:
+            _mirror_published(root, published_here, token)
+            restore_from(root, token, r2_json)
+        except Exception as exc:
+            print(public_error(exc))
+    picks = picks or Picks(root, token, [server["id"]] if server else [])
+    picks.restore()
     board = Board()
     board.load_dir(root)
+    board.load_dir(root, discord_picks.local_root(root))
     client = Client(token, auth="user", min_interval=1.5)
     client.max_attempts = 4
-    names = {channel["id"]: channel["name"] for channel in server["channels"] if channel.get("name")}
+    public = server["channels"] if server else []
+
+    def every() -> list:
+        return public + picks.channels()
+
+    def names_now() -> dict:
+        return {channel["id"]: channel["name"] for channel in every() if channel.get("name")}
+
+    names = names_now()
     icon, members, online = "", None, None
-    try:
-        icon, members, online = header(client, server)
-    except DiscordStop:
-        raise
-    if client.last_status == 200:
-        _account_issue(False, "")
-    print(f"[discord-live] {server['name']} {len(server['channels'])} channels")
+    if server:
+        try:
+            icon, members, online = header(client, server)
+        except DiscordStop:
+            raise
+        if client.last_status == 200:
+            _account_issue(False, "")
+        print(f"[discord-live] {server['name']} {len(server['channels'])} channels")
     started = time.monotonic()
     deadline = started + RUN_LIMIT
-    topic = server.get("ntfy") or DEFAULT_TOPIC
+    topic = (server.get("ntfy") if server else "") or DEFAULT_TOPIC
+
+    def topic_for(channel: dict) -> str:
+        # ntfy topics are public, so picked servers never push there.
+        return "" if channel.get("private") else topic
 
     def guarded(call):
         try:
@@ -734,7 +839,24 @@ def run(root: Path, server: dict, token: str) -> int:
                 return "rate"
             raise
 
-    for channel in server["channels"]:
+    def label(channel: dict) -> str:
+        # Picked channels stay unnamed in the log.
+        return "a picked channel" if channel.get("private") else "#" + (channel["name"] or channel["id"])
+
+    def write_all() -> None:
+        if server:
+            write_tree(root, server, board, icon, members, online, "ok", "", token)
+        picks.write(board)
+
+    def ship() -> None:
+        if server:
+            deploy(root, token)
+        picks.upload()
+
+    picks.reload()
+    guarded(lambda: picks.catalog(client, lambda: STOP["now"]))
+    names = names_now()
+    for channel in every():
         if STOP["now"] or time.monotonic() >= deadline:
             break
         result = guarded(lambda channel=channel: backfill(client, channel["id"]))
@@ -744,16 +866,16 @@ def run(root: Path, server: dict, token: str) -> int:
         if not isinstance(messages, list):
             if client.last_status == 403:
                 board.inaccessible.add(channel["id"])
-                print(f"[discord-live] #{channel['name'] or channel['id']} inaccessible")
+                print(f"[discord-live] {label(channel)} inaccessible")
             continue
-        apply_messages(board, channel, messages, names, topic, token, False)
-        print(f"[discord-live] #{channel['name']} history {len(board.rows(channel['id']))} gap {gap:.1f}s")
-    write_tree(root, server, board, icon, members, online, "ok", "", token)
-    deploy(root, token)
+        apply_messages(board, channel, messages, names, topic_for(channel), token, False)
+        print(f"[discord-live] {label(channel)} history {len(board.rows(channel['id']))} gap {gap:.1f}s")
+    write_all()
+    ship()
     last_deploy = time.monotonic()
     nxt = {}
     now = time.monotonic()
-    for channel in server["channels"]:
+    for channel in every():
         if channel["id"] in board.inaccessible:
             nxt[channel["id"]] = now + DEPLOY_EVERY
         elif channel["busy"]:
@@ -762,21 +884,43 @@ def run(root: Path, server: dict, token: str) -> int:
             nxt[channel["id"]] = now + next_gap(False)
     cursor = 0
     polls = 0
+    last_ask = time.monotonic()
     while not STOP["now"] and time.monotonic() < deadline:
         now = time.monotonic()
         if now - last_deploy >= DEPLOY_EVERY:
+            # The owner may have picked or dropped channels in the app.
+            added = picks.reload()
+            guarded(lambda: picks.catalog(client, lambda: STOP["now"]))
+            names = names_now()
+            live_ids = {channel["id"] for channel in every()}
+            for key in list(nxt):
+                if key not in live_ids:
+                    nxt.pop(key, None)
+            for key in added:
+                nxt[key] = time.monotonic()
             before = set(board.inaccessible)
-            refresh(client, server, board, names, topic, token, guarded)
+            refresh(client, every(), board, names, topic_for, token, guarded)
             recovered = before - board.inaccessible
-            write_tree(root, server, board, icon, members, online, "ok", "", token)
-            deploy(root, token)
+            write_all()
+            ship()
             last_deploy = time.monotonic()
-            for channel in server["channels"]:
+            for channel in every():
                 if channel["id"] in board.inaccessible:
                     nxt[channel["id"]] = time.monotonic() + DEPLOY_EVERY
                 elif channel["id"] in recovered:
                     nxt[channel["id"]] = time.monotonic()
-        open_channels = [channel for channel in server["channels"] if channel["id"] not in board.inaccessible]
+        if time.monotonic() - last_ask >= ASK_EVERY:
+            # A new pick or a "list my servers again" from the app shows up within a minute.
+            last_ask = time.monotonic()
+            for key in picks.reload():
+                nxt[key] = time.monotonic()
+            guarded(lambda: picks.catalog(client, lambda: STOP["now"]))
+            names = names_now()
+            live_ids = {channel["id"] for channel in every()}
+            for key in list(nxt):
+                if key not in live_ids:
+                    nxt.pop(key, None)
+        open_channels = [channel for channel in every() if channel["id"] not in board.inaccessible]
         channel, cursor = pick_due(open_channels, nxt, time.monotonic(), cursor)
         if channel is None:
             wait = min(nxt.values()) - time.monotonic() if nxt else 5
@@ -797,24 +941,29 @@ def run(root: Path, server: dict, token: str) -> int:
         if not isinstance(messages, list):
             if client.last_status == 403:
                 board.inaccessible.add(channel["id"])
-                print(f"[discord-live] #{channel['name']} inaccessible")
+                print(f"[discord-live] {label(channel)} inaccessible")
             nxt[channel["id"]] = time.monotonic() + (DEPLOY_EVERY if client.last_status == 403 else next_gap(channel["busy"]))
             continue
-        count = apply_messages(board, channel, messages, names, topic, token, bool(cursor_id))
+        newest = board.cursor.get(channel["id"])
+        count = apply_messages(board, channel, messages, names, topic_for(channel), token, bool(cursor_id))
         polls += 1
         if count or polls <= 30 or polls % 40 == 0:
-            print(f"[discord-live] #{channel['name']} +{count} gap {gap:.1f}s")
-        if count:
-            write_tree(root, server, board, icon, members, online, "ok", "", token)
+            print(f"[discord-live] {label(channel)} +{count} gap {gap:.1f}s")
+        if channel.get("private") and board.cursor.get(channel["id"]) != newest:
+            # Picked servers have no ntfy push, so their file goes up now.
+            picks.write(board)
+            picks.upload()
+        elif count:
+            write_all()
         nxt[channel["id"]] = time.monotonic() + next_gap(channel["busy"])
-    write_tree(root, server, board, icon, members, online, "ok", "", token)
-    deploy(root, token)
+    write_all()
+    ship()
     print("[discord-live] exited cleanly")
     return 0
 
 
-def refresh(client, server, board, names, topic, token, guarded) -> None:
-    for channel in server["channels"]:
+def refresh(client, channels, board, names, topic_for, token, guarded) -> None:
+    for channel in channels:
         if STOP["now"]:
             return
         result = guarded(lambda channel=channel: page(client, channel["id"]))
@@ -826,7 +975,7 @@ def refresh(client, server, board, names, topic, token, guarded) -> None:
                 board.inaccessible.add(channel["id"])
             continue
         board.inaccessible.discard(channel["id"])
-        apply_messages(board, channel, messages, names, topic, token, True)
+        apply_messages(board, channel, messages, names, topic_for(channel), token, True)
 
 
 def deploy(root: Path, token: str) -> None:
@@ -892,7 +1041,7 @@ def main() -> int:
         write_status(ROOT, server, "waiting for token", "DISCORD_USER_TOKEN is not set", "")
         deploy(ROOT, "")
         return 0
-    if server is None:
+    if server is None and not _has_picks():
         print("[discord-live] no user-auth message channels")
         return 0
     try:
@@ -911,6 +1060,14 @@ def main() -> int:
                     pass
             _account_issue(True, exc.text)
         return 0
+
+
+def _has_picks() -> bool:
+    """Picked servers, or the owner asked for the server list."""
+    doc = r2_json(discord_picks.PICKS_KEY)
+    if isinstance(doc, dict) and discord_picks.picked_servers(doc):
+        return True
+    return discord_picks.catalog_due(r2_json(discord_picks.CATALOG_KEY), r2_json(discord_picks.REQUEST_KEY))
 
 
 def _account_issue(paused: bool, reason: str) -> None:
