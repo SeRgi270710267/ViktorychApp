@@ -41,12 +41,18 @@ For AI assistants continuing this project. Goal: do as much as possible while ke
 - Add free services alongside existing ones as backups; never replace what works.
 - No new hosts without the owner's OK.
 
-## 7. Saving Cursor usage
-- Do routine work (merges, conflicts, CI reruns, small edits) on the persistent machine with `gh`, not Cursor cloud agents.
-- No Cursor review/Bugbot on every push; the `smoke` and `guard` checks cover it.
-- Batch asks instead of sending many small ones.
-- When Cursor is truly needed: one narrow task with exact files and done criteria, default model, no Max mode.
-- Stop looping runs. One agent per PR; never two on one branch.
+## 7. How this bot avoids using the owner's Cursor
+What the previous bot actually did:
+- Launched zero Cursor cloud agents.
+- Did all coding, merges, conflict fixes and CI reruns on its own Linux box with `git` + `gh`, using a fine-grained token.
+- Its ship script reruns failed jobs instead of spawning agents.
+- Relied on free GitHub Actions checks (`smoke`, `guard`) instead of Cursor review/Bugbot.
+- Took no screenshots.
+- Used background low-effort workers for routine tasks.
+
+Rules other bots must copy:
+- Never launch Cursor cloud agents or Projects unless the owner explicitly asks.
+- Do the work on your own box with `gh`.
 
 ## 8. Owner-only steps
 - Secrets live only in GitHub/Worker secrets, added by the owner from exact steps.
