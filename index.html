@@ -534,6 +534,18 @@
         if (snap && paintPosts(snap.posts)) return;
       } catch (err) { /* a broken saved copy must not stop the shell */ }
     })();
+    /* On a slow device the restored screen can be scrolled and tapped before
+       app.js runs. Remember how far down it was, so going back from the page
+       that was tapped lands on the same spot. app.js takes over at start. */
+    (function () {
+      var hash = location.hash || "#/";
+      var seen = window.__earlyScroll = { hash: hash, y: 0 };
+      function note() {
+        if (window.__earlyScroll !== seen) { window.removeEventListener("scroll", note); return; }
+        if ((location.hash || "#/") === hash) seen.y = window.scrollY || 0;
+      }
+      window.addEventListener("scroll", note, { passive: true });
+    })();
   </script>
   <div id="account-layer"></div>
   <script>
