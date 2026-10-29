@@ -50,6 +50,7 @@ const SHELL_FILES = [
   "./",
   "./index.html",
   "./styles.css",
+  "./customize.css",
   "./dock.css",
   "./dock.js",
   "./i18n.js",
