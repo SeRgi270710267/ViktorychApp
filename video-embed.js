@@ -336,7 +336,108 @@
     var primary = { kind: file.kind, url: primaryUrl, origin: file.url };
     var relayUrl = routed.relay && routed.relay !== primaryUrl ? routed.relay : "";
     var relay = relayUrl ? { kind: file.kind, url: relayUrl, origin: file.url } : null;
-    return { primary: primary, relay: relay, embedUrl: embedUrl, openUrl: openUrl, external: "" };
+    var seen = [primaryUrl, relayUrl];
+    var backups = (Array.isArray(routed.backups) ? routed.backups : []).filter(function (url) {
+      if (!url || seen.indexOf(url) >= 0) return false;
+      seen.push(url);
+      return true;
+    }).map(function (url) { return { kind: file.kind, url: url, origin: file.url }; });
+    return { primary: primary, relay: relay, backups: backups, embedUrl: embedUrl, openUrl: openUrl, external: "" };
+  }
+
+  /* TikTok's official players, used only after every direct file failed. */
+  function tiktokVideoId(value) {
+    var raw = typeof value === "object" && value ? [value.statusId, value.url, value.open, value.id].join(" ") : String(value || "");
+    var m = raw.match(/tiktok\.com\/(?:@[A-Za-z0-9._]{1,30}\/(?:video|photo)|embed(?:\/v2)?|player\/v1|v)\/(\d{8,22})/i);
+    if (m) return m[1];
+    if (typeof value === "object" && value && value.platform === "tiktok") {
+      var id = String(value.statusId || "").match(/^\d{8,22}$/) ? String(value.statusId) : (String(value.id || "").match(/(\d{8,22})/) || [])[1];
+      return id || "";
+    }
+    return "";
+  }
+  function tiktokEmbedUrl(id) {
+    var clean = String(id || "").replace(/\D/g, "");
+    return clean ? "https://www.tiktok.com/embed/v2/" + clean : "";
+  }
+  /* The platform's own embed for a post, with the size it draws at so it can
+     be scaled to cover our video frame. Empty when the platform has none. */
+  function officialEmbed(post, media) {
+    post = post || {};
+    var platform = String(post.platform || "");
+    var tt = platform === "tiktok" || /tiktok\.com/i.test([post.url, media && media.open].join(" ")) ? (tiktokVideoId(post) || tiktokVideoId(media && media.open)) : "";
+    if (tt) return { site: "tiktok", url: tiktokEmbedUrl(tt), width: 325, height: 578, origin: "https://www.tiktok.com" };
+    var x = platform === "x" || /(?:x|twitter)\.com\//i.test(String(post.url || "")) ? (xStatusId(post) || xStatusId(media)) : "";
+    if (x) return { site: "x", url: xEmbedUrl(x), width: 550, height: 560, origin: "https://platform.twitter.com" };
+    return null;
+  }
+  /* Scale a fixed-size embed like object-fit: cover inside the host frame and
+     crop what spills over. */
+  function fitEmbed(box, frame, size) {
+    var w = Number(size && size.width) || 550;
+    var h = Number(size && size.height) || 560;
+    box.style.position = "absolute";
+    box.style.inset = "0";
+    box.style.overflow = "hidden";
+    frame.style.position = "absolute";
+    frame.style.left = "50%";
+    frame.style.top = "50%";
+    frame.style.border = "0";
+    frame.style.transformOrigin = "50% 50%";
+    frame.style.width = w + "px";
+    frame.style.height = h + "px";
+    function fit() {
+      var bw = box.clientWidth || w;
+      var bh = box.clientHeight || h;
+      var scale = Math.max(bw / w, bh / h);
+      frame.style.transform = "translate(-50%, -50%) scale(" + scale.toFixed(4) + ")";
+    }
+    fit();
+    if (typeof ResizeObserver === "function") {
+      var ro = new ResizeObserver(fit);
+      ro.observe(box);
+      box._fitStop = function () { ro.disconnect(); };
+    }
+    return fit;
+  }
+  /* Last resort: a placeholder that costs no data. The official embed loads
+     only when it is tapped. */
+  function mountTapEmbed(host, embed, opts) {
+    opts = opts || {};
+    if (!host || !embed || !embed.url || typeof document === "undefined") return null;
+    host.querySelectorAll(":scope > .vembed-tap, :scope > .vembed-fit").forEach(function (node) {
+      if (node._fitStop) node._fitStop();
+      node.remove();
+    });
+    var tap = document.createElement("button");
+    tap.type = "button";
+    tap.className = "vembed-tap";
+    tap.setAttribute("data-site", embed.site || "");
+    tap.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span></span>';
+    tap.querySelector("span").textContent = opts.label || "Play";
+    function load(event) {
+      if (event) { event.preventDefault(); event.stopPropagation(); }
+      if (!tap.isConnected) return;
+      var box = document.createElement("div");
+      box.className = "vembed-fit";
+      box.setAttribute("data-site", embed.site || "");
+      var frame = document.createElement("iframe");
+      frame.className = embed.site === "x" ? "x-embed-frame" : "vembed-frame";
+      frame.setAttribute("loading", "lazy");
+      frame.setAttribute("scrolling", "no");
+      prepareFrame(frame, { url: embed.url, title: opts.title || "Video", allowFullscreen: true });
+      box.appendChild(frame);
+      tap.replaceWith(box);
+      host.classList.add("is-playing", "is-official");
+      host.classList.remove("is-failed");
+      fitEmbed(box, frame, embed);
+      frame.src = embed.url;
+      if (opts.onLoad) { try { opts.onLoad(frame); } catch (err) { /* stats are optional */ } }
+    }
+    tap.addEventListener("click", load);
+    host.appendChild(tap);
+    if (opts.onShow) { try { opts.onShow(tap); } catch (err) { /* stats are optional */ } }
+    return { load: load, node: tap };
   }
 
   function xExternal(value) {
@@ -387,7 +488,10 @@
     function wipeMedia() {
       stopEmbedWatch();
       if (opts.onStop) { try { opts.onStop(); } catch (err) { /* the previous player can already be gone */ } }
-      host.querySelectorAll("video, iframe.x-embed-frame, a.x-open").forEach(function (node) { node.remove(); });
+      host.querySelectorAll("video, iframe.x-embed-frame, a.x-open, .vembed-tap, .vembed-fit").forEach(function (node) {
+        if (node._fitStop) node._fitStop();
+        node.remove();
+      });
       host.querySelectorAll(".vshield, .ytp-video-click-target").forEach(function (node) { node.remove(); });
     }
     // A blocked embed does not fire error, and the frame looks the same as a
@@ -450,6 +554,20 @@
       if (!url) { showLink(); return; }
       phase = "embed";
       wipeMedia();
+      if (opts.tapToLoad) {
+        host.classList.remove("is-playing", "is-shown");
+        host.classList.add("is-failed", "is-official-wait");
+        var hold = host.querySelector(".vfallback");
+        if (hold) hold.hidden = true;
+        var hidePlay = host.querySelector(":scope > .play");
+        if (hidePlay) hidePlay.hidden = true;
+        mountTapEmbed(host, { site: "x", url: url, width: 550, height: 560 }, {
+          label: opts.tapLabel || "Play",
+          title: opts.title || "Post",
+          onLoad: function () { host.classList.remove("is-official-wait"); host.classList.add("is-x-embed"); }
+        });
+        return;
+      }
       host.classList.remove("is-failed");
       host.classList.add("is-playing", "is-x-embed");
       var held = host.querySelector(".vfallback");
@@ -541,13 +659,30 @@
       else showLink();
       return;
     }
-    playFile(plan.primary, function () {
-      if (plan.relay && plan.relay.url && plan.relay.url !== plan.primary.url) {
-        playFile(plan.relay, showEmbed);
-        return;
-      }
-      showEmbed();
-    });
+    /* Direct file, then the relay, then each backup fetcher, then one fresh
+       short-lived URL from the resolver, and only then the official embed. */
+    var chain = [];
+    if (plan.relay && plan.relay.url && plan.relay.url !== plan.primary.url) chain.push(plan.relay);
+    (plan.backups || []).forEach(function (row) { if (row && row.url) chain.push(row); });
+    var refreshed = false;
+    function refresh() {
+      if (refreshed || typeof opts.refresh !== "function") { showEmbed(); return; }
+      refreshed = true;
+      var job = null;
+      try { job = opts.refresh(); } catch (err) { job = null; }
+      if (!job || !job.then) { showEmbed(); return; }
+      job.then(function (fresh) {
+        if (!alive()) return;
+        if (!fresh || !fresh.url || fresh.url === plan.primary.url) { showEmbed(); return; }
+        playFile({ kind: fresh.kind || (/\.m3u8(\?|$)/i.test(fresh.url) ? "hls" : "mp4"), url: fresh.url, origin: fresh.url }, showEmbed);
+      }, function () { if (alive()) showEmbed(); });
+    }
+    function nextRoute() {
+      var row = chain.shift();
+      if (!row) { refresh(); return; }
+      playFile(row, nextRoute);
+    }
+    playFile(plan.primary, nextRoute);
   }
 
   function match(text, opts) {
@@ -590,6 +725,8 @@
     if (peer && !/youtube|youtu\.be|twitch|vimeo|odysee/i.test(peer[1])) {
       return { kind: "iframe", site: "peertube", url: "https://" + peer[1] + "/videos/embed/" + peer[2] + "?autoplay=1&playsinline=1" };
     }
+    var tiktok = /tiktok\.com\//i.test(raw) ? tiktokVideoId(raw) : "";
+    if (tiktok && !/\.mp4(\?|$)/i.test(raw)) return { kind: "iframe", site: "tiktok", url: tiktokEmbedUrl(tiktok) };
     var hasFile = /\.mp4(\?|$)/i.test(raw) || /video\.twimg\.com/i.test(raw);
     if (!hasFile) {
       var space = xSpaceId(raw);
@@ -739,6 +876,11 @@
     xPlan: xPlan,
     xExternal: xExternal,
     prepareXVideo: prepareXVideo,
-    runXPlayback: runXPlayback
+    runXPlayback: runXPlayback,
+    tiktokVideoId: tiktokVideoId,
+    tiktokEmbedUrl: tiktokEmbedUrl,
+    officialEmbed: officialEmbed,
+    fitEmbed: fitEmbed,
+    mountTapEmbed: mountTapEmbed
   };
 });

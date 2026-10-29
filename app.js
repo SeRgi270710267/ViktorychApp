@@ -1205,6 +1205,8 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.bellNotes = cleanBellNotes(parsed.bellNotes);
       parsed.bellSeen = Array.isArray(parsed.bellSeen) ? parsed.bellSeen.map((id) => String(id)).slice(-500) : [];
       parsed.bellRead = Number(parsed.bellRead) || 0;
+      parsed.noteClearedAt = Number(parsed.noteClearedAt) || 0;
+      parsed.noteDismissed = parsed.noteDismissed && typeof parsed.noteDismissed === "object" && !Array.isArray(parsed.noteDismissed) ? parsed.noteDismissed : {};
 parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       parsed.feedTabs = cleanFeedTabs(parsed.feedTabs);
       parsed.noteTabs = cleanFeedTabs(parsed.noteTabs);
@@ -2177,6 +2179,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       return (row && row.verifiedType ? badge(row.verifiedType) : "");
     }
   };
+
+  function platformIcon(platform) {
+    const name = { instagram: "ig", threads: "threads", youtube: "subs", vk: "vk", telegram: "tg", discord: "discord", tiktok: "tiktok", rss: "rss" }[platform];
+    return name && PATH[name] ? icon(name) : "";
+  }
 
   function sourceBadge(platform) {
     if (!platform || platform === "x" || platform === "app") return "";
@@ -3685,8 +3692,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       try { el._ytPlayer.destroy(); } catch (err) {}
       el._ytPlayer = null;
     }
-    el.classList.remove("is-x-embed");
-    el.querySelectorAll("video, iframe, .html5-video-player, .vshield, .ytp-video-click-target, a.x-open").forEach((node) => node.remove());
+    el.classList.remove("is-x-embed", "is-official", "is-official-wait");
+    el.querySelectorAll("video, iframe, .html5-video-player, .vshield, .ytp-video-click-target, a.x-open, .vembed-tap, .vembed-fit").forEach((node) => {
+      if (node._fitStop) node._fitStop();
+      node.remove();
+    });
     const play = el.querySelector(":scope > .play");
     if (play && !el.classList.contains("is-failed")) play.hidden = false;
   }
@@ -4219,6 +4229,44 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     startPlayback(el, { muted: saved.muted, resume: saved.time });
   }
 
+  /* The other API hosts (the Render failover and any extra mirrors) run the
+     same Worker, so each one can fetch a video when the main relay fails. */
+  function backupApis(current) {
+    const bag = window.VIKTORYCH_ACCOUNTS || {};
+    const list = [].concat(Array.isArray(bag.apis) ? bag.apis : [], bag.api || [], bag.backupApi || []);
+    const now = String(current || "").replace(/\/$/, "");
+    const out = [];
+    list.forEach((raw) => {
+      const root = String(raw || "").replace(/\/$/, "");
+      if (root && /^https:\/\//.test(root) && root !== now && out.indexOf(root) < 0) out.push(root);
+    });
+    return out.slice(0, 2);
+  }
+
+  /* Last resort once every direct route failed: the platform's official
+     embed behind a tap-to-load placeholder, so it costs nothing until used. */
+  function officialFallback(el, post, media) {
+    const helper = window.ViktorychEmbed;
+    const embed = helper && helper.officialEmbed ? helper.officialEmbed(post, media) : null;
+    if (!embed || !embed.url || !helper.mountTapEmbed) return false;
+    showVideoCard(el, post, media);
+    const link = el.querySelector(".vfallback");
+    if (link) link.hidden = true;
+    const retry = el.querySelector(".vretry");
+    if (retry) retry.hidden = true;
+    el.classList.add("is-official-wait");
+    notePlay(el, "official-" + embed.site + "-wait");
+    helper.mountTapEmbed(el, embed, {
+      label: embed.site === "tiktok" ? tr("Play with the TikTok player") : tr("Play with the X player"),
+      title: (post && (post.title || post.text)) || tr("Video"),
+      onLoad: () => {
+        el.classList.remove("is-official-wait", "is-failed");
+        notePlay(el, "official-" + embed.site);
+      }
+    });
+    return true;
+  }
+
   function xPlaybackPlan(post, media) {
     const helper = window.ViktorychEmbed;
     if (!helper || !helper.xPlan || !helper.xRoute) return null;
@@ -4237,11 +4285,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       expired: oePast,
       route: (url) => {
         let relay = "";
+        let backups = [];
         try {
           const host = new URL(url).hostname;
           if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
+          if (/(^|\.)video\.twimg\.com$/i.test(host)) backups = backupApis(api).map((root) => root + "/v1/media?url=" + encodeURIComponent(url));
         } catch (err) { relay = ""; }
-        return helper.xRoute(url, {
+        const routed = helper.xRoute(url, {
           networkMode: mode,
           relay: relay,
           preferRelay: mode === "auto" && isRuVisitor(),
@@ -4251,6 +4301,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
             signals: dev.signals()
           }) : null
         });
+        if (routed && typeof routed === "object") routed.backups = backups;
+        return routed;
       }
     });
     if (!plan || (!plan.primary && !plan.embedUrl && !plan.openUrl)) return null;
@@ -4313,6 +4365,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       resume: opts.resume || 0,
       stallMs: helper.X_STALL_MS || 3000,
       linkLabel: tr("Open on X"),
+      tapToLoad: true,
+      tapLabel: tr("Play with the X player"),
+      refresh: () => xRefresh(post),
       title: (post && (post.title || post.text)) || tr("Video"),
       active: opts.active,
       onFrame: (video) => {
@@ -4444,6 +4499,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     const platform = (post && post.platform) || "";
     const can = platform === "vk" || platform === "instagram" || platform === "threads" || platform === "x";
+    const lastResort = () => { if (!officialFallback(el, post, media)) showVideoCard(el, post, media); };
     if (!can || el._recovered) {
       const tgKey = socialFileKey(post, media);
       const tgUrl = tgKey ? tgMediaUrl(tgKey) : "";
@@ -4453,13 +4509,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         playSource(el, { kind: "hls", url: tgUrl + "/index.m3u8", telegram: true }, post, media, opts, gen, () => {
           playSource(el, { kind: "tg", url: tgUrl, telegram: true }, post, media, opts, gen, () => {
             notePlay(el, "no-source");
-            showVideoCard(el, post, media);
+            lastResort();
           });
         });
         return;
       }
       notePlay(el, "no-source");
-      showVideoCard(el, post, media);
+      lastResort();
       return;
     }
     el._recovered = 1;
@@ -4468,10 +4524,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const job = platform === "vk" ? vkRefresh(post, media) : platform === "x" ? xRefresh(post) : metaRefresh(post);
     job.then((fresh) => {
       if (el._gen !== gen) return;
-      if (!fresh || !fresh.url || !playableFile(fresh.url) || oePast(fresh.url)) { showVideoCard(el, post, media); return; }
+      if (!fresh || !fresh.url || !playableFile(fresh.url) || oePast(fresh.url)) { lastResort(); return; }
       const kind = /\.m3u8(\?|$)/i.test(fresh.url) ? "hls" : "mp4";
-      playSource(el, { kind: kind, url: fresh.url }, post, media, opts, gen, () => showVideoCard(el, post, media));
-    }).catch(() => { if (el._gen === gen) showVideoCard(el, post, media); });
+      playSource(el, { kind: kind, url: fresh.url }, post, media, opts, gen, lastResort);
+    }).catch(() => { if (el._gen === gen) lastResort(); });
   }
 
   function stopPlayback(el) {
@@ -4954,6 +5010,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
       ${articleCardHtml(asQuoted)}
       ${mediaHtml(asQuoted.media, false, asQuoted)}
+      ${quoted.appPost && quoted.appExtra ? quoted.appExtra : ""}
     </div>`;
   }
 
@@ -6050,6 +6107,46 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  function appReplyBucket(post, id, want) {
+    const fresh = String(STATE.forceReply || "") === id;
+    if (fresh) STATE.forceReply = "";
+    const bucket = STATE.replies[id];
+    if (!fresh && bucket && (bucket.loading || (bucket.fetchedAt && Date.now() - bucket.fetchedAt < 30000))) return bucket;
+    STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want, fetchedAt: (bucket && bucket.fetchedAt) || 0 };
+    accountCall("/v1/posts/thread?id=" + encodeURIComponent(id) + "&sort=" + replySortMode()).then((res) => {
+      if (res && res.status === 410) {
+        dropAppItem(id);
+        STATE.replies[id] = { loading: false, replies: [], missing: true, cap: want, fetchedAt: Date.now(), settled: true, gone: true };
+        render();
+        return;
+      }
+      if (!res || res.status !== 200 || !Array.isArray(res.replies)) {
+        STATE.replies[id] = { loading: false, replies: (bucket && bucket.replies) || [], missing: !(bucket && bucket.replies && bucket.replies.length), cap: want, fetchedAt: Date.now(), settled: true };
+        render();
+        return;
+      }
+      if (res.post && res.post.id) {
+        appThreadItems[res.post.id] = res.post;
+        patchAppItem(res.post.id, res.post);
+        const card = appCardPost(res.post);
+        STATE.shared[card.id] = Object.assign(STATE.shared[card.id] || {}, card);
+      }
+      const replies = res.replies.filter(notGone).map((item) => {
+        appThreadItems[item.id] = item;
+        const card = appCardPost(item);
+        card.replyingTo = { id: id, handle: post.handle || "" };
+        STATE.shared[card.id] = card;
+        return card;
+      });
+      STATE.replies[id] = { loading: false, replies: replies.slice(0, want), missing: false, cap: want, fetchedAt: Date.now(), settled: true };
+      render();
+    }).catch(() => {
+      STATE.replies[id] = { loading: false, replies: (bucket && bucket.replies) || [], missing: true, cap: want, fetchedAt: Date.now(), settled: true };
+      render();
+    });
+    return STATE.replies[id];
+  }
+
   function replyBucket(post) {
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
@@ -6074,6 +6171,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (post._community && post.kind !== "community") {
       return { loading: false, replies: Array.isArray(post.replies) ? post.replies : [], missing: false, cap: want };
     }
+    if (post.appPost && isAppPostId(id) && !post.community) return appReplyBucket(post, id, want);
     const fresh = String(STATE.forceReply || "") === id;
     if (fresh) STATE.forceReply = "";
     const bucket = STATE.replies[id];
@@ -6920,7 +7018,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     document.querySelectorAll("[data-hydrate]").forEach((el) => HYDRATE_OBS.observe(el));
     if (!ARCHIVE_OBS) {
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) revealMoreTimeline();
+        const hit = entries.filter((entry) => entry.isIntersecting);
+        hit.forEach((entry) => { if (entry.target.id === "author-more") loadOlderAuthorPosts(entry.target.getAttribute("data-id")); });
+        if (hit.some((entry) => entry.target.id !== "author-more")) revealMoreTimeline();
       }, { rootMargin: "600px" });
     }
     ARCHIVE_OBS.disconnect();
@@ -6928,6 +7028,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (sentinel) ARCHIVE_OBS.observe(sentinel);
     const liveSentinel = document.getElementById("live-more");
     if (liveSentinel) ARCHIVE_OBS.observe(liveSentinel);
+    const authorSentinel = document.getElementById("author-more");
+    if (authorSentinel) ARCHIVE_OBS.observe(authorSentinel);
   }
 
   function ensureYtSubs(feed) {
@@ -7263,7 +7365,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   // Reddit posts on Home get up and down votes with the score; internal posts do not.
   function redditVotes(post) {
-    if (!post || post.platform !== "reddit" || post.appPost || parseRoute().name !== "home") return "";
+    if (!post || post.platform !== "reddit" || post.appPost) return "";
     const votes = STATE.settings.redditVotes || {};
     const mine = Number(votes[post.id]) || 0;
     const base = Number(post.score != null ? post.score : (post.stats || {}).score) || 0;
@@ -7286,6 +7388,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
     const muteCommunity = post.community ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : "";
     const quote = post.community ? "" : `<button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>`;
+    const communityOwn = !!(post.community && /^va_[a-f0-9]{16}$/.test(String(post.id || "")));
+    if (self && (communityOwn || (!post.community && isAppPostId(post.id)))) {
+      const item = findAppItem(post.id);
+      const born = Number(item && item.createdAt) || Date.parse(post.date || "") || 0;
+      const editable = Date.now() - born < 3600000;
+      const sub = post.community ? ` data-sub="${esc(post.community.name)}"` : "";
+      return `<button type="button" class="menu-danger" data-act="app-delete" data-id="${esc(post.id)}"${sub}>${icon("trash")}<span>${esc(tr("Delete"))}</span></button>`
+        + (editable ? `<button type="button" data-act="app-edit" data-id="${esc(post.id)}"${sub}>${icon("pencil")}<span>${esc(tr("Edit"))}</span></button>` : "")
+        + quote;
+    }
     if (self || !post.authorId) return quote + muteCommunity;
     return quote + `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>` + muteCommunity;
   }
@@ -7345,7 +7457,7 @@ const here = parseRoute();
       : (redditSub(post) && !opts.parentShown
         ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(redditSub(post))}">${esc("r/" + redditSub(post))}</a></div>`
         : "");
-    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
+    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}${cardHeightStyle(post.id)}>
       ${community}
       ${repost}
       ${sharedNote}
@@ -7370,7 +7482,7 @@ const here = parseRoute();
           ${mediaHtml(post.media, eager, post)}
           ${post.appPost ? (post.appExtra || "") : ""}
           ${postCards(post)}
-          ${quoteCard(post.quoted)}
+          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
           ${giftChip(post)}
           ${threadLink}
           ${actionBar(post)}
@@ -7510,9 +7622,46 @@ const here = parseRoute();
 
   function visibleNotes(list) {
     if (window.TiktokLock && typeof window.TiktokLock.visibleNotes === "function") {
-      return window.TiktokLock.visibleNotes(list || [], noteViewer());
+      return window.TiktokLock.visibleNotes(list || [], noteViewer()).filter((note) => !noteDismissed(note));
     }
-    return (list || []).filter((note) => !noteHidden(note));
+    return (list || []).filter((note) => !noteHidden(note) && !noteDismissed(note));
+  }
+
+  /* Dismissed notifications (swipe, the desktop x, Clear all) stay hidden on
+     every device: the ids and the clear-all time live in synced settings. */
+  function noteDismissed(note) {
+    if (!note || !STATE.settings) return false;
+    const cleared = Number(STATE.settings.noteClearedAt) || 0;
+    if (cleared && (Number(note.at) || 0) && Number(note.at) <= cleared) return true;
+    const gone = STATE.settings.noteDismissed;
+    return !!(gone && note.id && gone[String(note.id)]);
+  }
+
+  function dismissNotes(ids) {
+    if (!STATE.settings || !ids.length) return;
+    const gone = Object.assign({}, STATE.settings.noteDismissed || {});
+    const now = Date.now();
+    ids.forEach((id) => { if (id) gone[String(id)] = now; });
+    const keys = Object.keys(gone).sort((a, b) => gone[b] - gone[a]).slice(0, 500);
+    const kept = {};
+    keys.forEach((key) => { kept[key] = gone[key]; });
+    STATE.settings.noteDismissed = kept;
+    saveSettings();
+    if (notesSignedIn()) accountCall("/v1/notifications/read", { method: "POST", body: { ids: ids.slice(0, 200) } }).catch(() => {});
+    updateBadge(bellUnread());
+  }
+
+  function clearAllNotes() {
+    if (!STATE.settings) return;
+    STATE.settings.noteClearedAt = Date.now();
+    STATE.settings.noteDismissed = {};
+    saveSettings();
+    markNoteTabRead("all");
+    updateBadge(bellUnread());
+  }
+
+  function noteX(ids) {
+    return `<button class="note-x" type="button" data-act="note-dismiss" data-ids="${esc(ids.join(","))}" aria-label="${esc(tr("Dismiss"))}" title="${esc(tr("Dismiss"))}">${icon("close")}</button>`;
   }
 
   function bellUnread() {
@@ -8662,7 +8811,8 @@ const here = parseRoute();
 
   function samePublicPosts(next) {
     if (publicPosts.length !== next.length) return false;
-    for (let i = 0; i < next.length; i++) if (!publicPosts[i] || publicPosts[i].id !== next[i].id) return false;
+    const sig = (item) => item ? [item.id, item.replyCount, item.quoteCount, item.likes, item.reposts, item.editedAt, item.poll && item.poll.total, item.body].join("|") : "";
+    for (let i = 0; i < next.length; i++) if (sig(publicPosts[i]) !== sig(next[i])) return false;
     return true;
   }
 
@@ -8702,8 +8852,17 @@ const here = parseRoute();
       authorPostCache[key].posts = authorPostCache[key].posts.filter((item) => item && item.id !== id);
     });
   }
+  /* Posts this device deleted. A list that left before the delete landed (or
+     a replayed outbox) must not bring them back. */
+  const goneOwn = {};
+  function notGone(item) {
+    const at = item && goneOwn[item.id];
+    if (!at) return true;
+    if (Date.now() - at > 600000) { delete goneOwn[item.id]; return true; }
+    return false;
+  }
   function keepOwnPosts(list) {
-    const next = list.slice();
+    const next = list.filter(notGone);
     const ids = new Set(next.map((item) => item && item.id));
     const now = Date.now();
     Object.keys(ownSent).forEach((id) => {
@@ -8717,14 +8876,14 @@ const here = parseRoute();
     });
     return next.sort((a, b) => (Number(b && b.createdAt) || 0) - (Number(a && a.createdAt) || 0));
   }
-  function optimisticOwnPost(text, parentId, quoteId) {
+  function optimisticOwnPost(text, parentId, quoteId, extParent) {
     const mine = signedAccount();
     if (!mine || !mine.publicId) return "";
     const id = "tmp-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     rememberOwnPost({
       id: id, body: String(text || ""), parentId: parentId || "", quoteId: quoteId || "", createdAt: Date.now(),
       authorId: String(mine.publicId), authorHandle: String(mine.handle || ""), authorName: String(mine.displayName || mine.handle || ""),
-      authorAvatar: String(mine.avatar || ""), pending: true, likes: 0, replyCount: 0, media: []
+      authorAvatar: String(mine.avatar || ""), pending: true, likes: 0, replyCount: 0, media: [], extParent: extParent || null
     });
     return id;
   }
@@ -8754,15 +8913,38 @@ const here = parseRoute();
         if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
         const mine = signedAccount();
         const next = mine && String(mine.publicId) === key ? keepOwnPosts(res.posts).filter((item) => String(item.authorId) === key) : res.posts;
-        const before = entry.posts.map((item) => item.id).join(",");
-        entry.posts = next;
-        if (before !== next.map((item) => item.id).join(",")) render();
+        const sig = (list) => list.map((item) => [item.id, item.replyCount, item.quoteCount, item.likes, item.reposts, item.editedAt, item.body].join("|")).join(",");
+        const before = sig(entry.posts);
+        // Keep pages already read further back; the first page replaces only its own span.
+        const edge = Number(res.before) || 0;
+        const older = (entry.posts || []).filter((item) => edge && (Number(item.createdAt) || 0) < edge && !next.some((row) => row.id === item.id));
+        if (!older.length) { entry.more = !!res.more; entry.before = edge; }
+        entry.posts = next.concat(older);
+        if (before !== sig(entry.posts)) render();
       }).catch(() => { entry.loading = false; });
     }
     const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
     const ids = new Set(have.map((item) => item.id));
     const extra = publicPosts.filter((item) => item && String(item.authorId) === key && !ids.has(item.id));
     return have.concat(extra);
+  }
+
+  // The next page of one account's posts, when the profile scrolls to its end.
+  function loadOlderAuthorPosts(publicId) {
+    const key = String(publicId || "");
+    const entry = authorPostCache[key];
+    if (!entry || !entry.more || entry.loadingMore || !entry.before) return;
+    entry.loadingMore = true;
+    accountCall("/v1/posts?by=" + key + "&before=" + entry.before).then((res) => {
+      entry.loadingMore = false;
+      if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      const ids = new Set((entry.posts || []).map((item) => item.id));
+      const add = res.posts.filter((item) => item && !ids.has(item.id) && String(item.authorId) === key);
+      entry.posts = (entry.posts || []).concat(add);
+      entry.before = Number(res.before) || 0;
+      entry.more = !!res.more && add.length > 0 && !!entry.before;
+      render();
+    }).catch(() => { entry.loadingMore = false; });
   }
 
   function hydratePublicMedia() {
@@ -8908,6 +9090,15 @@ const here = parseRoute();
       toast(tr("If you’re signed in, the server publishes this when it’s due. Otherwise it stays on this device until the app is open."));
       return;
     }
+    // Offline with an account: text and polls wait in the outbox, with the post they
+    // reply to or quote, and go out when the device is back online. Media stays a draft.
+    const outboxable = !navigator.onLine && token && root && window.ViktorychLocal && posts.every((part) => !(part.media || []).length);
+    if (outboxable) {
+      const slim = posts.map((part) => ({ text: part.text || "", media: [], poll: part.poll || null, location: part.location || "", audience: part.audience || "everyone", listIds: part.listIds || [], replyControl: part.replyControl || "everyone", scheduleAt: 0 }));
+      queueOffline({ type: "app-post", id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), on: true, snapshot: { posts: slim, parentId: payload.parentId || "", quoteId: payload.quoteId || "", extParent: payload.extParent || null } });
+      toast(tr("Sends when you’re back online."));
+      return;
+    }
     if (!navigator.onLine || !token || !root) {
       const text = posts.map((part) => part.text).filter(Boolean).join("\n\n");
       if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
@@ -8928,7 +9119,7 @@ const here = parseRoute();
       const parent = index === 0 ? (payload.parentId || "") : parentId;
       const quote = index === 0 ? (payload.quoteId || "") : "";
       const later = !!part.scheduleAt;
-      const tempId = later ? "" : optimisticOwnPost(part.text, parent, quote);
+      const tempId = later ? "" : optimisticOwnPost(part.text, parent, quote, index === 0 && !parent ? payload.extParent : null);
       if (tempId) render();
       const done = (res) => {
         if (tempId) forgetOwnPost(tempId);
@@ -8952,6 +9143,7 @@ const here = parseRoute();
         const data = new FormData();
         if (part.text) data.set("body", part.text);
         if (parent) data.set("parentId", parent);
+        if (!parent && index === 0 && payload.extParent) data.set("extParent", JSON.stringify(payload.extParent));
         if (quote) data.set("quoteId", quote);
         if (part.audience) data.set("audience", part.audience);
         if (part.listIds && part.listIds.length) data.set("listIds", JSON.stringify(part.listIds));
@@ -8970,6 +9162,7 @@ const here = parseRoute();
       }
       const body = { body: part.text || "" };
       if (parent) body.parentId = parent;
+      if (!parent && index === 0 && payload.extParent) body.extParent = payload.extParent;
       if (quote) body.quoteId = quote;
       if (part.audience) body.audience = part.audience;
       if (part.listIds && part.listIds.length) body.listIds = part.listIds;
@@ -9038,6 +9231,64 @@ const here = parseRoute();
     }).catch(finishFail);
   }
 
+  /* A reply to a post from X, Threads, Instagram, Reddit, RSS and the rest keeps
+     where that post lives and a snapshot of it. The server stores it with the
+     reply, so the original shows above the reply everywhere, like X. */
+  function extParentOf(post) {
+    if (!post || !post.platform || post.platform === "app" || post.appPost) return null;
+    const https = (value) => /^https:\/\//i.test(String(value || "")) ? String(value) : "";
+    const media = (post.media || []).slice(0, 4).map((item) => ({
+      type: item && item.type === "video" ? "video" : "photo",
+      url: https(item && (item.url || item.src)),
+      poster: https(item && (item.poster || item.thumb))
+    })).filter((item) => item.url || item.poster);
+    const stats = post.stats || {};
+    return {
+      platform: String(post.platform),
+      id: String(post.id || ""),
+      statusId: String(post.statusId || ""),
+      url: https(post.url),
+      handle: String(post.handle || "").replace(/^@/, ""),
+      author: String(post.author || post.handle || ""),
+      avatar: https(post.avatar),
+      text: String(post.text || "").slice(0, 1500),
+      title: String(post.title || "").slice(0, 300),
+      date: String(post.date || ""),
+      community: redditSub(post),
+      score: Number(post.score != null ? post.score : stats.score) || 0,
+      media: media
+    };
+  }
+
+  /* The live copy when this device has it loaded, the stored snapshot otherwise,
+     and "This post is unavailable" when neither has anything to show. */
+  function extParentCard(ext) {
+    const live = STATE.shared[ext.id] || (ext.statusId && STATE.shared[ext.statusId]) || null;
+    if (live && !live.appPost && (live.text || live.title || (live.media || []).length)) return live;
+    const card = {
+      id: ext.id,
+      statusId: ext.statusId || ext.id,
+      platform: ext.platform,
+      handle: ext.handle || "",
+      author: ext.author || ext.handle || "",
+      avatar: ext.avatar || "",
+      text: ext.text || "",
+      title: ext.title || "",
+      date: ext.date || "",
+      url: ext.url || "",
+      media: (ext.media || []).map((item) => ({ type: item.type, url: item.url || item.poster, poster: item.poster || "" })),
+      kind: "post",
+      extSnapshot: true
+    };
+    if (ext.community) card.subreddit = ext.community;
+    if (ext.platform === "reddit") card.score = Number(ext.score) || 0;
+    if (!card.text && !card.title && !card.media.length) {
+      card.text = tr("This post is unavailable.");
+      card.unavailable = true;
+    }
+    return card;
+  }
+
   // Posts written in this app (and in its communities) come from /v1/posts. Home shows
   // them as normal post cards, merged into the timeline by time, on For you and Following.
   function appCardPost(item) {
@@ -9045,8 +9296,9 @@ const here = parseRoute();
     const date = new Date(created || Date.now()).toISOString();
     const community = item.community && item.community.name ? { name: String(item.community.name), rootId: String(item.community.rootId || item.id || "") } : null;
     const media = (item.media || []).map(publicMediaHtml).join("");
-    const poll = item.poll && item.poll.options ? `<div class="public-poll">${item.poll.options.map((opt) => `<div>${esc(opt)}</div>`).join("")}</div>` : "";
+    const poll = appPollHtml(item);
     const place = item.location ? `<p class="phandle">${esc(item.location)}</p>` : "";
+    const edited = Number(item.editedAt) > 0 ? `<p class="phandle app-edited">${esc(tr("Edited"))}</p>` : "";
     const post = {
       id: String(item.id || ""),
       statusId: String(item.id || ""),
@@ -9062,9 +9314,16 @@ const here = parseRoute();
       date: date,
       sortDate: date,
       kind: item.parentId ? "reply" : (item.quote ? "quote" : "post"),
-      stats: { replies: Number(item.replyCount) || 0, likes: Number(item.likes) || 0 },
+      // The server counts include this account's own like and repost; the bar adds
+      // those from local state, so they come off here and are not counted twice.
+      stats: {
+        replies: Number(item.replyCount) || 0,
+        likes: Math.max(0, (Number(item.likes) || 0) - (item.liked ? 1 : 0)),
+        reposts: Math.max(0, (Number(item.reposts) || 0) - (item.reposted ? 1 : 0)),
+        quotes: Number(item.quoteCount) || 0
+      },
       media: [],
-      appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : ""),
+      appExtra: place + poll + (media ? `<div class="public-media">${media}</div>` : "") + edited,
       community: community,
       parentId: String(item.parentId || ""),
       url: ""
@@ -9075,8 +9334,97 @@ const here = parseRoute();
       post.replyParent = appCardPost(item.parent);
       post.replyingTo = { id: post.parentId, handle: post.replyParent.handle };
     } else if (post.parentId) post.replyingTo = { id: post.parentId, handle: String(item.parentHandle || "") };
-    if (item.quote) post.quoted = { platform: "app", id: String(item.quote.id || item.quoteId || ""), handle: String(item.quote.authorHandle || ""), author: String(item.quote.authorName || ""), text: String(item.quote.body || "") };
+    else if (item.extParent && item.extParent.id) {
+      post.replyParent = extParentCard(item.extParent);
+      post.replyingTo = { id: String(post.replyParent.statusId || post.replyParent.id), handle: post.replyParent.handle || "" };
+      post.kind = "reply";
+    }
+    if (item.quote && item.quote.unavailable) post.quoteGone = true;
+    else if (item.quote) {
+      const qMedia = (item.quote.media || []).map(publicMediaHtml).join("");
+      post.quoted = {
+        platform: "app",
+        appPost: true,
+        id: String(item.quote.id || item.quoteId || ""),
+        statusId: String(item.quote.id || item.quoteId || ""),
+        handle: String(item.quote.authorHandle || ""),
+        author: String(item.quote.authorName || item.quote.authorHandle || ""),
+        authorId: String(item.quote.authorId || ""),
+        avatar: String(item.quote.authorAvatar || ""),
+        text: String(item.quote.body || ""),
+        date: item.quote.createdAt ? new Date(Number(item.quote.createdAt)).toISOString() : "",
+        media: [],
+        appExtra: qMedia ? `<div class="public-media">${qMedia}</div>` : ""
+      };
+    }
+    // Like state from other devices: the server knows this account liked it.
+    if (item.liked && STATE.settings && STATE.settings.likes && !STATE.settings.likes[post.id] && !appUnliked[post.id]) STATE.settings.likes[post.id] = Number(item.createdAt) || Date.now();
     return post;
+  }
+
+  var appUnliked = {};
+  function appPollHtml(item) {
+    const poll = item && item.poll;
+    if (!poll || !Array.isArray(poll.options) || !poll.options.length) return "";
+    const ends = (Number(item.createdAt) || 0) + (Number(poll.minutes) || 1440) * 60000;
+    const closed = Date.now() > ends;
+    const votes = Array.isArray(poll.votes) ? poll.votes : [];
+    const total = Number(poll.total) || 0;
+    const mine = Number(poll.mine);
+    const voted = isFinite(mine) && mine >= 0;
+    const rows = poll.options.map((opt, i) => {
+      if (voted || closed) {
+        const pct = total ? Math.round(((Number(votes[i]) || 0) / total) * 100) : 0;
+        return `<div class="poll-choice${mine === i ? " on" : ""}"><span class="poll-bar" style="width:${pct}%"></span><span class="poll-label">${esc(opt)}</span><span class="poll-pct">${esc(String(pct))}%</span></div>`;
+      }
+      return `<button class="poll-choice poll-vote" type="button" data-act="app-vote" data-id="${esc(String(item.id || ""))}" data-choice="${i}"><span class="poll-label">${esc(opt)}</span></button>`;
+    }).join("");
+    return `<div class="poll public-poll">${rows}<div class="poll-total">${esc(tr("{count} votes", { count: formatCount(total) }))}</div></div>`;
+  }
+
+  /* Every app post this device has seen: Home, profiles and open threads. */
+  var appThreadItems = {};
+  function findAppItem(id) {
+    if (!id) return null;
+    const hit = publicPosts.find((item) => item && item.id === id);
+    if (hit) return hit;
+    if (appThreadItems[id]) return appThreadItems[id];
+    const keys = Object.keys(authorPostCache);
+    for (let i = 0; i < keys.length; i++) {
+      const found = (authorPostCache[keys[i]].posts || []).find((item) => item && item.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+  function isAppPostId(id) {
+    return /^[a-f0-9]{32}$/.test(String(id || ""));
+  }
+  function patchAppItem(id, change) {
+    const apply = (item) => { if (item && item.id === id) Object.assign(item, change); };
+    publicPosts.forEach(apply);
+    Object.keys(appThreadItems).forEach((key) => apply(appThreadItems[key]));
+    Object.keys(authorPostCache).forEach((key) => (authorPostCache[key].posts || []).forEach(apply));
+  }
+  function dropAppItem(id) {
+    publicPosts = publicPosts.filter((item) => item && item.id !== id);
+    delete appThreadItems[id];
+    Object.keys(authorPostCache).forEach((key) => {
+      authorPostCache[key].posts = (authorPostCache[key].posts || []).filter((item) => item && item.id !== id);
+    });
+    Object.keys(STATE.replies || {}).forEach((key) => {
+      const bucket = STATE.replies[key];
+      if (bucket && bucket.replies) bucket.replies = bucket.replies.filter((reply) => postKey(reply) !== id);
+    });
+  }
+  /* Something changed on a post this account wrote or touched: counts, a reply,
+     a like. Home, profiles and the open thread fetch again. */
+  function refreshAppPosts() {
+    publicStamp = 0;
+    Object.keys(authorPostCache).forEach((key) => { if (authorPostCache[key]) authorPostCache[key].at = 0; });
+    const focus = String(STATE.focusId || "");
+    if (focus && isAppPostId(focus)) STATE.forceReply = focus;
+    schedulePublicPosts();
+    render();
   }
 
   function appHomePosts(tab) {
@@ -9140,7 +9488,7 @@ const here = parseRoute();
     const inline = (tab === "foryou" || tab === "following") && STATE.modal !== "compose" && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
-    return homeHeader(tab) + bar + inline + body + timelineSentinel(list.length, sorted.length);
+    return homeHeader(tab) + bar + inline + showPostsRowHtml() + body + timelineSentinel(list.length, sorted.length);
   }
 
   function mobileLogo() {
@@ -10655,8 +11003,9 @@ const here = parseRoute();
         ${discordMeta(post)}
         ${articleCardHtml(post)}
         ${mediaHtml(post.media, false, post)}
+        ${post.appPost ? (post.appExtra || "") : ""}
         ${postCards(post)}
-        ${quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
         ${statusMeta(post)}
         ${actionBar(post, true)}`;
     const face = authorFace(post);
@@ -12483,7 +12832,8 @@ const here = parseRoute();
       : tr("New post notifications for {name}", { name: "{name}" });
     const when = noteWhen(first);
     const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
-    return `<article class="note-row note-group${unread ? " is-unread" : ""}"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(first.hash || "#/notifications")}"><div class="note-faces">${faces}</div><p class="note-line">${fillNoteName(raw, `<b>${name}</b>${mark}`)}${time}</p></a></article>`;
+    const groupIds = (notes || []).map((note) => String((note && note.id) || "")).filter(Boolean);
+    return `<article class="note-row note-group${unread ? " is-unread" : ""}" data-note-ids="${esc(groupIds.join(","))}"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(first.hash || "#/notifications")}"><div class="note-faces">${faces}</div><p class="note-line">${fillNoteName(raw, `<b>${name}</b>${mark}`)}${time}</p></a>${groupIds.length ? noteX(groupIds) : ""}</article>`;
   }
 
   function noteKindIcon(note) {
@@ -12504,7 +12854,7 @@ const here = parseRoute();
     const partial = note.partial ? `<p class="note-partial">${esc(tr("Partial. Replies on recent public posts, not X's mention inbox."))}</p>` : "";
     const text = (note.text || note.partial) ? `<div class="note-copy">${noteBody(note)}${partial}</div>` : "";
     const birthday = window.ProfileGifts && window.ProfileGifts.noteAction ? window.ProfileGifts.noteAction(note) : "";
-    return `<article class="note-row${unread ? " is-unread" : ""}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a>${birthday}</article>`;
+    return `<article class="note-row${unread ? " is-unread" : ""}" data-note-ids="${esc(String(note.id || ""))}"><div class="note-ico">${icon(noteKindIcon(note))}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-faces"><span class="note-face-wrap">${noteFace(note)}</span></div><p class="note-line">${noteTitle(note)}${time}</p>${text}</a>${birthday}${note.id ? noteX([String(note.id)]) : ""}</article>`;
   }
 
   function notesSignedIn() {
@@ -12585,7 +12935,7 @@ const here = parseRoute();
       return `<button class="bell-choice" type="button" data-act="note-tab" data-tab="${esc(tab.id)}" role="menuitemradio" aria-checked="${on ? "true" : "false"}"><span class="bell-choice-label">${esc(noteTabLabel(tab))}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
     }).join("");
     const filterBlock = filters ? `<div class="tab-menu-label">${esc(tr("Notification filters"))}</div>${filters}` : "";
-    return `<div class="bell-sheet" data-act="close-note-gear"><div class="menu bell-menu note-gear-menu" data-act="stop" role="menu" aria-label="${esc(tr("Notification options"))}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="note-mark-all"><span class="bell-choice-label">${esc(tr("Mark all as read"))}</span></button><a class="bell-choice" href="#/settings/notifications"><span class="bell-choice-label">${esc(tr("Notifications"))}</span></a><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-label">${esc(tr("Manage tabs"))}</span></button>${filterBlock}</div></div>`;
+    return `<div class="bell-sheet" data-act="close-note-gear"><div class="menu bell-menu note-gear-menu" data-act="stop" role="menu" aria-label="${esc(tr("Notification options"))}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="note-mark-all"><span class="bell-choice-label">${esc(tr("Mark all as read"))}</span></button><button class="bell-choice" type="button" data-act="note-clear-all"><span class="bell-choice-label">${esc(tr("Clear all"))}</span></button><a class="bell-choice" href="#/settings/notifications"><span class="bell-choice-label">${esc(tr("Notifications"))}</span></a><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-label">${esc(tr("Manage tabs"))}</span></button>${filterBlock}</div></div>`;
   }
 
   function notificationsView(route) {
@@ -12924,12 +13274,27 @@ const here = parseRoute();
 
   function deviceSyncSwitches() {
     const accounts = window.ViktorychAccounts || {};
+    const reg = window.ViktorychSettingsSync;
     const shared = !(STATE.settings && STATE.settings.syncUi === false);
     const own = !!(accounts.deviceOwnUi && accounts.deviceOwnUi());
-    const sw = (act, on, label, note) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"><span>${esc(label)}</span><i></i></button><p class="phandle">${esc(note)}</p>`;
-    return `<h2>${esc(tr("Devices"))}</h2>` +
-      sw("sync-ui", shared, tr("Sync across my devices"), tr("Menu, sidebar and display choices follow your account on every device you sign in on.")) +
-      sw("device-own-ui", own, tr("Keep this device's own look"), tr("Only this device ignores synced menu and display choices."));
+    const sw = (act, on, label, note, extra) => `<button class="tab-switch${on ? " on" : ""}" type="button" role="switch" aria-checked="${on ? "true" : "false"}" data-act="${act}"${extra || ""}><span>${esc(label)}</span><i></i></button>${note ? `<p class="phandle">${esc(note)}</p>` : ""}`;
+    let out = `<h2>${esc(tr("Devices"))}</h2>` +
+      sw("sync-ui", shared, tr("Sync across my devices"), tr("Your settings follow your account on every device you sign in on. Private ones are stored encrypted."));
+    if (!reg || !shared) return out;
+    out += `<h3 class="sync-local-title">${esc(tr("Keep on this device only"))}</h3><p class="phandle">${esc(tr("What you switch on here stays on this device and is not synced."))}</p>`;
+    reg.CATS.forEach((cat) => {
+      const on = cat.id === "look" ? own : reg.catLocal(cat.id);
+      out += sw(cat.id === "look" ? "device-own-ui" : "sync-cat-local", on, tr(cat.label), "", ` data-cat="${esc(cat.id)}"`);
+    });
+    out += `<details class="sync-keys"><summary>${esc(tr("Individual settings"))}</summary>`;
+    reg.CATS.forEach((cat) => {
+      const catOwn = cat.id === "look" ? own : reg.catLocal(cat.id);
+      cat.keys.forEach((row) => {
+        const on = catOwn || reg.keyLocal(row[0]);
+        out += sw("sync-key-local", on, tr(row[1]), "", ` data-key="${esc(row[0])}"${catOwn ? " disabled" : ""}`);
+      });
+    });
+    return out + "</details>";
   }
 
   function homeFeatureSwitch(key, label, note) {
@@ -13108,7 +13473,7 @@ const here = parseRoute();
         ${optToggle("privacyAntiFingerprint", tr("Fingerprint resistance"), tr("Reduces browser fingerprinting by disabling battery status and sensor enumeration APIs."), true)}
 
         <h2>${esc(tr("Mute and block"))}</h2>
-        <p class="phandle">${esc(tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
+        <p class="phandle">${esc(signedAccount() ? tr("Muted words, muted accounts, and reposts you turn off follow your account and are stored encrypted.") : tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
         <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
         ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
         <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
@@ -13700,7 +14065,18 @@ const here = parseRoute();
     </div></div>`;
   }
 
+  function postAskDialog() {
+    return `<div class="modal-back remove-back" data-act="close-modal"><div class="modal remove-sheet" role="alertdialog" aria-modal="true" aria-labelledby="post-del-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="post-del-title">${esc(tr("Delete post?"))}</h2><p>${esc(tr("This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results."))}</p><button type="button" class="remove-go" data-act="confirm-post-delete">${esc(tr("Delete"))}</button><button type="button" class="remove-cancel" data-act="close-modal">${esc(tr("Cancel"))}</button></div></div>`;
+  }
+
+  function postEditDialog() {
+    const edit = STATE.postEdit;
+    return `<div class="modal-back" data-act="close-modal"><div class="modal post-edit-sheet" role="dialog" aria-modal="true" aria-labelledby="post-edit-title" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${esc(tr("Close"))}">${icon("close")}</button><h2 id="post-edit-title">${esc(tr("Edit post"))}</h2><button class="save" type="button" data-act="save-post-edit">${esc(tr("Save"))}</button></div><div class="modal-body"><textarea id="post-edit-text" class="post-edit-text" rows="5" maxlength="4000" aria-label="${esc(tr("Edit post"))}">${esc(edit.text || "")}</textarea><p class="phandle">${esc(tr("Posts can be edited for an hour after they go out."))}</p></div></div></div>`;
+  }
+
   function modal() {
+    if (STATE.postAsk) return postAskDialog();
+    if (STATE.postEdit) return postEditDialog();
     if (STATE.removeFeed) return removeFeedDialog();
 if (STATE.histClear) {
       const tab = STATE.histClear;
@@ -13884,7 +14260,7 @@ if (STATE.histClear) {
       }
       if (act === "like") {
         histUpsert("likes", likedPost, { id: id });
-        queueLikeNote(likedPost, id);
+        if (!(likedPost && likedPost.appPost && isAppPostId(id))) queueLikeNote(likedPost, id);
       }
       if ((act === "like" || act === "repost") && likedPost && window.ForYou) {
         const memory = forYouMemory();
@@ -13895,9 +14271,21 @@ if (STATE.histClear) {
       }
     }
     saveSettings();
-    if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
+    const appLike = act === "like" && isAppPostId(id) && !!findAppItem(id);
+    if (appLike) {
+      const on = !!STATE.settings.likes[id];
+      if (on) delete appUnliked[id]; else appUnliked[id] = true;
+      if (navigator.onLine) sendAppLike(id, on);
+      else queueOffline({ type: "app-like", id: id, on: on });
+    } else if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
     if (parseRoute().name !== "shorts") render();
     return !!STATE.settings[bucket][id];
+  }
+
+  function sendAppLike(id, on) {
+    return accountCall("/v1/posts/like", { method: "POST", body: { id: id, on: !!on } }).then((res) => {
+      if (res && res.status === 200) patchAppItem(id, { likes: Number(res.likes) || 0, liked: !!res.liked });
+    }).catch(() => queueOffline({ type: "app-like", id: id, on: !!on }));
   }
 
   let pendingReposts = {};
@@ -14054,7 +14442,9 @@ if (STATE.histClear) {
     if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
     else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
     else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
-    return { html: shown.map((post) => card(post, "")).join(""), count: postList.length };
+    const entry = account.publicId ? authorPostCache[String(account.publicId)] : null;
+    const more = entry && entry.more ? `<div id="author-more" class="reply-empty" data-id="${esc(account.publicId)}"><button type="button" class="link-btn" data-act="author-more" data-id="${esc(account.publicId)}">${tr("Show more")}</button></div>` : "";
+    return { html: shown.map((post) => card(post, "")).join("") + more, count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -15236,7 +15626,7 @@ if (STATE.histClear) {
         ${reply}
         ${textBlock(shown, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
-        ${quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
       </div>
     </article>`;
   }
@@ -15652,15 +16042,27 @@ if (STATE.histClear) {
     return [...root.querySelectorAll(HSCROLL_SELECTOR)];
   }
 
+  const HSCROLL_FLAT = new Set();
+  try { window.addEventListener("resize", () => HSCROLL_FLAT.clear(), { passive: true }); } catch (err) { /* no window */ }
+
   function hscrollMatches(el) {
     if (!el || el.nodeType !== 1 || !el.matches) return false;
     if (el.matches(HSCROLL_SELECTOR)) return true;
     if (el.id === "app" || el.classList.contains("center") || el.classList.contains("app")) return false;
     // Style first: most nodes are not scrollers, and reading the computed
     // overflow is far cheaper than measuring every div's layout box.
+    // Overflow comes from CSS classes, so a class pair (with the parent's) that
+    // did not scroll last time won't now: skip the style read. That read was the
+    // biggest desktop long task on every render (hundreds of feed divs).
+    const sig = el.tagName + "|" + el.className + "|" + (el.getAttribute("style") || "") + "|" + ((el.parentElement && el.parentElement.className) || "");
+    if (HSCROLL_FLAT.has(sig)) return false;
     let ox = "";
     try { ox = getComputedStyle(el).overflowX; } catch (err) { return false; }
-    if (ox !== "auto" && ox !== "scroll" && ox !== "overlay") return false;
+    if (ox !== "auto" && ox !== "scroll" && ox !== "overlay") {
+      if (HSCROLL_FLAT.size > 4000) HSCROLL_FLAT.clear();
+      HSCROLL_FLAT.add(sig);
+      return false;
+    }
     if (el.scrollWidth <= el.clientWidth + 8) return false;
     if (el.clientHeight > 180 && el.scrollHeight > el.clientHeight + 24) return false;
     return true;
@@ -16058,7 +16460,7 @@ if (STATE.histClear) {
       badge: () => {
         if (!STATE.settings) return;
         const notes = Array.isArray(STATE.settings.bellNotes) ? STATE.settings.bellNotes.slice() : [];
-        notes.unshift({ id: "hscroll-badge-" + Date.now(), at: Date.now(), handle: "news", name: "News", text: "badge", hash: "#/" });
+        notes.unshift({ id: "hscroll-badge-" + Date.now(), at: Date.now(), handle: "news", name: tr("News"), text: "badge", hash: "#/" });
         STATE.settings.bellNotes = cleanBellNotes(notes);
         paintBellBadge();
         render();
@@ -16870,7 +17272,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "close-modal" || act === "close-remove") {
       if (act === "close-modal" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.requestClose && window.ViktorychXCompose.requestClose()) return;
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
-      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
+      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; STATE.navNewFolderOpen = false; render(); return;
     }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
@@ -16945,7 +17347,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "public-reply" || act === "public-quote") {
-      const found = publicPosts.find((item) => item && item.id === (el.dataset.id || ""));
+      const found = findAppItem(el.dataset.id || "");
       const opener = window.ViktorychXCompose;
       if (opener && opener.openReply && opener.openQuote) {
         const post = { id: el.dataset.id || "", handle: found && found.authorHandle, text: found && found.body, name: found && found.authorName };
@@ -16958,6 +17360,47 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       STATE.composeVia = "app";
       STATE.modal = "compose";
       STATE.composeSeed = "";
+      render();
+      return;
+    }
+    if (act === "app-vote") {
+      const id = el.dataset.id || "";
+      const choice = Number(el.dataset.choice);
+      accountCall("/v1/posts/vote", { method: "POST", body: { id: id, choice: choice } }).then((res) => {
+        if (res && res.status === 200 && res.poll) { patchAppItem(id, { poll: res.poll }); render(); }
+        else toast(tr("Could not save that."));
+      }).catch(() => toast(tr("Could not save that.")));
+      return;
+    }
+    if (act === "app-edit") {
+      const id = el.dataset.id || "";
+      const item = findAppItem(id);
+      const shown = STATE.shared[id] || null;
+      STATE.menu = null;
+      STATE.postEdit = { id: id, sub: el.dataset.sub || "", text: String((item && item.body) || (shown && shown.text) || "") };
+      render();
+      setTimeout(() => { const box = document.getElementById("post-edit-text"); if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); } }, 0);
+      return;
+    }
+    if (act === "save-post-edit") {
+      const edit = STATE.postEdit;
+      const box = document.getElementById("post-edit-text");
+      const text = box ? String(box.value || "") : "";
+      STATE.postEdit = null;
+      if (edit && text.trim() && text !== edit.text) editOwnPost({ id: edit.id, sub: edit.sub, text: text, was: edit.text });
+      render();
+      return;
+    }
+    if (act === "app-delete") {
+      STATE.menu = null;
+      STATE.postAsk = { id: el.dataset.id || "", sub: el.dataset.sub || "" };
+      render();
+      return;
+    }
+    if (act === "confirm-post-delete") {
+      const ask = STATE.postAsk;
+      STATE.postAsk = null;
+      if (ask && ask.id) deleteOwnPost(ask);
       render();
       return;
     }
@@ -17099,6 +17542,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "author-more") {
+      loadOlderAuthorPosts(el.dataset.id);
+      return;
+    }
     if (act === "reddit-vote") {
       const votes = STATE.settings.redditVotes || (STATE.settings.redditVotes = {});
       const dir = Number(el.dataset.dir) > 0 ? 1 : -1;
@@ -17186,6 +17633,15 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const on = STATE.settings.syncUi === false;
       STATE.settings.syncUi = on;
       STATE.settings.syncUiAt = Date.now();
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "sync-cat-local" || act === "sync-key-local") {
+      const reg = window.ViktorychSettingsSync;
+      if (!reg) return;
+      if (act === "sync-cat-local" && el.dataset.cat && reg.CATS.some((cat) => cat.id === el.dataset.cat)) reg.setCatLocal(el.dataset.cat, !reg.catLocal(el.dataset.cat));
+      if (act === "sync-key-local" && el.dataset.key && reg.CAT_OF[el.dataset.key]) reg.setKeyLocal(el.dataset.key, !reg.keyLocal(el.dataset.key));
       saveSettings();
       render();
       return;
@@ -17382,6 +17838,21 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const post = locatePost(el.dataset.id);
       STATE.repostMenu = null;
       if (!post) { render(); return; }
+      if (post.appPost && !post.community && isAppPostId(post.id)) {
+        const opener = window.ViktorychXCompose;
+        const item = findAppItem(post.id);
+        if (opener && opener.openQuote) {
+          opener.openQuote({ id: post.id, handle: post.handle, text: (item && item.body) || post.text, name: post.author });
+          return;
+        }
+        STATE.composeParent = "";
+        STATE.composeQuote = post.id;
+        STATE.composeVia = "app";
+        STATE.modal = "compose";
+        STATE.composeSeed = "";
+        render();
+        return;
+      }
       STATE.quoteTarget = post.id;
       STATE.modal = "quote";
       render();
@@ -17596,6 +18067,21 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const prefs = notePrefs();
       prefs.mentionsFrom = prefs.mentionsFrom === "following" ? "all" : "following";
       saveNotePrefs(prefs);
+      render();
+      return;
+    }
+    if (act === "note-dismiss") {
+      const ids = String(el.dataset.ids || "").split(",").filter(Boolean);
+      const row = el.closest(".note-row");
+      if (row) row.classList.add("is-dismissed");
+      dismissNotes(ids);
+      setTimeout(render, row ? 180 : 0);
+      return;
+    }
+    if (act === "note-clear-all") {
+      STATE.noteGear = false;
+      STATE.noteUnreadPaint = { tab: "all", ids: {} };
+      clearAllNotes();
       render();
       return;
     }
@@ -19112,6 +19598,74 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     hscrollOnResize();
   }
   window.addEventListener("resize", () => syncShell());
+
+  // Swipe a notification sideways to dismiss it (phones and tablets).
+  (function noteSwipe() {
+    let row = null, x0 = 0, y0 = 0, dx = 0, sideways = false;
+    document.addEventListener("touchstart", (event) => {
+      const hit = event.target && event.target.closest ? event.target.closest(".note-row[data-note-ids]") : null;
+      if (!hit || !hit.dataset.noteIds || event.touches.length !== 1) { row = null; return; }
+      row = hit; x0 = event.touches[0].clientX; y0 = event.touches[0].clientY; dx = 0; sideways = false;
+    }, { passive: true });
+    document.addEventListener("touchmove", (event) => {
+      if (!row || !event.touches[0]) return;
+      const mx = event.touches[0].clientX - x0;
+      const my = event.touches[0].clientY - y0;
+      if (!sideways) {
+        if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { row = null; return; }
+        if (Math.abs(mx) < 12) return;
+        sideways = true;
+        row.classList.add("is-swiping");
+      }
+      dx = mx;
+      row.style.transform = "translateX(" + dx + "px)";
+      row.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / (row.offsetWidth || 1)));
+    }, { passive: true });
+    const end = () => {
+      if (!row) return;
+      const el = row; row = null;
+      el.classList.remove("is-swiping");
+      if (sideways && Math.abs(dx) > (el.offsetWidth || 300) * 0.35) {
+        el.style.transform = "translateX(" + (dx > 0 ? "100%" : "-100%") + ")";
+        el.style.opacity = "0";
+        el.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); }, { capture: true, once: true });
+        dismissNotes(String(el.dataset.noteIds).split(",").filter(Boolean));
+        setTimeout(render, 180);
+      } else {
+        el.style.transform = "";
+        el.style.opacity = "";
+      }
+    };
+    document.addEventListener("touchend", end, { passive: true });
+    document.addEventListener("touchcancel", end, { passive: true });
+  })();
+  // Right rail like X: sticky at top 0 when it fits the viewport, otherwise
+  // it scrolls with the page until its bottom meets the viewport bottom
+  // (top = viewport height - rail height). No blank space below it.
+  let railEl = null;
+  let railObserver = null;
+  function fitRail() {
+    const el = document.querySelector(".side");
+    if (!el) { railEl = null; return; }
+    if (el !== railEl) {
+      railEl = el;
+      if (railObserver) railObserver.disconnect();
+      if (typeof ResizeObserver === "function") {
+        railObserver = new ResizeObserver(() => fitRail());
+        railObserver.observe(el);
+      }
+    }
+    const top = Math.min(0, Math.round((window.innerHeight || 0) - el.offsetHeight));
+    const want = top + "px";
+    if (el.style.getPropertyValue("--rail-top") !== want) el.style.setProperty("--rail-top", want);
+  }
+  window.addEventListener("resize", fitRail, { passive: true });
+  (function watchRail() {
+    const root = document.getElementById("app");
+    if (!root || typeof MutationObserver !== "function") return;
+    new MutationObserver(() => { if (document.querySelector(".side") !== railEl) fitRail(); }).observe(root, { childList: true, subtree: true });
+    fitRail();
+  })();
   window.addEventListener("orientationchange", () => syncShell());
   syncShell();
   function paintProfileChrome() {
@@ -19211,6 +19765,51 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     paintHover(el, profile);
   }
 
+  /* Feed cards skip layout off screen (content-visibility: auto) and guess 220px
+     until drawn. A new DOM after Back forgets the real sizes, so the page came
+     back shorter and the old scroll landed thousands of pixels early. Keep the
+     drawn heights per post and hand them back as the guess. */
+  function cardHeights() { return STATE.cardHeights || (STATE.cardHeights = new Map()); }
+  function rememberCardHeights() {
+    const CARD_HEIGHTS = cardHeights();
+    const cards = document.querySelectorAll("#app article.post[data-post]");
+    for (let i = 0; i < cards.length; i++) {
+      const h = Math.round(cards[i].getBoundingClientRect().height);
+      if (h > 40 && h < 6000) CARD_HEIGHTS.set(cards[i].getAttribute("data-post"), h);
+    }
+    while (CARD_HEIGHTS.size > 800) CARD_HEIGHTS.delete(CARD_HEIGHTS.keys().next().value);
+    // The first card on screen, so Back can line it up exactly.
+    STATE.homeAnchor = null;
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i].getBoundingClientRect();
+      if (r.bottom > 60) { STATE.homeAnchor = { key: STATE.scrollKey, id: cards[i].getAttribute("data-post"), top: r.top }; break; }
+    }
+  }
+  function settleHomeAnchor(key) {
+    const anchor = STATE.homeAnchor;
+    if (!anchor || anchor.key !== key) return;
+    const el = [...document.querySelectorAll("#app article.post[data-post]")].find((node) => node.getAttribute("data-post") === anchor.id);
+    if (!el) return;
+    const off = el.getBoundingClientRect().top - anchor.top;
+    if (Math.abs(off) > 2) window.scrollBy(0, off);
+    // Media frames above can still settle; keep lining up for a moment unless the reader touches the page.
+    let stop = false;
+    const quit = () => { stop = true; };
+    const evs = ["wheel", "touchstart", "keydown", "pointerdown"];
+    evs.forEach((ev) => window.addEventListener(ev, quit, { once: true, passive: true }));
+    [120, 350, 700].forEach((ms, i, all) => setTimeout(() => {
+      if (!stop && routeScrollKey() === key && el.isConnected) {
+        const late = el.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(late) > 2) window.scrollBy(0, late);
+      }
+      if (i === all.length - 1) evs.forEach((ev) => window.removeEventListener(ev, quit));
+    }, ms));
+  }
+  function cardHeightStyle(id) {
+    const h = STATE.cardHeights ? STATE.cardHeights.get(String(id || "")) : 0;
+    return h ? ` style="contain-intrinsic-size:auto ${h}px"` : "";
+  }
+
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   try {
     matchMedia("(max-width: 699px)").addEventListener("change", () => refreshMediaFrames());
@@ -19279,6 +19878,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       window.FeedsDiscord.syncFromHash();
       return;
     }
+    const leavingKey = STATE.scrollKey;
+    if (/^#\/(?:home)?(?:[/?]|$)|^#?$/.test(prevHash)) rememberCardHeights();
     const nextRoute = parseRoute();
     if (nextRoute.name === "home") {
       const nextTab = nextRoute.tab || "foryou";
@@ -19315,6 +19916,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render({
       y: y,
       done: () => {
+        if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
         routing = false;
         scrollFreeze = false;
       }
@@ -19454,6 +20056,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return added.concat(live);
   }
 
+  function showPostsRowHtml() {
+    return `<div class="show-posts-slot">${STATE.showPostsRow ? `<button type="button" class="show-posts" data-act="show-new-posts">${STATE.showPostsRow}</button>` : ""}</div>`;
+  }
+
+  function setShowPostsRow(html) {
+    if ((STATE.showPostsRow || "") === html) return;
+    STATE.showPostsRow = html;
+    const slot = document.querySelector(".show-posts-slot");
+    if (slot) slot.outerHTML = showPostsRowHtml();
+  }
+
+  function syncPillScroll() {
+    const el = document.getElementById("new-posts");
+    if (!el) return;
+    const hide = !STATE.showPostsRow || parseRoute().name !== "home" || (window.scrollY || 0) < 40;
+    if (el.hidden !== hide) el.hidden = hide;
+  }
+  window.addEventListener("scroll", () => { if (STATE.showPostsRow) syncPillScroll(); }, { passive: true });
+
   function showPill(posts) {
     const el = document.getElementById("new-posts");
     if (!el) return;
@@ -19463,6 +20084,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     list = list.filter((post) => homeShows(post, route) && !noteHidden(post));
     if (!list.length) {
       el.hidden = true;
+      setShowPostsRow("");
       if (window.ViktorychLocal) window.ViktorychLocal.savePill([]);
       return;
     }
@@ -19477,8 +20099,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       faces.push(src);
     });
     const avatars = faces.map((src) => `<img decoding="async" loading="lazy" class="pill-ava" alt="" src="${esc(src)}">`).join("");
-    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
-    el.hidden = false;
+    // Like X: an inline "Show N posts" row at the top of Home. The floating
+    // pill shows only once the reader has scrolled away from the top.
+    const label = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
+    el.innerHTML = label;
+    setShowPostsRow(label);
+    syncPillScroll();
     if (window.ViktorychLocal) {
       window.ViktorychLocal.savePill(list.slice(0, 20).map((post) => ({
         id: post.id,
@@ -21578,7 +22204,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     if (msg.op === "event" && msg.topic === "notifications" && msg.data) applyHubEvent(msg.data);
+    if (msg.op === "event" && msg.topic === "posts") {
+      clearTimeout(postsLiveTimer);
+      postsLiveTimer = setTimeout(refreshAppPosts, 600);
+    }
   }
+  var postsLiveTimer = 0;
 
   function bindChannel() {
     const presence = window.ViktorychPresence;
@@ -22172,6 +22803,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
       if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
     });
+    document.addEventListener("click", (event) => {
+      const row = event.target && event.target.closest ? event.target.closest('[data-act="show-new-posts"]') : null;
+      if (!row) return;
+      event.preventDefault();
+      document.getElementById("new-posts").click();
+    });
     document.getElementById("new-posts").addEventListener("click", () => {
       if (parseRoute().name !== "home") { showPill(pendingPillPosts()); return; }
       STATE.forYouAcceptNew = true;
@@ -22384,6 +23021,67 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   let rememberTimer = 0;
+  function outboxPost(type, id, snapshot) {
+    if (!window.ViktorychLocal || !window.ViktorychLocal.enqueue) return false;
+    window.ViktorychLocal.enqueue({ type: type, id: id, on: true, snapshot: snapshot });
+    toast(tr("Pending"));
+    return true;
+  }
+  function sendOwnDelete(ask) {
+    const req = ask.sub
+      ? accountCall("/v1/communities/" + encodeURIComponent(ask.sub) + "/posts/" + encodeURIComponent(ask.id), { method: "DELETE" })
+      : accountCall("/v1/posts/delete", { method: "POST", body: { id: ask.id } });
+    return Promise.resolve(req).then((res) => {
+      if (res && (res.status === 200 || res.status === 404 || res.status === 410)) { refreshAppPosts(); return; }
+      if (res && (!res.status || res.error === "all_endpoints_failed")) { outboxPost("app-delete", ask.id, { sub: ask.sub || "" }); return; }
+      delete goneOwn[ask.id];
+      toast(tr("Could not save that."));
+      refreshAppPosts();
+    }, () => { outboxPost("app-delete", ask.id, { sub: ask.sub || "" }); });
+  }
+  /* X-style delete: gone from Home, the profile and the thread at once, the
+     parent's reply count drops, and the request waits in the outbox offline. */
+  function deleteOwnPost(ask) {
+    const id = String(ask.id || "");
+    const item = findAppItem(id);
+    const parentId = String((item && item.parentId) || "");
+    goneOwn[id] = Date.now();
+    forgetOwnPost(id);
+    dropAppItem(id);
+    if (ask.sub) publicPosts = publicPosts.filter((row) => row && row.id !== id);
+    if (parentId) {
+      const parent = findAppItem(parentId);
+      if (parent) patchAppItem(parentId, { replyCount: Math.max(0, (Number(parent.replyCount) || 0) - 1) });
+      if (STATE.shared[parentId] && STATE.shared[parentId].stats) STATE.shared[parentId].stats.replies = Math.max(0, (Number(STATE.shared[parentId].stats.replies) || 0) - 1);
+    }
+    delete STATE.shared[id];
+    toast(tr("Post deleted"));
+    if (String(STATE.focusId || "") === id) history.back();
+    if (!navigator.onLine) { outboxPost("app-delete", id, { sub: ask.sub || "" }); return; }
+    sendOwnDelete(ask);
+  }
+  function sendOwnEdit(edit) {
+    const req = edit.sub
+      ? accountCall("/v1/communities/" + encodeURIComponent(edit.sub) + "/posts/" + encodeURIComponent(edit.id), { method: "PATCH", body: { text: edit.text } })
+      : accountCall("/v1/posts/edit", { method: "POST", body: { id: edit.id, body: edit.text } });
+    return Promise.resolve(req).then((res) => {
+      if (res && res.status === 200) {
+        if (!edit.sub) patchAppItem(edit.id, { body: res.body || edit.text, editedAt: res.editedAt || Date.now() });
+        refreshAppPosts();
+        return;
+      }
+      if (res && (!res.status || res.error === "all_endpoints_failed")) { outboxPost("app-edit", edit.id, { sub: edit.sub || "", text: edit.text }); return; }
+      if (edit.was != null) patchAppItem(edit.id, { body: edit.was });
+      toast(res && res.error === "edit_closed" ? tr("Posts can be edited for an hour after they go out.") : tr("Could not save that."));
+      refreshAppPosts();
+    }, () => { outboxPost("app-edit", edit.id, { sub: edit.sub || "", text: edit.text }); });
+  }
+  function editOwnPost(edit) {
+    patchAppItem(edit.id, { body: edit.text, editedAt: Date.now() });
+    if (STATE.shared[edit.id]) STATE.shared[edit.id].text = edit.text;
+    if (!navigator.onLine) { outboxPost("app-edit", edit.id, { sub: edit.sub || "", text: edit.text }); return; }
+    sendOwnEdit(edit);
+  }
   function queueOffline(action) {
     if (navigator.onLine || !window.ViktorychLocal) return;
     window.ViktorychLocal.enqueue(action);
@@ -22399,6 +23097,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         ? accountCall("/v1/reposts", { method: "PUT", body: { kind: "repost", post: action.snapshot || {} } })
         : accountCall("/v1/reposts", { method: "POST", body: { postKey: action.postKey || "" } });
       Promise.resolve(req).catch(() => {});
+    } else if (action.type === "app-post" && action.snapshot && Array.isArray(action.snapshot.posts)) {
+      publishComposer({ posts: action.snapshot.posts, parentId: action.snapshot.parentId || "", quoteId: action.snapshot.quoteId || "", extParent: action.snapshot.extParent || null }, true);
+    } else if (action.type === "app-delete") {
+      goneOwn[action.id] = goneOwn[action.id] || Date.now();
+      sendOwnDelete({ id: action.id, sub: (action.snapshot && action.snapshot.sub) || "" });
+    } else if (action.type === "app-edit" && action.snapshot && action.snapshot.text) {
+      sendOwnEdit({ id: action.id, sub: action.snapshot.sub || "", text: action.snapshot.text });
+    } else if (action.type === "app-like") {
+      sendAppLike(action.id, !!action.on);
     } else if (action.type === "reply" && window.ViktorychLocal) {
       window.ViktorychLocal.saveDoc("drafts", "compose", { text: action.body || "" });
     }
@@ -23037,6 +23744,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (window.ViktorychLocal && window.ViktorychLocal.saveDoc) window.ViktorychLocal.saveDoc("drafts", "compose", { text: value });
       },
       publish: function (payload) { publishComposer(payload); },
+      extParent: extParentOf,
       signedIn: function () { return !!accountToken(); },
       gifSearch: function (q) {
         return accountCall("/v1/gif?q=" + encodeURIComponent(q || "")).then((res) => {
@@ -23532,7 +24240,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs"].forEach((key) => {
+    ["appearance", "homePills", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
@@ -23599,6 +24307,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       removeStored: removeStored,
       relTime: relTime,
       accountHash: accountHash,
+      platformIcon: platformIcon,
       STATE: STATE
     });
   }
