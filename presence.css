@@ -376,6 +376,9 @@
   line-height: 16px;
   padding: 4px 10px;
 }
+.friends-rail-thread { display: flex; flex-direction: column; gap: 4px; padding: 0 16px 8px; }
+.friends-rail-line { align-self: flex-start; max-width: 85%; margin: 0; padding: 6px 12px; border-radius: 16px; background: rgb(var(--hover-rgb, 239 243 244) / 1); background: var(--hover, rgba(239, 243, 244, 0.1)); font-size: 14px; line-height: 18px; overflow-wrap: anywhere; }
+.friends-rail-line.mine { align-self: flex-end; background: rgb(29, 155, 240); color: #fff; }
 .friends-rail-compose { padding: 0 16px 10px; }
 .friends-rail-compose textarea {
   display: block;
