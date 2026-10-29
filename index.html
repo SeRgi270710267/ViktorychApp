@@ -542,6 +542,7 @@
     <script src="about-ui.js" defer></script>
     <script src="gifts-ui.js" defer></script>
     <script src="badges.js" defer></script>
+    <script src="data-saver.js" defer></script>
     <script src="settings-sync.js" defer></script>
     <script src="pulse.js" defer></script>
     <script src="accounts.js" defer></script>
@@ -597,7 +598,7 @@
         nodes = nodes.filter(wanted);
         if (!links.length && !nodes.length) return;
         if (document.documentElement.getAttribute("data-wall") === "1") {
-          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "settings-sync.js", "accounts.js"];
+          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "settings-sync.js", "data-saver.js", "accounts.js"];
           function rank(node) {
             var src = node.getAttribute("src") || "";
             var at = first.indexOf(src.replace(/^\.\//, ""));

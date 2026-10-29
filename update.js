@@ -818,6 +818,9 @@
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
       if (applying) return;
+      /* Save data: on mobile data the new build waits for Wi-Fi or a tap on Update. */
+      var saver = typeof window !== "undefined" ? window.ViktorychDataSaver : null;
+      if (saver && saver.allow && !saver.allow("update")) return;
       requestUpdate(state.reg);
     });
   }

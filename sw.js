@@ -63,6 +63,7 @@ const SHELL_FILES = [
   "./localfirst.js",
   "./direct.js",
   "./device.js",
+  "./data-saver.js",
   "./device-search.js",
   "./device-ai.js",
   "./ondevice-ai.js",
@@ -1867,6 +1868,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.mode === "navigate") {
+    /* The browser's data saver sends Save-Data on page loads. Note it so the
+       sign-up form can preselect Save data. */
+    if (request.headers.get("save-data") === "on") {
+      event.waitUntil(caches.open("viktorych-prefs").then((cache) => cache.put("./__prefs/save-data.json", new Response("1"))).catch(() => {}));
+    }
     event.respondWith((async () => {
       const home = shellDocument(url);
       const fresh = serveNetworkOnce || url.searchParams.has("vapp");
