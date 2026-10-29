@@ -1,12 +1,18 @@
 /* "My devices". Every session of an account is one device. Devices say
    hello at most once an hour with a name and type; the list shows each
    one with its last-seen time. Rename changes the label; remove deletes
-   that session so the device is signed out on its next request. */
+   that session so the device is signed out on its next request.
+   Each device also gets a data key that only the server keeps. The app
+   seals its private on-device copy with it, so removing the device (or
+   signing out) leaves that copy unreadable, and the removed device wipes
+   itself the next time it can reach the server. */
 
 const TYPES = ["phone", "tablet", "desktop", "tv", "other"];
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS session_devices (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', type TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL DEFAULT 0)",
   "CREATE INDEX IF NOT EXISTS session_devices_account ON session_devices(public_id, last_seen DESC)"
+  ,
+  "CREATE TABLE IF NOT EXISTS device_keys (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, data_key TEXT NOT NULL, created_at INTEGER NOT NULL)"
 ];
 let ready = null;
 
@@ -36,6 +42,14 @@ async function sessionOf(env, request, deps) {
   const hash = await deps.sha256Hex(token);
   const row = await env.DB.prepare("SELECT public_id FROM sessions WHERE token_hash = ? AND expires_at > ?").bind(hash, Date.now()).first();
   return row ? { hash, publicId: row.public_id } : null;
+}
+
+function newDataKey() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let text = "";
+  for (let i = 0; i < bytes.length; i++) text += String.fromCharCode(bytes[i]);
+  return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 async function readBody(request) {
@@ -81,6 +95,14 @@ export async function handleDevices(request, env, deps) {
     ).bind(me.hash, me.publicId, name, type, now, now).run();
     return deps.json(200, { ok: true, id: idOf(me.hash) });
   }
+  if (path === "/v1/devices/key" && request.method === "GET") {
+    await env.DB.prepare(
+      "INSERT INTO device_keys (token_hash, public_id, data_key, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(token_hash) DO NOTHING"
+    ).bind(me.hash, me.publicId, newDataKey(), now).run();
+    const row = await env.DB.prepare("SELECT data_key FROM device_keys WHERE token_hash = ? AND public_id = ?").bind(me.hash, me.publicId).first();
+    if (!row || !row.data_key) return deps.json(503, { error: "key" });
+    return deps.json(200, { key: row.data_key, id: idOf(me.hash) });
+  }
   if (path === "/v1/devices/rename" && request.method === "POST") {
     const body = (await readBody(request)) || {};
     const name = cleanName(body.name);
@@ -97,7 +119,8 @@ export async function handleDevices(request, env, deps) {
     if (!found) return deps.json(404, { error: "not_found" });
     await env.DB.batch([
       env.DB.prepare("DELETE FROM sessions WHERE token_hash = ? AND public_id = ?").bind(found.token_hash, me.publicId),
-      env.DB.prepare("DELETE FROM session_devices WHERE token_hash = ?").bind(found.token_hash)
+      env.DB.prepare("DELETE FROM session_devices WHERE token_hash = ?").bind(found.token_hash),
+      env.DB.prepare("DELETE FROM device_keys WHERE token_hash = ?").bind(found.token_hash)
     ]);
     return deps.json(200, { devices: found.token_hash === me.hash ? [] : await list(env, me), signedOut: found.token_hash === me.hash });
   }
