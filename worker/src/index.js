@@ -2425,7 +2425,7 @@ async function handleOwnerMedia(request, env, url) {
   });
 }
 
-const PUBLIC_MEDIA_HOST = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
+const PUBLIC_MEDIA_HOST = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|yt3\.ggpht\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
 
 function publicMediaHostOk(hostname) {
   return PUBLIC_MEDIA_HOST.test(String(hostname || ""));
@@ -5283,7 +5283,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {
     const isTor = !!(request.cf && request.cf.isTor) || request.headers.get("cf-ipcountry") === "T1";
     const country = (request.cf && request.cf.country) || request.headers.get("cf-ipcountry") || "XX";
-    return json(200, { country: country, isRu: country === "RU", isTor: isTor });
+    return json(200, { country: country, isRu: country === "RU", isIn: country === "IN", isTor: isTor });
   }
   if (path === "/v1/media" && (request.method === "GET" || request.method === "HEAD")) {
     return handlePublicMediaProxy(request, env, url);
