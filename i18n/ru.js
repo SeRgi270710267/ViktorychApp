@@ -3934,5 +3934,12 @@ SI18n.addPack("ru", {
   "Play with controller": "Играть с геймпадом",
   "Controller connected.": "Геймпад подключён.",
   "Play with a controller in the ViktorychTV app.": "Играйте с геймпадом в приложении ViktorychTV.",
-  "Xbox, PlayStation and other controllers work in the TV app.": "Геймпады Xbox, PlayStation и другие работают в приложении для ТВ."
+  "Xbox, PlayStation and other controllers work in the TV app.": "Геймпады Xbox, PlayStation и другие работают в приложении для ТВ.",
+  "{a} and {b}": "{a} и {b}",
+  "{a} {b} and {c}": "{a} {b} и {c}",
+  "{a} {b} and {others}": "{a} {b} и {others}",
+  "reply.others.one": "ещё {n}",
+  "reply.others.few": "ещё {n}",
+  "reply.others.many": "ещё {n}",
+  "reply.others.other": "ещё {n}"
 });

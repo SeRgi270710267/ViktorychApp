@@ -3934,5 +3934,10 @@ SI18n.addPack("en", {
   "Play with controller": "Play with controller",
   "Controller connected.": "Controller connected.",
   "Play with a controller in the ViktorychTV app.": "Play with a controller in the ViktorychTV app.",
-  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation and other controllers work in the TV app."
+  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation and other controllers work in the TV app.",
+  "{a} and {b}": "{a} and {b}",
+  "{a} {b} and {c}": "{a} {b} and {c}",
+  "{a} {b} and {others}": "{a} {b} and {others}",
+  "reply.others.one": "{n} other",
+  "reply.others.other": "{n} others"
 });

@@ -1330,6 +1330,8 @@ def main() -> None:
     counts_flow = subprocess.run(["node", str(ROOT / "scripts" / "profile_counts_test.mjs")], cwd=ROOT)
     check(counts_flow.returncode == 0, "profile headers never show 0 as a stand-in for unknown counts and paint last known counts from this device")
     feed_images = subprocess.run(["node", str(ROOT / "scripts" / "feed_images_test.mjs")], cwd=ROOT)
+    reply_context = subprocess.run(["node", str(ROOT / "scripts" / "reply_context_test.mjs")], cwd=ROOT)
+    check(reply_context.returncode == 0, "replies show one X-style \"Replying to\" line, hide the prefixed @mentions, keep mid-text mentions, and drop the line under a shown parent")
     check(feed_images.returncode == 0, "feed media URLs are real and a refused picture ends as the silhouette or the picture placeholder, never a broken frame")
     swr_flow = subprocess.run(["node", str(ROOT / "scripts" / "swr_cache_test.js")], cwd=ROOT)
     check(swr_flow.returncode == 0, "the shared local-first cache stays under its byte budget and evicts least recently used pages")

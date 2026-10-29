@@ -3926,5 +3926,10 @@ SI18n.addPack("hi", {
   "Play with controller": "कंट्रोलर से खेलें",
   "Controller connected.": "कंट्रोलर कनेक्ट हो गया।",
   "Play with a controller in the ViktorychTV app.": "ViktorychTV ऐप में कंट्रोलर से खेलें।",
-  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation और दूसरे कंट्रोलर TV ऐप में काम करते हैं।"
+  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation और दूसरे कंट्रोलर TV ऐप में काम करते हैं।",
+  "{a} and {b}": "{a} और {b}",
+  "{a} {b} and {c}": "{a} {b} और {c}",
+  "{a} {b} and {others}": "{a} {b} और {others}",
+  "reply.others.one": "{n} अन्य",
+  "reply.others.other": "{n} अन्य"
 });
