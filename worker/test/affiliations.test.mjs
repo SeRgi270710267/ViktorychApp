@@ -130,3 +130,22 @@ test("only an owner can grant an affiliation", async () => {
   const after = await call("/v1/affiliations?ids=" + bee.account.publicId, { token: bee.token, ip: "203.0.113.224" });
   assert.equal(after.body.accounts[bee.account.publicId], undefined);
 });
+
+test("an owner account carries its own organization badge, visible signed out", async () => {
+  const boss = await signup("boss_af", "Boss Aff", "203.0.113.230");
+  const plain = await signup("plain_af", "Plain Aff", "203.0.113.231");
+  await bindings.DB.prepare("UPDATE accounts SET owner = 0 WHERE owner = 1").run();
+  await bindings.DB.prepare("UPDATE accounts SET owner = 1 WHERE public_id = ?").bind(boss.account.publicId).run();
+  const anon = await call("/v1/affiliations?ids=" + boss.account.publicId + "," + plain.account.publicId, { ip: "203.0.113.232" });
+  assert.equal(anon.status, 200, JSON.stringify(anon.body));
+  assert.equal(anon.body.accounts[boss.account.publicId][0].id, "viktorych");
+  assert.equal(anon.body.accounts[boss.account.publicId][0].logo, "logo/affiliation-viktorych.svg");
+  assert.equal(anon.body.accounts[plain.account.publicId], undefined);
+  const mine = await call("/v1/affiliations/me", { token: boss.token, ip: "203.0.113.233" });
+  assert.equal(mine.body.affiliations[0].id, "viktorych");
+  const hide = await call("/v1/affiliations/me/viktorych", { method: "PATCH", token: boss.token, ip: "203.0.113.234", body: { hidden: true } });
+  assert.equal(hide.status, 200, JSON.stringify(hide.body));
+  const gone = await call("/v1/affiliations?ids=" + boss.account.publicId, { ip: "203.0.113.235" });
+  assert.equal(gone.body.accounts[boss.account.publicId], undefined);
+  await call("/v1/affiliations/me/viktorych", { method: "PATCH", token: boss.token, ip: "203.0.113.236", body: { hidden: false } });
+});
