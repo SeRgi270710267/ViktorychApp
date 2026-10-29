@@ -1,0 +1,79 @@
+/* The shared local-first cache stays small: entries over the per-entry cap are
+   refused, the total stays under the byte budget, and the least recently used
+   entries are evicted first. Reads are synchronous so a page can paint cached
+   data in its first frame. */
+const assert = require("assert");
+const localfirst = require("../localfirst.js");
+
+function memoryStore(quota) {
+  const data = new Map();
+  return {
+    getItem: (k) => (data.has(k) ? data.get(k) : null),
+    setItem: (k, v) => {
+      const used = [...data.entries()].reduce((n, [key, val]) => n + (key === k ? 0 : val.length), 0);
+      if (quota && used + String(v).length > quota) { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; }
+      data.set(k, String(v));
+    },
+    removeItem: (k) => data.delete(k),
+    get size() { return data.size; },
+    bytes() { return [...data.values()].reduce((n, v) => n + v.length, 0); }
+  };
+}
+
+const swr = localfirst.swr;
+const limits = swr.limits;
+assert.ok(limits.bytes > 0 && limits.entry > 0 && limits.entries > 0);
+
+let store = memoryStore();
+swr.reset();
+assert.strictEqual(swr.get("missing", store), null);
+assert.ok(swr.put("a", { n: 1 }, store));
+assert.deepStrictEqual(swr.get("a", store).value, { n: 1 });
+assert.ok(swr.fresh("a", 60000, store));
+assert.ok(!swr.fresh("a", -1, store));
+
+/* Survives a reload: a fresh module state reads the same store. */
+swr.reset();
+assert.deepStrictEqual(swr.get("a", store).value, { n: 1 });
+
+/* Oversized entries are refused. */
+assert.strictEqual(swr.put("huge", "x".repeat(limits.entry + 10), store), false);
+assert.strictEqual(swr.get("huge", store), null);
+
+/* Byte budget with LRU eviction. */
+swr.clear(store);
+swr.reset();
+const chunk = "y".repeat(Math.floor(limits.entry * 0.9));
+let now = 1000;
+const realNow = Date.now;
+Date.now = () => (now += 10);
+try {
+  for (let i = 0; i < 12; i++) {
+    assert.ok(swr.put("k" + i, chunk, store));
+    if (i === 2) swr.get("k0", store); /* k0 recently used: kept over k1 */
+  }
+} finally { Date.now = realNow; }
+assert.ok(store.bytes() <= limits.bytes + 4096, "cache over budget: " + store.bytes());
+assert.ok(swr.get("k11", store), "newest entry kept");
+assert.strictEqual(swr.get("k1", store), null, "least recently used entry evicted");
+
+/* Entry count cap. */
+swr.clear(store);
+swr.reset();
+for (let i = 0; i < limits.entries + 15; i++) swr.put("e" + i, i, store);
+swr.reset();
+const kept = Array.from({ length: limits.entries + 15 }, (_, i) => swr.get("e" + i, store)).filter(Boolean).length;
+assert.ok(kept <= limits.entries, "too many entries: " + kept);
+
+/* Storage quota: evicts and retries instead of failing. */
+store = memoryStore(400000);
+swr.reset();
+assert.ok(swr.put("q1", "z".repeat(200000), store));
+assert.ok(swr.put("q2", "z".repeat(250000), store));
+assert.ok(swr.get("q2", store));
+
+/* Sign-out wipes it. */
+swr.clear(store);
+assert.strictEqual(swr.get("q2", store), null);
+
+console.log("swr cache ok");
