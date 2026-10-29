@@ -4,7 +4,7 @@ const VERSION = "viktorych-a94-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T02:55:00Z-stable-update4
+// cache-bust: 2026-10-29T02:51:00Z-nostr
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -153,6 +153,7 @@ const SHELL_FILES = [
   "./video-embed.js",
   "./mention-suggest.js",
   "./settings-assistant.js",
+  "./nostr.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/x-compose.js",

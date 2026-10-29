@@ -57,6 +57,10 @@ async function signup(ip, handle, name) {
 test.before(async () => {
   mf = new Miniflare(workerOptions());
   await mf.getBindings();
+  // Nostr is off until the owner turns it on; these tests run with it on.
+  const db = await mf.getD1Database("DB");
+  await db.prepare("CREATE TABLE IF NOT EXISTS feature_flags (name TEXT PRIMARY KEY, off INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)").run();
+  await db.prepare("INSERT INTO feature_flags (name, off, updated_at) VALUES ('nostr', 0, 0)").run();
 });
 
 test.after(async () => {
@@ -138,4 +142,28 @@ test("federation: Nostr opt-out closes NIP-05 immediately", async () => {
   assert.equal(nostrAfter.status, 200);
   assert.deepEqual(nostrAfter.body.names, {});
   assert.equal((await call("/.well-known/webfinger?resource=acct:EveFed@accounts.test")).status, 404);
+});
+
+test("Nostr links: only the author links a public post, anyone reads it", async () => {
+  const author = await signup("203.0.113.90", "LinkAuthor", "Link Author");
+  const other = await signup("203.0.113.91", "LinkOther", "Link Other");
+  const made = await call("/v1/posts", { method: "POST", token: author.token, body: { body: "Hello relays" } });
+  assert.equal(made.status, 201, made.text);
+  const id = made.body.post.id;
+  const link = { event_id: "e".repeat(64), pubkey: "f".repeat(64) };
+  assert.equal((await call("/v1/nostr/posts/" + id)).status, 404);
+  assert.equal((await call("/v1/nostr/posts/" + id, { method: "POST", body: link })).status, 401);
+  assert.equal((await call("/v1/nostr/posts/" + id, { method: "POST", token: other.token, body: link })).status, 404, "not someone else's post");
+  assert.equal((await call("/v1/nostr/posts/" + id, { method: "POST", token: author.token, body: { event_id: "nope", pubkey: link.pubkey } })).status, 400);
+  const saved = await call("/v1/nostr/posts/" + id, { method: "POST", token: author.token, body: link });
+  assert.equal(saved.status, 200, saved.text);
+  const read = await call("/v1/nostr/posts/" + id);
+  assert.deepEqual(read.body, link);
+
+  const quiet = await call("/v1/posts", { method: "POST", token: author.token, body: { body: "Friends only", audience: "friends" } });
+  assert.equal(quiet.status, 201, quiet.text);
+  assert.equal((await call("/v1/nostr/posts/" + quiet.body.post.id, { method: "POST", token: author.token, body: link })).status, 409, "only public posts go to Nostr");
+
+  assert.equal((await call("/v1/nostr/posts/" + id, { method: "DELETE", token: author.token })).status, 200);
+  assert.equal((await call("/v1/nostr/posts/" + id)).status, 404);
 });
