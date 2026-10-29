@@ -6,8 +6,8 @@
    Owner: #/feeds/lists creates lists, adds sources, assigns accounts and
    approves requests. Members request an account from the same page. */
 (function () {
-  const META_KEY = "source-lists-v1";
-  const DOC_PREFIX = "source-list-doc:";
+  const META_KEY = "private-list-meta-v1";
+  const DOC_PREFIX = "private-list-doc:";
   const CHECK_MS = 30 * 60 * 1000;
   const NONE_MS = 6 * 60 * 60 * 1000;
   let hooks = null;
@@ -49,7 +49,7 @@
     let saved = null;
     const db = local();
     if (db) {
-      try { saved = await db.readDoc("source-lists", row.id); } catch (err) { saved = null; }
+      try { saved = await db.readDoc("private-list", row.id); } catch (err) { saved = null; }
     }
     if (!saved) saved = readLocal(DOC_PREFIX + row.id);
     return saved && saved.hash === row.hash && saved.doc && Array.isArray(saved.doc.posts) ? saved.doc : null;
@@ -58,7 +58,7 @@
     if (zeroTrace()) return;
     const db = local();
     if (db && db.saveDoc && typeof indexedDB !== "undefined") {
-      db.saveDoc("source-lists", row.id, { hash: row.hash, doc }).catch(() => null);
+      db.saveDoc("private-list", row.id, { hash: row.hash, doc }).catch(() => null);
       return;
     }
     writeLocal(DOC_PREFIX + row.id, { hash: row.hash, doc });
@@ -66,7 +66,7 @@
   function forgetShardDoc(row) {
     dropLocal(DOC_PREFIX + row.id);
     const db = local();
-    if (db && db.saveDoc && typeof indexedDB !== "undefined") db.saveDoc("source-lists", row.id, null).catch(() => null);
+    if (db && db.saveDoc && typeof indexedDB !== "undefined") db.saveDoc("private-list", row.id, null).catch(() => null);
   }
 
   /* Loads this device's copy. The timeline waits for it at most briefly. */

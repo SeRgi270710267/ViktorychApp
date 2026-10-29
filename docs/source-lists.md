@@ -33,7 +33,7 @@ Handles are masked in Actions logs and the sync prints counts only.
    most every 30 minutes (every 6 hours with no lists; no D1 write), pulls new
    hashes from peers via `ViktorychPool.getBlob` when available, else from
    `GET /v1/me/source-lists/shard/<hash>`, checks the sha256, keeps a local
-   copy, and merges the posts into the timeline. Worker copies are offered back
+   copy (localStorage keys contain `private-list`, so the device-wipe encryption covers them), and merges the posts into the timeline. Worker copies are offered back
    to the pool with `putBlob`.
 
 Members see their lists under **Feeds → Your extra sources** and can request

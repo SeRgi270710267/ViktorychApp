@@ -40,7 +40,7 @@ function setup(opts) {
   let changed = 0;
   const SL = window.SourceLists;
   SL.attach({ accountsApi: () => "https://api.example", accountToken: () => "t", signedOwner: () => false, STATE: { settings: {} }, onChange: () => { changed += 1; } });
-  return { SL, calls, hash, changed: () => changed };
+  return { SL, calls, hash, store, changed: () => changed };
 }
 
 const base = () => ({ feeds: [{ id: "x:globalpine" }], posts: [{ id: "g1", feedId: "x:globalpine", platform: "x" }] });
@@ -55,6 +55,8 @@ test("member gets the shard from the Worker and it merges with quotes inside", a
   assert.equal(doc.feeds.length, 2);
   assert.ok(!doc.feeds.some((f) => /quotedmaple/.test(f.id)));
   assert.equal(t.changed(), 1);
+  assert.ok(t.store.size > 0);
+  for (const key of t.store.keys()) assert.ok(key.includes("private-list"), key);
   const again = t.SL.merge(doc);
   assert.equal(again.posts.length, 2);
 });
