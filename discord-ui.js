@@ -1187,8 +1187,9 @@
     const sub = whoId && window.ViktorychPresence ? window.ViktorychPresence.dmSubHtml(whoId, place) : esc(place);
     const catchup = '<button type="button" class="show-more odai-btn" data-act="odai-unread" data-id="' + esc(id) + '" data-scope="dm">' + esc(tr("Summarize unread")) + "</button>";
     const suggest = '<button type="button" class="show-more odai-btn" data-act="odai-suggest" data-id="' + esc(id) + '" data-scope="dm">' + esc(tr("Suggest replies")) + "</button>";
+    const gameInvite = whoId && typeof window !== "undefined" && window.ViktorychGameSocial ? window.ViktorychGameSocial.dmHeadHtml(whoId, ch.name) : "";
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + catchup + suggest + pinBtn + "</header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + catchup + suggest + gameInvite + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       pinPanelHtml(id) +
       ("<button type=\"button\" class=\"dmsgs-jump\" hidden" + ">" + tr("Jump to present") + "<" + "/button>") +

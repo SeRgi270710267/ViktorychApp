@@ -465,13 +465,13 @@
   /* The same pop-out carries setting alerts. Variants: info, warning,
      critical, limit (100%) and countdown. They never mark badges as seen,
      never chime, and only critical ones rumble. */
-  var POP_VARIANTS = { info: 1, warning: 1, critical: 1, limit: 1, countdown: 1 };
-  var POP_HOLD = { info: 7000, warning: 9000, critical: 12000, limit: 12000, countdown: 3200 };
+  var POP_VARIANTS = { info: 1, warning: 1, critical: 1, limit: 1, countdown: 1, invite: 1, game: 1 };
+  var POP_HOLD = { info: 7000, warning: 9000, critical: 12000, limit: 12000, countdown: 3200, invite: 30000, game: 6000 };
   var achCurrent = null;
 
   /* Pop-out icons are names from the app's icon set, drawn as one-colour SVG in
      the variant's accent, never emoji. */
-  var POP_GLYPH = { info: "info", warning: "warning", critical: "alert", limit: "block", countdown: "alert" };
+  var POP_GLYPH = { info: "info", warning: "warning", critical: "alert", limit: "block", countdown: "alert", invite: "games", game: "games" };
   function popGlyph(name) {
     var I = root.ViktorychIcons;
     return I && I.svg ? I.svg(String(name)) : "";
@@ -486,12 +486,21 @@
     if (notice.dismiss !== false) buttons += '<button type="button" class="ach-btn" data-pop-act="dismiss">' + esc(notice.dismissLabel || tr("Dismiss")) + "</button>";
     if (notice.mute) buttons += '<button type="button" class="ach-btn ach-btn-quiet" data-pop-act="mute">' + esc(tr("Don't warn me about this")) + "</button>";
     return '<div class="ach-pill ach-card" data-pop-id="' + esc(notice.id || "") + '" aria-label="' + esc(label) + '">' +
-      '<span class="ach-orb" aria-hidden="true"><span class="ach-ring"></span><span class="ach-ico">' + popGlyph(notice.icon || POP_GLYPH[v] || "info") + "</span></span>" +
+      '<span class="ach-orb" aria-hidden="true"><span class="ach-ring"></span><span class="ach-ico">' + popOrb(notice, v) + "</span></span>" +
       '<span class="ach-copy"><span class="ach-kicker">' + esc(notice.kicker || "") + "</span>" +
       '<span class="ach-name" data-pop-title="1">' + esc(notice.title || "") + "</span>" +
       (notice.desc ? '<span class="ach-desc" data-pop-desc="1">' + esc(notice.desc) + "</span>" : "") +
       (buttons ? '<span class="ach-actions">' + buttons + "</span>" : "") + "</span>" +
-      (v === "countdown" ? '<span class="ach-count" aria-hidden="true"></span>' : "") + "</div>";
+      (v === "countdown" || notice.countdownMs ? '<span class="ach-count" aria-hidden="true"' + (notice.countdownMs ? ' style="animation-duration:' + Math.max(1000, Number(notice.countdownMs) || 0) + 'ms"' : "") + "></span>" : "") + "</div>";
+  }
+
+  /* Game invites show the inviter's photo; game achievements bring their
+     own outline badge (a trusted SVG string built by game-social.js). */
+  function popOrb(notice, v) {
+    if (notice.avatar && /^(https:|data:image\/|\.\/|blob:)/.test(String(notice.avatar))) return '<img class="ach-ava" src="' + esc(notice.avatar) + '" alt="">';
+    if (notice.avatarText) return '<span class="ach-ava ach-ava-text">' + esc(String(notice.avatarText).charAt(0).toUpperCase()) + "</span>";
+    if (notice.svg && /^<svg[\s>]/.test(String(notice.svg))) return String(notice.svg);
+    return popGlyph(notice.icon || POP_GLYPH[v] || "info");
   }
 
   function popTimes(notice) {
