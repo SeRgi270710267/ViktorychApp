@@ -3,6 +3,8 @@
    Block, mute, and a hidden flag keep people and reported posts out of the
    timeline. The moderation list is owner-only. */
 
+import { viewerHandle } from "./usernames.js";
+import { viewerDisplay } from "./name-rules.js";
 import { awardActivity, clawback, giftForPost } from "./points.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
 import { addCommunityPost, communityHomeRows } from "./communities.js";
@@ -311,7 +313,16 @@ export async function presentPost(env, request, row, viewerId) {
   }
   let quote = null;
   if (row.quote_id) {
-    try { quote = await quoteFor(env, request, row.quote_id, viewerId || ""); }
+    try {
+      quote = await quoteFor(env, request, row.quote_id, viewerId || "");
+      // Each viewer sees the one username and name the quoted author shows them.
+      if (quote && !quote.unavailable && quote.authorId) {
+        const seen = await viewerHandle(env, request, quote.authorId, viewerId);
+        if (seen && seen.handle) quote.authorHandle = seen.handle;
+        const shown = await viewerDisplay(env, request, quote.authorId, viewerId, quote.authorName);
+        if (shown && shown.name) quote.authorName = shown.name;
+      }
+    }
     catch (err) { quote = { id: row.quote_id, unavailable: true }; }
   }
   return {
@@ -321,8 +332,8 @@ export async function presentPost(env, request, row, viewerId) {
     parentId: row.parent_id || "",
     quoteId: row.quote_id || "",
     authorId: row.author_id,
-    authorName: row.display_name,
-    authorHandle: row.handle,
+    authorName: (await viewerDisplay(env, request, row.author_id, viewerId, row.display_name)).name,
+    authorHandle: (await viewerHandle(env, request, row.author_id, viewerId)).handle,
     authorAvatar: row.avatar || "",
     media: media,
     quote: quote,
