@@ -7603,6 +7603,7 @@ const here = parseRoute();
       if (parts[1] === "following") tab = "following";
       else if (parts[1] === "tab") tab = "list:" + (parts[2] || "");
       else if (parts[1] === "cat") tab = "cat:" + (parts[2] || "");
+      else if (parts[1] === "ctab") tab = "ctab:" + (parts[2] || "");
       return { name: "home", tab: tab, query };
     }
     if (parts[0] === "following") return { name: "home", tab: "following", query };
@@ -7614,6 +7615,7 @@ const here = parseRoute();
     }
     if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
     if (parts[0] === "cat" && parts[1]) return { name: "home", tab: "cat:" + parts[1], query };
+    if (parts[0] === "ctab" && parts[1]) return { name: "home", tab: "ctab:" + parts[1], query };
     if (parts[0] === "notifications") return { name: "notifications", tab: parts[1] || "", query };
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
@@ -8481,10 +8483,12 @@ const here = parseRoute();
     if (tab === "following") return "#/following";
     if (tab && tab.indexOf("list:") === 0) return "#/tab/" + encodeURIComponent(tab.slice(5));
     if (tab && tab.indexOf("cat:") === 0) return "#/cat/" + encodeURIComponent(tab.slice(4));
+    if (tab && tab.indexOf("ctab:") === 0) return "#/ctab/" + encodeURIComponent(tab.slice(5));
     return "#/";
   }
 
   function homeHash(tab) {
+    if (tab && tab.indexOf("ctab:") === 0) return homePath(tab);
     const q = new URLSearchParams();
     if (tab === "following") q.set("sort", STATE.settings.followingSort === "popular" ? "popular" : "recent");
     else if (tab && tab.indexOf("list:") === 0) {
@@ -8561,6 +8565,7 @@ const here = parseRoute();
   }
 
   function homeMember(post, tab) {
+    if (tab && tab.indexOf("ctab:") === 0) return false;
     if (tab === "following") {
       return followedPost(post);
     }
@@ -8646,6 +8651,7 @@ const here = parseRoute();
   function homeHeader(tab) {
     const lists = STATE.settings.lists.filter((l) => l.pinned);
     const cats = feedTabs().filter((item) => item.showHome !== false);
+    const pinnedCm = communityTabsPinned();
     const tabBtn = (id, label, on, face, noteId) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}"${noteId ? ` data-note-tab="${esc(noteId)}"` : ""} role="tab" aria-selected="${on ? "true" : "false"}">${face || ""}<span>${esc(label)}</span></button>`;
     const tabWithMenu = (id, label, face, noteId) => {
       if (tab !== id) return tabBtn(id, label, false, face, noteId);
@@ -8667,6 +8673,7 @@ const here = parseRoute();
           ${tabWithMenu("following", tr("Following"))}
           ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, item.emoji ? `<span class="tab-emoji">${esc(item.emoji)}</span>` : "", item.id)).join("")}
           ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
+          ${pinnedCm.map((item) => tabBtn("ctab:" + item.id, item.name, tab === "ctab:" + item.id)).join("")}
         </div>
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
@@ -8687,6 +8694,7 @@ const here = parseRoute();
 
   function tabMenu() {
     if (!STATE.tabMenu) return "";
+    if (STATE.tabMenu.indexOf("ctab:") === 0) return "";
     const which = STATE.tabMenu;
     const listId = which.indexOf("list:") === 0 ? which.slice(5) : "";
     const list = listId ? (STATE.settings.lists || []).find((item) => item.id === listId && item.pinned) : null;
@@ -9700,8 +9708,40 @@ const here = parseRoute();
     return out.concat(queue);
   }
 
+  /* Communities custom tabs the user pinned to Home. The tab list lives in
+     settings (synced privately with the account); the feed itself comes from
+     the Communities module, loaded on demand. */
+  function communityTabsBag() {
+    const bag = STATE.settings && STATE.settings.communityTabs;
+    if (window.ViktorychCommunities && window.ViktorychCommunities.cleanTabs) return window.ViktorychCommunities.cleanTabs(bag);
+    const tabs = bag && Array.isArray(bag.tabs) ? bag.tabs.filter((tab) => tab && tab.id && tab.name) : [];
+    return { at: Number(bag && bag.at) || 0, tabs: tabs };
+  }
+  function communityTabsPinned() {
+    return communityTabsBag().tabs.filter((tab) => tab.home === true).map((tab) => ({ id: String(tab.id), name: String(tab.name).slice(0, 40) }));
+  }
+  function communityTabView(tab) {
+    const id = tab.slice(5);
+    const pinned = communityTabsPinned().find((item) => item.id === id);
+    if (!pinned) return homeHeader(tab) + emptyBlock(tr("This tab isn’t pinned to Home"), tr("Pin a Communities tab to Home to see it here."));
+    if (!window.ViktorychCommunities || !window.ViktorychCommunities.tabFeed) {
+      ensureLazy("communities");
+      return homeHeader(tab) + `<div class="reply-empty">${esc(tr("Loading"))}</div>`;
+    }
+    const body = window.ViktorychCommunities.tabFeed(id);
+    const tools = `<div class="cm-tab-tools cm-home-tools"><a class="cm-btn-join" href="#/communities" data-act="cm-tab-open" data-id="${esc(id)}"><span>${esc(tr("Open in Communities"))}</span></a><button class="cm-btn-join" type="button" data-act="cm-tab-unpin" data-id="${esc(id)}"><span>${esc(tr("Unpin from Home"))}</span></button></div>`;
+    return homeHeader(tab) + tools + (body || emptyBlock(tr("No posts in this tab"), ""));
+  }
+  let pendingCommunityAction = null;
+  function withCommunities(fn) {
+    if (window.ViktorychCommunities && window.ViktorychCommunities.openAssign) { fn(window.ViktorychCommunities); return; }
+    pendingCommunityAction = fn;
+    ensureLazy("communities");
+  }
+
   function homeView(route) {
     const tab = route.tab || "foryou";
+    if (tab.indexOf("ctab:") === 0) return communityTabView(tab);
     const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
@@ -10962,6 +11002,7 @@ const here = parseRoute();
       const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
       if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
       if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
+      if (target.feedId || target.handle) rows.push(profileSheetRow("profile-cm-tab", tr("Add to Communities tab"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}" data-name="${esc(target.name || target.handle || "")}"`));
     }
     if (menu === "lists") {
       const lists = (STATE.settings && STATE.settings.lists) || [];
@@ -18756,6 +18797,27 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "close-profile-menu") { STATE.profileMenu = null; render(); return; }
     if (act === "profile-lists") { STATE.profileMenu = "lists"; render(); return; }
+    if (act === "profile-cm-tab") {
+      const id = String(el.dataset.id || "");
+      const name = String(el.dataset.name || "");
+      STATE.profileMenu = null;
+      render();
+      if (id) withCommunities((cm) => cm.openAssign("p:" + id, name));
+      return;
+    }
+    if (act === "cm-tab-unpin") {
+      const bag = communityTabsBag();
+      bag.tabs.forEach((item) => { if (item.id === el.dataset.id) item.home = false; });
+      STATE.settings.communityTabs = { at: Date.now(), tabs: bag.tabs };
+      saveSettings();
+      toast(tr("Unpinned from Home"));
+      goHash("#/");
+      return;
+    }
+    if (act === "cm-tab-open") {
+      if (window.ViktorychCommunities && window.ViktorychCommunities.openTab) window.ViktorychCommunities.openTab(el.dataset.id || "");
+      return;
+    }
     if (act === "profile-list-toggle") {
       const list = (STATE.settings.lists || []).find((item) => item.id === el.dataset.list);
       const id = String(el.dataset.id || "");
@@ -21102,6 +21164,20 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function feedsForTab(tab) {
     if (tab === "following") return followedFeeds();
+    if (tab && tab.indexOf("ctab:") === 0) {
+      const found = communityTabsBag().tabs.find((item) => item.id === tab.slice(5));
+      const out = [];
+      const seen = {};
+      ((found && found.sources) || []).forEach((src) => {
+        if (String(src).indexOf("p:") !== 0) return;
+        const feed = memberFeed(String(src).slice(2));
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+      return out.slice(0, 40);
+    }
     if (tab && tab.indexOf("list:") === 0) {
       const found = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
       const out = [];
@@ -24209,7 +24285,49 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return hiddenPost({ handle: handle, text: text, platform: platform || "app", feedId: "" });
     };
     window.ViktorychCommunities.note = function (item) { commitBellNotes(item ? [item] : []); };
+    window.ViktorychCommunities.readTabs = function () { return STATE.settings ? STATE.settings.communityTabs : null; };
+    window.ViktorychCommunities.writeTabs = function (bag) {
+      if (!STATE.settings) return;
+      STATE.settings.communityTabs = bag;
+      saveSettings();
+    };
+    window.ViktorychCommunities.profileInfo = function (id) {
+      const feed = memberFeed(id);
+      if (!feed) return null;
+      return { id: String(id), name: feed.name || feed.handle || "", handle: feed.handle || "", platform: feed.platform || "", platformLabel: PLATFORM[feed.platform] || "", avatar: feed.avatar || "" };
+    };
+    window.ViktorychCommunities.profiles = function (q) {
+      const text = String(q || "").trim().toLowerCase().replace(/^@/, "");
+      if (!text) return [];
+      return feeds().filter((feed) => feed && feed.id && ((feed.name || "") + " " + (feed.handle || "") + " " + (feed.platform || "") + " " + (PLATFORM[feed.platform] || "")).toLowerCase().indexOf(text) >= 0).slice(0, 30);
+    };
+    window.ViktorychCommunities.profileItems = function (ids) {
+      const out = [];
+      const seen = {};
+      (ids || []).slice(0, 40).forEach((id) => {
+        const feed = memberFeed(id);
+        if (!feed) return;
+        const mine = postsFor(feed).concat((STATE.pendingLive || []).filter((post) => post && (post.feedId === feed.id || sameAuthor(post, feed))));
+        mine.slice(0, 40).forEach((post) => {
+          const key = (post.platform || "") + ":" + (post.statusId || post.id);
+          if (seen[key] || hiddenPost(post)) return;
+          seen[key] = true;
+          out.push({ created: Date.parse(stamp(post)) || 0, html: card(post) });
+        });
+      });
+      return out;
+    };
+    window.ViktorychCommunities.loadProfiles = function (tabId) { return refreshHomeTabs(["ctab:" + tabId]); };
+    window.ViktorychCommunities.tabGone = function (id) {
+      const route = parseRoute();
+      if (route.name === "home" && route.tab === "ctab:" + id) goHash("#/");
+    };
     if (window.ViktorychCommunities.pullNotes) window.ViktorychCommunities.pullNotes();
+    if (pendingCommunityAction) {
+      const fn = pendingCommunityAction;
+      pendingCommunityAction = null;
+      fn(window.ViktorychCommunities);
+    }
   }
   function bindShortsModule() {
     if (!(window.ViktorychShorts && window.ViktorychShorts.bind)) return;
