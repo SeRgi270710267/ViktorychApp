@@ -3532,5 +3532,10 @@ SI18n.addPack("hi", {
   "Chats": "चैट",
   "Themes": "थीम",
   "Menus": "मेन्यू",
-  "Menu: {name}": "मेन्यू: {name}"
+  "Menu: {name}": "मेन्यू: {name}",
+  "Site health": "साइट की स्थिति",
+  "Site health: {count} problems need you": "साइट की स्थिति: {count} समस्याओं पर आपका ध्यान चाहिए",
+  "Site health: all good": "साइट की स्थिति: सब ठीक है",
+  "Site health not checked yet": "साइट की स्थिति अभी जाँची नहीं गई",
+  "Check now": "अभी जाँचें"
 });
