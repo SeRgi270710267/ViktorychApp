@@ -4,7 +4,7 @@ const VERSION = "viktorych-a104-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T07:28:00Z-mini
+// cache-bust: 2026-10-29T07:25:00Z-storage-panel
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -36,9 +36,12 @@ async function brandManifestResponse(response) {
   }
 }
 const SHELL = "shell-" + VERSION;
-const DATA = "data-" + VERSION;
-const MEDIA = "media-" + VERSION;
-const LIVE = "live-" + VERSION;
+// Saved feeds, media and live parts outlive app updates. Only the shell is
+// versioned; these names stay the same so a deploy does not wipe the cache.
+const DATA = "data-v1";
+const MEDIA = "media-v1";
+const LIVE = "live-v1";
+const OLD_USER_CACHE = /^(data|media|live)-viktorych-a\d+-/;
 const OFFLINE_MUSIC = "sintel-music-offline";
 const MEDIA_LIMIT_FULL = 150 * 1024 * 1024;
 const MEDIA_LIMIT = /iPhone|iPad|iPod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "") ? 48 * 1024 * 1024 : MEDIA_LIMIT_FULL;
@@ -298,11 +301,13 @@ self.addEventListener("activate", (event) => {
       const beat = updateReporting ? setInterval(() => broadcastProgress({ step: "activate" }, true), 4000) : null;
       activateBeat = beat;
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC && key !== PREFS_CACHE).map((key) => caches.delete(key)));
+      await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC && key !== PREFS_CACHE && !OLD_USER_CACHE.test(key)).map((key) => caches.delete(key)));
       try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
       if (updateReporting) broadcastProgress({ step: "clean" }, true);
     } catch (err) { /* a full disk must not leave the worker stuck activating */ }
     if (activateBeat) { clearInterval(activateBeat); activateBeat = null; }
+    // Move what older versions saved into the stable caches in the background.
+    adoptOldCaches().catch(() => {});
     try { await self.clients.claim(); } catch (err) { /* the page reloads once the worker is active */ }
     try {
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
@@ -324,6 +329,38 @@ self.addEventListener("activate", (event) => {
     }
   })());
 });
+
+async function adoptOldCaches() {
+  const keys = await caches.keys();
+  for (const key of keys) {
+    const match = OLD_USER_CACHE.exec(key);
+    if (!match) continue;
+    const target = match[1] === "data" ? DATA : (match[1] === "media" ? MEDIA : LIVE);
+    try {
+      const from = await caches.open(key);
+      const to = await caches.open(target);
+      const reqs = await from.keys();
+      for (const req of reqs) {
+        if (await to.match(req)) continue;
+        const res = await from.match(req);
+        if (res) await to.put(req, res);
+      }
+    } catch (err) { /* a full disk keeps what already moved */ }
+    await caches.delete(key);
+  }
+  try {
+    const db = await idb();
+    const rows = await self.ViktorychStorage.listFiles(db);
+    let changed = false;
+    rows.forEach((row) => {
+      const match = row && OLD_USER_CACHE.exec(row.cacheName || "");
+      if (!match) return;
+      row.cacheName = match[1] === "data" ? DATA : (match[1] === "media" ? MEDIA : LIVE);
+      changed = true;
+    });
+    if (changed) await self.ViktorychStorage.replaceFiles(db, rows);
+  } catch (err) { /* the storage screen re-measures */ }
+}
 
 function isArchiveStore(url) {
   return /\/v1\/archive\/[a-f0-9]{64}\.[a-z0-9]{1,8}$/i.test(url.pathname);
@@ -1649,6 +1686,16 @@ self.addEventListener("message", (event) => {
       await self.ViktorychStorage.writePolicy(db, data.policy || {});
       await trimMedia();
     }).catch(() => {}));
+  }
+  if (data.type === "storage-clear-opfs") {
+    event.waitUntil((async () => {
+      const opfs = self.ViktorychOpfs;
+      if (!opfs || !opfs.supported()) return;
+      if (data.all) { await opfs.clear(); return; }
+      const urls = Array.isArray(data.urls) ? data.urls.slice(0, 5000) : [];
+      for (const url of urls) { try { await opfs.remove(String(url)); } catch (err) { /* already gone */ } }
+    })().catch(() => {}));
+    return;
   }
   if (data.type === "storage-wipe") {
     event.waitUntil(wipeUserCaches(true));
