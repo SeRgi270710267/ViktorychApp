@@ -72,6 +72,20 @@ assert.ok(swr.put("q1", "z".repeat(200000), store));
 assert.ok(swr.put("q2", "z".repeat(250000), store));
 assert.ok(swr.get("q2", store));
 
+/* Private pages keep their snapshot under a "private-list" key, which the
+   device seal encrypts and the private wipe removes; public pages do not. */
+assert.ok(localfirst.routeKey("#/messages/abc").indexOf("private-list") >= 0);
+assert.ok(localfirst.routeKey("#/bookmarks").indexOf("private-list") >= 0);
+assert.ok(localfirst.routeKey("#/lists").indexOf("private-list") >= 0);
+assert.ok(localfirst.routeKey("#/notifications").indexOf("private-list") >= 0);
+assert.strictEqual(localfirst.routeKey("#/explore").indexOf("private-list"), -1);
+assert.strictEqual(localfirst.routeKey("#/communities").indexOf("private-list"), -1);
+assert.ok(swr.put(localfirst.routeKey("#/messages"), "<p>secret</p>", store));
+assert.ok(swr.put(localfirst.routeKey("#/explore"), "<p>public</p>", store));
+localfirst.wipePrivate(store);
+assert.strictEqual(swr.get(localfirst.routeKey("#/messages"), store), null);
+assert.ok(swr.get(localfirst.routeKey("#/explore"), store));
+
 /* Sign-out wipes it. */
 swr.clear(store);
 assert.strictEqual(swr.get("q2", store), null);
