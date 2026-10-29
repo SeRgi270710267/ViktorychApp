@@ -112,23 +112,17 @@
     });
   }
 
+  var lastAbout = {};
+
   function aboutBlock(list, id) {
-    var mine = false;
     var api = accounts();
     var session = api && api.account && api.account();
-    if (session && session.publicId === id) mine = true;
-    return '<div class="about-head"><h2>' + esc(tr("Affiliation")) + "</h2></div>" + list.map(function (item) {
-      var controls = "";
-      if (mine) {
-        controls = '<button type="button" class="aff-pill" data-aff-hide="' + esc(item.id) + '" data-hidden="' + (item.hidden ? "1" : "0") + '">' + esc(item.hidden ? tr("Show affiliation badge") : tr("Hide affiliation badge")) + "</button>" +
-          '<div class="aff-pills">' + ["public", "followers", "mutuals", "only"].map(function (mode) {
-            var on = (item.audience || "public") === mode;
-            var label = mode === "followers" ? tr("Followers") : mode === "mutuals" ? tr("Mutuals") : mode === "only" ? tr("Only me") : tr("Everyone");
-            return '<button type="button" class="aff-pill' + (on ? " on" : "") + '" data-aff-audience="' + esc(item.id) + '" data-value="' + mode + '">' + esc(label) + "</button>";
-          }).join("") + "</div>";
-      }
-      return '<div class="aff-about-row">' + badgeButton(item) + '<span>' + esc(tr("Affiliated with {name}", { name: item.name })) + "</span></div>" + controls;
-    }).join("");
+    var mine = !!(session && session.publicId === id);
+    list.forEach(function (item) { lastAbout[item.id] = { item: item, mine: mine }; });
+    return '<div class="about-head"><h2>' + esc(tr("Organization")) + '</h2></div><div class="bdg-list">' + list.map(function (item) {
+      var line = mine && item.hidden ? tr("Hidden from your name") : tr("Affiliated organization");
+      return '<button type="button" class="bdg-row" data-aff-open="' + esc(item.id) + '" data-aff-name="' + esc(item.name) + '" data-aff-logo="' + esc(item.logo) + '" data-aff-href="' + esc(item.href || "") + '" data-aff-row="1"><span class="bdg-ico org"><img src="' + esc(item.logo) + '" alt=""></span><span class="bdg-copy"><span class="bdg-name">' + esc(item.name) + '</span><span class="bdg-line">' + esc(line) + '</span></span><span class="bdg-chev" aria-hidden="true">\u203A</span></button>';
+    }).join("") + "</div>";
   }
 
   function adminHtml() {
@@ -136,29 +130,30 @@
   }
 
   function openSheet(button) {
-    var old = document.querySelector(".aff-sheet");
-    if (old) old.remove();
-    var sheet = document.createElement("div");
-    sheet.className = "aff-sheet";
-    sheet.setAttribute("role", "dialog");
-    sheet.setAttribute("aria-label", button.getAttribute("data-aff-name") || "");
+    var id = button.getAttribute("data-aff-open") || "";
+    var name = button.getAttribute("data-aff-name") || "";
+    var logo = button.getAttribute("data-aff-logo") || "";
     var href = button.getAttribute("data-aff-href") || "";
-    var link = href ? '<a href="' + esc(href) + '">' + esc(tr("View profile")) + "</a>" : "";
-    sheet.innerHTML = '<div class="aff-sheet-card"><button type="button" data-aff-close="1" aria-label="' + esc(tr("Close")) + '">×</button><img src="' + esc(button.getAttribute("data-aff-logo") || "") + '" alt=""><b>' + esc(button.getAttribute("data-aff-name") || "") + "</b>" + link + "</div>";
-    document.body.appendChild(sheet);
-  }
-
-  /* Like X: a tap opens the organization's profile; with no profile yet,
-     a small sheet names the organization. */
-  function openBadge(el) {
-    var href = el.getAttribute("data-aff-href") || "";
-    if (href && href.charAt(0) === "#" && !el.closest(".aff-sheet")) {
-      var hover = document.getElementById("hover");
-      if (hover) hover.innerHTML = "";
-      if (location.hash === href) openSheet(el);
-      else location.hash = href.slice(1);
+    var known = lastAbout[id];
+    var extra = "";
+    if (known && known.mine) {
+      var item = known.item;
+      var modes = ["public", "followers", "mutuals", "only"];
+      extra = '<button type="button" class="bdg-btn ghost" data-aff-hide="' + esc(id) + '" data-hidden="' + (item.hidden ? "1" : "0") + '">' + esc(item.hidden ? tr("Show next to my name") : tr("Hide from my name")) + "</button>" +
+        '<label class="bdg-field"><span>' + esc(tr("Who can see it")) + '</span><select data-aff-audience="' + esc(id) + '">' + modes.map(function (mode) {
+          var label = mode === "followers" ? tr("Followers") : mode === "mutuals" ? tr("Mutuals") : mode === "only" ? tr("Only me") : tr("Everyone");
+          return '<option value="' + mode + '"' + ((item.audience || "public") === mode ? " selected" : "") + ">" + esc(label) + "</option>";
+        }).join("") + "</select></label>";
+    }
+    var icon = '<span class="bdg-ico org"><img src="' + esc(logo) + '" alt=""></span>';
+    if (root.BadgeSheet) {
+      root.BadgeSheet.open({ iconHtml: icon, title: name, line: tr("Affiliated with {name}", { name: name }), detail: tr("The square next to a name shows the organization this account belongs to."), extraHtml: extra, href: href, linkText: tr("View profile") });
       return;
     }
+    if (href) location.hash = href.slice(1);
+  }
+
+  function openBadge(el) {
     openSheet(el);
   }
 
@@ -167,6 +162,8 @@
     if (!api || !api.call || !api.token || !api.token()) return;
     api.call("/v1/affiliations/me/" + encodeURIComponent(id), { method: "PATCH", token: api.token(), body: body }).then(function () {
       var me = api.account && api.account() ? api.account().publicId : "";
+      var open = document.querySelector(".bdg-sheet");
+      if (open) open.remove();
       if (me) { stamp[me] = 0; paint(); }
       if (api.requestRender) api.requestRender();
     }).catch(function () {});
@@ -192,6 +189,11 @@
         }
       }).observe(document.documentElement, { childList: true, subtree: true });
     }
+    document.addEventListener("change", function (event) {
+      var el = event.target;
+      if (!el || !el.getAttribute || !el.getAttribute("data-aff-audience")) return;
+      patch(el.getAttribute("data-aff-audience"), { audience: el.value || "public" });
+    });
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Enter" && event.key !== " ") return;
       var open = event.target && event.target.closest && event.target.closest("[data-aff-open]");
@@ -208,21 +210,10 @@
         openBadge(open);
         return;
       }
-      var closer = event.target && event.target.closest && event.target.closest("[data-aff-close]");
-      if (closer || (event.target && event.target.classList && event.target.classList.contains("aff-sheet"))) {
-        var sheet = document.querySelector(".aff-sheet");
-        if (sheet) sheet.remove();
-      }
       var hide = event.target && event.target.closest && event.target.closest("[data-aff-hide]");
       if (hide) {
         event.preventDefault();
         patch(hide.getAttribute("data-aff-hide"), { hidden: hide.getAttribute("data-hidden") !== "1" });
-        return;
-      }
-      var audience = event.target && event.target.closest && event.target.closest("[data-aff-audience]");
-      if (audience) {
-        event.preventDefault();
-        patch(audience.getAttribute("data-aff-audience"), { audience: audience.getAttribute("data-value") || "public" });
         return;
       }
       var act = event.target && event.target.closest && event.target.closest("[data-aff-do]");
@@ -248,6 +239,8 @@
     aboutHtml: function (account) {
       var id = account && account.publicId;
       if (!/^\d{12}$/.test(String(id || ""))) return "";
+      var list = cache[id];
+      if (list && list.length) return '<section class="about-section aff-about" data-aff-about="' + id + '">' + aboutBlock(list, id) + "</section>";
       return '<section class="about-section aff-about" data-aff-about="' + id + '" hidden></section>';
     }
   };
