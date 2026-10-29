@@ -2999,8 +2999,6 @@ SI18n.addPack("ru", {
   "Server {n}": "Сервер {n}",
   "Connection is slow - showing saved posts": "Медленное соединение — показываем сохранённые посты",
   "Help": "Помощь",
-  "Controller connected. Tap the game, then press any button.": "Геймпад подключён. Коснитесь игры и нажмите любую кнопку.",
-  "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Изображения подарков: Noto Emoji от Google (Apache 2.0, анимация CC BY 4.0).",
   "Add to liked songs": "Добавить в любимые",
   "Add to playlist": "Добавить в плейлист",
   "Add to queue": "Добавить в очередь",

@@ -2999,8 +2999,6 @@ SI18n.addPack("en", {
   "Server {n}": "Server {n}",
   "Connection is slow - showing saved posts": "Connection is slow - showing saved posts",
   "Help": "Help",
-  "Controller connected. Tap the game, then press any button.": "Controller connected. Tap the game, then press any button.",
-  "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).",
   "Add to liked songs": "Add to liked songs",
   "Add to playlist": "Add to playlist",
   "Add to queue": "Add to queue",
