@@ -92,9 +92,13 @@
     try { history.replaceState(null, "", location.pathname + nextSearch + nextHash); } catch (err) { /* older webview */ }
   }
 
+  function boot() { return window.ViktorychTVMode || null; }
+
   function isTvUa() {
+    var b = boot();
+    if (b) return b.isTvUa();
     var ua = String(navigator.userAgent || "");
-    return /Tizen|Web0S|webOS|SMART-TV|SmartTV|Smart-TV|BRAVIA|Bravia|CrKey|AFT[A-Z0-9]|Android TV|GoogleTV|HbbTV|Viera|NetCast|TV Bro|Fire TV|FireTV|AppleTV|Apple TV|Roku|VIDAA|Hisense|SmartHub|LivingRoom|Maple/i.test(ua);
+    return /Tizen|Web0S|webOS|SMART-TV|SmartTV|Smart-TV|BRAVIA|Bravia|CrKey|Chromecast|AFT[A-Z0-9]|Android ?TV|GoogleTV|HbbTV|Viera|NetCast|TV Bro|Fire TV|FireTV|AppleTV|Apple TV|Roku|VIDAA|Hisense|SmartHub|LivingRoom|Maple/i.test(ua);
   }
 
   function coarseLarge() {
@@ -113,16 +117,145 @@
     stripTvParam();
     if (TV.forced === "on") return true;
     if (TV.forced === "off") return false;
-    var mode = (TV.settings && TV.settings.tvMode) || "auto";
+    var b = boot();
+    var mode = b ? b.mode() : ((TV.settings && TV.settings.tvMode) || "auto");
     if (mode === "on") return true;
     if (mode === "off") return false;
     return isTvUa() || coarseLarge();
   }
 
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  var APK = "tv/ViktorychTV.apk";
+  var TV_PAGE = "tv/";
+  var SHORT_URL = "viktorychapp.pages.dev/tv";
+  // Inside the app the download leaves the WebView for the system browser,
+  // so the update link points at the release asset on github.com.
+  var RELEASE_APK = "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk";
+
+  function checkUpdate() {
+    var b = boot();
+    if (TV.updateChecked || !b || !b.inApp()) return;
+    TV.updateChecked = true;
+    try {
+      fetch("tv/version.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (v) {
+        var have = b.appVersion();
+        if (!v || !v.versionCode || !have || have >= Number(v.versionCode)) return;
+        TV.update = { code: Number(v.versionCode), name: String(v.versionName || ""), apk: String(v.release || RELEASE_APK) };
+        scheduleRestore();
+      }, function () {});
+    } catch (err) { /* offline */ }
+  }
+
+  function updateCardHtml(where) {
+    var u = TV.update;
+    if (!u) return "";
+    return '<div class="tv-app-card tv-update-card" data-tv-update-card="' + esc(where) + '">' +
+      '<div class="tv-app-copy"><strong>' + esc(tr("Update available")) + '</strong>' +
+      '<span>' + esc(tr("A newer TV app is ready. Download it and press Update. Your sign-in stays.")) + '</span></div>' +
+      '<a class="tv-app-get" href="' + esc(u.apk) + '" target="_blank" rel="noopener" data-tv-get="update">' + esc(tr("Update TV app")) + '</a>' +
+      '</div>';
+  }
+
+  function canInstallApp() {
+    var b = boot();
+    if (!b) return false;
+    if (b.inApp() || TV.installed) return false;
+    return b.isAndroidTv();
+  }
+
+  function appCardHtml(where) {
+    if (TV.update) return updateCardHtml(where);
+    if (!canInstallApp()) return "";
+    return '<div class="tv-app-card" data-tv-app-card="' + esc(where) + '">' +
+      '<div class="tv-app-copy"><strong>' + esc(tr("Get the TV app")) + '</strong>' +
+      '<span>' + esc(tr("Put ViktorychApp on your TV home screen. One download, then press Install.")) + '</span></div>' +
+      '<a class="tv-app-get" href="' + APK + '" download="ViktorychTV.apk" type="application/vnd.android.package-archive" data-tv-get="1">' + esc(tr("Install TV app")) + '</a>' +
+      '<a class="tv-app-how" href="' + TV_PAGE + '">' + esc(tr("How to install")) + '</a>' +
+      (where === "home" ? '<button class="tv-app-x" type="button" data-tv-hint-close="1" aria-label="' + esc(tr("Not now")) + '">&times;</button>' : "") +
+      '</div>';
+  }
+
+  function prefRow(name, label) {
+    var b = boot();
+    var p = b ? b.prefs() : {};
+    var on = !!p[name];
+    return '<button class="outline' + (on ? " on" : "") + '" type="button" data-tv-pref="' + name + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(label) + '</button>';
+  }
+
   function settingsHtml() {
-    var settings = TV.settings || loadSettings();
-    var on = !!(TV.on || settings.tvMode === "on");
-    return ("<h2" + ">" + tr("Display") + "<" + "/h2><div class=\"theme-row\"><button class=\"outline") + (on ? " on" : "") + '" type="button" data-tv-toggle="1" aria-pressed="' + (on ? "true" : "false") + ("\"" + ">" + tr("TV mode") + "<" + "/button></div>");
+    return '<div class="tv-settings">' + settingsInner() + "</div>";
+  }
+
+  function settingsInner() {
+    var b = boot();
+    var mode = b ? b.mode() : "auto";
+    var btn = function (id, label) {
+      var on = mode === id;
+      return '<button class="outline' + (on ? " on" : "") + '" type="button" data-tv-mode="' + id + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(label) + '</button>';
+    };
+    var html = "<h2>" + esc(tr("TV mode")) + "</h2>" +
+      '<p class="tv-set-note">' + esc(TV.on ? tr("On. Big text, remote control, and light defaults for TVs.") : tr("Big text and remote control for TV browsers. Auto turns it on when a TV is detected.")) + "</p>" +
+      '<div class="theme-row">' + btn("auto", tr("Auto")) + btn("on", tr("On")) + btn("off", tr("Off")) + "</div>";
+    if (TV.on && b) {
+      var p = b.prefs();
+      var auto = function (id, label) {
+        var on = p.autoplay === id;
+        return '<button class="outline' + (on ? " on" : "") + '" type="button" data-tv-autoplay="' + id + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(label) + '</button>';
+      };
+      html += "<h2>" + esc(tr("TV performance")) + "</h2>" +
+        '<p class="tv-set-note">' + esc(tr("Light defaults for low-power TVs. Turn any of them off.")) + "</p>" +
+        '<div class="theme-row tv-prefs">' +
+        prefRow("calm", tr("Reduce motion")) + prefRow("flat", tr("No blur effects")) + prefRow("lightImages", tr("Lighter images")) +
+        prefRow("fewerPosts", tr("Fewer posts in memory")) + prefRow("lazyStart", tr("Lighter start-up")) + "</div>" +
+        "<h2>" + esc(tr("TV video autoplay")) + "</h2>" +
+        '<div class="theme-row">' + auto("off", tr("Off")) + auto("muted", tr("Muted")) + auto("on", tr("On")) + "</div>" +
+        '<div class="theme-row"><button class="outline" type="button" data-tv-reset="1">' + esc(tr("Reset TV defaults")) + "</button></div>";
+    }
+    html += appCardHtml("settings");
+    return html;
+  }
+
+  function checkInstalled() {
+    if (TV.checkedInstall) return;
+    TV.checkedInstall = true;
+    try {
+      if (!navigator.getInstalledRelatedApps) return;
+      navigator.getInstalledRelatedApps().then(function (apps) {
+        var b = boot();
+        var pkg = b ? b.APP_PACKAGE : "";
+        var hit = (apps || []).some(function (a) { return a && (a.id === pkg || a.platform === "play" || a.platform === "webapp"); });
+        if (!hit) return;
+        TV.installed = true;
+        var cards = document.querySelectorAll("[data-tv-app-card]");
+        for (var i = 0; i < cards.length; i++) cards[i].remove();
+      }, function () {});
+    } catch (err) { /* not supported on this browser */ }
+  }
+
+  function hintDismissed() {
+    var b = boot();
+    var at = b ? Number(b.read().hintAt || 0) : 0;
+    return at && Date.now() - at < 30 * 86400000;
+  }
+
+  function placeHint() {
+    if (!TV.on || !atHome()) return;
+    if (!TV.update && hintDismissed()) return;
+    if (document.querySelector('[data-tv-app-card="home"], [data-tv-update-card="home"]')) return;
+    var html = appCardHtml("home");
+    if (!html) return;
+    var main = document.querySelector("main");
+    var anchor = main && (main.querySelector(".tabs") || main.firstElementChild);
+    if (!anchor) return;
+    var wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    var card = wrap.firstChild;
+    if (anchor.parentNode) anchor.parentNode.insertBefore(card, anchor.nextSibling);
   }
 
   function fit() {
@@ -139,7 +272,7 @@
     if (zoom > 2) zoom = 2;
     if (zoom < 1.15) zoom = 1.15;
     zoom = Math.round(zoom * 100) / 100;
-    var pad = Math.round((h * 0.045) / zoom);
+    var pad = Math.round((h * 0.05) / zoom);
     return { zoom: zoom, hide: hide || !side, pad: pad };
   }
 
@@ -356,6 +489,31 @@
     catch (err) { window.scrollBy(0, top); }
   }
 
+  // Keep the focused item on screen: scroll only when it is outside the
+  // middle 80% of the viewport.
+  function keepInView(el) {
+    if (!el || !el.getBoundingClientRect) return;
+    var rect = el.getBoundingClientRect();
+    var h = window.innerHeight || 720;
+    var top = h * 0.1;
+    var bottom = h * 0.9;
+    if (rect.top >= top && rect.bottom <= bottom) return;
+    var delta = rect.top < top ? rect.top - top : Math.min(rect.bottom - bottom, rect.top - top);
+    var zoom = TV.zoom || 1;
+    var scroller = el.closest ? el.closest(".modal, .drawer, .tab-menu, .share-pop") : null;
+    if (scroller && scroller.scrollHeight > scroller.clientHeight) {
+      scroller.scrollTop += delta / zoom;
+      return;
+    }
+    try { window.scrollBy({ top: delta / zoom, left: 0, behavior: calm() ? "auto" : "smooth" }); }
+    catch (err) { window.scrollBy(0, delta / zoom); }
+  }
+
+  function calm() {
+    var b = boot();
+    return !!(b && b.on && b.prefs().calm);
+  }
+
   function setFocus(el, center) {
     if (!el) return;
     ensureFocusable(el);
@@ -366,6 +524,39 @@
     }
     paint(el);
     if (center) centerEl(el);
+    else keepInView(el);
+  }
+
+  // Geometric fallback: the nearest visible control in the pressed direction.
+  // Used when the column model has nowhere to go, so focus never gets stuck.
+  var FOCUSABLE = "a[href], button, input, textarea, select, [tabindex]:not([tabindex='-1']), article.post, article.status";
+  function spatial(dir, from, scope) {
+    var root = scope || document.getElementById("app") || document.body;
+    if (!from || !from.getBoundingClientRect) return null;
+    var a = from.getBoundingClientRect();
+    var ax = a.left + a.width / 2;
+    var ay = a.top + a.height / 2;
+    var nodes = root.querySelectorAll(FOCUSABLE);
+    var best = null;
+    var bestScore = Infinity;
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el === from || (from.contains && from.contains(el)) || (el.contains && el.contains(from))) continue;
+      if (!visible(el)) continue;
+      var r = el.getBoundingClientRect();
+      var bx = r.left + r.width / 2;
+      var by = r.top + r.height / 2;
+      var main;
+      var cross;
+      if (dir === "ArrowDown") { main = r.top - a.bottom + a.height / 2; cross = Math.abs(bx - ax); if (by <= ay + 2) continue; }
+      else if (dir === "ArrowUp") { main = a.top - r.bottom + a.height / 2; cross = Math.abs(bx - ax); if (by >= ay - 2) continue; }
+      else if (dir === "ArrowRight") { main = r.left - a.right + a.width / 2; cross = Math.abs(by - ay); if (bx <= ax + 2) continue; }
+      else { main = a.left - r.right + a.width / 2; cross = Math.abs(by - ay); if (bx >= ax - 2) continue; }
+      var score = Math.max(0, main) + cross * 2;
+      if (score < bestScore) { bestScore = score; best = el; }
+    }
+    return best;
   }
 
   function entryFocus() {
@@ -444,6 +635,20 @@
   }
 
   function move(dir) {
+    var before = current();
+    moveModel(dir);
+    var after = current();
+    if (after !== before || !before) return;
+    var over = overlayRoot();
+    var next = spatial(dir, before, over || null);
+    if (next) setFocus(next, false);
+    else if (dir === "ArrowDown" || dir === "ArrowUp") {
+      // At the end of a list: scroll so more posts can load or show.
+      try { window.scrollBy(0, (dir === "ArrowDown" ? 1 : -1) * (window.innerHeight || 720) * 0.4 / (TV.zoom || 1)); } catch (err) { /* older webview */ }
+    }
+  }
+
+  function moveModel(dir) {
     var over = overlayRoot();
     if (over) {
       var inside = list(over.querySelectorAll("a, button, input, textarea, select"));
@@ -623,7 +828,7 @@
     var key = event.key || "";
     var code = event.keyCode || event.which || 0;
     if (key === "Escape" || key === "BrowserBack" || key === "XF86Back" || key === "GoBack" || key === "Back") return true;
-    if (code === 10009 || code === 461) return true;
+    if (code === 10009 || code === 461 || code === 4 || code === 166) return true;
     if (key === "Backspace" && !typing(current())) return true;
     return false;
   }
@@ -631,7 +836,7 @@
   function isPlay(event) {
     var key = event.key || "";
     var code = event.keyCode || event.which || 0;
-    return key === "MediaPlayPause" || key === "MediaPlay" || key === "MediaPause" || code === 179 || code === 415 || code === 19;
+    return key === "MediaPlayPause" || key === "MediaPlay" || key === "MediaPause" || key === "MediaStop" || code === 179 || code === 415 || code === 19 || code === 413 || code === 85 || code === 126 || code === 127;
   }
 
   function onKeyDown(event) {
@@ -652,13 +857,13 @@
       toggleMedia();
       return;
     }
-    if (key === "MediaFastForward" || code === 417) {
+    if (key === "MediaFastForward" || key === "MediaTrackNext" || code === 417 || code === 90 || code === 228) {
       event.preventDefault();
       event.stopPropagation();
       seekMedia(10);
       return;
     }
-    if (key === "MediaRewind" || code === 412) {
+    if (key === "MediaRewind" || key === "MediaTrackPrevious" || code === 412 || code === 89 || code === 227) {
       event.preventDefault();
       event.stopPropagation();
       seekMedia(-10);
@@ -722,17 +927,48 @@
     }
   }
 
+  function rerenderSettings(anchor) {
+    var host = anchor && anchor.closest ? anchor.closest(".tv-settings") : null;
+    if (!host) host = document.querySelector(".tv-settings");
+    if (!host) return;
+    var key = TV.key;
+    host.innerHTML = settingsInner();
+    var again = findKey(key);
+    if (again) setFocus(again, false);
+  }
+
   function onClick(event) {
-    var toggle = event.target && event.target.closest && event.target.closest("[data-tv-toggle]");
-    if (!toggle) return;
+    var t = event.target && event.target.closest ? event.target : null;
+    if (!t) return;
+    var b = boot();
+    var hit = t.closest("[data-tv-toggle], [data-tv-mode], [data-tv-pref], [data-tv-autoplay], [data-tv-reset], [data-tv-hint-close]");
+    if (!hit) return;
     event.preventDefault();
     event.stopPropagation();
-    setTvMode(TV.on ? "off" : "on");
+    if (hit.hasAttribute("data-tv-toggle")) setTvMode(TV.on ? "off" : "on");
+    else if (hit.hasAttribute("data-tv-mode")) setTvMode(hit.getAttribute("data-tv-mode"));
+    else if (b && hit.hasAttribute("data-tv-pref")) {
+      var name = hit.getAttribute("data-tv-pref");
+      b.setPref(name, !b.prefs()[name]);
+    } else if (b && hit.hasAttribute("data-tv-autoplay")) b.setPref("autoplay", hit.getAttribute("data-tv-autoplay"));
+    else if (b && hit.hasAttribute("data-tv-reset")) b.resetPrefs();
+    else if (hit.hasAttribute("data-tv-hint-close")) {
+      if (b) { var st = b.read(); st.hintAt = Date.now(); b.write(st); }
+      var card = hit.closest("[data-tv-app-card]");
+      if (card) card.remove();
+      var entry = entryFocus();
+      if (entry) setFocus(entry, false);
+      return;
+    }
+    rerenderSettings(hit);
   }
 
   function setTvMode(mode) {
-    TV.forced = mode === "on" ? "on" : "off";
-    patchSettings(function (s) { s.tvMode = mode; });
+    var m = mode === "on" || mode === "off" ? mode : "auto";
+    var b = boot();
+    if (b) b.setMode(m);
+    TV.forced = m === "auto" ? "" : m;
+    patchSettings(function (s) { if (m === "auto") delete s.tvMode; else s.tvMode = m; });
     applyMode();
   }
 
@@ -743,6 +979,7 @@
 
   function restore() {
     if (!TV.on) return;
+    placeHint();
     var hash = location.hash || "#/";
     if (hash !== TV.hash) {
       TV.hash = hash;
@@ -787,6 +1024,8 @@
     }
     TV.on = true;
     document.documentElement.classList.add("tv-on");
+    checkInstalled();
+    checkUpdate();
     applyScale();
     TV.hash = location.hash || "#/";
     scheduleRestore();
@@ -802,7 +1041,10 @@
 
   function applyMode() {
     TV.settings = loadSettings();
-    if (shouldEnable()) enter();
+    var on = shouldEnable();
+    var b = boot();
+    if (b) { b.on = on; b.paint(); }
+    if (on) enter();
     else exit();
   }
 

@@ -1,0 +1,60 @@
+// ViktorychTV: a Trusted Web Activity for Android TV and Google TV.
+// Chrome shows the site full screen without a URL bar once
+// /.well-known/assetlinks.json on the host matches the signing key. TVs
+// without Chrome open the same page in the built-in WebView fallback.
+// The signing key is never in this repo: pass its path and passwords in
+// TV_KEYSTORE, TV_KEYSTORE_PASS, TV_KEY_ALIAS, TV_KEY_PASS.
+plugins { id "com.android.application" }
+
+// Bump appVersion (and appVersionName) for a new APK, then update
+// tv/version.json in the site. The site reads ?tvapp=N to offer the update.
+def appVersion = 1
+def appVersionName = "1.0.0"
+def host = "viktorychapp.pages.dev"
+def startUrl = "https://" + host + "/?tv=1&src=tvapp&tvapp=" + appVersion + "#/home"
+
+android {
+    namespace "app.viktorych.tv"
+    compileSdk 35
+    defaultConfig {
+        applicationId "app.viktorych.tv"
+        minSdk 21
+        targetSdk 35
+        versionCode appVersion
+        versionName appVersionName
+        manifestPlaceholders = [
+            hostName: host,
+            defaultUrl: startUrl,
+            launcherName: "ViktorychApp",
+            themeColor: "#000000",
+            backgroundColor: "#000000"
+        ]
+        resValue "string", "app_host", host
+    }
+    signingConfigs {
+        release {
+            def ks = System.getenv("TV_KEYSTORE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("TV_KEYSTORE_PASS")
+                keyAlias System.getenv("TV_KEY_ALIAS") ?: "viktorychtv"
+                keyPassword System.getenv("TV_KEY_PASS") ?: System.getenv("TV_KEYSTORE_PASS")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv("TV_KEYSTORE")) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    lint { abortOnError false; checkReleaseBuilds false }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0"
+}

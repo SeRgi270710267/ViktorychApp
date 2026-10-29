@@ -2722,5 +2722,22 @@ SI18n.addPack("es", {
   "This is the official account of this site.": "Esta es la cuenta oficial de este sitio.",
   "Unpin from top": "Desfijar de arriba",
   "Verified account": "Cuenta verificada",
-  "Who can see it": "Quién puede verla"
+  "Who can see it": "Quién puede verla",
+  "A newer TV app is ready. Download it and press Update. Your sign-in stays.": "Hay una versión nueva de la app para TV. Descárgala y pulsa Actualizar. Tu sesión se mantiene.",
+  "Fewer posts in memory": "Menos posts en memoria",
+  "Get the TV app": "Consigue la app para TV",
+  "How to install": "Cómo instalar",
+  "Install TV app": "Instalar app para TV",
+  "Light defaults for low-power TVs. Turn any of them off.": "Ajustes ligeros para televisores poco potentes. Puedes desactivar cualquiera.",
+  "Lighter images": "Imágenes más ligeras",
+  "Lighter start-up": "Inicio más ligero",
+  "No blur effects": "Sin efectos de desenfoque",
+  "Put ViktorychApp on your TV home screen. One download, then press Install.": "Pon ViktorychApp en la pantalla de inicio de tu TV. Una descarga y pulsa Instalar.",
+  "Reduce motion": "Reducir movimiento",
+  "Reset TV defaults": "Restablecer ajustes de TV",
+  "TV performance": "Rendimiento en TV",
+  "TV video autoplay": "Reproducción automática en TV",
+  "Update TV app": "Actualizar app para TV",
+  "On. Big text, remote control, and light defaults for TVs.": "Activado. Texto grande, control remoto y ajustes ligeros para TV.",
+  "Big text and remote control for TV browsers. Auto turns it on when a TV is detected.": "Texto grande y control remoto para navegadores de TV. Auto lo activa cuando detecta una TV."
 });
