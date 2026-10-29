@@ -1,0 +1,7 @@
+{
+  "versionCode": 1,
+  "versionName": "1.0.0",
+  "apk": "tv/ViktorychTV.apk",
+  "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
+  "notes": "First TV app: ViktorychApp on the Google TV home screen."
+}
