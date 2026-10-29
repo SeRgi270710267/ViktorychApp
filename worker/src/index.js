@@ -55,6 +55,7 @@ import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./
 import { syncVk, vkDue } from "./vk.js";
 import { handlePackagesRoute, pollPackages, packageNotifier } from "./packages.js";
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
+import { handleTvBuild } from "./tv-build.js";
 import { BADGE_SCHEMA, handleBadges, syncBadges } from "./badges.js";
 import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
@@ -5509,6 +5510,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/badges" || path.startsWith("/v1/badges/")) {
     const badges = await handleBadges(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (badges) return badges;
+  }
+  if (path === "/v1/tv/build" || path.startsWith("/v1/tv/build/")) {
+    const built = await handleTvBuild(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (built) return built;
   }
   if (path === "/v1/about" || path.startsWith("/v1/about/")) {
     const birthday = await handleBirthdayRoutes(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
