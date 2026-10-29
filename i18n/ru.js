@@ -2500,5 +2500,8 @@ SI18n.addPack("ru", {
   "Paste a link or @handle above to add one.": "Вставьте ссылку или @имя выше, чтобы добавить источник.",
   "Paste a link or @handle": "Вставьте ссылку или @имя",
   "Select all": "Выбрать все",
-  "Try another search or filter.": "Попробуйте другой запрос или фильтр."
+  "Try another search or filter.": "Попробуйте другой запрос или фильтр.",
+  "Search Settings": "Поиск по настройкам",
+  "Ask in your own words, like “make the text bigger”.": "Спросите своими словами, например «сделать текст крупнее».",
+  "Suggested by the on-device assistant": "Подсказка помощника на устройстве"
 });
