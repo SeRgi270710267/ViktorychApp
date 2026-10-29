@@ -1,21 +1,31 @@
-.aff-slot { display: inline-flex; vertical-align: middle; margin-left: 4px; padding: 0; border: 0; background: transparent; }
+/* X's affiliate badge: a small rounded square with a hairline border,
+   right after the name and tick, sharing the tick's vertical center. */
+.aff-slot { display: inline-flex; flex: none; align-items: center; gap: 2px; margin-left: 2px; padding: 0; border: 0; background: transparent; vertical-align: middle; line-height: 0; }
 .aff-slot[hidden] { display: none; }
+.byline .aff-slot { margin-left: -2px; }
+.hcard .name .aff-slot { margin-left: 0; }
+.pname .aff-slot { margin-left: 0; }
 .aff-badge {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
   margin: 0;
   padding: 0;
-  border: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, #2f3336);
   border-radius: 4px;
   background: #2f3336;
   vertical-align: middle;
   line-height: 0;
+  cursor: pointer;
 }
-.aff-badge img { width: 14px; height: 14px; display: block; }
-.name .aff-badge, .pname .aff-badge { margin-left: 4px; }
+.aff-badge img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.pname .aff-badge, .drawer-name .aff-badge { width: 18px; height: 18px; }
+.aff-badge:focus-visible { outline: 2px solid var(--blue, #1d9bf0); outline-offset: 1px; }
 .aff-sheet {
   position: fixed;
   left: 0;
