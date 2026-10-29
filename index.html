@@ -294,6 +294,29 @@
     })();
   </script>
   <script>
+    /* Theme registry. Flag themes are data: add one entry here (plus its name in i18n) and
+       the generic html[data-flag] rules in styles.css do the rest. flag = exact flag colours
+       [top, accent, alert]; tint = the same bands darkened to OLED level for the page background. */
+    (function () {
+      var T = window.ViktorychThemes = {
+        base: { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" },
+        flags: {
+          russia: { name: "Russia", flag: ["#FFFFFF", "#0039A6", "#D52B1E"], tint: ["#0b0b0d", "#00081a", "#1a0503"], surface: "#05070d" }
+        },
+        color: function (id) { var f = T.flags[id]; return f ? f.tint[0] : (T.base[id] || "#000000"); },
+        known: function (id) { return !!(T.base[id] || T.flags[id]); },
+        apply: function (id) {
+          var root = document.documentElement, f = T.flags[id], names = ["1", "2", "3"], i;
+          root.setAttribute("data-theme", id);
+          if (!f) { root.removeAttribute("data-flag"); for (i = 0; i < 3; i++) { root.style.removeProperty("--flag-" + names[i]); root.style.removeProperty("--flag-tint-" + names[i]); } root.style.removeProperty("--flag-surface"); return; }
+          root.setAttribute("data-flag", id);
+          for (i = 0; i < 3; i++) { root.style.setProperty("--flag-" + names[i], f.flag[i]); root.style.setProperty("--flag-tint-" + names[i], f.tint[i]); }
+          root.style.setProperty("--flag-surface", f.surface || f.tint[0]);
+        }
+      };
+    })();
+  </script>
+  <script>
     (function () {
       try {
         var key = "viktorychapp-settings-v1";
@@ -305,16 +328,16 @@
         }
         var mode = raw ? (JSON.parse(raw).appearance || "lightsout") : "lightsout";
         if (mode === "auto") mode = matchMedia("(prefers-color-scheme: light)").matches ? "default" : "lightsout";
-        if (mode !== "default" && mode !== "dim" && mode !== "lightsout") mode = "lightsout";
-        document.documentElement.setAttribute("data-theme", mode);
+        var themes = window.ViktorychThemes;
+        if (!themes.known(mode)) mode = "lightsout";
+        themes.apply(mode);
         var savedNav = raw ? JSON.parse(raw) : {};
         var navLayout = savedNav.navLayout === "bar" ? "bar" : "auto";
         document.documentElement.setAttribute("data-nav-layout", navLayout);
         if (navLayout === "bar" && savedNav.navLayoutLand === true) document.documentElement.setAttribute("data-nav-bar-land", "1");
         else document.documentElement.removeAttribute("data-nav-bar-land");
-        var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
         var metas = document.querySelectorAll('meta[name="theme-color"]');
-        for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
+        for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", themes.color(mode));
         var scheme = document.querySelector('meta[name="color-scheme"]');
         if (scheme) scheme.setAttribute("content", mode === "default" ? "light" : "dark");
         var bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
