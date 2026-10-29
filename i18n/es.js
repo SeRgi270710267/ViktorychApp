@@ -2500,5 +2500,8 @@ SI18n.addPack("es", {
   "Paste a link or @handle above to add one.": "Pega un enlace o @usuario arriba para añadir una.",
   "Paste a link or @handle": "Pega un enlace o @usuario",
   "Select all": "Seleccionar todo",
-  "Try another search or filter.": "Prueba otra búsqueda o filtro."
+  "Try another search or filter.": "Prueba otra búsqueda o filtro.",
+  "Search Settings": "Buscar configuración",
+  "Ask in your own words, like “make the text bigger”.": "Pregunta con tus palabras, como «agrandar el texto».",
+  "Suggested by the on-device assistant": "Sugerido por el asistente del dispositivo"
 });
