@@ -9,7 +9,7 @@
   if (root) root.ViktorychUpdate = api;
   if (typeof document !== "undefined") api.start();
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var PREFIX = "viktorych-a134-";
+  var PREFIX = "viktorych-a136-";
   var SNOOZE_MS = 30 * 60 * 1000;
   var CHECK_MS = 3 * 60 * 1000;
   var RESTORE_MS = 2 * 60 * 1000;
@@ -681,7 +681,14 @@
       if (worker) {
         state.waiting = worker;
         armStall();
-        worker.postMessage({ type: "apply-update" });
+        // Files nearby devices already hold for this version go into a cache
+        // the worker reuses by hash. Bounded and skipped without peers.
+        var pool = window.ViktorychPool;
+        var prefill = pool && pool.prefillShell ? Promise.resolve().then(function () { return pool.prefillShell(); }).catch(function () { return 0; }) : Promise.resolve(0);
+        prefill.then(function () {
+          if (applying !== attempt) return;
+          worker.postMessage({ type: "apply-update" });
+        });
         return;
       }
       return readControllerSha().then(function (sha) {
