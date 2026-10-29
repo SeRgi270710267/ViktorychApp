@@ -123,7 +123,7 @@ html[data-onb-open="1"] body { overflow: hidden; }
 .onb-quiet {
   border: 0;
   background: transparent;
-  color: var(--blue, #1d9bf0);
+  color: var(--link, var(--blue, #1d9bf0));
   font: inherit;
   font-size: 15px;
   font-weight: 700;
@@ -241,7 +241,7 @@ html[data-onb-open="1"] body { overflow: hidden; }
   font-weight: 700;
   cursor: pointer;
 }
-.onb-seg.on { border-color: var(--blue, #1d9bf0); color: var(--blue, #1d9bf0); background: var(--blue-dim, rgba(29, 155, 240, 0.1)); }
+.onb-seg.on { border-color: var(--blue, #1d9bf0); color: var(--link, var(--blue, #1d9bf0)); background: var(--blue-dim, rgba(29, 155, 240, 0.1)); }
 .onb-seg-ico { width: 16px; height: 16px; border: 2px solid currentColor; border-radius: 50%; }
 .onb-seg-ico.square { border-radius: 4px; }
 .onb-field {
@@ -253,9 +253,9 @@ html[data-onb-open="1"] body { overflow: hidden; }
 }
 .onb-field:focus-within { border-color: var(--blue, #1d9bf0); box-shadow: 0 0 0 1px var(--blue, #1d9bf0); }
 .onb-field span { font-size: 13px; color: var(--muted, #71767b); }
-.onb-field:focus-within span { color: var(--blue, #1d9bf0); }
+.onb-field:focus-within span { color: var(--link, var(--blue, #1d9bf0)); }
 .onb-field input { border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 17px; padding: 4px 0 0; }
-.onb-error { color: var(--red, #f4212e); font-size: 14px; margin: 12px 0 0; }
+.onb-error { color: var(--red-text, var(--red, #f4212e)); font-size: 14px; margin: 12px 0 0; }
 .onb-note { color: var(--muted, #71767b); font-size: 15px; margin: 12px 0 0; }
 
 /* Who to follow. */
