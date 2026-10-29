@@ -4,7 +4,7 @@ const VERSION = "viktorych-a144-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T22:13:00Z-pool-capacity
+// cache-bust: 2026-10-29T23:20:00Z-pool-balance
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -2004,6 +2004,12 @@ self.addEventListener("fetch", (event) => {
       headers.set("pragma", "no-cache");
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers: headers });
     })().catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
+    return;
+  }
+  // Sealed catalogs are encrypted copies whose age the app checks itself:
+  // network (or a mirror when Pages is blocked), never this worker's cache.
+  if (url.origin === self.location.origin && /\/sealed\/[^/]+\.json$/.test(url.pathname)) {
+    event.respondWith(mirrorFetch(request).catch(() => new Response("", { status: 504 })));
     return;
   }
   if (isGameHost(url)) return;

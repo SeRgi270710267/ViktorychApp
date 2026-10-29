@@ -298,20 +298,48 @@
     var soonest = list.slice().sort(function (a, b) { return breakerOpenUntil(a) - breakerOpenUntil(b); });
     return soonest.slice(0, 1);
   }
-  /* Origin pool: when the main Worker says today's free requests are nearly
-     used (X-Quota-Pct), reads move to the next healthy origin for a sticky,
-     jittered while, shared by every tab. Writes stay on the main Worker.
-     The breaker above still skips any origin that is failing, so if the
-     backup stumbles reads come straight back to the main one. */
+  /* Origin pool. Reads are shared across every healthy origin all the
+     time, weighted by how much of its free daily capacity each one has
+     left: the main Worker from its X-Quota-Pct header, the Render backup
+     from its own /backup/status count. Each tab draws one origin and keeps
+     it for a while, so caches and ETags stay warm; across devices the
+     reads split in proportion to the room left. Writes stay on the main
+     Worker. The breaker still skips any origin that is failing, and a
+     reading of 85% or more takes the Worker out of the draw for a sticky,
+     jittered while, shared by every tab. A new UTC day clears it all. */
   var QUOTA_KEY = "viktorychapp-quota-v1";
+  var PICK_KEY = "viktorychapp-pool-pick-v1";
   var QUOTA_SHIFT_PCT = 85;
+  var POOL_CAP = 100000;
+  var COLD_MS = 4000;
+  var WARM_FOR = 10 * 60 * 1000;
+  function utcDay(ms) { return new Date(Number(ms) || 0).toISOString().slice(0, 10); }
+  function trimRoot(root) { return String(root || "").replace(/\/$/, ""); }
+  function mainRoot() { return trimRoot(config().api); }
+  function backupRoot() { return trimRoot(config().backupApi); }
   function quotaRead() {
     try { var q = JSON.parse(localStorage.getItem(QUOTA_KEY) || "null"); return q && typeof q === "object" ? q : {}; }
     catch (err) { return {}; }
   }
+  function quotaWrite(q) {
+    try { localStorage.setItem(QUOTA_KEY, JSON.stringify(q)); } catch (err) { /* memory only */ }
+  }
+  /* Today's reading for one origin: { pct, cap, at }, or null. */
+  function originNote(root, pct, cap) {
+    if (!root || !isFinite(pct)) return;
+    var q = quotaRead();
+    q.origins = q.origins && typeof q.origins === "object" ? q.origins : {};
+    q.origins[root] = { pct: Math.max(0, Number(pct)), cap: Number(cap) > 0 ? Number(cap) : POOL_CAP, at: Date.now() };
+    quotaWrite(q);
+  }
+  function originState(root) {
+    var row = (quotaRead().origins || {})[root];
+    if (!row || utcDay(row.at) !== utcDay(Date.now())) return null;
+    return row;
+  }
   function quotaNote(root, res) {
-    var main = String(config().api || "").replace(/\/$/, "");
-    if (!main || String(root || "").replace(/\/$/, "") !== main || !res || !res.headers || !res.headers.get) return;
+    var main = mainRoot();
+    if (!main || trimRoot(root) !== main || !res || !res.headers || !res.headers.get) return;
     var raw = res.headers.get("X-Quota-Pct");
     if (raw === null || raw === "" || !isFinite(Number(raw))) return;
     var pct = Number(raw);
@@ -320,26 +348,114 @@
     var nowMs = Date.now();
     q.pct = pct;
     q.at = nowMs;
+    q.origins = q.origins && typeof q.origins === "object" ? q.origins : {};
+    q.origins[main] = { pct: pct, cap: Number(config().workerDayRequests) || POOL_CAP, at: nowMs };
     if (pct >= limit) {
       // Sticky for 10 to 15 minutes so tabs do not flap between origins.
       if (!(Number(q.until) > nowMs)) q.until = nowMs + 10 * 60 * 1000 + Math.floor(Math.random() * 5 * 60 * 1000);
     } else q.until = 0;
-    try { localStorage.setItem(QUOTA_KEY, JSON.stringify(q)); } catch (err) { /* memory only */ }
+    quotaWrite(q);
   }
   function quotaShifted() {
     var q = quotaRead();
-    return Number(q.until) > Date.now();
+    return Number(q.until) > Date.now() && utcDay(q.at) === utcDay(Date.now());
   }
-  /* Reads: the same pool, with the main Worker moved last while it is near
-     its daily quota. A new UTC day clears the shift. */
+  /* Requests this origin has left today. Unknown counts as half full. */
+  function originRoom(root) {
+    var row = originState(root);
+    var cap = row ? row.cap : (root === mainRoot() ? (Number(config().workerDayRequests) || POOL_CAP) : POOL_CAP);
+    var pct = row ? row.pct : 50;
+    if (root === mainRoot() && quotaShifted()) return 0;
+    return Math.max(0, cap * (100 - Math.min(100, pct)) / 100);
+  }
+  function poolWeights(list) {
+    var out = {};
+    list.forEach(function (root) { out[root] = originRoom(root); });
+    return out;
+  }
+  function weightedPick(list, weights, rand) {
+    var total = 0;
+    list.forEach(function (root) { total += weights[root] || 0; });
+    if (!(total > 0)) return list[0];
+    var r = (typeof rand === "number" ? rand : Math.random()) * total;
+    for (var i = 0; i < list.length; i++) {
+      r -= weights[list[i]] || 0;
+      if (r < 0) return list[i];
+    }
+    return list[list.length - 1];
+  }
+  function pickRead() {
+    try { var p = JSON.parse(sessionStorage.getItem(PICK_KEY) || "null"); return p && typeof p === "object" ? p : null; }
+    catch (err) { return null; }
+  }
+  function pickWrite(p) {
+    try { sessionStorage.setItem(PICK_KEY, JSON.stringify(p)); } catch (err) { /* memory only */ }
+  }
+  /* Reads: this tab's origin first, then the rest by room left. */
   function readOrder(speed) {
     var list = apiOrder();
-    if (list.length < 2 || !quotaShifted()) return speed ? bySpeed(list) : list;
+    if (list.length < 2 || config().poolBalance === false) {
+      if (list.length >= 2 && quotaShifted()) {
+        var m = mainRoot();
+        var others = list.filter(function (root) { return root !== m; });
+        list = others.concat(list.indexOf(m) >= 0 ? [m] : []);
+      }
+      return speed ? bySpeed(list) : list;
+    }
+    var weights = poolWeights(list);
+    var nowMs = Date.now();
+    var pick = pickRead();
+    var fresh = pick && list.indexOf(pick.root) >= 0 && (weights[pick.root] || 0) > 0 && nowMs < Number(pick.until) && pick.day === utcDay(nowMs);
+    if (!fresh) {
+      pick = { root: weightedPick(list, weights), until: nowMs + 10 * 60 * 1000 + Math.floor(Math.random() * 5 * 60 * 1000), day: utcDay(nowMs) };
+      pickWrite(pick);
+    }
+    var rest = list.filter(function (root) { return root !== pick.root; }).sort(function (a, b) { return (weights[b] || 0) - (weights[a] || 0); });
+    var order = [pick.root].concat(rest);
+    return speed ? bySpeed(order) : order;
+  }
+  /* The free Render backup sleeps when idle. A cold one gets four seconds
+     before the same read also goes to the next origin. */
+  function originWarm(root) {
+    if (!root || root !== backupRoot()) return true;
     var q = quotaRead();
-    if (new Date(Number(q.at) || 0).toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10)) return list;
-    var main = String(config().api || "").replace(/\/$/, "");
-    var rest = list.filter(function (root) { return root !== main; });
-    return rest.length ? rest.concat(list.indexOf(main) >= 0 ? [main] : []) : list;
+    return Date.now() - Number((q.warm || {})[root] || 0) < WARM_FOR;
+  }
+  function warmNote(root, ms) {
+    if (!root || root !== backupRoot() || !(ms >= 0) || ms > COLD_MS) return;
+    var q = quotaRead();
+    q.warm = q.warm && typeof q.warm === "object" ? q.warm : {};
+    q.warm[root] = Date.now();
+    quotaWrite(q);
+  }
+  /* One cheap status read of the backup when the app opens (shared by every
+     tab, at most every four minutes). It wakes a sleeping backup and brings
+     back its request count for today, which sets its share of reads. */
+  var backupStatus = null;
+  var backupStatusAt = 0;
+  function poolWarm(force) {
+    var root = backupRoot();
+    if (!root || !nativeFetch) return Promise.resolve(null);
+    var nowMs = Date.now();
+    var q = quotaRead();
+    if (!force && (nowMs - backupStatusAt < 4 * 60 * 1000 || nowMs - Number(q.statusAt || 0) < 4 * 60 * 1000)) return Promise.resolve(backupStatus);
+    backupStatusAt = nowMs;
+    q.statusAt = nowMs;
+    quotaWrite(q);
+    var started = nowMs;
+    return nativeFetch(root + "/backup/status", { credentials: "omit", cache: "no-store" }).then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (body) {
+      if (!body) return null;
+      warmNote(root, Date.now() - started);
+      backupStatus = body;
+      var cap = Number(body.dayCapacity) || POOL_CAP;
+      var today = body.today && body.today.date === utcDay(Date.now()) ? Number(body.today.requests) || 0 : 0;
+      var down = body.ok === false || (body.egress && body.egress.saver);
+      originNote(root, down ? 100 : Math.round(today * 100 / cap), cap);
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return body;
+    }).catch(function () { return null; });
   }
   function apiEndpoints() {
     var c = config();
@@ -408,6 +524,89 @@
       return Promise.reject(new Error("fetch"));
     });
   }
+  /* A data read that came back 401 means this session is gone. For five
+     minutes the same token is not sent again for data (each try costs two
+     Worker requests with its preflight); signing in again clears it. */
+  var DENY_KEY = "viktorychapp-data-401-v1";
+  function dataDenied(token) {
+    try {
+      var row = JSON.parse(localStorage.getItem(DENY_KEY) || "null");
+      return !!(row && row.tail === String(token || "").slice(-12) && Number(row.until) > Date.now());
+    } catch (err) { return false; }
+  }
+  function dataDeny(token) {
+    try { localStorage.setItem(DENY_KEY, JSON.stringify({ tail: String(token || "").slice(-12), until: Date.now() + 5 * 60 * 1000 })); } catch (err) { /* memory only */ }
+  }
+  /* Sealed catalogs on Pages (see worker/src/data-seal.js). The build
+     encrypts the reader copy of a few read-mostly catalogs with a key that
+     changes each UTC day; a signed-in device fetches the key once a day and
+     then reads those files from Pages, so the Worker and D1 are not asked.
+     A missing, old, or unreadable file falls back to the API as before. */
+  var SEAL_KEY = "viktorychapp-seal-v1";
+  var SEALED = { "feeds.json": 1, "feeds.config.json": 1, "stories.json": 1, "people.json": 1, "suggestions.json": 1, "status.json": 1, "data/music.json": 1 };
+  var sealMiss = {};
+  var sealServed = {};
+  var sealKeysAsk = null;
+  function sealState() {
+    try { var s = JSON.parse(localStorage.getItem(SEAL_KEY) || "null"); return s && typeof s === "object" ? s : {}; }
+    catch (err) { return {}; }
+  }
+  function sealKeys(token, day) {
+    var st = sealState();
+    var tail = String(token || "").slice(-12);
+    if (st.tail === tail && st.use === false && Date.now() - Number(st.at || 0) < 6 * 3600 * 1000) return Promise.resolve(null);
+    if (st.tail === tail && st.keys && st.keys[day]) return Promise.resolve(st.keys[day]);
+    // Ask at most every 30 minutes per token, and once at a time.
+    if (st.tail === tail && Date.now() - Number(st.at || 0) < 30 * 60 * 1000) return Promise.resolve(null);
+    if (sealKeysAsk) return sealKeysAsk.then(function () { var again = sealState(); return again.keys && again.keys[day] || null; });
+    st = { tail: tail, at: Date.now(), keys: st.tail === tail ? st.keys : null, use: st.use };
+    try { localStorage.setItem(SEAL_KEY, JSON.stringify(st)); } catch (err) { /* memory only */ }
+    sealKeysAsk = api("/v1/seal", { token: token }).then(function (body) {
+      var next = { tail: tail, at: Date.now(), keys: body && body.status === 200 && body.keys ? body.keys : null, use: !(body && body.use === false) };
+      try { localStorage.setItem(SEAL_KEY, JSON.stringify(next)); } catch (err) { /* memory only */ }
+      return next;
+    }, function () { return null; }).then(function (next) {
+      sealKeysAsk = null;
+      return next && next.use !== false && next.keys ? next.keys[day] || null : null;
+    });
+    return sealKeysAsk;
+  }
+  function b64Bytes(text) {
+    var raw = atob(String(text || ""));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function sealedText(key, token, mark) {
+    var subtle = window.crypto && window.crypto.subtle;
+    if (!SEALED[key] || config().sealed === false || !subtle || !nativeFetch || typeof TextEncoder !== "function") return Promise.resolve(null);
+    if (Number(sealMiss[key] || 0) > Date.now()) return Promise.resolve(null);
+    // The pulse saw this catalog change after the Pages copy was used: ask the API.
+    if (mark && sealServed[key] && sealServed[key] !== mark) { delete sealServed[key]; return Promise.resolve(null); }
+    var st = sealState();
+    if (st.tail === String(token || "").slice(-12) && st.use === false) return Promise.resolve(null);
+    var file = "";
+    try { file = new URL(pageBase().replace(/\/?$/, "/") + "sealed/" + key.replace(/\//g, "__"), location.href).href; }
+    catch (err) { return Promise.resolve(null); }
+    var maxAge = (Number(config().sealMaxAgeMin) || 75) * 60 * 1000;
+    function miss() { sealMiss[key] = Date.now() + 10 * 60 * 1000; return null; }
+    return nativeFetch(file, { credentials: "omit" }).then(function (res) {
+      return res && res.ok ? res.json() : null;
+    }).then(function (doc) {
+      if (!doc || doc.v !== 1 || !doc.iv || !doc.ct || !doc.day) return miss();
+      if (!(Date.now() - Date.parse(doc.at) < maxAge)) return miss();
+      return sealKeys(token, doc.day).then(function (k) {
+        if (!k) return null;
+        return subtle.importKey("raw", b64Bytes(k), { name: "AES-GCM" }, false, ["decrypt"]).then(function (aes) {
+          return subtle.decrypt({ name: "AES-GCM", iv: b64Bytes(doc.iv), additionalData: new TextEncoder().encode(key) }, aes, b64Bytes(doc.ct));
+        }).then(function (plain) {
+          var text = new TextDecoder().decode(plain);
+          if (mark) sealServed[key] = mark;
+          return text;
+        });
+      });
+    }).catch(function () { return miss(); });
+  }
   function patchedFetch(input, init) {
     var raw = typeof input === "string" ? input : (input && input.url) || "";
     var url;
@@ -418,6 +617,7 @@
     if (!key || !config().gate) return mirrorPageFetch(input, init, url);
     var session = readSession();
     if (key === "BLOCK" || !session) return Promise.resolve(new Response("", { status: 401 }));
+    if (dataDenied(session.token)) return Promise.resolve(new Response("", { status: 401 }));
     var order = readOrder();
     if (!order.length) return Promise.resolve(new Response("", { status: 401 }));
     var headers = new Headers(init && init.headers || (typeof input !== "string" && input && input.headers) || {});
@@ -428,8 +628,11 @@
     var path = "/v1/data/" + key.split("/").map(encodeURIComponent).join("/");
     function attempt(i) {
       var apiRoot = order[i];
-      // A stalled root must not hang the feed: give up after a while and try the next one.
-      var t = timedSignal(Number(config().dataTimeoutMs) || DATA_TIMEOUT, init && init.signal);
+      // A stalled root must not hang the feed: give up after a while and try
+      // the next one. A sleeping backup gets four seconds.
+      var cold = i + 1 < order.length && !originWarm(apiRoot);
+      var t = timedSignal(cold ? COLD_MS : (Number(config().dataTimeoutMs) || DATA_TIMEOUT), init && init.signal);
+      var started = Date.now();
       return nativeFetch(apiRoot + path, {
         method: "GET",
         headers: headers,
@@ -445,26 +648,39 @@
         }
         breakerOk(apiRoot);
         quotaNote(apiRoot, res);
+        warmNote(apiRoot, Date.now() - started);
+        if (res.status === 401) dataDeny(session.token);
         if (res.status === 200 && mark) pulseKeep(key, mark, res.clone());
         return res;
       }, function (err) {
         t.done();
         if (init && init.signal && init.signal.aborted) throw err;
+        // Still waking up is not a failure: move on without opening its breaker.
+        if (cold && t.timedOut()) { wakeBackup(""); return attempt(i + 1); }
         rotateApi(apiRoot, 0);
         if (i + 1 < order.length) return attempt(i + 1);
         throw err;
       });
     }
-    // The sharing pool may answer from a nearby device first; it checks the
-    // bytes against the signed manifest and falls back to the normal read.
-    var pool = window.ViktorychPool;
-    if (pool && pool.wants && pool.wants(key)) {
-      return pool.fetchData(key, function () { return attempt(0); }).then(function (res) {
-        if (res && res.status === 200 && mark && res.headers.get("x-pool")) pulseKeep(key, mark, res.clone());
-        return res;
-      });
+    function fromApi() {
+      // The sharing pool may answer from a nearby device first; it checks the
+      // bytes against the signed manifest and falls back to the normal read.
+      var pool = window.ViktorychPool;
+      if (pool && pool.wants && pool.wants(key)) {
+        return pool.fetchData(key, function () { return attempt(0); }).then(function (res) {
+          if (res && res.status === 200 && mark && res.headers.get("x-pool")) pulseKeep(key, mark, res.clone());
+          return res;
+        });
+      }
+      return attempt(0);
     }
-    return attempt(0);
+    if (!SEALED[key]) return fromApi();
+    return sealedText(key, session.token, mark).then(function (text) {
+      if (typeof text !== "string") return fromApi();
+      var res = new Response(text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "x-sealed": "pages" } });
+      if (mark) pulseKeep(key, mark, res.clone());
+      return res;
+    }, fromApi);
   }
   /* Shared documents the pulse tracks. While the pulse is up and a
      document's mark has not moved, the last copy answers without a request.
@@ -723,6 +939,7 @@
             drop();
             if (settled) return;
             speedNote(root, Date.now() - started);
+            if (res && res.status < 500) warmNote(root, Date.now() - started);
             if (failoverRes(res)) {
               rotateApi(root, retryAfterMs(res));
               lastRes = { root: root, res: res, tagKey: sent.tagKey, held: sent.held };
@@ -751,7 +968,8 @@
           if (launch()) hedgeTimer = later(hedge, Number(config().hedgeMs) || HEDGE_MS);
         }
         launch();
-        if (list.length > 1) hedgeTimer = later(hedge, Number(config().hedgeMs) || HEDGE_MS);
+        // A sleeping backup gets four seconds before the next origin starts too.
+        if (list.length > 1) hedgeTimer = later(hedge, originWarm(list[0]) ? (Number(config().hedgeMs) || HEDGE_MS) : COLD_MS);
       });
     }
 
@@ -4235,19 +4453,9 @@ function signupPayload() {
      calls for D1 and R2 (1,200 calls per 5 minutes, about 345k a day, at
      several calls per request), so it counts as 100k a day unless the
      backup reports another figure. */
-  var backupStatus = null;
-  var backupStatusAt = 0;
   function loadBackupStatus() {
-    var root = String(config().backupApi || "").replace(/\/$/, "");
-    if (!root || !nativeFetch || Date.now() - backupStatusAt < 5 * 60 * 1000) return;
-    backupStatusAt = Date.now();
-    nativeFetch(root + "/backup/status", { credentials: "omit", cache: "no-store" }).then(function (res) {
-      return res.ok ? res.json() : null;
-    }).then(function (body) {
-      if (!body) return;
-      backupStatus = body;
-      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-    }).catch(function () {});
+    if (Date.now() - backupStatusAt < 5 * 60 * 1000 && backupStatus) return;
+    poolWarm(true);
   }
   function nextUtcMidnight(at) {
     var d = new Date(at || Date.now());
@@ -5820,6 +6028,12 @@ else if (act === "copy-id") copyAccountId();
   if (config().gate) {
     installFetch();
     tellSW(!!mine);
+    // Wake the backup and learn its share of reads as the app opens.
+    if (mine && mine.token) later(function () {
+      poolWarm(false);
+      // Today's key for the sealed catalogs on Pages, once a day.
+      if (config().sealed !== false) sealKeys(mine.token, utcDay(Date.now()));
+    }, 1500);
   } else {
     try {
       if (typeof fetch === "function") {
@@ -5883,7 +6097,7 @@ else if (act === "copy-id") copyAccountId();
     profilePostsHtml: null,
     call: api,
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
-    originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted },
+    originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted, weights: function () { return poolWeights(apiOrder()); }, pick: weightedPick, warm: poolWarm, originWarm: originWarm, warmNote: warmNote, sealedText: sealedText, dataDenied: dataDenied },
     serverPool: function () { loadUsage(); return usageDoc ? serverPool(usageDoc, backupStatus) : null; },
     serverPoolFrom: serverPool,
     poolCapacityHtml: poolCapacityHtml,
