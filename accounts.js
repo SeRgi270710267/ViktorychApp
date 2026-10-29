@@ -366,7 +366,38 @@
     var cap = row ? row.cap : (root === mainRoot() ? (Number(config().workerDayRequests) || POOL_CAP) : POOL_CAP);
     var pct = row ? row.pct : 50;
     if (root === mainRoot() && quotaShifted()) return 0;
-    return Math.max(0, cap * (100 - Math.min(100, pct)) / 100);
+    var room = Math.max(0, cap * (100 - Math.min(100, pct)) / 100);
+    if (root === backupRoot()) room *= hoursFactor();
+    return room;
+  }
+  /* Render's free plan has 750 instance hours a month and the backup stops
+     being woken at 90% of them. Its share of reads shrinks from 60% on, so
+     the month's hours run out slowly instead of all at once. */
+  var HOURS_SLOW_PCT = 60;
+  var HOURS_PAUSE_PCT = 90;
+  function backupHours() {
+    var h = quotaRead().hours;
+    if (!h || typeof h !== "object") return null;
+    if (h.resetAt && Date.now() >= Date.parse(h.resetAt)) return null;
+    return h;
+  }
+  function backupPaused() {
+    var h = backupHours();
+    return !!(h && (h.paused || Number(h.pct) >= HOURS_PAUSE_PCT));
+  }
+  function hoursFactor() {
+    var h = backupHours();
+    if (!h) return 1;
+    if (backupPaused()) return 0;
+    var pct = Number(h.pct) || 0;
+    if (pct <= HOURS_SLOW_PCT) return 1;
+    return Math.max(0, (HOURS_PAUSE_PCT - pct) / (HOURS_PAUSE_PCT - HOURS_SLOW_PCT));
+  }
+  function hoursNote(hours) {
+    if (!hours || typeof hours !== "object") return;
+    var q = quotaRead();
+    q.hours = { pct: Number(hours.pct) || 0, paused: !!hours.paused, used: Number(hours.used) || 0, left: Number(hours.left) || 0, resetAt: String(hours.resetAt || hours.reset || ""), at: Date.now() };
+    quotaWrite(q);
   }
   function poolWeights(list) {
     var out = {};
@@ -439,6 +470,8 @@
     var nowMs = Date.now();
     var q = quotaRead();
     if (!force && (nowMs - backupStatusAt < 4 * 60 * 1000 || nowMs - Number(q.statusAt || 0) < 4 * 60 * 1000)) return Promise.resolve(backupStatus);
+    // Resting to save its free hours: a status read would wake it again.
+    if (backupPaused()) return Promise.resolve(backupStatus);
     backupStatusAt = nowMs;
     q.statusAt = nowMs;
     quotaWrite(q);
@@ -451,7 +484,8 @@
       backupStatus = body;
       var cap = Number(body.dayCapacity) || POOL_CAP;
       var today = body.today && body.today.date === utcDay(Date.now()) ? Number(body.today.requests) || 0 : 0;
-      var down = body.ok === false || (body.egress && body.egress.saver);
+      hoursNote(body.hours);
+      var down = body.ok === false || (body.egress && body.egress.saver) || (body.hours && body.hours.paused);
       originNote(root, down ? 100 : Math.round(today * 100 / cap), cap);
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
       return body;
@@ -485,6 +519,7 @@
     if (!backup || backup === String(failedRoot || "").replace(/\/$/, "") || !nativeFetch) return;
     var now = Date.now();
     if (now - wakeAt < 4 * 60 * 1000) return;
+    if (backupPaused()) return;
     wakeAt = now;
     try {
       nativeFetch(backup + "/backup/health", { mode: "no-cors", cache: "no-store", credentials: "omit", keepalive: true }).catch(function () {});
@@ -4471,19 +4506,23 @@ function signupPayload() {
     }
     if (config().backupApi) {
       var t = backup && backup.today && backup.today.date === today ? backup.today : null;
-      var down = !backup || backup.ok === false || (backup.egress && backup.egress.saver);
-      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down });
+      var hours = backup && backup.hours ? backup.hours : backupHours();
+      var resting = !!(hours && (hours.paused || Number(hours.pct) >= HOURS_PAUSE_PCT));
+      var down = !resting && (!backup || backup.ok === false || (backup.egress && backup.egress.saver));
+      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down, resting: resting, restUntil: hours && (hours.resetAt || hours.reset) || "" });
     }
     var used = 0, cap = 0;
     origins.forEach(function (o) {
       o.pct = o.cap ? Math.round(o.used * 100 / o.cap) : 0;
       o.out = o.pct >= 100 || !!o.down;
+      // Resting is planned, not a fault: it leaves the totals and alerts.
+      if (o.resting) return;
       used += Math.min(o.used, o.cap);
       cap += o.cap;
     });
     // A Worker past its quota stops answering, so its overflow does not
     // fill the backup's share; the pool counts each origin up to its cap.
-    return { used: used, cap: cap, pct: cap ? Math.round(used * 100 / cap) : 0, origins: origins, bypassed: origins.filter(function (o) { return o.out; }).map(function (o) { return o.name; }) };
+    return { used: used, cap: cap, pct: cap ? Math.round(used * 100 / cap) : 0, origins: origins, bypassed: origins.filter(function (o) { return o.out && !o.resting; }).map(function (o) { return o.name; }) };
   }
   function poolCapacityHtml(pool) {
     if (!pool || !pool.origins.length) return "";
@@ -4493,12 +4532,16 @@ function signupPayload() {
     var rows = pool.origins.map(function (o) {
       var when = "";
       try { when = new Date(o.reset).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" }); } catch (err) { when = ""; }
-      var note = o.down ? tr("Not answering, reads skip it") : o.pct >= 100 ? tr("Used up, reads skip it") : !o.known && o.id === "render" ? tr("Counted since its last restart") : "";
-      return '<div class="pool-origin' + lvl(o.pct) + (o.out ? " out" : "") + '">' +
+      var restDate = "";
+      if (o.resting) {
+        try { restDate = new Date(o.restUntil || Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toLocaleDateString(loc, { month: "short", day: "numeric" }); } catch (err) { restDate = ""; }
+      }
+      var note = o.resting ? tr("Resting until {date}", { date: restDate }) : o.down ? tr("Not answering, reads skip it") : o.pct >= 100 ? tr("Used up, reads skip it") : !o.known && o.id === "render" ? tr("Counted since its last restart") : "";
+      return '<div class="pool-origin' + (o.resting ? " resting" : lvl(o.pct) + (o.out ? " out" : "")) + '">' +
         '<div class="usage-top"><span>' + esc(o.name) + '</span><b>' + esc(o.pct + "%") + "</b></div>" +
         '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(o.pct) + '" aria-label="' + esc(o.name) + '"><i style="width:' + pctOf(o.pct) + '%"></i></div>' +
         '<div class="pool-meta"><span>' + esc(tr("{used} of {limit}", { used: formatNum(o.used), limit: formatNum(o.cap) })) + "</span><span>" + esc(tr("Resets {time}", { time: when })) + "</span></div>" +
-        (note ? '<p class="pool-note">' + esc(note) + "</p>" : "") + "</div>";
+        (note ? '<p class="pool-note' + (o.resting ? " calm" : "") + '">' + esc(note) + "</p>" : "") + "</div>";
     }).join("");
     return '<section class="pool-cap' + lvl(pool.pct) + '" data-pool-cap>' +
       '<div class="pool-head"><span>' + esc(tr("Server pool today")) + '</span><b class="pool-pct">' + esc(pool.pct + "%") + "</b></div>" +
@@ -6097,7 +6140,7 @@ else if (act === "copy-id") copyAccountId();
     profilePostsHtml: null,
     call: api,
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
-    originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted, weights: function () { return poolWeights(apiOrder()); }, pick: weightedPick, warm: poolWarm, originWarm: originWarm, warmNote: warmNote, sealedText: sealedText, dataDenied: dataDenied },
+    originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted, weights: function () { return poolWeights(apiOrder()); }, pick: weightedPick, warm: poolWarm, originWarm: originWarm, warmNote: warmNote, sealedText: sealedText, dataDenied: dataDenied, paused: backupPaused, hoursFactor: hoursFactor, wake: wakeBackup },
     serverPool: function () { loadUsage(); return usageDoc ? serverPool(usageDoc, backupStatus) : null; },
     serverPoolFrom: serverPool,
     poolCapacityHtml: poolCapacityHtml,

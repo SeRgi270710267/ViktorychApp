@@ -13,7 +13,7 @@ const SECRET = "pepper-for-tests";
 const local = new Map();
 const session = new Map();
 const calls = [];
-const state = { quota: "40", backupToday: 0, backupDelay: 0, sealed: {}, seal401: false, data401: false };
+const state = { quota: "40", backupToday: 0, hours: null, backupDelay: 0, sealed: {}, seal401: false, data401: false };
 const el = () => ({ style: {}, classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } }, setAttribute() {}, getAttribute() { return null; }, appendChild() {}, addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; } });
 const document = Object.assign(el(), {
   readyState: "complete", visibilityState: "visible", documentElement: el(), body: el(), head: el(),
@@ -31,8 +31,9 @@ async function fetchStub(url, init) {
   const headers = new Headers({ "content-type": "application/json" });
   if (url.startsWith(MAIN)) headers.set("X-Quota-Pct", state.quota);
   if (url === BACKUP + "/backup/status") {
-    return new Response(JSON.stringify({ ok: true, today: { date: sealDay(Date.now()), requests: state.backupToday }, dayCapacity: 100000 }), { status: 200, headers });
+    return new Response(JSON.stringify({ ok: true, today: { date: sealDay(Date.now()), requests: state.backupToday }, dayCapacity: 100000, hours: state.hours }), { status: 200, headers });
   }
+  if (url === BACKUP + "/backup/health") return new Response("{}", { status: 200, headers });
   if (url.startsWith("https://site.test/sealed/")) {
     const name = url.slice("https://site.test/sealed/".length);
     return state.sealed[name] ? new Response(JSON.stringify(state.sealed[name]), { status: 200, headers }) : new Response("", { status: 404 });
@@ -160,4 +161,34 @@ assert.equal(r2.status, 401);
 assert.equal(calls.length, before, "no request while the token is known to be refused");
 assert.equal(P.dataDenied("tok-123456789abc"), true);
 assert.equal(P.dataDenied("another-token"), false, "a new sign-in is not held back");
+
+// Render's free hours: the share shrinks from 60% and stops at the cutoff.
+state.data401 = false;
+const reset = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString();
+state.backupToday = 10000;
+state.hours = { used: 525, left: 225, pct: 70, paused: false, resetAt: reset };
+await P.warm(true);
+assert.ok(Math.abs(P.hoursFactor() - 2 / 3) < 1e-9, "70% of hours: two thirds of its share");
+assert.equal(Math.round(P.weights()[BACKUP]), 60000);
+state.hours = { used: 690, left: 60, pct: 92, paused: true, resetAt: reset };
+await P.warm(true);
+assert.equal(P.paused(), true);
+assert.equal(P.weights()[BACKUP], 0, "a resting backup gets no reads");
+for (let i = 0; i < 30; i++) { session.clear(); assert.equal(P.readOrder()[0], MAIN); }
+calls.length = 0;
+await P.warm(false);
+P.wake(MAIN);
+assert.ok(!calls.some((c) => c.url.startsWith(BACKUP)), "no warm ping or wake while resting");
+// The Usage row says it is resting, calmly, and it raises no bypass alert.
+const pool = A.serverPoolFrom({ configured: true, workerRequestsToday: 50000, limits: { workerRequestsDay: 100000 } }, { ok: true, hours: state.hours, today: { date: sealDay(Date.now()), requests: 0 }, dayCapacity: 100000 });
+const html = A.poolCapacityHtml(pool);
+assert.ok(html.includes("Resting until"), "resting note shown");
+assert.ok(!html.includes("Not answering"), "not shown as a fault");
+assert.ok(html.includes("pool-origin resting"));
+assert.deepEqual(Array.from(pool.bypassed), []);
+assert.equal(pool.cap, 100000, "only the Worker counts while the backup rests");
+// A new month: hours reset, the backup is back in the draw.
+local.set("viktorychapp-quota-v1", JSON.stringify(Object.assign(JSON.parse(local.get("viktorychapp-quota-v1")), { hours: { pct: 95, paused: true, resetAt: new Date(Date.now() - 1000).toISOString() } })));
+assert.equal(P.paused(), false);
+assert.equal(P.hoursFactor(), 1);
 console.log("ok pool balance");

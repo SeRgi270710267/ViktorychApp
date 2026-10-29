@@ -4090,6 +4090,7 @@ SI18n.addPack("hi", {
   "ReGone": "ReGone",
   "Cloudflare Worker": "Cloudflare वर्कर",
   "Render backup": "Render बैकअप",
+  "Resting until {date}": "{date} तक आराम पर",
   "Not answering, reads skip it": "जवाब नहीं दे रहा, पढ़ना इसे छोड़ देता है",
   "Used up, reads skip it": "खत्म हो गया, पढ़ना इसे छोड़ देता है",
   "Counted since its last restart": "पिछले रीस्टार्ट से गिना गया",

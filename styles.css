@@ -6385,6 +6385,8 @@ img, video { max-width: 100%; }
 .pool-cap .hot .usage-bar i, .pool-cap.hot > .usage-bar i { background: #ff7a00; }
 .pool-cap .full .usage-bar i, .pool-cap.full > .usage-bar i { background: #f4212e; }
 .pool-cap .pool-origin.out { opacity: .72; }
+.pool-cap .pool-origin.resting { opacity: .8; }
+.pool-cap .pool-note.calm { color: var(--muted, #71767b); }
 
 /* Personal sidebar logo text, set in the wordmark's own lockup: Inter Black
    for the first letter at 1.1x, Inter Regular for the rest, currentColor so
