@@ -5103,6 +5103,9 @@ def gdrive_checks() -> None:
     wrangler_text = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
     check("head_sampling_rate = 1" in wrangler_text and 'binding = "CACHE"' in wrangler_text and 'crons = ["* * * * *"]' in wrangler_text, "workers logs and the KV cache are configured beside the existing cron")
     check("backups/d1/" in (ROOT / "worker" / "src" / "d1-backup.js").read_text(encoding="utf-8"), "the daily D1 export keeps its objects under backups/d1/")
+    import secret_scan
+    check(secret_scan.selftest() == 0, "the secret and personal-data scan catches its samples")
+    check(secret_scan.report(secret_scan.scan(secret_scan.git_files(False), False)) == 0, "no secret or personal data in the tracked tree")
 
 
 if __name__ == "__main__":
