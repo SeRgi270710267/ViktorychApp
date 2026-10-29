@@ -96,3 +96,31 @@ test("offline keeps the last saved catalog and backoff honors 429", () => {
   assert.equal(backoffMs(3, 503, 0), 60 * 60 * 1000);
   assert.equal(backoffMs(0, 503, 0), 30 * 1000);
 });
+
+test("any fediverse profile can be followed as a feed, by address or link", () => {
+  const cases = [
+    ["@laneharbor@social.example", "laneharbor", "social.example"],
+    ["laneharbor@pix.example", "laneharbor", "pix.example"],
+    ["fediverse:lane.harbor@mk.example", "lane.harbor", "mk.example"],
+    ["mastodon:laneharbor@social.example", "laneharbor", "social.example"],
+    ["https://pix.example/users/laneharbor", "laneharbor", "pix.example"],
+    ["https://mk.example/@laneharbor", "laneharbor", "mk.example"],
+    ["https://social.example/@laneharbor@other.example", "laneharbor", "other.example"],
+    ["https://tube.example/a/laneharbor", "laneharbor", "tube.example"],
+    ["https://friendica.example/profile/laneharbor", "laneharbor", "friendica.example"]
+  ];
+  cases.forEach(([input, handle, host]) => {
+    const spec = detectInput(input);
+    assert.equal(spec.ok, true, input);
+    assert.equal(spec.platform, "mastodon", input);
+    assert.equal(spec.handle, handle, input);
+    assert.equal(spec.host, host, input);
+    const urls = sourcePlan(spec).map((step) => step.url);
+    assert.equal(urls[0], "https://" + host + "/api/v1/accounts/lookup?acct=" + encodeURIComponent(handle), input);
+    assert.ok(urls.includes("https://" + host + "/@" + encodeURIComponent(handle) + ".rss"), input);
+    assert.ok(urls.includes("https://" + host + "/users/" + encodeURIComponent(handle) + ".atom"), input);
+    assert.ok(urls.every((url) => url.startsWith("https://" + host + "/")), input);
+  });
+  assert.equal(detectInput("@someone@127.0.0.1").ok, false);
+  assert.equal(detectInput("https://feeds.example/sample.xml").platform, "rss");
+});
