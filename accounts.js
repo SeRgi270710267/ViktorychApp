@@ -225,15 +225,20 @@
      primary comes back on its own once its wait ends. */
   var BREAKER_KEY = "viktorychapp-breaker-v1";
   var breakerMemo = null;
+  var breakerMemoAt = 0;
   function breakerRead() {
-    if (breakerMemo) return breakerMemo;
-    try { breakerMemo = JSON.parse(localStorage.getItem(BREAKER_KEY) || "{}") || {}; }
-    catch (err) { breakerMemo = {}; }
-    setTimeout(function () { breakerMemo = null; }, 1000);
+    var now = Date.now();
+    if (breakerMemo && now - breakerMemoAt < 1000) return breakerMemo;
+    var all = null;
+    try { all = JSON.parse(localStorage.getItem(BREAKER_KEY) || "{}"); }
+    catch (err) { all = null; }
+    breakerMemo = all && typeof all === "object" ? all : {};
+    breakerMemoAt = now;
     return breakerMemo;
   }
   function breakerWrite(all) {
     breakerMemo = all;
+    breakerMemoAt = Date.now();
     try {
       if (Object.keys(all).length) localStorage.setItem(BREAKER_KEY, JSON.stringify(all));
       else localStorage.removeItem(BREAKER_KEY);
