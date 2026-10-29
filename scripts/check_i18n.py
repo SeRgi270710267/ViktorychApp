@@ -46,6 +46,7 @@ UI_FILES = (
     "update.js",
     "storage.js",
     "localfirst.js",
+    "device-data.js",
     "direct.js",
     "device.js",
     "scores.js",
