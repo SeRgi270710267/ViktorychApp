@@ -47,7 +47,7 @@
 .sa-banner.v-critical, .sa-banner.v-limit { --sa-accent: #f4212e; }
 .sa-banner-ico { flex: none; width: 24px; color: var(--sa-accent); padding-top: 1px; }
 .sa-banner-ico svg { width: 24px; height: 24px; }
-.sa-banner-copy { flex: 1 1 auto; min-width: 0; }
+.sa-banner-copy { flex: 1 1 0; min-width: 0; }
 .sa-banner-copy b { display: block; font-size: 15px; line-height: 20px; }
 .sa-banner-copy p { margin: 2px 0 0; color: var(--muted, #71767b); font-size: 14px; line-height: 18px; }
 .sa-back { flex: 0 0 auto; white-space: nowrap; }
@@ -78,5 +78,5 @@
 .sa-note-x svg { width: 18px; height: 18px; }
 .sa-feel { margin-bottom: 4px; }
 .sa-test { min-height: 52px; column-gap: 10px; }
-.sa-test-label { flex: 1 1 0; min-width: 0; font-size: 15px; color: var(--text, #e7e9ea); }
+.sa-test-label { flex: 1 1 0; min-width: 0; font-size: 15px; font-weight: 700; color: var(--text, #e7e9ea); }
 .sa-test .outline { flex: none; }
