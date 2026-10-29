@@ -592,6 +592,7 @@ async function runJob(env, job, opts) {
   // finished can still have picked up a write that landed before the token died.
   if (publicId) {
     await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId).run();
+    try { await env.DB.prepare("DELETE FROM device_keys WHERE public_id = ?").bind(publicId).run(); } catch (err) { /* no device asked for a key yet */ }
     steps.sessions = true;
     await wipeDatabase(env, job);
     try { await wipeAccountChannel(env, publicId); }
