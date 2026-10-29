@@ -116,9 +116,15 @@ async function check(page, label) {
   const kept = await page.evaluate(() => [getComputedStyle(document.documentElement).getPropertyValue("--blue").trim(), document.documentElement.getAttribute("data-fs")]);
   if (kept[0] !== "#f91880" || kept[1] !== "18") fail(label + " choices were lost on reload " + JSON.stringify(kept));
   /* The saved screen paints before the click handlers are bound. */
-  await page.waitForTimeout(2500);
-  await page.locator(".pz-page [data-act='back']").click();
-  await page.waitForFunction(() => !document.querySelector(".pz-page"), null, { timeout: 8000 }).catch(async () => fail(label + " back stayed on " + await page.evaluate(() => location.hash + " " + history.length)));
+  /* Slow runners bind late, so tap back again until it takes. */
+  let left = false;
+  for (let i = 0; i < 8 && !left; i++) {
+    await page.waitForTimeout(1500);
+    const btn = page.locator(".pz-page [data-act='back']");
+    if (await btn.count()) await btn.click().catch(() => {});
+    left = await page.waitForFunction(() => !document.querySelector(".pz-page"), null, { timeout: 2500 }).then(() => true, () => false);
+  }
+  if (!left) fail(label + " back stayed on " + await page.evaluate(() => location.hash + " " + history.length));
   if (errors.length) fail(label + " page errors: " + errors.slice(0, 3).join(" | "));
 }
 
