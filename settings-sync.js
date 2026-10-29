@@ -21,7 +21,7 @@
       ["translateAuto", "Automatically translate posts"], ["translateNever", "Never translate"],
       ["peopleLinks", "Merged profiles"]
     ] },
-    { id: "notifications", label: "Notifications", keys: [["notify", "Notifications"], ["bells", "Account alerts"]] },
+    { id: "notifications", label: "Notifications", keys: [["notify", "Notifications"], ["bells", "Account alerts"], ["notifPrivacy", "Notification privacy"]] },
     { id: "privacy", label: "Privacy and mentions", keys: [
       ["mutedWords", "Muted words"], ["mutedAccounts", "Muted accounts"], ["privacyEmbedShield", "Third-party embed shield"],
       ["privacyWebRTC", "WebRTC leak protection"], ["privacyNoReferrer", "Strict no-referrer"], ["privacyStripTrackers", "Strip tracking parameters"],
@@ -34,7 +34,7 @@
   // keep their union merge in accounts.js.
   var LWW = ["appearance", "showPictures", "showBanners", "autoplay", "followingSort", "forYouReposts", "forYouReplies",
     "storyNotes", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells",
-    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "peopleLinks", "musicPrefs", "brandLogo"];
+    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "peopleLinks", "musicPrefs", "brandLogo", "notifPrivacy"];
   var CAT_OF = {};
   CATS.forEach(function (cat) { cat.keys.forEach(function (row) { CAT_OF[row[0]] = cat.id; }); });
   // Companion keys travel with their setting.
