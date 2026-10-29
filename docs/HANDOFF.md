@@ -77,9 +77,9 @@ Rules:
 
 ## TV sign-in
 
-On a TV, the signed-out landing is a 10-foot screen led by "Sign in with your phone".
-It uses a QR code plus a 6-character code, one use and five minutes, through `/v1/tv-pair/*`.
-Phones approve the code in Settings → Link a TV. See [TV-SIGN-IN.md](TV-SIGN-IN.md).
+Short address for people: `viktorychapp.pages.dev` (`SHORT_ORIGIN` in `shared/short-link.js`; `/tv`, `/p/CODE`, `/join`, `/go` via `_redirects`, and `404.html` on GitHub Pages).
+A signed-out TV opens "Sign in with your phone" by itself: a QR code for `/p/CODE` plus a 6-character code, ten minutes, one use, renewed by itself, through `/v1/tv-pair/*`.
+A signed-in phone confirms with one tap; a signed-out phone signs in or up and the TV finishes right after. See [TV-SIGN-IN.md](TV-SIGN-IN.md).
 
 ## 6. Gotchas
 

@@ -1337,6 +1337,8 @@ def main() -> None:
     check(tv_flow.returncode == 0, "TV mode detects TVs, keeps its light defaults switchable, and publishes the TV app files")
     tv_pair = subprocess.run(["node", str(ROOT / "scripts" / "tv_pair_test.mjs")], cwd=ROOT)
     check(tv_pair.returncode == 0, "a phone signs a TV in with a one-use code that expires")
+    tv_short = subprocess.run(["node", str(ROOT / "scripts" / "tv_short_pair_test.mjs")], cwd=ROOT)
+    check(tv_short.returncode == 0, "TV sign-in codes and share links use the short address")
     page_html = (ROOT / "index.html").read_text(encoding="utf-8")
     published = deployed_paths()
     check('src="storage.js"' in page_html and "storage.js" in published and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")

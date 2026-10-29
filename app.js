@@ -2042,13 +2042,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return feed && feed.id ? feed.id : "";
   }
 
-  function sitePermalink(hash) {
-    const clean = hash.startsWith("#") ? hash : "#" + hash;
-    return location.origin + pagesDirectory() + clean;
+  // Links people copy or share use the short address (shared/short-link.js).
+  function shareRoot() {
+    const short = window.ViktorychShort;
+    return short ? short.shareBase(location) : location.origin + pagesDirectory();
   }
 
-  function shareRoot() {
-    return location.origin + pagesDirectory();
+  function sitePermalink(hash) {
+    const clean = hash.startsWith("#") ? hash : "#" + hash;
+    return shareRoot() + clean;
   }
 
   function shareFileToken(post) {
@@ -14950,7 +14952,7 @@ const here = parseRoute();
     let title = fallbackTitle;
     let description = "";
     let image = icon;
-    let url = location.origin + location.pathname;
+    let url = shareRoot();
     if (route && route.name === "profile" && window.ViktorychAccounts && window.ViktorychAccounts.storedAccount) {
       const account = window.ViktorychAccounts.storedAccount(route.handle);
       if (account && account.handle) {

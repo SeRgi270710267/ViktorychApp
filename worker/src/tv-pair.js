@@ -1,12 +1,12 @@
 /* Sign a TV in with a phone. The TV asks for a short code, shows it with a
    QR, and checks back every few seconds. A signed-in phone approves the
    code. The TV's next check gets a fresh session of its own; the record is
-   then deleted, so each code works once. Codes last five minutes.
+   then deleted, so each code works once. Codes last ten minutes.
    Neither the code nor the TV's check-back secret is written to logs, and
    the table keeps only a hash of the secret. No session token is stored. */
 
-export const TV_PAIR_TTL_MS = 5 * 60 * 1000;
-export const TV_PAIR_POLL_S = 5;
+export const TV_PAIR_TTL_MS = 10 * 60 * 1000;
+export const TV_PAIR_POLL_S = 4;
 // No 0/O, 1/I/L: the code is read off a TV across the room.
 export const TV_PAIR_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const WINDOW_MS = 10 * 60 * 1000;
@@ -73,7 +73,7 @@ async function poll(request, env, deps) {
   const secret = String((body && body.poll) || "");
   if (!/^tvp1\.[A-Za-z0-9_-]{30,60}$/.test(secret)) return deps.json(400, { error: "invalid" });
   const pollHash = await deps.sha256Hex(secret);
-  const paced = await deps.rateHit(env, "tvpair-poll:" + pollHash.slice(0, 24), 120, WINDOW_MS);
+  const paced = await deps.rateHit(env, "tvpair-poll:" + pollHash.slice(0, 24), 200, WINDOW_MS);
   if (!paced.ok) return deps.limited(paced);
   const now = Date.now();
   const row = await env.DB.prepare("SELECT code, public_id, expires_at FROM tv_pairs WHERE poll_hash = ?").bind(pollHash).first();

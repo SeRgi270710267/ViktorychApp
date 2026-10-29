@@ -221,3 +221,17 @@
 .tv-land-langs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .tv-land-lang { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #2f3336; background: transparent; color: #71767b; font: 600 14px/1 inherit; font-family: inherit; }
 .tv-land-lang.on { color: #e7e9ea; border-color: #536471; }
+/* A phone that scanned a TV's QR code while signed out. */
+.x-shell.pair-land { display: flex; justify-content: center; align-items: flex-start; min-height: 100%; padding: 32px 20px; box-sizing: border-box; }
+.pair-land-main { width: 100%; max-width: 400px; display: flex; flex-direction: column; animation: pair-land-in 0.3s ease-out both; }
+@keyframes pair-land-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.pair-land-mark { width: 36px; height: 36px; fill: #e7e9ea; display: block; margin-bottom: 28px; }
+.pair-land-ico { width: 56px; height: 56px; color: #e7e9ea; display: block; }
+.pair-land-main h1 { font-size: 31px; line-height: 1.15; font-weight: 800; color: #e7e9ea; margin: 12px 0 4px; }
+.pair-land-code { font: 800 34px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; color: #fff; margin: 8px 0; }
+.pair-land-sub { color: #71767b; font-size: 15px; line-height: 20px; margin: 4px 0 20px; }
+.pair-land-actions { display: flex; flex-direction: column; gap: 12px; }
+.tv-land-btn.quiet { border-color: transparent; color: #71767b; }
+.pair-land-alt { margin: 20px 0 0; font-size: 15px; }
+.pair-land-alt a { color: #1d9bf0; text-decoration: none; }
+@media (prefers-reduced-motion: reduce) { .pair-land-main { animation: none; } }

@@ -1,6 +1,6 @@
 /* TV sign-in with a phone: codes are short and readable, the record is
    used once, it expires, and only a hash of the TV's secret is stored. */
-import { handleTvPair, cleanCode, newCode, TV_PAIR_ALPHABET } from "../worker/src/tv-pair.js";
+import { handleTvPair, cleanCode, newCode, TV_PAIR_ALPHABET, TV_PAIR_TTL_MS } from "../worker/src/tv-pair.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
@@ -101,7 +101,8 @@ p = await handleTvPair(req("/v1/tv-pair/poll", { poll }), env, deps);
 assert.equal(p.status, 410, "the secret works once");
 
 const s2 = await handleTvPair(req("/v1/tv-pair/start"), env, deps);
-clock += 5 * 60 * 1000 + 1;
+assert.equal(TV_PAIR_TTL_MS, 10 * 60 * 1000, "codes last ten minutes");
+clock += TV_PAIR_TTL_MS + 1;
 const late = await handleTvPair(req("/v1/tv-pair/approve", { code: s2.body.code }, "va1.phone"), env, deps);
 assert.equal(late.status, 404, "expired codes cannot be approved");
 p = await handleTvPair(req("/v1/tv-pair/poll", { poll: s2.body.poll }), env, deps);

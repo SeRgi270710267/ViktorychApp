@@ -577,3 +577,10 @@ if (failures.length) {
   process.exit(1);
 }
 console.log("signup flow ok");
+
+// Ride-along (workflow files are not edited): TV sign-in on the short address.
+{
+  const { spawnSync } = await import("node:child_process");
+  const tvShort = spawnSync(process.execPath, [path.join(root, "scripts", "tv_short_pair_test.mjs")], { cwd: root, env: process.env, stdio: "inherit" });
+  if (tvShort.status !== 0) process.exit(1);
+}
