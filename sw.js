@@ -4,7 +4,7 @@ const VERSION = "viktorych-a87-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T01:29:00Z-vk
+// cache-bust: 2026-10-29T01:20:00Z-setai
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -152,6 +152,7 @@ const SHELL_FILES = [
   "./shared/mirror.js",
   "./video-embed.js",
   "./mention-suggest.js",
+  "./settings-assistant.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/x-compose.js",
