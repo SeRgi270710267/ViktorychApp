@@ -25,6 +25,9 @@
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : null), function () {
   var ALLOW = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
 
+  function tr(key) {
+    return (typeof window !== "undefined" && typeof window.t === "function") ? window.t(key) : key;
+  }
   function pageOrigin(opts) {
     var given = opts && opts.origin;
     if (given && String(given).indexOf("http") === 0) return String(given).replace(/\/$/, "");
@@ -414,7 +417,7 @@
     tap.className = "vembed-tap";
     tap.setAttribute("data-site", embed.site || "");
     tap.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span></span>';
-    tap.querySelector("span").textContent = opts.label || "Play";
+    tap.querySelector("span").textContent = opts.label || tr("Play");
     function load(event) {
       if (event) { event.preventDefault(); event.stopPropagation(); }
       if (!tap.isConnected) return;
@@ -526,7 +529,7 @@
       host.classList.remove("is-playing", "is-shown", "is-x-embed");
       host.classList.add("is-failed");
       var href = plan.openUrl || "";
-      var label = opts.linkLabel || "Open on X";
+      var label = opts.linkLabel || tr("Open on X");
       var link = host.querySelector(".vfallback");
       if (link) {
         link.hidden = false;
@@ -562,7 +565,7 @@
         var hidePlay = host.querySelector(":scope > .play");
         if (hidePlay) hidePlay.hidden = true;
         mountTapEmbed(host, { site: "x", url: url, width: 550, height: 560 }, {
-          label: opts.tapLabel || "Play",
+          label: opts.tapLabel || tr("Play"),
           title: opts.title || "Post",
           onLoad: function () { host.classList.remove("is-official-wait"); host.classList.add("is-x-embed"); }
         });
