@@ -6,6 +6,8 @@
    can say what is missing. The answer is kept in memory for five minutes so
    an open panel costs one analytics read per isolate per five minutes. */
 
+import { renderHours } from "./render-warm.js";
+
 export const FREE_LIMITS = {
   workerRequestsDay: 100000,
   d1RowsReadDay: 5000000,
@@ -50,6 +52,8 @@ export function renderHoursCeiling(now) {
   return Math.round((now - start) / 36e5);
 }
 
+/* Render's free allowance, as the backup counted its own awake time. Null
+   until the backup has saved a reading this month. */
 export async function usageReport(env, now) {
   const at = Number(now) || Date.now();
   if (memo && at - memoAt < 5 * 60 * 1000) return memo;
@@ -57,7 +61,8 @@ export async function usageReport(env, now) {
     configured: !!(env.CF_ANALYTICS_TOKEN && env.CF_ACCOUNT_ID),
     at: at,
     limits: FREE_LIMITS,
-    renderHoursCeiling: renderHoursCeiling(at)
+    renderHoursCeiling: renderHoursCeiling(at),
+    renderHours: await renderHours(env, at)
   };
   if (out.configured) {
     const today = day(at);
