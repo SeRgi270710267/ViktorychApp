@@ -577,6 +577,7 @@ SI18n.addPack("en", {
   "Pinned messages": "Pinned messages",
   "Jump to present": "Jump to present",
   "Read-only channel": "Read-only channel",
+  "Servers": "Servers",
   "Loading pinned messages": "Loading pinned messages",
   "No pinned messages": "No pinned messages",
   "Mute channel": "Mute channel",

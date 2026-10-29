@@ -577,6 +577,7 @@ SI18n.addPack("es", {
   "Pinned messages": "Mensajes fijados",
   "Jump to present": "Ir al presente",
   "Read-only channel": "Canal de solo lectura",
+  "Servers": "Servidores",
   "Loading pinned messages": "Cargando mensajes fijados",
   "No pinned messages": "No hay mensajes fijados",
   "Mute channel": "Silenciar canal",
