@@ -534,6 +534,15 @@
       try { window.dispatchEvent(new CustomEvent("viktorych-api-trouble", { detail: { on: now } })); } catch (err) { /* old browser */ }
     }
   }
+  /* Settings alerts watch for rate limits and expired sessions. Only the
+     status code leaves this function, never the path or the body. */
+  function noteApiStatus(code, authed, res) {
+    if (code !== 429 && code !== 401 && !(authed && code >= 200 && code < 300)) return;
+    var wait = 0;
+    try { wait = Number(res && res.headers && res.headers.get && res.headers.get("Retry-After")) * 1000 || 0; } catch (err) { wait = 0; }
+    try { document.dispatchEvent(new CustomEvent("viktorych-api-status", { detail: { status: code, authed: authed, retryAfter: wait } })); } catch (err) { /* alerts are optional */ }
+  }
+
   function api(path, opts) {
     var list = bySpeed(apiOrder());
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
@@ -588,6 +597,7 @@
         // The friends API answers with a word in "status"; keep it before the HTTP code takes the field.
         if (typeof body.status === "string") body.bodyStatus = body.status;
         body.status = code;
+        noteApiStatus(code, !!opts.token, res);
         return body;
       });
     }
