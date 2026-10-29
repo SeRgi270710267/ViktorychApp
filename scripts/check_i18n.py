@@ -30,6 +30,7 @@ UI_FILES = (
     "about-ui.js",
     "usernames-ui.js",
     "gifts-ui.js",
+    "reactions.js",
     "accounts.js",
     "passkeys.js",
     "app-lock.js",

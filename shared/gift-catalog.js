@@ -6,6 +6,12 @@
 export const ART_STATIC = "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.047/png/512/emoji_u{f}.png";
 export const ART_ANIMATED = "https://fonts.gstatic.com/s/e/notoemoji/latest/{cp}/512.webp";
 export const FREE_PER_DAY = 5;
+/* Original illustrated art made for this project, kept in the repo. Others use Noto. */
+export const ART_LOCAL = "./icons/gifts/{id}.webp";
+/* id: hue of the tinted tile behind it. */
+export const ART_HUE = { alien_monster: 265, balloon: 45, bat: 275, bear: 25, beating_heart: 355, black_cat: 265, blow_kiss: 45, bouquet: 335, cake: 345, candle: 345, candy: 25, cat_love: 5, cat_smile: 355, chestnut: 25, chipmunk: 25, comet: 195, crown: 45, crystal_ball: 275, cupid: 25, dog: 35, doughnut: 345, fox: 25, frog: 75, gem: 215, ghost: 335, gift_heart: 345, hamster: 35, heart: 355, heart_eyes: 45, hedgehog: 25, hot_drink: 5, hug: 35, imp: 5, kiss: 355, koala: 165, leaf: 85, lion: 35, lollipop: 345, love_letter: 345, magic_wand: 45, maple: 5, monkey: 25, mushroom: 5, octopus: 345, otter: 25, panda: 75, party_popper: 335, penguin: 355, pie: 35, poodle: 345, present: 5, pumpkin: 25, ring: 35, rocket: 5, rose: 355, seal: 5, skull: 335, sloth: 25, snowman: 355, spark: 335, sparkling_heart: 345, spider: 265, star: 45, sunflower: 45, thanks: 5, trophy: 45, turtle: 75, two_hearts: 355, umbrella: 45, unicorn: 335, vampire: 355, web: 215, witch_broom: 35, xmas_tree: 95, zombie: 75 };
+export const LOCAL_ART = Object.keys(ART_HUE);
+const LOCAL_SET = new Set(LOCAL_ART);
 
 export const GIFTS = [
   { id: "heart", cp: "2764_fe0f", price: 10, cats: ["love"], name: "Heart gift", anim: true },
@@ -239,11 +245,23 @@ export function animatedArt(cp) {
   return ART_ANIMATED.replace("{cp}", String(cp || ""));
 }
 
+export function artHue(id) {
+  const key = String(id || "");
+  if (ART_HUE[key] != null) return ART_HUE[key];
+  let n = 0;
+  for (let i = 0; i < key.length; i += 1) n = (n * 31 + key.charCodeAt(i)) % 360;
+  return n;
+}
+
+export function localArt(id) {
+  return LOCAL_SET.has(String(id || "")) ? ART_LOCAL.replace("{id}", String(id)) : "";
+}
+
 export function emojiChar(cp) {
   try { return String(cp || "").split("_").map((part) => String.fromCodePoint(parseInt(part, 16))).join(""); }
   catch (err) { return ""; }
 }
 
-const api = { GIFTS, SEASONS, CATEGORIES, CHIPS, POPULAR, FREE_PER_DAY, seasonActive, activeSeasons, giftSeason, onShelf, inCategory, giftById, staticArt, animatedArt, emojiChar };
+const api = { GIFTS, SEASONS, CATEGORIES, CHIPS, POPULAR, FREE_PER_DAY, seasonActive, activeSeasons, giftSeason, onShelf, inCategory, giftById, staticArt, animatedArt, localArt, artHue, LOCAL_ART, emojiChar };
 globalThis.GiftCatalog = api;
 try { globalThis.dispatchEvent && globalThis.dispatchEvent(new Event("giftcatalog")); } catch (err) { /* workers have no events here */ }

@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a114-__SW_VERSION__";
+const VERSION = "viktorych-a118-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T09:27:00Z-logo-text
+// cache-bust: 2026-10-29T10:14:00Z-reactions
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -112,11 +112,13 @@ const SHELL_FILES = [
   "./shared/presence.js",
   "./about-ui.js",
   "./gifts-ui.js",
+  "./reactions.js",
   "./shared/gift-catalog.js",
   "./badges.js",
   "./badges.css",
   "./audience-ui.js",
   "./gifts.css",
+  "./reactions.css",
   "./settings-sync.js",
   "./accounts.js",
   "./passkeys.js",
@@ -213,7 +215,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a114-";
+  const prefix = "viktorych-a118-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -626,7 +628,68 @@ async function mirrorAlternate(url, signal) {
   return null;
 }
 
+// When the first origin is silent for this long, the other copy of the
+// same file starts too (DPI throttling stalls instead of failing).
+const MIRROR_HEDGE_MS = 4000;
+
 async function mirrorFetch(request, init) {
+  const api0 = mirrorApi();
+  let hedgeUrl = null;
+  if (api0 && request && request.method === "GET" && !(request.headers && request.headers.get("range"))) {
+    try { hedgeUrl = new URL(request.url); } catch (err) { hedgeUrl = null; }
+    if (hedgeUrl && !mirrorRelative(hedgeUrl)) hedgeUrl = null;
+  }
+  if (hedgeUrl) return mirrorHedged(request, init, hedgeUrl);
+  return mirrorFetchPlain(request, init);
+}
+
+function mirrorHedged(request, init, url) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let primaryDone = false;
+    let altStarted = false;
+    let altDone = false;
+    let primaryRes = null;
+    let primaryErr = null;
+    const finishFallback = () => {
+      if (settled || !primaryDone || (altStarted && !altDone)) return;
+      settled = true;
+      if (primaryRes) resolve(primaryRes);
+      else reject(primaryErr || new Error("mirror"));
+    };
+    const startAlt = () => {
+      if (altStarted || settled) return;
+      altStarted = true;
+      mirrorAlternate(url, request && request.signal).then((alt) => {
+        altDone = true;
+        if (settled) return;
+        if (alt) { settled = true; resolve(alt); return; }
+        finishFallback();
+      }, () => { altDone = true; finishFallback(); });
+    };
+    const timer = setTimeout(startAlt, MIRROR_HEDGE_MS);
+    const api = mirrorApi();
+    (init ? fetch(request, init) : fetch(request)).then((res) => {
+      primaryDone = true;
+      clearTimeout(timer);
+      if (settled) return;
+      if (res && !api.failoverStatus(res.status)) { settled = true; resolve(res); return; }
+      primaryRes = res;
+      startAlt();
+      finishFallback();
+    }, (err) => {
+      primaryDone = true;
+      clearTimeout(timer);
+      if (settled) return;
+      if (err && err.name === "AbortError" && !altStarted) { settled = true; reject(err); return; }
+      primaryErr = new Error("mirror");
+      startAlt();
+      finishFallback();
+    });
+  });
+}
+
+async function mirrorFetchPlain(request, init) {
   let res = null;
   let failed = false;
   try {
@@ -1985,7 +2048,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
