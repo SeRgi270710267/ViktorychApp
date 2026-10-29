@@ -670,19 +670,31 @@
   function swrReset() { swrIndex = null; swrMemo = {}; }
   /* Route snapshots: the last painted HTML of a page, shown at once while its
      module or data loads. Pages that hold private data opt out by not saving. */
+  /* Pages with private data (messages, bookmarks, lists, drafts, notifications)
+     keep their snapshot under a "private-list" key, so the device seal encrypts
+     it and the private wipe removes it with the rest of the private lists. */
+  var PRIVATE_ROUTE = /^#\/(?:messages|chat|bookmarks|lists?|drafts|notifications)(?:[/?]|$)/;
+  function routeKey(hash) {
+    return (PRIVATE_ROUTE.test(String(hash)) ? "private-list:route:" : "route:") + hash;
+  }
+  function wipePrivateRoutes(store) {
+    var index = swrReadIndex(store);
+    Object.keys(index).forEach(function (key) { if (key.indexOf("private-list") >= 0) swrDrop(key, store); });
+    swrWriteIndex(store);
+  }
   function saveRoute(hash, html) {
     if (!hash || !html || html.length > 150000 || /<script/i.test(html)) return false;
     clearTimeout(saveRoute.timers && saveRoute.timers[hash]);
     saveRoute.timers = saveRoute.timers || {};
     saveRoute.timers[hash] = setTimeout(function () {
-      var memo = swrMemo["route:" + hash];
+      var memo = swrMemo[routeKey(hash)];
       if (memo && memo.value === html) return;
-      swrPut("route:" + hash, html);
+      swrPut(routeKey(hash), html);
     }, 400);
     return true;
   }
   function readRoute(hash) {
-    var hit = hash ? swrGet("route:" + hash) : null;
+    var hit = hash ? swrGet(routeKey(hash)) : null;
     return hit && typeof hit.value === "string" ? hit.value : "";
   }
 
@@ -765,6 +777,8 @@
     swr: { get: swrGet, put: swrPut, fresh: swrFresh, drop: swrDrop, clear: swrClear, reset: swrReset, limits: { bytes: SWR_MAX_BYTES, entry: SWR_MAX_ENTRY, entries: SWR_MAX_ENTRIES } },
     saveRoute: saveRoute,
     readRoute: readRoute,
+    routeKey: routeKey,
+    wipePrivate: function (store) { wipePrivateRoutes(store || local()); },
     start: start
   };
 });
