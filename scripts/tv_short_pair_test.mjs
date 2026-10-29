@@ -2,7 +2,10 @@
    point at viktorychapp.pages.dev, a phone confirms, the TV signs itself in,
    and codes that run out renew by themselves, then ask for a new one.
    Static checks always run; the browser part runs when PLAYWRIGHT_CORE is set.
-   SHOTS=dir saves the TV waiting, phone confirm and TV signed-in screens. */
+   SHOTS=dir saves the TV waiting, phone confirm and TV signed-in screens,
+   plus the TV's "account on another device" keyboard and its sent screen.
+   The Worker side of asking an account (notification, Approve, Deny) is
+   checked end to end in signup_flow_test.mjs and tv_pair_test.mjs. */
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -69,8 +72,11 @@ function fakeWorker() {
     seq += 1;
     return code;
   }
+  const asks = [];
   return {
+    asks,
     setTtl(s) { ttl = s; },
+    deny(code) { const rec = pairs.get(code); if (rec) rec.denied = true; },
     handle(route, body) {
       const now = Date.now();
       if (route === "/v1/tv-pair/start") {
@@ -85,10 +91,20 @@ function fakeWorker() {
         rec.approved = true;
         return { status: 200 };
       }
+      if (route === "/v1/tv-pair/ask") {
+        for (const rec of pairs.values()) {
+          if (rec.poll !== body.poll) continue;
+          if (rec.until < now) return { status: 410 };
+          asks.push(String(body.username || ""));
+          return { status: 200, ok: true, sent: true };
+        }
+        return { status: 410 };
+      }
       if (route === "/v1/tv-pair/poll") {
         for (const [code, rec] of pairs) {
           if (rec.poll !== body.poll) continue;
           if (rec.until < now) { pairs.delete(code); return { status: 410 }; }
+          if (rec.denied) { pairs.delete(code); return { status: 403, error: "denied" }; }
           if (!rec.approved) return { status: 202, pending: true };
           pairs.delete(code);
           return { status: 200, token: "tv-session-test", account: { displayName: "Sam Rivera" } };
@@ -223,6 +239,66 @@ async function browserChecks() {
     await tv2.click('[data-tvpair="again"]');
     await tv2.waitForSelector('[data-tvp-phase="code"]', { timeout: 5000 });
     console.log("ok expired codes renew");
+
+    // 5. "Sign in with an account on another device": remote keyboard.
+    const tv3 = await tvPage(browser, base, worker);
+    await tv3.click('[data-tvpair="ask-open"]');
+    await tv3.waitForSelector('[data-tvp-phase="ask"] [data-tvkey]');
+    const startKey = await tv3.evaluate(() => document.activeElement && document.activeElement.getAttribute("data-tvkey"));
+    if (startKey !== "a") fail("keyboard does not take focus for the remote (" + startKey + ")");
+    // Remote only: arrows and OK (a, right, OK types s); up from e is 3.
+    await tv3.keyboard.press("ArrowRight");
+    await tv3.keyboard.press("Enter");
+    for (const ch of "ample") await tv3.click('[data-tvkey="' + ch + '"]');
+    await tv3.keyboard.press("ArrowUp");
+    const upKey = await tv3.evaluate(() => document.activeElement.getAttribute("data-tvkey"));
+    if (upKey !== "3") fail("arrow up from e lands on " + upKey);
+    await tv3.click('[data-tvkey="bksp"]');
+    await tv3.click('[data-tvkey="e"]');
+    const typed = await tv3.evaluate(() => ({ state: window.ViktorychTVPair.state().typed, box: document.querySelector("[data-tvp-name]").value }));
+    if (typed.state !== "sample" || typed.box !== "sample") fail("keyboard typed " + JSON.stringify(typed));
+    if (shots) { await tv3.waitForTimeout(500); await tv3.screenshot({ path: path.join(shots, "tv-ask-account.png") }); }
+    await tv3.click('[data-tvkey="send"]');
+    await tv3.waitForSelector('[data-tvp-phase="asked"]');
+    const sentText = await tv3.textContent('[data-tvp-phase="asked"]');
+    if (!sentText.includes("If that account exists, check your other devices")) fail("TV says " + sentText);
+    if (worker.asks.slice(-1)[0] !== "sample") fail("TV asked for " + worker.asks.slice(-1)[0]);
+    if (shots) { await tv3.waitForTimeout(500); await tv3.screenshot({ path: path.join(shots, "tv-ask-sent.png") }); }
+    // Typed on a real keyboard too, and Enter sends.
+    await tv3.click('[data-tvpair="ask-open"]');
+    await tv3.fill("[data-tvp-name]", "@Other.Name");
+    await tv3.press("[data-tvp-name]", "Enter");
+    await tv3.waitForSelector('[data-tvp-phase="asked"]');
+    if (worker.asks.slice(-1)[0] !== "other.name") fail("native typing sent " + worker.asks.slice(-1)[0]);
+    // Deny on the other device: the TV says so and offers a new code.
+    worker.deny(await tv3.evaluate(() => window.ViktorychTVPair.state().code));
+    await tv3.waitForSelector('[data-tvp-phase="denied"] [data-tvpair="again"]', { timeout: 8000 });
+    console.log("ok tv asks an account on another device");
+
+    // 6. Desktop Link a TV: a big box; a pasted code with spaces and a dash goes on by itself.
+    const tv4 = await tvPage(browser, base, worker);
+    const code4 = await tv4.evaluate(() => window.ViktorychTVPair.state().code);
+    const desk = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await desk.exposeFunction("fakeWorker", (route, body) => worker.handle(route, body));
+    await desk.goto(base + "/__phone", { waitUntil: "load" });
+    await desk.evaluate(() => {
+      window.__signedIn = true;
+      var route = { query: new URLSearchParams("") };
+      function draw() { document.getElementById("m").innerHTML = window.ViktorychTVPair.linkPage(route); }
+      window.addEventListener("vklazy", draw);
+      draw();
+    });
+    const font = await desk.evaluate(() => parseFloat(getComputedStyle(document.querySelector("#tvp-code")).fontSize));
+    if (font < 40) fail("desktop code box is small: " + font);
+    await desk.evaluate((text) => {
+      const input = document.querySelector("#tvp-code");
+      const data = new DataTransfer();
+      data.setData("text/plain", text);
+      input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    }, " " + code4.slice(0, 3).toLowerCase() + "-" + code4.slice(3) + " ");
+    await desk.waitForSelector('[data-tvp-phone="done"]', { timeout: 5000 });
+    await tv4.waitForSelector('[data-tvp-phase="done"]', { timeout: 8000 });
+    console.log("ok desktop paste signs the TV in");
   } finally {
     await browser.close();
     server.close();

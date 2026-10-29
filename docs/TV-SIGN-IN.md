@@ -46,6 +46,30 @@ The Android TV app (`?src=tvapp`) lands straight on the same screen.
 - Rate limits: start 20 per IP, poll 200 per secret, approve 10 per account, each per 10 minutes.
 - The phone page warns the user to link only a TV they can see. Removing the TV in My devices signs it out.
 
+## Sign in with an account on another device
+
+For when there is no phone camera handy. The code screen has **Sign in with an account on another device**.
+
+1. The TV shows a username box and an on-screen keyboard made for the remote (arrows and OK; Back, Clear and **Send request**). A real keyboard works too.
+2. The TV sends `POST /v1/tv-pair/ask` with its check-back secret and the username. The reply is **always the same**, whether the account exists or not.
+   The TV always says "If that account exists, check your other devices" and keeps checking back as before.
+3. After the reply, the Worker looks the name up. If the account exists, it gets an **Approve sign-in on TV?** notification (kind `tv_signin`):
+   in the in-app list on every signed-in device, plus a push if push is on (the push text never names anyone).
+   The notification shows the TV's code, a warning to approve only a TV in front of you, and **Approve** / **Deny**.
+4. **Approve** uses the normal `POST /v1/tv-pair/approve`, so the TV finishes signing in as usual.
+   **Deny** (`POST /v1/tv-pair/deny`, only the account that was asked) stops the code; the TV shows "Sign-in was denied" and offers a new code.
+5. The request lives in `tv_pair_asks` (migration 0085) and ends with the code: it expires at the same time and is deleted when the code is used, denied or expired.
+   The buttons in the notification disappear after the code expires or after an answer.
+
+Limits: 3 asks per TV code, 3 per username and 10 per IP, each per 10 minutes. Asking another username replaces the earlier request.
+Security note: an approval prompt can be abused by someone who wants a person to approve their TV. That's why the prompt shows the code
+and the warning, Deny is one tap, and the limits above apply. The code is stored in the notification so it can be compared.
+
+## Entering the code on a computer
+
+Settings → Link a TV and `viktorychapp.pages.dev/tv` take the code at desktop size: a big box, paste works (spaces and dashes are dropped),
+and it is sent by itself as soon as all 6 characters are in.
+
 ## Keep it one button away
 
 On TVs that can't take the Android TV app (Samsung, LG, Fire TV and others), the TV home shows a dismissible card after the first open.
@@ -53,4 +77,5 @@ It explains how to bookmark the site in that TV's own browser. Android TVs keep 
 
 Code: `shared/short-link.js`, `_redirects`, `404.html`, `tv-pair.js` / `tv-pair.css` (lazy module `tvpair`), `vendor/qrcode-1.4.4.js`
 (qrcode-generator, MIT, vendored, no CDN), `worker/src/tv-pair.js`.
-Tests: `scripts/tv_pair_test.mjs` (Worker), `scripts/tv_short_pair_test.mjs` (short links, TV ↔ phone in a browser, expiry and renewal; run by `selftest.py`).
+Tests: `scripts/tv_pair_test.mjs` (Worker), `scripts/tv_short_pair_test.mjs` (short links, TV ↔ phone in a browser, expiry and renewal, the remote keyboard ask flow, desktop paste; run by `selftest.py`),
+`scripts/signup_flow_test.mjs` (real Worker: ask, Approve/Deny from the notification, desktop Link a TV and `/tv` paste).
