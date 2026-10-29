@@ -160,12 +160,21 @@ function activityNow() {
   return "active";
 }
 
+const SHARED_BEAT = "viktorych-presence-beat";
+function sharedBeatFresh() {
+  try { return Date.now() - Number(localStorage.getItem(SHARED_BEAT) || 0) < HEARTBEAT_MS - 5000; }
+  catch (err) { return false; }
+}
+
 function beat(force) {
   if (!token() || !isAccountId(selfId())) return;
   const activity = activityNow();
   if (!force && activity === lastActivity && Date.now() - lastBeatAt < HEARTBEAT_MS) return;
+  // With several tabs open, one routine heartbeat per minute covers them all.
+  if (!force && activity === "active" && sharedBeatFresh()) { lastActivity = activity; lastBeatAt = Date.now(); return; }
   lastActivity = activity;
   lastBeatAt = Date.now();
+  if (activity === "active") { try { localStorage.setItem(SHARED_BEAT, String(lastBeatAt)); } catch (err) { /* this tab beats on its own */ } }
   call("/v1/presence", { method: "POST", body: { activity: activity } }).then(function (body) {
     if (!body || body.status !== 200) return;
     applyMine(body);
