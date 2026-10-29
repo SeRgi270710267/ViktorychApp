@@ -3638,5 +3638,15 @@ SI18n.addPack("ru", {
   "SMSPool API key": "API-ключ SMSPool",
   "Disconnect SMSPool": "Отключить SMSPool",
   "SMSPool is connected": "SMSPool подключён",
-  "Connect SMSPool": "Подключить SMSPool"
+  "Connect SMSPool": "Подключить SMSPool",
+  "In Inbox": "Во «Входящих»",
+  "Inbox sections": "Разделы «Входящих»",
+  "Keep every section inside Inbox, or give one its own page with an icon in the bottom bar and sidebar. Pinned sections come first.": "Держите все разделы во «Входящих» или вынесите любой на отдельную страницу со значком в нижней панели и боковом меню. Закреплённые разделы идут первыми.",
+  "Keep sections inside Inbox or give them their own page.": "Разделы во «Входящих» или на отдельных страницах.",
+  "Keep these choices on this device only": "Хранить эти настройки только на этом устройстве",
+  "Merge back into Inbox": "Вернуть во «Входящие»",
+  "Merge everything back into Inbox": "Вернуть всё во «Входящие»",
+  "Open as its own page": "Открыть отдельной страницей",
+  "Own page": "Отдельная страница",
+  "Sections with their own page are not shown here.": "Разделы с отдельной страницей здесь не показываются."
 });

@@ -3638,5 +3638,15 @@ SI18n.addPack("es", {
   "SMSPool API key": "Clave de API de SMSPool",
   "Disconnect SMSPool": "Desconectar SMSPool",
   "SMSPool is connected": "SMSPool está conectado",
-  "Connect SMSPool": "Conectar SMSPool"
+  "Connect SMSPool": "Conectar SMSPool",
+  "In Inbox": "En Bandeja de entrada",
+  "Inbox sections": "Secciones de Bandeja de entrada",
+  "Keep every section inside Inbox, or give one its own page with an icon in the bottom bar and sidebar. Pinned sections come first.": "Mantén todas las secciones dentro de Bandeja de entrada o dale a una su propia página con un icono en la barra inferior y en la barra lateral. Las secciones fijadas van primero.",
+  "Keep sections inside Inbox or give them their own page.": "Secciones dentro de Bandeja de entrada o en su propia página.",
+  "Keep these choices on this device only": "Guardar estas opciones solo en este dispositivo",
+  "Merge back into Inbox": "Volver a Bandeja de entrada",
+  "Merge everything back into Inbox": "Volver todo a Bandeja de entrada",
+  "Open as its own page": "Abrir como página propia",
+  "Own page": "Página propia",
+  "Sections with their own page are not shown here.": "Las secciones con página propia no se muestran aquí."
 });

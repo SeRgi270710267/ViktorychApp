@@ -3632,5 +3632,15 @@ SI18n.addPack("hi", {
   "SMSPool API key": "SMSPool API कुंजी",
   "Disconnect SMSPool": "SMSPool डिस्कनेक्ट करें",
   "SMSPool is connected": "SMSPool जुड़ा है",
-  "Connect SMSPool": "SMSPool जोड़ें"
+  "Connect SMSPool": "SMSPool जोड़ें",
+  "In Inbox": "इनबॉक्स में",
+  "Inbox sections": "इनबॉक्स के सेक्शन",
+  "Keep every section inside Inbox, or give one its own page with an icon in the bottom bar and sidebar. Pinned sections come first.": "हर सेक्शन को इनबॉक्स में रखें, या किसी को नीचे की बार और साइडबार में आइकन के साथ उसका अपना पेज दें। पिन किए गए सेक्शन सबसे पहले आते हैं।",
+  "Keep sections inside Inbox or give them their own page.": "सेक्शन इनबॉक्स में रखें या उन्हें अपना पेज दें।",
+  "Keep these choices on this device only": "ये विकल्प सिर्फ़ इसी डिवाइस पर रखें",
+  "Merge back into Inbox": "वापस इनबॉक्स में मिलाएँ",
+  "Merge everything back into Inbox": "सब कुछ वापस इनबॉक्स में मिलाएँ",
+  "Open as its own page": "अलग पेज के रूप में खोलें",
+  "Own page": "अलग पेज",
+  "Sections with their own page are not shown here.": "जिन सेक्शन का अपना पेज है, वे यहाँ नहीं दिखते।"
 });

@@ -273,3 +273,9 @@ inbox-mail.js|Outlook
 inbox-mail.js|Mail.ru
 inbox-mail.js|ViktorychApp codes
 inbox-mail.js|from:(simplelogin.co OR simplelogin.io) OR to:(@{alias-domain})
+inbox.js|Servers
+inbox.js|Mail
+inbox.js|SMS codes
+app.js|Servers
+app.js|Mail
+app.js|SMS codes
