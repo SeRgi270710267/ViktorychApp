@@ -2533,7 +2533,7 @@ SI18n.addPack("en", {
   "Show controls": "Show controls",
   "Turn your phone sideways to play": "Turn your phone sideways to play",
   "Play full screen": "Play full screen",
-  "Controller connected. Tap the game, then press any button.": "Controller connected. Tap the game, then press any button.",
+  "Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse.": "Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse.",
   "The joystick and buttons appear once you join a match. Tap menus directly.": "The joystick and buttons appear once you join a match. Tap menus directly.",
   "Playing {game}": "Playing {game}",
   "{name} invited you to play {game}": "{name} invited you to play {game}",
