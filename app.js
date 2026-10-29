@@ -18602,6 +18602,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       else document.title = withUnreadTitle(routeTitle(route, liveName, personName, discordTitle));
       setProfileShareMeta(route);
       window.scrollTo(0, y);
+      if (STATE.holdY != null && y > 4 && routeChanged) holdRestore(nextKey, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
           if (gen !== STATE.renderGen) return;
@@ -21965,6 +21966,43 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     matchMedia("(max-width: 699px)").addEventListener("change", () => refreshMediaFrames());
   } catch (err) { /* older webviews keep the ratio from the last render */ }
   let routing = false;
+  /* Going back to a page whose content arrives a moment after the route
+     paints (a module or cached data still loading) would clamp the saved
+     scroll to the short placeholder. Keep the target for a few seconds and
+     apply it once the page is tall enough, unless the reader scrolls first. */
+  var restoreTarget = null;
+  var restoreWatch = null;
+  function stopRestore() {
+    restoreTarget = null;
+    if (restoreWatch) { restoreWatch.disconnect(); restoreWatch = null; }
+  }
+  function tryRestore() {
+    const t = restoreTarget;
+    if (!t) return;
+    if (Date.now() > t.until || routeScrollKey() !== t.key) { stopRestore(); return; }
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    if (max < t.y - 4) return;
+    stopRestore();
+    window.scrollTo(0, t.y);
+    SCROLLS[t.key] = t.y;
+  }
+  function holdRestore(key, y) {
+    stopRestore();
+    if (!(y > 4) || Math.abs(pageY() - y) <= 4) return;
+    /* Only when the page was too short to reach it; a home anchor may
+       have moved the position on purpose. */
+    if (document.documentElement.scrollHeight - window.innerHeight >= y - 4) return;
+    restoreTarget = { key: key, y: y, until: Date.now() + 5000 };
+    const app = document.getElementById("app");
+    if (window.ResizeObserver && app) {
+      restoreWatch = new ResizeObserver(() => tryRestore());
+      restoreWatch.observe(app);
+    }
+    setTimeout(stopRestore, 5100);
+  }
+  ["wheel", "touchstart", "keydown", "mousedown"].forEach((type) => {
+    window.addEventListener(type, () => { if (restoreTarget) stopRestore(); }, { passive: true, capture: true });
+  });
   let scrollFreeze = false;
   window.addEventListener("scroll", () => {
     if (pageY() <= 4) STATE.snapTop = false;
@@ -22076,6 +22114,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       y: y,
       done: () => {
         if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
+        if (y > 0 && key !== leavingKey && !restoreTarget) holdRestore(key, y);
         routing = false;
         scrollFreeze = false;
       }
