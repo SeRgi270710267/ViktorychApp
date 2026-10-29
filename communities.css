@@ -39,7 +39,7 @@
 
 /* Mirrored forum marker, so a Discourse community is not mistaken for a subreddit */
 .cm-type-badge { display: inline-flex; align-items: center; padding: 1px 7px; border: 1px solid var(--line, #38444d); border-radius: 9999px; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); line-height: 1.6; flex: none; }
-.cm-forum-link { color: var(--blue, #1d9bf0); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.cm-forum-link { color: var(--link, var(--blue, #1d9bf0)); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
 .cm-forum-link:hover { text-decoration: underline; }
 .cm-forum-link svg { width: 14px; height: 14px; }
 .cm-hero-title .cm-type-badge { font-size: 11px; margin-left: 8px; vertical-align: middle; }
@@ -50,7 +50,7 @@
 .cm-btn-join { display: inline-flex; align-items: center; justify-content: center; padding: 7px 18px; border-radius: 9999px; font-size: 14px; font-weight: 700; border: 1px solid transparent; background: var(--fill, #eff3f4); color: var(--on-fill, #0f1419); cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; font-family: var(--font); flex: none; }
 .cm-btn-join:hover { background: var(--fill-hover, #d7dbdc); }
 .cm-btn-join.joined { background: transparent; border-color: var(--line, rgba(255,255,255,.2)); color: var(--text, #e7e9ea); }
-.cm-btn-join.joined:hover { border-color: rgba(244,33,46,.4); color: var(--red, #f4212e); background: rgba(244,33,46,.1); }
+.cm-btn-join.joined:hover { border-color: rgba(244,33,46,.4); color: var(--red-text, var(--red, #f4212e)); background: rgba(244,33,46,.1); }
 
 /* Facepile avatars preview */
 .cm-facepile-wrap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
@@ -131,11 +131,11 @@
 .cm-reddit-author { color: var(--muted); text-decoration: none; }
 .cm-reddit-author:hover { text-decoration: underline; }
 .cm-reddit-time { color: var(--muted); }
-.cm-reddit-flair { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: color-mix(in srgb, var(--blue, #1d9bf0) 15%, transparent); color: var(--blue, #1d9bf0); border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); }
+.cm-reddit-flair { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: color-mix(in srgb, var(--blue, #1d9bf0) 15%, transparent); color: var(--link, var(--blue, #1d9bf0)); border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); }
 
 /* Reddit Post Title */
 .cm-reddit-title { font-size: 17px; font-weight: 700; line-height: 1.35; color: var(--text); margin: 0 0 6px; text-decoration: none; display: block; }
-.cm-reddit-title:hover { color: var(--blue, #1d9bf0); }
+.cm-reddit-title:hover { color: var(--link, var(--blue, #1d9bf0)); }
 
 /* Reddit Post Text */
 .cm-reddit-text { font-size: 14px; color: var(--text); line-height: 1.5; margin: 0 0 8px; white-space: pre-wrap; word-break: break-word; }
@@ -179,14 +179,14 @@
 .cm-app-byline { display: flex; align-items: center; gap: 6px; font-size: 14px; margin-bottom: 4px; flex-wrap: wrap; }
 .cm-app-name { font-weight: 700; color: var(--text); }
 .cm-app-handle { color: var(--muted); }
-.cm-app-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: color-mix(in srgb, var(--blue) 12%, transparent); border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent); color: var(--blue); }
+.cm-app-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: color-mix(in srgb, var(--blue) 12%, transparent); border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent); color: var(--link, var(--blue)); }
 .cm-app-text { font-size: 15px; color: var(--text); line-height: 1.45; white-space: pre-wrap; word-break: break-word; text-decoration: none; display: block; margin-bottom: 8px; }
 .cm-app-actions { display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 13px; }
 .cm-app-act { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; color: inherit; font-size: 13px; font-family: var(--font); cursor: pointer; text-decoration: none; padding: 4px; border-radius: 9999px; transition: color .15s ease; }
 .cm-app-act svg { width: 16px; height: 16px; fill: currentColor; }
-.cm-app-act:hover { color: var(--blue); }
+.cm-app-act:hover { color: var(--link, var(--blue)); }
 .cm-app-act.like:hover, .cm-app-act.like.on { color: var(--pink, #f91880); }
-.cm-app-act.del:hover { color: var(--red, #f4212e); }
+.cm-app-act.del:hover { color: var(--red-text, var(--red, #f4212e)); }
 
 /* Thread Detail View & Reddit Nested Comments */
 .cm-thread-focus { border-bottom: 1px solid var(--line); }
@@ -291,7 +291,7 @@
 .cm-cover-blank img, .cm-cover-blank svg { width: 36px; height: 36px; border-radius: 50%; opacity: .9; }
 .cm-cover::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,.72) 100%); }
 .cm-cover-name { position: absolute; left: 10px; right: 10px; bottom: 8px; z-index: 1; font-size: 15px; line-height: 20px; font-weight: 800; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
-.cm-see-all { flex: none; align-self: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--blue, #1d9bf0); background: transparent; color: var(--blue, #1d9bf0); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; margin: 0 4px; }
+.cm-see-all { flex: none; align-self: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--blue, #1d9bf0); background: transparent; color: var(--link, var(--blue, #1d9bf0)); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; margin: 0 4px; }
 .cm-see-all:hover { background: color-mix(in srgb, var(--blue, #1d9bf0) 12%, transparent); }
 .cm-see-all svg { width: 20px; height: 20px; }
 .cm-rec { flex: none; width: 200px; color: inherit; text-decoration: none; scroll-snap-align: start; }
@@ -327,7 +327,7 @@
 .cm-x-acts { display: flex; align-items: center; justify-content: space-between; max-width: 425px; height: 36px; margin-top: 4px; color: var(--muted); }
 .cm-x-act { display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 6px; margin-left: -6px; border: 0; background: transparent; color: inherit; font-size: 13px; text-decoration: none; cursor: pointer; border-radius: 999px; }
 .cm-x-act svg { width: 18px; height: 18px; }
-.cm-x-act:hover { color: var(--blue, #1d9bf0); }
+.cm-x-act:hover { color: var(--link, var(--blue, #1d9bf0)); }
 .cm-x-acts .cm-mobile-vote { display: inline-flex; align-items: center; }
 a.cm-card-cover { position: relative; overflow: hidden; background: linear-gradient(135deg, hsl(var(--tone, 210) 45% 26%), hsl(calc(var(--tone, 210) + 40) 45% 14%)); }
 a.cm-card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -339,7 +339,7 @@ a.cm-card-cover img { width: 100%; height: 100%; object-fit: cover; display: blo
 
 /* Custom tabs: a "+" at the end of the tab row, a tools row on each tab,
    the tab editor and the "Add to tab" sheet. */
-.cm-hub-tabs .cm-tab-add { flex: none; align-self: center; width: 36px; height: 36px; margin: 0 8px; border: 0; border-radius: 50%; background: transparent; color: var(--blue, #1d9bf0); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.cm-hub-tabs .cm-tab-add { flex: none; align-self: center; width: 36px; height: 36px; margin: 0 8px; border: 0; border-radius: 50%; background: transparent; color: var(--link, var(--blue, #1d9bf0)); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .cm-hub-tabs .cm-tab-add:hover { background: var(--hover); }
 .cm-hub-tabs .cm-tab-add svg { width: 20px; height: 20px; }
 .cm-hub-tabs.has-custom .tab { flex: 1 0 auto; }
@@ -347,7 +347,7 @@ a.cm-card-cover img { width: 100%; height: 100%; object-fit: cover; display: blo
 .cm-tab-tools .cm-btn-join { gap: 6px; padding: 6px 14px; text-decoration: none; background: transparent; color: var(--text); border-color: var(--line); }
 .cm-tab-tools .cm-btn-join:hover { background: var(--hover); }
 .cm-tab-tools .cm-btn-join svg { width: 16px; height: 16px; fill: currentColor; }
-.cm-tab-tools .cm-tab-pin.on { color: var(--blue, #1d9bf0); border-color: var(--blue, #1d9bf0); }
+.cm-tab-tools .cm-tab-pin.on { color: var(--link, var(--blue, #1d9bf0)); border-color: var(--blue, #1d9bf0); }
 .cm-tab-count { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; }
 .cm-tab-empty .cm-tab-cta { margin-top: 12px; }
 .cm-layer { position: relative; z-index: 1000; }
@@ -384,12 +384,12 @@ a.cm-card-cover img { width: 100%; height: 100%; object-fit: cover; display: blo
 .cm-src-copy small { color: var(--muted); font-size: 13px; }
 .cm-src-btn { flex: none; min-height: 32px; padding: 0 16px; border-radius: 9999px; border: 1px solid transparent; background: var(--text); color: var(--bg); font-weight: 700; font-size: 14px; cursor: pointer; }
 .cm-src-btn.on { background: transparent; color: var(--text); border-color: var(--line); }
-.cm-src-btn.on:hover { color: var(--red, #f4212e); border-color: rgba(244,33,46,.4); }
+.cm-src-btn.on:hover { color: var(--red-text, var(--red, #f4212e)); border-color: rgba(244,33,46,.4); }
 .cm-order-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .cm-order-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
 .cm-order-row .cm-icon-btn { width: 32px; height: 32px; }
 .cm-order-row .cm-icon-btn:disabled { opacity: .35; cursor: default; }
-.cm-ed-delete { display: block; width: 100%; margin-top: 20px; min-height: 40px; border-radius: 9999px; border: 1px solid rgba(244,33,46,.5); background: transparent; color: var(--red, #f4212e); font-weight: 700; cursor: pointer; }
+.cm-ed-delete { display: block; width: 100%; margin-top: 20px; min-height: 40px; border-radius: 9999px; border: 1px solid rgba(244,33,46,.5); background: transparent; color: var(--red-text, var(--red, #f4212e)); font-weight: 700; cursor: pointer; }
 .cm-assign-back { align-items: flex-end; padding: 0; }
 .cm-assign { max-width: 480px; border-radius: 16px 16px 0 0; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
 .cm-assign-head { display: flex; flex-direction: column; padding: 8px 16px 10px; }
@@ -399,9 +399,9 @@ a.cm-card-cover img { width: 100%; height: 100%; object-fit: cover; display: blo
 .cm-assign-row { width: 100%; min-height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; }
 .cm-assign-row:hover { background: var(--hover); }
 .cm-assign-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cm-assign-mark { width: 20px; height: 20px; color: var(--blue, #1d9bf0); }
+.cm-assign-mark { width: 20px; height: 20px; color: var(--link, var(--blue, #1d9bf0)); }
 .cm-assign-mark svg, .cm-assign-new svg { width: 20px; height: 20px; fill: currentColor; }
-.cm-assign-new { color: var(--blue, #1d9bf0); }
+.cm-assign-new { color: var(--link, var(--blue, #1d9bf0)); }
 @media (min-width: 700px) {
   .cm-assign-back { align-items: center; padding: 16px; }
   .cm-assign { border-radius: 16px; }
