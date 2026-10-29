@@ -22044,9 +22044,36 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
         routing = false;
         scrollFreeze = false;
+        if (y > 0) restoreWhenTall(key, y);
       }
     });
   });
+
+  /* A route that paints its cached content a moment after the shell is too
+     short for the saved position at first, so the browser clamps it to the
+     top. Keep trying for a few seconds as the page grows, until the user
+     scrolls or touches the page themselves. */
+  function restoreWhenTall(key, y) {
+    if (Math.abs(window.scrollY - y) <= 4) return;
+    let stop = false;
+    const quit = () => { stop = true; };
+    const opts = { passive: true, once: true, capture: true };
+    ["wheel", "touchstart", "keydown", "pointerdown"].forEach((name) => window.addEventListener(name, quit, opts));
+    const started = Date.now();
+    const tick = () => {
+      if (stop || routeScrollKey() !== key || Date.now() - started > 4000) return;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (max >= y - 4) {
+        if (Math.abs(window.scrollY - y) > 4) {
+          window.scrollTo(0, y);
+          if (STATE.scrollKey === key) SCROLLS[key] = window.scrollY;
+        }
+        return;
+      }
+      setTimeout(tick, 100);
+    };
+    tick();
+  }
 
   function resolvedTheme() {
     const mode = (STATE.settings && STATE.settings.appearance) || "lightsout";
