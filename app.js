@@ -25980,6 +25980,30 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.ViktorychAccounts.writeHistory = writeHistory;
     window.ViktorychAccounts.profilePostsHtml = profilePostsHtml;
   }
+  /* First-time setup (onboarding.js) reads suggestions and changes a few
+     settings through this small surface. */
+  window.ViktorychSetup = {
+    ready: () => !!(STATE.data && Array.isArray(STATE.data.feeds) && STATE.data.feeds.length),
+    suggestions: (n) => followSuggestions().slice(0, n || 8).map((f) => ({
+      id: f.id,
+      name: f.name || "",
+      handle: f.handle || "",
+      avatar: /^https:\/\//.test(String(f.avatar || "")) ? f.avatar : "",
+      platform: f.platform || ""
+    })),
+    isFollowed: (id) => isFollowed(id),
+    follow: (id, on) => applyFollow([id], !!on),
+    get: (key) => (STATE.settings ? STATE.settings[key] : undefined),
+    set: (patch) => {
+      if (!STATE.settings || !patch || typeof patch !== "object") return;
+      Object.assign(STATE.settings, patch);
+      saveSettings();
+      applyTheme();
+      render();
+    },
+    skipWelcome: () => writeWelcome({ step: 2, done: true }),
+    done: () => render()
+  };
   window.ViktorychFaces = {
     picture: function (src, accountFace) { return faceChoice("picture", src, accountFace); },
     banner: function (src, accountFace) { return faceChoice("banner", src, accountFace); }
