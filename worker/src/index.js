@@ -71,6 +71,7 @@ import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
 import { STORY_BAR_SCHEMA, handleStoryBar } from "./story-bar.js";
 import { HIGHLIGHT_SCHEMA, handleHighlights } from "./highlights.js";
 import { parseHeader as parseBlockHeader, filterDoc as filterBlocked } from "../../shared/blocklist.js";
+import { passiveMediaType } from "./media-type.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -2538,8 +2539,11 @@ async function handlePublicMediaProxy(request, env, url) {
     return json(400, { error: "bad_url" });
   }
   const respHeaders = new Headers();
-  const ctype = upstream.headers.get("content-type") || "image/jpeg";
+  const ctype = passiveMediaType(upstream.headers.get("content-type") || "image/jpeg");
   respHeaders.set("content-type", ctype);
+  // Hosts such as the Discord CDN serve user uploads. Even if one returns
+  // HTML or SVG, it must never run as a page on this Worker's origin.
+  respHeaders.set("content-security-policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox");
   const length = upstream.headers.get("content-length");
   if (length) respHeaders.set("content-length", length);
   const contentRange = upstream.headers.get("content-range");
