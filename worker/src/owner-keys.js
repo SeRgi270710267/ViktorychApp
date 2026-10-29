@@ -479,6 +479,20 @@ async function listKeys(env, ownerId) {
   return { slots: slots, alerts: alertsFor(slots) };
 }
 
+/* Expired or signed-out keys for the watchdog. Labels and statuses only. */
+export async function ownerKeyAlerts(env) {
+  if (!env || !env.DB) return [];
+  try {
+    const ownerId = await ownerIdOf(env);
+    if (!ownerId) return [];
+    const listed = await listKeys(env, ownerId);
+    return (listed.alerts || []).filter((row) => row.status === "expired" || row.status === "needs_attention")
+      .map((row) => ({ slot: row.slot, label: row.label, status: row.status }));
+  } catch (err) {
+    return [];
+  }
+}
+
 async function slotView(env, ownerId, spec) {
   const listed = await listKeys(env, ownerId);
   return listed.slots.find((slot) => slot.id === spec.id) || publicSlot(spec, [], null, Date.now());

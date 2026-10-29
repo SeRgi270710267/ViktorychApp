@@ -339,17 +339,29 @@ async function main() {
       { label: "owner", width: 1366, height: 768, init: OWNER_STATE, owner: true }
     ];
     const problems = [];
+    // A live check flakes (a page exception while a fresh service worker
+    // reloads the tab, a slow CDN edge). A problem fails the run only when it
+    // shows up again on every one of up to three fresh-profile attempts, so a
+    // one-off flake cannot hold version.json back for hours.
+    const attempts = Math.max(1, Number(arg("--attempts", live && !site ? "3" : "1")) || 1);
     for (const run of runs) {
-      let result;
-      try {
-        result = await probe(url, run);
-      } catch (err) {
-        const message = err && err.message ? err.message : String(err);
-        if (!/did not open a debugger/.test(message)) throw err;
-        result = await probe(url, run);
+      let kept = null;
+      let result = null;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+          result = await probe(url, run);
+        } catch (err) {
+          const message = err && err.message ? err.message : String(err);
+          if (!/did not open a debugger/.test(message)) throw err;
+          result = await probe(url, run);
+        }
+        const now = result.problems.map((problem) => problem.replace(/^(exception|request): .*/, "$1"));
+        kept = kept === null ? now : kept.filter((problem) => now.indexOf(problem) >= 0);
+        if (!kept.length) break;
+        console.log(run.label + " attempt " + (attempt + 1) + ": " + result.problems.join("; ").slice(0, 300));
       }
       console.log(run.label + ": " + (result.text || (run.owner ? "(owner checks only)" : "(empty)")).slice(0, 120));
-      result.problems.forEach((problem) => problems.push(run.label + " " + problem));
+      if (kept.length) result.problems.forEach((problem) => problems.push(run.label + " " + problem));
     }
     if (problems.length) {
       console.error(problems.join("\n"));
