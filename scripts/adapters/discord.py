@@ -53,7 +53,9 @@ INVITE_PERMISSIONS = (1 << 10) | (1 << 16)
 SNOWFLAKE = re.compile(r"^\d{1,22}$")
 INVITE_CODE = re.compile(r"^[A-Za-z0-9-]{2,32}$")
 PUBLISHED = re.compile(r"discord/(?:index|state|messages/\d{1,22}|pins/\d{1,22})\.json$")
-USER_GET = re.compile(r"^/api/v10/(?:channels/\d{1,22}(?:/messages|/pins)?|guilds/\d{1,22}(?:/preview)?)$")
+# Read-only GETs a user token may send. users/@me/guilds and a guild's
+# channel list feed the in-app server picker (scripts/discord_picks.py).
+USER_GET = re.compile(r"^/api/v10/(?:channels/\d{1,22}(?:/messages|/pins)?|guilds/\d{1,22}(?:/preview|/channels)?|users/@me/guilds)$")
 CHANNEL_IN_PATH = re.compile(r"/channels/(\d{1,22})(?:/|$)")
 PINS_IN_PATH = re.compile(r"/channels/\d{1,22}/pins$")
 GUILD_READ = re.compile(r"/guilds/\d{1,22}(?:/preview)?$")
