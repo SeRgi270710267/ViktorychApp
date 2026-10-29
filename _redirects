@@ -1,0 +1,10 @@
+# Short paths on the Cloudflare Pages mirror (viktorychapp.pages.dev).
+# GitHub Pages ignores this file; 404.html maps the same paths there.
+# /tv and /tv/ are the real tv/ folder (Pages adds the slash itself).
+/go          /                 302
+/go/         /                 302
+/join        /?join=1          302
+/join/       /?join=1          302
+/p/:code     /?pair=:code      302
+/p/:code/    /?pair=:code      302
+/pair/:code  /?pair=:code      302
