@@ -185,7 +185,7 @@
     for (var i = 0; i < list.length; i++) {
       var row = list[i];
       if (!row || !row.url) continue;
-      if (row.cacheName === PINNED_CACHE) {
+      if (row.cacheName === PINNED_CACHE || row.category === "drafts") {
         pinned.push(row);
         continue;
       }
@@ -674,82 +674,235 @@
     return res.clone().blob().then(function (blob) { return blob.size || 0; }).catch(function () { return byteLengthOf(res); });
   }
 
-  function measureNow() {
-    var dbPromise = openDb();
-    return dbPromise.then(function (db) {
-      return listFiles(db).then(function (prev) {
-        var known = {};
-        prev.forEach(function (row) { if (row && row.url) known[row.url] = row; });
-        if (typeof caches === "undefined") {
-          return listDocs(db).then(function (docs) { return { db: db, rows: mergeDocRows(prev.slice(), docs) }; });
-        }
-        return caches.keys().then(function (names) {
-          var rows = [];
-          var chain = Promise.resolve();
-          names.forEach(function (name) {
-            if (/^shell-/.test(name)) return;
-            chain = chain.then(function () {
-              return caches.open(name).then(function (cache) { return cache.keys().then(function (reqs) { return { cache: cache, reqs: reqs, name: name }; }); });
-            }).then(function (opened) {
-              var inner = Promise.resolve();
-              opened.reqs.forEach(function (req) {
-                inner = inner.then(function () {
-                  var cat = categoryOf(req.url);
-                  if (!cat) return opened.cache.delete(req);
-                  return opened.cache.match(req).then(function (res) { return responseBytes(res); }).then(function (bytes) {
-                    var old = known[req.url];
-                    var now = Date.now();
-                    rows.push({
-                      url: req.url,
-                      bytes: bytes,
-                      category: cat,
-                      cacheName: opened.name,
-                      at: old && old.at ? old.at : now,
-                      saved: old && old.saved ? old.saved : now
-                    });
-                  });
+  function storeKind(name) {
+    if (/^shell-/.test(name)) return "app";
+    if (/^data-/.test(name)) return "data";
+    if (/^media-/.test(name)) return "media";
+    if (/^live-/.test(name)) return "liveparts";
+    if (name === PINNED_CACHE) return "downloads";
+    if (name === "viktorych-prefs") return "prefs";
+    return "othercache";
+  }
+
+  function noDb() { return Promise.resolve(null); }
+
+  function measureCaches(known) {
+    var rows = [];
+    var tally = {};
+    if (typeof caches === "undefined") return Promise.resolve({ rows: rows, tally: tally });
+    return caches.keys().then(function (names) {
+      var chain = Promise.resolve();
+      names.forEach(function (name) {
+        var kind = storeKind(name);
+        chain = chain.then(function () {
+          return caches.open(name).then(function (cache) { return cache.keys().then(function (reqs) { return { cache: cache, reqs: reqs }; }); });
+        }).then(function (opened) {
+          var inner = Promise.resolve();
+          opened.reqs.forEach(function (req) {
+            inner = inner.then(function () {
+              var app = kind === "app" || kind === "prefs";
+              var cat = app ? "" : categoryOf(req.url);
+              if (!app && !cat) return opened.cache.delete(req);
+              return opened.cache.match(req).then(function (res) {
+                var opaque = !!(res && res.type === "opaque");
+                return responseBytes(res).then(function (bytes) {
+                  var t = tally[kind] || (tally[kind] = { bytes: 0, count: 0, opaque: 0 });
+                  t.bytes += bytes;
+                  t.count += 1;
+                  if (opaque) t.opaque += 1;
+                  if (app) return;
+                  var old = known[req.url];
+                  var now = Date.now();
+                  rows.push({ url: req.url, bytes: bytes, category: cat, cacheName: name, at: old && old.at ? old.at : now, saved: old && old.saved ? old.saved : now });
                 });
               });
-              return inner;
             });
           });
-          return chain.then(function () {
-            return listDocs(db).then(function (docs) { return { db: db, rows: mergeDocRows(rows, docs) }; });
+          return inner;
+        }).catch(function () { /* one unreadable cache must not hide the rest */ });
+      });
+      return chain.then(function () { return { rows: rows, tally: tally }; });
+    }).catch(function () { return { rows: rows, tally: tally }; });
+  }
+
+  function measureOpfs() {
+    try {
+      if (typeof navigator === "undefined" || !navigator.storage || typeof navigator.storage.getDirectory !== "function") return Promise.resolve(null);
+      return navigator.storage.getDirectory().then(function (root) {
+        return root.getDirectoryHandle("vapp-media");
+      }).then(function (dir) {
+        if (!dir || !dir.values) return null;
+        var iter = dir.values();
+        var out = { bytes: 0, count: 0 };
+        var walk = function () {
+          return iter.next().then(function (step) {
+            if (step.done) return out;
+            var handle = step.value;
+            if (!handle || handle.kind !== "file") return walk();
+            return handle.getFile().then(function (file) { out.bytes += file.size || 0; out.count += 1; }).catch(function () {}).then(walk);
           });
+        };
+        return walk();
+      }).catch(function () { return null; });
+    } catch (err) { return Promise.resolve(null); }
+  }
+
+  function listDatabases() {
+    try {
+      if (typeof indexedDB === "undefined" || typeof indexedDB.databases !== "function") return Promise.resolve(null);
+      return indexedDB.databases().then(function (list) { return (list || []).map(function (d) { return d && d.name; }).filter(Boolean); }).catch(function () { return null; });
+    } catch (err) { return Promise.resolve(null); }
+  }
+
+  function localBytes() {
+    try {
+      if (typeof localStorage === "undefined") return 0;
+      var n = 0;
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i) || "";
+        n += (key.length + String(localStorage.getItem(key) || "").length) * 2;
+      }
+      return n;
+    } catch (err) { return 0; }
+  }
+
+  function measureNow() {
+    var dbPromise = typeof indexedDB === "undefined" ? noDb() : openDb().catch(noDb);
+    return dbPromise.then(function (db) {
+      var prevP = db ? listFiles(db) : Promise.resolve([]);
+      return prevP.then(function (prev) {
+        var known = {};
+        prev.forEach(function (row) { if (row && row.url) known[row.url] = row; });
+        return Promise.all([measureCaches(known), db ? listDocs(db) : Promise.resolve([]), measureOpfs(), listDatabases()]).then(function (parts) {
+          var rows = parts[0].rows;
+          // Large videos live in the origin private file system; keep their rows
+          // so they stay counted and can still be evicted or cleared.
+          if (parts[2] && parts[2].count) prev.forEach(function (row) { if (row && row.cacheName === "opfs") rows.push(row); });
+          rows = mergeDocRows(rows, parts[1]);
+          return { db: db, rows: rows, tally: parts[0].tally, opfs: parts[2], dbs: parts[3] };
         });
-      }).then(function (measured) {
-        return replaceFiles(measured.db, measured.rows).then(function () {
-          return readStats(measured.db).then(function (stats) {
-            var estimate = Promise.resolve(null);
-            if (typeof navigator !== "undefined" && navigator.storage && navigator.storage.estimate) estimate = navigator.storage.estimate().catch(function () { return null; });
-            var persisted = Promise.resolve(false);
-            if (typeof navigator !== "undefined" && navigator.storage && navigator.storage.persisted) persisted = navigator.storage.persisted().catch(function () { return false; });
-            return Promise.all([estimate, persisted]).then(function (pair) {
-              var est = pair[0] || {};
-              return {
-                rows: measured.rows,
-                stats: stats,
-                quota: Number(est.quota) || 0,
-                usage: Number(est.usage) || 0,
-                persisted: !!pair[1],
-                pressure: pressureLevel(Number(est.usage) || 0, Number(est.quota) || 0)
-              };
-            });
-          });
+      });
+    }).then(function (measured) {
+      var write = measured.db ? replaceFiles(measured.db, measured.rows) : Promise.resolve();
+      return write.then(function () {
+        return measured.db ? readStats(measured.db) : Promise.resolve(emptyStats(null));
+      }).then(function (stats) {
+        var estimate = Promise.resolve(null);
+        if (typeof navigator !== "undefined" && navigator.storage && navigator.storage.estimate) estimate = navigator.storage.estimate().catch(function () { return null; });
+        var persisted = Promise.resolve(false);
+        if (typeof navigator !== "undefined" && navigator.storage && navigator.storage.persisted) persisted = navigator.storage.persisted().catch(function () { return false; });
+        return Promise.all([estimate, persisted]).then(function (pair) {
+          var est = pair[0] || {};
+          var docBytes = 0;
+          measured.rows.forEach(function (row) { if (row.cacheName === "idb-docs") docBytes += row.bytes || 0; });
+          return {
+            at: Date.now(),
+            rows: measured.rows,
+            stats: stats,
+            tally: measured.tally,
+            opfs: measured.opfs,
+            dbs: measured.dbs,
+            docBytes: docBytes,
+            local: localBytes(),
+            details: est.usageDetails || null,
+            quota: Number(est.quota) || 0,
+            usage: Number(est.usage) || 0,
+            persisted: !!pair[1],
+            pressure: pressureLevel(Number(est.usage) || 0, Number(est.quota) || 0)
+          };
         });
       });
     });
   }
 
+  var STORE_COLORS = { app: "#1d9bf0", data: "#e8a33d", media: "#53b35b", liveparts: "#e85d4c", downloads: "#a46cff", opfs: "#3390ec", idb: "#5ac8fa", local: "#9aa0a6", other: "#8e8e93" };
+
+  function storeLabel(id) {
+    if (id === "app") return tr("App files");
+    if (id === "data") return tr("Feeds and posts");
+    if (id === "media") return tr("Photos and videos");
+    if (id === "liveparts") return tr("Live recordings");
+    if (id === "downloads") return tr("Downloaded music");
+    if (id === "opfs") return tr("Large videos");
+    if (id === "idb") return tr("Databases");
+    if (id === "local") return tr("Settings");
+    return tr("Other browser data");
+  }
+
+  function storeNote(id) {
+    if (id === "app") return tr("The app itself, so it opens offline");
+    if (id === "data") return tr("Timelines, profiles and threads for offline reading");
+    if (id === "media") return tr("Pictures and clips you already watched, in original quality");
+    if (id === "liveparts") return tr("Parts of live streams and recordings");
+    if (id === "downloads") return tr("Songs you saved for offline listening");
+    if (id === "opfs") return tr("Videos over 1 MB kept as files");
+    if (id === "idb") return tr("Saved posts, messages, drafts and search");
+    if (id === "local") return tr("Your preferences and sign-in on this device");
+    return tr("Space the browser counts but the app can’t itemize, including padding for media from other sites");
+  }
+
+  // One row per place the bytes live. Byte counts come from the files; the
+  // browser's own estimate is only used for the parts the app can't read.
+  function storeList(s) {
+    s = s || {};
+    var tally = s.tally || {};
+    var details = s.details || null;
+    var list = [];
+    var add = function (id, bytes, count, approx) { list.push({ id: id, bytes: Math.max(0, Number(bytes) || 0), count: count || 0, approx: !!approx }); };
+    var cacheSum = 0;
+    ["app", "data", "media", "liveparts", "downloads"].forEach(function (id) {
+      var t = tally[id] || { bytes: 0, count: 0, opaque: 0 };
+      cacheSum += t.bytes;
+      add(id, t.bytes, t.count, t.opaque > 0);
+    });
+    ["prefs", "othercache"].forEach(function (id) { if (tally[id]) cacheSum += tally[id].bytes; });
+    var opfs = s.opfs || { bytes: 0, count: 0 };
+    add("opfs", opfs.bytes, opfs.count, false);
+    var idbBytes = details && Number(details.indexedDB) > 0 ? Number(details.indexedDB) : (Number(s.docBytes) || 0);
+    add("idb", idbBytes, s.dbs ? s.dbs.length : 0, !(details && Number(details.indexedDB) > 0));
+    var prefs = (tally.prefs ? tally.prefs.bytes : 0) + (tally.othercache ? tally.othercache.bytes : 0);
+    add("local", (Number(s.local) || 0) + prefs, 0, false);
+    var known = 0;
+    list.forEach(function (row) { known += row.bytes; });
+    var usage = Number(s.usage) || 0;
+    // Chrome counts cross-site media with extra padding, so its total can be far
+    // above the real bytes. Show the gap as its own row instead of hiding it.
+    var gap = usage > known ? usage - known : 0;
+    add("other", gap, 0, true);
+    return { list: list, known: known, total: known + gap, usage: usage };
+  }
+
+  function storeDonut(list, total) {
+    if (!total) return "background:var(--line)";
+    var acc = 0;
+    var stops = [];
+    list.forEach(function (row) {
+      if (!row.bytes) return;
+      var start = acc;
+      acc += row.bytes / total * 100;
+      stops.push(STORE_COLORS[row.id] + " " + start.toFixed(3) + "% " + Math.min(100, acc).toFixed(3) + "%");
+    });
+    return stops.length ? "background:conic-gradient(" + stops.join(",") + ")" : "background:var(--line)";
+  }
+
+  var stale = false;
+  var failed = false;
+
   function kickMeasure() {
-    if (measuring || typeof indexedDB === "undefined") return;
+    if (measuring) return;
     measuring = true;
+    stale = false;
     measureNow().then(function (next) {
       snap = next;
+      failed = false;
       measuring = false;
       notePressure(next && next.pressure);
       requestRender();
-    }).catch(function () { measuring = false; });
+    }).catch(function () {
+      measuring = false;
+      failed = true;
+      requestRender();
+    });
   }
 
   function totals(rows) {
@@ -807,76 +960,133 @@
   }
 
   function usageHtml() {
-    if (!snap) kickMeasure();
+    if ((!snap || stale) && !failed) kickMeasure();
     var rows = snap && snap.rows || [];
     var summed = totals(rows);
+    var stores = storeList(snap);
+    var shown = snap ? stores.known : 0;
     var free = snap && snap.quota > snap.usage ? snap.quota - snap.usage : 0;
-    var freeLine = snap && snap.quota ? tr("{size} free", { size: formatBytes(free) }) : (measuring ? tr("Measuring storage…") : tr("Free on this device"));
+    var freeLine;
+    if (snap && snap.quota) freeLine = tr("{size} free", { size: formatBytes(free) });
+    else if (measuring || (!snap && !failed)) freeLine = tr("Measuring storage…");
+    else if (failed) freeLine = tr("Couldn’t measure storage in this browser.");
+    else freeLine = tr("This browser doesn’t report free space.");
+    var browserLine = snap && stores.usage && Math.abs(stores.usage - shown) > Math.max(1024 * 1024, shown * 0.1)
+      ? '<p class="phandle stor-note">' + esc(tr("The browser counts {size} against this site’s limit.", { size: formatBytes(stores.usage) })) + "</p>"
+      : "";
     var persistLine = persistText(snap && snap.persisted);
-    var stats = snap && snap.stats || { hits: 0, network: 0, savedBytes: 0, savedRequests: 0, direct: 0, server: 0, peerBytes: 0, originBytes: 0 };
+    var stats = emptyStats(snap && snap.stats);
     if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.counts) {
       var live = window.ViktorychDirect.counts();
       stats.direct = Math.max(stats.direct || 0, Number(live.direct) || 0);
       stats.server = Math.max(stats.server || 0, Number(live.server) || 0);
     }
+    var where = stores.list.filter(function (row) { return row.bytes > 0 || row.id !== "other"; }).map(function (row) {
+      var width = shown && row.bytes ? Math.max(2, Math.min(100, Math.round(row.bytes / Math.max(shown, stores.total) * 100))) : 0;
+      var size = (row.approx && row.bytes ? "≈ " : "") + formatBytes(row.bytes);
+      var count = row.count ? " · " + (row.id === "idb" ? tr("{count} databases", { count: String(row.count) }) : tr("{count} files", { count: String(row.count) })) : "";
+      return '<div class="stor-row"><i class="stor-swatch" style="background:' + STORE_COLORS[row.id] + '"></i><div class="stor-meta"><b>' + esc(storeLabel(row.id)) + '</b><span class="stor-sub">' + esc(storeNote(row.id) + count) + '</span><div class="stor-bar"><i style="width:' + width + "%;background:" + STORE_COLORS[row.id] + '"></i></div></div><span class="stor-size">' + esc(size) + "</span></div>";
+    }).join("");
     var list = ORDER.map(function (cat) {
       var bytes = summed.by[cat] || 0;
-      var width = summed.total ? Math.max(2, Math.round(bytes / summed.total * 100)) : 0;
-      if (!bytes) width = 0;
-      return '<div class="stor-row"><i class="stor-swatch" style="background:' + COLORS[cat] + '"></i><div class="stor-meta"><b>' + esc(catLabel(cat)) + '</b><div class="stor-bar"><i style="width:' + width + "%;background:" + COLORS[cat] + '"></i></div></div><span class="stor-size">' + esc(formatBytes(bytes)) + '</span><button class="outline stor-clear" type="button" data-stor="clear" data-cat="' + cat + '">' + esc(tr("Clear")) + "</button></div>";
+      var width = summed.total && bytes ? Math.max(2, Math.round(bytes / summed.total * 100)) : 0;
+      var clear = bytes ? '<button class="outline stor-clear" type="button" data-stor="clear" data-cat="' + cat + '">' + esc(tr("Clear")) + "</button>" : "";
+      return '<div class="stor-row' + (bytes ? "" : " is-empty") + '"><i class="stor-swatch" style="background:' + COLORS[cat] + '"></i><div class="stor-meta"><b>' + esc(catLabel(cat)) + '</b><div class="stor-bar"><i style="width:' + width + "%;background:" + COLORS[cat] + '"></i></div></div><span class="stor-size">' + esc(formatBytes(bytes)) + "</span>" + clear + "</div>";
     }).join("");
-    return '<div class="stor-hero"><div class="stor-donut" style="' + donutStyle(summed.by, summed.total) + '" role="img" aria-label="' + esc(tr("{size} used", { size: formatBytes(summed.total) })) + '"><div class="stor-hole"><b>' + esc(formatBytes(summed.total)) + "</b><span>" + esc(tr("Storage usage")) + "</span></div></div>" +
-      '<p class="stor-free">' + esc(freeLine) + "</p><p class=\"phandle\">" + esc(persistLine) + "</p></div>" +
-      '<div class="stor-list">' + list + "</div>" + controlsHtml() +
+    var retry = failed ? '<button class="outline" type="button" data-stor="remeasure">' + esc(tr("Try again")) + "</button>" : "";
+    var label = snap ? formatBytes(shown) : "…";
+    return '<div class="stor-hero"><div class="stor-donut" style="' + storeDonut(stores.list, Math.max(shown, 1)) + '" role="img" aria-label="' + esc(tr("{size} used", { size: label })) + '"><div class="stor-hole"><b>' + esc(label) + "</b><span>" + esc(tr("Used on this device")) + "</span></div></div>" +
+      '<p class="stor-free">' + esc(freeLine) + "</p>" + browserLine + '<p class="phandle">' + esc(persistLine) + "</p>" + retry + "</div>" +
+      '<div class="set-block stor-section"><h2>' + esc(tr("Where it’s stored")) + '</h2></div><div class="stor-list">' + where + "</div>" +
+      '<div class="set-block stor-section"><h2>' + esc(tr("What’s saved")) + '</h2></div><div class="stor-list">' + list + "</div>" + controlsHtml() +
       '<p class="stor-debug">' + esc(tr("Cache hits {count}", { count: String(stats.hits) })) + " · " + esc(tr("Network requests {count}", { count: String(stats.network) })) + " · " + esc(tr("Hit rate {percent}", { percent: hitRate(stats) + "%" })) + " · " + esc(tr("Saved {size}", { size: formatBytes(stats.savedBytes || 0) })) + " · " + esc(tr("Saved requests {count}", { count: String(stats.savedRequests || 0) })) + " · " + esc(tr("Direct {count}", { count: String(stats.direct || 0) })) + " · " + esc(tr("Server {count}", { count: String(stats.server || 0) })) + " · " + esc(tr("From peers {size}", { size: formatBytes(stats.peerBytes || 0) })) + " · " + esc(tr("From origin {size}", { size: formatBytes(stats.originBytes || 0) })) + "</p>";
   }
 
+  // "all" is the Clear cache button: it keeps settings, drafts and downloaded
+  // music. "wipe" (sign-out or account deletion) removes those too.
   function clearStored(category) {
-    var run = function () {
+    var wipe = category === "wipe";
+    var all = wipe || category === "all";
+    var keepCache = function (name) {
+      if (/^shell-/.test(name) || name === "viktorych-prefs") return true;
+      return name === PINNED_CACHE && !wipe && category !== "music";
+    };
+    var opfsUrls = [];
+    var clearCaches = function () {
       if (typeof caches === "undefined") return Promise.resolve();
       return caches.keys().then(function (names) {
         var chain = Promise.resolve();
         names.forEach(function (name) {
-          if (/^shell-/.test(name)) return;
+          if (keepCache(name)) return;
           chain = chain.then(function () {
             return caches.open(name).then(function (cache) {
               return cache.keys().then(function (reqs) {
                 var inner = Promise.resolve();
                 reqs.forEach(function (req) {
                   var cat = categoryOf(req.url);
-                  if (category === "all" || cat === category) inner = inner.then(function () { return cache.delete(req); });
+                  if (all || cat === category) inner = inner.then(function () { return cache.delete(req); });
                 });
                 return inner;
               });
             });
-          });
+          }).catch(function () { /* keep clearing the other caches */ });
         });
         return chain;
-      }).then(function () {
-        return openDb().then(function (db) {
-          var files = category === "all"
-            ? replaceFiles(db, [])
-            : listFiles(db).then(function (rows) {
-              return replaceFiles(db, rows.filter(function (row) { return row.category !== category && !(category === "all"); }));
-            });
-          return files.then(function () { return clearDocs(db, category); });
-        });
-      }).then(function () {
-        snap = null;
-        kickMeasure();
-      });
+      }).catch(function () {});
     };
-    return run();
+    var clearDb = function () {
+      if (typeof indexedDB === "undefined") return Promise.resolve();
+      return openDb().then(function (db) {
+        return listFiles(db).then(function (rows) {
+          var kept = rows.filter(function (row) {
+            var hit = wipe || (all ? (row.category !== "drafts" && !(row.cacheName === PINNED_CACHE)) : row.category === category);
+            if (hit && row.cacheName === "opfs") opfsUrls.push(row.url);
+            return !hit;
+          });
+          return replaceFiles(db, kept);
+        }).then(function () {
+          if (wipe) return clearDocs(db, "all");
+          if (all) {
+            return listDocs(db).then(function (docs) {
+              var cats = {};
+              docs.forEach(function (doc) { if (doc && doc.category && doc.category !== "drafts") cats[doc.category] = 1; });
+              var chain = Promise.resolve();
+              Object.keys(cats).forEach(function (cat) { chain = chain.then(function () { return clearDocs(db, cat); }); });
+              return chain;
+            });
+          }
+          return clearDocs(db, category);
+        });
+      }).catch(function () {});
+    };
+    return clearCaches().then(clearDb).then(function () {
+      if (all) post({ type: "storage-clear-opfs", all: true });
+      else if (opfsUrls.length) post({ type: "storage-clear-opfs", urls: opfsUrls });
+    }).then(function () {
+      snap = null;
+      failed = false;
+      kickMeasure();
+    });
   }
 
   function onClick(event) {
     var link = event.target && event.target.closest && event.target.closest('a[href="#/settings/storage"], a[href="#/settings/storage/usage"]');
-    if (link) askPersist();
+    if (link) {
+      askPersist();
+      stale = true;
+      failed = false;
+    }
     var el = event.target && event.target.closest && event.target.closest("[data-stor]");
     if (!el) return;
     event.preventDefault();
     event.stopPropagation();
     var kind = el.getAttribute("data-stor");
+    if (kind === "remeasure") {
+      failed = false;
+      kickMeasure();
+      requestRender();
+      return;
+    }
     if (kind === "prefetch") {
       var toggled = currentPolicy();
       toggled.prefetch = toggled.prefetch === false;
@@ -895,7 +1105,7 @@
     if (kind === "clear" || kind === "clear-all") {
       var cat = kind === "clear-all" ? "all" : (el.getAttribute("data-cat") || "");
       var question = cat === "all"
-        ? tr("Clear all cached media from this device?")
+        ? tr("Clear everything saved for offline use on this device? Your settings, drafts and downloaded music stay.")
         : tr("Clear {category} from this device?", { category: catLabel(cat) });
       if (typeof confirm === "function" && !confirm(question)) return;
       askPersist();
@@ -918,8 +1128,8 @@
     var saved = currentPolicy();
     var index = Number(el.value);
     var next = index >= MAX_STEPS.length
-      ? { keep: saved.keep, maxBytes: 0, unlimited: true }
-      : { keep: saved.keep, maxBytes: MAX_STEPS[index], unlimited: false };
+      ? { keep: saved.keep, maxBytes: 0, unlimited: true, prefetch: saved.prefetch }
+      : { keep: saved.keep, maxBytes: MAX_STEPS[index], unlimited: false, prefetch: saved.prefetch };
     saveLocal(next);
     askPersist();
   }
@@ -948,10 +1158,14 @@
     document.addEventListener("click", onClick, true);
     document.addEventListener("input", onInput, true);
     document.addEventListener("change", onChange, true);
+    window.addEventListener("hashchange", function () {
+      // Re-measure each time the usage screen opens so the numbers are current.
+      if (/^#\/settings\/storage\/usage/.test(location.hash || "")) { stale = true; failed = false; }
+    });
     askPersist();
     window.addEventListener("viktorych-account-deleted", function () {
       post({ type: "storage-wipe" });
-      clearStored("all");
+      clearStored("wipe");
     });
   }
 
@@ -973,6 +1187,8 @@
     sliceCached: sliceCached,
     byteLengthOf: byteLengthOf,
     formatBytes: formatBytes,
+    storeList: storeList,
+    clearStored: clearStored,
     pressureLevel: pressureLevel,
     persistText: persistText,
     askPersist: askPersist,
