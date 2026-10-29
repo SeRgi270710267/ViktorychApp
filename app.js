@@ -14710,7 +14710,8 @@ const here = parseRoute();
     const head = `<div class="topbar tall notes-top"><div class="notes-bar"><button class="m-ava" type="button" data-act="drawer" aria-label="${tr("Menu")}">${viewerFace()}${dot}</button><h1>${tr("Notifications")}</h1>${gear}</div>${bar}</div>`;
     const xBanner = window.ViktorychXCompose && window.ViktorychXCompose.mentionsBanner ? window.ViktorychXCompose.mentionsBanner() : "";
     const upcoming = window.ProfileAbout && window.ProfileAbout.upcomingHtml ? window.ProfileAbout.upcomingHtml() : "";
-    return head + xBanner + upcoming + notesListHtml(notes, active, current, unreadIds) + noteGearMenu(active);
+    const system = active === "all" && window.ViktorychSettingAlerts ? window.ViktorychSettingAlerts.notesHtml() : "";
+    return head + xBanner + upcoming + system + notesListHtml(notes, active, current, unreadIds) + noteGearMenu(active);
   }
 
   function openFeedTabEditor(id, presetFeed) {
@@ -15247,6 +15248,7 @@ const here = parseRoute();
         <h2>${esc(tr("Max data saving"))}</h2>
         <p class="phandle">${esc(tr("One tap sets every data setting below to its lowest-data choice. Turn it off to get your own choices back."))}</p>
         <button class="tab-switch${saverOn ? " on" : ""}" type="button" role="switch" aria-checked="${saverOn ? "true" : "false"}" data-act="data-saver"><span>${esc(tr("Max data saving"))}</span><i></i></button>
+        ${window.ViktorychSettingAlerts ? window.ViktorychSettingAlerts.dataCapHtml() : ""}
         <h2>${esc(tr("Images and video"))}</h2>
         ${pref("imageLoad", ds.imageLoad === "wifi", tr("Load photos on Wi-Fi only"), tr("On mobile data, tap a photo to load it."))}
         ${pref("imageSize", ds.imageSize === "small", tr("Smaller previews"), tr("Use the smaller size a site already offers. Photos are never re-encoded."))}
@@ -15300,6 +15302,7 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
         ${window.ViktorychAchievements && window.ViktorychAchievements.settingsHtml ? window.ViktorychAchievements.settingsHtml() : ""}
+        ${window.ViktorychSettingAlerts ? window.ViktorychSettingAlerts.settingsHtml() : ""}
       </div>`;
     }
     if (section === "security") {
