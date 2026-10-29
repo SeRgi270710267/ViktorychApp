@@ -220,7 +220,7 @@ def main() -> int:
                 missing.append(f"{code} extra {extra[:12]}")
         print("\n".join(missing))
         return 1
-    plural_bases = {key.rsplit(".", 1)[0] for key in base if key.endswith((".one", ".few", ".many", ".other"))}
+    plural_bases = {key.rsplit(".", 1)[0] for key in base if " " not in key and key.endswith((".one", ".few", ".many", ".other"))}
     for stem in sorted(plural_bases):
         missing = [form for form in ("one", "few", "many", "other") if f"{stem}.{form}" not in base]
         if missing:
