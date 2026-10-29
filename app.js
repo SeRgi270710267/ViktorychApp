@@ -13308,7 +13308,14 @@ const here = parseRoute();
   function settingsSearchHtml() {
     if (!window.ViktorychSettingsAssistant) return "";
     const q = String(STATE.settingsQ || "");
-    return `<div class="lang-search set-search"><label class="search"><span class="sr">${icon("search")}</span><input id="settings-q" type="search" autocomplete="off" placeholder="${esc(tr("Search Settings"))}" aria-label="${esc(tr("Search Settings"))}" value="${esc(q)}"></label>${window.ViktorychSettingsAssistant.available() ? `<p class="phandle set-search-tip">${esc(tr("Ask in your own words, like “make the text bigger”."))}</p>` : ""}</div><div class="set-list set-search-out" id="settings-q-out" aria-live="polite"${q.trim() ? "" : " hidden"}>${settingsSearchRows(q, -1)}</div>`;
+    return `<div class="lang-search set-search"><label class="search"><span class="sr">${icon("search")}</span><input id="settings-q" type="search" autocomplete="off" placeholder="${esc(tr("Search Settings"))}" aria-label="${esc(tr("Search Settings"))}" value="${esc(q)}"></label>${window.ViktorychSettingsAssistant.available() ? `<p class="phandle set-search-tip">${esc(tr("Ask in your own words, like “make the text bigger”."))}</p>` : ""}</div>`;
+  }
+
+  /* Results sit after the full list so the list stays the first one on the page. */
+  function settingsSearchOut() {
+    if (!window.ViktorychSettingsAssistant) return "";
+    const q = String(STATE.settingsQ || "");
+    return `<div class="set-list set-search-out" id="settings-q-out" aria-live="polite"${q.trim() ? "" : " hidden"}>${settingsSearchRows(q, -1)}</div>`;
   }
 
   function settingsSearchRows(q, pick) {
@@ -13603,7 +13610,7 @@ const here = parseRoute();
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
       ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
-    </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
+    </div>${settingsSearchOut()}` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
