@@ -4095,5 +4095,22 @@ SI18n.addPack("ru", {
   "{n} kills": "{n} убийств",
   "{n} min left": "Осталось {n} мин",
   "{n} playing now": "{n} играют сейчас",
-  "ReGone": "ReGone"
+  "ReGone": "ReGone",
+  "Cloudflare Worker": "Воркер Cloudflare",
+  "Render backup": "Резерв на Render",
+  "Not answering, reads skip it": "Не отвечает, чтение идёт в обход",
+  "Used up, reads skip it": "Исчерпан, чтение идёт в обход",
+  "Counted since its last restart": "Считается с последнего перезапуска",
+  "Resets {time}": "Сброс в {time}",
+  "Server pool today": "Пул серверов сегодня",
+  "{used} of {limit} requests across {n} servers": "{used} из {limit} запросов на {n} серверах",
+  "Server pool capacity": "Ёмкость пула серверов",
+  "{pct}% of today's server pool used": "Использовано {pct}% пула серверов на сегодня",
+  "{used} of {limit} requests across {n} servers. Resets {reset}.": "{used} из {limit} запросов на {n} серверах. Сброс в {reset}.",
+  "See usage": "Открыть использование",
+  "The server pool is almost used up": "Пул серверов почти исчерпан",
+  "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{used} из {limit} запросов на {n} серверах ({pct}%). Сброс в {reset}.",
+  "Today's server pool is used up": "Пул серверов на сегодня исчерпан",
+  "All {n} servers reached their free daily requests. Resets {reset}.": "Все {n} сервера исчерпали бесплатные запросы на день. Сброс в {reset}.",
+  "{name} is used up, so reads skip it.": "{name} исчерпан, поэтому чтение идёт в обход."
 });

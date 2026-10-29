@@ -4095,5 +4095,22 @@ SI18n.addPack("en", {
   "{n} kills": "{n} kills",
   "{n} min left": "{n} min left",
   "{n} playing now": "{n} playing now",
-  "ReGone": "ReGone"
+  "ReGone": "ReGone",
+  "Cloudflare Worker": "Cloudflare Worker",
+  "Render backup": "Render backup",
+  "Not answering, reads skip it": "Not answering, reads skip it",
+  "Used up, reads skip it": "Used up, reads skip it",
+  "Counted since its last restart": "Counted since its last restart",
+  "Resets {time}": "Resets {time}",
+  "Server pool today": "Server pool today",
+  "{used} of {limit} requests across {n} servers": "{used} of {limit} requests across {n} servers",
+  "Server pool capacity": "Server pool capacity",
+  "{pct}% of today's server pool used": "{pct}% of today's server pool used",
+  "{used} of {limit} requests across {n} servers. Resets {reset}.": "{used} of {limit} requests across {n} servers. Resets {reset}.",
+  "See usage": "See usage",
+  "The server pool is almost used up": "The server pool is almost used up",
+  "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.",
+  "Today's server pool is used up": "Today's server pool is used up",
+  "All {n} servers reached their free daily requests. Resets {reset}.": "All {n} servers reached their free daily requests. Resets {reset}.",
+  "{name} is used up, so reads skip it.": "{name} is used up, so reads skip it."
 });

@@ -4221,11 +4221,82 @@ function signupPayload() {
     if (!session || !session.token || !session.account || !session.account.owner) return;
     if (Date.now() - usageAt < 5 * 60 * 1000) return;
     usageAt = Date.now();
+    loadBackupStatus();
     api("/v1/owner/usage", { token: session.token }).then(function (body) {
       if (!body || body.status !== 200) return;
       usageDoc = body;
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {});
+  }
+  /* Server pool: every origin that answers /v1 reads, with its own free
+     daily capacity. The headline is total used over total capacity; each
+     origin keeps its own bar and reset time. The Render backup has no
+     request quota of its own; its real ceiling is the Cloudflare API it
+     calls for D1 and R2 (1,200 calls per 5 minutes, about 345k a day, at
+     several calls per request), so it counts as 100k a day unless the
+     backup reports another figure. */
+  var backupStatus = null;
+  var backupStatusAt = 0;
+  function loadBackupStatus() {
+    var root = String(config().backupApi || "").replace(/\/$/, "");
+    if (!root || !nativeFetch || Date.now() - backupStatusAt < 5 * 60 * 1000) return;
+    backupStatusAt = Date.now();
+    nativeFetch(root + "/backup/status", { credentials: "omit", cache: "no-store" }).then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (body) {
+      if (!body) return;
+      backupStatus = body;
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  function nextUtcMidnight(at) {
+    var d = new Date(at || Date.now());
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+  }
+  function serverPool(u, backup, at) {
+    at = Number(at) || Date.now();
+    var today = new Date(at).toISOString().slice(0, 10);
+    var origins = [];
+    var L = u && u.limits || {};
+    if (u && u.configured && !u.error) {
+      origins.push({ id: "worker", name: tr("Cloudflare Worker"), used: Number(u.workerRequestsToday) || 0, cap: Number(L.workerRequestsDay) || 100000, reset: nextUtcMidnight(at) });
+    }
+    if (config().backupApi) {
+      var t = backup && backup.today && backup.today.date === today ? backup.today : null;
+      var down = !backup || backup.ok === false || (backup.egress && backup.egress.saver);
+      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down });
+    }
+    var used = 0, cap = 0;
+    origins.forEach(function (o) {
+      o.pct = o.cap ? Math.round(o.used * 100 / o.cap) : 0;
+      o.out = o.pct >= 100 || !!o.down;
+      used += Math.min(o.used, o.cap);
+      cap += o.cap;
+    });
+    // A Worker past its quota stops answering, so its overflow does not
+    // fill the backup's share; the pool counts each origin up to its cap.
+    return { used: used, cap: cap, pct: cap ? Math.round(used * 100 / cap) : 0, origins: origins, bypassed: origins.filter(function (o) { return o.out; }).map(function (o) { return o.name; }) };
+  }
+  function poolCapacityHtml(pool) {
+    if (!pool || !pool.origins.length) return "";
+    var loc = window.SI18n ? window.SI18n.locale() : undefined;
+    var pctOf = function (n) { return Math.max(0, Math.min(100, n)); };
+    var lvl = function (n) { return n >= 100 ? " full" : n >= 80 ? " hot" : n >= 60 ? " warm" : ""; };
+    var rows = pool.origins.map(function (o) {
+      var when = "";
+      try { when = new Date(o.reset).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" }); } catch (err) { when = ""; }
+      var note = o.down ? tr("Not answering, reads skip it") : o.pct >= 100 ? tr("Used up, reads skip it") : !o.known && o.id === "render" ? tr("Counted since its last restart") : "";
+      return '<div class="pool-origin' + lvl(o.pct) + (o.out ? " out" : "") + '">' +
+        '<div class="usage-top"><span>' + esc(o.name) + '</span><b>' + esc(o.pct + "%") + "</b></div>" +
+        '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(o.pct) + '" aria-label="' + esc(o.name) + '"><i style="width:' + pctOf(o.pct) + '%"></i></div>' +
+        '<div class="pool-meta"><span>' + esc(tr("{used} of {limit}", { used: formatNum(o.used), limit: formatNum(o.cap) })) + "</span><span>" + esc(tr("Resets {time}", { time: when })) + "</span></div>" +
+        (note ? '<p class="pool-note">' + esc(note) + "</p>" : "") + "</div>";
+    }).join("");
+    return '<section class="pool-cap' + lvl(pool.pct) + '" data-pool-cap>' +
+      '<div class="pool-head"><span>' + esc(tr("Server pool today")) + '</span><b class="pool-pct">' + esc(pool.pct + "%") + "</b></div>" +
+      '<div class="usage-bar pool-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(pool.pct) + '" aria-label="' + esc(tr("Server pool today")) + '"><i style="width:' + pctOf(pool.pct) + '%"></i></div>' +
+      '<p class="pool-sub">' + esc(tr("{used} of {limit} requests across {n} servers", { used: formatNum(pool.used), limit: formatNum(pool.cap), n: pool.origins.length })) + "</p>" +
+      rows + "</section>";
   }
   function usageRow(label, used, limit) {
     var pct = limit ? Math.min(100, Math.round((Number(used) || 0) * 100 / limit)) : 0;
@@ -4243,7 +4314,9 @@ function signupPayload() {
       rows += '<p class="set-sub">' + esc(tr("Usage needs a read-only analytics token. Add CF_ANALYTICS_TOKEN and CF_ACCOUNT_ID as Worker secrets.")) + "</p>";
     } else if (u.error) {
       rows += '<p class="set-sub">' + esc(tr("Analytics did not answer. Try again later.")) + "</p>";
-    } else {
+    }
+    rows += poolCapacityHtml(serverPool(u, backupStatus));
+    if (u.configured && !u.error) {
       rows += usageRow(tr("Worker requests today"), u.workerRequestsToday, L.workerRequestsDay);
       rows += usageRow(tr("D1 rows read today"), u.d1RowsReadToday, L.d1RowsReadDay);
       rows += usageRow(tr("D1 rows written today"), u.d1RowsWrittenToday, L.d1RowsWrittenDay);
@@ -5811,6 +5884,9 @@ else if (act === "copy-id") copyAccountId();
     call: api,
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
     originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted },
+    serverPool: function () { loadUsage(); return usageDoc ? serverPool(usageDoc, backupStatus) : null; },
+    serverPoolFrom: serverPool,
+    poolCapacityHtml: poolCapacityHtml,
     saveOwnAccount: applyOwnAccount,
     openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
     openLogin: function () { openAuth("login"); },

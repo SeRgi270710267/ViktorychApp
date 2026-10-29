@@ -4095,5 +4095,22 @@ SI18n.addPack("es", {
   "{n} kills": "{n} bajas",
   "{n} min left": "Quedan {n} min",
   "{n} playing now": "{n} jugando ahora",
-  "ReGone": "ReGone"
+  "ReGone": "ReGone",
+  "Cloudflare Worker": "Worker de Cloudflare",
+  "Render backup": "Respaldo en Render",
+  "Not answering, reads skip it": "No responde; las lecturas lo omiten",
+  "Used up, reads skip it": "Agotado; las lecturas lo omiten",
+  "Counted since its last restart": "Contado desde su último reinicio",
+  "Resets {time}": "Se reinicia a las {time}",
+  "Server pool today": "Grupo de servidores hoy",
+  "{used} of {limit} requests across {n} servers": "{used} de {limit} solicitudes en {n} servidores",
+  "Server pool capacity": "Capacidad del grupo de servidores",
+  "{pct}% of today's server pool used": "{pct}% del grupo de servidores usado hoy",
+  "{used} of {limit} requests across {n} servers. Resets {reset}.": "{used} de {limit} solicitudes en {n} servidores. Se reinicia a las {reset}.",
+  "See usage": "Ver uso",
+  "The server pool is almost used up": "El grupo de servidores está casi agotado",
+  "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{used} de {limit} solicitudes en {n} servidores ({pct}%). Se reinicia a las {reset}.",
+  "Today's server pool is used up": "El grupo de servidores de hoy está agotado",
+  "All {n} servers reached their free daily requests. Resets {reset}.": "Los {n} servidores alcanzaron sus solicitudes diarias gratis. Se reinicia a las {reset}.",
+  "{name} is used up, so reads skip it.": "{name} está agotado, así que las lecturas lo omiten."
 });
