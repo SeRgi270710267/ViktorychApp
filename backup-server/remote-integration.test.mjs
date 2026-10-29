@@ -206,6 +206,19 @@ try {
   assert.ok(Date.now() - Number(claim.seen_at) < 60000);
   assert.ok(jobs && jobs.runs >= 1, JSON.stringify(jobs));
 
+  console.log("[test] 7. cheap health, media relay refused, status shows memory and egress");
+  const cheap = await fetch(`http://127.0.0.1:${APP_PORT}/backup/health`);
+  assert.equal(cheap.status, 200);
+  assert.equal((await cheap.json()).ok, true);
+  const relay = await fetch(`http://127.0.0.1:${APP_PORT}/v1/media?url=${encodeURIComponent("https://video.twimg.com/a.mp4")}`, { headers: { origin: ORIGIN } });
+  assert.equal(relay.status, 503, "video relays stay on the Worker");
+  assert.equal(relay.headers.get("access-control-allow-origin"), ORIGIN);
+  assert.equal((await relay.json()).error, "backup_media_off");
+  const status = await (await fetch(`http://127.0.0.1:${APP_PORT}/backup/status`)).json();
+  assert.ok(status.memoryMB && status.memoryMB.rss > 0);
+  assert.ok(status.egress && status.egress.mb >= 0 && status.egress.budgetMB > 0);
+  assert.ok(status.cache && status.cache.entries >= 0);
+
   console.log("[test] ALL REMOTE BACKUP INTEGRATION TESTS PASSED!");
 } finally {
   if (child) {
