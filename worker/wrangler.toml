@@ -32,6 +32,11 @@ workers_dev = true
 # OWNER_HANDLE is the owner account handle. OWNER_ID_SHA256 is one or more
 # sha256 hex digests of owner ids. The delete route compares hashes and
 # never keeps those ids in this file.
+# CF_ANALYTICS_TOKEN (a read-only token with Account Analytics: Read) and
+# CF_ACCOUNT_ID feed the owner usage panel (GET /v1/owner/usage). Both are
+# secrets. Without them the panel shows only the free limits.
+# npx wrangler secret put CF_ANALYTICS_TOKEN
+# npx wrangler secret put CF_ACCOUNT_ID
 # TIKTOK_TRACKED lists accounts the sync follows. TIKTOK_UNLOCKED lists
 # which of those stay visible while Shorts is locked. Both are secrets.
 [vars]

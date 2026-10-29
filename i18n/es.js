@@ -2501,5 +2501,17 @@ SI18n.addPack("es", {
   "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Deja que las apps de Nostr encuentren tu cuenta por su nombre NIP-05. Desactivado por defecto.",
   "Search Settings": "Buscar configuración",
   "Ask in your own words, like “make the text bigger”.": "Pregunta con tus palabras, como «agrandar el texto».",
-  "Suggested by the on-device assistant": "Sugerido por el asistente del dispositivo"
+  "Suggested by the on-device assistant": "Sugerido por el asistente del dispositivo",
+  "Free tier usage": "Uso del plan gratuito",
+  "{used} of {limit}": "{used} de {limit}",
+  "Usage needs a read-only analytics token. Add CF_ANALYTICS_TOKEN and CF_ACCOUNT_ID as Worker secrets.": "El uso necesita un token de analítica de solo lectura. Añade CF_ANALYTICS_TOKEN y CF_ACCOUNT_ID como secretos del Worker.",
+  "Analytics did not answer. Try again later.": "La analítica no respondió. Inténtalo más tarde.",
+  "Worker requests today": "Solicitudes al Worker hoy",
+  "D1 rows read today": "Filas de D1 leídas hoy",
+  "D1 rows written today": "Filas de D1 escritas hoy",
+  "Live channel requests today": "Solicitudes del canal en vivo hoy",
+  "Storage writes this month": "Escrituras de almacenamiento este mes",
+  "Storage reads this month": "Lecturas de almacenamiento este mes",
+  "Worker requests, last 7 days": "Solicitudes al Worker, últimos 7 días",
+  "Backup server hours this month (at most)": "Horas del servidor de respaldo este mes (como máximo)"
 });
