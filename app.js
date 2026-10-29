@@ -24161,7 +24161,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       body: {
         messages: fresh,
         mutedChannels: snap.mutedChannels || [],
-        mutedServers: snap.mutedServers || []
+        mutedServers: snap.mutedServers || [],
+        privateChannels: snap.privateChannels || []
       }
     }).then((res) => {
       if (!res || res.status !== 200) return;
