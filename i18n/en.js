@@ -3930,5 +3930,9 @@ SI18n.addPack("en", {
   "This request expired.": "This request expired.",
   "Approve": "Approve",
   "A TV asked to sign in to your account. Check that it shows this code:": "A TV asked to sign in to your account. Check that it shows this code:",
-  "Only approve if this TV is in front of you. If you didn't ask, choose Deny.": "Only approve if this TV is in front of you. If you didn't ask, choose Deny."
+  "Only approve if this TV is in front of you. If you didn't ask, choose Deny.": "Only approve if this TV is in front of you. If you didn't ask, choose Deny.",
+  "Play with controller": "Play with controller",
+  "Controller connected.": "Controller connected.",
+  "Play with a controller in the ViktorychTV app.": "Play with a controller in the ViktorychTV app.",
+  "Xbox, PlayStation and other controllers work in the TV app.": "Xbox, PlayStation and other controllers work in the TV app."
 });

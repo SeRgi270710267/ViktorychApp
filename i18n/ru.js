@@ -3930,5 +3930,9 @@ SI18n.addPack("ru", {
   "This request expired.": "Срок действия запроса истёк.",
   "Approve": "Одобрить",
   "A TV asked to sign in to your account. Check that it shows this code:": "Телевизор просит войти в ваш аккаунт. Проверьте, что на нём этот код:",
-  "Only approve if this TV is in front of you. If you didn't ask, choose Deny.": "Одобряйте, только если этот телевизор перед вами. Если вы не просили, нажмите «Запретить»."
+  "Only approve if this TV is in front of you. If you didn't ask, choose Deny.": "Одобряйте, только если этот телевизор перед вами. Если вы не просили, нажмите «Запретить».",
+  "Play with controller": "Играть с геймпадом",
+  "Controller connected.": "Геймпад подключён.",
+  "Play with a controller in the ViktorychTV app.": "Играйте с геймпадом в приложении ViktorychTV.",
+  "Xbox, PlayStation and other controllers work in the TV app.": "Геймпады Xbox, PlayStation и другие работают в приложении для ТВ."
 });

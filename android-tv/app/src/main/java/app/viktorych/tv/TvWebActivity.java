@@ -115,6 +115,10 @@ public class TvWebActivity extends Activity {
             toast(R.string.name_saved);
             return true;
         }
+        if ("viktorychtv".equals(scheme) && "game".equals(uri.getHost())) {
+            startActivity(new Intent(this, GameActivity.class).setData(uri));
+            return true;
+        }
         if ("viktorychtv".equals(scheme) && "mesh".equals(uri.getHost())) {
             startActivity(new Intent(this, MeshActivity.class));
             return true;
