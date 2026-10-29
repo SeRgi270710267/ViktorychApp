@@ -5,7 +5,10 @@
    (AES-GCM, a non-extractable key in IndexedDB "viktorych-messages-sms"),
    painted at once, and refreshed only while this section is open and the tab
    is visible: every 15 s while a code is awaited, otherwise every 2 min.
-   Numbers and codes are never written to the console or sent anywhere else. */
+   Numbers and codes are never written to the console or sent anywhere else.
+   Members (the owner too, if they like) can instead link their own SMSPool
+   account: the API key is kept only in the device vault (AES-GCM) and sent
+   with each read to POST /v1/inbox/sms, which relays it and keeps nothing. */
 (function (root) {
   "use strict";
 
@@ -33,6 +36,19 @@
   function onSection() {
     return !!(inbox() && inbox().isSmsHash(root.location ? root.location.hash : ""));
   }
+
+  var member = { key: "", loaded: false, busy: false, error: "" };
+  function loadMember() {
+    var v = inbox() && inbox().vault;
+    if (member.loaded || !v) return Promise.resolve();
+    return v.get("sms.key").then(function (got) {
+      member.key = got && got.key ? got.key : "";
+      member.loaded = true;
+      if (!member.key) inbox().setLinked("sms", false);
+    });
+  }
+  function canSee() { return isOwner() || !!member.key; }
+  function isSetup() { return /^#\/(?:messages|inbox)\/sms\/setup/.test(root.location ? root.location.hash : ""); }
 
   var state = { data: null, loading: false, error: "", fetchedAt: 0, timer: 0, ticker: 0, started: false, history: false, copied: "" };
 
@@ -103,7 +119,10 @@
     if (state.loading || !token() || !accounts() || !accounts().call) return Promise.resolve();
     state.loading = true;
     repaint();
-    return accounts().call("/v1/owner/sms" + (state.history ? "?history=1" : ""), { token: token() }).then(function (body) {
+    var req = member.key
+      ? accounts().call("/v1/inbox/sms", { token: token(), method: "POST", body: { key: member.key, history: !!state.history } })
+      : accounts().call("/v1/owner/sms" + (state.history ? "?history=1" : ""), { token: token() });
+    return req.then(function (body) {
       state.loading = false;
       if (!body || body.status !== 200) {
         state.error = body && (body.status === 403 || body.status === 404) ? "owner" : (body && body.status === 429 ? "busy" : "offline");
@@ -260,11 +279,12 @@
   }
 
   function bodyHtml() {
-    if (!isOwner()) return notice(tr("Owner only"), tr("SMS codes are only shown to the app owner."));
+    if (!canSee()) return notice(tr("SMSPool isn't connected"), tr("Link your own SMSPool account to see your codes here."));
     var d = state.data;
     if (!d && state.error === "owner") return notice(tr("Owner only"), tr("SMS codes are only shown to the app owner."));
     if (!d && state.error === "offline") return notice(tr("Can't load SMS codes"), tr("Check your connection and try again."));
     if (!d) return '<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>';
+    if (state.error === "bad_key" && member.key) return notice(tr("SMSPool rejected the API key"), tr("Paste a fresh key from your SMSPool settings."));
     if (d.connected === false) return notice(tr("SMSPool isn't connected"), tr("Add your SMSPool API key as the Worker secret SMSPOOL_API_KEY. Codes show up here after that."));
     if (state.error === "bad_key" || d.error === "bad_key") return notice(tr("SMSPool rejected the API key"), tr("Replace the Worker secret SMSPOOL_API_KEY with the key from your SMSPool settings."));
     var orders = (d.orders || []).map(orderCard).join("");
@@ -281,14 +301,65 @@
   function sectionHtml() {
     var updated = state.fetchedAt ? tr("Updated {time}", { time: ago(state.fetchedAt / 1000) }) : "";
     return '<div class="sms-sub"><div><b>' + esc(tr("SMS codes")) + '</b><span data-sms-updated>' + esc(updated) + "</span></div>" +
-      (isOwner() ? '<button type="button" class="sms-refresh' + (state.loading ? " spin" : "") + '" data-sms-refresh aria-label="' + esc(tr("Refresh")) + '">' + REFRESH_ICON + "</button>" : "") +
+      (canSee() ? '<a class="mail-gear" href="#/messages/sms/setup" aria-label="' + esc(tr("SMSPool settings")) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg></a>' : "") +
+      (canSee() ? '<button type="button" class="sms-refresh' + (state.loading ? " spin" : "") + '" data-sms-refresh aria-label="' + esc(tr("Refresh")) + '">' + REFRESH_ICON + "</button>" : "") +
       '</div><div class="sms-list" data-sms-list>' + bodyHtml() + "</div>";
+  }
+
+  function setupHtml() {
+    var on = inbox() && inbox().relayOn();
+    var err = member.error ? '<p class="mail-err" role="alert">' + esc(member.error) + "</p>" : "";
+    var intro = '<ul class="mail-list"><li>' + esc(tr("Paste the API key from your SMSPool account settings.")) + "</li><li>" +
+      esc(tr("The key is kept encrypted on this device. It passes through our relay only for each read, and the relay keeps nothing.")) + "</li><li>" +
+      esc(tr("Read-only: the app never buys, cancels or refunds numbers.")) + "</li></ul>";
+    var form = on ? '<form class="mail-form" data-sms-setup autocomplete="off"><label class="mail-lab">' + esc(tr("SMSPool API key")) + '<input name="key" type="password" required autocomplete="off"></label>' +
+      '<div class="mail-row"><button type="submit" class="mail-btn primary"' + (member.busy ? " disabled" : "") + ">" + esc(member.busy ? tr("Testing…") : tr("Test and connect")) + "</button></div></form>"
+      : notice(tr("Coming soon"), tr("Mail and SMSPool will appear here when they are turned on."));
+    var linked = member.key ? '<div class="mail-row"><button type="button" class="mail-btn danger" data-sms-forget>' + esc(tr("Disconnect SMSPool")) + "</button></div>" : "";
+    return '<section class="mail-body"><h2 class="mail-h2">' + esc(member.key ? tr("SMSPool is connected") : tr("Connect SMSPool")) + "</h2>" + err + intro + (member.key ? linked : form) + "</section>";
+  }
+  function submitSetup(form) {
+    var key = String(form.elements.key.value || "").trim();
+    if (!key) return;
+    member.busy = true; member.error = ""; repaintSetup();
+    accounts().call("/v1/inbox/sms", { token: token(), method: "POST", body: { key: key } }).then(function (body) {
+      member.busy = false;
+      if (body && body.status === 200 && !body.error) {
+        member.key = key;
+        inbox().vault.put("sms.key", { key: key }).then(function () {
+          inbox().setLinked("sms", true);
+          state.data = null;
+          dropCache();
+          root.location.hash = "#/messages/sms";
+        });
+        return;
+      }
+      member.error = body && body.error === "bad_key" ? tr("SMSPool rejected the API key") : tr("Check your connection and try again.");
+      repaintSetup();
+    }, function () { member.busy = false; member.error = tr("Check your connection and try again."); repaintSetup(); });
+  }
+  function repaintSetup() {
+    var el = root.document && root.document.querySelector("[data-inbox-sms] [data-sms-setup-root]");
+    if (el) el.innerHTML = setupHtml();
+  }
+  function forget() {
+    member.key = "";
+    inbox().setLinked("sms", false);
+    inbox().vault.drop(["sms.key"]);
+    state.data = null;
+    dropCache();
+    stop();
   }
 
   function page() {
     var chips = inbox() && inbox().tabsHtml ? inbox().tabsHtml() : "";
-    if (isOwner()) setTimeout(start, 0);
-    else { stop(); state.data = null; dropCache(); }
+    if (!member.loaded) loadMember().then(function () { if (root.dispatchEvent) root.dispatchEvent(new Event("vklazy")); });
+    if (isSetup()) {
+      stop();
+      return '<div class="inbox-sms" data-inbox-sms><header class="dmsgs-head"><h1>' + esc(tr("Inbox")) + "</h1></header>" + chips + '<div data-sms-setup-root>' + setupHtml() + "</div></div>";
+    }
+    if (canSee()) setTimeout(start, 0);
+    else if (member.loaded) { stop(); state.data = null; dropCache(); }
     return '<div class="inbox-sms" data-inbox-sms><header class="dmsgs-head"><h1>' + esc(tr("Inbox")) + "</h1></header>" + chips +
       '<section class="sms-section" aria-live="polite">' + sectionHtml() + "</section></div>";
   }
@@ -354,16 +425,23 @@
 
   if (root.document) {
     root.document.addEventListener("click", function (ev) {
-      var t = ev.target && ev.target.closest ? ev.target.closest("[data-sms-copy],[data-sms-refresh],[data-sms-history]") : null;
+      var t = ev.target && ev.target.closest ? ev.target.closest("[data-sms-copy],[data-sms-refresh],[data-sms-history],[data-sms-forget]") : null;
       if (!t || !t.closest("[data-inbox-sms]")) return;
       ev.preventDefault();
+      if (t.hasAttribute("data-sms-forget")) { forget(); repaintSetup(); return; }
       if (t.hasAttribute("data-sms-copy")) copy(t.getAttribute("data-sms-copy"));
       else if (t.hasAttribute("data-sms-history")) { state.history = true; fetchNow().then(schedule); }
       else fetchNow().then(schedule);
     });
+    root.document.addEventListener("submit", function (ev) {
+      var form = ev.target;
+      if (!form || !form.hasAttribute || !form.hasAttribute("data-sms-setup")) return;
+      ev.preventDefault();
+      submitSetup(form);
+    }, true);
     root.document.addEventListener("visibilitychange", function () {
       if (root.document.hidden) { clearTimeout(state.timer); state.timer = 0; return; }
-      if (onSection() && state.started && isOwner()) fetchNow().then(schedule);
+      if (onSection() && state.started && canSee()) fetchNow().then(schedule);
     });
     root.addEventListener("hashchange", function () { if (!onSection()) stop(); });
   }
