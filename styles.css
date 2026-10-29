@@ -1112,6 +1112,13 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .media.m3 .tile:first-child { grid-row: 1 / span 2; }
 .media.m4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 288px; }
 .tile { position: relative; min-width: 0; min-height: 0; background: var(--card); }
+/* Save data: a photo waiting for Wi-Fi or a tap keeps its box and says so. */
+.tile[data-ds-hold] { cursor: pointer; }
+.media.m1 .tile[data-ds-hold]:not([style*="aspect-ratio"]) { min-height: 200px; }
+.tile[data-ds-hold] img { visibility: hidden; pointer-events: none; }
+.tile.embed-tile[data-ds-hold] { height: 160px; min-height: 160px; aspect-ratio: auto; }
+.tile[data-ds-hold] iframe { display: none; }
+.tile[data-ds-hold]::after { content: attr(data-ds-label); position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 6px 14px; border-radius: 9999px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 13px; font-weight: 700; white-space: nowrap; pointer-events: none; }
 .media.m1 img, .media.m1 video {
   width: 100%;
   max-height: 510px;
