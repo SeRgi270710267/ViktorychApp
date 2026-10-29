@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a100-__SW_VERSION__";
+const VERSION = "viktorych-a101-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T03:56:00Z-p2p-direct
+// cache-bust: 2026-10-29T04:04:00Z-p2p-media
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -206,7 +206,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js"];
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a100-";
+  const prefix = "viktorych-a101-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1026,7 +1026,9 @@ async function cacheBookmark(urls) {
   for (const url of urls || []) {
     if (!url || !/^https:/.test(url)) continue;
     try {
-      const res = await fetch(url, { mode: "no-cors" });
+      // A readable copy can also go to friends' devices; opaque is the fallback.
+      const readable = url.startsWith(self.location.origin + "/") || /^https:\/\/(?:[a-z0-9-]+\.)*(?:twimg\.com|r2\.dev|workers\.dev)\//i.test(url);
+      const res = readable ? await fetch(url, { mode: "cors", credentials: "omit" }).catch(() => fetch(url, { mode: "no-cors" })) : await fetch(url, { mode: "no-cors" });
       if (res && (res.ok || res.type === "opaque")) {
         await cache.put(url, res.clone());
         await rememberMedia(url, Number(res.headers.get("content-length")) || 200 * 1024);
@@ -1034,6 +1036,19 @@ async function cacheBookmark(urls) {
     } catch (err) { /* a missed image still leaves the saved post text */ }
   }
   await trimMedia(cache);
+}
+
+/* Original bytes a friend's device sent for a URL this page asked about. */
+async function cacheFriendCopy(url, blob) {
+  try {
+    const cache = await caches.open(MEDIA);
+    if (await cache.match(url)) return;
+    const headers = { "content-length": String(blob.size) };
+    if (blob.type) headers["content-type"] = blob.type;
+    await cache.put(url, new Response(blob, { status: 200, headers: headers }));
+    await rememberMedia(url, blob.size);
+    await trimMedia(cache);
+  } catch (err) { /* the normal fetch still works */ }
 }
 
 let lastReportAt = 0;
@@ -1640,6 +1655,7 @@ self.addEventListener("message", (event) => {
   }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
   if (data.type === "cache-bookmark" || data.type === "cache-media") event.waitUntil(cacheBookmark(data.urls));
+  if (data.type === "cache-media-bytes" && typeof data.url === "string" && /^https:/.test(data.url) && data.blob instanceof Blob) event.waitUntil(cacheFriendCopy(data.url, data.blob));
   if (data.type === "shorts-lock") {
     rememberShortsLock(data);
     return;

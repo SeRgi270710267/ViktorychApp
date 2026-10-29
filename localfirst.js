@@ -469,6 +469,22 @@
     if (!list.length) return;
     var worker = navigator.serviceWorker.controller;
     if (!worker) return;
+    var friends = typeof window !== "undefined" && window.ViktorychFriendP2P;
+    if (friends && friends.peers && friends.peers().length) {
+      // Friends online first; whatever they don't have, or send too slowly, comes from the source.
+      Promise.all(list.slice(0, 24).map(function (url) {
+        return friends.fetchMedia(url, { peerOnly: true }).then(function (got) {
+          if (!got || !got.blob) return url;
+          try { worker.postMessage({ type: "cache-media-bytes", url: url, blob: got.blob }); } catch (err) { return url; }
+          return "";
+        }, function () { return url; });
+      })).then(function (rest) {
+        rest = rest.filter(Boolean);
+        if (!rest.length) return;
+        try { worker.postMessage({ type: "cache-media", urls: rest }); } catch (err) { /* the worker may be restarting */ }
+      });
+      return;
+    }
     try { worker.postMessage({ type: "cache-media", urls: list.slice(0, 24) }); } catch (err) { /* the worker may be restarting */ }
   }
 
