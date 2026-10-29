@@ -4,7 +4,7 @@ const VERSION = "viktorych-a117-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T09:58:00Z-unattended
+// cache-bust: 2026-10-29T09:57:00Z-resilience
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -625,7 +625,68 @@ async function mirrorAlternate(url, signal) {
   return null;
 }
 
+// When the first origin is silent for this long, the other copy of the
+// same file starts too (DPI throttling stalls instead of failing).
+const MIRROR_HEDGE_MS = 4000;
+
 async function mirrorFetch(request, init) {
+  const api0 = mirrorApi();
+  let hedgeUrl = null;
+  if (api0 && request && request.method === "GET" && !(request.headers && request.headers.get("range"))) {
+    try { hedgeUrl = new URL(request.url); } catch (err) { hedgeUrl = null; }
+    if (hedgeUrl && !mirrorRelative(hedgeUrl)) hedgeUrl = null;
+  }
+  if (hedgeUrl) return mirrorHedged(request, init, hedgeUrl);
+  return mirrorFetchPlain(request, init);
+}
+
+function mirrorHedged(request, init, url) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let primaryDone = false;
+    let altStarted = false;
+    let altDone = false;
+    let primaryRes = null;
+    let primaryErr = null;
+    const finishFallback = () => {
+      if (settled || !primaryDone || (altStarted && !altDone)) return;
+      settled = true;
+      if (primaryRes) resolve(primaryRes);
+      else reject(primaryErr || new Error("mirror"));
+    };
+    const startAlt = () => {
+      if (altStarted || settled) return;
+      altStarted = true;
+      mirrorAlternate(url, request && request.signal).then((alt) => {
+        altDone = true;
+        if (settled) return;
+        if (alt) { settled = true; resolve(alt); return; }
+        finishFallback();
+      }, () => { altDone = true; finishFallback(); });
+    };
+    const timer = setTimeout(startAlt, MIRROR_HEDGE_MS);
+    const api = mirrorApi();
+    (init ? fetch(request, init) : fetch(request)).then((res) => {
+      primaryDone = true;
+      clearTimeout(timer);
+      if (settled) return;
+      if (res && !api.failoverStatus(res.status)) { settled = true; resolve(res); return; }
+      primaryRes = res;
+      startAlt();
+      finishFallback();
+    }, (err) => {
+      primaryDone = true;
+      clearTimeout(timer);
+      if (settled) return;
+      if (err && err.name === "AbortError" && !altStarted) { settled = true; reject(err); return; }
+      primaryErr = new Error("mirror");
+      startAlt();
+      finishFallback();
+    });
+  });
+}
+
+async function mirrorFetchPlain(request, init) {
   let res = null;
   let failed = false;
   try {

@@ -72,4 +72,6 @@ console.log("profile tab order ok");
   const { spawnSync } = await import("node:child_process");
   const run = spawnSync(process.execPath, ["scripts/api_etag_test.mjs"], { stdio: "inherit" });
   if (run.status !== 0) throw new Error("api etag check failed");
+  const hedge = spawnSync(process.execPath, ["scripts/api_hedge_test.mjs"], { stdio: "inherit" });
+  if (hedge.status !== 0) throw new Error("api hedge check failed");
 }
