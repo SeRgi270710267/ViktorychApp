@@ -2528,6 +2528,7 @@ SI18n.addPack("es", {
   "Turn your phone sideways to play": "Gira el teléfono para jugar",
   "Play full screen": "Jugar en pantalla completa",
   "Controller connected. Tap the game, then press any button.": "Mando conectado. Toca el juego y pulsa cualquier botón.",
+  "The joystick and buttons appear once you join a match. Tap menus directly.": "El joystick y los botones aparecen al entrar en una partida. Toca los menús directamente.",
   "Playing {game}": "Jugando a {game}",
   "{name} invited you to play {game}": "{name} te invitó a jugar a {game}",
   "{name} invited you to play": "{name} te invitó a jugar",
