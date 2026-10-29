@@ -2946,5 +2946,21 @@ SI18n.addPack("ru", {
   "This is the official account of this site.": "Это официальный аккаунт этого сайта.",
   "Unpin from top": "Открепить сверху",
   "Verified account": "Подтверждённый аккаунт",
-  "Who can see it": "Кто может видеть"
+  "Who can see it": "Кто может видеть",
+  "Sharing pool": "Общий пул",
+  "Devices that turned this on pass each other the public feed files and app files they already have, so pages load from nearby and the server works less. Every file is checked against a signed fingerprint before it is used.": "Устройства, где это включено, передают друг другу уже загруженные публичные файлы ленты и приложения, поэтому страницы грузятся быстрее, а сервер нагружается меньше. Каждый файл перед использованием сверяется с подписанным отпечатком.",
+  "Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device.": "Как и при любом WebRTC-соединении, устройства, с которыми вы делитесь, видят ваш IP-адрес. Подключаются только те, кто это включил, не больше 4 одновременно, и сервер-ретранслятор не используется. С этого устройства раздаётся не больше 20 МБ в день.",
+  "Off while Save data is on.": "Выключено, пока включена экономия трафика.",
+  "Off on mobile data.": "Выключено при мобильном интернете.",
+  "Auto waits for an unmetered Wi-Fi or wired connection.": "Авто ждёт безлимитного Wi-Fi или проводного подключения.",
+  "Auto waits until this device is charging.": "Авто ждёт, пока устройство не начнёт заряжаться.",
+  "Off in TV mode unless you choose On.": "Выключено в режиме ТВ, если не выбрать «Вкл».",
+  "Off.": "Выключено.",
+  "Sign in to join the pool.": "Войдите, чтобы подключиться к пулу.",
+  "On, connected to {n} devices.": "Включено, подключено устройств: {n}.",
+  "Saved {saved} from peers, shared {shared}": "Получено от других {saved}, отдано {shared}",
+  "Sharing pool, last 7 days": "Общий пул, последние 7 дней",
+  "Peer hit rate {rate} ({hits} of {tries})": "Попадания у пиров {rate} ({hits} из {tries})",
+  "Offloaded from the server {peer} of {total} ({share})": "Снято с сервера {peer} из {total} ({share})",
+  "Online in the pool now {n} · rejected chunks {bad}": "Сейчас в пуле {n} · отклонено фрагментов {bad}"
 });

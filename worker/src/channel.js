@@ -35,6 +35,7 @@
 import { isAccountId } from "../../shared/presence.js";
 import { isSwarmName, swarmFetch, swarmMessage, swarmClose } from "./media-swarm.js";
 import { isLiveName, liveFetch, liveMessage, liveClose } from "./live.js";
+import { isPoolName, poolFetch, poolMessage, poolClose } from "./peer-pool.js";
 
 const TOPIC_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const TOPIC_LIMIT = 8;
@@ -133,6 +134,7 @@ export class AccountChannel {
   async fetch(request) {
     if (isLiveName(accountName(this.ctx))) return liveFetch(this, request);
     if (isSwarmName(accountName(this.ctx))) return swarmFetch(this, request);
+    if (isPoolName(accountName(this.ctx))) return poolFetch(this, request);
     const url = new URL(request.url);
     if (url.hostname === "channel.internal") return this.internal(request, url);
     const upgrade = String(request.headers.get("Upgrade") || "");
@@ -158,6 +160,7 @@ export class AccountChannel {
       return liveMessage(this, ws, text);
     }
     if (isSwarmName(accountName(this.ctx))) return swarmMessage(this, ws, message);
+    if (isPoolName(accountName(this.ctx))) return poolMessage(this, ws, typeof message === "string" ? message : "");
     const text = typeof message === "string" ? message : new TextDecoder().decode(message);
     if (!text || text.length > 4000) return;
     let msg = null;
@@ -192,6 +195,10 @@ export class AccountChannel {
     }
     if (isSwarmName(accountName(this.ctx))) {
       swarmClose(this, ws);
+      return;
+    }
+    if (isPoolName(accountName(this.ctx))) {
+      poolClose(this, ws);
       return;
     }
     let att = { watches: {} };

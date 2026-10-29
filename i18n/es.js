@@ -2946,5 +2946,21 @@ SI18n.addPack("es", {
   "This is the official account of this site.": "Esta es la cuenta oficial de este sitio.",
   "Unpin from top": "Desfijar de arriba",
   "Verified account": "Cuenta verificada",
-  "Who can see it": "Quién puede verla"
+  "Who can see it": "Quién puede verla",
+  "Sharing pool": "Grupo para compartir",
+  "Devices that turned this on pass each other the public feed files and app files they already have, so pages load from nearby and the server works less. Every file is checked against a signed fingerprint before it is used.": "Los dispositivos que lo activaron se pasan entre sí los archivos públicos del feed y de la app que ya tienen, así las páginas cargan desde cerca y el servidor trabaja menos. Cada archivo se comprueba con una huella firmada antes de usarse.",
+  "Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device.": "Como en cualquier conexión WebRTC, los dispositivos con los que compartes pueden ver tu dirección IP. Solo se conectan quienes lo activaron, como máximo 4 a la vez, y no se usa ningún servidor de retransmisión. Este dispositivo comparte hasta 20 MB al día.",
+  "Off while Save data is on.": "Desactivado mientras Ahorro de datos está activado.",
+  "Off on mobile data.": "Desactivado con datos móviles.",
+  "Auto waits for an unmetered Wi-Fi or wired connection.": "Automático espera una conexión Wi-Fi o por cable sin límite de datos.",
+  "Auto waits until this device is charging.": "Automático espera a que este dispositivo esté cargando.",
+  "Off in TV mode unless you choose On.": "Desactivado en modo TV salvo que elijas Activado.",
+  "Off.": "Desactivado.",
+  "Sign in to join the pool.": "Inicia sesión para unirte al grupo.",
+  "On, connected to {n} devices.": "Activado, conectado a {n} dispositivos.",
+  "Saved {saved} from peers, shared {shared}": "Ahorrado {saved} gracias a otros, compartido {shared}",
+  "Sharing pool, last 7 days": "Grupo para compartir, últimos 7 días",
+  "Peer hit rate {rate} ({hits} of {tries})": "Aciertos entre pares {rate} ({hits} de {tries})",
+  "Offloaded from the server {peer} of {total} ({share})": "Descargado del servidor {peer} de {total} ({share})",
+  "Online in the pool now {n} · rejected chunks {bad}": "En línea en el grupo ahora {n} · fragmentos rechazados {bad}"
 });

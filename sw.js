@@ -195,6 +195,8 @@ const SHELL_FILES = [
   "./icons/music-maskable-512.png",
   "./peer-media.js",
   "./shared/peer-media.js",
+  "./peer-pool.js",
+  "./shared/peer-pool.js",
   "./shared/device-performance.js"
 ];
 

@@ -2946,5 +2946,21 @@ SI18n.addPack("en", {
   "This is the official account of this site.": "This is the official account of this site.",
   "Unpin from top": "Unpin from top",
   "Verified account": "Verified account",
-  "Who can see it": "Who can see it"
+  "Who can see it": "Who can see it",
+  "Sharing pool": "Sharing pool",
+  "Devices that turned this on pass each other the public feed files and app files they already have, so pages load from nearby and the server works less. Every file is checked against a signed fingerprint before it is used.": "Devices that turned this on pass each other the public feed files and app files they already have, so pages load from nearby and the server works less. Every file is checked against a signed fingerprint before it is used.",
+  "Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device.": "Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device.",
+  "Off while Save data is on.": "Off while Save data is on.",
+  "Off on mobile data.": "Off on mobile data.",
+  "Auto waits for an unmetered Wi-Fi or wired connection.": "Auto waits for an unmetered Wi-Fi or wired connection.",
+  "Auto waits until this device is charging.": "Auto waits until this device is charging.",
+  "Off in TV mode unless you choose On.": "Off in TV mode unless you choose On.",
+  "Off.": "Off.",
+  "Sign in to join the pool.": "Sign in to join the pool.",
+  "On, connected to {n} devices.": "On, connected to {n} devices.",
+  "Saved {saved} from peers, shared {shared}": "Saved {saved} from peers, shared {shared}",
+  "Sharing pool, last 7 days": "Sharing pool, last 7 days",
+  "Peer hit rate {rate} ({hits} of {tries})": "Peer hit rate {rate} ({hits} of {tries})",
+  "Offloaded from the server {peer} of {total} ({share})": "Offloaded from the server {peer} of {total} ({share})",
+  "Online in the pool now {n} · rejected chunks {bad}": "Online in the pool now {n} · rejected chunks {bad}"
 });

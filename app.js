@@ -3940,7 +3940,35 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       <div class="theme-row" role="group" aria-label="${esc(tr("Upload cap"))}">
         ${caps.map((row) => `<button class="outline${cap === row[0] ? " on" : ""}" type="button" data-act="peer-upload" data-cap="${row[0]}">${esc(row[1])}</button>`).join("")}
       </div>
-      <button class="tab-switch${share ? " on" : ""}" type="button" role="switch" aria-checked="${share ? "true" : "false"}" data-act="peer-share"><span>${esc(tr("Share only while watching"))}</span><i></i></button>`;
+      <button class="tab-switch${share ? " on" : ""}" type="button" role="switch" aria-checked="${share ? "true" : "false"}" data-act="peer-share"><span>${esc(tr("Share only while watching"))}</span><i></i></button>` + poolSettingsHtml();
+  }
+  /* The sharing pool: public feed files and app files passed between
+     devices that turned it on. Stats come from peer-pool.js. */
+  function poolSettingsHtml() {
+    const pool = window.ViktorychPool;
+    const st = pool && pool.stats ? pool.stats() : null;
+    let mode = "auto";
+    try { const saved = JSON.parse(localStorage.getItem("viktorychapp-peer-pool-v1") || "{}"); if (saved && (saved.mode === "on" || saved.mode === "off")) mode = saved.mode; } catch (err) { mode = "auto"; }
+    const mb = (n) => (Math.max(0, Number(n) || 0) / 1048576).toFixed(1) + " MB";
+    const why = {
+      saveData: tr("Off while Save data is on."),
+      cellular: tr("Off on mobile data."),
+      metered: tr("Auto waits for an unmetered Wi-Fi or wired connection."),
+      battery: tr("Auto waits until this device is charging."),
+      tv: tr("Off in TV mode unless you choose On."),
+      off: tr("Off."),
+      signedOut: tr("Sign in to join the pool.")
+    };
+    const status = !st ? tr("Loading…") : st.on ? tr("On, connected to {n} devices.").replace("{n}", String(st.peers)) : (why[st.reason] || tr("Off."));
+    const line = tr("Saved {saved} from peers, shared {shared}").replace("{saved}", mb(st && st.saved)).replace("{shared}", mb(st && st.shared));
+    return `<h2>${esc(tr("Sharing pool"))}</h2>
+      <p class="phandle">${esc(tr("Devices that turned this on pass each other the public feed files and app files they already have, so pages load from nearby and the server works less. Every file is checked against a signed fingerprint before it is used."))}</p>
+      <p class="phandle">${esc(tr("Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device."))}</p>
+      <div class="theme-row" role="group" aria-label="${esc(tr("Sharing pool"))}">
+        ${["auto", "on", "off"].map((id) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="peer-pool" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
+      </div>
+      <p class="phandle" data-pool-status>${esc(status)}</p>
+      <p class="phandle" data-pool-stats>${esc(line)}</p>`;
   }
   function ensureDeviceModule() {
     if (ensureDeviceModule.done) return;
@@ -18752,6 +18780,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "peer-media") {
       const mode = el.dataset.mode === "on" || el.dataset.mode === "off" ? el.dataset.mode : "auto";
       writeDevicePerf({ peerMedia: mode });
+      render();
+      return;
+    }
+    if (act === "peer-pool") {
+      const mode = el.dataset.mode === "on" || el.dataset.mode === "off" ? el.dataset.mode : "auto";
+      if (window.ViktorychPool && window.ViktorychPool.setMode) window.ViktorychPool.setMode(mode);
+      else { try { localStorage.setItem("viktorychapp-peer-pool-v1", JSON.stringify({ mode: mode })); } catch (err) { /* memory only */ } }
       render();
       return;
     }

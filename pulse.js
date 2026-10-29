@@ -156,6 +156,8 @@
       if (typeof fn === "function") listeners.push(fn);
       return function () { listeners = listeners.filter(function (f) { return f !== fn; }); };
     },
+    /* Where the pulse is read; signed pool manifests sit beside it. */
+    url: function () { return sourceUrl(); },
     _apply: apply,
     _tick: tick
   };
