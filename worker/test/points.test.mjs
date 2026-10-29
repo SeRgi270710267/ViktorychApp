@@ -229,6 +229,20 @@ test("points ledger, caps, clawback, and gift privacy", async () => {
   assert.equal(inbox.body.gifts.some((item) => item.message === "in a message" && item.sender && item.sender.handle === "user_a"), true);
   const otherInbox = await call("/v1/gifts/inbox", { ip: "203.0.113.115", token: bea.token });
   assert.equal(otherInbox.body.gifts.some((item) => item.message === "in a message"), false);
+  const sentList = await call("/v1/gifts/sent", { ip: "203.0.113.116", token: ada.token });
+  assert.equal(sentList.status, 200);
+  assert.equal(sentList.body.gifts.some((item) => item.message === "in a message" && item.recipient && item.recipient.handle === "user_c" && item.cp), true);
+  const catalogNow = await call("/v1/gifts/catalog", { ip: "203.0.113.117" });
+  assert.equal(catalogNow.body.gifts.length > 100, true);
+  assert.equal(Array.isArray(catalogNow.body.trending) && catalogNow.body.trending.includes("heart"), true);
+  const freeOne = catalogNow.body.gifts.find((item) => item.price === 0);
+  for (let i = 0; i < catalogNow.body.freePerDay; i++) {
+    const free = await call("/v1/gifts/send", { method: "POST", ip: "203.0.113.118", token: ada.token, body: { giftId: freeOne.id, handle: "user_c", privacy: "public" } });
+    assert.equal(free.status, 201);
+  }
+  const overFree = await call("/v1/gifts/send", { method: "POST", ip: "203.0.113.118", token: ada.token, body: { giftId: freeOne.id, handle: "user_c", privacy: "public" } });
+  assert.equal(overFree.status, 429);
+  assert.equal(overFree.body.error, "free_limit");
 
   await bindings.DB.prepare(
     "CREATE TABLE IF NOT EXISTS about_fields (id TEXT PRIMARY KEY, public_id TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, audience TEXT NOT NULL, tz TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL)"
