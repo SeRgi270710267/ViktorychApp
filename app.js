@@ -9056,6 +9056,7 @@ const here = parseRoute();
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "points") return { name: "points", query };
     if (parts[0] === "online") return { name: "online", query };
+    if (parts[0] === "connect") return { name: "connect", query };
     if (parts[0] === "store" || parts[0] === "gifts") return { name: "store", sub: parts[1] || "", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
@@ -9588,6 +9589,10 @@ const here = parseRoute();
       ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
     </aside>`;
+  }
+
+  if (window.ViktorychPYMK && window.ViktorychPYMK.setHost) {
+    window.ViktorychPYMK.setHost({ esc, avatar, badge, icon, isFollowed, follow: followButtonClean, render: () => render() });
   }
 
   const BOTTOM_NAV_MIN = 2;
@@ -11183,7 +11188,7 @@ const here = parseRoute();
       : "";
     const tabLoading = !list.length && tabStillLoading(tab);
     if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
-    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(list.map((p, i) => card(p, null, { eager: i === 0 })), tab) : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -11192,6 +11197,13 @@ const here = parseRoute();
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
     return homeHeader(tab) + bar + inline + showPostsRowHtml() + body + timelineSentinel(list.length, sorted.length);
+  }
+
+  /* People you may know cards between Home posts (pymk.js). */
+  function withSuggestions(items, tab) {
+    const lib = window.ViktorychPYMK;
+    if (!lib || !lib.interleave || (tab !== "foryou" && tab !== "following")) return items.join("");
+    return lib.interleave(items, { tab });
   }
 
   function mobileLogo() {
@@ -15068,6 +15080,7 @@ const here = parseRoute();
       else if (section === "nostr") key = tr("Nostr");
       else if (section === "live-translate") key = tr("Live Translate");
       else if (section === "content") key = tr("Custom tabs");
+      else if (section === "suggestions") key = tr("Suggestions in your feed");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
       else if (section === "storage" && sub === "usage") key = tr("Storage usage");
@@ -15097,7 +15110,8 @@ const here = parseRoute();
         communities: tr("Communities"),
         drive: route.section === "photos" ? tr("Photos") : tr("brand.storage"),
         vault: tr("Viktorych Vault"),
-        packages: tr("Packages")
+        packages: tr("Packages"),
+        connect: tr("People you may know")
       };
       key = map[route.name] || "";
     }
@@ -15583,6 +15597,7 @@ const here = parseRoute();
         ${presenceBlock}
         ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
+        ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
         ${window.ViktorychNostr && window.ViktorychNostr.allowed() ? `<div class="set-list">${settingsRow("#/settings/nostr", tr("Nostr"), tr("Follow Nostr profiles, send your posts to relays, and see Nostr replies."))}</div>` : ""}
         ${acct && window.ViktorychUsernames ? `<div class="set-list">${settingsRow("#/settings/usernames", tr("Usernames"), tr("Choose who sees which username, nicknames, and who can mention you."))}</div>` : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
@@ -15607,6 +15622,9 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("Immediately purges all stored accounts, history, bookmarks, and cached files from this device."))}</p>
         <button class="outline danger" type="button" data-act="shred-local-data">${esc(tr("Clear all local data"))}</button>
       </div>`;
+    }
+    if (section === "suggestions") {
+      return settingsHead(tr("Suggestions in your feed"), "#/settings") + (window.ViktorychPYMK ? window.ViktorychPYMK.settingsPageHtml() : "");
     }
     if (section === "content") {
       return settingsHead(tr("Custom tabs"), "#/settings") + `<div class="set-block">
@@ -15677,6 +15695,7 @@ const here = parseRoute();
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
+      ${settingsRow("#/settings/suggestions", tr("Suggestions in your feed"), tr("People you may know, account types, and swipeable cards."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
@@ -17999,6 +18018,7 @@ if (STATE.histClear) {
     const params = new URLSearchParams(location.search);
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
+    if (route.name === "connect") return pageHead(window.ViktorychPYMK ? window.ViktorychPYMK.pageTitle(route) : tr("People you may know"), "", true) + (window.ViktorychPYMK ? window.ViktorychPYMK.pageHtml(route) : "");
     if (route.name === "online") return pageHead(tr("Friends")) + ((window.ViktorychPresence && window.ViktorychPresence.pageHtml && window.ViktorychPresence.pageHtml()) || "");
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces" && !route.id) {
@@ -20140,6 +20160,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const on = ids.some((item) => isFollowed(item));
       if (!on && ids.length > 1 && window.FeedsPeople && window.FeedsPeople.pick && window.FeedsPeople.pick(ids, el)) return;
       applyFollow(ids, !on);
+      return;
+    }
+    if (act && act.indexOf("pymk-") === 0 && window.ViktorychPYMK) {
+      window.ViktorychPYMK.act(act, el);
       return;
     }
     if (act && act.indexOf("pm-") === 0 && window.FeedsPeople && window.FeedsPeople.act) {
