@@ -31,7 +31,7 @@ function staticChecks() {
   const external = read("app.js");
   const profile = external.slice(external.indexOf("function profileView"), external.indexOf("function statusView"));
   if (profile.includes("ProfileAbout") || profile.includes("?tab=about")) fail("external profiles must not grow an About tab");
-  if (!read("sw.js").includes('VERSION = "viktorych-a129-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a130-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok about layout rules");
 }
 
@@ -115,7 +115,7 @@ async function browserChecks() {
       if (box.pencil < 1) fail(width + " missing edit pencil");
       if (box.lock < 1) fail(width + " missing privacy icon");
       if (!box.text.includes("sample one · sample two")) fail(width + " languages were not dotted");
-      if (!box.text.includes("3 family members") && !box.text.includes("3 familiares") && !box.text.includes("3 родственников")) fail(width + " family count missing");
+      if (!box.text.includes("3 family members") && !box.text.includes("3 familiares") && !box.text.includes("3 родственников") && !box.text.includes("3 родственника")) fail(width + " family count missing");
       await page.close();
     }
     const hidden = await (async () => {
