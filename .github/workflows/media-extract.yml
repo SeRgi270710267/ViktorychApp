@@ -18,6 +18,11 @@ on:
         required: false
         default: "80"
   pull_request:
+    paths:
+      - "scripts/media_extract.py"
+      - "scripts/telegram_backup.py"
+      - "scripts/owner_keys.py"
+      - ".github/workflows/media-extract.yml"
   push:
     branches:
       - main
@@ -33,17 +38,19 @@ permissions:
 # cancel-in-progress is false so the running upload finishes; a newer waiting
 # run takes the single queue slot.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && 'test' || 'upload' }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('test-{0}', github.event.pull_request.number) || 'upload' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   selftest:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -77,24 +84,26 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.secrets.outputs.present == 'true'
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         if: steps.secrets.outputs.present == 'true'
         with:
           python-version: "3.12"
 
       - name: Restore the ffmpeg build
         if: steps.secrets.outputs.present == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: /tmp/ffmpeg-dist
           key: ffmpeg-linux64-gpl-v1
 
       - name: Restore the pip cache
         if: steps.secrets.outputs.present == 'true'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-py312-media-${{ github.run_id }}
@@ -128,7 +137,7 @@ jobs:
 
       - name: Save the pip cache
         if: steps.secrets.outputs.present == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-py312-media-${{ github.run_id }}
