@@ -13575,6 +13575,7 @@ const here = parseRoute();
       else if (section === "privacy") key = tr("Privacy and safety");
       else if (section === "usernames") key = tr("Usernames");
       else if (section === "nostr") key = tr("Nostr");
+      else if (section === "live-translate") key = tr("Live Translate");
       else if (section === "content") key = tr("Custom tabs");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
@@ -13794,7 +13795,7 @@ const here = parseRoute();
     }
     if (section === "languages") {
       const endonym = window.SI18n ? window.SI18n.endonym(lang) : "English";
-      return settingsHead(tr("Languages"), "#/settings/accessibility") + `<div class="set-list">${settingsRow("#/settings/display-language", tr("Display language"), endonym)}</div><div class="set-block">${window.FeedsTranslate ? window.FeedsTranslate.settingsHtml() : ""}</div>`;
+      return settingsHead(tr("Languages"), "#/settings/accessibility") + `<div class="set-list">${settingsRow("#/settings/display-language", tr("Display language"), endonym)}${settingsRow("#/settings/live-translate", tr("Live Translate"), tr("Hear and read videos in your language while they play."))}</div><div class="set-block">${window.FeedsTranslate ? window.FeedsTranslate.settingsHtml() : ""}</div>`;
     }
     if (section === "data") {
       ensureDeviceModule();
@@ -13847,6 +13848,7 @@ const here = parseRoute();
       const screen = window.ViktorychPrivacy && window.ViktorychPrivacy.settingsHtml ? window.ViktorychPrivacy.settingsHtml() : "";
       return settingsHead(tr("Security"), "#/settings") + `<div class="set-block">${pass}${lock}${screen}</div>`;
     }
+    if (section === "live-translate") return settingsHead(tr("Live Translate"), "#/settings/languages") + `<div class="set-block">${window.ViktorychLiveTranslate ? window.ViktorychLiveTranslate.settingsHtml() : emptyBlock(tr("Live Translate isn’t available in this browser."), "")}</div>`;
     if (section === "nostr") return settingsHead(tr("Nostr"), "#/settings/privacy") + `<div class="set-block">${nostrSettingsHtml()}</div>`;
     if (section === "usernames") {
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";

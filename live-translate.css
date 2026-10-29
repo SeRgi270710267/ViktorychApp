@@ -1,0 +1,59 @@
+/* Live Translate pill and subtitles. */
+.lt-pill {
+  position: fixed;
+  z-index: 880;
+  right: 16px;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(260px, calc(100vw - 32px));
+  height: 32px;
+  padding: 0 14px 0 10px;
+  border: 1px solid rgba(239, 243, 244, 0.18);
+  border-radius: 9999px;
+  background: rgba(15, 20, 25, 0.82);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: rgba(101, 119, 134, 0.2) 0 0 15px, rgba(101, 119, 134, 0.15) 0 0 3px 1px;
+}
+.lt-pill[hidden] { display: none; }
+.lt-pill svg { flex: none; width: 18px; height: 18px; fill: currentColor; }
+.lt-pill.on { background: rgb(29, 155, 240); border-color: rgb(29, 155, 240); }
+.lt-pill .lt-clip { display: block; overflow: hidden; min-width: 0; white-space: nowrap; }
+.lt-pill .lt-text { display: inline-block; white-space: nowrap; }
+.lt-pill.long .lt-text { padding-right: 24px; animation: lt-marquee 9s linear infinite; }
+@keyframes lt-marquee { 0%, 15% { transform: translateX(0); } 85%, 100% { transform: translateX(calc(-100% + 160px)); } }
+@media (min-width: 700px) { .lt-pill { bottom: 24px; right: 24px; } }
+@media (prefers-reduced-motion: reduce) { .lt-pill.long .lt-text { animation: none; } }
+.lt-subs {
+  position: fixed;
+  z-index: 879;
+  box-sizing: border-box;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 17px;
+  line-height: 24px;
+  text-align: center;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lt-subs[hidden] { display: none; }
+.lt-settings .lt-row { flex-wrap: wrap; }
+.lt-settings .lt-row .outline { height: 32px; min-height: 32px; padding: 0 14px; }
+.lt-settings .lt-range { display: flex; align-items: center; gap: 12px; }
+.lt-settings .lt-range input { flex: 1; accent-color: rgb(29, 155, 240); }
+.lt-settings .lt-range span { min-width: 40px; text-align: right; }
+.lt-settings select + .outline { margin-top: 8px; }
