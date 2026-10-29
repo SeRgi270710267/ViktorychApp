@@ -693,7 +693,12 @@ async function readMedia(request, env, id, deps) {
   if ((post.audience || "") === "list" && !(await canSeeAudience(env, { viewerId: session.public_id, ownerId: post.author_id, audience: "list", subject: "post", subjectId: row.post_id }))) {
     return deps.json(404, { error: "not_found" });
   }
-  const object = await env.DATA.get(row.object_key);
+  let object = null;
+  try { object = await env.DATA.get(row.object_key); }
+  catch (err) { object = null; }
+  // The Telegram backup keeps a byte-for-byte copy of every upload. It is
+  // read only when the R2 object is missing or R2 fails.
+  if (!object && deps.tgObject) object = await deps.tgObject(env, row.object_key);
   if (!object) return deps.json(404, { error: "not_found" });
   const headers = new Headers();
   headers.set("content-type", row.mime || "application/octet-stream");

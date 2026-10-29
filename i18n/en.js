@@ -3464,5 +3464,20 @@ SI18n.addPack("en", {
   "Reduce motion is on, so achievements fade in quietly without sound or rumble.": "Reduce motion is on, so achievements fade in quietly without sound or rumble.",
   "Gentle": "Gentle",
   "Nearby chat (Bitchat)": "Nearby chat (Bitchat)",
-  "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.": "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers."
+  "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.": "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.",
+  "Nearby chat": "Nearby chat",
+  "A backup way to talk when the app can't reach its servers. On the TV app it uses Bluetooth to chat with people nearby. In a browser it uses an area chat over public Nostr relays. Both work with the Bitchat app. Messages here are public; anyone in the area can read them.": "A backup way to talk when the app can't reach its servers. On the TV app it uses Bluetooth to chat with people nearby. In a browser it uses an area chat over public Nostr relays. Both work with the Bitchat app. Messages here are public; anyone in the area can read them.",
+  "Offer nearby chat when nothing else loads": "Offer nearby chat when nothing else loads",
+  "It never runs by itself. It is offered only when the app can't load at all, and it connects only while the chat is open.": "It never runs by itself. It is offered only when the app can't load at all, and it connects only while the chat is open.",
+  "Open nearby chat": "Open nearby chat",
+  "Area (geohash)": "Area (geohash)",
+  "Nostr relays, separated by spaces (wss://…). Leave empty for the defaults.": "Nostr relays, separated by spaces (wss://…). Leave empty for the defaults.",
+  "Your name in the chat": "Your name in the chat",
+  "Type a message": "Type a message",
+  "Pick an area to start, such as u3qc for a city or u3qcn for a district.": "Pick an area to start, such as u3qc for a city or u3qcn for a district.",
+  "That is not a geohash. Use letters and digits like u3qcn.": "That is not a geohash. Use letters and digits like u3qcn.",
+  "{up} of {all} relays connected": "{up} of {all} relays connected",
+  "No messages in the last hour yet.": "No messages in the last hour yet.",
+  "Location is not available. Type an area instead.": "Location is not available. Type an area instead.",
+  "You are offline. The browser area chat needs some internet; the TV app can use Bluetooth.": "You are offline. The browser area chat needs some internet; the TV app can use Bluetooth."
 });

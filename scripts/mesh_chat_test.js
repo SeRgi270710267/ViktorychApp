@@ -49,8 +49,11 @@ function load({ search = "", ua = "Mozilla/5.0", store = {}, session = {}, cls =
   assert.strictEqual(w.ViktorychMesh.settingsHtml(), "");
 
   // Every language has every string.
-  const T = M._text, keys = Object.keys(T.en).sort();
-  for (const l of ["es", "hi", "ru"]) assert.deepStrictEqual(Object.keys(T[l]).sort(), keys, l + " strings");
+  // Every phrase is a key in every language pack.
+  for (const l of ["en", "es", "hi", "ru"]) {
+    const src = fs.readFileSync(path.join(__dirname, "..", "i18n", l + ".js"), "utf8");
+    for (const phrase of Object.values(M._text)) assert.ok(src.includes(JSON.stringify(phrase) + ":"), l + " pack has " + phrase);
+  }
 
   // An area message is a valid, signed Bitchat location event.
   w = load();

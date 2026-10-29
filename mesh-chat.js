@@ -17,113 +17,35 @@
   var DEFAULT_RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://offchain.pub"];
   var GEO = "0123456789bcdefghjkmnpqrstuvwxyz";
 
+  // English phrases are pack keys (i18n/*.js); SI18n translates them.
   var TEXT = {
-    en: {
-      open: "Nearby chat",
-      title: "Nearby chat (Bitchat)",
-      about: "A backup way to talk when the app can't reach its servers. On the TV app it uses Bluetooth to chat with people nearby. In a browser it uses an area chat over public Nostr relays. Both work with the Bitchat app. Messages here are public; anyone in the area can read them.",
-      mode: "Offer nearby chat when nothing else loads",
-      modeHelp: "It never runs by itself. It is offered only when the app can't load at all, and it connects only while the chat is open.",
-      openNow: "Open nearby chat",
-      area: "Area (geohash)",
-      here: "Use my location",
-      join: "Join",
-      relays: "Relays",
-      relaysAsk: "Nostr relays, separated by spaces (wss://…). Leave empty for the defaults.",
-      name: "Name",
-      nameAsk: "Your name in the chat",
-      say: "Type a message",
-      send: "Send",
-      close: "Close",
-      pick: "Pick an area to start, such as u3qc for a city or u3qcn for a district.",
-      bad: "That is not a geohash. Use letters and digits like u3qcn.",
-      conn: "{up} of {all} relays connected",
-      none: "No messages in the last hour yet.",
-      noLoc: "Location is not available. Type an area instead.",
-      offline: "You are offline. The browser area chat needs some internet; the TV app can use Bluetooth."
-    },
-    es: {
-      open: "Chat cercano",
-      title: "Chat cercano (Bitchat)",
-      about: "Una forma de respaldo para hablar cuando la app no llega a sus servidores. En la app de TV usa Bluetooth para chatear con personas cercanas. En un navegador usa un chat de zona a través de relays públicos de Nostr. Ambos funcionan con la app Bitchat. Los mensajes aquí son públicos; cualquiera en la zona puede leerlos.",
-      mode: "Ofrecer chat cercano cuando nada más cargue",
-      modeHelp: "Nunca se activa solo. Se ofrece solo cuando la app no puede cargar, y se conecta solo mientras el chat está abierto.",
-      openNow: "Abrir chat cercano",
-      area: "Zona (geohash)",
-      here: "Usar mi ubicación",
-      join: "Entrar",
-      relays: "Relays",
-      relaysAsk: "Relays de Nostr, separados por espacios (wss://…). Déjalo vacío para usar los predeterminados.",
-      name: "Nombre",
-      nameAsk: "Tu nombre en el chat",
-      say: "Escribe un mensaje",
-      send: "Enviar",
-      close: "Cerrar",
-      pick: "Elige una zona para empezar, como u3qc para una ciudad o u3qcn para un barrio.",
-      bad: "Eso no es un geohash. Usa letras y números como u3qcn.",
-      conn: "{up} de {all} relays conectados",
-      none: "Aún no hay mensajes en la última hora.",
-      noLoc: "La ubicación no está disponible. Escribe una zona.",
-      offline: "Estás sin conexión. El chat de zona del navegador necesita algo de internet; la app de TV puede usar Bluetooth."
-    },
-    hi: {
-      open: "आस-पास चैट",
-      title: "आस-पास चैट (Bitchat)",
-      about: "जब ऐप अपने सर्वर तक नहीं पहुँच पाता, तब बात करने का एक बैकअप तरीका। TV ऐप में यह ब्लूटूथ से आस-पास के लोगों से चैट करता है। ब्राउज़र में यह सार्वजनिक Nostr रिले के ज़रिए क्षेत्र चैट इस्तेमाल करता है। दोनों Bitchat ऐप के साथ काम करते हैं। यहाँ के संदेश सार्वजनिक हैं; क्षेत्र में कोई भी उन्हें पढ़ सकता है।",
-      mode: "जब कुछ और लोड न हो, तब आस-पास चैट दिखाएँ",
-      modeHelp: "यह अपने आप कभी नहीं चलता। यह सिर्फ़ तब दिखता है जब ऐप बिल्कुल लोड न हो, और सिर्फ़ चैट खुली होने तक जुड़ा रहता है।",
-      openNow: "आस-पास चैट खोलें",
-      area: "क्षेत्र (geohash)",
-      here: "मेरी लोकेशन इस्तेमाल करें",
-      join: "जुड़ें",
-      relays: "रिले",
-      relaysAsk: "Nostr रिले, स्पेस से अलग (wss://…)। डिफ़ॉल्ट के लिए खाली छोड़ें।",
-      name: "नाम",
-      nameAsk: "चैट में आपका नाम",
-      say: "संदेश लिखें",
-      send: "भेजें",
-      close: "बंद करें",
-      pick: "शुरू करने के लिए क्षेत्र चुनें, जैसे शहर के लिए u3qc या इलाके के लिए u3qcn।",
-      bad: "यह geohash नहीं है। u3qcn जैसे अक्षर और अंक इस्तेमाल करें।",
-      conn: "{all} में से {up} रिले जुड़े",
-      none: "पिछले एक घंटे में अभी कोई संदेश नहीं।",
-      noLoc: "लोकेशन उपलब्ध नहीं है। क्षेत्र लिखें।",
-      offline: "आप ऑफ़लाइन हैं। ब्राउज़र की क्षेत्र चैट को थोड़ा इंटरनेट चाहिए; TV ऐप ब्लूटूथ इस्तेमाल कर सकता है।"
-    },
-    ru: {
-      open: "Чат рядом",
-      title: "Чат рядом (Bitchat)",
-      about: "Запасной способ общаться, когда приложение не может связаться со своими серверами. В ТВ-приложении это чат с людьми рядом по Bluetooth. В браузере — чат района через публичные релеи Nostr. Оба совместимы с приложением Bitchat. Сообщения здесь публичные: их может прочитать любой в районе.",
-      mode: "Предлагать чат рядом, когда ничего не грузится",
-      modeHelp: "Сам он никогда не включается. Он предлагается, только когда приложение совсем не может загрузиться, и подключается только пока чат открыт.",
-      openNow: "Открыть чат рядом",
-      area: "Район (geohash)",
-      here: "Моё местоположение",
-      join: "Войти",
-      relays: "Релеи",
-      relaysAsk: "Релеи Nostr через пробел (wss://…). Оставьте пустым для стандартных.",
-      name: "Имя",
-      nameAsk: "Ваше имя в чате",
-      say: "Напишите сообщение",
-      send: "Отправить",
-      close: "Закрыть",
-      pick: "Выберите район, например u3qc для города или u3qcn для района.",
-      bad: "Это не geohash. Используйте буквы и цифры, например u3qcn.",
-      conn: "Подключено релеев: {up} из {all}",
-      none: "За последний час сообщений пока нет.",
-      noLoc: "Местоположение недоступно. Введите район вручную.",
-      offline: "Нет подключения. Чату района в браузере нужен хоть какой-то интернет; ТВ-приложение может использовать Bluetooth."
-    }
+    open: "Nearby chat",
+    title: "Nearby chat (Bitchat)",
+    about: "A backup way to talk when the app can't reach its servers. On the TV app it uses Bluetooth to chat with people nearby. In a browser it uses an area chat over public Nostr relays. Both work with the Bitchat app. Messages here are public; anyone in the area can read them.",
+    mode: "Offer nearby chat when nothing else loads",
+    modeHelp: "It never runs by itself. It is offered only when the app can't load at all, and it connects only while the chat is open.",
+    openNow: "Open nearby chat",
+    area: "Area (geohash)",
+    here: "Use my location",
+    join: "Join",
+    relays: "Relays",
+    relaysAsk: "Nostr relays, separated by spaces (wss://…). Leave empty for the defaults.",
+    name: "Name",
+    nameAsk: "Your name in the chat",
+    say: "Type a message",
+    send: "Send",
+    close: "Close",
+    pick: "Pick an area to start, such as u3qc for a city or u3qcn for a district.",
+    bad: "That is not a geohash. Use letters and digits like u3qcn.",
+    conn: "{up} of {all} relays connected",
+    none: "No messages in the last hour yet.",
+    noLoc: "Location is not available. Type an area instead.",
+    offline: "You are offline. The browser area chat needs some internet; the TV app can use Bluetooth."
   };
 
-  function lang() {
-    var l = "";
-    try { l = (window.SI18n && window.SI18n.getLang && window.SI18n.getLang()) || document.documentElement.lang || navigator.language || ""; } catch (err) { l = ""; }
-    l = String(l).slice(0, 2).toLowerCase();
-    return TEXT[l] ? l : "en";
-  }
   function t(key, vars) {
-    var s = (TEXT[lang()] || TEXT.en)[key] || TEXT.en[key] || key;
+    var s = TEXT[key] || key;
+    try { if (window.SI18n && window.SI18n.t) s = window.SI18n.t(s) || s; } catch (err) { /* packs not loaded */ }
     Object.keys(vars || {}).forEach(function (k) { s = s.split("{" + k + "}").join(String(vars[k])); });
     return s;
   }
