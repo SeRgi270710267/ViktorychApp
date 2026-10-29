@@ -17,7 +17,7 @@
    account_mutes, account_follow_requests, account_content,
    account_messages, mentions, notification_prefs, notification_events,
    notification_outbox, notification_tab_reads, discord_alert_prefs,
-   discord_alert_hits. notification_dead stores a salted hash only.
+   discord_alert_hits, and the native server tables (srv_*). notification_dead stores a salted hash only.
    push_vapid is the one global key and has no account column. The account
    channel object is wiped in the same database step. telegram_files is a
    shared media index with no account column, so it is left alone. There is
@@ -521,6 +521,16 @@ async function wipeDatabase(env, job) {
   // Post media rows carry only the post id. They go with the author's posts.
   if (tables.some((t) => t.name === "public_post_media") && tables.some((t) => t.name === "public_posts")) {
     push("DELETE FROM public_post_media WHERE post_id IN (SELECT id FROM public_posts WHERE author_id = ?)", publicId);
+  }
+  if (tables.some((t) => t.name === "srv_members")) {
+    // Native servers key memberships by account_id; reactions use the member id.
+    push("DELETE FROM srv_reactions WHERE mid IN (SELECT mid FROM srv_members WHERE account_id = ?)", publicId);
+    push("DELETE FROM srv_member_roles WHERE account_id = ?", publicId);
+    push("DELETE FROM srv_reads WHERE account_id = ?", publicId);
+    push("DELETE FROM srv_notify WHERE account_id = ?", publicId);
+    push("DELETE FROM srv_bans WHERE account_id = ?", publicId);
+    push("UPDATE srv_servers SET member_count = member_count - 1 WHERE id IN (SELECT server_id FROM srv_members WHERE account_id = ?)", publicId);
+    push("DELETE FROM srv_members WHERE account_id = ?", publicId);
   }
   for (let i = 0; i < tables.length; i++) {
     const name = String(tables[i].name || "");
