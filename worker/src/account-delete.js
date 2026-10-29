@@ -478,6 +478,21 @@ async function deletePrefix(bucket, prefix) {
   } while (cursor);
 }
 
+/* Post photos and videos live under post-media/ with no account in the key.
+   Their keys are read from D1 before the rows go, and the objects are
+   removed first, so a resumed job never leaves media behind. */
+async function wipePostMedia(env, publicId) {
+  if (!env.DATA || !/^\d{12}$/.test(publicId)) return;
+  const still = await env.DB.prepare("SELECT public_id, handle, skeleton, owner FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (still && await ownerProtected(env, still)) return;
+  let listed = null;
+  try {
+    listed = await env.DB.prepare("SELECT m.object_key FROM public_post_media m JOIN public_posts p ON p.id = m.post_id WHERE p.author_id = ?").bind(publicId).all();
+  } catch (err) { return; }
+  const keys = rowsOf(listed).map((row) => String(row.object_key || "")).filter((key) => /^post-media\/[A-Za-z0-9._-]+$/.test(key));
+  for (let i = 0; i < keys.length; i++) await env.DATA.delete(keys[i]);
+}
+
 async function wipeObjects(env, publicId) {
   if (!env.DATA || !/^\d{12}$/.test(publicId)) return;
   for (let i = 0; i < OBJECT_PREFIXES.length; i++) {
@@ -503,6 +518,10 @@ async function wipeDatabase(env, job) {
   push("DELETE FROM vault_shares WHERE item_id IN (SELECT id FROM vault_items WHERE owner_id = ?)", publicId);
   push("DELETE FROM community_likes WHERE item_id IN (SELECT id FROM community_posts WHERE author_id = ?)", publicId);
   const tables = rowsOf(await env.DB.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all());
+  // Post media rows carry only the post id. They go with the author's posts.
+  if (tables.some((t) => t.name === "public_post_media") && tables.some((t) => t.name === "public_posts")) {
+    push("DELETE FROM public_post_media WHERE post_id IN (SELECT id FROM public_posts WHERE author_id = ?)", publicId);
+  }
   for (let i = 0; i < tables.length; i++) {
     const name = String(tables[i].name || "");
     if (!safeName(name) || SKIP_TABLES.has(name)) continue;
@@ -591,6 +610,7 @@ async function runJob(env, job, opts) {
     await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId).run();
     try { await env.DB.prepare("DELETE FROM device_keys WHERE public_id = ?").bind(publicId).run(); } catch (err) { /* no device asked for a key yet */ }
     steps.sessions = true;
+    await wipePostMedia(env, publicId);
     await wipeDatabase(env, job);
     try { await wipeAccountChannel(env, publicId); }
     catch (err) { /* the rows are already gone; the next run closes the object */ }
@@ -774,6 +794,28 @@ export async function handleDeletionList(request, env, deps) {
   if (!gate.ok) return deps.limited(gate);
   const hashes = await deletionHashes(env);
   return jsonBody(deps, 200, { hashes });
+}
+
+/* Delete one account by id with no sign-in proof. Only the temporary
+   account sweep and its "delete now" route call this. The owner is refused
+   here and again inside the database step. */
+export async function deleteAccountById(env, publicId) {
+  const id = String(publicId || "");
+  if (!/^\d{12}$/.test(id)) return { status: "invalid" };
+  const row = await env.DB.prepare("SELECT public_id, handle, skeleton, owner FROM accounts WHERE public_id = ?").bind(id).first();
+  if (!row) return { status: "gone" };
+  if (await ownerProtected(env, row)) return { status: "owner_protected" };
+  let hash = await userHash(env, id);
+  if (!hash) hash = hex(crypto.getRandomValues(new Uint8Array(32)));
+  const job = await startJob(env, row, hash);
+  if (!job) return { status: "pending" };
+  try {
+    return await runJob(env, job, {});
+  } catch (err) {
+    if (err && err.code === "owner_protected") return { status: "owner_protected" };
+    await saveJob(env, job, parseSteps(job.steps), "pending", "retry");
+    return { status: "pending", steps: parseSteps(job.steps) };
+  }
 }
 
 export async function blockDeletedLogin(env, publicId) {
