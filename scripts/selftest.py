@@ -3307,6 +3307,83 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
         restored = discord_live.Board()
         restored.load_dir(empty)
         check(len(restored.rows("42")) == 120, "a missing Pages copy is restored from R2 pages")
+    discord_picks_checks(discord_live)
+
+
+def discord_picks_checks(discord_live) -> None:
+    import discord_picks
+    from adapters.discord import user_get_allowed
+
+    g1, g2, g3 = "100000000000000001", "100000000000000002", "100000000000000003"
+    check(user_get_allowed("https://discord.com/api/v10/users/@me/guilds") and user_get_allowed("https://discord.com/api/v10/guilds/%s/channels" % g1), "the picker may list the account's servers and their channels")
+    check(not user_get_allowed("https://discord.com/api/v10/invites/abc") and not user_get_allowed("https://discord.com/api/v10/users/@me/channels"), "the GET list still leaves out invites and DMs")
+    raw = [
+        {"id": "300000000000000001", "type": 4, "name": "Info", "position": 0},
+        {"id": "300000000000000002", "type": 4, "name": "Talk", "position": 1},
+        {"id": "300000000000000010", "type": 0, "name": "chat", "parent_id": "300000000000000002", "position": 0},
+        {"id": "300000000000000011", "type": 5, "name": "news", "parent_id": "300000000000000001", "position": 1},
+        {"id": "300000000000000012", "type": 2, "name": "voice", "position": 0},
+    ]
+    rows = discord_picks.guild_channels(raw)
+    check([row["name"] for row in rows] == ["news", "chat"] and rows[0]["kind"] == "announcement" and rows[0]["category"] == "Info", "the picker lists text and announcement channels in sidebar order")
+    picks = {"servers": [{"id": g1, "name": "One", "channels": [{"id": "300000000000000010", "name": "chat"}]}, {"id": g2, "name": "Main", "channels": [{"id": "300000000000000011"}]}]}
+    found = discord_picks.picked_servers(picks, [g2])
+    check([s["id"] for s in found] == [g1] and found[0]["ntfy"] == "" and found[0]["channels"][0]["private"] is True, "picked servers skip the configured one and never use ntfy")
+    check(discord_picks.catalog_task(None, None) == ("full", "") and discord_picks.catalog_task({"servers": [], "fetchedAt": "2026-01-02"}, {"requestedAt": "2026-01-01"}) == ("", "") and discord_picks.catalog_task({"servers": [], "fetchedAt": "2026-01-01"}, {"requestedAt": "2026-01-02", "guild": g3}) == ("guild", g3), "the catalog is listed when missing or when the owner asks")
+
+    class FakeClient:
+        def __init__(self):
+            self.calls = []
+
+        def get_json(self, path, params=None):
+            self.calls.append(path)
+            if path == "/users/@me/guilds":
+                return [{"id": g1, "name": "One"}, {"id": g3, "name": "Three", "icon": "abc"}]
+            return raw
+
+    fake = FakeClient()
+    old = {"servers": [{"id": g1, "name": "One", "channels": [{"id": "300000000000000010", "name": "chat"}]}, {"id": g2, "name": "Gone", "channels": []}]}
+    doc = discord_picks.build_catalog(fake, "2026-01-03", old=old, want=g3)
+    check([s["id"] for s in doc["servers"]] == [g1, g3] and fake.calls == ["/users/@me/guilds", f"/guilds/{g3}/channels"] and doc["servers"][1]["icon"].startswith("https://cdn.discordapp.com/icons/"), "a fresh join lists only the new server again")
+    check(discord_picks.join_invite("t", "abc", lambda url, headers: (200, b'{"guild":{"id":"%s"}}' % g3.encode())) == ("joined", g3), "a join returns the server")
+    check(discord_picks.join_invite("t", "abc", lambda url, headers: (400, b'{"captcha_key":["captcha-required"],"captcha_sitekey":"x"}'))[0] == "captcha", "a captcha answer is reported, not solved")
+    check(discord_picks.join_invite("t", "abc", lambda url, headers: (403, b'{"code":40002}'))[0] == "verification", "a verification answer is reported")
+    check(discord_picks.join_invite("t", "bad code!", lambda url, headers: (200, b"{}"))[0] == "invalid", "a bad code is never sent")
+    sent = []
+    seen_urls = []
+
+    def transport(url, headers):
+        seen_urls.append(url)
+        return 200, b'{"guild":{"id":"%s"}}' % g3.encode()
+
+    store = {"discord/x/request.json": {"requestedAt": "2026-01-02", "guild": g3, "join": {"code": "abc", "id": "abcdefgh1234", "guild": g3}}}
+
+    def put(key, payload):
+        sent.append(key)
+        store[key] = json.loads(payload.decode("utf-8"))
+        return True
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        picker = discord_live.Picks(root, "secret-token-value", [g2], store.get, put)
+        picker.join_transport = transport
+        picker.join(store["discord/x/request.json"])
+        picker.join(store["discord/x/request.json"])
+        check(len(seen_urls) == 1 and seen_urls[0].endswith("/invites/abc") and store["discord/x/join.json"]["status"] == "joined", "one confirmed join is sent once")
+        store["discord/x/picks.json"] = picks
+        added = picker.reload()
+        check(added == {"300000000000000010"}, "a new pick is polled right away")
+        board = discord_live.Board()
+        board.add("300000000000000010", {"id": "400000000000000001", "author": "9", "text": "hi", "date": "2026-01-01T00:00:00.000Z"}, "9", {"name": "Ada"})
+        picker.write(board)
+        sent.clear()
+        picker.upload()
+        picker.upload()
+        check(not (root / "discord").exists() and all(key.startswith("discord/x/") for key in sent) and sent[-1] == "discord/x/index.json" and len(sent) == 2, "picked servers go only to the private bucket and unchanged files are not sent again")
+        bad = discord_picks.health_doc("invalid", "unauthorized", "secret-token-value", "2026-01-01T00:00:00Z")
+        check(discord_picks.key_blocked(bad, "secret-token-value") and not discord_picks.key_blocked(bad, "other-token") and "secret" not in json.dumps(bad), "an invalid key is blocked by fingerprint until a new key is pasted")
+        index = store["discord/x/index.json"]
+        check(index["servers"][0]["channels"][0]["file"] == "discord/x/messages/300000000000000010.json" and index["servers"][0]["channels"][0]["last"] == "400000000000000001" and "secret-token-value" not in json.dumps(store), "the private index points at private files and never holds the token")
 
 
 def ia_backup_checks() -> None:

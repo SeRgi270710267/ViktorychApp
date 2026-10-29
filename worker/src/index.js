@@ -23,6 +23,7 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
+import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
@@ -1556,6 +1557,19 @@ function catalogResponse(text) {
 }
 
 async function handleData(request, env, pathname) {
+  const own = privateDiscordKey(String(pathname || "").replace(/^\/v1\/data\/?/, ""));
+  if (own) {
+    // Servers the owner picked in Messages. Signed-in readers see the
+    // messages; the server catalog is owner only. Never on Pages.
+    const viewer = await sessionAccount(env, request);
+    if (!viewer) return json(401, { error: "unauthorized" });
+    if ((ownerOnlyDiscordKey(own) && viewer.owner !== 1) || !env.DATA) return json(404, { error: "not_found" });
+    let object = null;
+    try { object = await env.DATA.get(own); }
+    catch (err) { object = null; }
+    if (!object) return json(404, { error: "not_found" });
+    return discordData(request, object);
+  }
   const key = dataKey(pathname);
   if (!key) return json(404, { error: "not_found" });
   const row = await sessionAccount(env, request);
@@ -5498,6 +5512,10 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/blocks" || path === "/v1/mutes") {
     const handled = await handleBlockMuteRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    if (handled) return handled;
+  }
+  if (isPickPath(path)) {
+    const handled = await handleDiscordPickRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
     if (handled) return handled;
   }
   if (path === "/v1/discord/alerts" || path.startsWith("/v1/discord/alerts/")) {
