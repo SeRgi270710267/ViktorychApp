@@ -370,9 +370,17 @@
     return isShortsLocked() && !isTiktokUnlocked(entity.handle || entity.account);
   }
 
+  // Notification privacy (notif-privacy.js): names, previews, banner text,
+  // icon badge and the tab title count follow the person's choices.
+  function notifPrivacy() {
+    const NP = window.ViktorychNotifPrivacy;
+    return NP ? NP.normalize(STATE.settings && STATE.settings.notifPrivacy) : null;
+  }
+
   function withUnreadTitle(text) {
     const base = String(text || "").replace(/^\((?:\d+|\d+\+|20\+)\)\s+/, "");
-    const count = bellUnread();
+    const np = notifPrivacy();
+    const count = np && np.count === false ? 0 : bellUnread();
     if (!count) return base;
     return "(" + (count > 20 ? "20+" : String(count)) + ") " + base;
   }
@@ -15301,6 +15309,7 @@ const here = parseRoute();
       const followOnly = prefs.mentionsFrom === "following";
       return settingsHead(tr("Notifications"), "#/settings") + `<div class="set-block">
         <button class="primary" type="button" data-act="notify">${esc(notifyOn ? tr("Notifications on") : tr("Notify me about new posts"))}</button>
+        ${window.ViktorychNotifPrivacy ? window.ViktorychNotifPrivacy.settingsHtml(STATE.settings && STATE.settings.notifPrivacy, esc) : ""}
         ${settingsRow("#/settings/notifications/discord", tr("Discord alerts"), tr("Mentions and keywords from channels this app already shows."))}
         ${prefRow("mentions", tr("Mentions"))}
         <button class="tab-switch${followOnly ? " on" : ""}" type="button" role="switch" aria-checked="${followOnly ? "true" : "false"}" data-act="note-mentions-from"><span>${esc(tr("Only from people you follow"))}</span><i></i></button>
@@ -20187,6 +20196,18 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       enableNotifications();
       return;
     }
+    if (act === "notif-privacy") {
+      const NP = window.ViktorychNotifPrivacy;
+      if (!NP || !STATE.settings) return;
+      STATE.settings.notifPrivacy = NP.toggle(STATE.settings.notifPrivacy, el.dataset.key);
+      // Names off: drop the device's cached names right away.
+      if (!STATE.settings.notifPrivacy.names) NP.wipe();
+      saveSettings();
+      updateBadge(bellUnread());
+      document.title = withUnreadTitle(document.title);
+      render();
+      return;
+    }
     if (act === "note-pref") {
       const kind = el.dataset.kind;
       const mode = el.dataset.mode;
@@ -22308,6 +22329,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function updateBadge(count) {
     if (!navigator.setAppBadge) return;
+    const np = notifPrivacy();
+    if (np && np.badge === false) count = 0;
     const op = count > 0 ? navigator.setAppBadge(count) : (navigator.clearAppBadge ? navigator.clearAppBadge() : Promise.resolve());
     Promise.resolve(op).catch(() => {});
   }
@@ -24577,6 +24600,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       else {
       notesPhase = "ready";
       applyServerNotes(res);
+      if (window.ViktorychNotifPrivacy) window.ViktorychNotifPrivacy.remember(res.items, notifPrivacy());
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
       const nowPending = notePending();
       if (sent.until && Number(nowPending.until) === Number(sent.until)) delete nowPending.until;
@@ -24695,7 +24719,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       let saved = null;
       try { saved = JSON.parse(readStored(localStorage, "push-sent") || "null"); } catch (err) { saved = null; }
       let sub = await reg.pushManager.getSubscription();
-      const fresh = saved && sub && saved.endpoint === sub.endpoint && Date.now() - Number(saved.at || 0) < 24 * 60 * 60 * 1000 && Number(saved.locked) === (isShortsLocked() ? 1 : 0);
+      const fresh = saved && sub && saved.endpoint === sub.endpoint && Date.now() - Number(saved.at || 0) < 24 * 60 * 60 * 1000 && Number(saved.locked) === (isShortsLocked() ? 1 : 0) && Number(saved.fmt) === 2;
       if (fresh && !(sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000)) {
         STATE.pushEndpoint = sub.endpoint || "";
         return;
@@ -24717,9 +24741,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!json.endpoint || !json.keys) return;
       const put = await accountCall("/v1/push/subscribe", {
         method: "PUT",
-        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0 }
+        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0, fmt: 2 }
       });
-      if (put && put.status === 200) writeStored(localStorage, "push-sent", JSON.stringify({ endpoint: json.endpoint, key: key, at: Date.now(), locked: isShortsLocked() ? 1 : 0 }));
+      if (put && put.status === 200) writeStored(localStorage, "push-sent", JSON.stringify({ endpoint: json.endpoint, key: key, at: Date.now(), locked: isShortsLocked() ? 1 : 0, fmt: 2 }));
     } catch (err) { /* in-app notes still sync */ }
   }
 
@@ -24810,20 +24834,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+    const NP = window.ViktorychNotifPrivacy;
+    const np = notifPrivacy();
     if (document.visibilityState === "visible") {
-      toast((note && note.text) || tr("New post"));
+      toast(NP && np ? NP.bannerText(Object.assign({ kind: "post" }, note), np) : ((note && note.text) || tr("New post")));
       return;
     }
     if (!note || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
-      const item = new Notification(note.name || ("@" + (note.handle || "post")), {
-        body: note.text || tr("New post"),
-        icon: note.avatar || "icons/icon-192.png",
+      const shown = NP && np ? NP.present(Object.assign({ kind: "post" }, note), np, { title: note.name || ("@" + (note.handle || "post")) }) : null;
+      const item = new Notification(shown ? shown.title : (note.name || ("@" + (note.handle || "post"))), {
+        body: shown ? shown.body : (note.text || tr("New post")),
+        icon: shown ? shown.icon : (note.avatar || "icons/icon-192.png"),
         tag: "note-" + note.id
       });
       item.onclick = () => {
         window.focus();
-        location.hash = note.hash || "#/";
+        location.hash = shown && shown.generic ? "#/notifications" : (note.hash || "#/");
         item.close();
       };
     } catch (err) { /* the in-app list still has the post */ }
@@ -24837,14 +24864,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+    const NP = window.ViktorychNotifPrivacy;
+    const np = notifPrivacy();
+    const shown = NP && np ? NP.present(Object.assign({ kind: "post" }, note), np, { title: note.name || ("@" + (note.handle || "post")) }) : null;
     const payload = {
-      body: note.text || tr("New post"),
-      icon: note.avatar || "icons/icon-192.png",
-      image: note.image || undefined,
+      body: shown ? shown.body : (note.text || tr("New post")),
+      icon: shown ? shown.icon : (note.avatar || "icons/icon-192.png"),
+      image: shown ? shown.image : (note.image || undefined),
       tag: "note-" + note.id,
-      data: { hash: note.hash || "#/" }
+      data: { hash: shown && shown.generic ? "#/notifications" : (note.hash || "#/") }
     };
-    const title = note.name || ("@" + (note.handle || "post"));
+    const title = shown ? shown.title : (note.name || ("@" + (note.handle || "post")));
     const viaRegistration = () => {
       if (!("serviceWorker" in navigator)) return Promise.reject();
       return navigator.serviceWorker.ready.then((reg) => {
@@ -25133,6 +25163,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function syncWorkerState() {
+    if (STATE.settings && window.ViktorychNotifPrivacy) window.ViktorychNotifPrivacy.persist(STATE.settings.notifPrivacy);
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
     if (!worker || !STATE.settings) return;
     worker.postMessage({

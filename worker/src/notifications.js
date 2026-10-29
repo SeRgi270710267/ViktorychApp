@@ -159,6 +159,7 @@ function httpsUrl(value) {
 async function addLockColumns(env) {
   const alters = [
     "ALTER TABLE push_subscriptions ADD COLUMN shorts_locked INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE push_subscriptions ADD COLUMN push_fmt INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE notification_state ADD COLUMN shorts_locked INTEGER NOT NULL DEFAULT 1"
   ];
   for (let i = 0; i < alters.length; i++) {
@@ -660,12 +661,15 @@ async function sendPush(env, publicId, item, viewer) {
   const keys = await vapidPublic(env);
   if (!keys.publicKey || !keys.privateJwk) return { ok: true, skipped: true };
   const subs = await env.DB.prepare(
-    "SELECT endpoint_hash, endpoint, p256dh, auth, shorts_locked FROM push_subscriptions WHERE public_id = ? LIMIT 10"
+    "SELECT endpoint_hash, endpoint, p256dh, auth, shorts_locked, push_fmt FROM push_subscriptions WHERE public_id = ? LIMIT 10"
   ).bind(publicId).all();
   const rows = (subs && subs.results) || [];
   const base = viewer || await lockViewer(env, publicId);
   const titleKey = titleKeyFor(item);
   if (!titleKey) return { ok: true, skipped: true };
+  // Devices on the new service worker get the compact payload: kind, a
+  // content-addressed short id and a count. No names, text, links or icons.
+  const compact = encoder.encode(JSON.stringify(await compactPush(item)));
   const payload = encoder.encode(JSON.stringify({
     titleKey,
     titleVars: {
@@ -689,7 +693,7 @@ async function sendPush(env, publicId, item, viewer) {
     if (tiktokNoteHidden(item, Object.assign({}, base, { locked: deviceLocked }))) continue;
     try {
       const jwt = await vapidJwt(sub.endpoint, keys.publicKey, keys.privateJwk);
-      const body = await encryptPush(payload, sub.p256dh, sub.auth);
+      const body = await encryptPush(Number(sub.push_fmt) === 2 ? compact : payload, sub.p256dh, sub.auth);
       const res = await fetch(sub.endpoint, {
         method: "POST",
         headers: {
@@ -715,6 +719,17 @@ async function sendPush(env, publicId, item, viewer) {
     }
   }
   return { ok: !failed || !rows.length, skipped: !rows.length };
+}
+
+// The compact push: {v:2,k:kind,i:shortId,n:count}. The short id is the
+// first 9 bytes of SHA-256 over the note id (12 base64url characters), so a
+// device can match it against its own cache without the id itself travelling.
+export async function compactPush(item) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(String((item && item.id) || ""))));
+  const out = { v: 2, k: clip(item && item.kind, 24), i: b64url(digest.slice(0, 9)) };
+  const others = Number(item && item.others) || 0;
+  if (others > 0) out.n = others;
+  return out;
 }
 
 function titleKeyFor(item) {
@@ -1307,9 +1322,10 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     const now = Date.now();
     const deviceLocked = lockFlag(body.locked != null ? body.locked : body.shortsLocked);
     const shortsLocked = deviceLocked === false ? 0 : 1;
+    const pushFmt = Number(body.fmt) === 2 ? 2 : 1;
     await env.DB.prepare(
-      "INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at, shorts_locked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, endpoint_hash) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh, auth = excluded.auth, ua = excluded.ua, updated_at = excluded.updated_at, expires_at = excluded.expires_at, shorts_locked = excluded.shorts_locked"
-    ).bind(row.public_id, hash, endpoint, clip(keys.p256dh, 200), clip(keys.auth, 200), clip(request.headers.get("user-agent"), 160), now, now, exp, shortsLocked).run();
+      "INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at, shorts_locked, push_fmt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, endpoint_hash) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh, auth = excluded.auth, ua = excluded.ua, updated_at = excluded.updated_at, expires_at = excluded.expires_at, shorts_locked = excluded.shorts_locked, push_fmt = excluded.push_fmt"
+    ).bind(row.public_id, hash, endpoint, clip(keys.p256dh, 200), clip(keys.auth, 200), clip(request.headers.get("user-agent"), 160), now, now, exp, shortsLocked, pushFmt).run();
     return json(200, { ok: true });
   }
   if (path === "/v1/push/subscribe" && request.method === "DELETE") {
