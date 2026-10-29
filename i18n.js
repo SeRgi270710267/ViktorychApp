@@ -138,7 +138,11 @@
     }
     var div = abs < 1e6 ? 1e3 : abs < 1e9 ? 1e6 : 1e9;
     var suffix = abs < 1e6 ? t("num.k") : abs < 1e9 ? t("num.m") : t("num.b");
-    var scaled = Math.round((n / div) * 10) / 10;
+    // Like X: cut, never round up (1,999 -> 1.9K), one decimal under 100
+    // units (5.2K, 1.4M) and none from 100 up (356K), so a count always fits.
+    var units = Math.abs(n) / div;
+    var scaled = units >= 100 ? Math.trunc(units) : Math.trunc(units * 10) / 10;
+    if (n < 0) scaled = -scaled;
     var digits = Math.abs(scaled) % 1 ? 1 : 0;
     var formatted;
     try {

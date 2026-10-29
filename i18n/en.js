@@ -2951,5 +2951,9 @@ SI18n.addPack("en", {
   "This is the official account of this site.": "This is the official account of this site.",
   "Unpin from top": "Unpin from top",
   "Verified account": "Verified account",
-  "Who can see it": "Who can see it"
+  "Who can see it": "Who can see it",
+  "Explain this post": "Explain this post",
+  "Profile picture shape": "Profile picture shape",
+  "Round": "Round",
+  "Square": "Square"
 });

@@ -11,7 +11,7 @@
   var MUSIC_STORE = "viktorych-music-v1";
   var CATS = [
     { id: "look", label: "Look and menus", keys: [
-      ["appearance", "Theme"], ["showPictures", "Profile pictures"], ["showBanners", "Banners"],
+      ["appearance", "Theme"], ["showPictures", "Profile pictures"], ["avatarShape", "Profile picture shape"], ["showBanners", "Banners"],
       ["drawerMenu", "Menu order"], ["navCustom", "Sidebar"], ["brandLogo", "Sidebar logo"], ["bottomNav", "Bottom bar"], ["profileTabs", "Profile tabs"]
     ] },
     { id: "feed", label: "Feed", keys: [
@@ -33,7 +33,7 @@
   // keep their union merge in accounts.js.
   var LWW = ["appearance", "showPictures", "showBanners", "autoplay", "followingSort", "forYouReposts", "forYouReplies",
     "storyNotes", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells",
-    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "musicPrefs", "brandLogo"];
+    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "avatarShape", "musicPrefs", "brandLogo"];
   var CAT_OF = {};
   CATS.forEach(function (cat) { cat.keys.forEach(function (row) { CAT_OF[row[0]] = cat.id; }); });
   // Companion keys travel with their setting.

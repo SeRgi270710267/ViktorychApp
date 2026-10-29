@@ -2951,5 +2951,9 @@ SI18n.addPack("es", {
   "This is the official account of this site.": "Esta es la cuenta oficial de este sitio.",
   "Unpin from top": "Desfijar de arriba",
   "Verified account": "Cuenta verificada",
-  "Who can see it": "Quién puede verla"
+  "Who can see it": "Quién puede verla",
+  "Explain this post": "Explicar este post",
+  "Profile picture shape": "Forma de la foto de perfil",
+  "Round": "Redonda",
+  "Square": "Cuadrada"
 });

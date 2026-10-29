@@ -2951,5 +2951,9 @@ SI18n.addPack("ru", {
   "This is the official account of this site.": "Это официальный аккаунт этого сайта.",
   "Unpin from top": "Открепить сверху",
   "Verified account": "Подтверждённый аккаунт",
-  "Who can see it": "Кто может видеть"
+  "Who can see it": "Кто может видеть",
+  "Explain this post": "Объяснить этот пост",
+  "Profile picture shape": "Форма фото профиля",
+  "Round": "Круглая",
+  "Square": "Квадратная"
 });
