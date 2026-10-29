@@ -681,7 +681,14 @@
       if (worker) {
         state.waiting = worker;
         armStall();
-        worker.postMessage({ type: "apply-update" });
+        // Files nearby devices already hold for this version go into a cache
+        // the worker reuses by hash. Bounded and skipped without peers.
+        var pool = window.ViktorychPool;
+        var prefill = pool && pool.prefillShell ? Promise.resolve().then(function () { return pool.prefillShell(); }).catch(function () { return 0; }) : Promise.resolve(0);
+        prefill.then(function () {
+          if (applying !== attempt) return;
+          worker.postMessage({ type: "apply-update" });
+        });
         return;
       }
       return readControllerSha().then(function (sha) {
