@@ -4,7 +4,7 @@ const VERSION = "viktorych-a126-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T12:39:00Z-x-native-video
+// cache-bust: 2026-10-29T12:33:00Z-tv
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -88,6 +88,8 @@ const SHELL_FILES = [
   "./people.css",
   "./tv.js",
   "./tv.css",
+  "./shared/tv-boot.js",
+  "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",
   "./split.js",
@@ -210,7 +212,7 @@ let serveNetworkOnce = false;
 let peerOn = false;
 const armedClients = new Set();
 const reloadingClients = new Set();
-const PRECACHE_TRIES = 4;
+const PRECACHE_TRIES = 6;
 const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inter-400.woff2", "./fonts/inter-900.woff2", "./onboarding.js", "./onboarding.css"];
 
 function versionSha(version) {
@@ -1208,8 +1210,10 @@ function retryableStatus(status) {
 }
 
 function precacheDelay(attempt) {
+  // 0.5s, 1s, 2s, 4s, 8s: long enough for a CDN edge that still serves the
+  // previous deploy (a 404 or an old copy) to catch up.
   if (attempt <= 0) return 0;
-  return Math.min(1600, 200 * (2 ** (attempt - 1)));
+  return Math.min(8000, 500 * (2 ** (attempt - 1)));
 }
 
 function precacheShell(report, fresh) {
@@ -1498,7 +1502,25 @@ async function offFeatureFiles() {
   }
 }
 
+/* Written into this version's shell cache once every file is in. A worker
+   that the browser stopped and started again (phones do this all the time)
+   then knows the download already finished and never repeats it. */
+const SHELL_READY = "./__shell-ready";
+async function shellReadyState() {
+  try {
+    const res = await (await caches.open(SHELL)).match(SHELL_READY);
+    if (!res) return null;
+    const doc = await res.json();
+    return doc && typeof doc === "object" ? doc : null;
+  } catch (err) { return null; }
+}
+
 async function doPrecache(report, generation, signal) {
+  const done = await shellReadyState();
+  if (done) {
+    progressState = { files: Number(done.files) || 0, totalFiles: Number(done.totalFiles) || 0, bytes: Number(done.bytes) || 0, totalBytes: Number(done.totalBytes) || 0 };
+    return progressState;
+  }
   // Download the whole shell into a staging cache. The live cache is
   // replaced only after every required file succeeds, so a client never
   // runs one version's HTML with another version's scripts. The staging
@@ -1553,6 +1575,8 @@ async function doPrecache(report, generation, signal) {
       if (res) await live.put(req, res);
     }));
     ok = true;
+    const summary = { files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes };
+    try { await live.put(SHELL_READY, new Response(JSON.stringify(summary), { headers: { "Content-Type": "application/json" } })); } catch (err) { /* the next apply checks the files again */ }
     console.info("shell update ready", "reused " + state.reused, "downloaded " + state.fetched);
     progressState = { files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes };
     return progressState;
@@ -1678,9 +1702,38 @@ self.addEventListener("message", (event) => {
     // The page heard nothing for a while. Answer with where this worker is.
     // A waiting worker with no download running is not making progress, so
     // the page shows Retry instead of waiting on it forever.
+    // A phone stops an idle worker and starts it again with no download in
+    // memory; that is not a failure. Pick the download up again (files
+    // already saved are kept) instead of sending the page to Retry.
     if (shellTask) broadcastProgress({ step: "download" }, true);
     else if (self.registration.active === self.serviceWorker) broadcastProgress({ step: "activate" }, true);
+    else if (self.registration.waiting === self.serviceWorker || self.registration.installing === self.serviceWorker) event.waitUntil(runApply(false));
     else broadcast({ type: "update-progress", step: "error", url: "", reason: "timeout" });
+    return;
+  }
+  if (data.type === "predownload") {
+    // A new version is waiting. Download its files quietly in the
+    // background; the page shows What's new only once this is done, so
+    // Update now just switches over. A failure here is never shown: the
+    // page tries again later.
+    event.waitUntil((async () => {
+      if (self.registration.active === self.serviceWorker) return;
+      const info = versionInfo();
+      try {
+        let task = precacheShell(false, false);
+        for (;;) {
+          try { await task; break; } catch (err) {
+            if (!err || err.reason !== "replaced" || !shellTask || shellTask === task) throw err;
+            task = shellTask;
+          }
+        }
+        broadcast({ type: "shell-ready", sha: info.sha, version: info.version });
+      } catch (err) {
+        const reason = safeShellReason(err && err.reason);
+        if (reason === "replaced") return;
+        broadcast({ type: "shell-pending", sha: info.sha, reason: reason, url: safeShellPath(err && err.shellPath) });
+      }
+    })());
     return;
   }
   if (data.type === "apply-update" || data.type === "skip-waiting") {
@@ -1865,6 +1918,8 @@ self.addEventListener("fetch", (event) => {
   }
   if (request.method !== "GET") return;
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  // The TV install page, the APK, and assetlinks go straight to the network.
+  if (url.origin === self.location.origin && (/\.apk$/i.test(url.pathname) || /\/tv\/(?:index\.html)?$/.test(url.pathname) || url.pathname.indexOf("/.well-known/") >= 0)) return;
   if (url.origin === self.location.origin && url.pathname.toLowerCase().endsWith("/version.json")) {
     event.respondWith((async () => {
       const res = await mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" }));
@@ -2042,6 +2097,7 @@ function shellDocument(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
   if (/\/(?:s|u)\//.test(path)) return false;
+  if (/\/tv\/(?:index\.html)?$/.test(path)) return false;
   return /\/(?:index\.html)?$/.test(path);
 }
 

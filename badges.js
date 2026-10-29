@@ -4,7 +4,6 @@
 
   var cache = {};
   var loading = {};
-  var toastTimer = 0;
 
   function tr(key, vars) {
     var fn = root.t || (root.SI18n && root.SI18n.t);
@@ -230,16 +229,283 @@
     return !!(data && data.badges && data.badges.some(function (card) { return card.earned; }));
   }
 
-  function showToast(notice) {
-    var old = document.querySelector(".badge-toast");
-    if (old) old.remove();
+  /* Achievement unlocked: an orb pops in, the pill slides open with the
+     badge name, holds, then folds away. One at a time, once per badge tier
+     per account. The Worker clears seen notices, so other devices skip it too. */
+  var ACH_KEY = "ach-shown-v1";
+  var ACH_PREFS = "ach-prefs-v1";
+  var ACH_DEFAULTS = { sound: true, chime: "classic", volume: 60, rumble: true, intensity: "medium" };
+  var CHIMES = ["classic", "sparkle", "deep", "retro"];
+  var INTENSITY = { light: 0.6, medium: 1, strong: 1.6 };
+  var achQueue = [];
+  var achBusy = false;
+  var achAudio = null;
+  var ACH_TIMES = { open: 520, hold: 5200, fold: 460, fade: 380 };
+
+  function store() {
+    try { return root.localStorage || null; } catch (err) { return null; }
+  }
+
+  function prefs() {
+    var ls = store();
+    var saved = {};
+    try { saved = JSON.parse(ls && ls.getItem(ACH_PREFS) || "{}") || {}; } catch (err) { saved = {}; }
+    var out = {};
+    Object.keys(ACH_DEFAULTS).forEach(function (key) { out[key] = saved[key] == null ? ACH_DEFAULTS[key] : saved[key]; });
+    if (CHIMES.indexOf(out.chime) < 0) out.chime = ACH_DEFAULTS.chime;
+    if (!INTENSITY[out.intensity]) out.intensity = ACH_DEFAULTS.intensity;
+    out.volume = Math.max(0, Math.min(100, Math.round(Number(out.volume)))) ;
+    if (isNaN(out.volume)) out.volume = ACH_DEFAULTS.volume;
+    out.sound = out.sound !== false;
+    out.rumble = out.rumble !== false;
+    return out;
+  }
+
+  function setPref(key, value) {
+    if (!Object.prototype.hasOwnProperty.call(ACH_DEFAULTS, key)) return prefs();
+    var next = prefs();
+    next[key] = value;
+    var ls = store();
+    if (ls) try { ls.setItem(ACH_PREFS, JSON.stringify(next)); } catch (err) { /* stays default */ }
+    return prefs();
+  }
+
+  function achAccount() {
+    var api = accounts();
+    var session = api && api.account && api.account();
+    return String(session && (session.publicId || session.handle) || "").toLowerCase();
+  }
+
+  function shownMap() {
+    var ls = store();
+    try { return JSON.parse(ls && ls.getItem(ACH_KEY) || "{}") || {}; } catch (err) { return {}; }
+  }
+
+  function noticeKey(notice) {
+    return String(notice && notice.id || "") + ":" + String(notice && notice.tier || "");
+  }
+
+  function wasShown(notice) {
+    var list = shownMap()[achAccount()] || [];
+    return list.indexOf(noticeKey(notice)) >= 0;
+  }
+
+  function markShown(notice) {
+    var ls = store();
+    if (!ls) return;
+    var map = shownMap();
+    var who = achAccount();
+    var list = map[who] || [];
+    if (list.indexOf(noticeKey(notice)) < 0) list.push(noticeKey(notice));
+    map[who] = list.slice(-200);
+    try { ls.setItem(ACH_KEY, JSON.stringify(map)); } catch (err) { /* full storage only skips the memory */ }
+  }
+
+  function reducedMotion() {
+    try { return !!(root.matchMedia && root.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (err) { return false; }
+  }
+
+  function quietNow() {
+    var presence = root.ViktorychPresence;
+    if (presence && presence.myState && presence.myState() === "dnd") return true;
+    return !!(root.document && root.document.visibilityState === "hidden");
+  }
+
+  function mayChime() {
+    var p = prefs();
+    if (!p.sound || p.volume <= 0 || reducedMotion() || quietNow()) return false;
+    var nav = root.navigator;
+    if (nav && nav.userActivation && !nav.userActivation.hasBeenActive) return false;
+    return true;
+  }
+
+  function canVibrate() {
+    var nav = root.navigator;
+    return !!(nav && typeof nav.vibrate === "function");
+  }
+
+  function mayRumble() {
+    var p = prefs();
+    return p.rumble && canVibrate() && !reducedMotion() && !quietNow();
+  }
+
+  /* Rumble in step with the toast: a tick when the orb pops, a rising
+     double pulse as the pill opens. Intensity scales every pulse. */
+  function rumblePattern(part, intensity) {
+    var k = INTENSITY[intensity] || 1;
+    var ms = function (n) { return Math.max(1, Math.round(n * k)); };
+    if (part === "pop") return [ms(14)];
+    if (part === "open") return [ms(20), 60, ms(36)];
+    return [ms(14), ACH_TIMES.open - ms(14), ms(20), 60, ms(36)];
+  }
+
+  function rumble(part, force) {
+    if (!(force ? canVibrate() : mayRumble())) return false;
+    try { return root.navigator.vibrate(rumblePattern(part, prefs().intensity)) !== false; } catch (err) { return false; }
+  }
+
+  /* Original chimes, synthesized on the device. Each note: [Hz, start s, length s, wave, level]. */
+  var CHIME_NOTES = {
+    classic: [[523.25, 0, 0.7, "sine", 1], [1046.5, 0, 0.35, "triangle", 0.25], [783.99, 0.09, 0.7, "sine", 1], [1567.98, 0.09, 0.35, "triangle", 0.25], [1046.5, 0.18, 0.8, "sine", 1], [2093, 0.18, 0.4, "triangle", 0.25]],
+    sparkle: [[1318.5, 0, 0.25, "sine", 0.8], [1661.2, 0.06, 0.25, "sine", 0.8], [1975.5, 0.12, 0.3, "sine", 0.8], [2637, 0.18, 0.5, "sine", 0.6], [3951, 0.24, 0.4, "sine", 0.3]],
+    deep: [[110, 0, 1.1, "sine", 1], [164.81, 0.02, 1.0, "triangle", 0.6], [220, 0.22, 0.9, "sine", 0.7], [329.63, 0.3, 0.7, "sine", 0.35]],
+    retro: [[392, 0, 0.09, "square", 0.35], [523.25, 0.09, 0.09, "square", 0.35], [659.25, 0.18, 0.09, "square", 0.35], [1046.5, 0.27, 0.3, "square", 0.35]]
+  };
+
+  function chime(name, force) {
+    if (!(force || mayChime())) return false;
+    var p = prefs();
+    var notes = CHIME_NOTES[name || p.chime] || CHIME_NOTES.classic;
+    var Ctx = root.AudioContext || root.webkitAudioContext;
+    if (!Ctx || p.volume <= 0) return false;
+    try {
+      if (!achAudio) achAudio = new Ctx();
+      if (achAudio.state === "suspended" && achAudio.resume) achAudio.resume();
+      var now = achAudio.currentTime + 0.02;
+      var out = achAudio.createGain();
+      out.gain.value = 0.09 * (p.volume / 100);
+      out.connect(achAudio.destination);
+      notes.forEach(function (note) {
+        var osc = achAudio.createOscillator();
+        var gain = achAudio.createGain();
+        var at = now + note[1];
+        osc.type = note[3];
+        osc.frequency.setValueAtTime(note[0], at);
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(note[4], at + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + note[2]);
+        osc.connect(gain);
+        gain.connect(out);
+        osc.start(at);
+        osc.stop(at + note[2] + 0.05);
+      });
+      return true;
+    } catch (err) { return false; }
+  }
+
+  function chimeLabel(id) {
+    if (id === "sparkle") return tr("Sparkle");
+    if (id === "deep") return tr("Deep");
+    if (id === "retro") return tr("Retro");
+    return tr("Classic");
+  }
+
+  function intensityLabel(id) {
+    if (id === "light") return tr("Gentle");
+    if (id === "strong") return tr("Strong");
+    return tr("Medium");
+  }
+
+  function switchHtml(key, on, label, disabled) {
+    return '<button class="tab-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" data-ach-set="' + key + '"' + (disabled ? " disabled" : "") + "><span>" + esc(label) + "</span><i></i></button>";
+  }
+
+  /* Settings > Notifications > Achievements. Saved on this device. */
+  function settingsHtml() {
+    var p = prefs();
+    var vib = canVibrate();
+    var calm = reducedMotion();
+    var chimes = CHIMES.map(function (id) {
+      var on = p.chime === id;
+      return '<div class="ach-chime"><button class="outline' + (on ? " on" : "") + '" type="button" role="radio" aria-checked="' + (on ? "true" : "false") + '" data-ach-set="chime" data-value="' + id + '"' + (p.sound ? "" : " disabled") + ">" + esc(chimeLabel(id)) + "</button>" +
+        '<button class="ach-play" type="button" data-ach-preview="chime" data-value="' + id + '" aria-label="' + esc(tr("Preview {name}", { name: chimeLabel(id) })) + '">\u25B6</button></div>';
+    }).join("");
+    var levels = ["light", "medium", "strong"].map(function (id) {
+      return '<button class="outline' + (p.intensity === id ? " on" : "") + '" type="button" data-ach-set="intensity" data-value="' + id + '"' + (vib && p.rumble ? "" : " disabled") + ">" + esc(intensityLabel(id)) + "</button>";
+    }).join("");
+    return '<section class="ach-settings" data-ach-settings="1"><h2>' + esc(tr("Achievements")) + "</h2>" +
+      '<p class="phandle">' + esc(tr("A short animation plays when you earn a badge.")) + "</p>" +
+      '<button class="outline ach-demo" type="button" data-ach-preview="toast">' + esc(tr("Preview achievement")) + "</button>" +
+      switchHtml("sound", p.sound, tr("Achievement sound")) +
+      '<label class="ach-volume"><span>' + esc(tr("Volume")) + '</span><input type="range" min="0" max="100" step="5" value="' + p.volume + '" data-ach-set="volume" aria-label="' + esc(tr("Volume")) + '"' + (p.sound ? "" : " disabled") + "></label>" +
+      '<h3 class="ach-sub">' + esc(tr("Chime")) + '</h3><div class="ach-chimes" role="radiogroup" aria-label="' + esc(tr("Chime")) + '">' + chimes + "</div>" +
+      switchHtml("rumble", p.rumble && vib, tr("Achievement rumble"), !vib) +
+      '<h3 class="ach-sub">' + esc(tr("Rumble strength")) + '</h3><div class="theme-row" role="group" aria-label="' + esc(tr("Rumble strength")) + '">' + levels + "</div>" +
+      '<button class="outline" type="button" data-ach-preview="rumble"' + (vib ? "" : " disabled") + ">" + esc(tr("Preview rumble")) + "</button>" +
+      (vib ? "" : '<p class="phandle">' + esc(tr("This device can't vibrate.")) + "</p>") +
+      (calm ? '<p class="phandle">' + esc(tr("Reduce motion is on, so achievements fade in quietly without sound or rumble.")) + "</p>" : "") +
+      "</section>";
+  }
+
+  function redrawSettings() {
+    var box = document.querySelector("[data-ach-settings]");
+    if (!box) return;
+    var holder = document.createElement("div");
+    holder.innerHTML = settingsHtml();
+    box.parentNode.replaceChild(holder.firstChild, box);
+  }
+
+  function onSetting(el) {
+    var key = el.getAttribute("data-ach-set");
+    var p = prefs();
+    if (key === "sound" || key === "rumble") setPref(key, !p[key]);
+    else if (key === "chime") { setPref("chime", el.getAttribute("data-value")); chime(el.getAttribute("data-value"), true); }
+    else if (key === "intensity") { setPref("intensity", el.getAttribute("data-value")); rumble("all", true); }
+    else if (key === "volume") setPref("volume", Number(el.value));
+    if (key !== "volume") redrawSettings();
+  }
+
+  function onPreview(el) {
+    var kind = el.getAttribute("data-ach-preview");
+    if (kind === "chime") chime(el.getAttribute("data-value"), true);
+    else if (kind === "rumble") rumble("all", true);
+    else if (kind === "toast") { achQueue.push({ id: "early", tier: "gold", preview: true }); achNext(); }
+  }
+
+  function achHtml(notice) {
+    var name = title(notice.id) + (notice.tier ? " \u00B7 " + tierLabel(notice.tier) : "");
+    return '<button type="button" class="ach-pill" data-ach-open="' + esc(notice.id) + '" aria-label="' + esc(tr("Achievement unlocked") + ": " + name) + '">' +
+      '<span class="ach-orb" aria-hidden="true"><span class="ach-ring"></span><span class="ach-ico">' + (ICONS[notice.id] || "\u2B50") + "</span></span>" +
+      '<span class="ach-copy"><span class="ach-kicker">' + esc(tr("Achievement unlocked")) + "</span>" +
+      '<span class="ach-name">' + esc(name) + "</span>" +
+      '<span class="ach-desc">' + esc(meaning(notice.id)) + "</span></span>" +
+      '<span class="ach-shine" aria-hidden="true"></span></button>';
+  }
+
+  function achNext() {
+    if (achBusy) return;
+    var notice = achQueue.shift();
+    if (!notice) return;
+    achBusy = true;
+    if (!notice.preview) {
+      markShown(notice);
+      ack(notice);
+    }
     var el = document.createElement("div");
-    el.className = "badge-toast";
+    el.className = "ach tier-" + (notice.tier || "none") + (reducedMotion() ? " calm" : "");
     el.setAttribute("role", "status");
-    el.textContent = tr("New badge") + " · " + title(notice.id) + " · " + tierLabel(notice.tier);
+    el.setAttribute("aria-live", "polite");
+    el.innerHTML = achHtml(notice);
     document.body.appendChild(el);
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { if (el.parentNode) el.remove(); }, 4200);
+    var step = function (fn, ms) { return setTimeout(fn, ms); };
+    step(function () { el.classList.add("in"); chime(); rumble("pop"); }, 30);
+    step(function () { el.classList.add("open"); rumble("open"); }, ACH_TIMES.open);
+    step(function () { el.classList.remove("open"); }, ACH_TIMES.open + ACH_TIMES.hold);
+    step(function () { el.classList.add("out"); }, ACH_TIMES.open + ACH_TIMES.hold + ACH_TIMES.fold);
+    step(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      achBusy = false;
+      achNext();
+    }, ACH_TIMES.open + ACH_TIMES.hold + ACH_TIMES.fold + ACH_TIMES.fade);
+  }
+
+  function celebrate(notices) {
+    (notices || []).forEach(function (notice) {
+      if (!notice || !notice.id) return;
+      if (wasShown(notice)) { ack(notice); return; }
+      var key = noticeKey(notice);
+      if (achQueue.some(function (n) { return noticeKey(n) === key; })) return;
+      achQueue.push(notice);
+    });
+    achNext();
+  }
+
+  function openAchievement(id) {
+    var api = accounts();
+    var session = api && api.account && api.account();
+    var data = session ? pack(session) : null;
+    if (data) { lastPack = data; lastMine = true; }
+    openCard(id);
   }
 
   function ack(notice) {
@@ -271,10 +537,7 @@
         return;
       }
       apply(handle, body);
-      if (mine && body.notices && body.notices.length) {
-        showToast(body.notices[0]);
-        ack(body.notices[0]);
-      }
+      if (mine && body.notices && body.notices.length) celebrate(body.notices);
     }).catch(function () { delete loading[id]; });
   }
 
@@ -300,6 +563,16 @@
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (!target || !target.closest) return;
+      var set = target.closest("[data-ach-set]");
+      if (set && set.tagName !== "INPUT") { event.preventDefault(); if (!set.disabled) onSetting(set); return; }
+      var preview = target.closest("[data-ach-preview]");
+      if (preview) { event.preventDefault(); if (!preview.disabled) onPreview(preview); return; }
+      var ach = target.closest("[data-ach-open]");
+      if (ach) {
+        event.preventDefault();
+        openAchievement(ach.getAttribute("data-ach-open") || "");
+        return;
+      }
       if (target.closest("[data-bdg-close]") || target.classList.contains("bdg-sheet")) {
         var open = document.querySelector(".bdg-sheet");
         if (open) open.remove();
@@ -323,6 +596,7 @@
     }, true);
     document.addEventListener("change", function (event) {
       var el = event.target;
+      if (el && el.getAttribute && el.getAttribute("data-ach-set") === "volume") { onSetting(el); chime(null, true); return; }
       if (!el || el.getAttribute("data-badge") !== "audience") return;
       patchBadge(el.getAttribute("data-id") || "", { audience: el.value || "public" });
     });
@@ -336,6 +610,19 @@
   }
 
   root.BadgeSheet = { open: sheet };
+  root.ViktorychAchievements = {
+    celebrate: celebrate,
+    settingsHtml: settingsHtml,
+    prefs: prefs,
+    setPref: setPref,
+    mayChime: mayChime,
+    mayRumble: mayRumble,
+    rumblePattern: rumblePattern,
+    chimes: CHIMES,
+    wasShown: wasShown,
+    pending: function () { return achQueue.length + (achBusy ? 1 : 0); },
+    times: ACH_TIMES
+  };
   root.ProfileBadges = {
     ensure: ensure,
     blockHtml: blockHtml,
