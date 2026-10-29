@@ -28,6 +28,11 @@ REQUIRED_EXTRAS = (
     "404.html",
     "robots.txt",
     ".nojekyll",
+    ".well-known/assetlinks.json",
+    "tv/index.html",
+    "tv/version.json",
+    "tv/qr.svg",
+    "tv/ViktorychTV.apk",
 )
 
 PRIVATE_PUBLICATION = {
