@@ -2500,5 +2500,8 @@ SI18n.addPack("en", {
   "Paste a link or @handle above to add one.": "Paste a link or @handle above to add one.",
   "Paste a link or @handle": "Paste a link or @handle",
   "Select all": "Select all",
-  "Try another search or filter.": "Try another search or filter."
+  "Try another search or filter.": "Try another search or filter.",
+  "Search Settings": "Search Settings",
+  "Ask in your own words, like “make the text bigger”.": "Ask in your own words, like “make the text bigger”.",
+  "Suggested by the on-device assistant": "Suggested by the on-device assistant"
 });
