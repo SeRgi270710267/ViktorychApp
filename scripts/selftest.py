@@ -1314,6 +1314,8 @@ def main() -> None:
     check(local_flow.returncode == 0, "a blocked reload paints home, a profile, a post, and notifications from cache")
     check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
     check(device_flow.returncode == 0, "device performance levels, toggles, and fallbacks pass")
+    tv_flow = subprocess.run(["node", str(ROOT / "scripts" / "tv_boot_test.js")], cwd=ROOT)
+    check(tv_flow.returncode == 0, "TV mode detects TVs, keeps its light defaults switchable, and publishes the TV app files")
     page_html = (ROOT / "index.html").read_text(encoding="utf-8")
     published = deployed_paths()
     check('src="storage.js"' in page_html and "storage.js" in published and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
