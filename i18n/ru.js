@@ -577,6 +577,7 @@ SI18n.addPack("ru", {
   "Pinned messages": "Закреплённые сообщения",
   "Jump to present": "К последним",
   "Read-only channel": "Канал только для чтения",
+  "Servers": "Серверы",
   "Loading pinned messages": "Загрузка закреплённых",
   "No pinned messages": "Нет закреплённых сообщений",
   "Mute channel": "Игнорировать канал",

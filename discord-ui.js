@@ -1115,6 +1115,21 @@
       "</section>";
   }
 
+  /* Server switcher: one round icon per server, like Discord's rail.
+     A tap opens that server alone and brings it into view. */
+  function switcherHtml() {
+    const list = serverOrder();
+    if (list.length < 2) return "";
+    const btns = list.map(function (server) {
+      const on = !!prefs().expanded[server.id];
+      const face = server.icon
+        ? '<img src="' + esc(server.icon) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">'
+        : "<span>" + esc(initials(server.name)) + "</span>";
+      return '<button type="button" class="dmsgs-sw-btn' + (on ? " on" : "") + '" data-discord="switch" data-server="' + esc(server.id) + '" title="' + esc(server.name) + '" aria-label="' + esc(server.name) + '" aria-pressed="' + (on ? "true" : "false") + '">' + face + "</button>";
+    }).join("");
+    return '<nav class="dmsgs-switcher" aria-label="' + esc(tr("Servers")) + '">' + btns + "</nav>";
+  }
+
   function listHtml(route) {
     const add = (root.DiscordPicks && root.DiscordPicks.addButtonHtml) ? root.DiscordPicks.addButtonHtml() : "";
     const warn = (root.DiscordPicks && root.DiscordPicks.keyBannerHtml) ? root.DiscordPicks.keyBannerHtml() : "";
@@ -1125,7 +1140,7 @@
     }
     const rows = serverOrder().map(function (server) { return serverBlock(server, route); }).join("");
     const filtering = state.query ? " is-filtering" : "";
-    return head +
+    return head + switcherHtml() +
       '<label class="search dmsgs-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20.3 16.7 16a7.5 7.5 0 1 0-.7.7L20.3 21 21 20.3zM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z"/></svg>' +
       ("<input id=\"dmsgs-q\" class=\"dmsgs-q\" type=\"search\" " + "placeholder=\"" + tr("Search Direct Messages") + "\"" + " " + "aria-label=\"" + tr("Search Direct Messages") + "\"" + " value=\"") + esc(state.query) + '"></label>' +
       '<div class="dmsgs-channels' + filtering + '">' + rows + "</div>";
@@ -2422,6 +2437,22 @@
       if (!id) return;
       event.preventDefault();
       const stored = prefs();
+      if (kind === "switch") {
+        Object.keys(stored.expanded).forEach(function (key) { delete stored.expanded[key]; });
+        stored.expanded[id] = true;
+        savePrefs();
+        document.querySelectorAll(".dmsgs-sw-btn").forEach(function (el) {
+          const on = el.getAttribute("data-server") === id;
+          el.classList.toggle("on", on);
+          el.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        state.listHold = 0;
+        if (!repaintChannels() && hooks().render) hooks().render();
+        const section = document.querySelector('.dmsgs-srv[data-server="' + id + '"]');
+        const list = listEl();
+        if (section && list) list.scrollTop = Math.max(0, section.offsetTop - list.offsetTop);
+        return;
+      }
       if (kind === "toggle") {
         const willOpen = !stored.expanded[id];
         const list = listEl();
