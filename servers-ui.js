@@ -3587,6 +3587,8 @@
   /* ---------- events ---------- */
   function onClick(ev) {
     var t = ev.target;
+    /* iOS only starts call audio inside a tap; any tap during a call retries it. */
+    if (root.ViktorychVoice && root.ViktorychVoice.state().status !== "idle") root.ViktorychVoice.unlock();
     if (!t || !t.closest) return;
     var pick = t.closest("[data-pop]");
     if (pick) { ev.preventDefault(); choosePop(Number(pick.getAttribute("data-pop"))); return; }
