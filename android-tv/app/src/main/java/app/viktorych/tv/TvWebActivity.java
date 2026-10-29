@@ -15,6 +15,7 @@ import android.provider.Settings;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -29,6 +30,7 @@ public class TvWebActivity extends Activity {
     private WebView web;
     private long pending = -1;
     private String waitingUrl;
+    private boolean fellBack;
 
     private final BroadcastReceiver done = new BroadcastReceiver() {
         @Override
@@ -72,6 +74,17 @@ public class TvWebActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return route(Uri.parse(url));
             }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+                if (req != null && req.isForMainFrame()) fallBack(req.getUrl());
+            }
+
+            @SuppressWarnings("deprecation")
+            @Override
+            public void onReceivedError(WebView view, int code, String description, String url) {
+                if (Build.VERSION.SDK_INT < 23) fallBack(url == null ? null : Uri.parse(url));
+            }
         });
         web.setDownloadListener((url, ua, disposition, mime, length) -> install(url));
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(done, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
@@ -80,6 +93,17 @@ public class TvWebActivity extends Activity {
         if (state != null) web.restoreState(state);
         else web.loadUrl(TvLauncherActivity.withAppInfo(this, start).toString());
         hideBars();
+    }
+
+    /** The short address did not load: open the same screen on GitHub Pages once. */
+    private void fallBack(Uri failed) {
+        if (fellBack || failed == null || !BuildConfig.APP_HOST.equals(failed.getHost())) return;
+        fellBack = true;
+        web.loadUrl(BuildConfig.FALLBACK_URL);
+    }
+
+    static boolean siteHost(String host) {
+        return BuildConfig.APP_HOST.equals(host) || BuildConfig.FALLBACK_HOST.equals(host);
     }
 
     private boolean route(Uri uri) {
@@ -110,7 +134,7 @@ public class TvWebActivity extends Activity {
         if (path.endsWith(".apk")) { install(uri.toString()); return true; }
         // A custom-name build, streamed by the accounts Worker with a short signed link.
         if ("https".equals(scheme) && path.startsWith("/v1/tv/build/") && path.endsWith("/apk")) { install(uri.toString()); return true; }
-        if (("https".equals(scheme) || "http".equals(scheme)) && !BuildConfig.APP_HOST.equals(uri.getHost())) {
+        if (("https".equals(scheme) || "http".equals(scheme)) && !siteHost(uri.getHost())) {
             try {
                 startActivity(new Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                 return true;
@@ -194,7 +218,7 @@ public class TvWebActivity extends Activity {
 
     private boolean ours() {
         String url = web.getUrl();
-        return url != null && BuildConfig.APP_HOST.equals(Uri.parse(url).getHost());
+        return url != null && siteHost(Uri.parse(url).getHost());
     }
 
     final class Bridge {

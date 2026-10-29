@@ -75,6 +75,12 @@ Rules:
 8. If main's own smoke check fails, every PR fails it too. Fix main first in a tiny PR at the top of the queue.
 9. Never edit `.github/workflows/`, never force-push main, never merge old main back into a branch, never use `git stash`. No account handles or IDs in commits, PR text or logs.
 
+## TV sign-in
+
+Short address for people: `viktorychapp.pages.dev` (`SHORT_ORIGIN` in `shared/short-link.js`; `/tv`, `/p/CODE`, `/join`, `/go` via `_redirects`, and `404.html` on GitHub Pages).
+A signed-out TV opens "Sign in with your phone" by itself: a QR code for `/p/CODE` plus a 6-character code, ten minutes, one use, renewed by itself, through `/v1/tv-pair/*`.
+A signed-in phone confirms with one tap; a signed-out phone signs in or up and the TV finishes right after. See [TV-SIGN-IN.md](TV-SIGN-IN.md).
+
 ## 6. Gotchas
 
 - `scripts/handle_guard.py` rejects any token from the private owner catalog, including product and assistant names used as handles. Keep docs neutral.
