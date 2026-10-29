@@ -63,6 +63,10 @@
 .menu.rx-bar .rx-more span { font-size: 22px; font-weight: 400; color: var(--muted); width: 30px; height: 30px; line-height: 28px; text-align: center; border-radius: 50%; border: 1px solid var(--line); }
 
 .rx-row { display: none; }
+.menu.rx-bar { touch-action: none; }
+.menu.rx-bar .rx-pick.rx-hot { transform: translateY(-10px) scale(1.5); z-index: 1; }
+.menu.rx-bar .rx-pick.rx-hot::before { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%) scale(.67); white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.85); color: #e7e9ea; font-size: 13px; font-weight: 700; pointer-events: none; }
+.menu.rx-bar.rx-below .rx-pick.rx-hot::before { bottom: auto; top: calc(100% + 6px); }
 .menu.rx-bar .rx-picks { display: flex; gap: 2px; }
 .menu.rx-bar.rx-has-counts { flex-direction: column; align-items: stretch; border-radius: 20px; }
 .menu.rx-bar .rx-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 2px 4px 2px; padding: 6px 2px 2px; border: 0; border-top: 1px solid var(--line, #2f3336); background: none; color: var(--muted, #71767b); font-size: 13px; cursor: pointer; text-align: left; }

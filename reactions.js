@@ -15,7 +15,9 @@
   var TINT = { "❤️": "#f91880", "👍": "#1d9bf0", "😂": "#f7b928", "😮": "#f7b928", "😢": "#f7b928", "😡": "#e9710f" };
   function groupNames() { return [tr("Smileys & Emotion"), tr("People & Body"), tr("Animals & Nature"), tr("Food & Drink"), tr("Travel & Places"), tr("Activities"), tr("Objects"), tr("Symbols"), tr("Flags")]; }
   var BATCH = 50;
-  var HOLD_MS = 450;
+  var HOLD_MS = 380;
+  var FAR_PX = 90;          // drag this far off the bar and release closes it (like Facebook)
+  var drag = null;         // { pid, cur, far } while a touch hold slides across the bar
   var HOVER_MS = 550;
   var LEAVE_MS = 350;
   /* The data-saving value of the "reactionsData" setting. */
@@ -544,11 +546,62 @@
       swallowClick = Date.now();
       if (navigator.vibrate) { try { navigator.vibrate(8); } catch (err) {} }
       openBar(btn, false);
+      if (bar) { drag = { pid: event.pointerId, cur: null, far: false }; bar.el.classList.add("rx-dragging"); }
     }, HOLD_MS) };
   }
-  function cancelHold() { if (hold) { clearTimeout(hold.timer); hold = null; } }
+  /* Pure: is (x, y) further than FAR_PX outside rect? */
+  function farFrom(rect, x, y) {
+    var dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
+    var dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+    return Math.max(dx, dy) > FAR_PX;
+  }
+  function dragTo(x, y) {
+    if (!drag || !bar) return;
+    var el = document.elementFromPoint ? document.elementFromPoint(x, y) : null;
+    var hit = el && el.closest ? el.closest(".rx-pick") : null;
+    if (hit && !bar.el.contains(hit)) hit = null;
+    drag.far = farFrom(bar.el.getBoundingClientRect(), x, y);
+    if (hit === drag.cur) return;
+    if (drag.cur) drag.cur.classList.remove("rx-hot");
+    drag.cur = hit;
+    if (hit) {
+      hit.classList.add("rx-hot");
+      if (navigator.vibrate) { try { navigator.vibrate(5); } catch (err) {} }
+    }
+  }
+  function endDrag(event) {
+    var was = drag;
+    drag = null;
+    if (!was) return false;
+    if (bar) bar.el.classList.remove("rx-dragging");
+    if (was.cur) was.cur.classList.remove("rx-hot");
+    if (event && event.type === "pointercancel") return true;
+    if (was.cur && bar && bar.el.contains(was.cur)) pick(was.cur.getAttribute("data-rx-pick"));
+    else if (was.far) closeBar(false);
+    return true;
+  }
+  function cancelHold(event) {
+    if (hold) { clearTimeout(hold.timer); hold = null; }
+    if (drag && event && event.pointerId === drag.pid) {
+      if (event.type === "pointerup") endDrag(event);
+      /* pointercancel: the touch stream carries on and touchend finishes the drag. */
+    }
+  }
   function onPointerMove(event) {
+    if (drag && event.pointerId === drag.pid) { dragTo(event.clientX, event.clientY); return; }
     if (hold && (Math.abs(event.clientX - hold.x) > 10 || Math.abs(event.clientY - hold.y) > 10)) cancelHold();
+  }
+  function onTouchMove(event) {
+    if (!drag) return;
+    event.preventDefault();
+    var t = event.touches && event.touches[0];
+    if (t) dragTo(t.clientX, t.clientY);
+  }
+  function onTouchEnd(event) {
+    if (!drag) return;
+    var t = event.changedTouches && event.changedTouches[0];
+    if (t) dragTo(t.clientX, t.clientY);
+    endDrag(event);
   }
   function hoverable() {
     try { return root.matchMedia && root.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (err) { return false; }
@@ -729,6 +782,9 @@
     root.addEventListener("pointermove", onPointerMove, true);
     root.addEventListener("pointerup", cancelHold, true);
     root.addEventListener("pointercancel", cancelHold, true);
+    document.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
+    document.addEventListener("touchend", onTouchEnd, true);
+    document.addEventListener("touchcancel", onTouchEnd, true);
     document.addEventListener("pointerover", onPointerOver, true);
     document.addEventListener("pointerout", onPointerOut, true);
     root.addEventListener("click", onClick, true);
@@ -744,6 +800,8 @@
     start: start,
     settingsHtml: settingsHtml,
     applyLocal: applyLocal,
+    farFrom: farFrom,
+    HOLD_MS: HOLD_MS,
     oneEmoji: oneEmoji,
     keyFor: keyFor,
     lite: lite,
