@@ -6644,6 +6644,7 @@ html[data-flag] a.entity { text-decoration: underline; text-decoration-color: va
 .xv-pills .reddit-votes, .xv-pills .votes { display: none; }
 .xv-pills .action-stats > .action,
 .xv-pills .action-stats > .repost-wrap { flex: 1 1 0; }
+.xv-pills .action-stats > .repost-wrap { display: flex; position: relative; }
 .xv-pills .action-stats > .action.bookmark,
 .xv-pills .action-stats > .action.share { flex: 0 0 44px; }
 .xv-pills .action {

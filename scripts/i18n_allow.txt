@@ -267,3 +267,6 @@ data-saver.js|HD video variants
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
+# app.js: keyboard registry labels are pack keys, translated where the registry renders them
+app.js|Next video
+app.js|Previous video
