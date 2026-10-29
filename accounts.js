@@ -798,6 +798,32 @@
     var backBtn = step < 2 ? '<button class="icon-btn" type="button" data-acct="setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button>' : "<span></span>";
     return '<div class="acct-back acct-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head">' + backBtn + '<div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button></div>" + (onb ? onb.progressHtml(2 + step) : "") + '<div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
   }
+  /* The temporary account sheet in the phone-style setup look, with Back
+     returning to the screen it was opened from. */
+  function tempSetupModal(body) {
+    var title = tr("Temporary account");
+    var anim = setupPainted === "temp" ? "" : " acct-setup-in";
+    setupPainted = "temp";
+    return '<div class="acct-back acct-setup acct-temp-setup"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head"><button class="icon-btn" type="button" data-acct="temp-setup-back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg></button><div class="acct-logo">' + mark("") + '</div><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button></div><div class="acct-body' + anim + '"><h1>' + esc(title) + "</h1>" + body + "</div></div></div>";
+  }
+  function openTemp(from) {
+    tempState.pick = "1d";
+    tempState.until = "";
+    tempState.saveData = null;
+    tempState.from = from || "";
+    setupPainted = -1;
+    openAuth("temp");
+  }
+  function tempSetupBack() {
+    var from = tempState.from;
+    tempState.from = "";
+    errorText = "";
+    if (from === "signup") { setupPainted = -1; openAuth("signup"); return; }
+    view = "";
+    paint();
+    var onb = window.ViktorychOnboarding;
+    if (onb) onb.start("pre", 0, -1);
+  }
   function fieldCount(name, value, max) {
     var raw = name === "accountNumber" ? String(value || "").replace(/\D/g, "") : String(value || "");
     return Array.from(raw).length + " / " + max;
@@ -1211,7 +1237,7 @@ var numberNote = form.passkey
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
     else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
-    else if (view === "temp") html += modal(tr("Temporary account"), tempBody());
+    else if (view === "temp") html += tempState.from ? tempSetupModal(tempBody()) : modal(tr("Temporary account"), tempBody());
     else if (view === "temp-saved") html += modal(tr("Account saved"), tempSavedBody());
     else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
     else if (view === "edit") html += editModal(editBody());
@@ -1296,6 +1322,7 @@ var numberNote = form.passkey
       return;
     }
     if (view === "signup" && step < 2 && setupOn()) writeOnb(null);
+    if (view === "temp") tempState.from = "";
     if (view === "signup" && step === 2 && readPending()) {
       view = "leave";
       paint();
@@ -4281,7 +4308,7 @@ function signupPayload() {
   /* Temporary accounts: one tap, no number to keep, and the account and its
      data are deleted at the time picked here. The server cron does the
      deletion even if this device never comes back. */
-  var tempState = { pick: "1d", until: "", busy: false, error: "", note: "", saveData: null, confirm: false, ownerLoaded: false, ownerLoading: false, ownerLabel: true, ownerCount: 0 };
+  var tempState = { pick: "1d", until: "", from: "", busy: false, error: "", note: "", saveData: null, confirm: false, ownerLoaded: false, ownerLoading: false, ownerLabel: true, ownerCount: 0 };
   function tempDeviceKey() {
     var key = "";
     try { key = localStorage.getItem("va-device-key") || ""; } catch (err) { key = ""; }
@@ -4937,7 +4964,8 @@ function signupPayload() {
     }
     if (act === "signup") startSetup();
     else if (act === "setup-back") setupBack();
-    else if (act === "open-temp") { tempState.pick = "1d"; tempState.until = ""; tempState.saveData = null; openAuth("temp"); }
+    else if (act === "open-temp") openTemp(setupOn() ? "signup" : "");
+    else if (act === "temp-setup-back") tempSetupBack();
     else if (act === "temp-pick") {
       tempState.pick = acct.getAttribute("data-pick") || "1d";
       if (view === "temp") paint(); else tempRender();
@@ -5668,6 +5696,7 @@ else if (act === "copy-id") copyAccountId();
     saveOwnAccount: applyOwnAccount,
     openSignupSetup: function () { setupPainted = -1; openAuth("signup"); },
     openLogin: function () { openAuth("login"); },
+    openTemp: function () { openTemp("welcome"); },
     setReposts: setReposts,
     ensureProfile: loadProfile,
     profilePending: profilePending,
