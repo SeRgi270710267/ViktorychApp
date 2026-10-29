@@ -12,6 +12,7 @@ COPY worker/ ./worker/
 COPY shared/ ./shared/
 COPY backup-server/server.mjs ./server.mjs
 COPY backup-server/cloudflare.mjs ./cloudflare.mjs
+COPY backup-server/pool-room.mjs ./pool-room.mjs
 
 # Default port (Render standard 10000)
 ENV PORT=10000

@@ -53,6 +53,54 @@ shows the 7-day peer hit rate, the bytes offloaded from the server, the
 devices in the pool now, and rejected chunks. These numbers are reported by
 devices, so they are estimates.
 
+## Getting past blocks (Russia, India)
+
+The pool is the last step in the fallback chain that PR #341 added: the
+main server, then the Render backup, then the other site copy and the media
+relay, then peers.
+
+- **Feed data when the servers fail or stall.** A data read that fails on
+  every server, or is still waiting after 4 s, asks peers for the newest
+  copy they hold. The copy must match a manifest the Worker signed, so a
+  peer can hold back an update but cannot fake or alter one. The first good
+  answer wins. If nothing newer than this tab's copy exists, the read fails
+  as before and the app keeps what it shows.
+- **Updates without the change signal.** Peers pass the signed manifests
+  for what they hold over the data channel (`mf`, and `want` to ask for
+  one). When the change signal is out of reach and a peer vouches for a
+  newer `feeds.json`, the app reads again (`viktorych-pool-news`) and the
+  copy comes from peers.
+- **Rescue mode.** A device that does not share (Auto without a charger,
+  or mobile data with the switch on On) joins the pool only while our
+  servers keep failing (10 minutes after the last failure). It only
+  downloads: nothing is uploaded and nothing is announced. Save data, TV
+  mode and Off keep it out. On mobile data, Auto keeps it out too.
+- **Two rooms.** The room runs on the Worker and, with the same rules and
+  code (`backup-server/pool-room.mjs`), on the Render backup. Tickets come
+  from the shared D1 table, so either server can issue one. Sharing devices
+  join both rooms, so a reader who only reaches Render still finds someone
+  with fresh copies. Readers in rescue join one, the first that answers.
+  The two rooms do not talk to each other.
+- **STUN.** Cloudflare (3478), Google (19302) and Nextcloud (443). Port
+  443 tends to stay open on networks that block other UDP ports. There is
+  still no TURN: if two devices cannot reach each other directly, they
+  cannot share.
+- **The slow-connection note** says "new posts came from other devices"
+  for 10 minutes after peers answered while the connection is slow.
+
+### What it cannot do
+
+- **Photos and videos.** Media lives on other sites. The browser gets an
+  opaque response that cannot be read or hashed, so there is nothing to
+  verify. Passing it on unverified would let any peer swap content, so
+  media still goes direct, through the relay, or not at all.
+- **Total blocks.** Peers find each other through the Worker or Render. If
+  both are blocked and the device has no copy, the pool cannot start.
+  Devices already connected keep exchanging while their links stay up.
+- **A peer is needed.** Rescue only works when someone online holds a newer
+  signed copy, which in practice means at least one device in the pool
+  that can reach the server.
+
 ## Privacy
 
 WebRTC peers see each other's IP address. This is the same for any direct
@@ -87,7 +135,12 @@ the Worker writes no manifests and the pool only shares app files.
 
 - `node worker/test/peer-pool.test.mjs` (Miniflare). It checks the rules, the
   manifest the data read signs, room relay and stats.
+- `node worker/test/pool-backup-room.test.mjs` runs the Render room on real
+  WebSockets: ready, peer, signal relay, single-use tickets and bye.
 - `PLAYWRIGHT_CORE=… node scripts/peer_pool_test.mjs` runs three Chrome
   pages. It checks peer hits, a single server read, and that a tampered chunk
-  is rejected and the normal request answers instead. It uses real WebRTC
+  is rejected and the normal request answers instead. It also checks the
+  blocked case: a newer signed feed reaching a page whose change signal and
+  server both fail, and a phone on mobile data that joins only while
+  blocked, gets the feed in rescue mode and uploads nothing. It uses real WebRTC
   where the sandbox allows it, and a stand-in transport otherwise.

@@ -2987,5 +2987,9 @@ SI18n.addPack("en", {
   "Sharing pool, last 7 days": "Sharing pool, last 7 days",
   "Peer hit rate {rate} ({hits} of {tries})": "Peer hit rate {rate} ({hits} of {tries})",
   "Offloaded from the server {peer} of {total} ({share})": "Offloaded from the server {peer} of {total} ({share})",
-  "Online in the pool now {n} · rejected chunks {bad}": "Online in the pool now {n} · rejected chunks {bad}"
+  "Online in the pool now {n} · rejected chunks {bad}": "Online in the pool now {n} · rejected chunks {bad}",
+  "Helping while our servers can't be reached: getting posts from {n} devices, uploading nothing.": "Helping while our servers can't be reached: getting posts from {n} devices, uploading nothing.",
+  "When our servers are blocked or failing, devices in the pool can still pass you the newest posts, checked against the same signed fingerprint. On mobile data this needs On, and nothing is uploaded from mobile data. Photos and videos from other sites can't be checked, so they aren't shared.": "When our servers are blocked or failing, devices in the pool can still pass you the newest posts, checked against the same signed fingerprint. On mobile data this needs On, and nothing is uploaded from mobile data. Photos and videos from other sites can't be checked, so they aren't shared.",
+  "Got {n} updates from peers while the server was out of reach": "Got {n} updates from peers while the server was out of reach",
+  "Connection is slow - new posts came from other devices": "Connection is slow - new posts came from other devices"
 });

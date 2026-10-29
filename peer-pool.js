@@ -2,8 +2,10 @@
    pass each other public feed documents and app files they already have,
    so the server sends each version once instead of once per person.
 
-   - Signaling is a WebSocket room on the Worker (JSON only). Bytes move on
-     WebRTC data channels with free STUN, never TURN, to at most 4 peers.
+   - Signaling is a WebSocket room on the Worker (JSON only), with the same
+     room on the Render backup for when the Worker cannot be reached. Bytes
+     move on WebRTC data channels with free STUN, never TURN, to at most 4
+     peers.
    - Feed documents are taken from a peer only when a manifest the Worker
      signed names that SHA-256 for the version the pulse says is current.
      App files are taken only when this deploy's shell-manifest.json names
@@ -11,26 +13,44 @@
      is thrown away and the normal request answers.
    - A peer gets a head start of a few round trips at most, then the normal
      request starts too and the first good answer wins.
+   - When our servers fail or stall (blocks, throttling), the newest copy a
+     peer holds can answer instead. It still has to match a manifest the
+     Worker signed, so a peer can delay an update but never fake one. Peers
+     pass those signed manifests to each other, so news travels even when
+     the change signal cannot be reached.
    - Cross-origin media is never shared: an opaque response cannot be read,
      so there is nothing to hash or pass on. */
 
 import * as R from "./shared/peer-pool.js";
 
-const STUN = ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"];
+// Three unrelated free STUN services; the last one answers on port 443,
+// which networks that block odd UDP ports usually leave open.
+const STUN = ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302", "stun:stun.nextcloud.com:443"];
 const ACCOUNT_KEY = "viktorychapp-account-v1";
 const HIDE_GRACE_MS = 60000;
 const STATS_EVERY_MS = 10 * 60 * 1000;
 const GET_TIMEOUT_MS = 2000;
 const SHELL_CACHE_POOL = "shell-pool";
+const READY_TIMEOUT_MS = 8000;
+const RESCUE_SLOW_MS = 4000;
+const RESCUE_DEADLINE_MS = 8000;
+const TROUBLE_MS = 10 * 60 * 1000;
+const NEWS_EVERY_MS = 60000;
+const MF_RATE = 30;
 
 const S = {
   mode: "auto",
   facts: null,
   on: false,
+  rescue: false,
   reason: "",
-  ws: null,
-  joining: false,
-  selfId: "",
+  rooms: new Map(),
+  rescueAt: 0,
+  trouble: 0,
+  latest: new Map(),
+  lastAt: new Map(),
+  lastH: new Map(),
+  newsAt: new Map(),
   links: new Map(),
   haves: new Map(),
   store: new Map(),
@@ -39,7 +59,7 @@ const S = {
   manifests: new Map(),
   used: new Set(),
   upload: { day: "", used: 0 },
-  stats: { saved: 0, shared: 0, origin: 0, hits: 0, tries: 0, rejected: 0 },
+  stats: { saved: 0, shared: 0, origin: 0, hits: 0, tries: 0, rejected: 0, rescued: 0 },
   unsent: { peer: 0, origin: 0, up: 0, hits: 0, tries: 0, rejected: 0 },
   reqSeq: 1,
   charging: null,
@@ -63,7 +83,7 @@ function loadPrefs() {
   const saved = readJson(R.POOL_KEY, {});
   S.mode = R.normalizeMode(saved.mode);
   const st = readJson(R.POOL_STATS_KEY, {});
-  ["saved", "shared", "origin", "hits", "tries", "rejected"].forEach((k) => { S.stats[k] = Math.max(0, Number(st[k]) || 0); });
+  ["saved", "shared", "origin", "hits", "tries", "rejected", "rescued"].forEach((k) => { S.stats[k] = Math.max(0, Number(st[k]) || 0); });
   if (st.upload && typeof st.upload === "object") S.upload = { day: String(st.upload.day || ""), used: Number(st.upload.used) || 0 };
 }
 function saveStats() {
@@ -99,15 +119,21 @@ function visible() {
   return !scope.document || scope.document.visibilityState !== "hidden";
 }
 
+function troubled() {
+  return !!S.trouble && Date.now() - S.trouble < TROUBLE_MS;
+}
+
 function evaluate() {
   S.facts = facts();
   const d = R.poolEnabled(S.mode, S.facts);
   S.reason = d.reason;
-  const was = S.on;
-  S.on = d.on && !!session();
-  if (!session()) S.reason = "signedOut";
-  if (S.on && !was) join();
-  if (!S.on && was) leave();
+  const signedIn = !!session();
+  S.on = d.on && signedIn;
+  // Rescue only downloads: it never uploads, and it starts only while our
+  // servers keep failing. On mobile data it needs the switch set to On.
+  S.rescue = !S.on && signedIn && R.poolRescue(S.mode, S.facts, troubled());
+  if (!signedIn) S.reason = "signedOut";
+  syncRooms();
   return S.on;
 }
 
@@ -120,73 +146,136 @@ function apiBase() {
   return String(live || saved || "").replace(/\/$/, "");
 }
 
-async function join() {
-  if (S.ws || S.joining || !S.on || !visible()) return;
-  const base = apiBase();
+/* The Worker first, then the Render backup. Both rooms run the same rules
+   and accept tickets from the same database. */
+function roots() {
+  const a = scope.ViktorychAccounts;
+  let list = [];
+  try { list = a && a.apiEndpoints ? a.apiEndpoints() : []; } catch (err) { list = []; }
+  const first = apiBase();
+  if (first && list.indexOf(first) === -1) list.unshift(first);
+  return list.map((u) => String(u || "").replace(/\/$/, "")).filter((u, i, all) => /^https?:\/\//.test(u) && all.indexOf(u) === i).slice(0, 2);
+}
+
+function wantedRoots() {
+  const all = roots();
+  if (!visible() || !all.length) return [];
+  // Sharing devices sit in both rooms, so a reader who only reaches the
+  // backup still finds someone with fresh copies.
+  if (S.on) return all;
+  if (!S.rescue) return [];
+  const open = all.find((root) => { const r = S.rooms.get(root); return r && r.id; });
+  return [open || all[S.rescueAt % all.length]];
+}
+
+function syncRooms() {
+  const want = wantedRoots();
+  S.rooms.forEach((room, root) => { if (want.indexOf(root) === -1) closeRoom(room); });
+  want.forEach((root) => { if (!S.rooms.has(root)) openRoom(root); });
+  if (!want.length) dropAll();
+}
+
+function join() { syncRooms(); }
+
+function retryRoom(room, ms) {
+  if (S.rooms.get(room.root) !== room) return;
+  S.rooms.delete(room.root);
+  if (!room.id) S.rescueAt += 1;
+  room.backoff = Math.min(120000, (room.backoff || ms) * 2);
+  roomBackoff.set(room.root, room.backoff);
+  setTimeout(syncRooms, room.backoff);
+}
+const roomBackoff = new Map();
+
+async function openRoom(root) {
   const s = session();
-  if (!base || !s) return;
-  S.joining = true;
+  if (!s) return;
+  const room = { root: root, ws: null, id: "", backoff: roomBackoff.get(root) || 0 };
+  S.rooms.set(root, room);
   try {
-    const res = await fetch(base + "/v1/media/swarm/ticket", { method: "POST", headers: { Authorization: "Bearer " + s.token, "content-type": "application/json" }, body: "{}", credentials: "omit" });
+    const res = await fetch(root + "/v1/media/swarm/ticket", { method: "POST", headers: { Authorization: "Bearer " + s.token, "content-type": "application/json" }, body: "{}", credentials: "omit", signal: timeoutSignal(READY_TIMEOUT_MS) });
     if (!res.ok) throw new Error("ticket");
     const body = await res.json();
-    if (!body || !body.ticket || !S.on) throw new Error("ticket");
-    const ws = new WebSocket(base.replace(/^http/i, "ws") + "/v1/pool/room?ticket=" + encodeURIComponent(body.ticket));
-    S.ws = ws;
-    ws.onmessage = (ev) => onRoom(ev.data);
+    if (!body || !body.ticket || S.rooms.get(root) !== room) throw new Error("ticket");
+    const ws = new WebSocket(root.replace(/^http/i, "ws") + "/v1/pool/room?ticket=" + encodeURIComponent(body.ticket));
+    room.ws = ws;
+    const ready = setTimeout(() => { if (!room.id) { try { ws.close(); } catch (err) { /* closed */ } } }, READY_TIMEOUT_MS);
+    ws.onmessage = (ev) => onRoom(room, ev.data);
     ws.onclose = () => {
-      if (S.ws !== ws) return;
-      S.ws = null;
-      dropAll();
-      if (S.on && visible()) {
-        S.backoff = Math.min(120000, (S.backoff || 3000) * 2);
-        setTimeout(join, S.backoff);
-      }
+      clearTimeout(ready);
+      dropRoomLinks(room);
+      if (S.rooms.get(root) === room) retryRoom(room, room.id ? 3000 : 5000);
     };
-    ws.onopen = () => { S.backoff = 0; };
   } catch (err) {
-    S.backoff = Math.min(120000, (S.backoff || 5000) * 2);
-    setTimeout(join, S.backoff);
-  } finally {
-    S.joining = false;
+    retryRoom(room, 5000);
   }
+}
+
+function timeoutSignal(ms) {
+  try { return AbortSignal.timeout(ms); } catch (err) { return undefined; }
+}
+
+function closeRoom(room) {
+  if (S.rooms.get(room.root) === room) S.rooms.delete(room.root);
+  const ws = room.ws;
+  room.ws = null;
+  if (ws) { try { if (ws.readyState === 1) ws.send(JSON.stringify({ op: "bye" })); ws.close(); } catch (err) { /* closed */ } }
+  dropRoomLinks(room);
 }
 
 function leave() {
   flushStats();
-  const ws = S.ws;
-  S.ws = null;
-  if (ws) { try { ws.send(JSON.stringify({ op: "bye" })); ws.close(); } catch (err) { /* closed */ } }
+  Array.from(S.rooms.values()).forEach(closeRoom);
   dropAll();
 }
 
-function roomSend(body) {
-  if (!S.ws || S.ws.readyState !== 1) return false;
-  try { S.ws.send(JSON.stringify(body)); return true; } catch (err) { return false; }
+function openRooms() {
+  return Array.from(S.rooms.values()).filter((r) => r.id && r.ws && r.ws.readyState === 1);
 }
 
-function onRoom(raw) {
+function roomSend(body, only) {
+  let sent = false;
+  (only ? [only] : openRooms()).forEach((room) => {
+    if (!room || !room.ws || room.ws.readyState !== 1) return;
+    try { room.ws.send(JSON.stringify(body)); sent = true; } catch (err) { /* closing */ }
+  });
+  return sent;
+}
+
+function selfIds() {
+  return new Set(Array.from(S.rooms.values()).map((r) => r.id).filter(Boolean));
+}
+
+function onRoom(room, raw) {
   let msg = null;
   try { msg = JSON.parse(raw); } catch (err) { return; }
   if (!msg || typeof msg !== "object") return;
   if (msg.op === "ready") {
-    S.selfId = String(msg.id || "");
-    announceAll();
+    room.id = String(msg.id || "");
+    room.backoff = 0;
+    roomBackoff.delete(room.root);
+    announceAll(room);
     const list = (Array.isArray(msg.peers) ? msg.peers : []).filter((id) => /^[a-f0-9]{8,32}$/.test(id));
     for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = list[i]; list[i] = list[j]; list[j] = t; }
-    list.slice(0, R.MAX_PEERS).forEach((id) => openLink(id, true));
+    list.slice(0, R.MAX_PEERS).forEach((id) => openLink(id, true, room));
     return;
   }
-  if (msg.op === "peer") { announceAll(); return; }
+  if (msg.op === "peer") {
+    announceAll(room);
+    // A reader in rescue does not announce anything, so reach out to new
+    // peers instead of waiting to hear what they have.
+    if (S.rescue && msg.id && S.links.size < R.MAX_PEERS) openLink(String(msg.id), true, room);
+    return;
+  }
   if (msg.op === "have" && msg.from) {
     const from = String(msg.from);
     let set = S.haves.get(from);
     if (!set || msg.reset) { set = new Map(); S.haves.set(from, set); }
     (msg.items || []).forEach((it) => { if (it && /^[a-f0-9]{64}$/.test(it.h)) set.set(it.h, Number(it.size) || 0); });
-    if (!S.links.has(from) && S.links.size < R.MAX_PEERS && wantsAny(set)) openLink(from, true);
+    if (!S.links.has(from) && S.links.size < R.MAX_PEERS && (wantsAny(set) || S.rescue)) openLink(from, true, room);
     return;
   }
-  if (msg.op === "signal" && msg.from) { takeSignal(String(msg.from), msg.signal); return; }
+  if (msg.op === "signal" && msg.from) { takeSignal(String(msg.from), msg.signal, room); return; }
   if (msg.op === "bye" && msg.from) { dropLink(String(msg.from)); S.haves.delete(String(msg.from)); }
 }
 
@@ -199,37 +288,38 @@ function wantsAny(set) {
 
 function rtc() { return scope._origRTCPeerConnection || scope.RTCPeerConnection || null; }
 
-function openLink(id, offer) {
-  if (!id || id === S.selfId || S.links.has(id) || S.links.size >= R.MAX_PEERS) return null;
+function openLink(id, offer, room) {
+  if (!id || !room || selfIds().has(id) || S.links.has(id) || S.links.size >= R.MAX_PEERS) return null;
   const Ctor = rtc();
   if (!Ctor) return null;
   let pc;
   try { pc = new Ctor({ iceServers: [{ urls: STUN }], iceTransportPolicy: "all" }); } catch (err) { return null; }
-  const link = { id: id, pc: pc, ch: null, rtt: 0, wait: new Map(), bad: 0 };
+  const link = { id: id, room: room, pc: pc, ch: null, rtt: 0, wait: new Map(), bad: 0, mf: { at: 0, n: 0 } };
   S.links.set(id, link);
   pc.onicecandidate = (ev) => {
     if (!ev || !ev.candidate || !ev.candidate.candidate || /typ relay/i.test(ev.candidate.candidate)) return;
-    roomSend({ op: "signal", to: id, signal: { type: "ice", candidate: ev.candidate.candidate, sdpMid: ev.candidate.sdpMid || "", sdpMLineIndex: ev.candidate.sdpMLineIndex } });
+    roomSend({ op: "signal", to: id, signal: { type: "ice", candidate: ev.candidate.candidate, sdpMid: ev.candidate.sdpMid || "", sdpMLineIndex: ev.candidate.sdpMLineIndex } }, room);
   };
   pc.ondatachannel = (ev) => bindChannel(link, ev.channel);
   pc.onconnectionstatechange = () => { if (pc.connectionState === "failed" || pc.connectionState === "closed") dropLink(id); };
   if (offer) {
     bindChannel(link, pc.createDataChannel("pool", { ordered: true }));
     pc.createOffer().then((d) => pc.setLocalDescription(d)).then(() => {
-      roomSend({ op: "signal", to: id, signal: { type: "offer", sdp: pc.localDescription && pc.localDescription.sdp } });
+      roomSend({ op: "signal", to: id, signal: { type: "offer", sdp: pc.localDescription && pc.localDescription.sdp } }, room);
     }).catch(() => dropLink(id));
   }
   setTimeout(() => { const l = S.links.get(id); if (l === link && (!l.ch || l.ch.readyState !== "open")) dropLink(id); }, 15000);
   return link;
 }
 
-async function takeSignal(from, signal) {
+async function takeSignal(from, signal, room) {
   const clean = R.cleanPoolSignal(signal);
   if (!clean) return;
   let link = S.links.get(from);
+  if (link && link.room !== room) return;
   if (!link) {
     if (clean.type !== "offer") return;
-    link = openLink(from, false);
+    link = openLink(from, false, room);
     if (!link) return;
   }
   try {
@@ -237,7 +327,7 @@ async function takeSignal(from, signal) {
       await link.pc.setRemoteDescription({ type: "offer", sdp: clean.sdp });
       const answer = await link.pc.createAnswer();
       await link.pc.setLocalDescription(answer);
-      roomSend({ op: "signal", to: from, signal: { type: "answer", sdp: link.pc.localDescription && link.pc.localDescription.sdp } });
+      roomSend({ op: "signal", to: from, signal: { type: "answer", sdp: link.pc.localDescription && link.pc.localDescription.sdp } }, room);
     } else if (clean.type === "answer") {
       await link.pc.setRemoteDescription({ type: "answer", sdp: clean.sdp });
     } else if (clean.type === "ice") {
@@ -256,10 +346,10 @@ async function takeSignal(from, signal) {
 function bindChannel(link, ch) {
   link.ch = ch;
   ch.binaryType = "arraybuffer";
-  ch.onopen = () => ping(link);
+  ch.onopen = () => { ping(link); pushManifests(link); };
   ch.onmessage = (ev) => onPeer(link, ev.data);
   ch.onclose = () => { if (link.ch === ch) dropLink(link.id); };
-  if (ch.readyState === "open") ping(link);
+  if (ch.readyState === "open") { ping(link); pushManifests(link); }
 }
 
 function ping(link) {
@@ -274,6 +364,10 @@ function dropLink(id) {
   link.wait.clear();
   try { if (link.ch) link.ch.close(); } catch (err) { /* closed */ }
   try { link.pc.close(); } catch (err) { /* closed */ }
+}
+
+function dropRoomLinks(room) {
+  S.links.forEach((link, id) => { if (link.room === room) { dropLink(id); S.haves.delete(id); } });
 }
 
 function dropAll() {
@@ -331,6 +425,8 @@ function onPeer(link, data) {
     if (msg.op === "ping") { try { link.ch.send(JSON.stringify({ op: "pong", t: msg.t })); } catch (err) { /* closed */ } return; }
     if (msg.op === "pong") { const rtt = Date.now() - Number(msg.t); if (rtt >= 0 && rtt < 10000) link.rtt = link.rtt ? Math.round(link.rtt * 0.7 + rtt * 0.3) : rtt; return; }
     if (msg.op === "get") { serve(link, msg); return; }
+    if (msg.op === "mf") { takeManifest(link, msg.e); return; }
+    if (msg.op === "want") { offerManifest(link, String(msg.k || "")); return; }
     if (msg.op === "miss") { const w = link.wait.get(Number(msg.r) >>> 0); if (w) w.done(null); }
     return;
   }
@@ -420,11 +516,96 @@ function keep(h, bytes, key) {
   if (S.on) roomSend({ op: "have", items: [{ h: h, size: bytes.byteLength }] });
 }
 
-function announceAll() {
+function announceAll(room) {
+  if (!S.on) return;
   const items = [];
   S.store.forEach((v, h) => items.push({ h: h, size: v.bytes.byteLength }));
   S.shell.forEach((v, h) => items.push({ h: h, size: v.size }));
-  for (let i = 0; i < items.length; i += 24) roomSend({ op: "have", items: items.slice(i, i + 24), reset: i === 0 });
+  for (let i = 0; i < items.length; i += 24) roomSend({ op: "have", items: items.slice(i, i + 24), reset: i === 0 }, room);
+}
+
+/* ---------- signed manifests between peers ---------- */
+
+function newestEntry(key) {
+  const a = S.manifests.get(key);
+  const b = S.latest.get(key);
+  if (!a) return b || null;
+  if (!b) return a;
+  return Number(b.at) > Number(a.at) ? b : a;
+}
+
+function sendManifest(link, entry) {
+  if (!entry || !link.ch || link.ch.readyState !== "open") return;
+  try { link.ch.send(JSON.stringify({ op: "mf", e: entry })); } catch (err) { /* closed */ }
+}
+
+/* A sharing device tells each new link which versions it can pass on. */
+function pushManifests(link) {
+  if (!S.on) return;
+  const keys = new Set();
+  S.store.forEach((v) => { if (v.key) keys.add(v.key); });
+  keys.forEach((key) => {
+    const entry = newestEntry(key);
+    if (entry && S.store.has(entry.h)) sendManifest(link, entry);
+  });
+}
+
+function pushManifest(key) {
+  const entry = newestEntry(key);
+  if (!S.on || !entry || !S.store.has(entry.h)) return;
+  openLinks().forEach((link) => sendManifest(link, entry));
+}
+
+function offerManifest(link, key) {
+  if (!S.on || !R.POOL_DATA_KEYS.test(key)) return;
+  const entry = newestEntry(key);
+  if (entry && S.store.has(entry.h)) sendManifest(link, entry);
+}
+
+async function takeManifest(link, entry) {
+  const now = Date.now();
+  if (now - link.mf.at > 60000) link.mf = { at: now, n: 0 };
+  link.mf.n += 1;
+  if (link.mf.n > MF_RATE) return;
+  if (!entry || typeof entry !== "object" || !R.POOL_DATA_KEYS.test(String(entry.key || "")) || !/^[a-f0-9]{64}$/.test(String(entry.h || ""))) return;
+  const known = newestEntry(entry.key);
+  const same = known && known.h === entry.h;
+  if (!same && !(await R.verifyManifest(entry, scope.__viktorychPoolTestJwk || undefined))) { link.bad += 1; return; }
+  let set = S.haves.get(link.id);
+  if (!set) { set = new Map(); S.haves.set(link.id, set); }
+  set.set(entry.h, same ? Number(known.size) || 0 : Number(entry.size) || 0);
+  if (same) return;
+  const prev = S.latest.get(entry.key);
+  if (!prev || Number(entry.at) > Number(prev.at)) S.latest.set(entry.key, entry);
+  maybeNews(entry.key);
+}
+
+/* A newer signed version than the copy this tab has, while the change
+   signal is out of reach: tell the app so it reads again. */
+function newerThanMine(key) {
+  const entry = newestEntry(key);
+  if (!entry) return null;
+  if (S.lastH.get(key) === entry.h) return null;
+  if (Number(entry.at) <= (S.lastAt.get(key) || 0)) return null;
+  return entry;
+}
+
+function maybeNews(key) {
+  if (!S.used.has(key) || pulseMark(key)) return;
+  if (!newerThanMine(key)) return;
+  const at = S.newsAt.get(key) || 0;
+  if (Date.now() - at < NEWS_EVERY_MS) return;
+  S.newsAt.set(key, Date.now());
+  emit("viktorych-pool-news", { key: key });
+}
+
+function emit(name, detail) {
+  try { scope.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (err) { /* old browser */ }
+}
+
+function remember(key, h, at) {
+  S.lastH.set(key, h);
+  S.lastAt.set(key, Math.max(S.lastAt.get(key) || 0, Number(at) || 0));
 }
 
 /* ---------- feed documents ---------- */
@@ -465,30 +646,134 @@ async function loadManifest(key) {
 
 function learnFrom(key, res) {
   if (!res || !res.ok || !res.clone) return res;
+  const fetchedAt = Date.now();
   const copy = res.clone();
   copy.arrayBuffer().then(async (buf) => {
     const bytes = new Uint8Array(buf);
     if (!bytes.byteLength || bytes.byteLength > R.ITEM_MAX) return;
+    // Not sharing: just note when this copy arrived, without extra reads.
+    if (!S.on && !S.rescue) { remember(key, "", fetchedAt); return; }
     if (S.on) { S.stats.origin += bytes.byteLength; S.unsent.origin += bytes.byteLength; saveStatsSoon(); }
     const h = await R.sha256Hex(bytes);
     let entry = S.manifests.get(key);
     // The Worker signs a new version while answering the first reader, so
     // look again shortly when the manifest does not know these bytes yet.
     if (!entry || entry.h !== h) { await sleep(2500); entry = await loadManifest(key); }
-    if (entry && entry.h === h && S.on) keep(h, bytes, key);
+    if (!entry || entry.h !== h) { const other = S.latest.get(key); if (other && other.h === h) entry = other; }
+    remember(key, h, entry && entry.h === h ? entry.at : fetchedAt);
+    if (entry && entry.h === h && S.on) { keep(h, bytes, key); pushManifest(key); }
   }).catch(() => {});
   return res;
 }
 
 /* True when this read can try the pool. */
 function wants(key) {
-  return S.on && !isOwner() && R.POOL_DATA_KEYS.test(String(key || ""));
+  if (isOwner() || !R.POOL_DATA_KEYS.test(String(key || ""))) return false;
+  // Signed in and not switched off: a failing read may start rescue.
+  const f = S.facts || {};
+  return S.on || S.rescue || (S.mode !== "off" && !!session() && !f.saveData && !f.tv);
+}
+
+function noteTrouble(on) {
+  const was = S.trouble;
+  S.trouble = on ? Date.now() : 0;
+  if (!!was !== !!S.trouble) evaluate();
+}
+
+function failedRead(r) {
+  return !r || !!r.err || !r.res || r.res.status === 0 || r.res.status === 429 || r.res.status >= 500;
+}
+
+function finish(key, r) {
+  if (r.err) throw r.err;
+  return learnFrom(key, r.res);
+}
+
+function peerResponse(key, entry, bytes, how) {
+  remember(key, entry.h, entry.at);
+  // A reader in rescue is here only because the server keeps failing.
+  if (how !== "self" && !S.on && S.rescue) how = "peer-rescue";
+  if (how !== "self") {
+    S.stats.hits += 1; S.unsent.hits += 1;
+    S.stats.saved += bytes.byteLength; S.unsent.peer += bytes.byteLength;
+    if (S.on) { keep(entry.h, bytes, key); pushManifest(key); }
+  }
+  if (how === "peer-rescue") S.stats.rescued += 1;
+  saveStatsSoon();
+  emit("viktorych-pool-delivered", { key: key, how: how });
+  return new Response(bytes.slice(), { status: 200, headers: { "content-type": "application/json; charset=utf-8", "x-pool": how } });
+}
+
+/* The manifest without the change signal, for when the signal is blocked
+   but the public bucket is not. */
+async function loadManifestDirect(key) {
+  const base = manifestBase();
+  if (!base) return null;
+  try {
+    const res = await fetch(base + R.manifestObjectName(key) + "?r=" + Math.floor(Date.now() / 30000), { cache: "no-cache", credentials: "omit", mode: "cors", signal: timeoutSignal(3000) });
+    if (!res.ok) return null;
+    const entry = await res.json();
+    if (!entry || entry.key !== key || !(await R.verifyManifest(entry, scope.__viktorychPoolTestJwk || undefined))) return null;
+    const prev = S.latest.get(key);
+    if (!prev || Number(entry.at) > Number(prev.at)) S.latest.set(key, entry);
+    return entry;
+  } catch (err) { return null; }
+}
+
+function askLatest(key) {
+  openLinks().forEach((link) => { try { link.ch.send(JSON.stringify({ op: "want", k: key })); } catch (err) { /* closed */ } });
+}
+
+/* The server failed or stalls: the newest signed copy a peer holds. */
+async function rescue(key) {
+  // Joining takes a few seconds, so the first failed read only starts it;
+  // the next reads can use it.
+  S.trouble = Date.now();
+  if (!S.rescue && !S.on) evaluate();
+  let entry = newerThanMine(key);
+  if (!entry || !holders(entry.h).length) {
+    // Ask the links for their newest signed copy, and the public bucket
+    // for the manifest, then give the answers a moment to arrive.
+    askLatest(key);
+    loadManifestDirect(key);
+    for (let waited = 0; waited < 1500; waited += 100) {
+      await sleep(100);
+      entry = newerThanMine(key);
+      if (entry && (S.store.has(entry.h) || holders(entry.h).length)) break;
+    }
+  }
+  if (!entry) return null;
+  if (S.store.has(entry.h)) return peerResponse(key, entry, S.store.get(entry.h).bytes, "self");
+  if (!holders(entry.h).length) return null;
+  S.stats.tries += 1;
+  S.unsent.tries += 1;
+  const signal = { stop: false };
+  const bytes = await Promise.race([pullItem(entry.h, entry.size, entry.c, signal), sleep(RESCUE_DEADLINE_MS).then(() => { signal.stop = true; return null; })]);
+  return bytes ? peerResponse(key, entry, bytes, "peer-rescue") : null;
+}
+
+/* The normal read, with peers as the last fallback when it fails (after
+   the backup server and every retry) or is still waiting after a few
+   seconds. The first good answer wins. */
+async function guarded(key, origin) {
+  const net = Promise.resolve().then(origin).then((res) => ({ res: res }), (err) => ({ err: err }));
+  const first = await Promise.race([net, sleep(RESCUE_SLOW_MS).then(() => null)]);
+  if (first && !failedRead(first)) { if (S.trouble && !S.rescue) S.trouble = 0; return finish(key, first); }
+  const saved = rescue(key);
+  if (first) { const got = await saved; return got || finish(key, first); }
+  const winner = await Promise.race([
+    net.then((r) => (failedRead(r) ? saved.then((g) => g || r) : r)),
+    saved.then((g) => g || net)
+  ]);
+  if (winner instanceof Response) return winner;
+  return finish(key, winner);
 }
 
 /* origin() is the normal request. Returns a Response. */
 async function fetchData(key, origin) {
   if (!wants(key)) return origin();
   S.used.add(key);
+  if (!S.on && !S.rescue) return guarded(key, origin);
   const mark = pulseMark(key);
   let entry = S.manifests.get(key);
   // A new version: when peers are connected, give the manifest a brief
@@ -496,37 +781,43 @@ async function fetchData(key, origin) {
   if ((!entry || entry.mark !== mark) && mark && openLinks().length) {
     entry = await Promise.race([loadManifest(key), sleep(150).then(() => null)]);
   }
-  if (!entry || !mark || entry.mark !== mark) {
-    loadManifest(key);
-    return learnFrom(key, await origin());
+  let current = entry && mark && entry.mark === mark ? entry : null;
+  // No change signal: a newer version a peer vouched for with a signed
+  // manifest is the version to look for.
+  if (!current && !mark) current = newerThanMine(key);
+  if (!current) {
+    if (mark) loadManifest(key);
+    return guarded(key, origin);
   }
-  if (S.store.has(entry.h)) {
-    return new Response(S.store.get(entry.h).bytes.slice(), { status: 200, headers: { "content-type": "application/json; charset=utf-8", "x-pool": "self" } });
-  }
-  if (!holders(entry.h).length) return learnFrom(key, await origin());
+  entry = current;
+  if (S.store.has(entry.h)) return peerResponse(key, entry, S.store.get(entry.h).bytes, "self");
+  if (!holders(entry.h).length) return guarded(key, origin);
   S.stats.tries += 1;
   S.unsent.tries += 1;
   const signal = { stop: false };
   const peer = Promise.race([pullItem(entry.h, entry.size, entry.c, signal), sleep(R.PEER_DEADLINE_MS).then(() => { signal.stop = true; return null; })]);
   const first = await Promise.race([peer, sleep(R.headStart(bestRtt(entry.h))).then(() => "late")]);
-  const win = (bytes, how) => {
-    S.stats.hits += 1; S.unsent.hits += 1;
-    S.stats.saved += bytes.byteLength; S.unsent.peer += bytes.byteLength;
-    saveStatsSoon();
-    keep(entry.h, bytes, key);
-    return new Response(bytes.slice(), { status: 200, headers: { "content-type": "application/json; charset=utf-8", "x-pool": how } });
-  };
-  if (first && first !== "late") return win(first, "peer");
-  if (first === null) return learnFrom(key, await origin());
+  if (first && first !== "late") return peerResponse(key, entry, first, "peer");
+  if (first === null) return guarded(key, origin);
   // The peer is slower than its head start: the normal request runs too.
-  const net = Promise.resolve().then(origin);
+  // A failed server read waits for the peer instead of answering.
+  let netFailed = false;
+  const net = Promise.resolve().then(origin).then((res) => ({ res: res }), (err) => ({ err: err }));
   const result = await Promise.race([
-    peer.then((b) => (b ? { peer: b } : net.then((res) => ({ res: res })))),
-    net.then((res) => ({ res: res }), () => peer.then((b) => (b ? { peer: b } : Promise.reject(new Error("fetch")))))
+    peer.then((b) => (b ? { peer: b } : net)),
+    net.then((r) => {
+      if (!failedRead(r)) return r;
+      netFailed = true;
+      return peer.then((b) => (b ? { peer: b } : r));
+    })
   ]);
-  if (result.peer) return win(result.peer, "peer-race");
+  if (result.peer) return peerResponse(key, entry, result.peer, netFailed ? "peer-rescue" : "peer-race");
   signal.stop = true;
-  return learnFrom(key, result.res);
+  if (failedRead(result)) {
+    const got = await rescue(key);
+    if (got) return got;
+  }
+  return finish(key, result);
 }
 
 /* ---------- app files ---------- */
@@ -605,12 +896,15 @@ function saveStatsSoon() {
 function flushStats() {
   const u = S.unsent;
   if (!(u.peer || u.origin || u.up || u.hits || u.tries || u.rejected)) return;
-  if (roomSend(Object.assign({ op: "stats" }, u))) S.unsent = { peer: 0, origin: 0, up: 0, hits: 0, tries: 0, rejected: 0 };
+  // Counters go to one room only, the Worker's when it is open; the owner
+  // panel reads that one.
+  const room = openRooms().sort((a, b) => roots().indexOf(a.root) - roots().indexOf(b.root))[0];
+  if (room && roomSend(Object.assign({ op: "stats" }, u), room)) S.unsent = { peer: 0, origin: 0, up: 0, hits: 0, tries: 0, rejected: 0 };
   saveStats();
 }
 
 function stats() {
-  return Object.assign({}, S.stats, { on: S.on, mode: S.mode, reason: S.reason, peers: openLinks().length, uploadToday: S.upload.day === R.dayKey(Date.now()) ? S.upload.used : 0, uploadCap: R.UPLOAD_DAY_CAP });
+  return Object.assign({}, S.stats, { on: S.on, rescue: S.rescue, rooms: openRooms().length, mode: S.mode, reason: S.reason, peers: openLinks().length, uploadToday: S.upload.day === R.dayKey(Date.now()) ? S.upload.used : 0, uploadCap: R.UPLOAD_DAY_CAP });
 }
 
 function setMode(mode) {
@@ -650,6 +944,7 @@ function start() {
   // Save data, TV mode and the charger can change without an event.
   setInterval(evaluate, 60000);
   const p = scope.ViktorychPulse;
+  scope.addEventListener && scope.addEventListener("viktorych-api-trouble", (ev) => noteTrouble(!!(ev && ev.detail && ev.detail.on)));
   if (p && p.on) p.on((keys) => { (keys || []).forEach((k) => { if (S.on && S.used.has(k)) loadManifest(k); }); });
   setTimeout(indexShell, 4000);
 }

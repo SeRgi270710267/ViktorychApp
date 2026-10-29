@@ -2987,5 +2987,9 @@ SI18n.addPack("es", {
   "Sharing pool, last 7 days": "Grupo para compartir, últimos 7 días",
   "Peer hit rate {rate} ({hits} of {tries})": "Aciertos entre pares {rate} ({hits} de {tries})",
   "Offloaded from the server {peer} of {total} ({share})": "Descargado del servidor {peer} de {total} ({share})",
-  "Online in the pool now {n} · rejected chunks {bad}": "En línea en el grupo ahora {n} · fragmentos rechazados {bad}"
+  "Online in the pool now {n} · rejected chunks {bad}": "En línea en el grupo ahora {n} · fragmentos rechazados {bad}",
+  "Helping while our servers can't be reached: getting posts from {n} devices, uploading nothing.": "Ayudando mientras no se puede llegar a nuestros servidores: recibiendo publicaciones de {n} dispositivos, sin subir nada.",
+  "When our servers are blocked or failing, devices in the pool can still pass you the newest posts, checked against the same signed fingerprint. On mobile data this needs On, and nothing is uploaded from mobile data. Photos and videos from other sites can't be checked, so they aren't shared.": "Cuando nuestros servidores están bloqueados o fallan, los dispositivos del grupo aún pueden pasarte las publicaciones más recientes, comprobadas con la misma huella firmada. Con datos móviles hace falta elegir Activado, y no se sube nada con datos móviles. Las fotos y videos de otros sitios no se pueden comprobar, así que no se comparten.",
+  "Got {n} updates from peers while the server was out of reach": "Recibiste {n} actualizaciones de otros mientras el servidor no respondía",
+  "Connection is slow - new posts came from other devices": "La conexión es lenta - las publicaciones nuevas llegaron de otros dispositivos"
 });

@@ -4,6 +4,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { Readable } from "node:stream";
 import { createCloudflareClient, createD1, createR2, createMemoryCache, resolveD1DatabaseId } from "./cloudflare.mjs";
+import { attachPoolRoom } from "./pool-room.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,6 +211,17 @@ async function main() {
       res.end(JSON.stringify({ error: "backup_server_error", message: String(err && err.message || err) }));
     }
   });
+
+  // Sharing pool signaling, so browsers that cannot reach the Worker can
+  // still find each other here. Needs the shared D1 for tickets.
+  if (remote) {
+    try {
+      const pool = await import(pathToFileURL(path.resolve(path.dirname(scriptPath), "peer-pool.js")).href);
+      await attachPoolRoom(server, pool, () => remote);
+    } catch (err) {
+      console.error("[ViktorychApp Backup Backend] sharing pool room failed:", err && err.message);
+    }
+  }
 
   server.listen(PORT, HOST, () => {
     console.log(`[ViktorychApp Backup Backend] running at http://${HOST}:${PORT} (${stats.mode})`);

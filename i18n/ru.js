@@ -2987,5 +2987,9 @@ SI18n.addPack("ru", {
   "Sharing pool, last 7 days": "Общий пул, последние 7 дней",
   "Peer hit rate {rate} ({hits} of {tries})": "Попадания у пиров {rate} ({hits} из {tries})",
   "Offloaded from the server {peer} of {total} ({share})": "Снято с сервера {peer} из {total} ({share})",
-  "Online in the pool now {n} · rejected chunks {bad}": "Сейчас в пуле {n} · отклонено фрагментов {bad}"
+  "Online in the pool now {n} · rejected chunks {bad}": "Сейчас в пуле {n} · отклонено фрагментов {bad}",
+  "Helping while our servers can't be reached: getting posts from {n} devices, uploading nothing.": "Помогает, пока наши серверы недоступны: посты приходят от устройств ({n}), с этого устройства ничего не отдаётся.",
+  "When our servers are blocked or failing, devices in the pool can still pass you the newest posts, checked against the same signed fingerprint. On mobile data this needs On, and nothing is uploaded from mobile data. Photos and videos from other sites can't be checked, so they aren't shared.": "Если наши серверы заблокированы или не отвечают, устройства из пула всё равно могут передать вам новые посты, сверенные с тем же подписанным отпечатком. На мобильном интернете для этого нужно выбрать «Вкл», и с мобильного интернета ничего не отдаётся. Фото и видео с других сайтов проверить нельзя, поэтому ими не делятся.",
+  "Got {n} updates from peers while the server was out of reach": "Получено обновлений от других, пока сервер был недоступен: {n}",
+  "Connection is slow - new posts came from other devices": "Соединение медленное - новые посты пришли от других устройств"
 });

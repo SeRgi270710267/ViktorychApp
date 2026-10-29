@@ -8,7 +8,11 @@ import { acceptPoolMessage, buildManifest, manifestObjectName, sha256Hex } from 
    in by a relay in this script that follows worker/src/peer-pool.js (ready,
    peer, have, signal, bye). Checks that documents come from peers once one
    page has read them, that the server sees one read, and that a tampered
-   chunk is thrown away with the normal read answering instead. */
+   chunk is thrown away with the normal read answering instead.
+   Then the blocked case: a page whose change signal and server both fail
+   still gets the newer signed feed from peers, and a fourth page that only
+   joins because the server keeps failing gets posts from peers in rescue
+   mode while uploading nothing. */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function fail(message) {
@@ -30,7 +34,9 @@ const MARKS = { "feeds.json": "etagfeeds1", "stories.json": "etagstories1" };
 const PAGE = (base) => `<!doctype html><html><head><meta charset="utf-8"></head><body>
 <script>
   localStorage.setItem("viktorychapp-account-v1", JSON.stringify({ token: "t-" + Math.random(), account: { publicId: "100000000001" } }));
-  localStorage.setItem("viktorychapp-peer-pool-v1", JSON.stringify({ mode: "on" }));
+  localStorage.setItem("viktorychapp-peer-pool-v1", JSON.stringify({ mode: new URLSearchParams(location.search).get("mode") || "on" }));
+  window.__events = [];
+  ["viktorych-pool-news", "viktorych-pool-delivered"].forEach((n) => window.addEventListener(n, (e) => window.__events.push({ name: n, detail: e.detail })));
   window.VIKTORYCH_ACCOUNTS = { api: ${JSON.stringify(base + "/api")} };
   window.__marks = ${JSON.stringify(MARKS)};
   window.ViktorychPulse = { ok: () => true, version: (k) => window.__marks[k] || "", url: () => ${JSON.stringify(base + "/r2/pulse/v1.json")}, on: () => () => {} };
@@ -46,6 +52,13 @@ const PAGE = (base) => `<!doctype html><html><head><meta charset="utf-8"></head>
     const buf = new Uint8Array(await res.arrayBuffer());
     const d = new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
     return { how: res.headers.get("x-pool") || "origin", size: buf.byteLength, sha: Array.from(d, (b) => b.toString(16).padStart(2, "0")).join("") };
+  };
+  // A blocked network: the server read fails the way a block looks (503).
+  window.__getBlocked = async (key) => {
+    const res = await window.ViktorychPool.fetchData(key, () => fetch(${JSON.stringify(base)} + "/blocked/v1/data/" + key, { cache: "no-store" }));
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const d = new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
+    return { status: res.status, how: res.headers.get("x-pool") || "origin", size: buf.byteLength, sha: Array.from(d, (b) => b.toString(16).padStart(2, "0")).join("") };
   };
 </script>
 <script type="module" src="/peer-pool.js"></script></body></html>`;
@@ -126,11 +139,13 @@ async function main() {
     if (p === "/p.html") { res.writeHead(200, { "content-type": "text/html" }); res.end(PAGE(base)); return; }
     if (p === "/peer-pool.js" || p === "/shared/peer-pool.js") { res.writeHead(200, { "content-type": "text/javascript" }); res.end(fs.readFileSync(path.join(root, p.slice(1)))); return; }
     if (p === "/api/v1/media/swarm/ticket") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ticket: "mt1.test" })); return; }
+    if (p.startsWith("/blocked/")) { hits.blocked = (hits.blocked || 0) + 1; res.writeHead(503); res.end(); return; }
     if (p.startsWith("/api/v1/data/")) {
       const key = p.slice("/api/v1/data/".length);
       hits[key] = (hits[key] || 0) + 1;
       if (!DOCS[key]) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, { "content-type": "application/json" }); res.end(DOCS[key]); return;
+      // A far-away server: a peer nearby answers sooner.
+      setTimeout(() => { res.writeHead(200, { "content-type": "application/json" }); res.end(DOCS[key]); }, 400); return;
     }
     if (p.startsWith("/r2/") && manifests[p.slice(4)]) { res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" }); res.end(manifests[p.slice(4)]); return; }
     res.writeHead(404); res.end();
@@ -160,9 +175,10 @@ async function main() {
         }
       });
     };
-    for (let i = 0; i < 3; i++) {
+    const addPage = async (mode, cellular) => {
       const ctx = await browser.newContext();
       const page = await ctx.newPage();
+      if (cellular) await page.addInitScript(() => { Object.defineProperty(Navigator.prototype, "connection", { get: () => ({ type: "cellular", effectiveType: "4g", addEventListener() {} }) }); });
       page.on("pageerror", (e) => errors.push(String(e)));
       let id = "";
       await page.exposeFunction("__wsOpen", () => {
@@ -181,11 +197,15 @@ async function main() {
       await page.exposeFunction("__wsClose", () => { room.delete(id); room.forEach((_, o) => deliver(o, { op: "bye", from: id })); });
       if (fake) { await page.exposeFunction("__pipe", pipe); await page.addInitScript(FAKE_RTC); }
       await page.addInitScript((jwk) => { window.__viktorychPoolTestJwk = jwk; }, pub);
-      await page.goto(base + "/p.html");
-      await page.waitForFunction(() => window.ViktorychPool && window.ViktorychPool.stats().on, null, { timeout: 10000 });
+      await page.goto(base + "/p.html" + (mode ? "?mode=" + mode : ""));
       pages.push(page);
+      return page;
+    };
+    for (let i = 0; i < 3; i++) {
+      const page = await addPage("");
+      await page.waitForFunction(() => window.ViktorychPool && window.ViktorychPool.stats().on, null, { timeout: 10000 });
     }
-    const [A, B, C] = pages;
+    const [A, B, C] = pages.slice(0, 3);
     await Promise.all(pages.map((p) => p.waitForFunction(() => window.ViktorychPool.stats().peers >= 2, null, { timeout: 20000 })));
     check(true, "three pages joined the pool and connected to each other");
 
@@ -217,6 +237,57 @@ async function main() {
     const sc = await C.evaluate(() => window.ViktorychPool.stats());
     console.log("stats A shared " + sa.shared + " B saved " + sb.saved + " shared " + sb.shared + " C saved " + sc.saved + " tries/hits B " + sb.tries + "/" + sb.hits);
     check(sb.saved >= DOCS["feeds.json"].length && sa.shared > 0, "stats count bytes saved and shared");
+
+    // ----- blocked: no change signal, the server fails -----
+    await C.evaluate(() => { window.ViktorychPulse.ok = () => false; });
+    DOCS["feeds.json"] = doc(950, "g");
+    MARKS["feeds.json"] = "etagfeeds2";
+    manifests[manifestObjectName("feeds.json")] = JSON.stringify(await buildManifest("feeds.json", "etagfeeds2", DOCS["feeds.json"], Date.now() + 1000, priv));
+    const want2 = await sha256Hex(DOCS["feeds.json"]);
+    await A.evaluate(() => { window.__marks["feeds.json"] = "etagfeeds2"; });
+    const a2 = await A.evaluate(() => window.__get("feeds.json"));
+    check(a2.how === "origin" && a2.sha === want2, "a page that can reach the server reads the new feeds.json");
+    await C.waitForFunction(() => window.__events.some((e) => e.name === "viktorych-pool-news" && e.detail.key === "feeds.json"), null, { timeout: 10000 });
+    check(true, "a page whose change signal is blocked hears of the new version from a peer's signed manifest");
+    const blockedBefore = hits.blocked || 0;
+    const c2 = await C.evaluate(() => window.__getBlocked("feeds.json"));
+    check(c2.status === 200 && c2.how.startsWith("peer") && c2.sha === want2, "with the server blocked too, it gets the new feeds.json from peers (" + c2.how + "), hash matches");
+
+    // ----- rescue: a phone on mobile data joins only while blocked -----
+    const A0 = await A.evaluate(() => window.ViktorychPool.stats().shared);
+    const auto = await addPage("auto", true);
+    await auto.waitForFunction(() => window.ViktorychPool && window.ViktorychPool.stats(), null, { timeout: 10000 });
+    await auto.evaluate(() => { window.ViktorychPulse.ok = () => false; });
+    await auto.evaluate(() => window.__getBlocked("feeds.json"));
+    await sleep(1500);
+    const autoStats = await auto.evaluate(() => window.ViktorychPool.stats());
+    check(!autoStats.on && !autoStats.rescue && autoStats.rooms === 0, "on mobile data with Auto, a blocked read does not join the pool (" + autoStats.reason + ")");
+    await auto.context().close();
+    pages.splice(pages.indexOf(auto), 1);
+    const D = await addPage("on", true);
+    await D.waitForFunction(() => window.ViktorychPool && window.ViktorychPool.stats(), null, { timeout: 10000 });
+    const d0 = await D.evaluate(() => window.ViktorychPool.stats());
+    check(!d0.on && !d0.rescue && d0.rooms === 0, "a phone on mobile data stays out of the pool while the server works (" + d0.reason + ")");
+    await D.evaluate(() => { window.ViktorychPulse.ok = () => false; });
+    const d1 = await D.evaluate(() => window.__getBlocked("feeds.json"));
+    // Joining takes a moment: the first read fails as before, or the links
+    // come up in time and peers answer it already.
+    let got = d1;
+    if (d1.status !== 200) {
+      check(d1.status === 503, "its first blocked read fails as before and starts rescue");
+      await D.waitForFunction(() => window.ViktorychPool.stats().rescue && window.ViktorychPool.stats().peers >= 1, null, { timeout: 20000 });
+      got = await D.evaluate(() => window.__getBlocked("feeds.json"));
+    } else {
+      check(true, "its first blocked read starts rescue, and peers already answer it");
+    }
+    check(got.status === 200 && got.how === "peer-rescue" && got.sha === want2, "in rescue it gets the newest signed feeds.json from a peer (" + got.size + " bytes)");
+    const d3 = await D.evaluate(() => window.__getBlocked("feeds.json"));
+    check(d3.status === 503, "with nothing newer than its copy, the next blocked read fails as before, so the app keeps what it has");
+    const ds = await D.evaluate(() => window.ViktorychPool.stats());
+    const dEvents = await D.evaluate(() => window.__events.filter((e) => e.name === "viktorych-pool-delivered").map((e) => e.detail.how));
+    check(ds.shared === 0 && ds.rescued >= 1 && ds.uploadToday === 0, "rescue uploads nothing (shared " + ds.shared + ") and counts " + ds.rescued + " rescued update");
+    check(dEvents.indexOf("peer-rescue") >= 0, "the app is told the update came from peers, for the slow-connection note");
+    check((hits.blocked || 0) - blockedBefore >= 3, "the blocked server was tried first each time");
     check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join("; ") : ""));
   } finally {
     await browser.close();

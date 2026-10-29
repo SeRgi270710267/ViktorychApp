@@ -4057,16 +4057,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       off: tr("Off."),
       signedOut: tr("Sign in to join the pool.")
     };
-    const status = !st ? tr("Loading…") : st.on ? tr("On, connected to {n} devices.").replace("{n}", String(st.peers)) : (why[st.reason] || tr("Off."));
+    const status = !st ? tr("Loading…") : st.on ? tr("On, connected to {n} devices.").replace("{n}", String(st.peers)) : st.rescue ? tr("Helping while our servers can't be reached: getting posts from {n} devices, uploading nothing.").replace("{n}", String(st.peers)) : (why[st.reason] || tr("Off."));
     const line = tr("Saved {saved} from peers, shared {shared}").replace("{saved}", mb(st && st.saved)).replace("{shared}", mb(st && st.shared));
+    const rescued = st && st.rescued ? `<p class="phandle" data-pool-rescued>${esc(tr("Got {n} updates from peers while the server was out of reach").replace("{n}", String(st.rescued)))}</p>` : "";
     return `<h2>${esc(tr("Sharing pool"))}</h2>
       <p class="phandle">${esc(tr("Devices that turned this on pass each other the public feed files and app files they already have, so pages load from nearby and the server works less. Every file is checked against a signed fingerprint before it is used."))}</p>
+      <p class="phandle">${esc(tr("When our servers are blocked or failing, devices in the pool can still pass you the newest posts, checked against the same signed fingerprint. On mobile data this needs On, and nothing is uploaded from mobile data. Photos and videos from other sites can't be checked, so they aren't shared."))}</p>
       <p class="phandle">${esc(tr("Like any WebRTC connection, the devices you share with can see your IP address. Only people who turned this on connect, at most 4 at a time, and no relay server is used. Up to 20 MB a day is shared from this device."))}</p>
       <div class="theme-row" role="group" aria-label="${esc(tr("Sharing pool"))}">
         ${["auto", "on", "off"].map((id) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="peer-pool" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
       </div>
       <p class="phandle" data-pool-status>${esc(status)}</p>
-      <p class="phandle" data-pool-stats>${esc(line)}</p>`;
+      <p class="phandle" data-pool-stats>${esc(line)}</p>${rescued}`;
   }
   function ensureDeviceModule() {
     if (ensureDeviceModule.done) return;
@@ -22236,7 +22238,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     el.dataset.mode = "limited";
     el.hidden = false;
-    el.innerHTML = `${esc(tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>`;
+    // Say so when the newest posts reached us from other devices instead.
+    const viaPeers = STATE.netPeerAt && Date.now() - STATE.netPeerAt < 10 * 60 * 1000;
+    el.innerHTML = `${esc(viaPeers ? tr("Connection is slow - new posts came from other devices") : tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>`;
   }
 
   function setOffline(offline) {
@@ -23948,6 +23952,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.addEventListener("pageshow", () => wakeHome());
     window.addEventListener("offline", () => setOffline(true));
     window.addEventListener("viktorych-api-trouble", (event) => setLimited(!!(event.detail && event.detail.on)));
+    // The sharing pool: a peer answered while our servers were failing, or
+    // a peer vouched for a newer signed feed while the change signal is down.
+    window.addEventListener("viktorych-pool-delivered", (event) => {
+      const how = event.detail && event.detail.how;
+      if (how !== "peer-rescue" && !STATE.netLimited) return;
+      STATE.netPeerAt = Date.now();
+      paintNetNote();
+    });
+    window.addEventListener("viktorych-pool-news", (event) => {
+      if (event.detail && event.detail.key === "feeds.json") refreshFeeds(true);
+    });
     document.addEventListener("click", (event) => {
       const btn = event.target && event.target.closest ? event.target.closest('[data-act="net-retry"], [data-act="net-check"]') : null;
       if (!btn) return;

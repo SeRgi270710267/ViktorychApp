@@ -72,6 +72,17 @@ export function poolEnabled(mode, facts) {
   return { on: false, reason: "battery" };
 }
 
+/* Rescue: download-only help from peers while our servers keep failing
+   (blocks, throttling). Save data and TV mode keep it off. On mobile data
+   or a metered link it needs the switch set to On; Auto stays off there. */
+export function poolRescue(mode, facts, trouble) {
+  const m = normalizeMode(mode);
+  const f = facts && typeof facts === "object" ? facts : {};
+  if (!trouble || m === "off" || f.saveData || f.tv) return false;
+  if (f.cellular || f.metered) return m === "on";
+  return true;
+}
+
 export function dayKey(now) {
   return new Date(Number(now) || Date.now()).toISOString().slice(0, 10);
 }

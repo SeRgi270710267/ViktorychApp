@@ -52,14 +52,23 @@ export async function poolFetch(room, request) {
   }
   if (String(request.headers.get("Upgrade") || "").toLowerCase() !== "websocket") return new Response("not found", { status: 404 });
   if (sockets(room).length >= ROOM_CAP) return new Response("full", { status: 503 });
-  const id = hex(crypto.getRandomValues(new Uint8Array(8)));
   const pair = new WebSocketPair();
-  room.ctx.acceptWebSocket(pair[1]);
-  pair[1].serializeAttachment({ id: id, n: 0, at: Date.now() });
-  const others = peers(room, pair[1]);
-  send(pair[1], { op: "ready", id: id, peers: others.slice(-40) });
-  sockets(room).forEach((ws) => { if (ws !== pair[1]) send(ws, { op: "peer", id: id }); });
+  poolAccept(room, pair[1]);
   return new Response(null, { status: 101, webSocket: pair[0] });
+}
+
+/* Adds one socket to a room. The Render backup runs the same rules on its
+   own in-memory room, so this takes any object with the Durable Object
+   socket methods (send, close, serializeAttachment, deserializeAttachment). */
+export function poolAccept(room, socket) {
+  if (sockets(room).length >= ROOM_CAP) return false;
+  const id = hex(crypto.getRandomValues(new Uint8Array(8)));
+  room.ctx.acceptWebSocket(socket);
+  socket.serializeAttachment({ id: id, n: 0, at: Date.now() });
+  const others = peers(room, socket);
+  send(socket, { op: "ready", id: id, peers: others.slice(-40) });
+  sockets(room).forEach((ws) => { if (ws !== socket) send(ws, { op: "peer", id: id }); });
+  return true;
 }
 
 async function addStats(room, s) {
@@ -111,6 +120,18 @@ export function poolClose(room, ws) {
   sockets(room).forEach((other) => { if (other !== ws) send(other, { op: "bye", from: id }); });
 }
 
+/* A ticket from POST /v1/media/swarm/ticket works once, on either server,
+   because both read the same D1 table. */
+export async function usePoolTicket(env, raw) {
+  const ticket = String(raw || "");
+  if (!ticket.startsWith("mt1.") || ticket.length > 80 || !env || !env.DB) return false;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ticket));
+  const hash = hex(new Uint8Array(digest));
+  const row = await env.DB.prepare("SELECT public_id, expires_at FROM channel_tickets WHERE token_hash = ?").bind(hash).first();
+  await env.DB.prepare("DELETE FROM channel_tickets WHERE token_hash = ?").bind(hash).run();
+  return !!(row && Number(row.expires_at) > Date.now() && isAccountId(row.public_id));
+}
+
 function poolRoom(env) {
   return env.ACCOUNT_CHANNEL.get(env.ACCOUNT_CHANNEL.idFromName("pool:" + POOL_ROOM));
 }
@@ -120,13 +141,7 @@ export async function handlePool(request, env, url, deps) {
   if (path !== "/v1/pool/room") return null;
   if (request.method !== "GET") return deps.json(405, { error: "method" });
   if (String(request.headers.get("Upgrade") || "").toLowerCase() !== "websocket") return deps.json(426, { error: "upgrade" });
-  const ticket = String(url.searchParams.get("ticket") || "");
-  if (!ticket.startsWith("mt1.") || ticket.length > 80) return deps.json(401, { error: "ticket" });
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ticket));
-  const hash = hex(new Uint8Array(digest));
-  const row = await env.DB.prepare("SELECT public_id, expires_at FROM channel_tickets WHERE token_hash = ?").bind(hash).first();
-  await env.DB.prepare("DELETE FROM channel_tickets WHERE token_hash = ?").bind(hash).run();
-  if (!row || Number(row.expires_at) <= Date.now() || !isAccountId(row.public_id)) return deps.json(401, { error: "ticket" });
+  if (!(await usePoolTicket(env, url.searchParams.get("ticket")))) return deps.json(401, { error: "ticket" });
   if (!env.ACCOUNT_CHANNEL) return deps.json(503, { error: "channel" });
   return poolRoom(env).fetch(request);
 }

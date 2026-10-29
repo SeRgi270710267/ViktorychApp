@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
-import { verifyManifest, sha256Hex, poolEnabled, poolFacts, admitUpload, acceptPoolMessage, cleanPoolSignal, headStart, manifestObjectName, UPLOAD_DAY_CAP } from "../../shared/peer-pool.js";
+import { verifyManifest, sha256Hex, poolEnabled, poolRescue, poolFacts, admitUpload, acceptPoolMessage, cleanPoolSignal, headStart, manifestObjectName, UPLOAD_DAY_CAP } from "../../shared/peer-pool.js";
 
 const ORIGIN = "https://viktorychgroup.github.io";
 let mf;
@@ -85,6 +85,18 @@ test("rules: defaults, caps and messages", () => {
   assert.ok(headStart(0) >= 60 && headStart(5000) <= 250);
   assert.equal(cleanPoolSignal({ type: "ice", candidate: "candidate:1 1 UDP 1 198.51.100.4 3478 typ relay raddr 0.0.0.0" }), null);
   assert.equal(acceptPoolMessage(JSON.stringify({ op: "data", bytes: "x" })), null);
+});
+
+test("rules: rescue only while the server keeps failing", () => {
+  const phone = poolFacts({ type: "cellular" }, { ua: "Android Mobile" });
+  const laptop = poolFacts({}, { ua: "Mozilla/5.0 (X11; Linux x86_64)", charging: false });
+  assert.equal(poolRescue("auto", laptop, false), false);
+  assert.equal(poolRescue("auto", laptop, true), true);
+  assert.equal(poolRescue("off", laptop, true), false);
+  assert.equal(poolRescue("auto", phone, true), false);
+  assert.equal(poolRescue("on", phone, true), true);
+  assert.equal(poolRescue("on", poolFacts({ type: "wifi", saveData: true }, {}), true), false);
+  assert.equal(poolRescue("on", poolFacts({}, { tv: true }), true), false);
 });
 
 test("a signed-in read signs a manifest into the pulse bucket", async () => {
