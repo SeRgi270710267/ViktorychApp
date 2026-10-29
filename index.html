@@ -439,7 +439,11 @@
         if (saved.schema != null && Number(saved.schema) !== 1) return false;
         if (saved.html.indexOf("<script") >= 0) return false;
         if (app.childElementCount && !app.querySelector("[data-boot-card]")) return false;
-        app.innerHTML = saved.html;
+        var html = saved.html;
+        var conn = navigator.connection || {};
+        // Data saving: a restored screen must not fetch link card pictures.
+        if (conn.saveData || (window.matchMedia && window.matchMedia("(prefers-reduced-data: reduce)").matches)) html = html.replace(/<img[^>]*class="link-card-img"[^>]*>/g, "");
+        app.innerHTML = html;
         document.documentElement.classList.add("is-restored");
         return true;
       }
@@ -541,6 +545,7 @@
     <script src="friend-p2p.js" type="module"></script>
     <script src="about-ui.js" defer></script>
     <script src="gifts-ui.js" defer></script>
+    <script src="shared/gift-catalog.js" type="module"></script>
     <script src="badges.js" defer></script>
     <script src="settings-sync.js" defer></script>
     <script src="pulse.js" defer></script>
