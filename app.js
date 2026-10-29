@@ -12556,7 +12556,8 @@ const here = parseRoute();
     const loaded = postsFor(feed);
     const carriedOnly = loaded.filter((post) => carriedBy(post, feed) && !sameAuthor(post, feed)).length;
     const own = loaded.filter((post) => post.kind !== "reply" && !(carriedBy(post, feed) && !sameAuthor(post, feed))).length;
-    let total = own;
+    /* Nothing loaded and no count from the network yet: show no count, not "0 posts". */
+    let total = own || null;
     if (feed.postsCount != null && !feed.postsCountIncludesReposts) total = Number(feed.postsCount);
     else if (feed.postsCount != null) total = Math.max(own, Number(feed.postsCount) - carriedOnly);
     let list = loaded.slice();
@@ -12565,7 +12566,7 @@ const here = parseRoute();
     else if (tab === "replies") list = list.filter((p) => p.kind === "reply");
     else if (tab === "media") list = list.filter((p) => (p.media || []).length);
     else list = list.filter((p) => p.kind !== "reply");
-    const count = formatCount(total);
+    const count = total == null ? "" : formatCount(total);
     const bannerFace = faceChoice("banner", feed.banner);
     const banner = bannerFace === "photo" && feed.banner ? `<img decoding="async" class="pbanner" src="${esc(feed.banner)}" alt="">` : (bannerFace !== "none" && feed.bannerColor && faceSetting("showBanners") === "show" ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : "");
     const meta = [
@@ -12588,7 +12589,7 @@ const here = parseRoute();
       feedId: feed.id,
       url: profileOpenUrl(feed),
       own: false,
-      count: trn("posts", total, { count: count })
+      count: count === "" ? "" : trn("posts", total || 0, { count: count })
     }, banner)}
     <div class="pinfo">
       <div class="pava-row">
@@ -16215,7 +16216,7 @@ if (STATE.histClear) {
     const identities = (account && account.identities) || [];
     const ownApp = account.publicId ? authorPosts(account.publicId).map(appCardPost) : [];
     if (!ownApp.length && !account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
-      return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: 0 };
+      return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: null };
     }
     const rows = rowsForAccount(account);
     if (mine) writeRepostCache(rows);
