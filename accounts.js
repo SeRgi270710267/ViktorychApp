@@ -276,6 +276,19 @@
   function failoverStatus(code) {
     return code === 429 || code === 502 || code === 503 || code === 504;
   }
+  /* "action" means the server paced one action (a follow, a gift, a sign-in
+     try). "device" means the request guard slowed this device down. A bare
+     429 (Cloudflare itself, or an older server) counts as a device limit. */
+  function limitScope(res) {
+    var scope = "";
+    try { scope = String(res && res.headers && res.headers.get && res.headers.get("X-Limit-Scope") || ""); } catch (err) { scope = ""; }
+    return scope === "action" ? "action" : "device";
+  }
+  /* An action limit is an answer, not an outage: keep this server. */
+  function failoverRes(res) {
+    if (!res || !failoverStatus(res.status)) return false;
+    return !(res.status === 429 && limitScope(res) === "action");
+  }
   /* Roots in the order to try: closed ones first, in config order, then the
      open one whose wait ends soonest so the app is never fully stuck. */
   function apiOrder() {
@@ -382,7 +395,7 @@
         signal: t.signal
       }).then(function (res) {
         t.done();
-        if (failoverStatus(res.status)) {
+        if (failoverRes(res)) {
           rotateApi(apiRoot, retryAfterMs(res));
           if (i + 1 < order.length) return attempt(i + 1);
           return res;
@@ -529,8 +542,10 @@
      status code leaves this function, never the path or the body. */
   function noteApiStatus(code, authed, res) {
     if (code !== 429 && code !== 401 && !(authed && code >= 200 && code < 300)) return;
-    var wait = 0;
-    try { wait = Number(res && res.headers && res.headers.get && res.headers.get("Retry-After")) * 1000 || 0; } catch (err) { wait = 0; }
+    // A paced action shows its own message where it happened; only a device
+    // limit is worth a settings alert.
+    if (code === 429 && limitScope(res) === "action") return;
+    var wait = retryAfterMs(res);
     try { document.dispatchEvent(new CustomEvent("viktorych-api-status", { detail: { status: code, authed: authed, retryAfter: wait } })); } catch (err) { /* alerts are optional */ }
   }
 
@@ -601,7 +616,7 @@
       var sent = send(root, t.signal);
       return sent.promise.then(function (res) {
         t.done();
-        if (failoverStatus(res.status)) {
+        if (failoverRes(res)) {
           rotateApi(root, retryAfterMs(res));
           if (endpointIndex + 1 < list.length) return attempt(endpointIndex + 1);
         }
@@ -663,7 +678,7 @@
             drop();
             if (settled) return;
             speedNote(root, Date.now() - started);
-            if (failoverStatus(res.status)) {
+            if (failoverRes(res)) {
               rotateApi(root, retryAfterMs(res));
               lastRes = { root: root, res: res, tagKey: sent.tagKey, held: sent.held };
               if (!launch()) maybeEnd();
