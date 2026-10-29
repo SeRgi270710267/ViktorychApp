@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.viktorych.tv",
+      "sha256_cert_fingerprints": ["0E:EB:22:4E:97:89:CD:E6:D4:44:84:31:0F:35:67:01:9B:23:4A:5B:AF:78:20:5C:C3:C1:2F:F4:C6:61:76:1A"]
+    }
+  }
+]
