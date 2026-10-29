@@ -385,6 +385,7 @@
 
   const ARCHIVE = { order: [], loaded: {}, posts: [] };
   const HYDRATED = {};
+  const HYDRATED_VERSION = { n: 0 };
   const HYDRATE_MISS = {};
   const HYDRATE_FLIGHT = {};
   let HYDRATE_OBS = null;
@@ -834,7 +835,30 @@
     });
   }
 
+  /* posts() runs dozens of times per render (every card, tab and count asks).
+     The merged list only changes when the catalog, archive, or hydrated copies
+     do, so one synchronous run (a render) reuses it; the copy is dropped at the
+     end of the task. Callers get their own array so sorting stays local. */
+  let POSTS_MEMO = null;
   function posts() {
+    const data = STATE.data;
+    const full0 = (data && data.posts) || null;
+    const locked = isShortsLocked();
+    const memo = POSTS_MEMO;
+    if (memo && memo.data === data && memo.full === full0 && memo.fullLen === (full0 ? full0.length : 0) && memo.archive === ARCHIVE.posts && memo.archiveLen === ARCHIVE.posts.length && memo.catalog === STATE.ownerCatalog && memo.locked === locked && memo.hydrated === HYDRATED_VERSION.n) {
+      return memo.list.slice();
+    }
+    const list = postsFresh();
+    POSTS_MEMO = { data: data, full: full0, fullLen: full0 ? full0.length : 0, archive: ARCHIVE.posts, archiveLen: ARCHIVE.posts.length, catalog: STATE.ownerCatalog, locked: locked, hydrated: HYDRATED_VERSION.n, list: list };
+    if (!memo) {
+      const drop = () => { POSTS_MEMO = null; };
+      if (typeof queueMicrotask === "function") queueMicrotask(drop);
+      else Promise.resolve().then(drop);
+    }
+    return list.slice();
+  }
+
+  function postsFresh() {
     const full = (STATE.data && STATE.data.posts) || [];
     const seen = {};
     full.forEach((post) => { seen[postIdentity(post)] = true; });
@@ -7019,10 +7043,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (value.tombstone) {
       const saved = archivedFromManifest(stub);
       if (saved) {
-        HYDRATED[key] = saved;
+        HYDRATED_VERSION.n += 1; HYDRATED[key] = saved;
         return;
       }
-      HYDRATED[key] = Object.assign({}, stub, { tombstone: true, text: "", media: [], stub: false });
+      HYDRATED_VERSION.n += 1; HYDRATED[key] = Object.assign({}, stub, { tombstone: true, text: "", media: [], stub: false });
       return;
     }
     const merged = Object.assign({}, stub, value, {
@@ -7034,7 +7058,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       repostedBy: stub.repostedBy || value.repostedBy,
       sortDate: stub.sortDate || value.sortDate
     });
-    HYDRATED[key] = merged;
+    HYDRATED_VERSION.n += 1; HYDRATED[key] = merged;
     if (stub && typeof stub === "object") Object.assign(stub, merged, {
       stub: false,
       feedId: stub.feedId || value.feedId || "",
@@ -7052,7 +7076,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (stub.platform === "instagram" || stub.platform === "threads" || stub.platform === "rss" || stub.platform === "discord") {
       const saved = archivedFromManifest(stub);
       if (saved) {
-        HYDRATED[key] = saved;
+        HYDRATED_VERSION.n += 1; HYDRATED[key] = saved;
         render();
       }
       HYDRATE_MISS[key] = true;
@@ -7072,7 +7096,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (!value) {
         const saved = archivedFromManifest(stub);
         if (saved) {
-          HYDRATED[key] = saved;
+          HYDRATED_VERSION.n += 1; HYDRATED[key] = saved;
           render();
           return;
         }
@@ -7085,7 +7109,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       delete HYDRATE_FLIGHT[key];
       const saved = archivedFromManifest(stub);
       if (saved) {
-        HYDRATED[key] = saved;
+        HYDRATED_VERSION.n += 1; HYDRATED[key] = saved;
         render();
         return;
       }
@@ -16471,12 +16495,15 @@ if (STATE.histClear) {
     return [...root.querySelectorAll(HSCROLL_SELECTOR)];
   }
 
+  const HSCROLL_SCAN = "div:not(article.post *), ul:not(article.post *), ol:not(article.post *), nav:not(article.post *)";
   const HSCROLL_FLAT = new Set();
   try { window.addEventListener("resize", () => HSCROLL_FLAT.clear(), { passive: true }); } catch (err) { /* no window */ }
 
-  function hscrollMatches(el) {
+  function hscrollMatches(el, known) {
     if (!el || el.nodeType !== 1 || !el.matches) return false;
-    if (el.matches(HSCROLL_SELECTOR)) return true;
+    // hscrollListLive already collected every selector match; skip re-testing
+    // the long selector on each of the feed's hundreds of plain divs.
+    if (!known && el.matches(HSCROLL_SELECTOR)) return true;
     if (el.id === "app" || el.classList.contains("center") || el.classList.contains("app")) return false;
     // Style first: most nodes are not scrollers, and reading the computed
     // overflow is far cheaper than measuring every div's layout box.
@@ -16501,10 +16528,15 @@ if (STATE.histClear) {
     const found = hscrollList(root);
     const seen = new Set(found);
     if (!root || !root.querySelectorAll) return found;
-    const nodes = root.querySelectorAll("div, ul, ol, nav");
+    // Post cards hold most of the page's nodes and none of its side-scrolling
+    // rows (those carry a known class and were found above), so the style
+    // scan skips them. Browsers without complex :not() scan everything.
+    let nodes;
+    try { nodes = root.querySelectorAll(HSCROLL_SCAN); }
+    catch (err) { nodes = root.querySelectorAll("div, ul, ol, nav"); }
     for (let i = 0; i < nodes.length; i++) {
       const el = nodes[i];
-      if (seen.has(el) || !hscrollMatches(el)) continue;
+      if (seen.has(el) || !hscrollMatches(el, true)) continue;
       seen.add(el);
       found.push(el);
     }
@@ -16678,9 +16710,31 @@ if (STATE.histClear) {
     });
   }
 
+  /* Boot renders several times as cached data, the fresh catalog, stories
+     and the archive arrive; most of those produce the exact same Home markup.
+     Rebuilding identical DOM was the biggest cost of opening the app on a
+     phone (parse, swap, then a forced layout). When the markup matches the
+     last commit and the page still holds that commit, keep it. Anything with
+     live state (players, focus) always gets the normal swap. */
+  let COMMIT_LAST = { html: "", first: null, count: 0 };
+  function sameCommit(app, html) {
+    if (!COMMIT_LAST.first || html !== COMMIT_LAST.html) return false;
+    if (app.firstChild !== COMMIT_LAST.first || app.childNodes.length !== COMMIT_LAST.count) return false;
+    if (STATE.playing || STATE.autoEl || STATE.viewer || STATE.modal) return false;
+    const active = document.activeElement;
+    if (active && active !== document.body && app.contains(active)) return false;
+    if (app.querySelector("video, iframe, .is-playing, [open], .is-open")) return false;
+    return true;
+  }
+
   function commitApp(html) {
     const app = document.getElementById("app");
     if (!app) return;
+    if (sameCommit(app, html)) {
+      if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
+      return;
+    }
+    COMMIT_LAST = { html: "", first: null, count: 0 };
     hscrollHolding = true;
     hscrollHoldGen = STATE.renderGen || 0;
     hscrollRemember(app);
@@ -16689,6 +16743,7 @@ if (STATE.histClear) {
     hscrollReuse(app, tpl.content);
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
+    COMMIT_LAST = { html: html, first: app.firstChild, count: app.childNodes.length };
     hscrollSettle({ reveal: true });
     if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
@@ -16942,6 +16997,25 @@ if (STATE.histClear) {
     if (tile.querySelector("iframe")) return;
     if (tile.dataset.preview && !tile.classList.contains("player")) openFullVideo(tile);
     else startPlayback(tile, {});
+  }
+
+  /* Background data (people, live rooms, a late script, storage) asks for a
+     repaint. Several of those land during boot, each used to rebuild the
+     whole page. Coalesce them into one render on the next frame, and skip it
+     when a render already ran after the ask, since that one read the new data. */
+  let renderSoonQueued = false;
+  function renderSoon() {
+    if (renderSoonQueued) return;
+    renderSoonQueued = true;
+    const askedAt = STATE.renderGen || 0;
+    const run = () => {
+      if (!renderSoonQueued) return;
+      renderSoonQueued = false;
+      if ((STATE.renderGen || 0) !== askedAt) return;
+      render();
+    };
+    if (document.hidden || typeof requestAnimationFrame !== "function") setTimeout(run, 50);
+    else requestAnimationFrame(run);
   }
 
   function render(opts) {
@@ -23119,7 +23193,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
               setTimeout(paint, 50);
               return;
             }
-            render();
+            renderSoon();
           };
           paint();
         }
@@ -24110,7 +24184,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
         followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
         sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
-        statusHash: statusHash, watchHash: watchHash, render: render,
+        statusHash: statusHash, watchHash: watchHash, render: renderSoon,
         connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
         extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
         ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
@@ -24181,7 +24255,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       window.Spaces.__shell = true;
       window.Spaces.bind({
         isFollowed: isFollowed,
-        render: render,
+        render: renderSoon,
         findFeed: findFeed,
         shareRoot: shareRoot,
         toast: toast
@@ -24200,7 +24274,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (andRender && !blocked) render();
   }
   bindShellModules(false);
-  window.addEventListener("viktorych-late", () => bindShellModules(true));
+  window.addEventListener("viktorych-late", () => {
+    bindShellModules(false);
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) renderSoon();
+  });
   function bindCommunitiesModule() {
     if (!window.ViktorychCommunities) return;
     window.ViktorychCommunities.requestRender = function () { render(); };
@@ -24342,7 +24419,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     showLocalNotification(note);
   });
   if (window.ViktorychAccounts) {
-    window.ViktorychAccounts.requestRender = function () { render(); };
+    window.ViktorychAccounts.requestRender = function () { renderSoon(); };
     window.ViktorychAccounts.followButton = followButtonClean;
     window.ViktorychFollows = {
       lookup: function (id) {
