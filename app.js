@@ -15033,6 +15033,7 @@ const here = parseRoute();
         ${sameSwitch}
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
+        ${window.ViktorychAchievements && window.ViktorychAchievements.settingsHtml ? window.ViktorychAchievements.settingsHtml() : ""}
       </div>`;
     }
     if (section === "security") {
