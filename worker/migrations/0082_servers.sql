@@ -1,0 +1,28 @@
+-- Native Messages servers (servers.js). Same statements as SERVERS_SCHEMA.
+CREATE TABLE IF NOT EXISTS srv_servers (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', icon_key TEXT NOT NULL DEFAULT '', banner_key TEXT NOT NULL DEFAULT '', member_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS srv_channels (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, topic TEXT NOT NULL DEFAULT '', parent_id TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0, slowmode INTEGER NOT NULL DEFAULT 0, last_message_id TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS srv_channels_server ON srv_channels(server_id, position);
+CREATE TABLE IF NOT EXISTS srv_roles (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, name TEXT NOT NULL, color INTEGER NOT NULL DEFAULT 0, perms INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL DEFAULT 0, hoist INTEGER NOT NULL DEFAULT 0, mentionable INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS srv_roles_server ON srv_roles(server_id, position);
+CREATE TABLE IF NOT EXISTS srv_members (server_id TEXT NOT NULL, account_id TEXT NOT NULL, mid TEXT NOT NULL, nick TEXT NOT NULL DEFAULT '', joined_at INTEGER NOT NULL, timeout_until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (server_id, account_id));
+CREATE UNIQUE INDEX IF NOT EXISTS srv_members_mid ON srv_members(server_id, mid);
+CREATE INDEX IF NOT EXISTS srv_members_account ON srv_members(account_id);
+CREATE TABLE IF NOT EXISTS srv_member_roles (server_id TEXT NOT NULL, account_id TEXT NOT NULL, role_id TEXT NOT NULL, PRIMARY KEY (server_id, account_id, role_id));
+CREATE INDEX IF NOT EXISTS srv_member_roles_role ON srv_member_roles(role_id);
+CREATE TABLE IF NOT EXISTS srv_overrides (channel_id TEXT NOT NULL, server_id TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL, allow INTEGER NOT NULL DEFAULT 0, deny INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (channel_id, target_type, target_id));
+CREATE INDEX IF NOT EXISTS srv_overrides_server ON srv_overrides(server_id);
+CREATE TABLE IF NOT EXISTS srv_bans (server_id TEXT NOT NULL, account_id TEXT NOT NULL, mid TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', by_mid TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL, PRIMARY KEY (server_id, account_id));
+CREATE TABLE IF NOT EXISTS srv_invites (code TEXT PRIMARY KEY, server_id TEXT NOT NULL, by_mid TEXT NOT NULL, max_uses INTEGER NOT NULL DEFAULT 0, uses INTEGER NOT NULL DEFAULT 0, expires_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS srv_invites_server ON srv_invites(server_id, created_at);
+CREATE TABLE IF NOT EXISTS srv_messages (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, channel_id TEXT NOT NULL, author_id TEXT NOT NULL, author_mid TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', reply_to TEXT NOT NULL DEFAULT '', attachments TEXT NOT NULL DEFAULT '', mentions TEXT NOT NULL DEFAULT '', flags INTEGER NOT NULL DEFAULT 0, edited_at INTEGER NOT NULL DEFAULT 0, removed_by TEXT NOT NULL DEFAULT '', removed_at INTEGER NOT NULL DEFAULT 0, removed_reason TEXT NOT NULL DEFAULT '', pinned_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS srv_messages_channel ON srv_messages(channel_id, id);
+CREATE INDEX IF NOT EXISTS srv_messages_author ON srv_messages(channel_id, author_id, id);
+CREATE INDEX IF NOT EXISTS srv_messages_server ON srv_messages(server_id, id);
+CREATE TABLE IF NOT EXISTS srv_reactions (message_id TEXT NOT NULL, emoji TEXT NOT NULL, mid TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (message_id, emoji, mid));
+CREATE TABLE IF NOT EXISTS srv_emojis (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, by_mid TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS srv_emojis_server ON srv_emojis(server_id);
+CREATE TABLE IF NOT EXISTS srv_reads (account_id TEXT NOT NULL, channel_id TEXT NOT NULL, server_id TEXT NOT NULL, last_read TEXT NOT NULL DEFAULT '', mentions INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (account_id, channel_id));
+CREATE INDEX IF NOT EXISTS srv_reads_server ON srv_reads(account_id, server_id);
+CREATE TABLE IF NOT EXISTS srv_notify (account_id TEXT NOT NULL, scope_id TEXT NOT NULL, level TEXT NOT NULL, PRIMARY KEY (account_id, scope_id));
+CREATE TABLE IF NOT EXISTS srv_modlog (id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL, actor_mid TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS srv_modlog_server ON srv_modlog(server_id, id);
