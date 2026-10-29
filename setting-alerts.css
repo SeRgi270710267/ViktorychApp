@@ -20,7 +20,9 @@
 .sa-list { display: flex; flex-direction: column; }
 .sa-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; border-bottom: 1px solid var(--line, #2f3336); }
 .sa-row > .tab-switch { flex: 1 1 0; min-width: 0; border-bottom: 0; }
-.sa-row-ico { width: 24px; text-align: center; font-size: 18px; }
+.sa-row-ico { flex: none; width: 24px; height: 24px; color: var(--muted, #71767b); }
+.sa-row-ico svg, .sa-banner-ico svg, .sa-note-ico svg, .sa-note-x svg { display: block; fill: currentColor; }
+.sa-row-ico svg { width: 22px; height: 22px; margin: 1px; }
 .sa-auto { flex: 1 1 100%; padding-left: 34px; margin-top: -10px; }
 .sa-auto .tab-switch { border-bottom: 0; font-size: 13px; color: var(--muted, #71767b); gap: 8px; }
 .sa-auto .tab-switch span { white-space: nowrap; }
@@ -43,7 +45,8 @@
 }
 .sa-banner.v-warning { --sa-accent: #ffad1f; }
 .sa-banner.v-critical, .sa-banner.v-limit { --sa-accent: #f4212e; }
-.sa-banner-ico { font-size: 22px; line-height: 1.2; }
+.sa-banner-ico { flex: none; width: 24px; color: var(--sa-accent); padding-top: 1px; }
+.sa-banner-ico svg { width: 24px; height: 24px; }
 .sa-banner-copy { flex: 1 1 auto; min-width: 0; }
 .sa-banner-copy b { display: block; font-size: 15px; line-height: 20px; }
 .sa-banner-copy p { margin: 2px 0 0; color: var(--muted, #71767b); font-size: 14px; line-height: 18px; }
@@ -58,14 +61,18 @@
 @media (prefers-reduced-motion: reduce) { .sa-pulse { animation: none; } }
 
 .sa-notes { border-bottom: 1px solid var(--line, #2f3336); }
-.sa-note { display: flex; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line, #2f3336); }
-.sa-note-ico { flex: 0 0 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #16181c; box-shadow: inset 0 0 0 2px #1d9bf0; font-size: 16px; }
-.sa-note.v-warning .sa-note-ico { box-shadow: inset 0 0 0 2px #ffad1f; }
-.sa-note.v-critical .sa-note-ico, .sa-note.v-limit .sa-note-ico { box-shadow: inset 0 0 0 2px #f4212e; }
+/* Same left column as the native .note-row: 32px column, 26px glyph in the
+   row's colour, no circle. Blue info, amber warning, red critical. */
+.sa-note { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line, #2f3336); background: var(--bg, #000); }
+.sa-note-ico { width: 32px; flex: none; padding-top: 8px; color: var(--link, var(--blue, #1d9bf0)); }
+.sa-note-ico svg { width: 26px; height: 26px; }
+.sa-note.v-warning .sa-note-ico { color: #ffad1f; }
+.sa-note.v-critical .sa-note-ico, .sa-note.v-limit .sa-note-ico { color: #f4212e; }
 .sa-note-copy { flex: 1 1 auto; min-width: 0; }
 .sa-note-kicker { display: block; color: var(--muted, #71767b); font-size: 13px; line-height: 16px; }
 .sa-note-copy b { display: block; font-size: 15px; line-height: 20px; margin-top: 2px; }
 .sa-note-copy p { margin: 2px 0 4px; color: var(--muted, #71767b); font-size: 15px; line-height: 20px; }
 .sa-note-link { color: var(--blue, #1d9bf0); font-size: 15px; text-decoration: none; }
 .sa-note-link:hover { text-decoration: underline; }
-.sa-note-x { flex: 0 0 auto; align-self: flex-start; }
+.sa-note-x { flex: 0 0 auto; align-self: flex-start; color: var(--muted, #71767b); }
+.sa-note-x svg { width: 18px; height: 18px; }
