@@ -1179,6 +1179,7 @@
     keepMs: keepMs,
     defaultMaxBytes: defaultMaxBytes,
     normalizePolicy: normalizePolicy,
+    savePolicy: saveLocal,
     applyDeviceCap: applyDeviceCap,
     planEviction: planEviction,
     mediaFresh: mediaFresh,
