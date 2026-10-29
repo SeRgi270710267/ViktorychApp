@@ -76,16 +76,33 @@ and the instance is using a private empty database — logins will not transfer.
 ## Keep it warm
 
 Render's free web service sleeps after about 15 minutes without traffic, and a
-cold start can take a minute. The `Backup Warmup` GitHub workflow pings
-`/v1/health` every 10 minutes so sign-in does not wait for a cold start. You can
-instead use any free uptime pinger.
+cold start takes 30-60 seconds. The Worker cron (`worker/src/render-warm.js`)
+pings `/backup/health` every 10 minutes, except 21:00-00:59 UTC, which keeps
+it awake about 620 hours a month, inside the free 750. The GitHub `Backup
+Warmup` workflow still exists but GitHub runs it only every few hours.
+
+When the main API fails, the app also sends one background ping to the
+backup so it is already waking while the user retries.
+
+## Free plan limits this server guards against
+
+| Limit | Guard |
+| --- | --- |
+| 512 MB memory | Bounded edge-cache stand-in (32 MB, honours max-age), R2 bodies streamed instead of buffered, `--max-old-space-size=320`, background jobs pause above 360 MB RSS |
+| 5 GB outbound bandwidth a month (over it with no card suspends every free service) | Video relays (`/v1/media?url=`, `/v1/yt/*`) are refused with 503 so the Worker relays them; an egress meter (saved in R2 under `ops/render-egress/`) switches to JSON-only answers and hands jobs back to the Worker past `RENDER_EGRESS_BUDGET_MB` (3500) |
+| 500 build minutes a month | `buildFilter` in `render.yaml` rebuilds only when `backup-server/`, `worker/src/` or `shared/` change; the image installs no npm packages |
+| Hung upstream calls | 20 s timeout on Cloudflare API calls, 28 s per request (504 with Retry-After so the client fails over) |
+| Idle connection 502s | `keepAliveTimeout` 120 s, longer than Render's proxy |
+
+`/backup/health` answers without touching D1 or R2 and is the Render health
+check. `/backup/status` shows memory, cache, egress and job state.
 
 ---
 
 ## Local development
 
 ```sh
-npm install --prefix backup-server
+npm install --prefix backup-server   # dev only: Miniflare for local mode
 node backup-server/test.mjs
 ```
 

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocket } from "ws";
 import * as pool from "../src/peer-pool.js";
 import { attachPoolRoom } from "../../backup-server/pool-room.mjs";
 
@@ -40,7 +40,7 @@ test("the backup pool room relays signals and uses each ticket once", async () =
   const tickets = ["mt1.backupticketone0000000000", "mt1.backupticket2222222222222"];
   for (const t of tickets) rows.set(await sha(t), { public_id: id, expires_at: Date.now() + 60000 });
   const server = http.createServer((req, res) => { res.statusCode = 404; res.end(); });
-  const room = await attachPoolRoom(server, pool, () => ({ DB: fakeDb(rows) }), { WebSocketServer });
+  const room = await attachPoolRoom(server, pool, () => ({ DB: fakeDb(rows) }));
   assert.ok(room);
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const port = server.address().port;

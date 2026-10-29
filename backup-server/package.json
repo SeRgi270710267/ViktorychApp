@@ -1,9 +1,9 @@
 {
   "name": "viktorych-backup-server",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "private": true,
-  "description": "Turnkey backup accounts backend for ViktorychApp (shared Cloudflare D1 + R2)",
+  "description": "Backup accounts backend for ViktorychApp (shared Cloudflare D1 + R2). Production needs no npm packages.",
   "engines": {
     "node": ">=22"
   },
@@ -12,8 +12,8 @@
     "test": "node test.mjs && node remote.test.mjs && node remote-integration.test.mjs",
     "test:remote": "node remote.test.mjs && node remote-integration.test.mjs"
   },
-  "dependencies": {
-    "miniflare": "^4.20251008.0",
-    "ws": "^8.18.0"
+  "dependencies": {},
+  "devDependencies": {
+    "miniflare": "4.20251008.0"
   }
 }
