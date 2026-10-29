@@ -3334,5 +3334,16 @@ SI18n.addPack("hi", {
   "srvResults.one": "{n} नतीजा",
   "srvResults.few": "{n} नतीजे",
   "srvResults.many": "{n} नतीजे",
-  "srvResults.other": "{n} नतीजे"
+  "srvResults.other": "{n} नतीजे",
+  "Also on {platforms}. Add them?": "{platforms} पर भी हैं। इन्हें जोड़ें?",
+  "Follow on {platform}": "{platform} पर फ़ॉलो करें",
+  "Follow {name} on": "{name} को फ़ॉलो करें:",
+  "Merge": "जोड़ें",
+  "Merged into {name}’s profile": "{name} की प्रोफ़ाइल में जोड़ा गया",
+  "Merged profiles": "जोड़ी गई प्रोफ़ाइलें",
+  "Not the same person? Unmerge": "एक ही व्यक्ति नहीं? अलग करें",
+  "Posts from": "पोस्ट कहाँ से:",
+  "Same person as {name}?": "क्या ये {name} ही हैं?",
+  "Undo": "पहले जैसा करें",
+  "Unmerged. Each account has its own profile again.": "अलग कर दिया गया। हर अकाउंट की फिर से अपनी प्रोफ़ाइल है।"
 });

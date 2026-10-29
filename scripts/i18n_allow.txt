@@ -259,3 +259,4 @@ servers-ui.js|MANAGE_CHANNELS
 servers-ui.js|MANAGE_ROLES
 servers-ui.js|MANAGE_SERVER
 servers-ui.js|Files
+people.js|Fediverse
