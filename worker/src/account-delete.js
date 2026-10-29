@@ -20,8 +20,10 @@
    discord_alert_hits, and the native server tables (srv_*). notification_dead stores a salted hash only.
    push_vapid is the one global key and has no account column. The account
    channel object is wiped in the same database step. telegram_files is a
-   shared media index with no account column, so it is left alone. There is
-   no invites table. */
+   shared media index with no account column, so the generic sweep skips it;
+   forgetTelegram drops the rows for this account's own files instead, and
+   queues their message ids so the next Telegram backup run deletes them from
+   the channel. There is no invites table. */
 
 import { inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 import { wipeAccountChannel } from "./channel.js";
@@ -490,7 +492,52 @@ async function wipePostMedia(env, publicId) {
     listed = await env.DB.prepare("SELECT m.object_key FROM public_post_media m JOIN public_posts p ON p.id = m.post_id WHERE p.author_id = ?").bind(publicId).all();
   } catch (err) { return; }
   const keys = rowsOf(listed).map((row) => String(row.object_key || "")).filter((key) => /^post-media\/[A-Za-z0-9._-]+$/.test(key));
+  try { await forgetTelegram(env, publicId, keys); }
+  catch (err) { /* R2 and D1 are still wiped; a resumed job tries again */ }
   for (let i = 0; i < keys.length; i++) await env.DATA.delete(keys[i]);
+}
+
+/* The Telegram backup copies uploads, avatars, banners, and stories. When an
+   account goes, its rows leave telegram_files (so no route can serve them),
+   and the message ids are written to backup/tg-forget/ for the backup job,
+   which holds the channel id, to delete from the channel. */
+export const TG_FORGET_PREFIX = "backup/tg-forget/";
+export function telegramPrefixes(publicId) {
+  if (!/^\d{12}$/.test(String(publicId || ""))) return [];
+  return OBJECT_PREFIXES.map((prefix) => prefix + publicId + "/");
+}
+
+export async function forgetTelegram(env, publicId, postKeys) {
+  if (!env.DB || !env.DATA) return 0;
+  const prefixes = telegramPrefixes(publicId);
+  if (!prefixes.length) return 0;
+  const found = [];
+  const select = "SELECT object_key, message_id FROM telegram_files WHERE ";
+  for (let i = 0; i < prefixes.length; i++) {
+    let listed = null;
+    try { listed = await env.DB.prepare(select + "substr(object_key, 1, ?) = ?").bind(prefixes[i].length, prefixes[i]).all(); }
+    catch (err) { return 0; }
+    rowsOf(listed).forEach((row) => found.push(row));
+  }
+  const exact = (postKeys || []).filter((key) => /^post-media\/[A-Za-z0-9._-]+$/.test(String(key || "")));
+  for (let i = 0; i < exact.length; i += 50) {
+    const chunk = exact.slice(i, i + 50);
+    let listed = null;
+    try { listed = await env.DB.prepare(select + "object_key IN (" + chunk.map(() => "?").join(",") + ")").bind(...chunk).all(); }
+    catch (err) { listed = null; }
+    rowsOf(listed).forEach((row) => found.push(row));
+  }
+  if (!found.length) return 0;
+  const keys = Array.from(new Set(found.map((row) => String(row.object_key || "")).filter(Boolean)));
+  const messages = Array.from(new Set(found.map((row) => Number(row.message_id) || 0).filter((id) => id > 0)));
+  await env.DATA.put(TG_FORGET_PREFIX + publicId + "-" + Date.now() + ".json", JSON.stringify({ v: 1, keys: keys, messages: messages, at: Date.now() }), {
+    httpMetadata: { contentType: "application/json", cacheControl: "private, no-store" }
+  });
+  for (let i = 0; i < keys.length; i += 50) {
+    const chunk = keys.slice(i, i + 50);
+    await env.DB.prepare("DELETE FROM telegram_files WHERE object_key IN (" + chunk.map(() => "?").join(",") + ")").bind(...chunk).run();
+  }
+  return keys.length;
 }
 
 async function wipeObjects(env, publicId) {

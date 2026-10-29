@@ -112,7 +112,7 @@
     player.className = "html5-video-player paused-mode" + (this.ambientEnabled_ ? "" : " ytp-ambient-off");
     player.tabIndex = 0;
     player.setAttribute("role", "region");
-    player.setAttribute("aria-label", "YouTube Video Player");
+    player.setAttribute("aria-label", tr("YouTube video player"));
     this.el = player;
 
     // Ambient Canvas (Real-Time Color Bleed Glow)
@@ -229,7 +229,7 @@
     var progressContainer = document.createElement("div");
     progressContainer.className = "ytp-progress-bar-container";
     progressContainer.setAttribute("role", "slider");
-    progressContainer.setAttribute("aria-label", "Seek slider");
+    progressContainer.setAttribute("aria-label", tr("Seek"));
     this.progressBarContainer_ = progressContainer;
 
     var progressBar = document.createElement("div");
@@ -325,7 +325,7 @@
     var volumePanel = document.createElement("div");
     volumePanel.className = "ytp-volume-panel";
     volumePanel.setAttribute("role", "slider");
-    volumePanel.setAttribute("aria-label", "Volume slider");
+    volumePanel.setAttribute("aria-label", tr("Volume"));
 
     var volumeSlider = document.createElement("div");
     volumeSlider.className = "ytp-volume-slider";
