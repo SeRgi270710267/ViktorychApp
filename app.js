@@ -2834,6 +2834,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     };
     add(post && post.link);
     ((post && post.cards) || []).forEach(add);
+    if (!rows.length) {
+      const url = previewLinkOf(post);
+      if (url) return linkPreviewHtml(url, post, post.id || "");
+    }
     return rows.join("");
   }
 
@@ -2867,19 +2871,279 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return bits.length ? `<div class="counts">${bits.join("")}</div>` : "";
   }
 
-  function linkCard(link) {
+  function linkCardLarge(link) {
+    if (link.large === true) return true;
+    if (link.large === false) return false;
+    const w = Number(link.width) || 0;
+    const h = Number(link.height) || 0;
+    return !(w && h) || w / h >= 1.3;
+  }
+
+  function linkCard(link, post) {
     if (!link || !link.url) return "";
+    const id = post && post.id ? ` data-id="${esc(post.id)}"` : "";
     const external = window.ViktorychEmbed && window.ViktorychEmbed.xExternal ? window.ViktorychEmbed.xExternal(link.url) : null;
     if (external && external.kind === "link" && external.openUrl) {
-      const id = arguments[1] && arguments[1].id ? ` data-id="${esc(arguments[1].id)}"` : "";
       return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(external.openUrl)}"><span class="link-card-copy"><span class="link-title">${esc(tr("Open on X"))}</span></span></a>`;
     }
-    const image = link.image ? `<img decoding="async" class="link-card-img" src="${esc(link.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
-    const site = link.site ? `<span class="link-site">${esc(link.site)}</span>` : "";
-    const title = `<span class="link-title">${esc(link.title || link.url)}</span>`;
-    const description = link.description ? `<span class="link-desc">${esc(link.description)}</span>` : "";
-    const id = arguments[1] && arguments[1].id ? ` data-id="${esc(arguments[1].id)}"` : "";
-    return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
+    const domain = link.domain || linkDomain(link.url);
+    const blocked = linkImagesBlocked();
+    const hasImage = !!link.image && !blocked;
+    if (!hasImage && !link.title && !link.description) return linkChip(link.url, post && post.id, false);
+    const large = hasImage && linkCardLarge(link);
+    const video = !!(link.video || link.youtube) && large;
+    const image = hasImage ? `<span class="link-card-media">${`<img decoding="async" class="link-card-img" src="${esc(link.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`}${video ? `<span class="link-card-play" aria-hidden="true">${icon("play")}</span>` : ""}</span>` : "";
+    const site = `<span class="link-site">${esc(domain || link.site || "")}</span>`;
+    const title = `<span class="link-title">${esc(link.title || link.site || domain || link.url)}</span>`;
+    const description = link.description && link.description !== link.title ? `<span class="link-desc">${esc(link.description)}</span>` : "";
+    const cls = large ? "link-card lc-large" : (hasImage ? "link-card lc-small" : "link-card lc-text");
+    return `<a class="${cls}" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
+  }
+
+  // Link previews, X style. A post with a link gets one card: an embedded
+  // post for X, Bluesky or Reddit links, a big image card for
+  // summary_large_image pages and videos, a small card for summary pages, and
+  // a plain domain chip while loading or when the page has no tags.
+  // Metadata comes from fxtwitter (X posts), Bluesky's public API, and the
+  // Worker's /v1/unfurl (edge cache + R2). The browser keeps an LRU too.
+  const LINK_PREVIEW = { mem: {}, lsKey: "viktorychapp-unfurl-v1", max: 400, ttl: 7 * 24 * 3600 * 1000, failTtl: 6 * 3600 * 1000, loaded: false, saveTimer: 0 };
+  const LP_MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|twimg\.com|ytimg\.com|googlevideo\.com|tiktokcdn[\w-]*\.com|redd\.it|redditmedia\.com|userapi\.com|vkuserphoto\.ru|discordapp\.(?:com|net)|telesco\.pe|cdn\.bsky\.app)$/i;
+  const LP_MEDIA_FILE = /\.(?:jpe?g|png|gif|webp|avif|heic|mp4|m4v|mov|webm|m3u8|mp3|m4a|ogg|wav)(?:$|[?#])/i;
+
+  function linkDomain(url) {
+    try { return new URL(url).hostname.replace(/^www\./, "").toLowerCase(); } catch (err) { return ""; }
+  }
+
+  function linkImagesBlocked() {
+    const s = STATE.settings || {};
+    if (s.saveData === true || s.dataSaver === true || s.saveData === "on" || s.dataSaver === "on") return true;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-data: reduce)").matches) return true;
+    const conn = connectionInfo();
+    return conn.saveData || conn.effectiveType === "slow-2g" || conn.effectiveType === "2g";
+  }
+
+  function linkStatusTarget(url) {
+    let u;
+    try { u = new URL(url); } catch (err) { return null; }
+    const host = u.hostname.replace(/^(www|mobile|m)\./, "").toLowerCase();
+    let m;
+    if (/^(x\.com|twitter\.com|fxtwitter\.com|vxtwitter\.com|fixupx\.com|nitter\.[\w.]+|xcancel\.com)$/.test(host) && (m = u.pathname.match(/^\/(?:[\w]{1,20}|i(?:\/web)?)\/status(?:es)?\/(\d{5,25})/))) return { kind: "x", id: m[1] };
+    if (/^(bsky\.app|staging\.bsky\.app)$/.test(host) && (m = u.pathname.match(/^\/profile\/([^/]+)\/post\/([\w]+)/))) return { kind: "bluesky", actor: decodeURIComponent(m[1]), rkey: m[2] };
+    if (/(^|\.)reddit\.com$/.test(host) && (m = u.pathname.match(/\/comments\/([a-z0-9]{3,12})/i))) return { kind: "reddit", id: m[1] };
+    return null;
+  }
+
+  function linkPreviewSkip(url, post) {
+    if (!/^https?:\/\//i.test(url) || url.length > 2000) return true;
+    let u;
+    try { u = new URL(url); } catch (err) { return true; }
+    const host = u.hostname.toLowerCase();
+    if (host === "t.co" || LP_MEDIA_HOST.test(host) || LP_MEDIA_FILE.test(u.pathname)) return true;
+    const norm = (value) => String(value || "").replace(/^https?:\/\/(www\.|mobile\.|m\.)?/i, "").replace(/[/?#]+$/, "").toLowerCase();
+    if (post && post.url && norm(post.url) === norm(url)) return true;
+    if (post && post.quoted && post.quoted.url && norm(post.quoted.url) === norm(url)) return true;
+    if (/^(x\.com|twitter\.com)$/.test(host.replace(/^www\./, "")) && /\/(photo|video)\/\d/.test(u.pathname)) return true;
+    // A bare profile or hashtag link is a mention, not a card.
+    if (/^(www\.)?(x\.com|twitter\.com|instagram\.com|threads\.(?:net|com)|tiktok\.com)$/.test(host) && /^\/[^/]+\/?$/.test(u.pathname) && !u.search) return true;
+    if (/^(www\.)?(x\.com|twitter\.com)$/.test(host) && /^\/(hashtag|search|i\/lists)\b/.test(u.pathname)) return true;
+    const media = (post && post.media) || [];
+    if (media.some((m) => m && [m.url, m.open, m.poster, m.fallback].some((v) => v && norm(v) === norm(url)))) return true;
+    return false;
+  }
+
+  function previewLinkOf(post) {
+    if (!post || post.link || (post.cards && post.cards.length) || post.article || articleOf(post) || post.appPost) return "";
+    if (post.platform === "youtube" || post.platform === "tiktok" || post.platform === "discord") return "";
+    const found = [];
+    (post.links || []).forEach((item) => {
+      const url = item && (item.expanded || item.url || item.expanded_url);
+      const shown = String((item && (item.display || item.anchorText)) || "");
+      if (url && !/^[@#]/.test(shown)) found.push(String(url));
+    });
+    String(post.text || "").replace(/https?:\/\/[^\s<>"')\]]+/gi, (url) => { found.push(url.replace(/[.,;:!?…]+$/, "")); return url; });
+    const hasMedia = !!(post.media && post.media.length);
+    // X shows the card for the last link. With media attached only an
+    // embedded post is shown, never a page card.
+    for (let i = found.length - 1; i >= 0; i -= 1) {
+      const url = found[i];
+      if (linkPreviewSkip(url, post)) continue;
+      const target = linkStatusTarget(url);
+      if (target && post.quoted) continue;
+      if (hasMedia && !target) continue;
+      return url;
+    }
+    return "";
+  }
+
+  function lpLoad() {
+    if (LINK_PREVIEW.loaded) return;
+    LINK_PREVIEW.loaded = true;
+    try {
+      const rows = JSON.parse(localStorage.getItem(LINK_PREVIEW.lsKey) || "{}") || {};
+      const now = Date.now();
+      Object.keys(rows).forEach((url) => {
+        const row = rows[url];
+        if (!row || !row.at) return;
+        const ttl = row.none ? LINK_PREVIEW.failTtl : LINK_PREVIEW.ttl;
+        if (now - row.at < ttl && !LINK_PREVIEW.mem[url]) LINK_PREVIEW.mem[url] = row;
+      });
+    } catch (err) { /* private mode */ }
+  }
+
+  function lpSave() {
+    clearTimeout(LINK_PREVIEW.saveTimer);
+    if (!LINK_PREVIEW.hooked) {
+      LINK_PREVIEW.hooked = true;
+      window.addEventListener("pagehide", () => { if (LINK_PREVIEW.dirty) lpWrite(); });
+    }
+    LINK_PREVIEW.dirty = true;
+    LINK_PREVIEW.saveTimer = setTimeout(lpWrite, 800);
+  }
+
+  function lpWrite() {
+    clearTimeout(LINK_PREVIEW.saveTimer);
+    LINK_PREVIEW.dirty = false;
+    {
+      const rows = Object.keys(LINK_PREVIEW.mem).map((url) => [url, LINK_PREVIEW.mem[url]]).filter((row) => row[1] && !row[1].pending)
+        .sort((a, b) => b[1].at - a[1].at).slice(0, LINK_PREVIEW.max);
+      const out = {};
+      rows.forEach((row) => {
+        const value = row[1];
+        // Embedded posts live in the fx/status cache; keep the card only.
+        out[row[0]] = value.quote ? { at: value.at, quoteRef: true, none: false } : value;
+      });
+      try { localStorage.setItem(LINK_PREVIEW.lsKey, JSON.stringify(out)); } catch (err) { /* quota */ }
+    }
+  }
+
+  function lpPut(url, value) {
+    LINK_PREVIEW.mem[url] = Object.assign({ at: Date.now() }, value);
+    lpSave();
+    lpPaint(url);
+  }
+
+  function lpPaint(url) {
+    const slots = document.querySelectorAll(".lp-slot[data-lp]");
+    slots.forEach((slot) => {
+      if (slot.getAttribute("data-lp") !== url) return;
+      const post = slot.dataset.id ? findAnyPost(slot.dataset.id) : null;
+      const html = linkPreviewHtml(url, post, slot.dataset.id || "");
+      if (html) slot.outerHTML = html;
+    });
+  }
+
+  function lpBluesky(target) {
+    const uri = "at://" + target.actor + "/app.bsky.feed.post/" + target.rkey;
+    return fetchJson("https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?depth=0&parentHeight=0&uri=" + encodeURIComponent(uri)).then((data) => {
+      const p = data && data.thread && data.thread.post;
+      if (!p || !p.record) return null;
+      const author = p.author || {};
+      const media = [];
+      const embed = p.embed || {};
+      const imgs = embed.images || (embed.media && embed.media.images) || [];
+      imgs.forEach((img) => { if (img && (img.fullsize || img.thumb)) media.push({ type: "photo", url: img.fullsize || img.thumb, alt: img.alt || "", width: img.aspectRatio && img.aspectRatio.width, height: img.aspectRatio && img.aspectRatio.height }); });
+      const vid = embed.playlist ? embed : (embed.media && embed.media.playlist ? embed.media : null);
+      if (vid) media.push({ type: "video", hls: vid.playlist, url: vid.playlist, poster: vid.thumbnail || "", width: vid.aspectRatio && vid.aspectRatio.width, height: vid.aspectRatio && vid.aspectRatio.height });
+      const ext = embed.external || (embed.media && embed.media.external);
+      return {
+        id: "bsky:" + target.rkey,
+        platform: "bluesky",
+        external: true,
+        author: author.displayName || author.handle || "",
+        handle: author.handle || "",
+        avatar: author.avatar || "",
+        text: String(p.record.text || ""),
+        date: p.record.createdAt || p.indexedAt || "",
+        url: "https://bsky.app/profile/" + (author.handle || target.actor) + "/post/" + target.rkey,
+        media: media,
+        link: ext && ext.uri ? { url: ext.uri, title: ext.title || "", description: ext.description || "", image: ext.thumb || "", large: true } : null
+      };
+    });
+  }
+
+  function lpReddit(target) {
+    return fetchJson("https://www.reddit.com/comments/" + encodeURIComponent(target.id) + ".json?limit=1&raw_json=1").then((data) => {
+      const d = data && data[0] && data[0].data && data[0].data.children && data[0].data.children[0] && data[0].data.children[0].data;
+      if (!d || !d.title) return null;
+      const media = [];
+      const preview = d.preview && d.preview.images && d.preview.images[0] && d.preview.images[0].source;
+      const video = d.secure_media && d.secure_media.reddit_video;
+      if (video && video.hls_url) media.push({ type: "video", hls: video.hls_url, url: video.fallback_url || video.hls_url, poster: preview ? preview.url : "", width: video.width, height: video.height });
+      else if (preview && preview.url) media.push({ type: "photo", url: preview.url, width: preview.width, height: preview.height });
+      return {
+        id: "reddit:" + d.id,
+        platform: "reddit",
+        external: true,
+        author: "r/" + (d.subreddit || ""),
+        handle: "",
+        avatar: "",
+        text: d.title + (d.selftext ? "\n\n" + String(d.selftext).slice(0, 400) : ""),
+        date: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : "",
+        url: "https://www.reddit.com" + (d.permalink || ""),
+        media: media
+      };
+    });
+  }
+
+  function lpUnfurl(url) {
+    const api = accountsApi();
+    if (!api) return Promise.resolve(null);
+    return fetchJson(api + "/v1/unfurl?url=" + encodeURIComponent(url)).then((meta) => (meta && !meta.none && (meta.title || meta.image) ? meta : null));
+  }
+
+  function lpFetch(url) {
+    return once("unfurl:" + url, () => {
+      const target = linkStatusTarget(url);
+      let job;
+      if (target && target.kind === "x") {
+        job = fxStatusPost(target.id).then((quoted) => (quoted ? { quote: quoted } : lpUnfurl(url).then((meta) => (meta ? { meta: meta } : null))));
+      } else if (target && target.kind === "bluesky") {
+        job = lpBluesky(target).catch(() => null).then((quoted) => (quoted ? { quote: quoted } : lpUnfurl(url).then((meta) => (meta ? { meta: meta, asPost: true } : null))));
+      } else if (target && target.kind === "reddit") {
+        job = lpReddit(target).catch(() => null).then((quoted) => (quoted ? { quote: quoted } : lpUnfurl(url).then((meta) => (meta ? { meta: meta, asPost: true } : null))));
+      } else {
+        const asPost = /(^|\.)(threads\.(?:net|com)|instagram\.com|mastodon\.[\w.]+|tiktok\.com)$/i.test(linkDomain(url)) && /\/(post|p|reel|t|video|@[^/]+\/\d+)/.test(url);
+        job = lpUnfurl(url).then((meta) => (meta ? { meta: meta, asPost: asPost } : null));
+      }
+      return job.catch(() => null).then((found) => { lpPut(url, found || { none: true }); return found; });
+    });
+  }
+
+  function linkChip(url, id, loading) {
+    const domain = linkDomain(url) || url;
+    return `<a class="link-chip${loading ? " lp-slot" : ""}"${loading ? ` data-lp="${esc(url)}"` : ""} data-act="open-link"${id ? ` data-id="${esc(id)}"` : ""} target="_blank" rel="noopener noreferrer" href="${esc(url)}">${icon("link")}<span>${esc(domain)}</span></a>`;
+  }
+
+  function linkPreviewHtml(url, post, id) {
+    lpLoad();
+    const row = LINK_PREVIEW.mem[url];
+    if (!row) {
+      lpFetch(url);
+      return linkChip(url, id, true);
+    }
+    if (row.quoteRef) {
+      const target = linkStatusTarget(url);
+      const hit = target && target.kind === "x" ? (LIVE.mem["fx:status:" + target.id] || {}).value : null;
+      if (hit) return quoteCard(hit);
+      delete LINK_PREVIEW.mem[url];
+      lpFetch(url);
+      return linkChip(url, id, true);
+    }
+    if (row.quote) return quoteCard(row.quote);
+    if (row.meta) return row.asPost ? linkPostCard(row.meta, id) : linkCard(row.meta, post || (id ? { id: id } : null));
+    return linkChip(url, id, false);
+  }
+
+  function linkPostCard(meta, id) {
+    // Threads, Instagram and other pages without an API, shaped as a quote.
+    const blocked = linkImagesBlocked();
+    const image = meta.image && !blocked ? `<img decoding="async" class="lp-post-img" src="${esc(meta.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
+    const domain = meta.site || linkDomain(meta.url);
+    return `<a class="quote lp-post" data-act="open-link"${id ? ` data-id="${esc(id)}"` : ""} target="_blank" rel="noopener noreferrer" href="${esc(meta.url)}">
+      <span class="quote-head"><span class="name">${esc(meta.title || domain)}</span><span class="dot">·</span><span class="handle">${esc(domain)}</span></span>
+      ${meta.description ? `<span class="quote-text lp-post-text">${esc(meta.description)}</span>` : ""}
+      ${image}
+    </a>`;
   }
 
   function metaEmbedSrc(post) {
@@ -5031,7 +5295,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const platform = quoted.platform || "x";
     const asQuoted = asPost(quoted, platform);
     const art = articleOf(asQuoted);
-    const href = art ? articleHash(asQuoted) : (quoted.url && !quoted.handle ? quoted.url : (quoted.handle ? statusHash(asQuoted) : (quoted.url || "#")));
+    const href = art ? articleHash(asQuoted) : (quoted.url && (!quoted.handle || quoted.external) ? quoted.url : (quoted.handle ? statusHash(asQuoted) : (quoted.url || "#")));
     const external = !art && href.startsWith("http");
     const open = external ? ` data-href="${esc(href)}"` : ` data-open="${esc(href)}"`;
     const key = "q:" + (quoted.statusId || quoted.id || "x");
@@ -5739,6 +6003,20 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(conv || "");
   }
 
+  function fxCard(card) {
+    if (!card || typeof card !== "object" || !card.url) return null;
+    const url = String(card.url);
+    if (!/^https?:\/\//i.test(url)) return null;
+    const img = card.image && typeof card.image === "object" ? card.image : (typeof card.image === "string" ? { url: card.image } : null);
+    let image = img && img.url ? String(img.url) : "";
+    // Card images come in the size X picked; ask for the original.
+    if (/^https:\/\/pbs\.twimg\.com\/card_img\//.test(image)) image = image.replace(/([?&])name=[^&]*/, "$1name=orig");
+    const out = { url: url, title: String(card.title || ""), description: String(card.description || ""), image: image, domain: String(card.domain || "") };
+    if (img && img.width && img.height) { out.width = Number(img.width); out.height = Number(img.height); }
+    if (card.type === "summary") out.large = false;
+    return out;
+  }
+
   function fxFromStatus(status, depth) {
     if (!status || typeof status !== "object") return null;
     const wrapped = status.tweet && typeof status.tweet === "object" ? status.tweet : status;
@@ -5775,6 +6053,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (conv) post.conversationId = conv;
     const parentStatus = (wrapped.replying_to && (wrapped.replying_to.status || wrapped.replying_to.status_id)) || wrapped.replying_to_status || wrapped.in_reply_to_status_id;
     if (replying && parentStatus) post.replyingTo = Object.assign({}, replying, { id: String(parentStatus) });
+    const card = fxCard(wrapped.card);
+    if (card && !article) {
+      post.link = card;
+      // X hides the trailing link once its card shows.
+      const tail = post.text.lastIndexOf(card.url);
+      if (tail >= 0 && tail + card.url.length === post.text.length && tail > 0) post.text = post.text.slice(0, tail).trim();
+    }
     if (!depth && wrapped.quote && typeof wrapped.quote === "object") { const quoted = fxFromStatus(wrapped.quote, 1); if (quoted) { post.quoted = quoted; if (post.kind === "post") post.kind = "quote"; } }
     return post;
   }
@@ -12297,6 +12582,7 @@ const here = parseRoute();
     if (slim && post && post.article) slim.article = slimArticle(post.article);
     if (slim && post && post.link && post.link.url) {
       slim.link = { url: post.link.url || "", title: post.link.title || "", description: post.link.description || "", image: post.link.image || "", site: post.link.site || "" };
+      ["domain", "width", "height", "large", "video", "youtube"].forEach((key) => { if (post.link[key] != null && post.link[key] !== "") slim.link[key] = post.link[key]; });
     }
     const entry = {
       key: tab + ":" + id,
@@ -20460,7 +20746,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const article = slimArticle(post.article);
     if (article) row.article = article;
     if (post.quoted) row.quoted = slimPost(post.quoted);
-    if (post.link && post.link.url) row.link = { url: post.link.url, title: post.link.title || "", description: post.link.description || "", image: post.link.image || "", site: post.link.site || "" };
+    if (post.link && post.link.url) row.link = { url: post.link.url, title: post.link.title || "", description: post.link.description || "", image: post.link.image || "", site: post.link.site || "" }; if (row.link) ["domain", "width", "height", "large", "video", "youtube"].forEach((key) => { if (post.link[key] != null && post.link[key] !== "") row.link[key] = post.link[key]; });
     return row;
   }
 
