@@ -136,7 +136,7 @@ async function desktopOff(browser) {
   assert(side !== "none", "desktop shows the right column");
   await shot(page, "tv_compare_desktop_1080.png");
   await page.goto(ROOT + "/#/settings", { waitUntil: "domcontentloaded" });
-  const toggle = page.locator("[data-tv-toggle]").first();
+  const toggle = page.locator("[data-tv-mode]").first();
   await toggle.waitFor({ timeout: 15000 });
   assert((await toggle.innerText()).indexOf("TV mode") >= 0, "Settings has a TV mode control");
   await context.close();
