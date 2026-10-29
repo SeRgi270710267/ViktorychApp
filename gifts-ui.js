@@ -107,7 +107,6 @@
     if (started) return;
     started = true;
     loadCatalog();
-    loadShop();
     loadPoints().then(function () {
       touch("login").then(function () { return touch("read"); }).then(loadPoints);
     });
@@ -412,6 +411,7 @@
 
   /* A compact picker for the composer and Messages: owned packs first. */
   function stickerPicker(slot) {
+    if (!shop) loadShop();
     var sc = storeLib();
     if (!sc) return "";
     var owned = ownedPacks();
