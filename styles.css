@@ -1065,7 +1065,7 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .byline .handle { flex: 1 1 auto; flex-shrink: 100; }
 .time, .dot, .src, .more-btn { flex: none; }
 .more-btn { margin-left: auto; color: var(--muted); }
-.more-btn:hover { color: var(--blue); background: var(--blue-dim); }
+.more-btn:hover { color: var(--link, var(--blue)); background: var(--blue-dim); }
 .vbadge { display: inline-flex; width: 18px; height: 18px; flex: none; align-items: center; }
 .vbadge svg { width: 18px; height: 18px; fill: currentColor; display: block; }
 .vbadge path { fill-rule: evenodd; }
@@ -1075,7 +1075,7 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .src { display: inline-flex; color: var(--muted); width: 16px; height: 16px; }
 .src svg { width: 14px; height: 14px; fill: currentColor; }
 .replying { color: var(--muted); font-size: 15px; line-height: 20px; margin: 0 0 2px; }
-.replying a { color: var(--blue); }
+.replying a { color: var(--link, var(--blue)); }
 .replying a:hover { text-decoration: underline; }
 .post-text, .bio, .quote-text {
   font-size: 15px;
@@ -1084,12 +1084,12 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
   overflow-wrap: anywhere;
   color: var(--text);
 }
-.entity { color: var(--blue); }
+.entity { color: var(--link, var(--blue)); }
 .entity:hover { text-decoration: underline; }
 .show-more {
   border: 0;
   background: none;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   padding: 0;
   font-size: 15px;
   line-height: 20px;
@@ -1309,6 +1309,42 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
   pointer-events: none;
 }
 .player .vmute, .player .vleft { display: none !important; }
+/* Inline play controls (X style): expand next to mute, a seek strip on the
+   progress line, and the play button back while the user has paused. */
+.vexpand {
+  position: absolute;
+  right: 52px;
+  bottom: 8px;
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 20, 25, 0.75);
+  color: #fff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+.vexpand svg { width: 18px; height: 18px; fill: #fff; }
+.vplay.is-shown .vexpand, .vplay.is-inline .vexpand { display: flex; }
+.vseek {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  z-index: 3;
+  display: none;
+  cursor: pointer;
+  touch-action: none;
+}
+.vplay.is-inline .vseek { display: block; }
+.vplay.is-inline .vprog { height: 4px; }
+.vplay.is-user-paused > .play { visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; z-index: 4; }
+.player .vexpand, .player .vseek { display: none !important; }
 .vplay.is-failed { cursor: default; }
 .vplay.is-failed > .play,
 .vplay.is-failed .vdur { display: none; }
@@ -1374,7 +1410,7 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .open-original {
   display: block;
   padding: 10px 12px;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 15px;
 }
 .tile.broken .open-original { padding: 16px; }
@@ -1505,7 +1541,7 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
   pointer-events: auto;
 }
 .action svg { width: 18.75px; height: 18.75px; fill: currentColor; }
-.action.reply:hover { color: var(--blue); }
+.action.reply:hover { color: var(--link, var(--blue)); }
 .action.reply:hover .ic::after { background: var(--blue-dim); }
 .action.repost:hover, .action.repost.on { color: var(--green); }
 .action.repost:hover .ic::after { background: var(--green-dim); }
@@ -1524,9 +1560,9 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .vote-wrap .vote-score { font-size: 13px; color: var(--muted, inherit); min-width: 1.5em; text-align: center; }
 .action.vote.up:hover, .action.vote.up.on { color: #ff4500; }
 .action.vote.down:hover, .action.vote.down.on { color: #7193ff; }
-.action.views:hover, .action.bookmark:hover, .action.share:hover { color: var(--blue); }
+.action.views:hover, .action.bookmark:hover, .action.share:hover { color: var(--link, var(--blue)); }
 .action.views:hover .ic::after, .action.bookmark:hover .ic::after, .action.share:hover .ic::after { background: var(--blue-dim); }
-.action.bookmark.on { color: var(--blue); }
+.action.bookmark.on { color: var(--link, var(--blue)); }
 .menu {
   position: absolute;
   right: 8px;
@@ -1631,7 +1667,7 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 .show-more-row {
   display: block;
   padding: 16px;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 15px;
 }
 .show-more-row:hover { background: var(--hover-soft); }
@@ -1661,7 +1697,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .follow.following .u { display: none; }
 .follow.following:hover {
   background: rgba(244, 33, 46, 0.1);
-  color: var(--red);
+  color: var(--red-text, var(--red));
   border-color: rgba(244, 33, 46, 0.4);
 }
 .follow.following:hover .f { display: none; }
@@ -1674,7 +1710,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   padding: 0 12px;
   border-radius: 9999px;
   border: 1px solid var(--blue);
-  color: var(--blue);
+  color: var(--link, var(--blue));
   background: transparent;
   font-weight: 700;
   font-size: 14px;
@@ -1841,7 +1877,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   color: var(--muted);
   font-size: 15px;
 }
-.pmeta a { color: var(--blue); }
+.pmeta a { color: var(--link, var(--blue)); }
 .pmeta a:hover, .counts b { text-decoration: none; }
 .pmeta span, .pmeta a { display: inline-flex; align-items: center; gap: 4px; }
 .pmeta svg { width: 18px; height: 18px; fill: var(--muted); }
@@ -1940,7 +1976,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .status-text { font-size: 17px; line-height: 24px; margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ancestor .post-text { font-size: 15px; line-height: 20px; }
 .status-time { margin-top: 16px; color: var(--muted); font-size: 15px; line-height: 20px; }
-.status-time a { color: var(--blue); }
+.status-time a { color: var(--link, var(--blue)); }
 .status-views { margin-top: 16px; padding: 16px 0 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 15px; }
 .status-views b { font-weight: 700; }
 .poll { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
@@ -1969,7 +2005,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .status.has-thread .status-author { align-items: flex-start; }
 
 .show-thread {
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 15px;
   line-height: 20px;
   display: inline-block;
@@ -2082,7 +2118,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   padding: 0;
   border: 0;
   background: none;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 15px;
   line-height: 20px;
   text-align: left;
@@ -2107,7 +2143,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 }
 .show-replies {
   display: block;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 15px;
   line-height: 20px;
   margin: 0 16px 12px 68px;
@@ -2196,7 +2232,7 @@ button.show-replies {
   border: 0;
   border-bottom: 1px solid var(--line);
   background: none;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 15px;
   line-height: 20px;
   padding: 16px;
@@ -2359,7 +2395,7 @@ button.show-replies {
 .mute-form .search { min-width: 0; }
 .mute-form .follow { align-self: flex-start; }
 .mute-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
-.mute-row button { border: 0; background: none; color: var(--red); font-weight: 700; font-size: 13px; }
+.mute-row button { border: 0; background: none; color: var(--red-text, var(--red)); font-weight: 700; font-size: 13px; }
 .field { display: block; margin: 16px 0; }
 .field span { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 .field input, .field textarea, .member-search, .explore-search input {
@@ -2386,7 +2422,7 @@ button.show-replies {
 .danger {
   background: none;
   border: 0;
-  color: var(--red);
+  color: var(--red-text, var(--red));
   font-weight: 700;
   padding: 12px 0;
 }
@@ -2405,7 +2441,7 @@ button.show-replies {
 }
 .outline:hover { background: var(--hover); }
 .list-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0 12px; }
-.pin.on { color: var(--blue); }
+.pin.on { color: var(--link, var(--blue)); }
 .color-chip { width: 48px; height: 48px; border-radius: 12px; flex: none; }
 
 .drawer-back { justify-content: flex-start; padding: 0; background: rgba(0, 0, 0, 0.4); }
@@ -2875,7 +2911,7 @@ button.show-replies {
   justify-content: center;
 }
 .yt-toggle button:hover, .text-btn:hover, .pill:hover { background: var(--hover); }
-.yt-toggle button.on { background: var(--blue-dim); color: var(--blue); }
+.yt-toggle button.on { background: var(--blue-dim); color: var(--link, var(--blue)); }
 .yt-toggle svg { width: 20px; height: 20px; fill: currentColor; }
 .yt-chips {
   display: flex;
@@ -2964,7 +3000,7 @@ button.show-replies {
   margin: 0 16px 8px;
   background: none;
   border: 0;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-weight: 700;
   font-size: 14px;
   padding: 4px 0;
@@ -3217,7 +3253,7 @@ button.show-replies {
   line-height: inherit;
 }
 .pill svg, .yt-c-likes svg { width: 18px; height: 18px; fill: currentColor; }
-.pill.on { color: var(--blue); }
+.pill.on { color: var(--link, var(--blue)); }
 .pill-group .pill { background: transparent; border-radius: 0; }
 .pill-group .pill + .pill { border-left: 1px solid var(--line); }
 .desc { background: var(--search); border-radius: 12px; padding: 12px; margin-top: 8px; }
@@ -3232,7 +3268,7 @@ button.show-replies {
 .yt-c-name span, .yt-c-likes { color: var(--muted); font-weight: 400; font-size: 12px; }
 .yt-c-main p { margin: 4px 0; white-space: pre-wrap; }
 .yt-c-likes { display: flex; align-items: center; gap: 6px; }
-.yt-replies { border: 0; background: transparent; color: var(--blue); font-weight: 700; padding: 6px 0; }
+.yt-replies { border: 0; background: transparent; color: var(--link, var(--blue)); font-weight: 700; padding: 6px 0; }
 .yt-kids { margin-left: 16px; }
 .upnext h2 { margin: 0 0 12px; font-size: 16px; }
 .up-row { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 8px; margin-bottom: 8px; padding: 4px; border-radius: 12px; }
@@ -3869,11 +3905,11 @@ html.tv-on #new-posts { display: none; }
 .bell-choice-ico, .bell-mark { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .bell-choice-ico svg, .bell-mark svg { width: 20px; height: 20px; fill: currentColor; }
 .bell-choice-label { flex: 1; min-width: 0; }
-.bell-mark { color: var(--blue); }
+.bell-mark { color: var(--link, var(--blue)); }
 .bell-note { margin: 4px 16px 12px; color: var(--muted); font-size: 13px; line-height: 16px; }
 .note-row { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--bg); }
 .note-row.is-unread { background: rgba(29, 155, 240, 0.16); background: color-mix(in srgb, var(--blue) 16%, var(--bg)); }
-.note-ico { width: 32px; flex: none; color: var(--blue); padding-top: 8px; }
+.note-ico { width: 32px; flex: none; color: var(--link, var(--blue)); padding-top: 8px; }
 .note-ico svg { width: 26px; height: 26px; fill: currentColor; }
 .note-main { color: inherit; min-width: 0; flex: 1; }
 .note-main:hover { text-decoration: none; }
@@ -4043,7 +4079,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 .gsearch-tools button:hover { background: var(--hover); }
 .gsearch-tools svg { width: 18px; height: 18px; fill: currentColor; }
 .search.gsearch:focus-within .gsearch-tools svg { fill: currentColor; }
-.gsearch.is-listening .gsearch-mic { color: var(--blue); background: var(--blue-dim); }
+.gsearch.is-listening .gsearch-mic { color: var(--link, var(--blue)); background: var(--blue-dim); }
 @media (prefers-reduced-motion: no-preference) {
   .gsearch.is-listening .gsearch-mic { animation: gmic 1.2s ease infinite; }
 }
@@ -4262,7 +4298,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 }
 .discord-emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; object-fit: contain; }
 .discord-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; color: var(--muted); font-size: 13px; line-height: 16px; }
-.discord-channel { color: var(--blue); font-weight: 700; }
+.discord-channel { color: var(--link, var(--blue)); font-weight: 700; }
 .discord-thread { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .discord-bot { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
 
@@ -4386,7 +4422,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 }
 .xa-body ul, .xa-body ol { margin: 0 0 16px; padding-left: 28px; }
 .xa-body li { margin: 0 0 8px; }
-.xa-body a { color: var(--blue); }
+.xa-body a { color: var(--link, var(--blue)); }
 .xa-img, .xa-video, .xa-link {
   display: block;
   width: 100%;
@@ -4404,7 +4440,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 }
 .xa-embed { margin: 0 0 16px; }
 .xa-embed .quote { margin-top: 0; }
-.xa-embed-link, .xa-view a { color: var(--blue); font-weight: 700; }
+.xa-embed-link, .xa-view a { color: var(--link, var(--blue)); font-weight: 700; }
 .xa-fallback {
   white-space: pre-wrap;
   font-size: 20px;
@@ -4525,7 +4561,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   z-index: 3;
   pointer-events: none;
 }
@@ -4535,7 +4571,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
   fill: currentColor;
 }
 .outline.danger {
-  color: var(--red);
+  color: var(--red-text, var(--red));
   border-color: var(--line);
 }
 .outline.danger:hover {
@@ -4797,7 +4833,7 @@ html[data-nav="icons"] .nav-item { overflow: visible; }
 }
 .friends-pill.active {
   background: var(--hover-soft);
-  color: var(--blue);
+  color: var(--link, var(--blue));
 }
 .pill-count {
   font-size: 12px;
@@ -4954,7 +4990,7 @@ html[data-nav="icons"] .nav-item { overflow: visible; }
 .friend-btn.friend-pending .u { display: none; }
 .friend-btn.friend-pending:hover {
   background: rgba(244, 33, 46, 0.1);
-  color: var(--red);
+  color: var(--red-text, var(--red));
   border-color: rgba(244, 33, 46, 0.4);
 }
 .friend-btn.friend-pending:hover .f { display: none; }
@@ -4973,7 +5009,7 @@ html[data-nav="icons"] .nav-item { overflow: visible; }
 }
 .friend-btn.friend-decline:hover {
   background: rgba(244, 33, 46, 0.1);
-  color: var(--red);
+  color: var(--red-text, var(--red));
   border-color: rgba(244, 33, 46, 0.4);
 }
 .friend-btn.friend-mutual {
@@ -4984,7 +5020,7 @@ html[data-nav="icons"] .nav-item { overflow: visible; }
 .friend-btn.friend-mutual .u { display: none; }
 .friend-btn.friend-mutual:hover {
   background: rgba(244, 33, 46, 0.1);
-  color: var(--red);
+  color: var(--red-text, var(--red));
   border-color: rgba(244, 33, 46, 0.4);
 }
 .friend-btn.friend-mutual:hover .f { display: none; }
@@ -5129,7 +5165,7 @@ html[data-nav="icons"] .nav-item { overflow: visible; }
   opacity: 0.5;
 }
 .icon-btn.danger:hover {
-  color: var(--red);
+  color: var(--red-text, var(--red));
   background: rgba(244, 33, 46, 0.1);
 }
 
@@ -5277,7 +5313,7 @@ body.upd-open { overflow: hidden; }
   border-radius: 999px;
   background: var(--blue);
 }
-.upd-error { margin: 16px 0 0; color: var(--red); font-weight: 700; }
+.upd-error { margin: 16px 0 0; color: var(--red-text, var(--red)); font-weight: 700; }
 .upd-detail { margin: 8px 0 0; color: var(--muted); font-size: 13px; word-break: break-all; }
 .upd-actions { margin-top: 22px; display: flex; flex-direction: column; gap: 4px; }
 .upd-go, .upd-later {
@@ -5297,7 +5333,7 @@ body.upd-open { overflow: hidden; }
 .upd-go[hidden], .upd-later[hidden] { display: none; }
 .upd-later {
   background: transparent;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-weight: 700;
   padding: 12px 20px;
 }
@@ -5829,7 +5865,7 @@ header.nav.nav-land { display: none; }
 }
 .feeds-chip.on { background: var(--fill); color: var(--on-fill); border-color: transparent; }
 .feeds-more-panel { min-width: 0; }
-.feeds-more-panel > summary { cursor: pointer; color: var(--blue); font-size: 14px; padding: 4px 0; list-style: none; }
+.feeds-more-panel > summary { cursor: pointer; color: var(--link, var(--blue)); font-size: 14px; padding: 4px 0; list-style: none; }
 .feeds-more-panel > summary::-webkit-details-marker { display: none; }
 .feeds-org > .feeds-more-panel { padding: 12px 16px; border-top: 1px solid var(--line); }
 .feeds-selects { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; align-items: end; padding-top: 8px; }
@@ -5879,7 +5915,7 @@ header.nav.nav-land { display: none; }
 .feeds-status.is-failing { color: #f4212e; white-space: normal; }
 .feeds-status.is-failing .feeds-dot { background: #f4212e; }
 .feeds-status.is-paused .feeds-dot { background: var(--muted); }
-.feeds-status.is-adding { color: var(--blue); }
+.feeds-status.is-adding { color: var(--link, var(--blue)); }
 .feeds-spin { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: feeds-spin .8s linear infinite; }
 @keyframes feeds-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .feeds-spin { animation: none; } }
@@ -5888,7 +5924,7 @@ header.nav.nav-land { display: none; }
   width: 36px; height: 36px; border-radius: 50%; border: 0; background: transparent; color: var(--muted);
   display: grid; place-items: center; cursor: pointer; font-size: 20px;
 }
-.feeds-icon-btn:hover, .feeds-icon-btn.on { background: var(--hover-soft); color: var(--blue); }
+.feeds-icon-btn:hover, .feeds-icon-btn.on { background: var(--hover-soft); color: var(--link, var(--blue)); }
 .feeds-icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
 .feeds-switch {
   position: relative; width: 40px; height: 24px; border-radius: 12px; border: 0; padding: 0; cursor: pointer;
@@ -6024,7 +6060,7 @@ html[data-privacy-select="off"] [data-privacy="messages"] * {
   padding: 0 8px;
   border: 1px solid var(--blue);
   border-radius: 999px;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font-size: 13px;
   font-weight: 700;
   line-height: 16px;
@@ -6117,7 +6153,7 @@ html.ios-lite {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--blue);
+  color: var(--link, var(--blue));
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -6170,7 +6206,7 @@ img, video { max-width: 100%; }
 .xc-reply-slim { align-items: center; padding: 8px 16px; }
 .xc-reply-slim .xc-slim { flex: 1; min-width: 0; width: auto; }
 .tr-credit { color: var(--muted); font-size: 13px; line-height: 16px; margin-top: 4px; }
-.tr-credit .show-more { color: var(--blue); font-size: 13px; }
+.tr-credit .show-more { color: var(--link, var(--blue)); font-size: 13px; }
 
 /* My devices */
 .device-row { display: flex; align-items: center; gap: 12px; }
@@ -6243,7 +6279,7 @@ img, video { max-width: 100%; }
   border: 0; border-radius: 9999px; background: none; color: var(--muted); cursor: pointer;
 }
 .note-x svg { width: 18px; height: 18px; fill: currentColor; }
-.note-x:hover { background: var(--blue-dim); color: var(--blue); }
+.note-x:hover { background: var(--blue-dim); color: var(--link, var(--blue)); }
 @media (hover: hover) and (pointer: fine) {
   .note-row:hover .note-x, .note-x:focus-visible { display: inline-flex; }
 }
@@ -6286,7 +6322,7 @@ img, video { max-width: 100%; }
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; min-height: 48px; padding: 0 16px;
   background: none; border: 0; border-bottom: 1px solid var(--line);
-  color: var(--blue); font-size: 15px; font-weight: 400; cursor: pointer;
+  color: var(--link, var(--blue)); font-size: 15px; font-weight: 400; cursor: pointer;
 }
 .show-posts:hover { background: var(--hover, rgba(255, 255, 255, 0.03)); }
 .show-posts .pill-ava { width: 24px; height: 24px; }
@@ -6371,3 +6407,78 @@ img, video { max-width: 100%; }
 html[data-theme="default"] .logo-preview { color: #000; }
 .logo-preview .logo-preview-mark { display: block; height: 28px; width: auto; max-width: 100%; }
 .logo-preview-none { color: var(--muted); font-size: 14px; }
+
+/* ===== Flag themes =====
+   Data-driven: the palette lives in window.ViktorychThemes (index.html), which sets
+   data-flag plus --flag-1/2/3 (exact flag colours: top, accent, alert) and --flag-tint-1/2/3
+   (the same bands darkened to OLED level). Nothing below names a country, so a new flag
+   theme is one registry entry. Text never uses a flag colour that fails WCAG AA on the dark
+   bands: links and alert text stay white; flag blue and red are used as fills (with white
+   text), icons, borders and stripes. */
+html[data-flag] {
+  --flag-stripe: linear-gradient(90deg, var(--flag-1) 0 33.34%, var(--flag-2) 33.34% 66.67%, var(--flag-3) 66.67% 100%);
+  --flag-bands: linear-gradient(180deg, var(--flag-1) 0 33.34%, var(--flag-2) 33.34% 66.67%, var(--flag-3) 66.67% 100%);
+  --bg: var(--flag-surface);
+  --text: #FFFFFF;
+  --muted: #8b93a7;
+  --line: rgba(140, 155, 200, 0.2);
+  --blue: var(--flag-2);
+  --blue-dim: color-mix(in srgb, var(--flag-2) 24%, transparent);
+  --link: var(--flag-1);
+  --pink: var(--flag-3);
+  --pink-dim: color-mix(in srgb, var(--flag-3) 18%, transparent);
+  --red: var(--flag-3);
+  --red-text: var(--flag-1);
+  --card: color-mix(in srgb, var(--flag-surface) 72%, transparent);
+  --search: color-mix(in srgb, var(--flag-tint-2) 55%, rgba(30, 36, 52, 0.75));
+  --banner: color-mix(in srgb, var(--flag-tint-2) 70%, #1a2030);
+  --sheet: var(--flag-surface);
+  --topbar: color-mix(in srgb, var(--flag-surface) 62%, transparent);
+  --thread: rgba(140, 155, 200, 0.24);
+  --ava: #1a2030;
+  --tab-pill: var(--flag-2);
+  --bell-border: var(--flag-2);
+  color-scheme: dark;
+  background: var(--flag-tint-1);
+}
+/* The darkened flag behind everything: one fixed layer, so scrolling never repaints it. */
+html[data-flag]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--flag-tint-1) 0%, var(--flag-tint-1) 20%, var(--flag-tint-2) 50%, var(--flag-tint-3) 80%, var(--flag-tint-3) 100%);
+}
+html[data-flag] body,
+html[data-flag] .note-row { background: transparent; }
+/* Tricolour stripes in the chrome. Background layers, so no existing pseudo-element is touched. */
+html[data-flag] .nav { background: var(--flag-stripe) top / 100% 3px no-repeat; }
+html[data-flag] .topbar { background: var(--flag-stripe) bottom / 100% 2px no-repeat, var(--topbar); }
+html[data-flag] .bottom-nav { background: var(--flag-stripe) top / 100% 2px no-repeat, var(--topbar); border-top-color: transparent; }
+html[data-flag] .tab.on span:not(.tab-grip)::after,
+html[data-flag] .tab-pair.on::after,
+html[data-flag] .ptabs .tab.on > .ptab-marquee::after { background: var(--flag-stripe); }
+/* Post buttons: exact flag blue with a tricolour rim and white text (contrast 9.8:1). */
+html[data-flag] .post-btn,
+html[data-flag] .fab {
+  background: linear-gradient(var(--flag-2), var(--flag-2)) padding-box, var(--flag-bands) border-box;
+  border: 2px solid transparent;
+  color: #FFFFFF;
+}
+html[data-flag] .post-btn:hover,
+html[data-flag] .fab:hover { filter: brightness(1.15); }
+/* Profile without a banner image: the flag itself. */
+html[data-flag] .pbanner.theme,
+html[data-flag] div.pbanner,
+html[data-flag] .hcard .hbanner { background: var(--flag-bands); }
+/* Loading: tricolour spinner and update bar. */
+html[data-flag] .spin { border-color: var(--flag-1) var(--flag-2) var(--flag-3) color-mix(in srgb, var(--flag-2) 30%, transparent); }
+html[data-flag] .upd-bar > i { background: var(--flag-stripe); }
+/* Badges and notification counts: flag red with white text (5.0:1). */
+html[data-flag] .nav-badge { background: var(--flag-3); color: #FFFFFF; }
+/* Likes: the heart is flag red (icon, >3:1); the number stays white for AA text contrast. */
+html[data-flag] .action.like.on .count,
+html[data-flag] .action.like:hover .count { color: var(--text); }
+/* Links are white for contrast; flag blue marks them as links. */
+html[data-flag] a.entity { text-decoration: underline; text-decoration-color: var(--flag-2); text-decoration-thickness: 2px; text-underline-offset: 2px; }

@@ -1088,15 +1088,18 @@ var numberNote = form.passkey
   }
   function wallTheme() {
     var mode = document.documentElement.getAttribute("data-theme") || "lightsout";
-    if (mode !== "default" && mode !== "dim") mode = "lightsout";
+    var themes = window.ViktorychThemes;
+    if (themes ? !themes.known(mode) : (mode !== "default" && mode !== "dim")) mode = "lightsout";
     return mode;
   }
   function applyWallTheme(mode) {
-    if (mode !== "default" && mode !== "dim") mode = "lightsout";
-    document.documentElement.setAttribute("data-theme", mode);
+    var themes = window.ViktorychThemes;
+    if (themes ? !themes.known(mode) : (mode !== "default" && mode !== "dim")) mode = "lightsout";
+    if (themes) themes.apply(mode);
+    else document.documentElement.setAttribute("data-theme", mode);
     var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
     var metas = document.querySelectorAll('meta[name="theme-color"]');
-    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
+    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", themes ? themes.color(mode) : colors[mode]);
     try {
       var key = "viktorychapp-settings-v1";
       var raw = localStorage.getItem(key);
@@ -1117,7 +1120,7 @@ var numberNote = form.passkey
     }
     return '<p class="acct-sub">' + esc(tr("Language and appearance stay on this device.")) + "</p>" +
       '<div class="theme-row" role="group" aria-label="' + esc(tr("Display language")) + '">' + langBtn("en", "English") + langBtn("es", "Español") + langBtn("ru", "Русский") + "</div>" +
-      '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + "</div>" +
+      '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}).map(function (id) { return themeBtn(id, tr(window.ViktorychThemes.flags[id].name)); }).join("") + "</div>" +
       '<p class="acct-sub">' + esc(tr("Account settings are available after you sign in.")) + "</p>";
   }
   function deletedFlag() {
