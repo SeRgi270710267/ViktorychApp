@@ -206,3 +206,10 @@ automatically" (on by default). Off means every peer is equal, the flat
 - **Seeding.** Announcements list the rarest items first and collapse
   duplicate content ids. A peer that asks for the same chunk twice gets a
   miss.
+
+**Device wipe.** Blobs live only in memory, so a reload drops them, and
+`ViktorychPool.clear()` (also run on a `viktorych-wipe` event) drops them
+at once. The pool writes only its mode and byte counters to localStorage,
+plus public app files to the `shell-pool` cache. Private bytes should be
+encrypted before `putBlob`. Their at-rest copies belong to the owning
+module, under the `private-list` localStorage keys or OPFS `vapp-private/`.

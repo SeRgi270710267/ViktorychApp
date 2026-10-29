@@ -1056,6 +1056,18 @@ function hasBlob(h) {
   return S.store.has(String(h || "")) || holders(String(h || "")).length > 0;
 }
 
+/* Drops every blob held in memory (a device wipe calls this). Nothing the
+   pool carries is written to localStorage, IndexedDB or OPFS; only public
+   app files sit in the "shell-pool" cache, and a full wipe clears caches. */
+function clear() {
+  S.store.clear();
+  S.storeBytes = 0;
+  S.kids.clear();
+  S.links.forEach((link) => link.sent.clear());
+  openRooms().forEach((room) => announceAll(room));
+}
+if (scope.addEventListener) scope.addEventListener("viktorych-wipe", clear);
+
 const queue = Q.createQueue(3, () => S.budget);
 
 /* opts.priority: "visible" (default), "next", "likely" or "background".
@@ -1088,7 +1100,7 @@ async function pullBlob(h, size, opts) {
   return bytes;
 }
 
-const api = { wants, fetchData, prefillShell, stats, setMode, mode: () => S.mode, evaluate, indexShell, putBlob, getBlob, hasBlob, setSmart,
+const api = { wants, fetchData, prefillShell, stats, setMode, mode: () => S.mode, evaluate, indexShell, putBlob, getBlob, hasBlob, setSmart, clear,
   scheduler: {
     record: (name, sample) => Q.recordSource(S.scores, name, sample),
     rank: (names) => (S.smart ? Q.rankSources(S.scores, names) : names.slice()),
