@@ -172,3 +172,56 @@ test("one app account replies to and quotes another, end to end", async () => {
   assert.equal(bogus.status, 201);
   assert.equal(bogus.body.post.extParent, null);
 });
+
+test("a reply can carry a photo, and the thread shows it", async () => {
+  const ip = "203.0.113.181";
+  const a = await signup("device_user", ip);
+  const parent = await call("/v1/posts", { method: "POST", ip, token: a.token, json: { body: "parent for media" } });
+  assert.equal(parent.status, 201, JSON.stringify(parent.body));
+  const pid = parent.body.post.id;
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const b = "replymedia";
+  const field = (name, value) => Buffer.from("--" + b + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n");
+  const body = Buffer.concat([
+    field("body", "reply with a photo"),
+    field("parentId", pid),
+    Buffer.from("--" + b + "\r\nContent-Disposition: form-data; name=\"media\"; filename=\"p.png\"\r\nContent-Type: image/png\r\n\r\n"),
+    png,
+    Buffer.from("\r\n--" + b + "--\r\n")
+  ]);
+  const reply = await call("/v1/posts", { method: "POST", ip, token: a.token, multipart: { type: "multipart/form-data; boundary=" + b, body } });
+  assert.equal(reply.status, 201, JSON.stringify(reply.body));
+  assert.equal(reply.body.post.parentId, pid);
+  const media = reply.body.post.media || [];
+  assert.equal(media.length, 1, JSON.stringify(reply.body.post));
+  const thread = await call("/v1/posts/thread?id=" + pid, { ip, token: a.token });
+  const shown = thread.body.replies.find((post) => post.id === reply.body.post.id);
+  assert.ok(shown && (shown.media || []).length === 1, "the thread lists the reply with its photo");
+});
+
+test("a profile pages back through all of an account's posts", async () => {
+  const ip = "203.0.113.191";
+  const u = await signup("owner_test", ip);
+  const db = await mf.getD1Database("DB");
+  const made = [];
+  const seed = await call("/v1/posts", { method: "POST", ip, token: u.token, json: { body: "post 0" } });
+  assert.equal(seed.status, 201, JSON.stringify(seed.body));
+  const row = await db.prepare("SELECT * FROM public_posts WHERE id = ?").bind(seed.body.post.id).first();
+  const cols = Object.keys(row);
+  made.push(row.id);
+  await db.prepare("UPDATE public_posts SET created_at = ? WHERE id = ?").bind(1700000000000, row.id).run();
+  // Copies past the posting rate limit, one second apart.
+  for (let i = 1; i < 45; i++) {
+    const copy = Object.assign({}, row, { id: String(row.id).slice(0, -3) + String(100 + i), body: "post " + i, created_at: 1700000000000 + i * 1000 });
+    await db.prepare("INSERT INTO public_posts (" + cols.join(",") + ") VALUES (" + cols.map(() => "?").join(",") + ")").bind(...cols.map((c) => copy[c])).run();
+    made.push(copy.id);
+  }
+  const first = await call("/v1/posts?by=" + u.account.publicId, { ip, token: u.token });
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.posts.length, 40);
+  assert.equal(first.body.more, true);
+  const next = await call("/v1/posts?by=" + u.account.publicId + "&before=" + first.body.before, { ip, token: u.token });
+  const ids = new Set(first.body.posts.concat(next.body.posts).map((post) => post.id));
+  assert.ok(made.every((id) => ids.has(id)), "every post shows across the two pages");
+  assert.equal(next.body.more, false);
+});

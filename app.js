@@ -7018,7 +7018,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     document.querySelectorAll("[data-hydrate]").forEach((el) => HYDRATE_OBS.observe(el));
     if (!ARCHIVE_OBS) {
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) revealMoreTimeline();
+        const hit = entries.filter((entry) => entry.isIntersecting);
+        hit.forEach((entry) => { if (entry.target.id === "author-more") loadOlderAuthorPosts(entry.target.getAttribute("data-id")); });
+        if (hit.some((entry) => entry.target.id !== "author-more")) revealMoreTimeline();
       }, { rootMargin: "600px" });
     }
     ARCHIVE_OBS.disconnect();
@@ -7026,6 +7028,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (sentinel) ARCHIVE_OBS.observe(sentinel);
     const liveSentinel = document.getElementById("live-more");
     if (liveSentinel) ARCHIVE_OBS.observe(liveSentinel);
+    const authorSentinel = document.getElementById("author-more");
+    if (authorSentinel) ARCHIVE_OBS.observe(authorSentinel);
   }
 
   function ensureYtSubs(feed) {
@@ -7361,7 +7365,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   // Reddit posts on Home get up and down votes with the score; internal posts do not.
   function redditVotes(post) {
-    if (!post || post.platform !== "reddit" || post.appPost || parseRoute().name !== "home") return "";
+    if (!post || post.platform !== "reddit" || post.appPost) return "";
     const votes = STATE.settings.redditVotes || {};
     const mine = Number(votes[post.id]) || 0;
     const base = Number(post.score != null ? post.score : (post.stats || {}).score) || 0;
@@ -7453,7 +7457,7 @@ const here = parseRoute();
       : (redditSub(post) && !opts.parentShown
         ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(redditSub(post))}">${esc("r/" + redditSub(post))}</a></div>`
         : "");
-    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
+    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}${cardHeightStyle(post.id)}>
       ${community}
       ${repost}
       ${sharedNote}
@@ -8911,14 +8915,36 @@ const here = parseRoute();
         const next = mine && String(mine.publicId) === key ? keepOwnPosts(res.posts).filter((item) => String(item.authorId) === key) : res.posts;
         const sig = (list) => list.map((item) => [item.id, item.replyCount, item.quoteCount, item.likes, item.reposts, item.editedAt, item.body].join("|")).join(",");
         const before = sig(entry.posts);
-        entry.posts = next;
-        if (before !== sig(next)) render();
+        // Keep pages already read further back; the first page replaces only its own span.
+        const edge = Number(res.before) || 0;
+        const older = (entry.posts || []).filter((item) => edge && (Number(item.createdAt) || 0) < edge && !next.some((row) => row.id === item.id));
+        if (!older.length) { entry.more = !!res.more; entry.before = edge; }
+        entry.posts = next.concat(older);
+        if (before !== sig(entry.posts)) render();
       }).catch(() => { entry.loading = false; });
     }
     const have = (authorPostCache[key] && authorPostCache[key].posts) || [];
     const ids = new Set(have.map((item) => item.id));
     const extra = publicPosts.filter((item) => item && String(item.authorId) === key && !ids.has(item.id));
     return have.concat(extra);
+  }
+
+  // The next page of one account's posts, when the profile scrolls to its end.
+  function loadOlderAuthorPosts(publicId) {
+    const key = String(publicId || "");
+    const entry = authorPostCache[key];
+    if (!entry || !entry.more || entry.loadingMore || !entry.before) return;
+    entry.loadingMore = true;
+    accountCall("/v1/posts?by=" + key + "&before=" + entry.before).then((res) => {
+      entry.loadingMore = false;
+      if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      const ids = new Set((entry.posts || []).map((item) => item.id));
+      const add = res.posts.filter((item) => item && !ids.has(item.id) && String(item.authorId) === key);
+      entry.posts = (entry.posts || []).concat(add);
+      entry.before = Number(res.before) || 0;
+      entry.more = !!res.more && add.length > 0 && !!entry.before;
+      render();
+    }).catch(() => { entry.loadingMore = false; });
   }
 
   function hydratePublicMedia() {
@@ -14410,7 +14436,9 @@ if (STATE.histClear) {
     if (tab === "replies") shown = postList.filter((post) => post.kind === "reply");
     else if (tab === "media") shown = postList.filter((post) => (post.media || []).length);
     else if (tab === "posts" || !tab) shown = postList.filter((post) => post.kind !== "reply");
-    return { html: shown.map((post) => card(post, "")).join(""), count: postList.length };
+    const entry = account.publicId ? authorPostCache[String(account.publicId)] : null;
+    const more = entry && entry.more ? `<div id="author-more" class="reply-empty" data-id="${esc(account.publicId)}"><button type="button" class="link-btn" data-act="author-more" data-id="${esc(account.publicId)}">${tr("Show more")}</button></div>` : "";
+    return { html: shown.map((post) => card(post, "")).join("") + more, count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -16008,15 +16036,27 @@ if (STATE.histClear) {
     return [...root.querySelectorAll(HSCROLL_SELECTOR)];
   }
 
+  const HSCROLL_FLAT = new Set();
+  try { window.addEventListener("resize", () => HSCROLL_FLAT.clear(), { passive: true }); } catch (err) { /* no window */ }
+
   function hscrollMatches(el) {
     if (!el || el.nodeType !== 1 || !el.matches) return false;
     if (el.matches(HSCROLL_SELECTOR)) return true;
     if (el.id === "app" || el.classList.contains("center") || el.classList.contains("app")) return false;
     // Style first: most nodes are not scrollers, and reading the computed
     // overflow is far cheaper than measuring every div's layout box.
+    // Overflow comes from CSS classes, so a class pair (with the parent's) that
+    // did not scroll last time won't now: skip the style read. That read was the
+    // biggest desktop long task on every render (hundreds of feed divs).
+    const sig = el.tagName + "|" + el.className + "|" + (el.getAttribute("style") || "") + "|" + ((el.parentElement && el.parentElement.className) || "");
+    if (HSCROLL_FLAT.has(sig)) return false;
     let ox = "";
     try { ox = getComputedStyle(el).overflowX; } catch (err) { return false; }
-    if (ox !== "auto" && ox !== "scroll" && ox !== "overlay") return false;
+    if (ox !== "auto" && ox !== "scroll" && ox !== "overlay") {
+      if (HSCROLL_FLAT.size > 4000) HSCROLL_FLAT.clear();
+      HSCROLL_FLAT.add(sig);
+      return false;
+    }
     if (el.scrollWidth <= el.clientWidth + 8) return false;
     if (el.clientHeight > 180 && el.scrollHeight > el.clientHeight + 24) return false;
     return true;
@@ -17494,6 +17534,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       STATE.menu = null;
       toast(tr("We'll show you less of this."));
       render();
+      return;
+    }
+    if (act === "author-more") {
+      loadOlderAuthorPosts(el.dataset.id);
       return;
     }
     if (act === "reddit-vote") {
@@ -19715,6 +19759,51 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     paintHover(el, profile);
   }
 
+  /* Feed cards skip layout off screen (content-visibility: auto) and guess 220px
+     until drawn. A new DOM after Back forgets the real sizes, so the page came
+     back shorter and the old scroll landed thousands of pixels early. Keep the
+     drawn heights per post and hand them back as the guess. */
+  function cardHeights() { return STATE.cardHeights || (STATE.cardHeights = new Map()); }
+  function rememberCardHeights() {
+    const CARD_HEIGHTS = cardHeights();
+    const cards = document.querySelectorAll("#app article.post[data-post]");
+    for (let i = 0; i < cards.length; i++) {
+      const h = Math.round(cards[i].getBoundingClientRect().height);
+      if (h > 40 && h < 6000) CARD_HEIGHTS.set(cards[i].getAttribute("data-post"), h);
+    }
+    while (CARD_HEIGHTS.size > 800) CARD_HEIGHTS.delete(CARD_HEIGHTS.keys().next().value);
+    // The first card on screen, so Back can line it up exactly.
+    STATE.homeAnchor = null;
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i].getBoundingClientRect();
+      if (r.bottom > 60) { STATE.homeAnchor = { key: STATE.scrollKey, id: cards[i].getAttribute("data-post"), top: r.top }; break; }
+    }
+  }
+  function settleHomeAnchor(key) {
+    const anchor = STATE.homeAnchor;
+    if (!anchor || anchor.key !== key) return;
+    const el = [...document.querySelectorAll("#app article.post[data-post]")].find((node) => node.getAttribute("data-post") === anchor.id);
+    if (!el) return;
+    const off = el.getBoundingClientRect().top - anchor.top;
+    if (Math.abs(off) > 2) window.scrollBy(0, off);
+    // Media frames above can still settle; keep lining up for a moment unless the reader touches the page.
+    let stop = false;
+    const quit = () => { stop = true; };
+    const evs = ["wheel", "touchstart", "keydown", "pointerdown"];
+    evs.forEach((ev) => window.addEventListener(ev, quit, { once: true, passive: true }));
+    [120, 350, 700].forEach((ms, i, all) => setTimeout(() => {
+      if (!stop && routeScrollKey() === key && el.isConnected) {
+        const late = el.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(late) > 2) window.scrollBy(0, late);
+      }
+      if (i === all.length - 1) evs.forEach((ev) => window.removeEventListener(ev, quit));
+    }, ms));
+  }
+  function cardHeightStyle(id) {
+    const h = STATE.cardHeights ? STATE.cardHeights.get(String(id || "")) : 0;
+    return h ? ` style="contain-intrinsic-size:auto ${h}px"` : "";
+  }
+
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   try {
     matchMedia("(max-width: 699px)").addEventListener("change", () => refreshMediaFrames());
@@ -19783,6 +19872,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       window.FeedsDiscord.syncFromHash();
       return;
     }
+    const leavingKey = STATE.scrollKey;
+    if (/^#\/(?:home)?(?:[/?]|$)|^#?$/.test(prevHash)) rememberCardHeights();
     const nextRoute = parseRoute();
     if (nextRoute.name === "home") {
       const nextTab = nextRoute.tab || "foryou";
@@ -19819,6 +19910,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render({
       y: y,
       done: () => {
+        if (y > 0 && key !== leavingKey) settleHomeAnchor(key);
         routing = false;
         scrollFreeze = false;
       }
