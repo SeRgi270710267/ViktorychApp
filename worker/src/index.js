@@ -19,7 +19,7 @@ import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlayl
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
-import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, resumeAccountDeletions } from "./account-delete.js";
+import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
 import { handleMediaSwarm } from "./media-swarm.js";
@@ -34,6 +34,7 @@ import { handlePills } from "./pills.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
+import { sealPayload, openPayload, maybeBackupSettings } from "./settings-vault.js";
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
@@ -43,6 +44,7 @@ import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingReq
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
+import { syncVk, vkDue } from "./vk.js";
 import { ABOUT_SCHEMA, handleAbout } from "./about.js";
 import { BADGE_SCHEMA, handleBadges, syncBadges } from "./badges.js";
 import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
@@ -264,14 +266,16 @@ async function addProfileColumns(env) {
     "ALTER TABLE accounts ADD COLUMN private_follows INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE accounts ADD COLUMN profile_less INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE accounts ADD COLUMN protected_account INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE accounts ADD COLUMN profile_tabs TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE accounts ADD COLUMN profile_tabs TEXT NOT NULL DEFAULT ''",
+    // 0036 used to add this; the runtime schema has it, older tables get it here.
+    "ALTER TABLE app_stories ADD COLUMN audience TEXT NOT NULL DEFAULT 'public'"
   ];
   for (let i = 0; i < statements.length; i++) {
     try {
       await env.DB.prepare(statements[i]).run();
     } catch (err) {
       const message = String(err && err.message || err);
-      if (!/duplicate column/i.test(message)) throw err;
+      if (!/duplicate column|no such table/i.test(message)) throw err;
     }
   }
 }
@@ -786,7 +790,8 @@ function recoveryDeps() {
     clientIp: clientIp,
     originAllowed: originAllowed,
     blockDeletedLogin: blockDeletedLogin,
-    accountCols: ACCOUNT_COLS
+    accountCols: ACCOUNT_COLS,
+    publish: publishToAccount
   };
 }
 
@@ -1258,6 +1263,7 @@ async function handleSyncGet(request, env) {
   let payload = null;
   try { payload = JSON.parse(saved.payload); }
   catch (err) { payload = null; }
+  payload = await openPayload(env, payload);
   if (payload && typeof payload === "object") {
     delete payload.bellNotes;
     delete payload.bellSeen;
@@ -1267,6 +1273,12 @@ async function handleSyncGet(request, env) {
 }
 
 const SYNC_UI_KEYS = ["appearance", "drawerMenu", "navCustom", "navCustomAt", "bottomNav", "bottomNavCustom", "profileTabs", "homePills", "stories", "prefsAt", "showPictures", "showBanners"];
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  if (value && typeof value === "object") return "{" + Object.keys(value).sort().map((key) => JSON.stringify(key) + ":" + canonicalJson(value[key])).join(",") + "}";
+  return JSON.stringify(value === undefined ? null : value);
+}
 
 async function handleSyncPut(request, env) {
   const row = await sessionAccount(env, request);
@@ -1278,8 +1290,11 @@ async function handleSyncPut(request, env) {
   let previous = null;
   if (current) {
     try { previous = JSON.parse(current.payload); } catch (err) { previous = null; }
+    previous = await openPayload(env, previous);
   }
+  const previousText = previous ? canonicalJson(previous) : "";
   const payload = body.payload;
+  delete payload.sealed;
   delete payload.bellNotes;
   delete payload.bellSeen;
   delete payload.bellRead;
@@ -1336,6 +1351,18 @@ async function handleSyncPut(request, env) {
     });
   }
   delete payload.uiLocal;
+  // Settings this device keeps to itself: the account's copy stays.
+  if (Array.isArray(payload.localKeys)) {
+    const own = payload.localKeys.filter((key) => typeof key === "string" && /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(key) && key !== "prefsAt" && key !== "localKeys").slice(0, 80);
+    if (previous) {
+      own.forEach((key) => {
+        if (payload[key] === undefined && previous[key] !== undefined) payload[key] = previous[key];
+        const at = previous.prefsAt && previous.prefsAt[key];
+        if (at && payload.prefsAt && typeof payload.prefsAt === "object" && !Array.isArray(payload.prefsAt)) payload.prefsAt[key] = at;
+      });
+    }
+  }
+  delete payload.localKeys;
   if (payload.syncUi != null) payload.syncUi = payload.syncUi !== false;
   payload.syncUiAt = Math.max(0, Math.min(Number(payload.syncUiAt) || 0, Date.now() + 60000));
   if (payload.prefsAt != null && (typeof payload.prefsAt !== "object" || Array.isArray(payload.prefsAt))) delete payload.prefsAt;
@@ -1352,14 +1379,12 @@ async function handleSyncPut(request, env) {
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);
   if (current && base && Number(current.updated_at) !== base) {
-    let payload = null;
-    try { payload = JSON.parse(current.payload); } catch (err) { payload = null; }
-    return json(409, { error: "conflict", payload, updatedAt: current.updated_at });
+    return json(409, { error: "conflict", payload: previous, updatedAt: current.updated_at });
   }
   const now = Date.now();
-  await env.DB.prepare("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").bind(row.public_id, text, now).run();
+  await env.DB.prepare("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").bind(row.public_id, JSON.stringify(await sealPayload(env, payload)), now).run();
   // Other signed-in devices hear about a real change and pull it.
-  if (!current || current.payload !== text) {
+  if (!current || previousText !== canonicalJson(payload)) {
     const device = String(body.device || "").replace(/[^a-z0-9]/gi, "").slice(0, 24);
     try { await publishToAccount(env, row.public_id, "sync", { updatedAt: now, device }, row.public_id); }
     catch (err) { /* devices also check when they come back */ }
@@ -1367,7 +1392,7 @@ async function handleSyncPut(request, env) {
   return json(200, { payload: body.payload, updatedAt: now });
 }
 
-const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^discord\/messages\/\d{1,22}\/p\/\d{1,4}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$|^data\/communities\/[a-z0-9_]{2,21}\/\d{1,20}\.json$/;
+const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state|vk)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^discord\/messages\/\d{1,22}\/p\/\d{1,4}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$|^data\/communities\/[a-z0-9_]{2,21}\/\d{1,20}\.json$/;
 
 function dataKey(pathname) {
   const raw = String(pathname || "").replace(/^\/v1\/data\/?/, "");
@@ -5284,6 +5309,9 @@ async function route(request, env, ctx) {
       if (posted) return posted;
     }
   }
+  if (path === "/v1/account/inactivity") {
+    return handleInactivity(request, env, { json, readJson, rateHit, limited, sessionAccount });
+  }
   if (path === "/v1/account/delete" && request.method === "POST") {
     return handleAccountDelete(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
   }
@@ -5520,7 +5548,7 @@ export default {
     // Jobs the Render backup claimed in the last couple of minutes run there.
     const away = await claimedJobs(env, at);
     const minute = new Date(at).getUTCMinutes();
-    const jobs = [resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), sweepExpiredNotes(env, at)];
+    const jobs = [resumeAccountDeletions(env).then(() => sweepInactive(env, at)), sweepExpiredStatuses(env, at), drainOutbox(env), publishDuePosts(env, at), vkDue(at) ? syncVk(env, at).catch(() => null) : Promise.resolve(), sweepExpiredNotes(env, at)];
     const run = (name, start) => { if (!away.has(name)) jobs.push(start()); };
     run("ownerFeeds", () => sweepOwnerFeeds(env, at));
     if (!off.shorts && !off.lives) run("tiktokLive", () => watchTikTokLive(env, at));
@@ -5532,6 +5560,7 @@ export default {
     if (minute % 15 === 0) jobs.push(maybeDispatchDiscord(env));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
     jobs.push(maybeBackupD1(env, at));
+    jobs.push(maybeBackupSettings(env, at));
     if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {

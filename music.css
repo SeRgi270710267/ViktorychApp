@@ -262,7 +262,7 @@
   font-size: 14px;
 }
 
-html.music-on .center, html.music-mini .center { padding-bottom: 96px; }
+html.music-on .center { padding-bottom: 96px; }
 
 .mu-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 24; }
 .mu-dock[hidden] { display: none !important; }
@@ -270,25 +270,9 @@ html.music-on .center, html.music-mini .center { padding-bottom: 96px; }
    sidebar's account button moves up so the bar never covers it. */
 @media (min-width: 500px) {
   html.music-on .mu-dock, html.music-mini .mu-dock { z-index: 27; }
-  html.music-on .nav, html.music-mini .nav { padding-bottom: 72px; }
+  html.music-on .nav { padding-bottom: 72px; }
 }
-/* Mini player outside the music pages: same bar plus a close button. */
-.mu-mini-x { display: none; }
-html.music-mini .mu-bar { grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.3fr) minmax(120px, 0.8fr) 36px; }
-html.music-mini .mu-mini-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text);
-}
-html.music-mini .mu-mini-x:hover { background: var(--hover); }
-html.music-mini .mu-mini-x svg { width: 18px; height: 18px; fill: currentColor; }
+.mu-mini-x, .mu-pop-bar { display: none; }
 #mu-yt-host {
   position: fixed;
   left: -2400px;
@@ -432,14 +416,12 @@ html.music-mini .mu-mini-x svg { width: 18px; height: 18px; fill: currentColor; 
   }
   .mu-vol, .mu-transport .mu-shuffle, .mu-transport .mu-rep { display: none; }
   .mu-seek { display: flex; grid-column: 1 / -1; min-height: 28px; }
-  html.music-mini .mu-bar { grid-template-columns: minmax(0, 1fr) auto 36px; }
-  html.music-mini .mu-seek { grid-row: 2; }
 }
 @media (max-width: 499px) {
   html.music-on .topbar:not(.tall) { border-bottom: 1px solid var(--line); }
-  html.music-on .center, html.music-mini .center { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
-  html.music-on .mu-dock, html.music-mini .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
-  html.music-on .fab, html.music-mini .fab { bottom: calc(156px + env(safe-area-inset-bottom)); }
+  html.music-on .center { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
+  html.music-on .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
+  html.music-on .fab { bottom: calc(156px + env(safe-area-inset-bottom)); }
   .mu-bar { height: auto; min-height: 56px; padding-bottom: 8px; }
   .mu-id .mu-art { width: 40px; height: 40px; }
   .mu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -452,6 +434,178 @@ html.music-mini .mu-mini-x svg { width: 18px; height: 18px; fill: currentColor; 
 /* Phone held sideways: the icon rail stays on the left, so the bar starts
    after it and never covers the rail's buttons. */
 @media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) {
-  html.music-on .mu-dock, html.music-mini .mu-dock { left: calc(80px + var(--safe-l, env(safe-area-inset-left, 0px))); }
-  html.music-on .nav, html.music-mini .nav { padding-bottom: calc(4px + var(--safe-b, env(safe-area-inset-bottom, 0px))); }
+  html.music-on .mu-dock { left: calc(80px + var(--safe-l, env(safe-area-inset-left, 0px))); }
+  html.music-on .nav { padding-bottom: calc(4px + var(--safe-b, env(safe-area-inset-bottom, 0px))); }
+}
+
+/* Outside the music pages the player shrinks to a small square card: the
+   cover, play and skip, a thin progress line and a close button. It sits in
+   a corner (dragged there with a mouse) and above the bottom bar on phones,
+   and the page leaves room under it so it never hides the last post. */
+html.music-mini .center { padding-bottom: 196px; }
+html.music-mini .mu-dock {
+  --pop: 168px;
+  --pop-gap: 20px;
+  left: auto;
+  top: auto;
+  right: calc(var(--pop-gap) + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--pop-gap) + env(safe-area-inset-bottom, 0px));
+  width: var(--pop);
+  height: var(--pop);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: 0 0 15px var(--shadow, rgba(101, 119, 134, 0.2)), 0 0 3px 1px var(--shadow-tight, rgba(101, 119, 134, 0.15));
+  transition: box-shadow 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+html.music-mini .mu-dock[data-corner="bl"], html.music-mini .mu-dock[data-corner="tl"] { right: auto; left: calc(var(--pop-gap) + env(safe-area-inset-left, 0px)); }
+html.music-mini .mu-dock[data-corner="tr"], html.music-mini .mu-dock[data-corner="tl"] { bottom: auto; top: calc(var(--pop-gap) + env(safe-area-inset-top, 0px)); }
+html.music-mini .mu-dock.is-dragging { transition: none; cursor: grabbing; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); }
+@media (pointer: fine) { html.music-mini .mu-dock .mu-id { cursor: grab; } }
+html.music-mini .mu-bar {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+html.music-mini .mu-id {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+html.music-mini .mu-id:hover { background: transparent; }
+html.music-mini .mu-id .mu-art { width: 100%; height: 100%; border-radius: 0; }
+html.music-mini .mu-id .mu-letter { font-size: 40px; }
+html.music-mini .mu-id::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35) 0, rgba(0, 0, 0, 0) 34%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.72) 100%);
+  pointer-events: none;
+}
+html.music-mini .mu-id .mu-copy {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 52px;
+  z-index: 1;
+  overflow: hidden;
+  text-align: left;
+}
+html.music-mini .mu-id b, html.music-mini .mu-id .mu-copy span {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+html.music-mini .mu-id b { font-size: 13px; line-height: 16px; }
+html.music-mini .mu-id .mu-copy span { font-size: 12px; line-height: 15px; color: rgba(255, 255, 255, 0.82); }
+html.music-mini .mu-id .mu-marq { animation: mu-marq var(--mq-time, 8s) linear infinite; }
+@keyframes mu-marq {
+  0%, 18% { transform: translateX(0); }
+  82%, 100% { transform: translateX(var(--mq, 0)); }
+}
+html.music-mini .mu-transport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+html.music-mini .mu-transport button { pointer-events: auto; color: #fff; }
+html.music-mini .mu-transport .mu-shuffle, html.music-mini .mu-transport .mu-rep, html.music-mini .mu-transport [data-act="music-prev"] { display: none; }
+html.music-mini .mu-transport [data-act="music-next"] { width: 34px; height: 34px; background: rgba(0, 0, 0, 0.35); }
+html.music-mini .mu-transport [data-act="music-next"]:hover { background: rgba(0, 0, 0, 0.55); }
+html.music-mini .mu-transport svg { fill: currentColor; }
+html.music-mini .mu-transport .mu-play { width: 36px; height: 36px; background: #fff; color: #0f1419; }
+html.music-mini .mu-seek, html.music-mini .mu-vol { display: none; }
+html.music-mini .mu-pop-bar {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+html.music-mini .mu-pop-bar b { display: block; width: 0; height: 100%; background: var(--blue, #1d9bf0); transition: width 0.45s linear; }
+html.music-mini .mu-mini-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+}
+html.music-mini .mu-mini-x:hover { background: rgba(0, 0, 0, 0.7); }
+html.music-mini .mu-mini-x svg { width: 16px; height: 16px; fill: currentColor; }
+/* The "Play in a window" pill moves clear of the card. */
+html.music-mini #native-pip { bottom: calc(var(--pop-pip, 200px) + env(safe-area-inset-bottom, 0px)); right: 20px; }
+html.music-mini .mu-dock[data-corner="tr"] ~ #native-pip, html.music-mini .mu-dock[data-corner="tl"] ~ #native-pip { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+/* Phones: a smaller card at the right, just above the bottom bar, with the
+   compose button moved above it. It steps aside while you type. */
+@media (max-width: 499px) {
+  html.music-mini .mu-dock, html.music-mini .mu-dock[data-corner] {
+    --pop: 116px;
+    --pop-gap: 12px;
+    top: auto;
+    left: auto;
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(53px + 12px + env(safe-area-inset-bottom, 0px));
+    border-radius: 14px;
+  }
+  html.music-mini .center { padding-bottom: calc(200px + env(safe-area-inset-bottom)); }
+  html.music-mini .fab { bottom: calc(53px + 140px + env(safe-area-inset-bottom)); }
+  html.music-mini #native-pip, html.music-mini .mu-dock[data-corner] ~ #native-pip { right: auto; left: 12px; bottom: calc(53px + 12px + env(safe-area-inset-bottom, 0px)); }
+  html.music-mini .mu-id .mu-copy { bottom: 44px; left: 8px; right: 8px; }
+  html.music-mini .mu-id .mu-copy span { display: none; }
+  html.music-mini .mu-id b { font-size: 12px; line-height: 15px; }
+  html.music-mini .mu-transport { bottom: 8px; gap: 8px; }
+  html.music-mini .mu-transport .mu-play, html.music-mini .mu-transport [data-act="music-next"] { width: 32px; height: 32px; }
+  html.music-mini .mu-mini-x { top: 5px; right: 5px; width: 26px; height: 26px; }
+  html.music-mini:has(textarea:focus, input[type="text"]:focus, input[type="search"]:focus, [contenteditable="true"]:focus) .mu-dock { display: none; }
+}
+/* Phone held sideways: the card sits above the rail's right edge, out of
+   the way of the rail and the bottom of the timeline. */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) {
+  html.music-mini .mu-dock, html.music-mini .mu-dock[data-corner] {
+    --pop: 116px;
+    top: auto;
+    left: auto;
+    right: calc(12px + var(--safe-r, env(safe-area-inset-right, 0px)));
+    bottom: calc(12px + var(--safe-b, env(safe-area-inset-bottom, 0px)));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.music-mini .mu-id .mu-marq { animation: none; }
+  html.music-mini .mu-pop-bar b { transition: none; }
 }

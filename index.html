@@ -539,6 +539,7 @@
     <script src="about-ui.js" defer></script>
     <script src="gifts-ui.js" defer></script>
     <script src="badges.js" defer></script>
+    <script src="settings-sync.js" defer></script>
     <script src="accounts.js" defer></script>
     <script src="mention-suggest.js" defer></script>
     <script src="owner-keys.js" defer></script>
@@ -590,7 +591,7 @@
         nodes = nodes.filter(wanted);
         if (!links.length && !nodes.length) return;
         if (document.documentElement.getAttribute("data-wall") === "1") {
-          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "accounts.js"];
+          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "settings-sync.js", "accounts.js"];
           function rank(node) {
             var src = node.getAttribute("src") || "";
             var at = first.indexOf(src.replace(/^\.\//, ""));
@@ -618,10 +619,23 @@
           if (left > 0) return;
           try { window.dispatchEvent(new Event("viktorych-late")); } catch (err) { /* the shell is already up */ }
         }
+        /* Only the interface language in use downloads with the app. English
+           is the fallback and always loads; i18n.js fetches another pack if
+           the language changes later. A pack is skipped only when the saved
+           choice already rules it out. */
+        var skipPack = {};
+        try {
+          var savedLang = localStorage.getItem("superintelapp-lang");
+          var sure = localStorage.getItem("viktorychapp-lang-user-picked") === "1" || !!localStorage.getItem("viktorychapp-account-v1") || !!localStorage.getItem("viktorychapp-accounts-session-v1");
+          if (savedLang === "en" || savedLang === "ru" || savedLang === "es") {
+            if (savedLang !== "es") skipPack["i18n/es.js"] = 1;
+            if (savedLang !== "ru" && sure) skipPack["i18n/ru.js"] = 1;
+          }
+        } catch (err) { /* private mode keeps every pack */ }
         var frag = document.createDocumentFragment();
         nodes.forEach(function (node) {
           var src = node.getAttribute("src");
-          if (!src) return;
+          if (!src || skipPack[src.replace(/^\.\//, "")]) return;
           var el = document.createElement("script");
           var type = node.getAttribute("type");
           if (type) el.type = type;
