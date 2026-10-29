@@ -40,6 +40,9 @@ PBKDF2_ITERATIONS = "8000"
 # Free sign-up check: proof of work, honeypot, and a short wait.
 # Keep this "on". Tests that post straight to /v1/signup leave it unset.
 SIGNUP_GUARD = "on"
+# Per-client request cap kept in isolate memory (src/guard.js). Keep this
+# "on". Tests that send many requests from one address leave it unset.
+REQUEST_GUARD = "on"
 # One flag. "owner" hides TikTok and Shorts except for the owner account.
 # "all" shows them to everyone. Keep this in step with accounts.config.js.
 TIKTOK_AUDIENCE = "owner"
@@ -54,6 +57,13 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "DATA"
 bucket_name = "viktorych-data"
+
+# The change signal. The cron writes pulse/v1.json here only when a shared
+# document or the live list changed. This bucket is public, so clients read
+# the pulse without spending Worker requests. It holds version marks only.
+[[r2_buckets]]
+binding = "PULSE"
+bucket_name = "superintelmusic-live"
 
 # Free cron. Every minute it watches the owner's TikTok handles and dispatches
 # tiktok-record.yml the moment a live starts. GitHub's own `*/5` schedule is
