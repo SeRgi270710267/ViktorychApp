@@ -2697,7 +2697,7 @@ SI18n.addPack("ru", {
   "Sign in to see the gifts you sent and received.": "Войдите, чтобы увидеть отправленные и полученные подарки.",
   "You haven’t sent any gifts yet.": "Вы ещё не отправляли подарков.",
   "No gifts here right now.": "Сейчас здесь нет подарков.",
-  "Gift art: Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Изображения подарков: Noto Emoji от Google (Apache 2.0, анимация CC BY 4.0).",
+  "Gift art: original illustrations made for ViktorychApp, plus Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).": "Изображения подарков: оригинальные иллюстрации для ViktorychApp и Noto Emoji от Google (Apache 2.0, анимация CC BY 4.0).",
   "You’ve used today’s free gifts. Try again tomorrow.": "Бесплатные подарки на сегодня закончились. Попробуйте завтра.",
   "Not enough Viktorychs for this gift.": "Недостаточно Viktorychs для этого подарка.",
   "Jack-o’-lantern": "Тыква-фонарь",
