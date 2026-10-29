@@ -1,0 +1,52 @@
+/* Packages: X-style list, cards and a vertical timeline. */
+.pk { min-height: 100vh; color: var(--text); }
+.pk-top .page-head { display: flex; align-items: center; gap: 12px; }
+.pk-back { text-decoration: none; color: var(--text); font-size: 20px; }
+.pk-add-btn, .pk-primary { border: 0; border-radius: 999px; padding: 8px 16px; font-weight: 700; background: var(--text); color: var(--bg); cursor: pointer; }
+.pk-primary[disabled], .pk-ghost[disabled] { opacity: .5; cursor: default; }
+.pk-ghost { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 700; background: transparent; color: var(--text); cursor: pointer; text-decoration: none; font-size: 14px; }
+.pk-ghost:hover { background: var(--hover); }
+.pk-danger { color: #f4212e; border-color: rgba(244, 33, 46, .4); }
+.pk-form { display: grid; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
+.pk-form label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.pk-form input, .pk-form select, .pk-form textarea { font: inherit; font-size: 16px; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; }
+.pk-form input:focus, .pk-form select:focus, .pk-form textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.pk-form select option, .pk-form select optgroup { background: var(--bg); color: var(--text); }
+.pk-paste summary { cursor: pointer; color: var(--blue); font-size: 14px; }
+.pk-paste textarea { width: 100%; box-sizing: border-box; margin-top: 8px; }
+.pk-found { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.pk-chip { border: 1px solid var(--blue); color: var(--blue); background: transparent; border-radius: 999px; padding: 4px 10px; cursor: pointer; font-family: ui-monospace, monospace; }
+.pk-form-row { display: flex; justify-content: flex-end; gap: 8px; }
+.pk-tabs { border-bottom: 1px solid var(--line); }
+.pk-card { display: grid; gap: 4px; padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.pk-card:hover { background: var(--hover); }
+.pk-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pk-name { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-meta, .pk-last, .pk-foot, .pk-ev-meta { color: var(--muted); font-size: 14px; }
+.pk-num { font-family: ui-monospace, monospace; }
+.pk-eta { font-weight: 700; font-size: 14px; }
+.pk-muted { font-style: italic; }
+.pk-pill { flex: none; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; background: var(--hover); color: var(--text); }
+.pk-in_transit { background: rgba(29, 155, 240, .15); color: #1d9bf0; }
+.pk-out_for_delivery { background: rgba(255, 173, 31, .18); color: #e09400; }
+.pk-ready_for_pickup { background: rgba(120, 86, 255, .16); color: #7856ff; }
+.pk-delivered { background: rgba(0, 186, 124, .16); color: #00ba7c; }
+.pk-problem { background: rgba(244, 33, 46, .14); color: #f4212e; }
+.pk-empty { padding: 32px 24px; text-align: center; color: var(--muted); }
+.pk-empty h2 { color: var(--text); font-size: 24px; margin: 0 0 8px; }
+.pk-error { margin: 12px 16px; padding: 10px 12px; border-radius: 8px; background: rgba(244, 33, 46, .1); color: #f4212e; font-size: 14px; }
+.pk-note { color: var(--muted); font-size: 14px; }
+.pk-hero { display: grid; gap: 6px; padding: 16px; border-bottom: 1px solid var(--line); }
+.pk-hero .pk-pill { justify-self: start; font-size: 14px; padding: 4px 12px; }
+.pk-hero-text { font-size: 17px; font-weight: 700; }
+.pk-map { color: var(--blue); font-size: 14px; text-decoration: none; }
+.pk-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.pk-timeline { list-style: none; margin: 0; padding: 12px 16px; }
+.pk-ev { position: relative; display: flex; gap: 12px; padding: 0 0 18px; }
+.pk-ev:not(:last-child)::before { content: ""; position: absolute; left: 5px; top: 14px; bottom: 0; width: 2px; background: var(--line); }
+.pk-dot { flex: none; width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; background: var(--line); }
+.pk-ev.on .pk-dot { background: var(--blue); }
+.pk-ev-text { font-size: 15px; }
+.pk-ev.on .pk-ev-text { font-weight: 700; }
+.pk-ev-meta a { color: var(--blue); text-decoration: none; }
+.pk-foot { padding: 0 16px 24px; }
