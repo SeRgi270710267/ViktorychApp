@@ -6332,7 +6332,7 @@ img, video { max-width: 100%; }
 .usage-panel .usage-top { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
 .usage-panel .usage-top b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .usage-panel .usage-bar { height: 6px; border-radius: 3px; background: var(--line, rgba(127,127,127,.25)); overflow: hidden; margin-top: 4px; }
-.usage-panel .usage-bar i { display: block; height: 100%; background: var(--blue); }
+.usage-panel .usage-bar i { display: block; height: 100%; background: var(--accent, #1d9bf0); }
 .usage-panel .usage-row.warm .usage-bar i { background: #ffad1f; }
 .usage-panel .usage-row.hot .usage-bar i { background: #f4212e; }
 .usage-panel .usage-week { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -6381,7 +6381,7 @@ img, video { max-width: 100%; }
   background: transparent;
   font-size: 16px;
 }
-.logo-input:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: transparent; }
+.logo-input:focus { outline: 2px solid var(--accent, #1d9bf0); outline-offset: 1px; border-color: transparent; }
 .logo-count { font-variant-numeric: tabular-nums; }
 .logo-preview {
   display: flex;
