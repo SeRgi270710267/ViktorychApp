@@ -1169,9 +1169,6 @@ SI18n.addPack("ru", {
   "You don’t have any pending friend requests.": "У вас нет входящих запросов в друзья.",
   "No friends found": "Друзья не найдены",
   "Couldn’t find any friends matching your search.": "По вашему запросу ничего не найдено.",
-  "Federation (Fediverse & Nostr)": "Федерация (Fediverse и Nostr)",
-  "Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.": "Разрешить Mastodon, Fediverse и Nostr находить и подписываться на ваш внутренний аккаунт. По умолчанию выключено.",
-  "Fediverse (ActivityPub)": "Федайверс (ActivityPub)",
   "Nostr (NIP-05)": "Ностр (NIP-05)",
   "Soccer Scores": "Футбольные счета",
   "Latest Result": "Последний результат",
@@ -2501,6 +2498,7 @@ SI18n.addPack("ru", {
   "Paste a link or @handle": "Вставьте ссылку или @имя",
   "Select all": "Выбрать все",
   "Try another search or filter.": "Попробуйте другой запрос или фильтр.",
+  "Let Nostr apps find your account by its NIP-05 name. Default is off.": "Разрешить приложениям Nostr находить ваш аккаунт по имени NIP-05. По умолчанию выключено.",
   "Search Settings": "Поиск по настройкам",
   "Ask in your own words, like “make the text bigger”.": "Спросите своими словами, например «сделать текст крупнее».",
   "Suggested by the on-device assistant": "Подсказка помощника на устройстве"

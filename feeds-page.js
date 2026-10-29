@@ -139,7 +139,7 @@
   function platformLabel(name) {
     const labels = {
       x: "X", threads: "Threads", instagram: "Instagram", youtube: "YouTube", tiktok: "TikTok",
-      vk: "VK", telegram: "Telegram", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Mastodon", rss: "RSS"
+      vk: "VK", telegram: "Telegram", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", rss: "RSS"
     };
     const key = labels[name] || name || "RSS";
     return tr(key);

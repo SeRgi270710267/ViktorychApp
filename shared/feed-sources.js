@@ -90,9 +90,10 @@ function detectInput(raw) {
   if (/facebook\.com|fb\.com|fb\.watch/i.test(text)) return fail("unsupported_facebook");
   if (/discord\.(com|gg)|discordapp\.com/i.test(text)) return fail("unsupported_discord");
 
-  const prefixed = text.match(/^(x|threads|instagram|youtube|tiktok|vk|telegram|reddit|bluesky|bsky|mastodon|rss):(\S+)$/i);
+  const prefixed = text.match(/^(x|threads|instagram|youtube|tiktok|vk|telegram|reddit|bluesky|bsky|mastodon|fediverse|fedi|rss):(\S+)$/i);
   if (prefixed) {
-    const platform = prefixed[1].toLowerCase() === "bsky" ? "bluesky" : prefixed[1].toLowerCase();
+    const named = prefixed[1].toLowerCase();
+    const platform = named === "bsky" ? "bluesky" : (named === "fediverse" || named === "fedi") ? "mastodon" : named;
     return detectBare(platform, prefixed[2]);
   }
 
@@ -101,6 +102,8 @@ function detectInput(raw) {
   if (/^[A-Za-z0-9._-]{1,80}\.bsky\.social$/i.test(text.replace(/^@/, ""))) {
     return blueskySpec(text.replace(/^@/, ""));
   }
+  const fedi = fediAddress(text);
+  if (fedi) return mastodonSpec(fedi.host, fedi.user);
   if (/^@?[A-Za-z][A-Za-z0-9_]{16,32}$/.test(text)) {
     return telegramSpec(text.replace(/^@/, ""));
   }
@@ -134,7 +137,10 @@ function detectBare(platform, rest) {
   if (platform === "telegram") return telegramSpec(text.replace(/^@/, ""));
   if (platform === "reddit") return redditBare(text);
   if (platform === "bluesky") return blueskySpec(text.replace(/^@/, ""));
-  if (platform === "mastodon") return fail("bad_input");
+  if (platform === "mastodon") {
+    const fediBare = fediAddress(text);
+    return fediBare ? mastodonSpec(fediBare.host, fediBare.user) : fail("bad_input");
+  }
   if (platform === "rss") return fail("bad_input");
   return fail("bad_input");
 }
@@ -192,9 +198,9 @@ function detectUrl(text) {
     const actor = (path.match(/^\/profile\/([A-Za-z0-9._:-]{3,80})\/?$/) || [])[1];
     return actor ? blueskySpec(decodeURIComponent(actor)) : fail("bad_input");
   }
-  const mastodon = path.match(/^\/@([A-Za-z0-9_]{1,64})\/?$/);
-  if (mastodon && url.protocol === "https:") {
-    return mastodonSpec(url.hostname.toLowerCase(), mastodon[1]);
+  const fediUrl = fediProfilePath(path);
+  if (fediUrl && url.protocol === "https:") {
+    return mastodonSpec(fediUrl.host || host, fediUrl.user, fediUrl.host ? "" : url.origin + path.replace(/\/$/, ""));
   }
   if (url.protocol !== "https:") return fail("bad_feed");
   return rssSpec(url);
@@ -256,9 +262,30 @@ function blueskySpec(actor) {
   return okSpec({ platform: "bluesky", handle: handle, url: "https://bsky.app/profile/" + handle, host: "public.api.bsky.app" });
 }
 
-function mastodonSpec(host, user) {
-  if (!publicHostname(host) || !/^[A-Za-z0-9_]{1,64}$/.test(user)) return fail("bad_input");
-  return okSpec({ platform: "mastodon", handle: user, host: host, url: "https://" + host + "/@" + user });
+/* Fediverse profiles are followed as feeds only: Mastodon, Pixelfed,
+   Misskey, Pleroma, Akkoma, GoToSocial, Friendica, PeerTube, Lemmy and
+   anything else with a public API or RSS/Atom. Nothing is posted back. */
+const FEDI_USER = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
+const FEDI_HOST = /^(?=.{4,253}$)[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,63}$/;
+
+function fediAddress(raw) {
+  const text = String(raw || "").trim().replace(/^acct:/i, "");
+  const m = text.match(/^@?([^@\s/]+)@([^@\s/]+)$/);
+  if (!m || !FEDI_USER.test(m[1]) || !FEDI_HOST.test(m[2])) return null;
+  return { user: m[1], host: m[2].toLowerCase() };
+}
+
+function fediProfilePath(path) {
+  const remote = path.match(/^\/@([^@/]+)@([^@/]+)\/?$/);
+  if (remote && FEDI_USER.test(remote[1]) && FEDI_HOST.test(remote[2])) return { user: remote[1], host: remote[2].toLowerCase() };
+  const local = path.match(/^\/(?:@|users\/|u\/|a\/|c\/|profile\/)([^/@]+)\/?$/);
+  if (local && FEDI_USER.test(local[1])) return { user: local[1], host: "" };
+  return null;
+}
+
+function mastodonSpec(host, user, profileUrl) {
+  if (!publicHostname(host) || !FEDI_USER.test(String(user || ""))) return fail("bad_input");
+  return okSpec({ platform: "mastodon", handle: user, host: host, url: profileUrl || ("https://" + host + "/@" + user) });
 }
 
 function rssSpec(url) {
@@ -350,12 +377,19 @@ function sourcePlan(spec) {
   }
   if (platform === "mastodon") {
     return [
-      { kind: "mastodon-lookup", url: "https://" + spec.host + "/api/v1/accounts/lookup?acct=" + enc(handle) },
-      { kind: "rss", url: "https://" + spec.host + "/@" + enc(handle) + ".rss" }
-    ];
+      { kind: "mastodon-lookup", url: "https://" + spec.host + "/api/v1/accounts/lookup?acct=" + enc(handle) }
+    ].concat(fediFeeds(spec.host, handle).map((url) => ({ kind: "rss", url: url })));
   }
   if (platform === "rss") return [{ kind: "rss", url: spec.url }];
   return [];
+}
+
+/* Public feeds by software, most common first: Mastodon, Misskey and
+   GoToSocial; Pixelfed; Pleroma and Akkoma; PeerTube. */
+function fediFeeds(host, handle) {
+  const h = "https://" + host;
+  const u = enc(handle);
+  return [h + "/@" + u + ".rss", h + "/users/" + u + ".atom", h + "/users/" + u + "/feed.atom", h + "/feeds/videos.xml?accountName=" + u];
 }
 
 function backoffMs(attempt, status, retryAfterSeconds) {
@@ -499,6 +533,8 @@ export {
   publicHostname,
   accountId,
   sourcePlan,
+  fediAddress,
+  fediFeeds,
   backoffMs,
   healthStatus,
   sortRows,

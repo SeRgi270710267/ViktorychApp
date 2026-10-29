@@ -216,8 +216,6 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?)", o, b, now);
   await sql("INSERT INTO account_federation (public_id, enabled_ap, enabled_nostr, nostr_pubkey, ap_public_key_pem, ap_private_key_pem, created_at, updated_at) VALUES (?, 1, 0, '', 'pub', 'priv', ?, ?)", a, now, now);
   await sql("INSERT INTO account_federation (public_id, enabled_ap, enabled_nostr, nostr_pubkey, ap_public_key_pem, ap_private_key_pem, created_at, updated_at) VALUES (?, 0, 0, '', '', '', ?, ?)", b, now, now);
-  await sql("INSERT INTO ap_followers (actor_handle, follower_actor_url, follower_inbox_url, created_at) VALUES (?, 'https://ada.example/u', 'https://ada.example/in', ?)", adaRow.handle, now);
-  await sql("INSERT INTO ap_followers (actor_handle, follower_actor_url, follower_inbox_url, created_at) VALUES (?, 'https://bee.example/u', 'https://bee.example/in', ?)", "bee_wipe", now);
   await sql("INSERT INTO account_identities (public_id, platform, handle, display_name, avatar, proof_url, verification_type, verified, created_at) VALUES (?, 'x', 'ada', '', '', '', 'challenge', 1, ?)", a, now);
   await sql("INSERT INTO account_identities (public_id, platform, handle, display_name, avatar, proof_url, verification_type, verified, created_at) VALUES (?, 'x', 'bee', '', '', '', 'challenge', 1, ?)", b, now);
   await sql("INSERT INTO identity_challenges (challenge_id, public_id, platform, handle, code, created_at, expires_at) VALUES ('ch-ada', ?, 'x', 'ada', 'code', ?, ?)", a, now, now + 1000);
@@ -364,7 +362,6 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_pace WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM rate_limits WHERE bucket = ?", "follow:" + b), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files"), 1);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM ap_followers WHERE actor_handle = 'bee_wipe'"), 1);
   const beeSync = await one("SELECT payload FROM sync_state WHERE public_id = ?", b);
   assert.equal(JSON.parse(beeSync.payload).bookmarks.keep, 1);
 
