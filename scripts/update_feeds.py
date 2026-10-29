@@ -407,6 +407,27 @@ def save_http_cache() -> None:
         print(f"[cache] {exc}", file=sys.stderr)
 
 
+def load_mirrors() -> dict:
+    """Sources that only repeat another source of the same person. Private R2."""
+    try:
+        from tiktok_sync import r2_get
+
+        blob = r2_get("sync/mirrors.json")
+        doc = json.loads(blob.decode("utf-8")) if blob else {}
+        return doc if isinstance(doc, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_mirrors(doc: dict) -> None:
+    try:
+        from tiktok_sync import r2_put
+
+        r2_put("sync/mirrors.json", json.dumps(doc, sort_keys=True).encode("utf-8"))
+    except Exception as exc:
+        print(f"[mirror] {exc}", file=sys.stderr)
+
+
 def read_source(url: str) -> str:
     if url.startswith("file://"):
         return Path(url[7:]).read_text(encoding="utf-8")
@@ -1140,10 +1161,24 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     print(f"[keep] {row.get('id')}: channel id: {exc}", file=sys.stderr)
         load_http_cache()
         feed_deadline()
+    mirrors = {}
+    mirror_skip = set()
+    if not use_fixtures:
+        mirrors = load_mirrors()
+        now_ts = time.time()
+        try:
+            from people import mirror_due
+
+            mirror_skip = {row["id"] for row in feed_rows if isinstance(row, dict) and row.get("id") and not mirror_due(mirrors, row["id"], now_ts)}
+        except Exception:
+            mirror_skip = set()
+        if mirror_skip:
+            print(f"[mirror] {len(mirror_skip)} mirror sources wait for their next slot")
     prefetched = {}
     if not use_fixtures:
-        prefetched.update(prefetch_x(feed_rows, config))
-        prefetched.update(prefetch_http(feed_rows, config))
+        live_rows = [row for row in feed_rows if not (isinstance(row, dict) and row.get("id") in mirror_skip)]
+        prefetched.update(prefetch_x(live_rows, config))
+        prefetched.update(prefetch_http(live_rows, config))
 
     def note_private(feed: dict) -> None:
         nonlocal private_changed
@@ -1161,6 +1196,10 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             record_source(health, feed["id"], False, stamp, "refresh budget spent")
             note_private(feed)
             collected.extend(old_by_feed.get(feed["id"], []))
+            continue
+        if feed["id"] in mirror_skip and old_by_feed.get(feed["id"]):
+            collected.extend(old_by_feed.get(feed["id"], []))
+            note_private(feed)
             continue
         if not use_fixtures and feed.get("origin") == "repost":
             time.sleep(pace)
@@ -1491,6 +1530,18 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             print(f"[people] {stamped} cross-posts")
     except Exception as exc:
         print(f"[people] cross-posts: {exc}", file=sys.stderr)
+    try:
+        from people import auto_people, dedupe_cross_posts, update_mirrors
+
+        linked, _weak, _counts = auto_people(profiles, config.get("people") or [], set(config.get("peopleSplit") or []))
+        posts, cross = dedupe_cross_posts(posts, linked)
+        if cross["dropped"]:
+            print(f"[people] {cross['dropped']} cross-post copies folded into {cross['groups']} posts")
+        if not use_fixtures:
+            read_ids = {row["id"] for row in feed_rows if isinstance(row, dict) and row.get("id") and row["id"] not in mirror_skip}
+            save_mirrors(update_mirrors(mirrors, cross["mirrors"], read_ids, time.time()))
+    except Exception as exc:
+        print(f"[people] cross-post fold: {exc}", file=sys.stderr)
     if download:
         print("[media] --download-media no longer copies Meta CDN files; URLs stay hotlinked", file=sys.stderr)
     stamped = stamp_media_dimensions(posts)
