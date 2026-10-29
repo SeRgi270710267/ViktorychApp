@@ -8,7 +8,7 @@
   }
   function trn(key, n, vars) {
     var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
-    return fn ? fn(key, n, vars) : String(n);
+    return fn ? fn(key, n, vars) : String(n) + " " + key; // plain English when no language pack is loaded
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
@@ -1151,12 +1151,15 @@
 
   // App-native servers (servers-ui.js) sit above the mirrored Discord list.
   function nativeServersHtml() {
-    const mod = window.ViktorychServers;
+    // The list also renders outside a page (node checks), where there is no window.
+    const host = typeof window !== "undefined" ? window : null;
+    if (!host) return "";
+    const mod = host.ViktorychServers;
     if (mod && mod.listHtml) {
       try { return mod.listHtml(); } catch (err) { return ""; }
     }
-    if (window.ViktorychLazy && window.ViktorychLazy.ensure) {
-      try { window.ViktorychLazy.ensure("servers"); } catch (err) { /* offline */ }
+    if (host.ViktorychLazy && host.ViktorychLazy.ensure) {
+      try { host.ViktorychLazy.ensure("servers"); } catch (err) { /* offline */ }
     }
     return "";
   }

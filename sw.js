@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a138-__SW_VERSION__";
+const VERSION = "viktorych-a139-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T18:50:00Z-personalize
+// cache-bust: 2026-10-29T19:06:49Z-media-fallback
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -89,6 +89,8 @@ const SHELL_FILES = [
   "./friend-p2p.js",
   "./people.js",
   "./people.css",
+  "./pymk.js",
+  "./pymk.css",
   "./tv.js",
   "./tv.css",
   "./shared/tv-boot.js",
@@ -226,7 +228,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a138-";
+  const prefix = "viktorych-a139-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -325,6 +327,7 @@ self.addEventListener("activate", (event) => {
     if (activateBeat) { clearInterval(activateBeat); activateBeat = null; }
     // Move what older versions saved into the stable caches in the background.
     adoptOldCaches().catch(() => {});
+    purgeOpaquePictures().catch(() => {});
     try { await self.clients.claim(); } catch (err) { /* the page reloads once the worker is active */ }
     try {
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
@@ -929,10 +932,11 @@ async function fetchMediaOrigin(request, headers, authed) {
     if (isRuVisitor && !authed) {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 2000);
-      try { return await fetch(request, { signal: ctrl.signal }); }
+      try { return corsPictureHost(request) ? await fetchPicture(request, ctrl.signal) : await fetch(request, { signal: ctrl.signal }); }
       finally { clearTimeout(tid); }
     }
-    if (authed) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    if (authed) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow", referrerPolicy: "no-referrer" });
+    if (corsPictureHost(request)) return fetchPicture(request);
     return fetch(request);
   };
   let attempt = 0;
@@ -969,13 +973,62 @@ function teachOrigin(request, response) {
   }).catch(() => {});
 }
 
+/* X's picture host answers 403 to any request that carries a referrer from
+   another site, and an opaque (no-cors) answer hides that status, so a 403
+   used to be stored as if it were the picture. Pictures from that host are
+   asked for in CORS mode without a referrer: the status is visible and only
+   real pictures are stored. Original bytes, never re-encoded. */
+function corsPictureHost(request) {
+  try {
+    const url = new URL(request.url);
+    return url.hostname === "pbs.twimg.com" && request.method === "GET" && !request.headers.get("Range");
+  } catch (err) {
+    return false;
+  }
+}
+
+async function fetchPicture(request, signal) {
+  const init = { method: "GET", mode: "cors", credentials: "omit", referrerPolicy: "no-referrer", redirect: "follow" };
+  if (signal) init.signal = signal;
+  try {
+    return await fetch(request.url, init);
+  } catch (err) {
+    if (signal && signal.aborted) throw err;
+    return fetch(request);
+  }
+}
+
+async function dropMediaCopy(url) {
+  const cache = await caches.open(MEDIA);
+  await cache.delete(new Request(url, { method: "GET" }));
+  const opfs = self.ViktorychOpfs;
+  if (opfs && opfs.supported && opfs.supported() && opfs.remove) {
+    try { await opfs.remove(url); } catch (err) { /* Cache Storage was the usual home */ }
+  }
+}
+
+/* Opaque copies from X's picture host may be stored 403s from older
+   versions. They are dropped once on activate; real pictures come back on
+   the next view. */
+async function purgeOpaquePictures() {
+  const cache = await caches.open(MEDIA);
+  const keys = await cache.keys();
+  for (const req of keys) {
+    let host = "";
+    try { host = new URL(req.url).hostname; } catch (err) { continue; }
+    if (host !== "pbs.twimg.com") continue;
+    const res = await cache.match(req);
+    if (!res || res.type === "opaque" || !res.ok) await cache.delete(req);
+  }
+}
+
 async function serveMedia(request, extraHeaders) {
   const parsed = new URL(request.url);
   const headers = new Headers(extraHeaders || undefined);
   const rangeHeader = request.headers.get("Range");
   if (!self.ViktorychStorage.shouldCacheMedia(parsed)) {
     if (rangeHeader) headers.set("Range", rangeHeader);
-    if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow", referrerPolicy: "no-referrer" });
     return fetch(request);
   }
   const opfs = self.ViktorychOpfs;
@@ -1048,7 +1101,7 @@ async function serveMedia(request, extraHeaders) {
     const authed = headers.has("Authorization");
     if (authed && rangeHeader) headers.set("Range", rangeHeader);
     const res = await fetchMediaOrigin(request, headers, authed);
-    const store = res && (res.type === "opaque" || self.ViktorychStorage.revalidateAction(res.status) === "store");
+    const store = res && ((res.type === "opaque" && !corsPictureHost(request)) || self.ViktorychStorage.revalidateAction(res.status) === "store");
     if (store && !rangeHeader) {
       let inOpfs = false;
       const length = self.ViktorychStorage.byteLengthOf(res);
@@ -1143,7 +1196,7 @@ async function cacheBookmark(urls) {
     try {
       // A readable copy can also go to friends' devices; opaque is the fallback.
       const readable = url.startsWith(self.location.origin + "/") || /^https:\/\/(?:[a-z0-9-]+\.)*(?:twimg\.com|r2\.dev|workers\.dev)\//i.test(url);
-      const res = readable ? await fetch(url, { mode: "cors", credentials: "omit" }).catch(() => fetch(url, { mode: "no-cors" })) : await fetch(url, { mode: "no-cors" });
+      const res = readable ? await fetch(url, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => fetch(url, { mode: "no-cors", referrerPolicy: "no-referrer" })) : await fetch(url, { mode: "no-cors", referrerPolicy: "no-referrer" });
       if (res && (res.ok || res.type === "opaque")) {
         await cache.put(url, res.clone());
         await rememberMedia(url, Number(res.headers.get("content-length")) || 200 * 1024);
@@ -1641,6 +1694,13 @@ self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type === "game-busy") {
     gameBusyUntil = data.on ? Date.now() + 3 * 60 * 1000 : 0;
+    return;
+  }
+  if (data.type === "media-drop" && typeof data.url === "string" && /^https:\/\//i.test(data.url)) {
+    // A picture that did not load on the page: forget any stored copy so a
+    // cached failure (an opaque error is indistinguishable from a picture)
+    // never sticks to this device.
+    event.waitUntil(dropMediaCopy(data.url).catch(() => {}));
     return;
   }
   if (data.type === "drop-profile-media") {
