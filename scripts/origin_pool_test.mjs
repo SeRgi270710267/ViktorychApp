@@ -1,4 +1,4 @@
-// Origin pool: reads leave the main Worker when it reports it is near its
+// Origin pool (balancing off): reads leave the main Worker when it reports it is near its
 // free daily quota (X-Quota-Pct); writes stay on it. Run: node scripts/origin_pool_test.mjs
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -21,7 +21,7 @@ function fetchStub(url, init) {
   return Promise.resolve(new Response("{}", { status: 200, headers }));
 }
 const win = {
-  VIKTORYCH_ACCOUNTS: { api: MAIN, backupApi: BACKUP, gate: true },
+  VIKTORYCH_ACCOUNTS: { api: MAIN, backupApi: BACKUP, gate: true, poolBalance: false },
   localStorage: { getItem: (k) => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
   sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
   location: { href: "https://site.test/", origin: "https://site.test", pathname: "/", hash: "", search: "" },

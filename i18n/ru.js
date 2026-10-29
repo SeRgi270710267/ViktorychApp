@@ -4101,6 +4101,7 @@ SI18n.addPack("ru", {
   "ReGone": "ReGone",
   "Cloudflare Worker": "Воркер Cloudflare",
   "Render backup": "Резерв на Render",
+  "Resting until {date}": "Отдыхает до {date}",
   "Not answering, reads skip it": "Не отвечает, чтение идёт в обход",
   "Used up, reads skip it": "Исчерпан, чтение идёт в обход",
   "Usage not available right now": "Данные об использовании сейчас недоступны",

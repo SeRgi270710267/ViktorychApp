@@ -4101,6 +4101,7 @@ SI18n.addPack("es", {
   "ReGone": "ReGone",
   "Cloudflare Worker": "Worker de Cloudflare",
   "Render backup": "Respaldo en Render",
+  "Resting until {date}": "En pausa hasta el {date}",
   "Not answering, reads skip it": "No responde; las lecturas lo omiten",
   "Used up, reads skip it": "Agotado; las lecturas lo omiten",
   "Usage not available right now": "Uso no disponible ahora",

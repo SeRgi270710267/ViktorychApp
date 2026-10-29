@@ -44,6 +44,8 @@ import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
 import { handleYtm } from "./ytmusic.js";
 import { logError } from "./log.js";
+import { tiktokPublic, ownerOnlyItem, stripOwnerOnly } from "./owner-only.js";
+import { handleSeal } from "./data-seal.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
 import { warmRender } from "./render-warm.js";
@@ -1510,40 +1512,6 @@ function dataKey(pathname) {
   if (!key || key.indexOf("..") >= 0 || key.charAt(0) === "/" || key.indexOf("\\") >= 0) return "";
   if (key === "archive/ia-state.json" || key === "archive/ia-manifest.json") return "";
   return DATA_KEY.test(key) ? key : "";
-}
-
-function tiktokPublic(env) {
-  return String((env && env.TIKTOK_AUDIENCE) || "owner") === "all";
-}
-
-function ownerOnlyItem(item, env) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) return false;
-  if (item.ownerOnly === true) return true;
-  const platform = String(item.platform || "").toLowerCase();
-  if (platform === "tiktok" && !tiktokPublic(env)) return true;
-  const kind = String(item.kind || item.type || "").toLowerCase();
-  if (kind === "short" || kind === "shorts") return true;
-  if (item.short === true || item.isShort === true) return true;
-  const blob = [item.url, item.link, item.watch, item.external, item.canonical].filter(Boolean).join(" ");
-  return /\/shorts\//i.test(blob);
-}
-
-function stripOwnerOnly(value, env) {
-  if (Array.isArray(value)) {
-    const out = [];
-    for (let i = 0; i < value.length; i++) {
-      const item = value[i];
-      if (item && typeof item === "object" && !Array.isArray(item) && ownerOnlyItem(item, env)) continue;
-      out.push(stripOwnerOnly(item, env));
-    }
-    return out;
-  }
-  if (value && typeof value === "object") {
-    const out = {};
-    Object.keys(value).forEach((key) => { out[key] = stripOwnerOnly(value[key], env); });
-    return out;
-  }
-  return value;
 }
 
 function etagMatches(header, etag) {
@@ -5430,6 +5398,7 @@ async function route(request, env, ctx) {
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   const viewMedia = path.match(/^\/v1\/media\/view\/([a-f0-9]{32})$/);
   if (viewMedia && request.method === "GET") return handleMediaView(request, env, viewMedia[1]);
+  if (path === "/v1/seal") return handleSeal(request, env, { json, sessionAccount });
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path, ctx);
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
