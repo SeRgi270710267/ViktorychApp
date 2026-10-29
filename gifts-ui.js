@@ -12,6 +12,7 @@
   var started = false;
   var viewedHandle = "";
 
+  function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
     var fn = root.t || (typeof window !== "undefined" && window.t);
     var text = fn ? fn(key, vars) : key;
@@ -131,7 +132,7 @@
   function pointsPage() {
     var earn = rules.map(function (rule) {
       var extra = rule.streak ? " · " + tr("streak bonus up to {n}", { n: String(rule.streak) }) : "";
-      return "<li><b>" + esc(reasonLabel(rule.id)) + "</b><span>" + esc(tr("{n} Viktorychs", { n: String(rule.points) })) + esc(extra) + "</span></li>";
+      return "<li><b>" + esc(reasonLabel(rule.id)) + "</b><span>" + esc(tn("viktorychs", rule.points, { count: String(rule.points) })) + esc(extra) + "</span></li>";
     }).join("");
     var rows = history.map(function (item) {
       var sign = item.delta > 0 ? "+" : "";
@@ -244,7 +245,7 @@
   function priceLabel(item) {
     if (!item) return "";
     if (Number(item.price) === 0) return '<span class="vkg-price is-free">' + esc(tr("Free")) + "</span>";
-    return '<span class="vkg-price">' + esc(tr("{n} Viktorychs", { n: String(item.price) })) + "</span>";
+    return '<span class="vkg-price">' + esc(tn("viktorychs", item.price, { count: String(item.price) })) + "</span>";
   }
 
   function hueStyle(item) {
@@ -285,7 +286,7 @@
 
   function balanceLine() {
     if (balance == null) return "";
-    return '<a class="vkg-balance" href="#/points">' + esc(tr("You have {n} Viktorychs", { n: String(balance) })) + "</a>";
+    return '<a class="vkg-balance" href="#/points">' + esc(tn("viktorychBalance", balance, { count: String(balance) })) + "</a>";
   }
 
   function searchResults() {
@@ -306,7 +307,7 @@
     var person = sent ? item.recipient : item.sender;
     var who = person ? (person.name || (person.handle ? "@" + person.handle : "")) : tr("Anonymous gift");
     var line = sent ? tr("To {name}", { name: who }) : tr("From {name}", { name: who });
-    var when = item.at ? new Date(item.at).toLocaleDateString() : "";
+    var when = item.at ? new Date(item.at).toLocaleDateString((window.SI18n ? window.SI18n.locale() : undefined)) : "";
     return '<div class="vkg-hrow"><span class="vkg-hart">' + artHtml(gift, false) + '</span><div class="vkg-htext"><b>' + esc(giftLabel(gift)) + "</b><span>" + esc(line) + (when ? " · " + esc(when) : "") + "</span>" + (item.message ? "<p>" + esc(item.message) + "</p>" : "") + "</div></div>";
   }
 
