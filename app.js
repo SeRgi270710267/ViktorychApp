@@ -13819,6 +13819,7 @@ const here = parseRoute();
           ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
         </div>
         ${peerMediaSettingsHtml()}
+        ${window.ViktorychFriendP2P ? window.ViktorychFriendP2P.settingsHtml() : ""}
       </div>${ownerFeaturesSection()}`;
     }
     if (section === "notifications" && sub === "discord") return discordAlertsView();

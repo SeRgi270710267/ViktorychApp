@@ -263,7 +263,7 @@ function onSocketMessage(event) {
   try { msg = JSON.parse(String(event.data || "")); }
   catch (err) { return; }
   if (!msg) return;
-  if (msg.op === "event" && (msg.topic === "notifications" || msg.topic === "sync")) {
+  if (msg.op === "event" && (msg.topic === "notifications" || msg.topic === "sync" || msg.topic === "p2p")) {
     notifyChannel(msg);
     return;
   }
@@ -298,7 +298,7 @@ function connect() {
     ws.addEventListener("open", function () {
       attempt = 0;
       try {
-        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync", "posts"] }));
+        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync", "posts", "p2p"] }));
         ws.send(JSON.stringify({ op: "watch", topic: "presence", ids: currentIds() }));
       } catch (err) { /* close reconnects */ }
       clearInterval(pollTimer);
@@ -651,6 +651,7 @@ function onClick(event) {
     railTo = railTo === id ? "" : id;
     railNote = "";
     paintRail();
+    if (railTo && window.ViktorychFriendP2P && api.stateOf(railTo) && api.stateOf(railTo) !== "offline") window.ViktorychFriendP2P.connect(railTo);
     const box = document.querySelector("[data-rail-text]");
     if (box) box.focus();
     return;
@@ -820,7 +821,7 @@ function activeFriends() {
 function railRow(person) {
   const photo = wrap(person.publicId, friendPhoto(person));
   const compose = railTo === person.publicId
-    ? '<form class="friends-rail-compose"><textarea data-rail-text maxlength="500" placeholder="' + esc(tr("Send a message…")) + '" aria-label="' + esc(tr("Send a message…")) + '"></textarea><button type="submit" data-presence="rail-send" data-id="' + esc(person.publicId) + '">' + esc(tr("Message")) + "</button></form>"
+    ? railThread(person.publicId) + '<form class="friends-rail-compose"><textarea data-rail-text maxlength="500" placeholder="' + esc(tr("Send a message…")) + '" aria-label="' + esc(tr("Send a message…")) + '"></textarea><button type="submit" data-presence="rail-send" data-id="' + esc(person.publicId) + '">' + esc(tr("Message")) + "</button></form>"
     : "";
   return '<div class="friends-rail-row"><a class="friends-rail-main" href="' + esc(friendHref(person)) + '">' + photo + friendEmoji(person) + '<span class="friends-rail-copy"><b>' + esc(person.name || person.handle) + '</b><span data-pid-line="' + esc(person.publicId) + '">' + esc(phrase(person)) + "</span></span></a><button type=\"button\" class=\"friends-rail-msg\" data-presence=\"rail-msg\" data-id=\"" + esc(person.publicId) + "\" aria-label=\"" + esc(tr("Message")) + "\">" + esc(tr("Message")) + "</button></div>" + compose;
 }
@@ -848,16 +849,29 @@ function railHtml() {
 
 function sendRailMessage(id, text) {
   railNote = "";
-  return call("/v1/messages", { method: "POST", body: { id: id, text: text } }).then(function (body) {
-    if (!body || body.status !== 200) {
+  const p2p = window.ViktorychFriendP2P;
+  const sent = p2p ? p2p.send(id, text).then(function (res) { return res.via; })
+    : call("/v1/messages", { method: "POST", body: { id: id, text: text } }).then(function (body) { return body && body.status === 200 ? "server" : "refused"; });
+  return sent.then(function (via) {
+    if (via !== "p2p" && via !== "server" && via !== "outbox") {
       railNote = tr("Couldn’t send that message.");
       paintRail();
       return;
     }
-    railTo = "";
-    railNote = tr("Message sent");
+    railNote = via === "outbox" ? tr("You’re offline. It will send when you’re back online.") : tr("Message sent");
     paintRail();
+    const box = document.querySelector(".friends-rail-compose [data-rail-text]");
+    if (box) box.focus();
   });
+}
+
+function railThread(id) {
+  const p2p = window.ViktorychFriendP2P;
+  const list = p2p && p2p.thread ? p2p.thread(id).slice(-4) : [];
+  if (!list.length) return "";
+  return '<div class="friends-rail-thread">' + list.map(function (row) {
+    return '<p class="friends-rail-line' + (row.mine ? " mine" : "") + '">' + esc(row.text) + "</p>";
+  }).join("") + "</div>";
 }
 
 function stripHtml() {
@@ -961,10 +975,18 @@ function boot() {
       paintOnline();
       return;
     }
+    const draft = event.target && event.target.closest && event.target.closest("[data-rail-text]");
+    if (draft && railTo && window.ViktorychFriendP2P) {
+      window.ViktorychFriendP2P.typing(railTo);
+      return;
+    }
     const rail = event.target && event.target.closest && event.target.closest("[data-rail-search]");
     if (!rail) return;
     railQuery = rail.value || "";
     paintRail();
+  });
+  window.addEventListener("viktorych-friend-message", function (event) {
+    if (event.detail && event.detail.from === railTo) paintRail();
   });
   window.addEventListener("resize", placeSheet);
   document.addEventListener("keydown", function (event) {
@@ -1013,7 +1035,21 @@ const api = {
   pageHtml: pageHtml,
   railHtml: railHtml,
   onlineCount: onlineCount,
-  reloadFriends: function () { return loadFriends(true); }
+  reloadFriends: function () { return loadFriends(true); },
+  seen: function (id, state) {
+    if (!isAccountId(id) || id === selfId()) return;
+    const prev = cached(id) || {};
+    remember(Object.assign({}, prev, { id: id, state: state || "online", lastSeen: Date.now(), exact: true }));
+    friends.forEach(function (person) { if (person.publicId === id) person.state = state || "online"; });
+    paint();
+  },
+  stateOf: function (id) {
+    const view = cached(id);
+    if (view && view.state) return view.state;
+    const person = friends.find(function (row) { return row.publicId === id; });
+    return person ? person.state || "" : "";
+  },
+  myState: function () { return (mine && mine.preference) || "online"; }
 };
 window.ViktorychPresence = api;
 
