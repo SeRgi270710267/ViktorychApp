@@ -3,10 +3,15 @@
    Which channels: the Worker secret VK_CHANNELS, one per line or comma,
    each a numeric community id ("123", "-123", "club123", "public123") or a
    vk.com link or short name, optionally "Label=ref". Nothing about them is
-   in the repo. Reading: with the Worker secret VK_TOKEN (a VK service or
-   community key) the official wall.get is used; without it, or when the API
-   fails, VK's public community widget page is parsed instead (numeric ids
-   only). The result is stored in R2 in the same shape the Discord poller
+   in the repo; a VK Messenger channel link (vk.com/im/channels/-123) works
+   too. Reading, with the Worker secret VK_TOKEN:
+   - a community key (Manage -> API usage, "messages" right) reads the
+     community's Messenger channel with messages.getConversations and
+     messages.getHistory. Channel posts never reach the wall, so this is the
+     only way to read them;
+   - otherwise wall.get (service or community key).
+   Without a token, or when both come back empty, VK's public community
+   widget page is parsed instead (numeric ids only, open communities). The result is stored in R2 in the same shape the Discord poller
    writes, so discord-ui.js shows VK in the same list, chat view and cards:
    discord/vk.json lists the servers, discord/messages/<id>.json holds each
    channel. Channel and author ids are prefixed so they never meet a Discord
@@ -31,7 +36,10 @@ export function parseChannels(raw) {
     let label = "";
     const eq = text.indexOf("=");
     if (eq > 0 && !/^https?:/i.test(text.slice(0, eq))) { label = text.slice(0, eq).trim().slice(0, 80); text = text.slice(eq + 1).trim(); }
-    text = text.replace(/^https?:\/\/(?:m\.)?vk\.(?:com|ru)\//i, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+    text = text.replace(/^https?:\/\/(?:m\.|web\.)?vk\.(?:com|ru)\//i, "");
+    const sel = /^im\/?\?(?:.*&)?sel=-?(\d{1,12})/i.exec(text);
+    if (sel) text = sel[1];
+    text = text.replace(/^im\/(?:channels|convo)\//i, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
     let gid = 0;
     let name = "";
     const num = /^(?:-|club|public|event)?(\d{1,12})$/i.exec(text);
@@ -111,6 +119,69 @@ export function rowsFromWall(gid, response) {
   return { rows: rows, authors: authors };
 }
 
+function messageAttachments(list) {
+  const out = [];
+  (list || []).forEach((att) => {
+    if (!att || out.length >= 10) return;
+    if (att.type === "photo") { const p = bestPhoto(att.photo); if (p) out.push(p); }
+    else if (att.type === "video" && att.video) { const p = bestImage(att.video.image); if (p) out.push(p); }
+    else if (att.type === "link" && att.link && att.link.photo) { const p = bestPhoto(att.link.photo); if (p) out.push(p); }
+    else if (att.type === "wall" && att.wall) { messageAttachments(att.wall.attachments).forEach((p) => { if (out.length < 10) out.push(p); }); }
+  });
+  return out;
+}
+
+/* messages.getHistory (extended) of a community Messenger channel. */
+export function rowsFromChannel(gid, response) {
+  const items = (response && Array.isArray(response.items)) ? response.items : [];
+  const authors = {};
+  ((response && response.groups) || []).forEach((g) => {
+    if (g && g.id) authors[groupAuthor(g.id)] = { name: String(g.name || "").slice(0, 80), handle: String(g.screen_name || ("club" + g.id)), avatar: String(g.photo_100 || g.photo_50 || "") };
+  });
+  ((response && response.profiles) || []).forEach((p) => {
+    if (p && p.id) authors[userAuthor(p.id)] = { name: (String(p.first_name || "") + " " + String(p.last_name || "")).trim().slice(0, 80), handle: String(p.screen_name || ("id" + p.id)), avatar: String(p.photo_100 || p.photo_50 || "") };
+  });
+  const rows = [];
+  items.forEach((item) => {
+    const mid = item && (item.conversation_message_id || item.id);
+    if (!mid || item.action) return;
+    const from = Number(item.from_id || -gid);
+    let text = plainText(item.text);
+    const attachments = messageAttachments(item.attachments);
+    if (!text && item.attachments && item.attachments[0] && item.attachments[0].type === "wall") text = plainText(item.attachments[0].wall.text);
+    if (!text && !attachments.length) return;
+    const row = {
+      id: String(mid),
+      author: from < 0 ? groupAuthor(-from) : userAuthor(from),
+      text: text,
+      date: new Date((Number(item.date) || 0) * 1000).toISOString(),
+      link: "https://vk.com/im/channels/-" + gid
+    };
+    if (attachments.length) row.attachments = attachments;
+    const count = Array.isArray(item.reactions) ? item.reactions.reduce((n, r) => n + (Number(r && r.count) || 0), 0) : 0;
+    if (count > 0) row.reactions = [{ emoji: "❤️", count: count }];
+    rows.push(row);
+  });
+  return { rows: rows, authors: authors };
+}
+
+function isChannel(conv) {
+  const settings = conv && conv.chat_settings;
+  return !!(conv && conv.peer && conv.peer.type === "chat" && settings && (settings.is_group_channel || settings.is_channel));
+}
+
+async function channelRead(env, gid, label, fetcher) {
+  const convs = await vkApi(env, "messages.getConversations", { filter: "all", count: "200", extended: "1" }, fetcher);
+  const list = ((convs && convs.items) || []).map((item) => item && item.conversation).filter(isChannel);
+  if (!list.length) return null;
+  const want = String(label || "").toLowerCase();
+  const conv = list.find((c) => want && String(c.chat_settings.title || "").toLowerCase() === want) || list[0];
+  const history = await vkApi(env, "messages.getHistory", { peer_id: String(conv.peer.id), count: String(KEEP), extended: "1", fields: "photo_100,screen_name" }, fetcher);
+  const got = rowsFromChannel(gid, history);
+  const photo = conv.chat_settings.photo || {};
+  return { rows: got.rows, authors: got.authors, title: String(conv.chat_settings.title || ""), avatar: String(photo.photo_100 || photo.photo_50 || "") };
+}
+
 const MONTHS = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
 
 function decodeEntities(text) {
@@ -179,7 +250,7 @@ export function rowsFromWidget(gid, html, now) {
     });
     if (attachments.length) rows[rows.length - 1].attachments = attachments;
   });
-  return { rows: rows, authors: authors, title: authors[authorId].name, avatar: authors[authorId].avatar };
+  return { rows: rows, authors: authors, title: authors[authorId].name, avatar: authors[authorId].avatar, closed: /class="wcommunity_closed"/.test(page) };
 }
 
 async function widgetRead(gid, fetcher, now) {
@@ -199,22 +270,41 @@ async function readOne(env, channel, fetcher, now) {
   let gid = channel.gid;
   let title = channel.label;
   let avatar = "";
+  let empty = null;
   if (token) {
     try {
-      const groups = await vkApi(env, "groups.getById", { group_id: gid ? String(gid) : channel.name, fields: "photo_100" }, fetcher);
+      const groups = await vkApi(env, "groups.getById", gid ? { group_id: String(gid), fields: "photo_100" } : { group_id: channel.name, fields: "photo_100" }, fetcher);
       const list = Array.isArray(groups) ? groups : (groups && groups.groups) || [];
       const g = list[0];
       if (g && g.id) { gid = Number(g.id); title = title || String(g.name || ""); avatar = String(g.photo_100 || ""); }
+    } catch (err) { /* a community key may still read its channel */ }
+    if (gid) {
+      try {
+        const ch = await channelRead(env, gid, channel.label, fetcher);
+        if (ch && ch.rows.length) return { gid: gid, title: title || ch.title || "VK " + gid, avatar: avatar || ch.avatar, rows: ch.rows, authors: ch.authors, via: "channel" };
+        if (ch) empty = { gid: gid, title: title || ch.title || "VK " + gid, avatar: avatar || ch.avatar, rows: [], authors: {}, via: "channel" };
+      } catch (err) { /* not a community key, or no messages right */ }
+    }
+    try {
+      if (!gid) throw new Error("vk_needs_id");
       const wall = await vkApi(env, "wall.get", { owner_id: String(-gid), count: String(KEEP), extended: "1", fields: "photo_100,screen_name" }, fetcher);
       const got = rowsFromWall(gid, wall);
-      return { gid: gid, title: title || "VK " + gid, avatar: avatar, rows: got.rows, authors: got.authors, via: "api" };
+      if (got.rows.length || !empty) {
+        const out = { gid: gid, title: title || "VK " + gid, avatar: avatar, rows: got.rows, authors: got.authors, via: "api" };
+        if (got.rows.length) return out;
+        empty = out;
+      }
     } catch (err) {
       if (!gid) throw err;
     }
   }
   if (!gid) throw new Error("vk_needs_id");
-  const got = await widgetRead(gid, fetcher, now);
-  return { gid: gid, title: title || got.title || "VK " + gid, avatar: avatar || got.avatar, rows: got.rows, authors: got.authors, via: "widget" };
+  let got;
+  try { got = await widgetRead(gid, fetcher, now); }
+  catch (err) { if (empty) return empty; throw err; }
+  if (!got.rows.length && empty) return empty;
+  const name = got.title && got.title !== "VK" ? got.title : "";
+  return { gid: gid, title: title || name || "VK " + gid, avatar: avatar || got.avatar, rows: got.rows, authors: got.authors, via: got.closed ? "closed" : "widget" };
 }
 
 /* Every other cron minute. Keeps up to KEEP posts per channel, merged with
@@ -236,7 +326,8 @@ export async function syncVk(env, at, fetcher) {
     let prior = null;
     try { const obj = await env.DATA.get(key); prior = obj ? JSON.parse(await obj.text()) : null; } catch (err) { prior = null; }
     const byId = {};
-    ((prior && prior.messages) || []).forEach((row) => { if (row && row.id) byId[row.id] = row; });
+    const samePlace = !prior || !prior.via || prior.via === got.via || (prior.via !== "channel" && got.via !== "channel");
+    ((samePlace && prior && prior.messages) || []).forEach((row) => { if (row && row.id) byId[row.id] = row; });
     got.rows.forEach((row) => { byId[row.id] = row; });
     const rows = Object.values(byId).sort((a, b) => Number(b.id) - Number(a.id)).slice(0, KEEP);
     const authors = Object.assign({}, (prior && prior.authors) || {}, got.authors);
