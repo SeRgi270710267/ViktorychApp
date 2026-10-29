@@ -14,10 +14,37 @@
 const BUCKETS = new Map();
 const BUCKET_MAX_KEYS = 4000;
 
+/* Signed-in accounts get a bigger bucket than an anonymous address, and
+   the owner a bigger one still. A token only counts as signed in after the
+   Worker has matched it to a live session (noteGuardTier), so a made-up
+   Bearer header gets the anonymous bucket. */
 export const GUARD_LIMITS = {
   api: { burst: 120, perSecond: 2 },
   media: { burst: 400, perSecond: 6 }
 };
+
+export const GUARD_TIERS = {
+  anon: 1,
+  signed: 2,
+  owner: 5
+};
+
+const TIERS = new Map();
+const TIER_MAX_KEYS = 4000;
+
+export function tokenGuardKey(token) {
+  return token ? "t:" + String(token).slice(-24) : "";
+}
+
+export function noteGuardTier(key, tier) {
+  if (!key || !GUARD_TIERS[tier]) return;
+  if (TIERS.size >= TIER_MAX_KEYS && !TIERS.has(key)) TIERS.clear();
+  TIERS.set(key, tier);
+}
+
+export function guardTier(key) {
+  return TIERS.get(key) || "anon";
+}
 
 export function guardClass(method, path) {
   if (method === "OPTIONS") return "";
@@ -31,13 +58,15 @@ export function guardKey(request) {
   const header = request.headers.get("Authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   const token = match ? match[1].trim() : "";
-  if (token) return "t:" + token.slice(-24);
+  if (token) return tokenGuardKey(token);
   return "ip:" + (request.headers.get("CF-Connecting-IP") || request.headers.get("x-forwarded-for") || "unknown");
 }
 
-export function takeToken(key, kind, now) {
-  const limit = GUARD_LIMITS[kind];
-  if (!limit) return { ok: true };
+export function takeToken(key, kind, now, tier) {
+  const base = GUARD_LIMITS[kind];
+  if (!base) return { ok: true };
+  const scale = GUARD_TIERS[tier || guardTier(key)] || 1;
+  const limit = { burst: base.burst * scale, perSecond: base.perSecond * scale };
   const id = kind + "|" + key;
   const at = Number(now) || Date.now();
   let bucket = BUCKETS.get(id);
@@ -73,6 +102,7 @@ function pruneBuckets(now) {
 
 export function resetGuard() {
   BUCKETS.clear();
+  TIERS.clear();
 }
 
 /* Shared documents the client reads through /v1/data. The pulse names them
