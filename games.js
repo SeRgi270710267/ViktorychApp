@@ -452,7 +452,7 @@
     var pads = [];
     try { pads = navigator.getGamepads ? Array.prototype.slice.call(navigator.getGamepads() || []) : []; } catch (err) { pads = []; }
     var pad = pads.filter(Boolean)[0];
-    if (pad) padNote(tr("Controller connected. Tap the game, then press any button."));
+    if (pad) padNote(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse."));
   }
   function toggleFull() {
     var host = hostEl();
@@ -509,7 +509,7 @@
     else if (playing) beat();
   });
   window.addEventListener("gamepadconnected", function () {
-    if (playing) padNote(tr("Controller connected. Tap the game, then press any button."));
+    if (playing) padNote(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse."));
   });
   window.addEventListener("resize", function () {
     var host = hostEl();
