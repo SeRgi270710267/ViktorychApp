@@ -3494,6 +3494,20 @@ html.tv-on #new-posts { display: none; }
   padding: 8px 14px;
 }
 #offline[hidden] { display: none; }
+#offline .net-note-btn {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent, #1d9bf0);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.net-help h2 { margin-top: 18px; }
+.net-help ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted, inherit); font-size: 14px; line-height: 20px; }
+.net-help ul li { margin: 4px 0; }
+.net-help .net-check { margin-top: 10px; }
 #update {
   position: fixed;
   top: calc(12px + env(safe-area-inset-top));
