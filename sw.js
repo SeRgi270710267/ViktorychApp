@@ -4,7 +4,7 @@ const VERSION = "viktorych-a152-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T04:28:41Z-inbox-split
+// cache-bust: 2026-10-30T04:43:12Z-inbox-split
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -54,6 +54,9 @@ const SHELL_FILES = [
   "./dock.css",
   "./dock.js",
   "./desktop-app.js",
+  "./keys.js",
+  "./keys-ui.js",
+  "./keys.css",
   "./i18n.js",
   "./i18n/en.js",
   "./i18n/ru.js",
