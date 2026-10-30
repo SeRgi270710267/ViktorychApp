@@ -5,6 +5,7 @@
    custom status changes. */
 
 import { playingNow } from "./games.js";
+import { friendsOffAmong } from "./friends-pref.js";
 import {
   PRESENCE_CACHE_MS,
   WRITE_WINDOW_MS,
@@ -153,13 +154,23 @@ function overlaps(set, ids) {
   return false;
 }
 
-async function friendSet(env, userId, ids) {
+async function friendSet(env, userId, ids, userIsSubject) {
   const set = new Set();
   if (!ids.length) return set;
   const marks = ids.map(() => "?").join(",");
   try {
     const result = await env.DB.prepare("SELECT friend_id FROM account_friends WHERE user_id = ? AND friend_id IN (" + marks + ")").bind(userId, ...ids).all();
     rows(result).forEach((row) => set.add(String(row.friend_id || "")));
+    // Friends off on either side, or "share online status with friends" off,
+    // means the friendship grants no presence.
+    if (set.size) {
+      // userIsSubject: userId is the person whose presence is shared, so
+      // their own "share online status" choice decides; otherwise each
+      // friend's choice does.
+      if ((await friendsOffAmong(env, [userId], !!userIsSubject)).size) return new Set();
+      const quiet = await friendsOffAmong(env, Array.from(set), !userIsSubject);
+      quiet.forEach((id) => set.delete(id));
+    }
   } catch (err) { /* friends are optional for a presence read */ }
   return set;
 }
@@ -280,7 +291,7 @@ async function fanout(env, publicId, prev, next, prevStatus, nextStatus, now) {
   const subjectLists = listIds(next && (next.seen_lists || next.seenLists));
   const onSubjectLists = await membersOnLists(env, publicId, watchers);
   const watcherLists = await listsContaining(env, watchers, publicId);
-  const friendRows = await friendSet(env, publicId, watchers);
+  const friendRows = await friendSet(env, publicId, watchers, true);
   for (let i = 0; i < watchers.length; i++) {
     const viewerId = watchers[i];
     const viewerRow = priv.get(viewerId) || null;
@@ -540,7 +551,10 @@ export async function handleFriendPresence(request, env, deps) {
   } catch (err) {
     return privateJson(deps, { friends: [] });
   }
-  const people = rows(listed).filter((row) => row.profile_less !== 1 && isAccountId(row.public_id));
+  const listedPeople = rows(listed).filter((row) => row.profile_less !== 1 && isAccountId(row.public_id));
+  const off = await friendsOffAmong(env, [account.public_id].concat(listedPeople.map((row) => row.public_id)));
+  if (off.has(String(account.public_id))) return privateJson(deps, { friends: [], friendsOff: true });
+  const people = listedPeople.filter((row) => !off.has(String(row.public_id)));
   const blocked = await blockedIds(env, account.public_id, people.map((row) => row.public_id));
   const visible = people.filter((row) => !blocked.has(row.public_id));
   const now = Date.now();
