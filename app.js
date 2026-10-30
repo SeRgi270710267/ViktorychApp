@@ -15804,6 +15804,11 @@ const here = parseRoute();
       return settingsHead(tr("Post to X"), "#/settings") + body;
     }
     if (section === "devices") return myDevicesView();
+    /* Settings > Connected keys > one service: its own page, like X's
+       Connected apps > app. */
+    if (section === "keys" && sub && window.OwnerKeys && window.OwnerKeys.detailHtml) {
+      return settingsHead(window.OwnerKeys.titleFor(sub), "#/settings/keys") + window.OwnerKeys.detailHtml(sub);
+    }
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
