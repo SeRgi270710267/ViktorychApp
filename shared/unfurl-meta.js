@@ -56,10 +56,12 @@ export function parseMeta(html, pageUrl) {
   });
   const links = head.match(/<link\b[^>]*>/gi) || [];
   let icon = "";
+  let oembed = "";
   links.forEach((tag) => {
     const a = attrs(tag);
     const rel = String(a.rel || "").toLowerCase();
     if (!icon && /(^|\s)(icon|apple-touch-icon)(\s|$)/.test(rel) && a.href) icon = a.href;
+    if (!oembed && /(^|\s)alternate(\s|$)/.test(rel) && String(a.type || "").toLowerCase() === "application/json+oembed" && a.href) oembed = a.href;
   });
   const titleTag = (head.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "";
   const base = absolute(meta["og:url"], pageUrl) || pageUrl;
@@ -85,7 +87,18 @@ export function parseMeta(html, pageUrl) {
   // X decides the big card from twitter:card. Without it, a wide image is big.
   out.large = !!image && (cardType === "summary_large_image" || cardType === "player" || (!cardType && (!width || !height || width / height >= 1.3)) || (cardType !== "summary" && width >= 600 && width / Math.max(1, height) >= 1.3));
   if (cardType === "summary") out.large = false;
-  if (video) out.video = video;
+  if (video) {
+    out.video = video;
+    // twitter:player is always a player page; og:video says what it is.
+    const ogVideo = meta["og:video:secure_url"] || meta["og:video:url"] || meta["og:video"];
+    const videoType = clip(ogVideo ? meta["og:video:type"] || "" : "text/html", 60).toLowerCase();
+    if (videoType) out.videoType = videoType;
+    const vw = Number(ogVideo ? meta["og:video:width"] : meta["twitter:player:width"]) || 0;
+    const vh = Number(ogVideo ? meta["og:video:height"] : meta["twitter:player:height"]) || 0;
+    if (vw > 0 && vh > 0) { out.videoWidth = vw; out.videoHeight = vh; }
+  }
+  const oembedUrl = absolute(oembed, base);
+  if (oembedUrl) out.oembed = oembedUrl;
   if (!out.title && !out.description && !out.image) return null;
   return out;
 }
@@ -105,4 +118,23 @@ export function safeTarget(raw) {
   if (/^[\d.]+$/.test(host) || host.indexOf(":") >= 0 || host.startsWith("[")) return null;
   url.hash = "";
   return url;
+}
+
+/* The official player from an oEmbed answer of type "video": the https src
+   of the iframe in its html, with the size it asks for. Anything else is
+   ignored, so the card stays a link. */
+export function oembedPlayer(json) {
+  if (!json || typeof json !== "object" || String(json.type || "").toLowerCase() !== "video") return null;
+  const html = String(json.html || "").slice(0, 8000);
+  const tag = (html.match(/<iframe\b[^>]*>/i) || [])[0];
+  if (!tag) return null;
+  const a = attrs(tag);
+  let src;
+  try { src = new URL(String(a.src || "").trim()); } catch (_) { return null; }
+  if (src.protocol !== "https:" || src.username || src.password) return null;
+  const out = { src: src.href };
+  const width = Number(json.width || a.width) || 0;
+  const height = Number(json.height || a.height) || 0;
+  if (width > 0 && height > 0) { out.width = width; out.height = height; }
+  return out;
 }
