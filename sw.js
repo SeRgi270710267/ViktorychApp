@@ -238,7 +238,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a147-";
+  const prefix = "viktorych-a149-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
