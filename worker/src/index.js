@@ -55,6 +55,7 @@ import { sealPayload, openPayload, maybeBackupSettings } from "./settings-vault.
 import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
+import { handleOwnerSourceLists, handleMySourceLists, refreshWanted } from "./source-lists.js";
 import { claimedJobs } from "./job-runner.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingRequest, importAllowed, readFollowRows, outgoingRequestIds, requestCount, followsYouSet, handleSocialRoutes, blockedProfile, stripBlockedView, blocksEither, pairState } from "./social.js";
@@ -5466,6 +5467,12 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
   }
+  if (path === "/v1/owner/source-lists" || path.startsWith("/v1/owner/source-lists/")) {
+    return handleOwnerSourceLists(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
+  }
+  if (path === "/v1/me/source-lists" || path.startsWith("/v1/me/source-lists/")) {
+    return handleMySourceLists(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+  }
   if (path === "/v1/owner/feeds" || path.startsWith("/v1/owner/feeds/")) {
     return handleOwnerFeeds(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
   }
@@ -5866,6 +5873,7 @@ export default {
     // deploy and records health for the owner (src/watchdog.js).
     if (minute === 7) jobs.push(runWatchdog(env, at));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
+    if (minute === 7) jobs.push(refreshWanted(env, at).catch(() => null));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));
     // Every ten minutes outside quiet hours: keep the Render backup awake.
