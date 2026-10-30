@@ -1,8 +1,8 @@
 const assert = require("assert");
 const update = require("../update.js");
 
-assert.strictEqual(update.shaFromVersion("viktorych-a239-abcdef1234567890"), "abcdef1234567890");
-assert.strictEqual(update.shaFromVersion("viktorych-a239-__SW_VERSION__"), "");
+assert.strictEqual(update.shaFromVersion("viktorych-a267-abcdef1234567890"), "abcdef1234567890");
+assert.strictEqual(update.shaFromVersion("viktorych-a267-__SW_VERSION__"), "");
 assert.strictEqual(update.shaFromVersion(""), "");
 
 assert.deepStrictEqual(update.notesOf({ changelog: [" One ", "One", "", "Two"] }), ["One", "Two"]);

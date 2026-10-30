@@ -861,7 +861,7 @@
     // A Discord join and its captcha answer must reach the same Worker: the
     // challenge, its one retry and the owner's key all live there.
     // YouTube subscriptions need the Data API key, which only the Worker has.
-    if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path)) || /^\/v1\/ext-graph\/youtube\?/.test(String(path))) {
+    if (/^\/v1\/(owner\/(usage|limits)|locked-follows)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path)) || /^\/v1\/ext-graph\/youtube\?/.test(String(path))) {
       var mainRoot = String(config().api || "").replace(/\/$/, "");
       if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
       // Owner usage goes to the Worker only. Its analytics read can take a
@@ -875,6 +875,11 @@
     if (opts.token) headers.Authorization = "Bearer " + opts.token;
     if (opts.headers) {
       Object.keys(opts.headers).forEach(function (key) { headers[key] = opts.headers[key]; });
+    }
+    // An open Locked area on this device can read its people's messages.
+    if (!headers["X-Locked-Grant"] && /^\/v1\/messages/.test(String(path || "")) && window.ViktorychLocked && window.ViktorychLocked.grantHeader) {
+      var lockedGrant = window.ViktorychLocked.grantHeader();
+      if (lockedGrant) headers["X-Locked-Grant"] = lockedGrant;
     }
 
     var reading = !opts.method || opts.method === "GET";
@@ -4259,6 +4264,16 @@ function signupPayload() {
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
         return { pending: true };
       }
+      // Already followed, inside Locked follows: nothing changes and the
+      // follow stays hidden here.
+      if (follow && res.lockedFollow) {
+        if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
+        previewFollow(id, false);
+        dirtyLists();
+        if (window.ViktorychLocked && window.ViktorychLocked.lockedNotice) window.ViktorychLocked.lockedNotice();
+        if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        return false;
+      }
       graphCounts[id].pending = false;
       if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
       graphCounts[id].fresh = true;
@@ -4936,7 +4951,8 @@ function signupPayload() {
     if (!rows.length) {
       var title = tab === "followers" ? tr("No followers yet") : tab === "mutuals" ? tr("No mutuals yet") : tab === "requests" ? tr("No follow requests") : tr("Not following anyone yet");
       var copy = tab === "requests" ? tr("When someone asks to follow you, they’ll show up here.") : tab === "mutuals" ? tr("People you follow who follow you back show up here.") : tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
-      return search + '<div class="empty"><h2>' + esc(title) + '</h2><p>' + esc(copy) + '</p></div>';
+      var empty = search + '<div class="empty"><h2>' + esc(title) + '</h2><p>' + esc(copy) + '</p></div>';
+      return tab === "following" && viewerOwnsSubject(subjectId, handle) ? lockedPullWrap(empty) : empty;
     }
     var mine = viewerOwnsSubject(subjectId, handle);
     var html = rows.map(function (item) {
@@ -4948,10 +4964,24 @@ function signupPayload() {
       var href = person.handle ? "#/@" + encodeURIComponent(person.handle) : (person.id ? "#/p/" + encodeURIComponent(String(person.id).replace(/^app:/, "")) : "#/");
       var letter = String(person.name || person.handle || "?").trim().charAt(0).toUpperCase() || "?";
       var face = publicAvatar(person.avatar, person.avatarFace, "", letter);
-      return '<div class="connect-row"><a class="who-main" href="' + esc(href) + '">' + face + '<span class="who-copy"><span class="name">' + esc(person.name) + badge + '</span><span class="handle">' + (person.handle ? "@" + esc(person.handle) : "") + '</span></span></a><span class="row-actions">' + accept + remove + button + '</span></div>';
+      // Your own Following list: ⋯ or a long press locks the follow. The
+      // app owner's view of someone else's list marks their locked follows.
+      var lockable = mine && tab === "following" && LOCKED() && person.id;
+      var lockAttrs = lockable ? ' data-lf-row="' + esc(person.id) + '" data-name="' + esc(person.name || "") + '" data-handle="' + esc(person.handle || "") + '"' : "";
+      var lockMenu = lockable ? LOCKED().rowMenuHtml(person.id, person.name, person.handle) : "";
+      if (item.locked) badge += '<span class="pill-badge">' + esc(tr("Locked")) + '</span>';
+      return '<div class="connect-row"' + lockAttrs + '><a class="who-main" href="' + esc(href) + '">' + face + '<span class="who-copy"><span class="name">' + esc(person.name) + badge + '</span><span class="handle">' + (person.handle ? "@" + esc(person.handle) : "") + '</span></span></a><span class="row-actions">' + accept + remove + button + lockMenu + '</span></div>';
     }).join("");
     var more = pack.cursor ? '<button class="outline" type="button" data-act="graph-more" data-id="' + esc(subjectId) + '" data-tab="' + esc(tab) + '">' + esc(tr("Load more")) + '</button>' : "";
+    if (mine && tab === "following") return lockedPullWrap(search + html + more);
     return search + html + more;
+  }
+  function LOCKED() { return window.ViktorychLocked || null; }
+  /* Pull down on your own Following list to show the way into Locked
+     follows (unless the person chose to hide it). */
+  function lockedPullWrap(inner) {
+    var pull = LOCKED() && LOCKED().pullHtml ? LOCKED().pullHtml() : "";
+    return '<div class="lf-pull-host">' + pull + inner + '</div>';
   }
   function galleryList(account, kind) {
     var list = kind === "banner" ? ((account && account.banners) || []) : ((account && account.photos) || []);
