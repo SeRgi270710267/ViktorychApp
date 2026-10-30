@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a146-__SW_VERSION__";
+const VERSION = "viktorych-a149-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T00:40:00Z-discord-local
+// cache-bust: 2026-10-30T01:30:00Z-discord-local-send
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
