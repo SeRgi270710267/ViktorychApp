@@ -1088,8 +1088,23 @@ function start() {
   });
 }
 
+/* First-time setup: who sees when you are online. Resolves true once saved. */
+function setSeenPrivacy(value) {
+  if (PRIVACY_IDS.indexOf(value) < 0) return Promise.resolve(false);
+  if (!mine) mine = { id: selfId(), exact: true, preference: "online", seenPrivacy: "everyone", reciprocal: true, seenLists: [], state: "offline", emoji: "", text: "" };
+  const prev = mine.seenPrivacy;
+  mine.seenPrivacy = value;
+  return call("/v1/presence", { method: "PATCH", body: { seenPrivacy: value } }).then(function (res) {
+    if (!res || res.status !== 200) { if (mine) mine.seenPrivacy = prev; return false; }
+    applyMine(res);
+    return true;
+  });
+}
+
 const api = {
   wrap: wrap,
+  seenPrivacy: function () { return (mine && mine.seenPrivacy) || "everyone"; },
+  setSeenPrivacy: setSeenPrivacy,
   linesHtml: linesHtml,
   dmSubHtml: dmSubHtml,
   settingsHtml: settingsHtml,

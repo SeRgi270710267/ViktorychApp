@@ -4879,7 +4879,7 @@ SI18n.addPack("ru", {
   "reply.others.many": "ещё {n}",
   "reply.others.other": "ещё {n}",
   "Run setup again": "Пройти настройку заново",
-  "Theme, data usage, notifications, install and follows.": "Тема, трафик, уведомления, установка и подписки.",
+  "Privacy, look, alerts, install and follows.": "Конфиденциальность, вид, оповещения, установка и подписки.",
   "Theme, save data and notifications keep their defaults. Change them in Settings.": "Тема, экономия трафика и уведомления остаются по умолчанию. Их можно изменить в настройках.",
   "Settings, drafts and sign-in": "Настройки, черновики и вход",
   "Saved screens": "Сохранённые экраны",
