@@ -29,6 +29,10 @@ export const FEATURES = {
   // Friends master switch per account (Settings > Privacy > Friends). On by
   // default. Off: every account reads as Friends on and the setting is hidden.
   friends_off: { paths: ["/v1/friends/settings"] },
+  // Linked profiles merged into the account's own profile: their posts join
+  // its timeline and their old pages redirect there. On by default. Off:
+  // linked profiles stay listed but keep their own pages.
+  merged_profiles: { paths: ["/v1/identities/merged"] },
   // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
   nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true },
   // Off until the owner turns it on and sets NFT_CONTRACT: optional gift NFTs.
