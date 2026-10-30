@@ -1722,6 +1722,8 @@ var numberNote = form.passkey
     return lang || "en";
   }
   function bdayLabel(text) {
+    var bd = window.ViktorychBirthDate;
+    if (bd) return bd.label(text, uiLang());
     var raw = String(text || "").trim();
     var full = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     var short = raw.match(/^(\d{2})-(\d{2})$/);
@@ -1731,13 +1733,53 @@ var numberNote = form.passkey
     } catch (err) { /* the raw text is still readable */ }
     return raw;
   }
-  function bdayAudienceSelect() {
-    var current = form.bdayAudience || "only";
-    var options = [["public", tr("Everyone")], ["followers", tr("Followers")], ["friends", tr("Mutuals")], ["only", tr("Only me")]];
-    if (current === "list") options.push(["list", tr("Custom list")]);
-    return '<div class="acct-field ep-select"><select id="acct-bdayAudience" name="bdayAudience">' + options.map(function (pair) {
-      return '<option value="' + pair[0] + '"' + (pair[0] === current ? " selected" : "") + ">" + esc(pair[1]) + "</option>";
-    }).join("") + '</select><label for="acct-bdayAudience">' + esc(tr("Who can see this")) + "</label></div>";
+  /* Birth date, as on X: "Birth date · Edit" opens a short warning, then
+     Month / Day / Year pickers and who sees the month and day and the year.
+     Every picker is a sheet of rows, never a raw browser control. */
+  var BDAY_AUDIENCES = ["public", "followers", "friends", "only"];
+  function bdayAudienceName(value) {
+    if (value === "public") return tr("Everyone");
+    if (value === "followers") return tr("Followers");
+    if (value === "friends") return tr("Mutuals");
+    if (value === "list") return tr("Custom list");
+    return tr("Only me");
+  }
+  function bdayParts() {
+    return { year: Number(form.bdayY) || 0, month: Number(form.bdayM) || 0, day: Number(form.bdayD) || 0 };
+  }
+  function setBdayParts(year, month, day) {
+    form.bdayY = year ? String(year) : "";
+    form.bdayM = month ? String(month) : "";
+    form.bdayD = day ? String(day) : "";
+    var bd = window.ViktorychBirthDate;
+    form.bdayText = bd && year && month && day ? bd.compose(year, month, day) : (!year && !month && !day ? "" : form.bdayText);
+  }
+  function syncBdayParts() {
+    var bd = window.ViktorychBirthDate;
+    var parts = bd ? bd.parse(form.bdayText) : null;
+    form.bdayY = parts && parts.year ? String(parts.year) : "";
+    form.bdayM = parts ? String(parts.month) : "";
+    form.bdayD = parts ? String(parts.day) : "";
+  }
+  /* "" when the open birth date can be saved, else the reason. */
+  function bdayProblem() {
+    if (!form.bdayOpen) return "";
+    var bd = window.ViktorychBirthDate;
+    if (!bd) return "";
+    var p = bdayParts();
+    if (!p.year && !p.month && !p.day) return "";
+    /* A date saved before without a year (MM-DD) stays valid as it is. */
+    if (!p.year && p.month && p.day && /^\d{2}-\d{2}$/.test(String((form.initial || {}).bdayText || "")) && String(form.bdayText) === String(form.initial.bdayText)) return "";
+    return bd.check(p.year, p.month, p.day, bd.today());
+  }
+  function bdayProblemText(code) {
+    if (code === "incomplete") return tr("Choose a month, day, and year.");
+    if (code === "young") return tr("You must be at least {age} years old.", { age: String((window.ViktorychBirthDate || {}).MIN_AGE || 13) });
+    if (code === "future" || code === "invalid") return tr("That date isn’t valid.");
+    return "";
+  }
+  function epPicker(sheet, title, value, empty, cls) {
+    return '<button class="ep-picker' + (cls ? " " + cls : "") + (value ? "" : " is-empty") + '" type="button" data-acct="ep-sheet" data-sheet="' + sheet + '" aria-haspopup="dialog" aria-expanded="' + (form.sheet === sheet ? "true" : "false") + '"><span class="ep-picker-label">' + esc(title) + '</span><span class="ep-picker-value">' + esc(value || empty || "") + '</span><svg class="ep-picker-chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3.543 8.96l1.414-1.42L12 14.59l7.043-7.05 1.414 1.42L12 17.41 3.543 8.96z"/></svg></button>';
   }
   function bdayBlock() {
     var value = form.bdayText ? bdayLabel(form.bdayText) : "";
@@ -1746,15 +1788,95 @@ var numberNote = form.passkey
       var shown = form.bdayState === "loading" && !value ? tr("Loading…") : (value || tr("Add your birth date"));
       return head + '<p class="ep-bday-value' + (value ? "" : " muted") + '">' + esc(shown) + "</p></div>";
     }
-    var dateValue = /^\d{4}-\d{2}-\d{2}$/.test(String(form.bdayText || "")) ? form.bdayText : "";
-    var now = new Date();
-    var max = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    var bd = window.ViktorychBirthDate;
+    var p = bdayParts();
+    var months = bd ? bd.monthNames(uiLang()) : [];
+    var problem = bdayProblem();
+    var shownProblem = problem && (problem !== "incomplete" || form.bdayTried) ? bdayProblemText(problem) : "";
+    var yearVis = form.bdayShowYear ? tr("Same as month and day") : tr("Only me");
     return head + '<p class="ep-bday-note">' + esc(tr("This should be the date of your birthday. It is only on your profile if you choose who sees it.")) + "</p>" +
-      '<div class="acct-field"><input id="acct-bdayText" name="bdayText" type="date" min="1900-01-01" max="' + max + '" placeholder=" " value="' + esc(dateValue) + '"><label for="acct-bdayText">' + esc(tr("Birth date")) + "</label></div>" +
-      bdayAudienceSelect() +
-      epSwitch("toggle-bday-year", !!form.bdayShowYear, tr("Show year"), tr("Others see the day and month only when this is off.")) +
-      (form.bdayText ? '<button class="ep-link ep-bday-clear" type="button" data-acct="bday-clear">' + esc(tr("Remove birth date")) + "</button>" : "") +
+      '<div class="ep-bday-pick' + (shownProblem ? " has-error" : "") + '">' +
+      epPicker("month", tr("Month"), p.month ? months[p.month - 1] : "", "", "ep-picker-month") +
+      epPicker("day", tr("Day"), p.day ? String(p.day) : "", "", "ep-picker-day") +
+      epPicker("year", tr("Year"), p.year ? String(p.year) : "", "", "ep-picker-year") +
+      "</div>" +
+      (shownProblem ? '<p class="ep-bday-error" role="alert">' + esc(shownProblem) + "</p>" : "") +
+      '<h3 class="ep-bday-sub">' + esc(tr("Who can see this")) + "</h3>" +
+      epPicker("aud-md", tr("Month and day"), bdayAudienceName(form.bdayAudience || "only"), "", "ep-picker-wide") +
+      epPicker("aud-y", tr("Year"), yearVis, "", "ep-picker-wide") +
+      (form.bdayText || p.month || p.day || p.year ? '<button class="ep-link ep-bday-clear" type="button" data-acct="bday-clear">' + esc(tr("Remove birth date")) + "</button>" : "") +
       "</div>";
+  }
+  /* X's picker sheet: rows with a check on the chosen one; a bottom sheet
+     on phones, a small card on wider screens. */
+  function sheetOptions(kind) {
+    var bd = window.ViktorychBirthDate;
+    var p = bdayParts();
+    if (kind === "month") return (bd ? bd.monthNames(uiLang()) : []).map(function (name, i) { return [String(i + 1), name]; });
+    if (kind === "day") {
+      var days = bd ? bd.daysIn(p.month, p.year) : 31;
+      var out = [];
+      for (var d = 1; d <= days; d += 1) out.push([String(d), String(d)]);
+      return out;
+    }
+    if (kind === "year") return (bd ? bd.years(bd.today()) : []).map(function (y) { return [String(y), String(y)]; });
+    if (kind === "aud-md") {
+      var list = BDAY_AUDIENCES.slice();
+      if (form.bdayAudience === "list") list.push("list");
+      return list.map(function (a) { return [a, bdayAudienceName(a)]; });
+    }
+    if (kind === "aud-y") return [["same", tr("Same as month and day")], ["only", tr("Only me")]];
+    return [];
+  }
+  function sheetValue(kind) {
+    if (kind === "month") return String(form.bdayM || "");
+    if (kind === "day") return String(form.bdayD || "");
+    if (kind === "year") return String(form.bdayY || "");
+    if (kind === "aud-md") return form.bdayAudience || "only";
+    if (kind === "aud-y") return form.bdayShowYear ? "same" : "only";
+    return "";
+  }
+  function sheetTitle(kind) {
+    if (kind === "month") return tr("Month");
+    if (kind === "day") return tr("Day");
+    if (kind === "year") return tr("Year");
+    if (kind === "aud-md") return tr("Month and day");
+    if (kind === "aud-y") return tr("Year");
+    return "";
+  }
+  function sheetHtml() {
+    var kind = form.sheet;
+    if (!kind) return "";
+    var current = sheetValue(kind);
+    var check = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9 20c-.264 0-.52-.104-.707-.293l-4.785-4.785 1.414-1.414L9 17.586 19.072 7.5l1.42 1.416L9.708 19.7c-.188.19-.442.3-.708.3z"/></svg>';
+    var rows = sheetOptions(kind).map(function (pair) {
+      var on = pair[0] === current;
+      return '<button class="ep-sheet-row' + (on ? " on" : "") + '" type="button" role="option" aria-selected="' + (on ? "true" : "false") + '" data-acct="ep-pick" data-sheet="' + kind + '" data-value="' + esc(pair[0]) + '"><span>' + esc(pair[1]) + '</span><i class="ep-sheet-check">' + (on ? check : "") + "</i></button>";
+    }).join("");
+    var note = kind === "aud-y" ? '<p class="ep-sheet-note">' + esc(tr("The year is never shown to more people than the month and day.")) + "</p>" : "";
+    return '<div class="ep-sheet-back" data-acct="ep-sheet-close"><div class="ep-sheet" role="dialog" aria-modal="true" aria-label="' + esc(sheetTitle(kind)) + '" data-sheet-kind="' + kind + '"><div class="ep-sheet-grab" aria-hidden="true"></div><h2 class="ep-sheet-title">' + esc(sheetTitle(kind)) + "</h2>" + note + '<div class="ep-sheet-list" role="listbox" aria-label="' + esc(sheetTitle(kind)) + '">' + rows + '</div><button class="ep-sheet-cancel" type="button" data-acct="ep-sheet-close">' + esc(tr("Cancel")) + "</button></div></div>";
+  }
+  function bdayWarnHtml() {
+    if (!form.bdayWarn) return "";
+    return '<div class="ep-confirm" role="alertdialog" aria-modal="true" aria-labelledby="ep-warn-title" aria-describedby="ep-warn-text"><div class="ep-confirm-box"><h2 id="ep-warn-title">' + esc(tr("Edit date of birth?")) + '</h2><p id="ep-warn-text">' + esc(tr("Make sure you enter the age of the person using the account.")) + '</p><button class="ep-primary" type="button" data-acct="bday-warn-yes">' + esc(tr("Edit")) + '</button><button class="ep-cancel" type="button" data-acct="bday-warn-no">' + esc(tr("Cancel")) + "</button></div></div>";
+  }
+  /* X's toast: a short note over the bottom of the sheet that stays in
+     view however far down the form is scrolled. */
+  var epToastTimer = 0;
+  function epToast(text) {
+    form.toast = text || "";
+    clearTimeout(epToastTimer);
+    if (!text) return;
+    var mine = form;
+    epToastTimer = setTimeout(function () {
+      if (form !== mine || !mine.toast) return;
+      mine.toast = "";
+      var el = document.querySelector("#account-layer .ep-toast");
+      if (el) el.remove();
+    }, 5000);
+  }
+  function toastHtml() {
+    return form.toast ? '<div class="ep-toast" role="alert">' + esc(form.toast) + "</div>" : "";
   }
   function usernamesSub() {
     var api = window.ViktorychUsernames;
@@ -1787,7 +1909,7 @@ var numberNote = form.passkey
       (window.ViktorychUsernames ? epRow("edit-sub", tr("Usernames"), usernamesSub(), ' data-sub="usernames"') : "") +
       epRow("open-link-identity", tr("Linked social accounts"), tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) +
       "</div>";
-    return editMedia() + '<div class="ep-fields">' + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + bdayBlock() + "</div>" + rows + privRow + profLessRow + errorHtml();
+    return editMedia() + '<div class="ep-fields">' + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + bdayBlock() + "</div>" + rows + privRow + profLessRow;
   }
   function discardHtml() {
     if (!form.confirmDiscard) return "";
@@ -1801,11 +1923,13 @@ var numberNote = form.passkey
     var lead = sub
       ? '<button class="icon-btn" type="button" data-acct="edit-back" aria-label="' + esc(tr("Back")) + '">' + backIcon() + "</button>"
       : '<button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button>";
-    var save = sub ? "<span></span>" : '<button class="acct-save" type="button" data-acct="save-profile"' + (form.saving ? ' disabled aria-busy="true"' : "") + ">" + esc(tr("Save")) + "</button>";
+    var blocked = !form.saving && !!bdayProblem() && bdayProblem() !== "incomplete";
+    var save = sub ? "<span></span>" : '<button class="acct-save' + (form.saving ? " is-saving" : "") + '" type="button" data-acct="save-profile"' + (form.saving ? ' disabled aria-busy="true" aria-label="' + esc(tr("Saving…")) + '"' : blocked ? " disabled" : "") + '><span class="ep-save-text">' + esc(tr("Save")) + "</span>" + (form.saving ? '<span class="ep-spin" aria-hidden="true"></span>' : "") + "</button>";
     var backCls = "acct-back ep-back" + (anim === "enter" ? " ep-enter" : "");
     var cls = "acct-modal acct-edit ep" + (sub ? " ep-is-sub" : "") + (anim === "enter" ? " ep-enter" : "");
     var bodyCls = "acct-body acct-edit-body" + (anim === "sub" ? " ep-slide-in" : anim === "back" ? " ep-slide-back" : "");
-    return '<div class="' + backCls + '" data-ep-back="1"><div class="' + cls + '" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head acct-edit-head"><span class="ep-lead">' + lead + "</span><h1>" + esc(title) + "</h1>" + save + '</div><div class="' + bodyCls + '">' + body + "</div>" + discardHtml() + "</div></div>";
+    var bodySub = ' data-sub="' + esc(form.sub || "") + '"';
+    return '<div class="' + backCls + '" data-ep-back="1"><div class="' + cls + '" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head acct-edit-head"><span class="ep-lead">' + lead + "</span><h1>" + esc(title) + "</h1>" + save + '</div><div class="' + bodyCls + '"' + bodySub + ">" + body + "</div>" + bdayWarnHtml() + sheetHtml() + discardHtml() + toastHtml() + "</div></div>";
   }
   function cropModal() {
     var title = form.cropKind === "banner" ? tr("Edit banner") : tr("Edit photo");
@@ -1928,12 +2052,33 @@ var numberNote = form.passkey
       var focusName = "";
       var focusAct = "";
       var caret = null;
+      var caretEnd = null;
       if (previous && previous.closest && previous.closest("#account-layer")) {
         focusName = previous.name || "";
         focusAct = previous.getAttribute("data-acct") || "";
-        if (typeof previous.selectionStart === "number") caret = previous.selectionStart;
+        try { if (typeof previous.selectionStart === "number") { caret = previous.selectionStart; caretEnd = previous.selectionEnd; } } catch (err) { caret = null; }
       }
+      /* Edit profile repaints while you type (the birth date or a names
+         list arriving, a picker, a switch). Keep the scroll position, the
+         focused field and its caret, so the phone keyboard stays up and
+         the form does not jump back to the top. */
+      var oldBody = view === "edit" ? root.querySelector(".ep .acct-edit-body") : null;
+      var keepScroll = oldBody && oldBody.getAttribute("data-sub") === (form.sub || "") ? oldBody.scrollTop : null;
+      var focusSub = previous && previous.getAttribute ? previous.getAttribute("data-sub") || "" : "";
       root.innerHTML = html;
+      if (view === "edit") {
+        var newBody = root.querySelector(".ep .acct-edit-body");
+        if (newBody && keepScroll != null) newBody.scrollTop = keepScroll;
+        var again = null;
+        if (focusName) again = root.querySelector('.ep [name="' + focusName.replace(/[^A-Za-z]/g, "") + '"]');
+        if (!again && focusAct && focusAct !== "close" && focusAct !== "save-profile") again = root.querySelector('.ep [data-acct="' + focusAct.replace(/[^a-z-]/g, "") + '"]' + (focusSub ? '[data-sub="' + focusSub.replace(/[^a-z-]/g, "") + '"]' : ""));
+        if (again && !root.querySelector(".ep-confirm, .ep-sheet")) {
+          try { again.focus({ preventScroll: true }); } catch (err) { again.focus(); }
+          if (caret != null && focusName && again.setSelectionRange) {
+            try { again.setSelectionRange(caret, caretEnd == null ? caret : caretEnd); } catch (err) { /* not a text field */ }
+          }
+        }
+      }
       if (stepMoved) {
         var onbApi = window.ViktorychOnboarding;
         var titleEl = root.querySelector("#oobe-title");
@@ -2010,10 +2155,25 @@ var numberNote = form.passkey
       form.bdayAudience = "only";
       form.bdayShowYear = false;
       form.bdayOpen = false;
+      form.bdayWarn = false;
+      form.sheet = "";
+      form.toast = "";
       form.sub = "";
       form.anim = "enter";
+      /* Reopened right after a save: start from what was just saved, not
+         from a read that may still be catching up. */
+      var known = savedBday && savedBday.handle === account.handle && Date.now() - savedBday.at < BDAY_KEEP_MS ? savedBday : null;
+      if (known) {
+        form.bdayId = known.id || "";
+        form.bdayText = known.text;
+        form.bdayAudience = known.audience;
+        form.bdayShowYear = known.showYear;
+        form.bdayTz = known.tz || "";
+      }
+      syncBdayParts();
       form.initial = epSnapshot();
       loadBirthday(account);
+      pushEditHistory();
       watchUsernames();
       watchDisplayNames();
     }
@@ -2072,6 +2232,17 @@ var numberNote = form.passkey
       });
       var untouched = !mine.bdayOpen;
       mine.bdayState = "ready";
+      var known = savedBday && savedBday.handle === account.handle && Date.now() - savedBday.at < BDAY_KEEP_MS ? savedBday : null;
+      if (known && (!found || String(found.text || "") !== known.text || (found.audience || "only") !== known.audience || !!found.showYear !== known.showYear)) {
+        if (view === "edit") paint();
+        return;
+      }
+      if (!found && untouched && mine.bdayText && !known) {
+        mine.bdayText = "";
+        mine.bdayId = "";
+        syncBdayParts();
+        if (mine.initial) mine.initial.bdayText = "";
+      }
       if (found) {
         mine.bdayId = found.id || "";
         if (untouched) {
@@ -2079,6 +2250,7 @@ var numberNote = form.passkey
           mine.bdayAudience = found.audience || "only";
           mine.bdayShowYear = !!found.showYear;
           mine.bdayTz = found.tz || "";
+          if (form === mine) syncBdayParts();
           if (mine.initial) {
             mine.initial.bdayText = mine.bdayText;
             mine.initial.bdayAudience = mine.bdayAudience;
@@ -2097,21 +2269,70 @@ var numberNote = form.passkey
     var start = form.initial || {};
     return String(form.bdayText || "") !== String(start.bdayText || "") || String(form.bdayAudience || "") !== String(start.bdayAudience || "") || !!form.bdayShowYear !== !!start.bdayShowYear;
   }
-  function saveBirthday(token) {
+  /* Saves the birth date in About. Resolves true, or the server's error
+     code so the toast can say what went wrong. */
+  var savedBday = null;
+  var BDAY_KEEP_MS = 5 * 60 * 1000;
+  function saveBirthday(token, handle) {
     if (!birthdayChanged()) return Promise.resolve(true);
     var text = String(form.bdayText || "").trim();
-    var ok = function (res) { return !!res && (!res.status || res.status < 400); };
+    var mine = form;
+    var ok = function (res) {
+      var good = !!res && (!res.status || res.status < 400);
+      if (!good) return (res && res.error) || false;
+      var field = res && res.field;
+      if (field && field.id) mine.bdayId = field.id;
+      else if (res && res.id) mine.bdayId = res.id;
+      if (!text) mine.bdayId = "";
+      savedBday = { handle: handle || "", id: mine.bdayId || "", text: text, audience: mine.bdayAudience || "only", showYear: !!mine.bdayShowYear, tz: mine.bdayTz || "", at: Date.now() };
+      return true;
+    };
     if (!text) {
-      if (!form.bdayId) return Promise.resolve(true);
-      return api("/v1/about/" + form.bdayId, { method: "DELETE", token: token }).then(ok);
+      if (!form.bdayId) { savedBday = { handle: handle || "", id: "", text: "", audience: "only", showYear: false, tz: "", at: Date.now() }; return Promise.resolve(true); }
+      return api("/v1/about/" + form.bdayId, { method: "DELETE", token: token }).then(function (res) {
+        /* Already gone counts as removed. */
+        return ok(res && res.status === 404 ? { status: 200 } : res);
+      });
     }
     var zone = form.bdayTz || "";
     if (!zone) { try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (err) { zone = ""; } }
+    form.bdayTz = zone;
     var body = { section: "personal", kind: "birthday", text: text, audience: form.bdayAudience || "only", showYear: !!form.bdayShowYear, tz: zone };
     if (form.bdayAudience === "list") delete body.audience;
     if (form.bdayId) return api("/v1/about/" + form.bdayId, { method: "PATCH", token: token, body: body }).then(ok);
     return api("/v1/about", { method: "POST", token: token, body: body }).then(ok);
   }
+  /* X's Edit profile on Android: the system back button closes it, and
+     asks first when something changed. */
+  var epPushed = false;
+  var epPopIgnore = false;
+  function pushEditHistory() {
+    if (epPushed) return;
+    try {
+      history.pushState(Object.assign({}, history.state || {}, { epOpen: 1 }), "", location.href);
+      epPushed = true;
+    } catch (err) { epPushed = false; }
+  }
+  function popEditHistory() {
+    if (!epPushed) return;
+    epPushed = false;
+    try {
+      if (history.state && history.state.epOpen) { epPopIgnore = true; history.back(); }
+    } catch (err) { epPopIgnore = false; }
+  }
+  window.addEventListener("popstate", function () {
+    if (epPopIgnore) { epPopIgnore = false; return; }
+    if (!epPushed || (history.state && history.state.epOpen)) return;
+    epPushed = false;
+    if (view !== "edit" && view !== "crop") return;
+    if (view === "crop") { closeAuth(); pushEditHistory(); return; }
+    if (form.sheet || form.bdayWarn || form.confirmDiscard || (form.sub && form.subFrom !== "settings") || editDirty()) {
+      closeAuth();
+      if (view === "edit") pushEditHistory();
+      return;
+    }
+    requestEditClose(true);
+  });
   /* Close with X's short fade/scale; asks first when something changed. */
   var epClosing = false;
   function requestEditClose(force) {
@@ -2133,6 +2354,7 @@ var numberNote = form.passkey
       view = "";
       errorText = "";
       form = {};
+      popEditHistory();
       paint();
     };
     if (!back || still) { finish(); return; }
@@ -2150,6 +2372,8 @@ var numberNote = form.passkey
       return;
     }
     if (view === "edit") {
+      if (form.sheet) { var was = form.sheet; form.sheet = ""; paint(); var opener = document.querySelector('#account-layer [data-acct="ep-sheet"][data-sheet="' + was + '"]'); if (opener) { try { opener.focus({ preventScroll: true }); } catch (err) { opener.focus(); } } return; }
+      if (form.bdayWarn) { form.bdayWarn = false; paint(); return; }
       if (form.confirmDiscard) { form.confirmDiscard = false; paint(); return; }
       if (form.sub && form.subFrom !== "settings") { form.sub = ""; form.anim = "back"; paint(); return; }
       requestEditClose(false);
@@ -3538,9 +3762,29 @@ function signupPayload() {
       step();
     });
   }
+  /* Save, as on X: nothing changed closes at once; otherwise the button
+     spins and stays locked until the sheet closes (a second tap does
+     nothing), and on an error a toast says why while every edit stays. */
+  function saveFailText(code) {
+    if (code === "birthday_too_young") return bdayProblemText("young");
+    if (code === "birthday_invalid") return bdayProblemText("invalid");
+    if (code === "network") return tr("Something went wrong. Try again.");
+    return errorMessage(code) || tr("Something went wrong. Try again.");
+  }
   function saveProfile() {
     var session = readSession();
-    if (!session) return;
+    if (!session || view !== "edit") return;
+    if (form.saving || epClosing) return;
+    var problem = bdayProblem();
+    if (problem) {
+      form.bdayTried = true;
+      epToast(bdayProblemText(problem));
+      paint();
+      var pick = document.querySelector("#account-layer .ep-bday-pick");
+      if (pick && pick.scrollIntoView) pick.scrollIntoView({ block: "center" });
+      return;
+    }
+    if (!editDirty()) { requestEditClose(true); return; }
     var body = {
       displayName: String(form.displayName || "").trim(),
       bio: String(form.bio || ""),
@@ -3553,45 +3797,58 @@ function signupPayload() {
     body.bannerEmpty = form.bannerEmpty === "none" ? "none" : "default";
     if (form.avatarTouched) body.avatar = form.avatar || "";
     if (form.bannerTouched) body.banner = form.banner || "";
-    if (form.saving) return;
-    form.saving = true;
+    var mine = form;
+    var start = mine.initial || {};
+    var profileChanged = mine.avatarTouched || mine.bannerTouched || ["displayName", "bio", "location", "website", "privateFollows", "profileLess"].some(function (key) {
+      var now = mine[key] == null ? "" : mine[key];
+      var was = start[key] == null ? "" : start[key];
+      return typeof now === "string" || typeof was === "string" ? String(now).trim() !== String(was).trim() : now !== was;
+    });
+    mine.saving = true;
     errorText = "";
+    epToast("");
     paint();
-    api("/v1/profile", { method: "PATCH", token: session.token, body: body }).then(function (res) {
-        if (res.status !== 200 || !res.account) {
-          form.saving = false;
-          errorText = errorMessage(res.error);
+    var failed = function (code) {
+      if (form !== mine) return;
+      mine.saving = false;
+      epToast(saveFailText(code));
+      paint();
+    };
+    var saveBday = function () {
+      return saveBirthday(session.token, (session.account || {}).handle).then(function (bdayOk) {
+        if (form !== mine) return;
+        if (bdayOk !== true) {
+          /* The profile itself is saved; only the birthday needs another try. */
+          mine.saving = false;
+          mine.avatarTouched = false;
+          mine.bannerTouched = false;
+          var keepBday = { bdayText: mine.initial && mine.initial.bdayText, bdayAudience: mine.initial && mine.initial.bdayAudience, bdayShowYear: mine.initial && mine.initial.bdayShowYear };
+          mine.initial = epSnapshot();
+          Object.keys(keepBday).forEach(function (key) { mine.initial[key] = keepBday[key]; });
+          epToast(typeof bdayOk === "string" && /^birthday_/.test(bdayOk) ? saveFailText(bdayOk) : tr("Couldn’t save that detail."));
           paint();
           return;
         }
-        session.account = res.account;
-        writeSession(session);
-        remember(res.account);
-        dirtyLists();
-        if (window.ViktorychDisplayNames && window.ViktorychDisplayNames.names && window.ViktorychDisplayNames.names()) window.ViktorychDisplayNames.load();
+        if (window.ProfileAbout && window.ProfileAbout.forget) window.ProfileAbout.forget();
+        /* Stays "saving" through the close so a second tap cannot send it again. */
+        requestEditClose(true);
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-        return saveBirthday(session.token).then(function (bdayOk) {
-          form.saving = false;
-          if (!bdayOk) {
-            /* The profile itself is saved; only the birthday needs another try. */
-            form.avatarTouched = false;
-            form.bannerTouched = false;
-            var keepBday = { bdayText: form.initial && form.initial.bdayText, bdayAudience: form.initial && form.initial.bdayAudience, bdayShowYear: form.initial && form.initial.bdayShowYear };
-            form.initial = epSnapshot();
-            Object.keys(keepBday).forEach(function (key) { form.initial[key] = keepBday[key]; });
-            errorText = tr("Couldn’t save that detail.");
-            paint();
-            return;
-          }
-          if (window.ProfileAbout && window.ProfileAbout.forget) window.ProfileAbout.forget();
-          requestEditClose(true);
-          if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-        });
-    }).catch(function () {
-      form.saving = false;
-      errorText = tr("Something went wrong. Try again.");
-      paint();
-    });
+      });
+    };
+    var step = profileChanged ? api("/v1/profile", { method: "PATCH", token: session.token, body: body }).then(function (res) {
+      if (form !== mine) return false;
+      if (!res || res.status !== 200 || !res.account) { failed(res && res.error); return false; }
+      var fresh = readSession() || session;
+      fresh.account = res.account;
+      writeSession(fresh);
+      remember(res.account);
+      saveHead(res.account);
+      dirtyLists();
+      if (window.ViktorychDisplayNames && window.ViktorychDisplayNames.names && window.ViktorychDisplayNames.names()) window.ViktorychDisplayNames.load();
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return true;
+    }) : Promise.resolve(true);
+    step.then(function (go) { if (go) return saveBday(); }).catch(function () { failed("network"); });
   }
   function remember(account) {
     if (!account || !account.handle) return;
@@ -6289,13 +6546,59 @@ function signupPayload() {
         form.bdayText = start.bdayText || "";
         form.bdayAudience = start.bdayAudience || "only";
         form.bdayShowYear = !!start.bdayShowYear;
+        form.bdayTried = false;
+        syncBdayParts();
+        form.bdayOpen = false;
+        paint();
+      } else {
+        form.bdayWarn = true;
+        paint();
+        var warnYes = document.querySelector('#account-layer [data-acct="bday-warn-yes"]');
+        if (warnYes) warnYes.focus();
       }
-      form.bdayOpen = !form.bdayOpen;
-      paint();
-      if (form.bdayOpen) { var dateEl = document.getElementById("acct-bdayText"); if (dateEl) dateEl.focus(); }
     }
-    else if (act === "bday-clear") { form.bdayText = ""; paint(); }
-    else if (act === "toggle-bday-year") { form.bdayShowYear = !form.bdayShowYear; paint(); }
+    else if (act === "bday-warn-no") { form.bdayWarn = false; paint(); }
+    else if (act === "bday-warn-yes") {
+      form.bdayWarn = false;
+      form.bdayOpen = true;
+      syncBdayParts();
+      paint();
+      var firstPick = document.querySelector('#account-layer [data-acct="ep-sheet"][data-sheet="month"]');
+      if (firstPick) { try { firstPick.focus({ preventScroll: true }); } catch (err) { firstPick.focus(); } }
+      var pickRow = document.querySelector("#account-layer .ep-bday");
+      if (pickRow && pickRow.scrollIntoView) pickRow.scrollIntoView({ block: "nearest" });
+    }
+    else if (act === "ep-sheet") {
+      form.sheet = acct.getAttribute("data-sheet") || "";
+      paint();
+      var chosen = document.querySelector("#account-layer .ep-sheet-row.on") || document.querySelector("#account-layer .ep-sheet-row");
+      if (chosen) {
+        try { chosen.focus({ preventScroll: true }); } catch (err) { chosen.focus(); }
+        if (chosen.scrollIntoView) chosen.scrollIntoView({ block: "center" });
+      }
+    }
+    else if (act === "ep-sheet-close") {
+      if (event.target.closest(".ep-sheet") && !event.target.closest(".ep-sheet-cancel")) return;
+      closeAuth();
+    }
+    else if (act === "ep-pick") {
+      var kindPicked = acct.getAttribute("data-sheet") || "";
+      var picked = acct.getAttribute("data-value") || "";
+      var bdHelp = window.ViktorychBirthDate;
+      var parts = bdayParts();
+      if (kindPicked === "month") parts.month = Number(picked) || 0;
+      else if (kindPicked === "day") parts.day = Number(picked) || 0;
+      else if (kindPicked === "year") parts.year = Number(picked) || 0;
+      if (kindPicked === "month" || kindPicked === "day" || kindPicked === "year") {
+        /* 31 → 30 or 29 when the month or year changes, never an invalid day. */
+        if (bdHelp && parts.day && parts.month) parts.day = Math.min(parts.day, bdHelp.daysIn(parts.month, parts.year));
+        setBdayParts(parts.year, parts.month, parts.day);
+      } else if (kindPicked === "aud-md") form.bdayAudience = BDAY_AUDIENCES.indexOf(picked) >= 0 || picked === "list" ? picked : "only";
+      else if (kindPicked === "aud-y") form.bdayShowYear = picked === "same";
+      epToast("");
+      closeAuth();
+    }
+    else if (act === "bday-clear") { form.bdayTried = false; setBdayParts(0, 0, 0); form.bdayText = ""; paint(); }
     else if (act === "save-profile") saveProfile();
     else if (act === "media-menu") {
       var kind = acct.dataset.kind === "banner" ? "banner" : "avatar";
