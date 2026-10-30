@@ -60,6 +60,7 @@
   }
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
   const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", nostr: "Nostr" };
+  Object.defineProperty(PLATFORM, "news", { get: () => tr("Newsletter") });
 
   const PATH = {
     atSign: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z",
@@ -1574,6 +1575,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
   function followSnapshot(id) {
     if (!id || String(id).indexOf("app:") === 0) return null;
+    if (String(id).indexOf("news:") === 0) {
+      const nl = (STATE.settings.newsletters || {})[String(id).slice(5)];
+      return nl ? { name: String(nl.name || "").slice(0, 80), handle: String(id).slice(5), platform: "news", avatar: /^https:\/\//.test(String(nl.avatar || "")) ? nl.avatar : "", bio: "" } : null;
+    }
     const feed = feedById(id);
     if (!feed) return null;
     const avatar = /^https:\/\//.test(String(feed.avatar || "")) ? feed.avatar : "";
@@ -1778,13 +1783,20 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
       return Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
     } catch (err) { return []; }
   }
+  /* True only once the server list has been fetched and the feature is not
+     in it, so default-off features stay hidden until the owner turns them on. */
+  window.ViktorychServerFeature = function (name) {
+    let at = 0;
+    try { at = Number(localStorage.getItem(SERVER_OFF_KEY + "-at")) || 0; } catch (err) { at = 0; }
+    return at > 0 && SERVER_FEATURES.includes(name) && !serverOffList().includes(name);
+  };
   function storeServerOff(list) {
     try {
       localStorage.setItem(SERVER_OFF_KEY, JSON.stringify(list || []));
@@ -1849,7 +1861,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       regone_profile_stats: [tr("ReGone profile stats"), tr("Stats and achievements from the NZlay profile someone linked to their own account.")],
       nzlay_forum: [tr("NZlay forum community"), tr("The NZlay Forums community: topics and replies read live from nzlay.com.")],
       nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
-      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")]
+      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
+      nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -2079,8 +2092,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!text || text.length > 300) return null;
     if (/^(?:nostr:)?(?:npub1|nprofile1)[02-9ac-hj-np-z]{20,}$/i.test(text)) return { platform: "nostr", account: text.replace(/^nostr:/i, "") };
     if (/^nostr:[A-Za-z0-9._-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/i.test(text)) return { platform: "nostr", account: text.slice(6) };
+    if (/^(?:news|newsletter):\S+$/i.test(text)) return { platform: "news", account: text };
     const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok|bsky|mastodon):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
+    if (/^(?:https?:\/\/)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:[/?#]\S*)?$/.test(text) && isNewsletterUrl(text) && !/^(?:https?:\/\/)?(?:www\.)?medium\.com\/?$/i.test(text)) return { platform: "news", account: text };
     if (/^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}(?:\/[A-Za-z0-9_/%?&=.+~-]*)?$/i.test(text)) return { platform: "x", account: text };
     if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
     if (/threads\.(?:com|net)\/@/i.test(text)) return { platform: "threads", account: text };
@@ -2464,8 +2479,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function sourceBadge(platform) {
     if (!platform || platform === "x" || platform === "app") return "";
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : "rss";
-    return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : platform === "news" ? "mail" : "rss";
+    return `<span class="src" title="${esc(platform === "news" ? tr("Newsletter") : (PLATFORM[platform] || "RSS"))}">${icon(name)}</span>`;
   }
 
   function platformGlyph(platform) {
@@ -9579,7 +9594,7 @@ const here = parseRoute();
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["bsky", "mastodon", "nostr"].includes(parts[0]) && parts[1]) {
+    } else if (["bsky", "mastodon", "nostr", "news"].includes(parts[0]) && parts[1]) {
       // Profiles followed on this device (fediverse, Bluesky, Nostr) open live.
       if (parts[2] === "status" && parts[3]) return { name: "status", platform: parts[0], handle: parts[1], id: parts.slice(3).join("/"), query };
       if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "followers_you_follow") return { name: "connections", platform: parts[0], handle: parts[1], tab: parts[2], query };
@@ -9593,6 +9608,7 @@ const here = parseRoute();
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
     if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "followers_you_follow" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
+    if (rest[0] === "games") return { name: "profile", platform, handle, tab: "games", query };
     return { name: "profile", platform, handle, query };
   }
 
@@ -10079,7 +10095,7 @@ const here = parseRoute();
   }
 
   function sidebar() {
-    const people = followSuggestions().slice(0, 3);
+    const people = window.ViktorychPYMK && window.ViktorychPYMK.sideHtml ? [] : followSuggestions().slice(0, 3);
     const rows = people.map((f) => `<div class="who-row">
       <a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">
         ${avatar(f.avatar, f.name)}
@@ -10093,13 +10109,20 @@ const here = parseRoute();
       </form>
       ${(!STATE.settings || STATE.settings.friendsRail !== false) && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
-      ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
+      ${window.ViktorychPYMK && window.ViktorychPYMK.sideHtml ? window.ViktorychPYMK.sideHtml() : people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
     </aside>`;
   }
 
   if (window.ViktorychPYMK && window.ViktorychPYMK.setHost) {
-    window.ViktorychPYMK.setHost({ esc, avatar, badge, icon, isFollowed, follow: followButtonClean, render: () => render() });
+    window.ViktorychPYMK.setHost({
+      esc, avatar, badge, icon, isFollowed, sourceBadge,
+      follow: followButtonClean,
+      render: () => render(),
+      /* Outside sources the user can follow, for the unified right-column
+         "Who to follow" panel and the people tab of #/connect. */
+      feedPeople: () => followSuggestions().slice(0, 40).map((f) => Object.assign({}, f, { href: accountHash(f.platform, f.channelId || f.handle) }))
+    });
   }
 
   const BOTTOM_NAV_MIN = 2;
@@ -12762,6 +12785,198 @@ const here = parseRoute();
     });
   }
 
+  /* Newsletters (Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp
+     archives, any site with RSS/Atom) followed as senders. The Worker finds
+     the feed and keeps a short-lived sanitized copy; the feed URL each key
+     points to stays in this device's settings. Images are hotlinked. */
+  const NEWSLETTER_HOSTS = /(^|\.)(substack\.com|beehiiv\.com|buttondown\.(?:com|email)|ghost\.io|medium\.com|campaign-archive\d*\.com|list-manage\.com|mailchi\.mp|mailerlite\.com|kit\.com|convertkit\.com|tinyletter\.com|letterdrop\.com|revue\.co|getrevue\.co|substackcdn\.com)$/i;
+  const NL_ISSUES = {};
+  /* What was typed in the Newsletters box survives a re-render of the Feeds page. */
+  const NL_DRAFT = { text: "" };
+  document.addEventListener("input", (event) => {
+    if (event.target && event.target.id === "nl-add-input") NL_DRAFT.text = event.target.value;
+  });
+  function newsletterMap() {
+    const map = STATE.settings.newsletters;
+    if (map && typeof map === "object" && !Array.isArray(map)) return map;
+    STATE.settings.newsletters = {};
+    return STATE.settings.newsletters;
+  }
+  function isNewsletterUrl(text) {
+    const raw = String(text || "").trim();
+    if (/^(?:news|newsletter):\S+$/i.test(raw)) return true;
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : "https://" + raw);
+      return NEWSLETTER_HOSTS.test(url.hostname);
+    } catch (err) { return false; }
+  }
+  function newsProfile(doc) {
+    const p = (doc && doc.profile) || {};
+    return {
+      id: "news:" + doc.key,
+      platform: "news",
+      handle: doc.key,
+      displayHandle: p.host || doc.key,
+      name: p.name || p.host || doc.key,
+      avatar: /^https:\/\//.test(String(p.avatar || "")) ? p.avatar : "",
+      banner: "",
+      bio: p.bio || "",
+      website: /^https?:\/\//.test(String(p.site || "")) ? p.site : "",
+      url: p.site || "",
+      postsCount: null,
+      followers: null,
+      following: null
+    };
+  }
+  function newsPost(item, profile, key) {
+    if (!item || !item.id) return null;
+    const title = String(item.title || "").trim();
+    const excerpt = String(item.excerpt || "").trim();
+    const text = title && excerpt && excerpt.indexOf(title) !== 0 ? title + "\n\n" + excerpt : (title || excerpt);
+    const image = /^https:\/\//.test(String(item.image || "")) ? item.image : "";
+    return {
+      id: "nl" + item.id,
+      statusId: "nl" + item.id,
+      platform: "news",
+      kind: "post",
+      author: profile.name,
+      handle: key,
+      displayHandle: profile.displayHandle,
+      avatar: profile.avatar,
+      text: text,
+      title: title,
+      media: image ? [{ type: "photo", url: image, alt: title }] : [],
+      likes: 0,
+      reposts: 0,
+      replyCount: 0,
+      date: item.date || "",
+      url: item.link || profile.url,
+      newsletter: { key: key, id: item.id, byline: item.author || "" }
+    };
+  }
+  /* Waits a moment for the accounts API on a cold start instead of giving up. */
+  function newsletterApi(tries) {
+    const api = accountsApi();
+    if (api || (tries || 0) >= 20) return Promise.resolve(api);
+    return new Promise((resolve) => setTimeout(resolve, 250)).then(() => newsletterApi((tries || 0) + 1));
+  }
+  function newsletterFetch(query) {
+    return newsletterApi(0).then((api) => (api ? fetchJson(api + "/v1/newsletter?" + query) : null)).catch(() => null);
+  }
+  function newsDocToRow(row, doc) {
+    const profile = newsProfile(doc);
+    row.profile = profile;
+    row.posts = (doc.items || []).map((item) => newsPost(item, profile, doc.key)).filter(Boolean);
+    row.posts.forEach(rememberLive);
+    row.media = row.posts.filter((post) => post.media && post.media.length);
+    row.replies = [];
+    row.source = "news";
+    row.fetchedAt = Date.now();
+    const map = newsletterMap();
+    const was = map[doc.key];
+    if (isFollowed("news:" + doc.key) && (!was || was.feed !== doc.feed || was.name !== profile.name || was.avatar !== profile.avatar)) {
+      map[doc.key] = { feed: doc.feed, name: profile.name, avatar: profile.avatar };
+      saveSettings();
+    }
+    snapshotProfile("news:" + doc.key, row);
+  }
+  function loadNewsLive(row, key) {
+    const saved = newsletterMap()[key];
+    const query = saved && saved.feed ? "url=" + encodeURIComponent(saved.feed) : "key=" + encodeURIComponent(key);
+    if (!row.profile && saved) row.profile = newsProfile({ key: key, profile: { name: saved.name, avatar: saved.avatar } });
+    return newsletterFetch(query).then((doc) => {
+      if (doc && doc.key && Array.isArray(doc.items)) newsDocToRow(row, doc);
+      else {
+        row.error = "thin";
+        if (!row.profile) row.profile = limitedProfile("news", key);
+        row.fetchedAt = Date.now();
+      }
+    });
+  }
+  function followNewsletter(raw) {
+    const text = String(raw || "").trim().replace(/^(?:news|newsletter):/i, "");
+    toast(tr("Looking for the newsletter’s feed…"));
+    return newsletterFetch("url=" + encodeURIComponent(text)).then((doc) => {
+      if (!doc || !doc.key || !Array.isArray(doc.items)) {
+        toast(tr("Couldn’t find a feed or archive for that newsletter."));
+        return false;
+      }
+      const map = newsletterMap();
+      const profile = newsProfile(doc);
+      map[doc.key] = { feed: doc.feed, name: profile.name, avatar: profile.avatar };
+      const row = STATE.liveUsers[liveKey("news", doc.key)] || (STATE.liveUsers[liveKey("news", doc.key)] = blankLive("news", doc.key));
+      newsDocToRow(row, doc);
+      row.settled = true;
+      applyFollow(["news:" + doc.key], true);
+      location.hash = userHash("news", doc.key);
+      return true;
+    });
+  }
+  /* The full issue, sanitized again on this device before it is shown. */
+  const NL_TAGS = /^(A|P|BR|HR|B|STRONG|I|EM|U|S|DEL|INS|MARK|SMALL|SUB|SUP|CODE|PRE|KBD|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|Q|CITE|UL|OL|LI|DL|DT|DD|IMG|FIGURE|FIGCAPTION|PICTURE|SOURCE|VIDEO|TABLE|THEAD|TBODY|TFOOT|TR|TD|TH|CAPTION|DIV|SPAN|SECTION|ARTICLE|HEADER|FOOTER|CENTER|FONT|ABBR|TIME)$/;
+  const NL_ATTRS = { href: 1, src: 1, srcset: 1, alt: 1, title: 1, width: 1, height: 1, colspan: 1, rowspan: 1, start: 1, cite: 1, datetime: 1, poster: 1, controls: 1, preload: 1, playsinline: 1, loading: 1, decoding: 1, referrerpolicy: 1, target: 1, rel: 1, type: 1 };
+  function cleanIssueHtml(html) {
+    let doc;
+    try { doc = new DOMParser().parseFromString("<body>" + String(html || "") + "</body>", "text/html"); } catch (err) { return ""; }
+    const walk = (node) => {
+      Array.from(node.children).forEach((el) => {
+        if (!NL_TAGS.test(el.tagName)) {
+          if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|FORM|SVG|MATH|NOSCRIPT|TEMPLATE|LINK|META|BASE)$/.test(el.tagName)) { el.remove(); return; }
+          walk(el);
+          el.replaceWith.apply(el, Array.from(el.childNodes));
+          return;
+        }
+        Array.from(el.attributes).forEach((attr) => {
+          const name = attr.name.toLowerCase();
+          const value = String(attr.value || "");
+          if (!NL_ATTRS[name]) { el.removeAttribute(attr.name); return; }
+          if ((name === "href" || name === "src" || name === "poster" || name === "cite") && !/^(https:\/\/|http:\/\/|mailto:)/i.test(value.trim())) el.removeAttribute(attr.name);
+          if ((name === "src" || name === "poster") && !/^https:\/\//i.test(value.trim())) el.removeAttribute(attr.name);
+          if (name === "srcset" && /javascript:|data:/i.test(value)) el.removeAttribute(attr.name);
+        });
+        if (el.tagName === "A") { el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer nofollow"); }
+        if (el.tagName === "IMG") {
+          if (!el.getAttribute("src")) { el.remove(); return; }
+          el.setAttribute("loading", "lazy");
+          el.setAttribute("decoding", "async");
+          el.setAttribute("referrerpolicy", "no-referrer");
+        }
+        walk(el);
+      });
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  }
+  function newsletterIssue(post) {
+    const nl = post.newsletter || {};
+    const slot = NL_ISSUES[nl.id];
+    if (slot) return slot;
+    const saved = newsletterMap()[nl.key];
+    const entry = NL_ISSUES[nl.id] = { state: "loading", html: "" };
+    if (!nl.id) { entry.state = "error"; return entry; }
+    const q = "key=" + encodeURIComponent(nl.key || "") + "&id=" + encodeURIComponent(nl.id) + (saved && saved.feed ? "&url=" + encodeURIComponent(saved.feed) : "");
+    newsletterApi(0).then((api) => (api ? fetchJson(api + "/v1/newsletter/issue?" + q) : null)).then((data) => {
+      entry.html = data && data.html ? cleanIssueHtml(data.html) : "";
+      entry.state = entry.html ? "ok" : "empty";
+    }).catch(() => { entry.state = "error"; }).then(() => {
+      const route = parseRoute();
+      if (route.name === "status" && route.platform === "news") render();
+    });
+    return entry;
+  }
+  function newsletterBody(post) {
+    const issue = newsletterIssue(post);
+    const nl = post.newsletter || {};
+    const title = post.title ? `<h2 class="nl-title" dir="auto">${esc(post.title)}</h2>` : "";
+    const byline = nl.byline ? `<div class="nl-byline" dir="auto">${esc(nl.byline)}</div>` : "";
+    const open = post.url && /^https?:\/\//.test(post.url) ? `<a class="nl-open" data-act="stop" href="${esc(post.url)}" target="_blank" rel="noopener noreferrer">${icon("link")}<span>${tr("Open the original issue")}</span></a>` : "";
+    let body = "";
+    if (issue.state === "loading") body = `<div class="nl-loading" aria-busy="true">${tr("Loading the issue…")}</div>`;
+    else if (issue.state === "ok") body = `<div class="nl-body" dir="auto">${issue.html}</div>`;
+    else body = `<p class="nl-empty">${esc(String(post.text || "").replace(post.title || "", "").trim() || tr("This issue has no text in its feed."))}</p>`;
+    return `<div class="nl-issue">${title}${byline}${body}${open}</div>`;
+  }
+
   /* A Nostr profile and its notes, read from relays on this device. Only when
      the owner has Nostr on and this person opted in. */
   function nostrOn() {
@@ -12827,7 +13042,7 @@ const here = parseRoute();
 
   /* Profiles followed on this device that are not in the site's feed list
      (fediverse, Bluesky, Nostr) are read live here and join Home. */
-  const DEVICE_FOLLOW = ["mastodon", "bsky", "nostr"];
+  const DEVICE_FOLLOW = ["mastodon", "bsky", "nostr", "news"];
   function deviceFollowPosts(tab) {
     if (tab !== "foryou" && tab !== "following") return [];
     const out = [];
@@ -12862,6 +13077,7 @@ const here = parseRoute();
     const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
       : platform === "bsky" ? loadBskyHeader(clean)
       : platform === "mastodon" ? loadMastodonHeader(clean)
+      : platform === "news" ? Promise.resolve(null)
       : platform === "nostr" ? Promise.resolve(null)
       : platform === "vk" ? Promise.resolve(limitedProfile("vk", clean))
       : platform === "telegram" ? Promise.resolve(limitedProfile("telegram", clean))
@@ -12887,6 +13103,7 @@ const here = parseRoute();
     const job = platform === "youtube" ? loadYtLive(row, clean)
       : platform === "bsky" ? loadBskyLive(row, clean)
       : platform === "mastodon" ? loadMastodonLive(row, clean)
+      : platform === "news" ? loadNewsLive(row, clean)
       : platform === "nostr" ? loadNostrLive(row, clean)
       : platform === "vk" ? loadVkSaved(row, clean)
       : platform === "telegram" ? loadTelegramSaved(row, clean)
@@ -13001,10 +13218,12 @@ const here = parseRoute();
     if (platform === "youtube") return tr("View on YouTube");
     if (platform === "tiktok") return tr("Open on TikTok");
     if (platform === "x") return tr("View on X");
+    if (platform === "news") return tr("Open the newsletter’s website");
     return tr("View on {platform}", { platform: PLATFORM[platform] || tr("Web") });
   }
 
   function profileLinkLabel(platform) {
+    if (platform === "news") return tr("Website");
     return PLATFORM[platform] || tr("Web");
   }
 
@@ -13612,6 +13831,13 @@ const here = parseRoute();
     }
     let post = findPost(route.platform, route.handle, route.id);
     if (!post && route.platform === "nostr") nostrStatus(route.id);
+    if (!post && route.platform === "news" && route.handle) {
+      const row = ensureLiveUser("news", route.handle);
+      if (!row.settled) return pageHead(tr("Post noun"), "", true) + `<div class="reply-empty">${tr("Loading…")}</div>`;
+      post = STATE.shared[String(route.id)] || (row.posts || []).find((item) => item && String(item.statusId || item.id) === String(route.id)) || null;
+      if (post) rememberLive(post);
+      if (!post) return pageHead(tr("Post noun"), "", true) + emptyBlock(tr("Post unavailable"), tr("This issue is no longer in the newsletter’s feed."));
+    }
     if (!post && (route.platform === "instagram" || route.platform === "threads" || route.platform === "youtube")) {
       const archived = (ARCHIVE.posts || []).find((item) => item && item.p === route.platform && String(item.id) === String(route.id));
       const knownShape = route.platform !== "youtube" || ytVideoId(route.id) || !!(archived && archived.k);
@@ -13666,7 +13892,7 @@ const here = parseRoute();
     const focusPost = parentShown ? mentionless(post) : replyBody(post);
     const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? replyContextHtml(post).replace('<div class="replying">', '<div class="replying status-replying">') : "";
     const body = `${forwardLine(post)}${replyLine}
-        ${textBlock(focusPost, post.id, true, "status-text")}
+        ${post.platform === "news" && !hiddenPost(post) ? newsletterBody(post) : textBlock(focusPost, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">${tr("Muted on this device.")}</p>` : ""}
         ${pollHtml(post)}
         ${discordMeta(post)}
@@ -14248,8 +14474,25 @@ const here = parseRoute();
   }
 
   function feedsView() {
-    if (window.FeedsPage && window.FeedsPage.view) return window.FeedsPage.view();
-    return feedsViewLegacy();
+    if (window.FeedsPage && window.FeedsPage.view) return window.FeedsPage.view() + newslettersSection();
+    return feedsViewLegacy() + newslettersSection();
+  }
+
+  /* Newsletters this account follows, with an add box for a pasted link. */
+  function newslettersSection() {
+    const map = STATE.settings.newsletters || {};
+    const ids = (STATE.settings.follows || []).filter((id) => String(id).indexOf("news:") === 0);
+    const rows = ids.map((id) => {
+      const key = String(id).slice(5);
+      const nl = map[key] || {};
+      const row = STATE.liveUsers[liveKey("news", key)];
+      const profile = (row && row.profile) || {};
+      const name = profile.name || nl.name || key;
+      const face = profile.avatar || nl.avatar || "";
+      return `<div class="acct-row"><a class="who-main" href="${esc(userHash("news", key))}">${avatar(face, name)}<span class="who-copy"><span class="name">${esc(name)}</span><span class="handle">${esc(profile.displayHandle || key)}</span></span></a>${followButtonClean(id)}</div>`;
+    }).join("");
+    const box = `<form class="add-account nl-add"><label class="search"><span>${icon("mail")}</span><input id="nl-add-input" value="${esc(NL_DRAFT.text)}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="${esc(tr("Paste a newsletter link"))}" aria-label="${esc(tr("Add a newsletter"))}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>`;
+    return `<section class="feed-section nl-section"><h2>${esc(tr("Newsletters"))}</h2><p class="feeds-hint">${esc(tr("Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts."))}</p>${box}${rows}</section>`;
   }
 
   function feedsViewLegacy() {
@@ -23416,6 +23659,17 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     const addForm = event.target.closest("form.add-account");
     if (addForm) {
       event.preventDefault();
+      const nlInput = addForm.querySelector("input");
+      const nlParsed = parseAccountInput(nlInput && nlInput.value);
+      /* Newsletter links follow on this device for everyone; other feed URLs too unless the owner adds them to the catalog. */
+      if (addForm.classList.contains("nl-add") && nlInput && String(nlInput.value || "").trim()) {
+        followNewsletter(nlInput.value).then((ok) => { if (ok) { NL_DRAFT.text = ""; addForm.reset(); } });
+        return;
+      }
+      if (nlParsed && (nlParsed.platform === "news" || (nlParsed.platform === "rss" && !(signedOwner() && accountsApi() && accountToken())))) {
+        followNewsletter(nlParsed.account).then((ok) => { if (ok) addForm.reset(); });
+        return;
+      }
       if (window.FeedsPage && window.FeedsPage.onAdd && window.FeedsPage.onAdd(addForm)) return;
       const input = addForm.querySelector("input");
       const parsed = parseAccountInput(input && input.value);
@@ -28371,7 +28625,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     } else if (parts[0].charAt(0) === "@") {
       platform = "x";
       handle = parts[0].slice(1);
-    } else if (["x", "threads", "instagram", "youtube", "vk", "discord", "telegram", "tiktok", "bsky", "mastodon", "app"].indexOf(parts[0]) >= 0 && parts[1] && parts[2] !== "status") {
+    } else if (["x", "threads", "instagram", "youtube", "vk", "discord", "telegram", "tiktok", "bsky", "mastodon", "news", "app"].indexOf(parts[0]) >= 0 && parts[1] && parts[2] !== "status") {
       platform = parts[0];
       handle = parts[1];
     }

@@ -77,14 +77,20 @@ test("the owner can turn heavy features fully off", async () => {
 
   let pub = await call("/v1/features");
   assert.equal(pub.status, 200);
-  assert.deepEqual(pub.body.off, ["nostr"], "Nostr starts off until the owner turns it on");
+  assert.deepEqual(pub.body.off, ["nostr", "nft"], "Nostr and gift NFTs start off until the owner turns them on");
+  assert.equal((await call("/v1/nft/config")).status, 204, "gift NFTs are off by default");
   assert.ok(pub.body.features.includes("nostr"));
   for (const path of ["/.well-known/nostr.json?name=member_test", "/v1/nostr/posts/" + "a".repeat(32)]) {
     const res = await call(path);
     assert.equal(res.status, 204, path + " is off by default");
   }
   const nostrOn = await call("/v1/owner/features", { method: "POST", token: owner.body.token, body: { name: "nostr", off: false } });
-  assert.deepEqual(nostrOn.body.off, []);
+  assert.deepEqual(nostrOn.body.off, ["nft"]);
+  const nftOn = await call("/v1/owner/features", { method: "POST", token: owner.body.token, body: { name: "nft", off: false } });
+  assert.deepEqual(nftOn.body.off, []);
+  const nftConfig = await call("/v1/nft/config");
+  assert.equal(nftConfig.status, 200);
+  assert.equal(nftConfig.body.ready, false, "on but without a contract address, nothing can be minted");
   assert.equal((await call("/v1/nostr/posts/" + "a".repeat(32))).status, 404, "on: unknown posts have no Nostr link");
   pub = await call("/v1/features");
   assert.deepEqual(pub.body.off, []);

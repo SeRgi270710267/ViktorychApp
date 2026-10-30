@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Unicorn",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/unicorn.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "unicorn"
+    },
+    {
+      "trait_type": "Index",
+      "value": 69
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreibliogfqtett5clnnmspdssh7kjdijnbntn4lzbzbjyituhvy6g5e",
+  "image_sha256": "2b438c584c939f44b6b59278e523fd491a12d0b66de2f21c853844e87ae3c6e9"
+}

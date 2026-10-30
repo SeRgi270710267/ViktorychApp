@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Fox",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/fox.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "fox"
+    },
+    {
+      "trait_type": "Index",
+      "value": 21
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreiaixaba42jjpukt5qjdqtu3ybswztheyrqt3mhrzd22efc5krumja",
+  "image_sha256": "08b8020e69297d153ec12384e9bc0656ccce4c4613db0f1c8f5a2145d5468c48"
+}

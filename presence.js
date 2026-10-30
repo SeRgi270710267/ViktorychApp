@@ -591,6 +591,13 @@ function save(root, status) {
 }
 
 function onClick(event) {
+  const face = event.target && event.target.closest && event.target.closest("[data-rail-face]");
+  if (face) {
+    // A face in the collapsed strip: open the panel on that friend's chat.
+    event.preventDefault();
+    openRailChat(face.closest(".friends-rail"), face.getAttribute("data-rail-face") || "");
+    return;
+  }
   const el = event.target && event.target.closest && event.target.closest("[data-presence]");
   if (!el) {
     if (sheet && !sheet.hidden && event.target === sheet) close();
@@ -650,13 +657,10 @@ function onClick(event) {
   if (act === "rail-fold") {
     event.preventDefault();
     const card = el.closest(".friends-rail");
-    const collapsed = !(card && card.classList.contains("is-collapsed"));
-    if (card) card.classList.toggle("is-collapsed", collapsed);
-    setRailCollapsed(collapsed);
-    el.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    el.textContent = collapsed ? "▸" : "▾";
+    foldRail(card, !(card && card.classList.contains("is-collapsed")));
     return;
   }
+
   if (act === "rail-msg") {
     event.preventDefault();
     const id = el.getAttribute("data-id") || "";
@@ -852,13 +856,64 @@ function railListHtml() {
 function paintRail() {
   const list = document.querySelector("[data-rail-list]");
   if (list) list.innerHTML = railListHtml();
+  const peek = document.querySelector("[data-rail-peek]");
+  if (peek) peek.innerHTML = railPeekInner();
+}
+
+function openRailChat(card, id) {
+  foldRail(card, false);
+  railTo = id;
+  railNote = "";
+  paintRail();
+  if (railTo && window.ViktorychFriendP2P && api.stateOf(railTo) && api.stateOf(railTo) !== "offline") window.ViktorychFriendP2P.connect(railTo);
+  const field = document.querySelector("[data-rail-text]");
+  if (field) field.focus();
+}
+
+function foldRail(card, collapsed) {
+  if (card) card.classList.toggle("is-collapsed", collapsed);
+  setRailCollapsed(collapsed);
+  const fold = card && card.querySelector(".friends-rail-fold");
+  if (fold) {
+    fold.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    fold.setAttribute("aria-label", (collapsed ? tr("Expand") : tr("Collapse")));
+    fold.textContent = collapsed ? "▸" : "▾";
+  }
+  const title = card && card.querySelector(".friends-rail-title");
+  if (title) title.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
+/* The collapsed panel still shows who is around: up to seven stacked faces
+   with their presence dots and a count. Same friends list as the open
+   panel (no extra requests). */
+const PEEK_MAX = 7;
+function peekFriends() {
+  return friends.filter(function (person) {
+    return person && (person.state === "online" || person.state === "idle");
+  }).sort(function (a, b) {
+    const diff = friendRank(a.state) - friendRank(b.state);
+    if (diff) return diff;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+}
+
+function railPeekInner() {
+  if (!friendsLoaded) return '<span class="friends-rail-peek-note">' + esc(tr("Loading…")) + "</span>";
+  const list = peekFriends();
+  if (!list.length) return '<span class="friends-rail-peek-note">' + esc(tr("No friends online")) + "</span>";
+  const faces = list.slice(0, PEEK_MAX).map(function (person) {
+    const name = person.name || person.handle || "";
+    return '<button type="button" class="friends-rail-face" data-rail-face="' + esc(person.publicId) + '" title="' + esc(name) + '" aria-label="' + esc(tr("Message {name}", { name: name })) + '">' + wrap(person.publicId, friendPhoto(person)) + "</button>";
+  }).join("");
+  const more = list.length > PEEK_MAX ? '<span class="friends-rail-more" aria-hidden="true">+' + (list.length - PEEK_MAX) + "</span>" : "";
+  return '<span class="friends-rail-faces">' + faces + more + '</span><button type="button" class="friends-rail-count" data-presence="rail-fold"><i class="friends-rail-live" aria-hidden="true"></i>' + esc(tr("{n} online", { n: list.length })) + "</button>";
 }
 
 function railHtml() {
   if (!token()) return "";
   if (visible()) loadFriends(false);
   const collapsed = railCollapsed();
-  return '<section class="card friends-rail' + (collapsed ? " is-collapsed" : "") + '" aria-label="' + esc(tr("Friends")) + '"><div class="friends-rail-head"><h2>' + esc(tr("Friends")) + '</h2><button type="button" class="friends-rail-fold" data-presence="rail-fold" aria-expanded="' + (collapsed ? "false" : "true") + '" aria-label="' + esc(tr("Collapse")) + '">' + (collapsed ? "▸" : "▾") + '</button></div><div class="friends-rail-body"><label class="friends-rail-search"><input type="search" data-rail-search placeholder="' + esc(tr("Search Friends")) + '" aria-label="' + esc(tr("Search Friends")) + '" value="' + esc(railQuery) + '"></label><div class="friends-rail-list" data-rail-list>' + railListHtml() + '</div><a class="show-more-row" href="#/online">' + esc(tr("See all")) + "</a></div></section>";
+  return '<section class="card friends-rail' + (collapsed ? " is-collapsed" : "") + '" aria-label="' + esc(tr("Friends")) + '"><div class="friends-rail-head"><h2><button type="button" class="friends-rail-title" data-presence="rail-fold" aria-expanded="' + (collapsed ? "false" : "true") + '">' + esc(tr("Friends")) + '</button></h2><button type="button" class="friends-rail-fold" data-presence="rail-fold" aria-expanded="' + (collapsed ? "false" : "true") + '" aria-label="' + esc((collapsed ? tr("Expand") : tr("Collapse"))) + '">' + (collapsed ? "▸" : "▾") + '</button></div><div class="friends-rail-peek" data-rail-peek>' + railPeekInner() + '</div><div class="friends-rail-body"><label class="friends-rail-search"><input type="search" data-rail-search placeholder="' + esc(tr("Search Friends")) + '" aria-label="' + esc(tr("Search Friends")) + '" value="' + esc(railQuery) + '"></label><div class="friends-rail-list" data-rail-list>' + railListHtml() + '</div><a class="show-more-row" href="#/online">' + esc(tr("See all")) + "</a></div></section>";
 }
 
 function sendRailMessage(id, text) {
