@@ -1016,7 +1016,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -2021,6 +2021,23 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (feed && feed.handle) return profileHash(feed.platform, feed.handle);
     return userHash(platform, handle);
   }
+  /* Community Notes: the post ref the Worker and the X mirror use. */
+  function cnRef(post) {
+    if (!post) return "";
+    const platform = String(post.platform || "").toLowerCase();
+    const id = String(post.statusId || post.id || "").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 100);
+    return /^[a-z]{1,12}$/.test(platform) && id ? platform + ":" + id : "";
+  }
+  function cnSlot(post) {
+    const ref = cnRef(post);
+    if (!ref) return "";
+    const app = post.platform === "app" && /^[a-f0-9]{32}$/.test(String(post.id || "")) ? String(post.id) : "";
+    return `<div class="cn-slot" data-cn-ref="${esc(ref)}" data-cn-href="${esc(statusHash(post))}"${app ? ` data-cn-app="${app}"` : ""}></div>`;
+  }
+  function cnMenu(post) {
+    return window.ViktorychCommunityNotes && window.ViktorychCommunityNotes.menuItems ? window.ViktorychCommunityNotes.menuItems(cnRef(post)) : "";
+  }
+
   function statusHash(post) {
     const platform = post.platform || "x";
     const handle = post.handle || "";
@@ -9011,7 +9028,7 @@ const here = parseRoute();
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -9062,6 +9079,7 @@ const here = parseRoute();
           ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
           ${giftChip(post)}
           ${threadLink}
+          ${cnSlot(post)}
           ${actionBar(post)}
         </div>
       </div>
@@ -9156,6 +9174,7 @@ const here = parseRoute();
     }
     if (parts[0] === "vault") return { name: "vault", tab: parts[1] || "my", query };
     if (parts[0] === "packages") return { name: "packages", tab: parts[1] || "active", query };
+    if (parts[0] === "communitynotes") return { name: "communitynotes", tab: parts[1] || "", query };
     if (parts[0] === "customize") return { name: "customize", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
@@ -14707,6 +14726,12 @@ const here = parseRoute();
     if (kind === "friend_request") return tr("{name} sent you a friend request", { name: who });
     if (kind === "friend_accept") return tr("{name} accepted your friend request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
+    if (kind === "community_note") {
+      const text = note && note.text;
+      if (text === "Your Community Note is now showing") return tr("Your Community Note is now showing");
+      if (text === "Readers added context to your post") return tr("Readers added context to your post");
+      return tr("Readers added context to a post you interacted with");
+    }
     if (kind === "game_invite") return tr("{name} invited you to play {game}", { name: who, game: (note && note.text) || "ReGone" });
     if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
     if (kind === "gift") return tr("{name} sent you a gift", { name: who });
@@ -14718,7 +14743,7 @@ const here = parseRoute();
   }
 
   function noteBody(note) {
-    const text = note && note.text ? String(note.text) : "";
+    const text = note && note.text && note.kind !== "community_note" ? String(note.text) : "";
     if (!text) return "";
     const ai = window.ViktorychOnDeviceAi;
     if (ai && ai.hiddenSpam && ai.hiddenSpam(text, "notification")) {
@@ -14782,6 +14807,7 @@ const here = parseRoute();
     if (kind === "reply" || kind === "mention" || (note && note.mention)) return "reply";
     if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "user";
     if (kind === "live") return "mic";
+    if (kind === "community_note") return "communities";
     if (kind === "tv_signin") return "tv";
     return "bellOn";
   }
@@ -15200,6 +15226,7 @@ const here = parseRoute();
     let key = "";
     if (route.name === "home") key = tr("Home");
     else if (route.name === "status") key = tr("Post noun");
+    else if (route.name === "communitynotes") key = tr("Community Notes");
     else if (route.name === "incoming") key = tr("Add account");
     else if (route.name === "customize") key = tr("Customize");
     else if (route.name === "settings") {
@@ -15668,6 +15695,7 @@ const here = parseRoute();
           ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
         </div>
         ${window.ViktorychReactions ? window.ViktorychReactions.settingsHtml(STATE.settings && STATE.settings.reactionsData) : ""}
+        ${window.ViktorychCommunityNotes ? window.ViktorychCommunityNotes.settingsHtml(STATE.settings && STATE.settings.communityNotesData) : ""}
         ${peerMediaSettingsHtml()}
         ${window.ViktorychFriendP2P ? window.ViktorychFriendP2P.settingsHtml() : ""}
       </div>${ownerFeaturesSection()}`;
@@ -15840,6 +15868,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
+      ${accountToken() ? settingsRow("#/communitynotes", tr("Community Notes"), tr("Rate and write notes that add context to posts.")) : ""}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
       ${accountToken() ? settingsRow("#/link-tv", tr("Link a TV"), tr("Sign a TV in with the code it shows. Nothing to type on the TV.")) : ""}
@@ -18123,6 +18152,10 @@ if (STATE.histClear) {
       if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
       return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
     }
+    if (route.name === "communitynotes") {
+      const owner = route.tab === "admin";
+      return pageHead(owner ? tr("Owner panel") : tr("Community Notes"), "", true) + (window.ViktorychCommunityNotes ? window.ViktorychCommunityNotes.page(route) : emptyBlock(tr("Community Notes"), tr("Reload the page.")));
+    }
     if (route.name === "packages") {
       if (window.ViktorychPackages && window.ViktorychPackages.visible()) return window.ViktorychPackages.page(route);
       if (!window.ViktorychPackages) { ensureLazy("packages"); return lazySkeleton(tr("Packages")); }
@@ -19144,6 +19177,10 @@ if (STATE.histClear) {
       if (window.ViktorychPackages) {
         if (route.name === "packages") window.ViktorychPackages.mount(route);
         else window.ViktorychPackages.unmount();
+      }
+      if (window.ViktorychCommunityNotes) {
+        if (route.name === "communitynotes") window.ViktorychCommunityNotes.mount(route);
+        else window.ViktorychCommunityNotes.unmount();
       }
       if (window.ViktorychTV) {
         if (route.name === "tv") window.ViktorychTV.mount(route);
@@ -20661,6 +20698,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }[key];
       if (!flip || !STATE.settings) return;
       STATE.settings[key] = STATE.settings[key] === flip[0] ? flip[1] : flip[0];
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "cnotes-data") {
+      const mode = el.dataset.mode;
+      STATE.settings.communityNotesData = mode === "full" || mode === "lite" ? mode : "auto";
       saveSettings();
       render();
       return;
@@ -27544,7 +27588,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "communityNotesData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
