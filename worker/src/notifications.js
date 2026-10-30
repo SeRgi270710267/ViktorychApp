@@ -16,6 +16,7 @@ import { publishToAccount } from "./channel.js";
 import { visibleAvatarUrl } from "./profile-media.js";
 import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 import { actorHidden, canMention } from "./social.js";
+import { viewerDisplay } from "./name-rules.js";
 
 const encoder = new TextEncoder();
 const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1, package: 1, game_invite: 1, game_join: 1, game_achievement: 1, game_board: 1, tv_signin: 1, community_note: 1, feed_request: 1, feed_approved: 1, feed_rejected: 1 };
@@ -1193,6 +1194,7 @@ export async function finishDeliveries(env, deliveries, request) {
 }
 
 export async function emitNotification(env, input) {
+  input = await shownActorName(env, input);
   const planned = await planNotification(env, input);
   if (!planned || !planned.statements || !planned.statements.length) {
     return { created: false, id: planned && planned.id };
@@ -1206,6 +1208,18 @@ export async function emitNotification(env, input) {
   await finishDeliveries(env, planned.deliveries, input && input.request);
   const unread = await unreadCount(env, String(input.publicId || ""), (await readState(env, String(input.publicId || ""))).readUntil);
   return { created: !!planned.created, id: planned.id, unread };
+}
+
+/* The stored and pushed name is the one display name this recipient may
+   see for the actor (their own nickname for the actor wins). */
+async function shownActorName(env, input) {
+  if (!input || !input.actorId || !input.publicId || typeof input.name !== "string") return input;
+  const actorId = String(input.actorId).replace(/^app:/, "");
+  try {
+    const shown = await viewerDisplay(env, input.request || null, actorId, String(input.publicId), input.name);
+    const name = shown.hidden ? String(input.handle || "") : shown.name;
+    return name === input.name ? input : Object.assign({}, input, { name });
+  } catch (err) { return input; }
 }
 
 export async function drainOutbox(env) {
