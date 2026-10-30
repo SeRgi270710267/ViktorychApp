@@ -303,6 +303,8 @@ async function accountDetail(env, id, deps) {
     ? (await all(env, "SELECT l.target_id AS target, a.public_id AS pid, a.handle, a.display_name, l.created_at AS at FROM locked_follows l LEFT JOIN accounts a ON ('app:' || a.public_id) = l.target_id OR a.public_id = l.target_id WHERE l.owner_id = ? ORDER BY l.created_at DESC LIMIT " + PEOPLE_MAX, [id]))
         .map((r) => person(r, { target: String(r.target || ""), locked: true }))
     : [];
+  // Locked follows stay in account_follows; mark them so the owner sees which.
+  if (locked.length) { const lk = new Set(locked.map((l) => l.target)); for (const f of following) if (lk.has(f.target)) f.locked = true; }
   const lockPrefs = has("locked_follow_prefs") ? await first(env, "SELECT CASE WHEN code_hash <> '' THEN 1 ELSE 0 END AS has_lock, hide_entry, relock_secs FROM locked_follow_prefs WHERE public_id = ?", [id]) : null;
   const friendPrefs = has("account_friend_prefs") ? await first(env, "SELECT enabled, who_can_request, list_audience, share_online FROM account_friend_prefs WHERE public_id = ?", [id]) : null;
   const people = {
