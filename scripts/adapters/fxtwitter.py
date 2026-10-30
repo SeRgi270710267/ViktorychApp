@@ -176,6 +176,16 @@ def _person(obj) -> dict | None:
     return person
 
 
+def _conversation(status: dict) -> str:
+    conv = status.get("conversation_id") or status.get("conversation_id_str") or ""
+    nested = status.get("conversation")
+    if not conv and isinstance(nested, dict):
+        conv = nested.get("id") or nested.get("status") or ""
+    elif not conv and isinstance(nested, str):
+        conv = nested
+    return str(conv or "")
+
+
 def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
     author = status.get("author") or {}
     handle = author.get("screen_name") or author.get("handle") or (feed.get("handle") if not nested else "") or ""
@@ -202,6 +212,12 @@ def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
     if parent_id and replying and not replying.get("id"):
         replying = dict(replying)
         replying["id"] = str(parent_id)
+    conversation = _conversation(status)
+    if not nested and kind == "post" and conversation and status_id and conversation != status_id:
+        # A post in someone else's conversation is a reply even when this
+        # page left out who it answers; the reader looks the parent up live.
+        kind = "reply"
+        replying = {"name": "", "handle": "", "avatar": ""}
     item_id = status_id
     if kind == "repost" and not nested:
         who = ((reposted or {}).get("handle") or "").lstrip("@").lower()
@@ -228,6 +244,8 @@ def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
         quoted=None if nested else quoted,
         article=article_from_status(status),
     )
+    if conversation and not nested:
+        post["conversationId"] = conversation
     if not nested and (status.get("pinned") or status.get("is_pinned")):
         post["pinned"] = True
         pin_at = status.get("pinned_at") or status.get("pinnedAt") or ""
