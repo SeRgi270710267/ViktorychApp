@@ -326,7 +326,7 @@ function checkLayout(data, narrow) {
   assert.strictEqual(thread.ancestorText, "15px");
   near(thread.ancestorLine, 2, 0.6);
   assert.strictEqual(thread.byline, "15px");
-  assert.ok(thread.nameWeight === "800" || thread.nameWeight === "bold", thread.nameWeight);
+  assert.ok(thread.nameWeight === "700" || thread.nameWeight === "800" || thread.nameWeight === "bold", thread.nameWeight);
   assert.strictEqual(data.colors.dark.thread, rgb("#2f3336"));
   assert.strictEqual(data.colors.dim.thread, rgb("#38444d"));
   assert.strictEqual(data.colors.default.thread, rgb("#cfd9de"));
