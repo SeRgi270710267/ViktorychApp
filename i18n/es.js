@@ -4152,5 +4152,20 @@ SI18n.addPack("es", {
   "reply.others.other": "{n} más",
   "Run setup again": "Volver a ejecutar la configuración",
   "Theme, data usage, notifications, install and follows.": "Tema, uso de datos, notificaciones, instalación y cuentas que sigues.",
-  "Theme, save data and notifications keep their defaults. Change them in Settings.": "El tema, el ahorro de datos y las notificaciones quedan con sus valores predeterminados. Cámbialos en Configuración."
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "El tema, el ahorro de datos y las notificaciones quedan con sus valores predeterminados. Cámbialos en Configuración.",
+  "Settings, drafts and sign-in": "Ajustes, borradores e inicio de sesión",
+  "Saved screens": "Pantallas guardadas",
+  "Small caches": "Cachés pequeñas",
+  "Old copies": "Copias antiguas",
+  "Other pages on this address": "Otras páginas en esta dirección",
+  "Never cleared here": "Nunca se borran aquí",
+  "Pages you opened, so they show at once. Rebuilt as you browse": "Páginas que abriste, para que se muestren al instante. Se rehacen mientras navegas",
+  "Link previews, translations and profile headers. Rebuilt when needed": "Vistas previas de enlaces, traducciones y cabeceras de perfil. Se rehacen cuando hace falta",
+  "Duplicates left by older versions of the app": "Duplicados que dejaron versiones anteriores de la app",
+  "Saved by other pages on the same address. Not cleared here": "Guardado por otras páginas en la misma dirección. No se borra aquí",
+  "Free up {size}": "Liberar {size}",
+  "Nothing to clear. Only settings are saved here.": "No hay nada que borrar. Aquí solo se guardan ajustes.",
+  "Settings storage": "Almacenamiento de ajustes",
+  "{used} of about {limit} ({pct}%)": "{used} de unos {limit} ({pct} %)",
+  "Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay.": "¿Borrar las pantallas guardadas y las cachés del almacenamiento de ajustes? Tus ajustes, borradores e inicio de sesión se conservan."
 });

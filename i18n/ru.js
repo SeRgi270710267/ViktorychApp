@@ -4152,5 +4152,20 @@ SI18n.addPack("ru", {
   "reply.others.other": "ещё {n}",
   "Run setup again": "Пройти настройку заново",
   "Theme, data usage, notifications, install and follows.": "Тема, трафик, уведомления, установка и подписки.",
-  "Theme, save data and notifications keep their defaults. Change them in Settings.": "Тема, экономия трафика и уведомления остаются по умолчанию. Их можно изменить в настройках."
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "Тема, экономия трафика и уведомления остаются по умолчанию. Их можно изменить в настройках.",
+  "Settings, drafts and sign-in": "Настройки, черновики и вход",
+  "Saved screens": "Сохранённые экраны",
+  "Small caches": "Небольшие кэши",
+  "Old copies": "Старые копии",
+  "Other pages on this address": "Другие страницы на этом адресе",
+  "Never cleared here": "Здесь никогда не удаляются",
+  "Pages you opened, so they show at once. Rebuilt as you browse": "Открытые вами страницы, чтобы они показывались сразу. Создаются заново, пока вы пользуетесь приложением",
+  "Link previews, translations and profile headers. Rebuilt when needed": "Превью ссылок, переводы и шапки профилей. Создаются заново при необходимости",
+  "Duplicates left by older versions of the app": "Дубликаты, оставшиеся от старых версий приложения",
+  "Saved by other pages on the same address. Not cleared here": "Сохранено другими страницами на том же адресе. Здесь не удаляется",
+  "Free up {size}": "Освободить {size}",
+  "Nothing to clear. Only settings are saved here.": "Нечего удалять. Здесь хранятся только настройки.",
+  "Settings storage": "Хранилище настроек",
+  "{used} of about {limit} ({pct}%)": "{used} из примерно {limit} ({pct}%)",
+  "Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay.": "Удалить сохранённые экраны и кэши из хранилища настроек? Ваши настройки, черновики и вход сохранятся."
 });

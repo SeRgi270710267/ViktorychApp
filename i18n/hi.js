@@ -4144,5 +4144,20 @@ SI18n.addPack("hi", {
   "reply.others.other": "{n} अन्य",
   "Run setup again": "सेटअप फिर से चलाएँ",
   "Theme, data usage, notifications, install and follows.": "थीम, डेटा उपयोग, सूचनाएँ, इंस्टॉल और फ़ॉलो।",
-  "Theme, save data and notifications keep their defaults. Change them in Settings.": "थीम, डेटा बचत और सूचनाएँ डिफ़ॉल्ट पर रहती हैं। इन्हें सेटिंग्स में बदलें।"
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "थीम, डेटा बचत और सूचनाएँ डिफ़ॉल्ट पर रहती हैं। इन्हें सेटिंग्स में बदलें।",
+  "Settings, drafts and sign-in": "सेटिंग्स, ड्राफ़्ट और साइन-इन",
+  "Saved screens": "सेव की गई स्क्रीन",
+  "Small caches": "छोटे कैश",
+  "Old copies": "पुरानी कॉपियाँ",
+  "Other pages on this address": "इस पते पर अन्य पेज",
+  "Never cleared here": "यहाँ कभी नहीं मिटाए जाते",
+  "Pages you opened, so they show at once. Rebuilt as you browse": "आपके खोले गए पेज, ताकि वे तुरंत दिखें। ब्राउज़ करते समय फिर से बन जाते हैं",
+  "Link previews, translations and profile headers. Rebuilt when needed": "लिंक प्रीव्यू, अनुवाद और प्रोफ़ाइल हेडर। ज़रूरत पड़ने पर फिर से बन जाते हैं",
+  "Duplicates left by older versions of the app": "ऐप के पुराने वर्ज़न से बचे डुप्लिकेट",
+  "Saved by other pages on the same address. Not cleared here": "उसी पते पर अन्य पेजों द्वारा सेव किया गया। यहाँ नहीं मिटाया जाता",
+  "Free up {size}": "{size} खाली करें",
+  "Nothing to clear. Only settings are saved here.": "मिटाने के लिए कुछ नहीं है। यहाँ सिर्फ़ सेटिंग्स सेव हैं।",
+  "Settings storage": "सेटिंग्स स्टोरेज",
+  "{used} of about {limit} ({pct}%)": "लगभग {limit} में से {used} ({pct}%)",
+  "Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay.": "सेटिंग्स स्टोरेज से सेव की गई स्क्रीन और कैश मिटाएँ? आपकी सेटिंग्स, ड्राफ़्ट और साइन-इन बने रहेंगे।"
 });

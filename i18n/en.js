@@ -4152,5 +4152,20 @@ SI18n.addPack("en", {
   "reply.others.other": "{n} others",
   "Run setup again": "Run setup again",
   "Theme, data usage, notifications, install and follows.": "Theme, data usage, notifications, install and follows.",
-  "Theme, save data and notifications keep their defaults. Change them in Settings.": "Theme, save data and notifications keep their defaults. Change them in Settings."
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "Theme, save data and notifications keep their defaults. Change them in Settings.",
+  "Settings, drafts and sign-in": "Settings, drafts and sign-in",
+  "Saved screens": "Saved screens",
+  "Small caches": "Small caches",
+  "Old copies": "Old copies",
+  "Other pages on this address": "Other pages on this address",
+  "Never cleared here": "Never cleared here",
+  "Pages you opened, so they show at once. Rebuilt as you browse": "Pages you opened, so they show at once. Rebuilt as you browse",
+  "Link previews, translations and profile headers. Rebuilt when needed": "Link previews, translations and profile headers. Rebuilt when needed",
+  "Duplicates left by older versions of the app": "Duplicates left by older versions of the app",
+  "Saved by other pages on the same address. Not cleared here": "Saved by other pages on the same address. Not cleared here",
+  "Free up {size}": "Free up {size}",
+  "Nothing to clear. Only settings are saved here.": "Nothing to clear. Only settings are saved here.",
+  "Settings storage": "Settings storage",
+  "{used} of about {limit} ({pct}%)": "{used} of about {limit} ({pct}%)",
+  "Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay.": "Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay."
 });
