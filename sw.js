@@ -4,7 +4,7 @@ const VERSION = "viktorych-a167-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T10:29:51Z-setup-settings
+// cache-bust: 2026-10-30T10:27:48Z-bitchat
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -205,6 +205,7 @@ const SHELL_FILES = [
   "./mention-suggest.js",
   "./settings-assistant.js",
   "./nostr.js",
+  "./mesh-chat.js",
   "./follow-lists.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
