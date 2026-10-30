@@ -149,7 +149,8 @@ async function check(browser, port, size, lang) {
   await page.goto("http://127.0.0.1:" + port + "/index.html#/compose/post", { waitUntil: "domcontentloaded" });
   const box = await page.waitForSelector("textarea", { timeout: 15000 }).catch(() => null);
   if (box) {
-    await box.click();
+    /* The composer can repaint once right after the route opens; click by selector so a fresh box is used. */
+    await page.locator("textarea").first().click({ timeout: 15000 });
     await page.keyboard.type("hi @blocked_b");
     await page.waitForSelector(".mention-hint", { timeout: 5000 }).catch(() => fail(label + ": no can't-mention hint"));
     const hint = await page.textContent(".mention-hint");
@@ -168,9 +169,12 @@ async function main() {
   const browser = await chromium.launch({ headless: true, channel: "chrome" });
   try {
     const port = server.address().port;
+    /* Two pages at a time: six pages booting at once on a busy CI runner
+       took past the 20 s wait while each one was still re-rendering. */
     const jobs = [];
-    for (const lang of ["en", "es", "ru"]) for (const size of SIZES) jobs.push(check(browser, port, size, lang));
-    await Promise.all(jobs);
+    for (const lang of ["en", "es", "ru"]) for (const size of SIZES) jobs.push(() => check(browser, port, size, lang));
+    const lanes = Array.from({ length: 2 }, async () => { while (jobs.length) await jobs.shift()(); });
+    await Promise.all(lanes);
     console.log("usernames settings ok");
   } finally {
     await browser.close();
