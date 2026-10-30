@@ -1,0 +1,64 @@
+/* "Get your key" stepper (discord-key-helper.js). Styled like X's dialogs. */
+#dkey-host { position: fixed; inset: 0; z-index: 9100; display: flex; align-items: flex-end; justify-content: center; }
+.dkey-back { position: absolute; inset: 0; background: rgba(91, 112, 131, 0.4); }
+.dkey-sheet {
+  position: relative; width: min(600px, 100%); max-height: min(92vh, 780px); overflow: auto;
+  background: var(--bg); color: var(--text); border-radius: 16px 16px 0 0;
+  padding: 8px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 0 15px var(--shadow);
+}
+.dkey-head { display: flex; align-items: center; justify-content: space-between; min-height: 53px; }
+.dkey-head b { font-size: 20px; line-height: 24px; font-weight: 800; }
+.dkey-x { border: 0; background: transparent; color: var(--text); font-size: 26px; line-height: 1; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
+.dkey-x:hover { background: var(--hover); }
+.dkey-dots { display: flex; gap: 6px; margin: 2px 0 14px; }
+.dkey-dot { width: 24px; height: 4px; border-radius: 9999px; background: var(--line); }
+.dkey-dot.on { background: var(--blue); }
+.dkey-dot.done { background: var(--green); }
+.dkey-step { display: flex; flex-direction: column; align-items: stretch; }
+.dkey-h { margin: 0 0 6px; font-size: 20px; line-height: 24px; font-weight: 800; }
+.dkey-p { margin: 0 0 14px; color: var(--muted); font-size: 15px; line-height: 20px; }
+.dkey-ol { margin: 0 0 12px; padding-left: 20px; color: var(--text); font-size: 15px; line-height: 22px; }
+.dkey-ol li { margin-bottom: 6px; }
+.dkey-snip-note { margin: 0 0 6px; color: var(--muted); font-size: 13px; line-height: 17px; }
+.dkey-snip {
+  margin: 0 0 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--search); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 16px; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+}
+.dkey-snip code { font: inherit; }
+.dkey-warn {
+  margin: 12px 0; padding: 12px; border-radius: 12px; font-size: 13px; line-height: 18px;
+  background: var(--red-dim, rgba(244, 33, 46, 0.1)); color: var(--text); border: 1px solid rgba(244, 33, 46, 0.4);
+}
+.dkey-warn b { color: var(--red); }
+.dkey-input {
+  width: 100%; box-sizing: border-box; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line);
+  border-radius: 12px; background: transparent; color: var(--text); font-size: 17px; line-height: 24px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.dkey-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.dkey-err { margin: 0 0 10px; color: var(--red); font-size: 13px; line-height: 17px; }
+.dkey-ok { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.dkey-ava { width: 40px; height: 40px; border-radius: 50%; flex: none; object-fit: cover; background: var(--ava); }
+.dkey-ava.blank { background: var(--ava); }
+.dkey-ok-copy { display: flex; flex-direction: column; min-width: 0; }
+.dkey-ok-copy b { font-size: 15px; line-height: 20px; overflow-wrap: anywhere; }
+.dkey-status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 16px; }
+.dkey-status.ok { color: var(--green); }
+.dkey-status i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.dkey-pill {
+  display: inline-block; text-align: center; min-height: 44px; line-height: 24px; padding: 10px 24px; margin: 0 0 8px;
+  border-radius: 9999px; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; text-decoration: none; box-sizing: border-box;
+}
+.dkey-pill.primary { border: 1px solid transparent; background: var(--fill); color: var(--on-fill); }
+.dkey-pill.primary:hover { background: var(--fill-hover); }
+.dkey-pill.outline { border: 1px solid var(--bell-border, #536471); background: transparent; color: var(--text); }
+.dkey-pill.outline:hover { background: var(--hover); }
+.dkey-pill:disabled { opacity: 0.5; cursor: default; }
+.dkey-link { align-self: center; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; padding: 8px; cursor: pointer; }
+.dkey-link:hover { color: var(--text); text-decoration: underline; }
+@media (min-width: 700px) {
+  #dkey-host { align-items: center; }
+  .dkey-sheet { border-radius: 16px; }
+}
