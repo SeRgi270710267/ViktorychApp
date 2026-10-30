@@ -790,7 +790,11 @@
         : `<div class="feeds-empty"><b>${esc(tr("No sources yet"))}</b><span>${esc(tr("Paste a link or @handle above to add one."))}</span></div>`;
     }
     const head = hooks.pageHead ? hooks.pageHead(tr("Feeds")) : "";
-    return head + `<div class="feeds-org">${add}${offline}${failed}${previewCard()}${tools}${bulk}${pending ? `<section class="feeds-section is-pending-list">${pending}</section>` : ""}${body}${groupsPanel()}</div>`;
+    const signed = hooks.accountsApi && hooks.accountsApi() && hooks.accountToken && hooks.accountToken();
+    const lists = signed && window.SourceLists
+      ? `<a class="feeds-banner sl-link" href="#/feeds/lists"><span>${esc(ownerOn() ? tr("Source lists: extra sources only the accounts you pick see") : tr("Your extra sources and requests"))}</span><span aria-hidden="true">›</span></a>`
+      : "";
+    return head + `<div class="feeds-org">${lists}${add}${offline}${failed}${previewCard()}${tools}${bulk}${pending ? `<section class="feeds-section is-pending-list">${pending}</section>` : ""}${body}${groupsPanel()}</div>`;
   }
 
   function onToggle(event) {
