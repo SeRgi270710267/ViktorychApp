@@ -13,6 +13,8 @@
     selected: {},
     preview: null,
     busy: false,
+    // What is typed in the add box; survives every redraw of the page.
+    addDraft: "",
     drag: "",
     confirmId: "",
     menuId: "",
@@ -96,15 +98,52 @@
   function paint() {
     const active = document.activeElement;
     const id = active && active.id;
-    const pos = active && typeof active.selectionStart === "number" ? active.selectionStart : null;
+    const keep = id ? caretOf(active) : null;
     if (hooks && hooks.render) hooks.render();
     if (!id) return;
     const next = document.getElementById(id);
     if (!next || !next.focus) return;
     next.focus();
-    if (pos != null && next.setSelectionRange) {
-      try { next.setSelectionRange(pos, pos); } catch (err) { /* a button has no caret */ }
-    }
+    restoreCaret(next, keep);
+  }
+
+  function caretOf(el) {
+    try {
+      if (!el || typeof el.selectionStart !== "number") return null;
+      return { start: el.selectionStart, end: el.selectionEnd, dir: el.selectionDirection || "none" };
+    } catch (err) { return null; }
+  }
+
+  function restoreCaret(el, keep) {
+    if (!keep || !el || !el.setSelectionRange) return;
+    const len = String(el.value || "").length;
+    try { el.setSelectionRange(Math.min(keep.start, len), Math.min(keep.end, len), keep.dir); } catch (err) { /* a button has no caret */ }
+  }
+
+  // A redraw from anywhere (not only paint) rebuilds the add box. Keep focus
+  // and caret there so typing carries on; the text comes from page.addDraft.
+  function keepAddFocus() {
+    const active = document.activeElement;
+    if (!active || active.id !== "add-account") return;
+    const keep = caretOf(active);
+    const restore = () => {
+      const next = document.getElementById("add-account");
+      if (!next || next === active || !next.isConnected) return;
+      const now = document.activeElement;
+      if (now && now !== document.body && now !== active && now.isConnected) return;
+      next.focus();
+      restoreCaret(next, keep);
+    };
+    if (typeof queueMicrotask === "function") queueMicrotask(restore);
+    else Promise.resolve().then(restore);
+  }
+
+  function addHintText(raw) {
+    const lib = sources();
+    const text = String(raw || "").trim();
+    if (!text || !lib) return "";
+    const spec = lib.detectInput(text);
+    return spec.ok ? tr("Detected: {platform}", { platform: platformLabel(spec.platform) + (spec.handle ? " · @" + spec.handle : "") }) : (spec.error === "unsupported_discord" ? tr("Discord server. Add opens Add Discord.") : "");
   }
 
   function load() {
@@ -261,7 +300,9 @@
       // sheet with the invite filled in instead of a dead-end toast.
       const picks = window.DiscordPicks;
       if (spec.error === "unsupported_discord" && picks && picks.openInvite && picks.openInvite(raw)) {
+        page.addDraft = "";
         form.reset();
+        if (input) input.value = "";
         const hint = document.getElementById("feeds-add-hint");
         if (hint) hint.textContent = "";
         return true;
@@ -274,7 +315,9 @@
     page.adding = page.adding.filter((item) => item.key !== key);
     const item = { key: key, input: raw, platform: spec.platform || "rss", handle: spec.handle || "", status: "adding", message: "" };
     page.adding.unshift(item);
+    page.addDraft = "";
     form.reset();
+    if (input) input.value = "";
     const hint = document.getElementById("feeds-add-hint");
     if (hint) hint.textContent = "";
     paint();
@@ -568,13 +611,9 @@
   function onInput(event) {
     const el = event.target;
     if (el && el.id === "add-account" && el.closest && el.closest(".feeds-org")) {
+      page.addDraft = String(el.value || "");
       const hint = document.getElementById("feeds-add-hint");
-      const lib = sources();
-      const raw = String(el.value || "").trim();
-      if (!hint) return;
-      if (!raw || !lib) { hint.textContent = ""; return; }
-      const spec = lib.detectInput(raw);
-      hint.textContent = spec.ok ? tr("Detected: {platform}", { platform: platformLabel(spec.platform) + (spec.handle ? " · @" + spec.handle : "") }) : (spec.error === "unsupported_discord" ? tr("Discord server. Add opens Add Discord.") : "");
+      if (hint) hint.textContent = addHintText(page.addDraft);
       return;
     }
     if (!el || el.id !== "feeds-q") return;
@@ -728,6 +767,7 @@
 
   function view() {
     if (!hooks) return "";
+    keepAddFocus();
     if (ownerOn() && !page.started) {
       page.started = true;
       load();
@@ -770,7 +810,7 @@
       : "";
     const offline = page.offline ? `<p class="feeds-banner" role="status">${esc(tr("Offline. Showing the last saved feeds."))}</p>` : "";
     const failed = page.loadError && !page.offline ? `<p class="feeds-banner is-error" role="alert"><span>${esc(tr("Couldn’t load your feeds."))}</span><button type="button" class="feeds-pill" data-feed-act="reload">${esc(tr("Retry"))}</button></p>` : "";
-    const add = `<form class="add-account feeds-add"><label class="search"><span>${hooks.icon ? hooks.icon("plus") : ""}</span><input id="add-account" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(tr("Paste a link or @handle"))}" aria-label="${esc(tr("Add account"))}" aria-describedby="feeds-add-hint"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form><p class="feeds-hint" id="feeds-add-hint" aria-live="polite"></p>`;
+    const add = `<form class="add-account feeds-add"><label class="search"><span>${hooks.icon ? hooks.icon("plus") : ""}</span><input id="add-account" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(tr("Paste a link or @handle"))}" aria-label="${esc(tr("Add account"))}" aria-describedby="feeds-add-hint" value="${esc(page.addDraft)}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form><p class="feeds-hint" id="feeds-add-hint" aria-live="polite">${esc(addHintText(page.addDraft))}</p>`;
     const tools = `<div class="feeds-tools">
       <label class="search feeds-search"><span>${hooks.icon ? hooks.icon("search") : ""}</span><input id="feeds-q" type="search" value="${esc(page.q)}" placeholder="${esc(tr("Search feeds"))}" aria-label="${esc(tr("Search feeds"))}"></label>
       <div class="feeds-chips" role="group" aria-label="${esc(tr("Filter by platform"))}">${chips}</div>
