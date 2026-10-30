@@ -2828,6 +2828,7 @@ async function showCompactPush(c) {
     icon: shown.icon,
     image: shown.image,
     tag: "n-" + (c.sid || c.kind),
+    silent: !!c.quiet,
     data: { hash: shown.hash, id: (note && note.id) || "", invite: gameInviteId(c.kind, shown.hash) },
     ...gameInviteActions(c.kind, shown.hash)
   });
@@ -2904,6 +2905,7 @@ self.addEventListener("push", (event) => {
       body: shownL ? shownL.body : ((data && data.body) || ""),
       icon: shownL ? shownL.icon : ((data && data.icon) || "icons/icon-192.png"),
       tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
+      silent: !!(data && data.quiet),
       data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "", invite: gameInviteId(data && data.kind, data && data.hash) },
       ...gameInviteActions(data && data.kind, data && data.hash)
     });

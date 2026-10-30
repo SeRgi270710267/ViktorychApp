@@ -4106,8 +4106,51 @@ html.tv-on #new-posts { display: none; }
   background: var(--blue);
   box-shadow: 0 0 0 2px var(--bg);
 }
-.notes-top .tabs { display: flex; width: 100%; }
-.notes-top .tab { flex: 1 1 0; }
+.notes-top .tabs { display: flex; width: 100%; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.notes-top .tabs::-webkit-scrollbar { display: none; }
+.notes-top .tab { flex: 1 0 auto; padding-left: 16px; padding-right: 16px; white-space: nowrap; }
+.notes-top .tab.on[style] > span::after { background: var(--note-tab-color); }
+.note-tab-emoji { margin-right: 4px; font-style: normal; }
+.note-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 1px;
+}
+.note-type-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.note-type-chip {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.note-type-chip.on { border-color: var(--blue); background: var(--blue); color: #fff; }
+.note-game-links { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.note-game-links a { text-align: center; text-decoration: none; padding: 10px 14px; }
+.note-manage-row .tab-switch.note-vis { width: auto; min-height: 0; padding: 0 8px; border: 0; }
+.note-manage-row.is-hidden .who-copy { opacity: 0.6; }
+.note-manage-row .who-copy { min-width: 0; flex: 1 1 auto; }
+.note-move { display: inline-flex; flex-direction: column; flex: none; margin: 0 4px; }
+.note-manage-row .note-move button { min-width: 0; display: flex; align-items: center; justify-content: center; width: 28px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.note-manage-row .note-move button:hover { background: var(--hover); color: var(--text); }
+.note-manage-row .note-move button svg { width: 16px; height: 16px; fill: currentColor; }
+.note-manage-row .note-move button[disabled] { opacity: 0.25; cursor: default; }
 .notes-top .tab .tab-bell { display: inline-flex; width: 16px; height: 16px; margin-right: 6px; vertical-align: -2px; }
 .notes-top .tab .tab-bell svg { width: 16px; height: 16px; fill: currentColor; }
 .notes-top .note-gear { border: 0; background: transparent; color: var(--text); }

@@ -165,6 +165,8 @@ const INSPECT = `(() => {
       return !!(h1 && h1.scrollWidth > h1.clientWidth + 2);
     })(),
     tabCount: document.querySelectorAll(".notes-tabs [role='tab']").length,
+    gamesTab: !!document.querySelector(".notes-tabs [data-tab='games']"),
+    customTab: Array.from(document.querySelectorAll(".notes-tabs [role='tab']")).some((el) => (el.textContent || "").trim() === "Tab A"),
     allOn: (document.querySelector(".notes-tabs [data-tab='all']") || {}).getAttribute ? document.querySelector(".notes-tabs [data-tab='all']").getAttribute("aria-selected") === "true" : false,
     bell: !!document.querySelector(".notes-tabs .tab.on .tab-bell"),
     avatar: !!document.querySelector(".notes-top button.m-ava"),
@@ -192,7 +194,10 @@ function assertVisible(info, allowed, label) {
   if (info.mark || info.spark) fail(label + " old header controls are still in the bar");
   if (info.title !== "Notificaciones") fail(label + " title");
   if (info.titleCut) fail(label + " title is cut off");
-  if (info.tabCount !== 3) fail(label + " tab count " + info.tabCount);
+  // All, Mentions, Verified, Games and the custom "Tab A".
+  if (info.tabCount !== 5) fail(label + " tab count " + info.tabCount);
+  if (!info.gamesTab) fail(label + " Games tab missing");
+  if (!info.customTab) fail(label + " custom tab missing from the bar");
   if (info.allOn !== info.bell) fail(label + " bell on the selected All tab");
   if (info.kind === "loading") {
     if (info.skel < 1) fail(label + " skeleton missing");
