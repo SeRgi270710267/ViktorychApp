@@ -1,0 +1,88 @@
+// Client side of source lists: merge only assigned shards, verify hashes,
+// prefer peers, and never fetch shards for accounts without lists.
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import vm from "node:vm";
+import { createHash, webcrypto } from "node:crypto";
+
+const SRC = fs.readFileSync(new URL("../source-lists.js", import.meta.url), "utf8");
+const sha = (text) => createHash("sha256").update(text).digest("hex");
+
+function setup(opts) {
+  const store = new Map();
+  const calls = [];
+  const shard = JSON.stringify({ feeds: [{ id: "rss:feeds.example", name: "Example", handle: "feeds.example" }], posts: [{ id: "p1", feedId: "rss:feeds.example", platform: "rss", quoted: { id: "q1", handle: "quotedmaple" } }] });
+  const hash = sha(shard);
+  const lists = opts.lists === false ? [] : [{ id: "sa1b2c3d4", name: "Extra", hash, size: shard.length, at: 1 }];
+  const body = opts.badShard ? shard + " " : shard;
+  const window = {
+    ViktorychAccounts: { account: () => ({ publicId: "membermaple" }) },
+    ViktorychPool: opts.pool ? {
+      getBlob: async (h) => { calls.push("pool:" + h.slice(0, 6)); return h === hash ? new TextEncoder().encode(shard) : null; },
+      putBlob: async () => { calls.push("offer"); return hash; }
+    } : undefined
+  };
+  const ctx = {
+    window, document: { addEventListener() {}, visibilityState: "hidden", querySelector: () => null },
+    localStorage: { getItem: (k) => store.get(k) || null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) },
+    navigator: { onLine: true }, crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, Promise, JSON, Date, Set, Math, Array, Object, String, Number,
+    setTimeout: () => 0, setInterval: () => 0,
+    fetch: async (url) => {
+      calls.push(url.replace("https://api.example", ""));
+      if (url.endsWith("/v1/me/source-lists")) return { ok: true, status: 200, json: async () => ({ lists }) };
+      if (url.includes("/shard/")) return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode(body).buffer };
+      return { ok: false, status: 404, json: async () => ({}) };
+    }
+  };
+  vm.createContext(ctx);
+  vm.runInContext(SRC, ctx);
+  let changed = 0;
+  const SL = window.SourceLists;
+  SL.attach({ accountsApi: () => "https://api.example", accountToken: () => "t", signedOwner: () => false, STATE: { settings: {} }, onChange: () => { changed += 1; } });
+  return { SL, calls, hash, store, changed: () => changed };
+}
+
+const base = () => ({ feeds: [{ id: "x:globalpine" }], posts: [{ id: "g1", feedId: "x:globalpine", platform: "x" }] });
+
+test("member gets the shard from the Worker and it merges with quotes inside", async () => {
+  const t = setup({});
+  assert.equal(await t.SL.refresh(true), true);
+  assert.ok(t.calls.some((c) => c.includes("/shard/" + t.hash)));
+  const doc = t.SL.merge(base());
+  assert.equal(doc.posts.length, 2);
+  assert.equal(doc.posts[1].quoted.handle, "quotedmaple");
+  assert.equal(doc.feeds.length, 2);
+  assert.ok(!doc.feeds.some((f) => /quotedmaple/.test(f.id)));
+  assert.equal(t.changed(), 1);
+  assert.ok(t.store.size > 0);
+  for (const key of t.store.keys()) assert.ok(key.includes("private-list"), key);
+  const again = t.SL.merge(doc);
+  assert.equal(again.posts.length, 2);
+});
+
+test("peers are tried first and a Worker copy is offered back", async () => {
+  const t = setup({ pool: true });
+  await t.SL.refresh(true);
+  assert.ok(t.calls.includes("pool:" + t.hash.slice(0, 6)));
+  assert.ok(!t.calls.some((c) => c.includes("/shard/")));
+  assert.equal(t.SL.merge(base()).posts.length, 2);
+});
+
+test("a shard that fails its hash is dropped", async () => {
+  const t = setup({ badShard: true });
+  await t.SL.refresh(true);
+  assert.equal(t.SL.merge(base()).posts.length, 1);
+});
+
+test("accounts without lists download no shard and stale list posts go away", async () => {
+  const t = setup({ lists: false });
+  await t.SL.refresh(true);
+  assert.ok(!t.calls.some((c) => c.includes("/shard/")));
+  const stale = base();
+  stale.feeds.push({ id: "rss:feeds.example", sourceList: true });
+  stale.posts.push({ id: "p1", feedId: "rss:feeds.example", sourceList: true });
+  const doc = t.SL.merge(stale);
+  assert.equal(doc.posts.length, 1);
+  assert.equal(doc.feeds.length, 1);
+});
