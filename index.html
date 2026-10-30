@@ -195,6 +195,31 @@
           return saved && saved.token ? String(saved.token) : "";
         } catch (err) { return ""; }
       }
+      function bytes(text) {
+        var raw = atob(String(text || ""));
+        var out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+      }
+      /* The sealed copy on Pages first (accounts.js keeps today's key);
+         anything missing, old, or unreadable goes to the API as before. */
+      function sealedCatalog(key, auth) {
+        var subtle = window.crypto && window.crypto.subtle;
+        var st = null;
+        try { st = JSON.parse(localStorage.getItem("viktorychapp-seal-v1") || "null"); } catch (err) { st = null; }
+        if (!subtle || !st || !st.keys || st.use === false || st.tail !== auth.slice(-12) || cfg.sealed === false || typeof TextEncoder !== "function") return Promise.resolve(null);
+        var maxAge = (Number(cfg.sealMaxAgeMin) || 75) * 60000;
+        return fetch("sealed/" + key, { credentials: "omit" }).then(function (res) {
+          return res && res.ok ? res.json() : null;
+        }).then(function (doc) {
+          if (!doc || doc.v !== 1 || !st.keys[doc.day] || !(Date.now() - Date.parse(doc.at) < maxAge)) return null;
+          return subtle.importKey("raw", bytes(st.keys[doc.day]), { name: "AES-GCM" }, false, ["decrypt"]).then(function (k) {
+            return subtle.decrypt({ name: "AES-GCM", iv: bytes(doc.iv), additionalData: new TextEncoder().encode(key) }, k, bytes(doc.ct));
+          }).then(function (plain) {
+            return new Response(new TextDecoder().decode(plain), { status: 200, headers: { "Content-Type": "application/json", "X-Sealed": "pages" } });
+          });
+        }).catch(function () { return null; });
+      }
       function loadCatalog(key) {
         var api = String(cfg.api || "").replace(/\/$/, "");
         var gated = !!(cfg.gate && api);
@@ -202,10 +227,14 @@
         var headers = { "X-Feed-Refresh": "1" };
         var auth = gated ? sessionToken() : "";
         if (auth) headers.Authorization = "Bearer " + auth;
-        return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
-          if (!res || !res.ok) return emptyBody(key);
-          return res;
-        }).catch(function () { return emptyBody(key); });
+        function fromApi() {
+          return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
+            if (!res || !res.ok) return emptyBody(key);
+            return res;
+          }).catch(function () { return emptyBody(key); });
+        }
+        if (!auth) return fromApi();
+        return sealedCatalog(key, auth).then(function (res) { return res || fromApi(); });
       }
       var boot = window.__homeFreshBoot || {};
       if (boot.feeds) return;
@@ -598,6 +627,7 @@
     <link rel="stylesheet" href="accounts.css">
     <link rel="stylesheet" href="gifts.css">
     <link rel="stylesheet" href="badges.css">
+    <link rel="stylesheet" href="game-social.css">
     <link rel="stylesheet" href="setting-alerts.css">
     <link rel="stylesheet" href="storage.css">
     <link rel="stylesheet" href="yt-player.css">
@@ -648,6 +678,8 @@
     <script src="gifts-ui.js" defer></script>
     <script src="shared/gift-catalog.js" type="module"></script>
     <script src="badges.js" defer></script>
+    <script src="shared/regone.js" type="module"></script>
+    <script src="game-social.js" defer></script>
     <script src="shared/local-budget.js" defer></script>
     <script src="setting-alerts.js" defer></script>
     <script src="data-saver.js" defer></script>
