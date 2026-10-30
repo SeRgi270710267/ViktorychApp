@@ -2,6 +2,7 @@
    A hidden birthday is left out of the list and out of the notification. */
 
 import { blocksEither } from "./social.js";
+import { notLocked } from "./locked-sql.js";
 import { emitNotification } from "./notifications.js";
 import { birthdayParts, canSeeField, daysUntilBirthday } from "./about.js";
 import { canSeeAudience } from "./audience.js";
@@ -83,7 +84,7 @@ export async function upcomingBirthdays(env, viewer, now) {
   const notes = !(pref && pref.notes === 0);
   if (!enabled(env)) return { upcoming: [], notes: notes, enabled: false };
   const follows = await env.DB.prepare(
-    "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id LIKE 'app:%' LIMIT 200"
+    "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id LIKE 'app:%'" + notLocked("account_follows") + " LIMIT 200"
   ).bind(viewer.public_id).all();
   const upcoming = [];
   for (const row of rowsOf(follows)) {
