@@ -26,6 +26,9 @@ export const FEATURES = {
   // the owner allows, blocks or bans. On by default. Off restores the old
   // owner-only add without requests.
   feed_requests: { paths: ["/v1/feed-requests", "/v1/owner/feed-requests", "/v1/owner/feed-bans"] },
+  // Owner account inspector (Cuentas): owner-only account details for
+  // moderation. On by default; off hides the owner view and its routes.
+  owner_inspector: { paths: ["/v1/owner/inspector"] },
   // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
   nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true },
   // Off until the owner turns it on and sets NFT_CONTRACT: optional gift NFTs.

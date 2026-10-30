@@ -16,7 +16,8 @@
     communities: { classic: true, scripts: ["communities.js", "communities.css"] },
     servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] },
     inboxsms: { classic: true, scripts: ["inbox-sms.js", "inbox-sms.css", "inbox-mail.css"] },
-    inboxmail: { classic: true, scripts: ["inbox-mail.js", "inbox-sms.css", "inbox-mail.css"] }
+    inboxmail: { classic: true, scripts: ["inbox-mail.js", "inbox-sms.css", "inbox-mail.css"] },
+    owner_inspector: { classic: true, scripts: ["owner-inspector.js", "owner-inspector.css"] }
   };
   var loads = {};
   var preloadStarted = false;
