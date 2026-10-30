@@ -1,9 +1,9 @@
 /* Display-name nicknames and per-audience mention controls.
 
-   Nicknames: an account can suggest a name its friends see instead of its
-   display name, and anyone can keep a private nickname for any account
-   (only they ever see it). Order: private nickname, then the friend name
-   for friends, then the display name.
+   Nicknames: anyone can keep a private nickname for any account (only they
+   ever see it). Order: private nickname, then the one display name the
+   account picked for this viewer (display-names.js), then the main name.
+   The old single "name for friends" is a friends-only display name now.
 
    Mentions: per audience "anyone", "replies" (only in a reply to them) or
    "nobody", plus allow and block lists. Most specific wins: person (block
@@ -12,6 +12,7 @@
    suggested, and the composer gets a neutral "can't mention" hint. */
 
 import { loadNames, relationTo, resolveName, viewerHandle } from "./usernames.js";
+import { displayFor, friendNameGet, friendNamePut } from "./display-names.js";
 
 export const NAME_RULES_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS display_nicknames (viewer_id TEXT NOT NULL, target_id TEXT NOT NULL, name TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (viewer_id, target_id))",
@@ -92,29 +93,34 @@ export async function canMention(env, targetId, actorId, ctx) {
 const memos = new WeakMap();
 
 /* The display name this viewer sees for ownerId. */
+/* The name viewerId sees for ownerId: their own private nickname first,
+   then the one display name the owner picked for them (display-names.js),
+   then the fallback. hidden: no display name is visible to this viewer
+   (callers show the handle). friendName: the shown name is not the main
+   one (kept for older clients). */
 export async function viewerDisplay(env, request, ownerId, viewerId, fallback) {
-  if (!ownerId || !viewerId || ownerId === viewerId) return { name: fallback || "", nickname: "", friendName: "" };
+  if (!ownerId || ownerId === viewerId) return { name: fallback || "", nickname: "", friendName: "", hidden: false };
   let memo = request && typeof request === "object" ? memos.get(request) : null;
   if (!memo) { memo = new Map(); if (request && typeof request === "object") memos.set(request, memo); }
-  const key = ownerId + ">" + viewerId;
+  const key = ownerId + ">" + (viewerId || "");
   if (!memo.has(key)) {
     memo.set(key, (async () => {
       let nickname = "";
-      let friendName = "";
+      let shown = null;
       try {
-        const nick = await env.DB.prepare("SELECT name FROM display_nicknames WHERE viewer_id = ? AND target_id = ?").bind(viewerId, ownerId).first();
-        nickname = nick ? nick.name : "";
-        const suggested = await env.DB.prepare("SELECT name FROM friend_names WHERE public_id = ?").bind(ownerId).first();
-        if (suggested && suggested.name) {
-          const rel = await relationTo(env, ownerId, viewerId);
-          if (rel.friends) friendName = suggested.name;
+        if (viewerId) {
+          const nick = await env.DB.prepare("SELECT name FROM display_nicknames WHERE viewer_id = ? AND target_id = ?").bind(viewerId, ownerId).first();
+          nickname = nick ? nick.name : "";
         }
+        if (!nickname) shown = await displayFor(env, request, ownerId, viewerId || "");
       } catch (err) { /* tables not created yet */ }
-      return { nickname, friendName };
+      return { nickname, shown };
     })());
   }
   const got = await memo.get(key);
-  return { name: got.nickname || got.friendName || fallback || "", nickname: got.nickname, friendName: got.friendName };
+  if (got.nickname) return { name: got.nickname, nickname: got.nickname, friendName: "", hidden: false };
+  if (!got.shown) return { name: fallback || "", nickname: "", friendName: "", hidden: false };
+  return { name: got.shown.name, nickname: "", friendName: got.shown.alt ? got.shown.name : "", hidden: got.shown.hidden };
 }
 
 async function targetFor(env, raw, viewerId) {
@@ -168,14 +174,13 @@ export async function handleNameRules(request, env, path, deps) {
   }
 
   if (path === "/v1/usernames/friend-name" && method === "GET") {
-    const row = await env.DB.prepare("SELECT name FROM friend_names WHERE public_id = ?").bind(me).first();
-    return json(200, { name: row ? row.name : "" }, nocache);
+    // Now one friends-only entry in Edit profile > Display names.
+    return json(200, { name: await friendNameGet(env, me) }, nocache);
   }
 
   if (path === "/v1/usernames/friend-name" && method === "PUT") {
-    const name = cleanNickname(body.name);
-    if (name) await env.DB.prepare("INSERT INTO friend_names (public_id, name, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at").bind(me, name, Date.now()).run();
-    else await env.DB.prepare("DELETE FROM friend_names WHERE public_id = ?").bind(me).run();
+    const name = await friendNamePut(env, me, cleanNickname(body.name));
+    if (deps.invalidate) { try { await deps.invalidate(env, me); } catch (err) { /* cache drops on its own */ } }
     return json(200, { name }, nocache);
   }
 
