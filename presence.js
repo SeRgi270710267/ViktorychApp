@@ -144,6 +144,7 @@ function phrase(view) {
 
 function statusText(view) {
   if (!view) return "";
+  if (view.playing && view.room) return tr("In {game}, room {room}", { game: view.playing, room: view.room });
   if (view.playing) return tr("Playing {game}", { game: view.playing });
   return [view.emoji, view.text].filter(Boolean).join(" ");
 }
@@ -307,7 +308,7 @@ function connect() {
     ws.addEventListener("open", function () {
       attempt = 0;
       try {
-        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync", "posts", "p2p", "srv"] }));
+        ws.send(JSON.stringify({ op: "subscribe", topics: ["presence", "notifications", "sync", "posts", "p2p", "srv", "games"] }));
         ws.send(JSON.stringify({ op: "watch", topic: "presence", ids: currentIds() }));
       } catch (err) { /* close reconnects */ }
       clearInterval(pollTimer);
@@ -373,6 +374,8 @@ function paint(root) {
     const view = cached(id);
     const state = view && view.state ? view.state : "";
     if (el.getAttribute("data-presence") !== state) el.setAttribute("data-presence", state);
+    if (view && view.playing && state !== "offline") el.setAttribute("data-playing", "1");
+    else el.removeAttribute("data-playing");
     const label = lineText(view);
     if (label) el.setAttribute("title", label);
   });
@@ -693,7 +696,9 @@ function wrap(publicId, html, attrs) {
   if (!isAccountId(publicId) || !html || String(html).indexOf("ava-none") >= 0) return html || "";
   const view = cached(publicId);
   const state = view && view.state ? view.state : "";
-  return '<span class="ava-presence" data-pid="' + publicId + '" data-presence="' + esc(state) + '"' + (attrs || "") + '>' + html + '<i class="presence-dot" aria-hidden="true"></i></span>';
+  // A small controller badge marks friends who are playing right now.
+  const game = view && view.playing && state !== "offline" ? ' data-playing="1"' : "";
+  return '<span class="ava-presence" data-pid="' + publicId + '" data-presence="' + esc(state) + '"' + game + (attrs || "") + '>' + html + '<i class="presence-dot" aria-hidden="true"></i></span>';
 }
 
 function linesHtml(publicId) {
@@ -909,7 +914,8 @@ function onlineListHtml() {
   }
   return '<div class="online-list">' + list.map(function (person) {
     const photo = wrap(person.publicId, friendPhoto(person));
-    return '<a class="online-row" href="' + esc(friendHref(person)) + '">' + photo + friendEmoji(person) + '<span class="online-copy"><b>' + esc(person.name || person.handle) + '</b><span>@' + esc(person.handle) + " · " + esc(friendSub(person)) + "</span></span></a>";
+    const join = person.playing && window.ViktorychGameSocial ? window.ViktorychGameSocial.joinChipHtml(person.publicId, person.room || "") : "";
+    return '<a class="online-row" href="' + esc(friendHref(person)) + '">' + photo + friendEmoji(person) + '<span class="online-copy"><b>' + esc(person.name || person.handle) + '</b><span>@' + esc(person.handle) + " · " + esc(friendSub(person)) + "</span></span>" + join + "</a>";
   }).join("") + "</div>";
 }
 
@@ -958,7 +964,8 @@ function loadFriends(force) {
         lastSeen: person.lastSeen,
         emoji: person.emoji,
         text: person.text,
-        playing: person.playing || ""
+        playing: person.playing || "",
+        room: person.room || ""
       });
     });
     friendsAt = Date.now();

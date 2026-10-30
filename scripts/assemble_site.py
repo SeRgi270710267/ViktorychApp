@@ -28,6 +28,7 @@ REQUIRED_EXTRAS = (
     "404.html",
     "robots.txt",
     ".nojekyll",
+    "_redirects",
     ".well-known/assetlinks.json",
     "tv/index.html",
     "tv/version.json",

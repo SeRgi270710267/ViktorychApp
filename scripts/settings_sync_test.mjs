@@ -29,7 +29,7 @@ test("a fresh device takes the account's settings, then its own edits win", () =
 
 test("device-only choices by category, by setting and by the master switch", () => {
   mem.clear();
-  assert.deepEqual(reg.localKeys({}), []);
+  assert.deepEqual(reg.localKeys({}), ["inboxLayout"], "Inbox sections stay on this device by default");
   reg.setCatLocal("music", true);
   reg.setKeyLocal("mutedWords", true);
   const own = reg.localKeys({});
@@ -41,4 +41,17 @@ test("device-only choices by category, by setting and by the master switch", () 
   for (const key of ["networkMode", "playbackSource", "privacyZeroTrace", "bellNotes", "bellSeen", "bellRead"]) {
     assert.equal(reg.CAT_OF[key], undefined, key + " never syncs");
   }
+});
+
+test("Inbox sections are per device until the member shares them", () => {
+  mem.clear();
+  assert.equal(reg.keyLocal("inboxLayout"), true);
+  reg.setKeyLocal("inboxLayout", false);
+  assert.equal(reg.keyLocal("inboxLayout"), false);
+  assert.ok(!reg.localKeys({}).includes("inboxLayout"));
+  assert.ok(reg.localKeys({ lookOwn: true }).includes("inboxLayout"), "the device-look override still keeps it");
+  reg.setKeyLocal("inboxLayout", true);
+  assert.ok(reg.localKeys({}).includes("inboxLayout"));
+  assert.equal(reg.CAT_OF.inboxLayout, "look");
+  assert.ok(reg.LWW.includes("inboxLayout"));
 });

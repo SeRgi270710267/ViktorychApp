@@ -77,6 +77,17 @@ function applyMutes(rule, body) {
   return Object.assign({}, rule, { mutedChannels, mutedServers });
 }
 
+/* Channels the member marked private: an alert still fires, but it says
+   only that a message arrived, never who wrote it or what it says. */
+function privateSet(body) {
+  const out = new Set();
+  (Array.isArray(body.privateChannels) ? body.privateChannels : []).slice(0, 200).forEach((id) => {
+    const text = String(id || "");
+    if (/^\d{2,22}$/.test(text)) out.add(text);
+  });
+  return out;
+}
+
 function previewMatches(messages, rule) {
   const matches = [];
   messages.forEach((message) => {
@@ -116,6 +127,7 @@ export async function handleDiscordAlertRoutes(request, env, path, deps) {
     const saved = body.rule ? cleanDiscordRule(body.rule) : await loadRule(env, row.public_id);
     const rule = applyMutes(saved, body);
     const messages = cleanMessages(body.messages);
+    const hush = privateSet(body);
     const matches = previewMatches(messages, rule);
     if (path === "/v1/discord/alerts/preview") return json(200, { matches });
     const now = Date.now();
@@ -140,8 +152,8 @@ export async function handleDiscordAlertRoutes(request, env, path, deps) {
         actorId: "",
         idempotencyKey: "discord:" + message.id,
         handle: "",
-        name: message.authorName || "Discord",
-        text: clip(message.content, 180),
+        name: hush.has(message.channelId) ? "Discord" : (message.authorName || "Discord"),
+        text: hush.has(message.channelId) ? "New message" : clip(message.content, 180),
         hash: message.channelId ? "#/messages/discord/" + encodeURIComponent(message.channelId) : "#/messages",
         platform: "discord",
         feedId: message.channelId ? "discord:" + message.channelId : "discord",

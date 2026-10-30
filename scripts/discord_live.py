@@ -703,9 +703,12 @@ def published_here(path: str):
 
 
 
-def write_health(status: str, reason: str, token: str) -> None:
+def write_health(status: str, reason: str, token: str, checked: str | None = None) -> None:
     """Private key health. No ids, no token. Cached messages stay as they are."""
-    doc = discord_picks.health_doc(status, reason, token, iso_now())
+    if checked is None:
+        prev = read_health()
+        checked = str(prev.get("checkedAt") or "") if isinstance(prev, dict) and status == "ok" else ""
+    doc = discord_picks.health_doc(status, reason, token, iso_now(), checked)
     payload = json.dumps(doc, separators=(",", ":")).encode("utf-8")
     if token and token.encode("utf-8") in payload:
         return
@@ -751,18 +754,39 @@ class Picks:
         return now - before
 
     def join(self, request) -> None:
-        """The owner's one confirmed join. Done once per request id."""
+        """The owner's one confirmed join, done once per request id. A captcha
+        goes to the owner's screen; their own answer is sent once per solution."""
         ask = discord_picks.join_request(request)
-        if not ask or ask["id"] in self.joined:
+        if not ask:
+            return
+        cap = ask.get("captcha")
+        once = cap["sid"] if cap else ask["id"]
+        if once in self.joined:
             return
         done = self.get(discord_picks.JOIN_KEY)
-        if isinstance(done, dict) and str(done.get("id") or "") == ask["id"]:
-            self.joined.add(ask["id"])
+        if not cap and isinstance(done, dict) and str(done.get("id") or "") == ask["id"]:
+            self.joined.add(once)
             return
-        self.joined.add(ask["id"])
-        status, guild = discord_picks.join_invite(self.token, ask["code"], self.join_transport)
+        if not cap and ask.get("by") == "worker":
+            # The Worker already sent this join with the owner's key.
+            self.joined.add(once)
+            return
+        if cap and isinstance(done, dict) and str(done.get("solution") or "") == cap["sid"]:
+            self.joined.add(once)
+            return
+        self.joined.add(once)
+        status, guild, challenge = discord_picks.join_attempt(self.token, ask["code"], self.join_transport, cap)
+        at = iso_now()
+        if status == "captcha" and challenge:
+            doc = discord_picks.captcha_doc(ask["id"], ask["code"], ask["guild"], challenge, at)
+            payload = json.dumps(doc, separators=(",", ":")).encode("utf-8")
+            if not (self.token and self.token.encode("utf-8") in payload):
+                self.put(discord_picks.CAPTCHA_KEY, payload)
+            status = "captcha_failed" if cap else "needs_captcha"
         print(f"[discord-live] join {status}")
-        result = {"id": ask["id"], "status": status, "guild": guild or ask["guild"], "at": iso_now()}
+        result = {"id": ask["id"], "status": status, "guild": guild or ask["guild"], "at": at}
+        if cap:
+            result["solution"] = cap["sid"]
         self.put(discord_picks.JOIN_KEY, json.dumps(result, separators=(",", ":")).encode("utf-8"))
 
     def catalog(self, client, stop) -> None:
@@ -802,6 +826,20 @@ class Picks:
             print(public_error(exc))
 
 
+def daily_key_check(client, health=None, today: str | None = None) -> bool:
+    """One light GET /users/@me a day. A 401 stops the run (DiscordStop) and
+    the app shows a quiet "needs replacing" note. Nothing else is read here."""
+    health = read_health() if health is None else health
+    today = today or iso_now()
+    if not discord_picks.key_check_due(health, today):
+        return False
+    me = client.key_check()
+    if isinstance(me, dict):
+        write_health("ok", "", client.token, today)
+        print("[discord-live] key check ok")
+    return True
+
+
 def run(root: Path, server: dict | None, token: str, picks: Picks | None = None) -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
@@ -828,6 +866,7 @@ def run(root: Path, server: dict | None, token: str, picks: Picks | None = None)
     board.load_dir(root, discord_picks.local_root(root))
     client = Client(token, auth="user", min_interval=1.5)
     client.max_attempts = 4
+    daily_key_check(client)
     public = server["channels"] if server else []
 
     def every() -> list:
@@ -912,7 +951,7 @@ def run(root: Path, server: dict | None, token: str, picks: Picks | None = None)
     cursor = 0
     polls = 0
     last_ask = time.monotonic()
-    while not STOP["now"] and time.monotonic() < deadline:
+    while not STOP["now"] and time.monotonic() < deadline and not client.capped:
         now = time.monotonic()
         if now - last_deploy >= DEPLOY_EVERY:
             # The owner may have picked or dropped channels in the app.

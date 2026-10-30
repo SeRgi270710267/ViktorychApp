@@ -45,24 +45,24 @@ test("the cached mirror serves one upstream fetch to two runs", async () => {
   STATE.down = false;
   const mf = new Miniflare(workerOptions());
   try {
-    const first = await get(mf, "/v1/x/2/profile/NASA/statuses");
+    const first = await get(mf, "/v1/x/2/profile/SampleAgency/statuses");
     assert.equal(first.status, 200);
     assert.equal(first.headers.get("x-cache"), "miss");
     const body = await first.json();
-    assert.equal(body.results[0].author.screen_name, "NASA");
+    assert.equal(body.results[0].author.screen_name, "SampleAgency");
     assert.equal(STATE.calls, 1);
 
-    const second = await get(mf, "/v1/x/2/profile/NASA/statuses");
+    const second = await get(mf, "/v1/x/2/profile/SampleAgency/statuses");
     assert.equal(second.status, 200);
     assert.equal(second.headers.get("x-cache"), "fresh");
     assert.equal(STATE.calls, 1, "the second run reads the stored copy");
 
-    const replies = await get(mf, "/v1/x/2/profile/NASA/statuses?with_replies=1");
+    const replies = await get(mf, "/v1/x/2/profile/SampleAgency/statuses?with_replies=1");
     assert.equal(replies.status, 200);
     assert.equal(replies.headers.get("x-cache"), "miss");
     assert.equal(STATE.calls, 2, "a different query is a different cache entry");
 
-    const articles = await get(mf, "/v1/x/2/profile/NASA/articles?count=10");
+    const articles = await get(mf, "/v1/x/2/profile/SampleAgency/articles?count=10");
     assert.equal(articles.status, 200);
     assert.equal(STATE.calls, 3, "the articles page is mirrored too");
   } finally {
@@ -102,11 +102,11 @@ test("the mirror only accepts profile paths and a GET", async () => {
   STATE.down = false;
   const mf = new Miniflare(workerOptions());
   try {
-    const notAProfile = await get(mf, "/v1/x/2/users/by/username/NASA");
+    const notAProfile = await get(mf, "/v1/x/2/users/by/username/SampleAgency");
     assert.equal(notAProfile.status, 404);
     const traversal = await get(mf, "/v1/x/2/profile/../../oauth/statuses");
     assert.equal(traversal.status, 404);
-    const post = await mf.dispatchFetch("https://accounts.test/v1/x/2/profile/NASA/statuses", { method: "POST" });
+    const post = await mf.dispatchFetch("https://accounts.test/v1/x/2/profile/SampleAgency/statuses", { method: "POST" });
     assert.equal(post.status, 405);
     assert.equal(STATE.calls, 0, "a rejected request never reaches fxtwitter");
   } finally {
@@ -119,9 +119,9 @@ test("a shared secret gates the mirror when one is configured", async () => {
   STATE.down = false;
   const mf = new Miniflare(workerOptions({ X_PROXY_TOKEN: "mirror-test" }));
   try {
-    const denied = await get(mf, "/v1/x/2/profile/NASA/statuses");
+    const denied = await get(mf, "/v1/x/2/profile/SampleAgency/statuses");
     assert.equal(denied.status, 401);
-    const allowed = await get(mf, "/v1/x/2/profile/NASA/statuses", { "X-Viktorych-Token": "mirror-test" });
+    const allowed = await get(mf, "/v1/x/2/profile/SampleAgency/statuses", { "X-Viktorych-Token": "mirror-test" });
     assert.equal(allowed.status, 200);
     assert.equal(STATE.calls, 1);
   } finally {
