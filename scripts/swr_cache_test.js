@@ -66,10 +66,10 @@ const kept = Array.from({ length: limits.entries + 15 }, (_, i) => swr.get("e" +
 assert.ok(kept <= limits.entries, "too many entries: " + kept);
 
 /* Storage quota: evicts and retries instead of failing. */
-store = memoryStore(400000);
+store = memoryStore(Math.floor(limits.entry * 1.5));
 swr.reset();
-assert.ok(swr.put("q1", "z".repeat(200000), store));
-assert.ok(swr.put("q2", "z".repeat(250000), store));
+assert.ok(swr.put("q1", "z".repeat(Math.floor(limits.entry * 0.8)), store));
+assert.ok(swr.put("q2", "z".repeat(Math.floor(limits.entry * 0.9)), store));
 assert.ok(swr.get("q2", store));
 
 /* Private pages keep their snapshot under a "private-list" key, which the

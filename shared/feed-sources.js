@@ -7,7 +7,7 @@ const SUPPORTED = ["x", "threads", "instagram", "youtube", "tiktok", "vk", "tele
 const ERROR_TEXT = {
   bad_input: "Use a profile URL, @handle, or an https feed.",
   unsupported_facebook: "Facebook has no public feed we can read without a paid API.",
-  unsupported_discord: "Discord needs the bot already set up for that server.",
+  unsupported_discord: "Add Discord servers from Messages › Add Discord.",
   not_found: "That account wasn’t found.",
   rate: "The source asked us to slow down. We’ll try again later.",
   down: "The source didn’t answer.",

@@ -279,7 +279,11 @@ def join_request(request) -> dict | None:
     jid = str(join.get("id") or "")
     if not INVITE_CODE.match(code) or not re.match(r"^[a-z0-9]{8,32}$", jid):
         return None
-    return {"code": code, "id": jid, "guild": snowflake(join.get("guild"))}
+    out = {"code": code, "id": jid, "guild": snowflake(join.get("guild")), "by": str(join.get("by") or "")}
+    cap = join.get("captcha")
+    if isinstance(cap, dict) and re.match(r"^[a-z0-9]{8,32}$", str(cap.get("sid") or "")) and _cfield(cap.get("key")):
+        out["captcha"] = {"sid": str(cap["sid"]), "key": cap["key"], "rqtoken": _cfield(cap.get("rqtoken")), "session": _cfield(cap.get("session"))}
+    return out
 
 
 def join_outcome(status: int, body) -> tuple[str, str]:
@@ -307,13 +311,41 @@ def join_outcome(status: int, body) -> tuple[str, str]:
     return "error", ""
 
 
-def join_invite(token: str, code: str, transport=None) -> tuple[str, str]:
+CAPTCHA_KEY = PREFIX + "captcha.json"
+_CAPTCHA_FIELD = re.compile(r"^[A-Za-z0-9_.:+/=-]{1,4096}$")
+
+
+def _cfield(value) -> str:
+    text = "" if value is None else str(value)
+    return text if _CAPTCHA_FIELD.match(text) else ""
+
+
+def captcha_challenge(body) -> dict | None:
+    """The hCaptcha fields of a Discord join answer, for the owner to solve
+    by hand in the app. Never solved here."""
+    try:
+        parsed = json.loads(body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body or ""))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(parsed, dict) or not _cfield(parsed.get("captcha_sitekey")):
+        return None
+    return {
+        "sitekey": _cfield(parsed.get("captcha_sitekey")),
+        "service": _cfield(parsed.get("captcha_service")) or "hcaptcha",
+        "rqdata": _cfield(parsed.get("captcha_rqdata")),
+        "rqtoken": _cfield(parsed.get("captcha_rqtoken")),
+        "sessionId": _cfield(parsed.get("captcha_session_id")),
+    }
+
+
+def join_attempt(token: str, code: str, transport=None, captcha: dict | None = None) -> tuple[str, str, dict | None]:
     """One POST to /invites/<code> for the owner's confirmed tap. Nothing else.
 
-    The token is never logged. A captcha or verification answer is returned,
-    not solved."""
+    With ``captcha`` (the owner's own hCaptcha answer) Discord's captcha
+    headers ride along, once. The token is never logged. A captcha answer is
+    returned with its challenge, never solved."""
     if not token or not INVITE_CODE.match(code or ""):
-        return "invalid", ""
+        return "invalid", "", None
     from adapters.discord import API, BROWSER_UA
 
     url = f"{API}/invites/{code}"
@@ -323,21 +355,43 @@ def join_invite(token: str, code: str, transport=None) -> tuple[str, str]:
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
+    if captcha and _cfield(captcha.get("key")):
+        headers["X-Captcha-Key"] = captcha["key"]
+        if _cfield(captcha.get("rqtoken")):
+            headers["X-Captcha-Rqtoken"] = captcha["rqtoken"]
+        if _cfield(captcha.get("session")):
+            headers["X-Captcha-Session-Id"] = captcha["session"]
+
+    def done(status, body):
+        outcome, guild = join_outcome(int(status), body)
+        return outcome, guild, captcha_challenge(body) if outcome == "captcha" else None
+
     if transport:
         status, body = transport(url, headers)
-        return join_outcome(int(status), body)
+        return done(status, body)
     request = urllib.request.Request(url, data=b"{}", headers=headers, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            return join_outcome(getattr(response, "status", 200), response.read(200_000))
+            return done(getattr(response, "status", 200), response.read(200_000))
     except urllib.error.HTTPError as exc:
         try:
             body = exc.read(200_000)
         except Exception:
             body = b""
-        return join_outcome(exc.code, body)
+        return done(exc.code, body)
     except (urllib.error.URLError, TimeoutError, OSError):
-        return "error", ""
+        return "error", "", None
+
+
+def join_invite(token: str, code: str, transport=None) -> tuple[str, str]:
+    status, guild, _ = join_attempt(token, code, transport)
+    return status, guild
+
+
+def captcha_doc(jid: str, code: str, guild: str, challenge: dict, at: str) -> dict:
+    doc = {"id": jid, "code": code, "guild": guild, "at": at, "used": False}
+    doc.update({k: challenge.get(k, "") for k in ("sitekey", "service", "rqdata", "rqtoken", "sessionId")})
+    return doc
 
 
 def key_hash(token: str) -> str:
@@ -348,13 +402,22 @@ def key_hash(token: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
 
 
-def health_doc(status: str, reason: str, token: str, at: str) -> dict:
-    return {
+def health_doc(status: str, reason: str, token: str, at: str, checked: str = "") -> dict:
+    doc = {
         "status": status if status in ("ok", "invalid") else "ok",
         "reason": reason if reason in ("unauthorized", "forbidden") else "",
         "keyHash": key_hash(token) if status == "invalid" else "",
         "at": at,
     }
+    if checked:
+        doc["checkedAt"] = str(checked)[:40]
+    return doc
+
+
+def key_check_due(health, today: str) -> bool:
+    """The once-a-day GET /users/@me is due when today's is not on file."""
+    checked = str((health or {}).get("checkedAt") or "") if isinstance(health, dict) else ""
+    return checked[:10] != str(today)[:10]
 
 
 def key_blocked(health, token: str) -> bool:

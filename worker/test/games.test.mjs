@@ -124,11 +124,12 @@ test("play beats, friend board, playing presence and invites", async () => {
   assert.equal(sent.status, 200, sent.text);
   assert.equal(sent.body.sent, true);
   const dup = await call("/v1/games/invite", { method: "POST", token: ana.token, ip: "203.0.113.141", body: { gameId: "regone", to: bo.account.publicId } });
-  assert.equal(dup.body.sent, false, "one invite per hour");
+  assert.equal(dup.body.sent, false, "one open invite per friend");
+  assert.equal(dup.body.id, sent.body.id);
   const bell = await call("/v1/notifications", { token: bo.token, ip: "203.0.113.142" });
   const inv = (bell.body.items || []).filter((item) => item.kind === "game_invite");
   assert.equal(inv.length, 1);
-  assert.equal(inv[0].hash, "#/games/regone");
+  assert.equal(inv[0].hash, "#/games/regone?invite=" + sent.body.id);
   const stranger = await call("/v1/games/invite", { method: "POST", token: cy.token, ip: "203.0.113.143", body: { gameId: "regone", to: bo.account.publicId } });
   assert.equal(stranger.status, 403);
 });

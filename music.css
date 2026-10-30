@@ -273,14 +273,34 @@ html.music-on .center { padding-bottom: 96px; }
   html.music-on .nav { padding-bottom: 72px; }
 }
 .mu-mini-x, .mu-pop-bar { display: none; }
+/* The YouTube player: one fixed box laid over its target by music.js
+   (Now Playing cover, the mini player's slot, or the card above the bar).
+   It stays at least 200x200 with nothing on top, as YouTube asks. */
 #mu-yt-host {
   position: fixed;
-  left: -2400px;
+  left: 0;
   top: 0;
   width: 200px;
   height: 200px;
+  min-width: 200px;
+  min-height: 200px;
   overflow: hidden;
-  pointer-events: none;
+  z-index: 28;
+  background: #000;
+  border-radius: 12px;
+}
+#mu-yt-host.is-off { left: -2400px !important; top: 0 !important; pointer-events: none; visibility: hidden; }
+#mu-yt-host.is-full { z-index: 37; }
+#mu-yt-host.is-mini { border-radius: 15px 15px 0 0; }
+#mu-yt-host.is-card { box-shadow: 0 0 15px rgba(255, 255, 255, 0.2), 0 0 3px 1px rgba(255, 255, 255, 0.15); border: 0; }
+html[data-theme="default"] #mu-yt-host.is-card { box-shadow: 0 0 15px rgba(101, 119, 134, 0.25), 0 0 3px 1px rgba(101, 119, 134, 0.2); }
+#mu-yt, #mu-yt-host iframe { display: block; width: 100%; height: 100%; border: 0; }
+.mu-yt-slot { display: none; }
+/* Room under the page for the 200x200 card on the music pages. */
+html.ytm-card .center { padding-bottom: 320px; }
+@media (max-width: 499px) {
+  html.ytm-card .center { padding-bottom: calc(420px + env(safe-area-inset-bottom)); }
+  html.ytm-card.music-on .fab { bottom: calc(368px + env(safe-area-inset-bottom)); }
 }
 .mu-bar {
   height: 72px;
@@ -339,31 +359,8 @@ html.music-on .center { padding-bottom: 96px; }
 .mu-play svg { width: 22px !important; height: 22px !important; fill: var(--on-fill) !important; }
 .mu-seek { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .mu-vol { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
-.mu-range, .mu-volume {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--line);
-  margin: 0;
-}
+.mu-range, .mu-volume { width: 100%; height: 24px; }
 .mu-volume { width: 92px; }
-.mu-range::-webkit-slider-thumb, .mu-volume::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 0;
-}
-.mu-range::-moz-range-thumb, .mu-volume::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 0;
-}
 .mu-rep { position: relative; }
 .mu-rep i {
   position: absolute;
@@ -390,6 +387,7 @@ html.music-on .center { padding-bottom: 96px; }
 .mu-now-kicker { font-size: 13px; font-weight: 700; }
 .mu-now-art {
   width: min(100%, 420px);
+  min-width: 200px;
   margin: 16px auto;
   aspect-ratio: 1;
   border-radius: 12px;
@@ -577,7 +575,7 @@ html.music-mini #native-pip { bottom: calc(92px + var(--safe-b, env(safe-area-in
   }
   html.music-mini .center { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   html.music-mini #native-pip { right: auto; left: 12px; bottom: calc(69px + env(safe-area-inset-bottom, 0px)); }
-  html.music-mini:has(textarea:focus, input[type="text"]:focus, input[type="search"]:focus, [contenteditable="true"]:focus) .mu-dock { display: none; }
+  html.music-mini:has(textarea:focus, input[type="text"]:focus, input[type="search"]:focus, [contenteditable="true"]:focus) .mu-dock:not(.is-yt) { display: none; }
 }
 /* Phone held sideways: the chat squares shrink to 48px, so does the tile. */
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
@@ -587,4 +585,150 @@ html.music-mini #native-pip { bottom: calc(92px + var(--safe-b, env(safe-area-in
 @media (prefers-reduced-motion: reduce) {
   html.music-mini .mu-id .mu-marq { animation: none; }
   html.music-mini .mu-pop-bar b { transition: none; }
+}
+
+/* A YouTube song: the mini square grows to the 200x200 player YouTube
+   asks for, in the same corner. The chat squares in the row step aside
+   (flex), and a thin strip under the player holds the title, play, next
+   and close so nothing covers the video. Our own songs keep the 56px tile. */
+html.music-mini .mu-dock.is-yt, html.music-mini .mu-dock.is-yt[data-corner] {
+  width: 202px;
+  height: 234px;
+  transition: width 220ms cubic-bezier(0.2, 0, 0, 1), height 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+html.music-mini .mu-dock.is-yt .mu-yt-slot { display: block; position: absolute; top: 0; left: 0; width: 200px; height: 200px; background: #000; }
+html.music-mini .mu-dock.is-yt .mu-id {
+  inset: auto 82px 3px 0;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 10px;
+  overflow: hidden;
+}
+html.music-mini .mu-dock.is-yt #mu-dock-art, html.music-mini .mu-dock.is-yt #mu-dock-artist { display: none; }
+html.music-mini .mu-dock.is-yt .mu-id .mu-copy { display: block; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 13px; line-height: 16px; }
+html.music-mini .mu-dock.is-yt .mu-id .mu-copy b { display: inline-block; font-weight: 700; }
+html.music-mini .mu-dock.is-yt .mu-transport { right: 30px; bottom: 5px; gap: 4px; pointer-events: auto; }
+html.music-mini .mu-dock.is-yt .mu-transport [data-act="music-next"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+}
+html.music-mini .mu-dock.is-yt .mu-transport [data-act="music-next"] svg { width: 16px; height: 16px; fill: currentColor; }
+html.music-mini .mu-dock.is-yt .mu-transport .mu-play { width: 24px !important; height: 24px !important; }
+html.music-mini .mu-dock.is-yt .mu-mini-x { display: inline-flex; top: auto; bottom: 5px; right: 4px; width: 24px; height: 24px; background: transparent; color: var(--text); }
+html.music-mini .mu-dock.is-yt .mu-mini-x:hover { background: var(--hover, rgba(231, 233, 234, 0.1)); }
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
+  html.music-mini .mu-dock.is-yt, html.music-mini .mu-dock.is-yt[data-corner] { width: 202px; height: 234px; }
+}
+
+/* YouTube Music pages */
+.ytm-tabs { display: flex; gap: 8px; padding: 12px 16px 4px; overflow-x: auto; scrollbar-width: none; }
+.ytm-tabs::-webkit-scrollbar { display: none; }
+.ytm-chip, .ytm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ytm-chip:hover, .ytm-pill:hover { background: var(--hover, rgba(231, 233, 234, 0.1)); text-decoration: none; }
+.ytm-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.ytm-pill { min-height: 32px; padding: 0 14px; font-size: 14px; background: var(--text); color: var(--bg); border-color: var(--text); }
+.ytm-pill.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+.ytm-pill[disabled] { opacity: 0.5; cursor: default; }
+.ytm-pill svg { width: 16px; height: 16px; fill: currentColor; }
+.ytm-chip:focus-visible, .ytm-pill:focus-visible, .ytm-row .mu-open:focus-visible, .ytm-tile:focus-visible { outline: 2px solid var(--blue, #1d9bf0); outline-offset: 2px; }
+.ytm-moods { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px 4px; }
+.ytm-moods .ytm-chip { min-height: 32px; font-size: 14px; }
+.ytm-shelf { padding-bottom: 8px; }
+.ytm-shelf .mu-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ytm-head-tools { display: inline-flex; gap: 8px; align-items: center; }
+.ytm-tile .ytm-cover { aspect-ratio: 16 / 9; }
+.ytm-tile.ytm-artist .ytm-cover, .ytm-cover.is-round { aspect-ratio: 1; border-radius: 999px; }
+.ytm-cover img, .ytm-thumb img, .ytm-hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ytm-cover, .ytm-thumb, .ytm-hero-art { display: block; overflow: hidden; background: var(--banner, #16181c); }
+/* A thumbnail that starts playback stays at least 120x70 (YouTube's rule). */
+.ytm-thumb { flex: none; width: 124px; height: 70px; border-radius: 8px; }
+.ytm-row { gap: 8px; }
+.ytm-row .mu-open { min-width: 0; }
+.ytm-n { flex: none; width: 24px; text-align: right; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.ytm-actions { display: inline-flex; }
+.ytm-badge { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border-radius: 8px; background: linear-gradient(135deg, #1d9bf0, #7856ff); }
+.ytm-badge svg { width: 40%; height: 40%; fill: #fff; }
+.ytm-hero { display: flex; gap: 16px; align-items: flex-end; padding: 16px; flex-wrap: wrap; }
+.ytm-hero-art { width: 160px; height: 160px; border-radius: 12px; }
+.ytm-hero-art.is-round { border-radius: 999px; }
+.ytm-hero-copy { min-width: 0; flex: 1 1 220px; }
+.ytm-hero-copy h2 { margin: 2px 0 4px; font-size: 26px; line-height: 30px; font-weight: 800; overflow-wrap: anywhere; }
+.ytm-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ytm-grid .ytm-cover { aspect-ratio: 16 / 9; }
+.ytm-loading { display: flex; align-items: center; gap: 10px; padding: 24px 16px; color: var(--muted); }
+.ytm-tip, .ytm-card { margin: 12px 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 16px; }
+.ytm-tip p, .ytm-card p { margin: 0 0 10px; color: var(--muted); font-size: 14px; line-height: 19px; }
+.ytm-card h3 { margin: 0 0 6px; font-size: 17px; font-weight: 800; }
+.ytm-tip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ytm-input { flex: 1 1 220px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font: inherit; }
+.ytm-settings summary { cursor: pointer; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
+.ytm-settings fieldset { border: 0; margin: 8px 0; padding: 0; }
+.ytm-settings legend { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.ytm-opt { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 15px; cursor: pointer; }
+.ytm-opt input { width: 18px; height: 18px; accent-color: var(--blue, #1d9bf0); }
+.ytm-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+  padding: 4px 0;
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2), 0 0 3px 1px rgba(255, 255, 255, 0.15);
+}
+html[data-theme="default"] .ytm-menu { box-shadow: 0 0 15px rgba(101, 119, 134, 0.2), 0 0 3px 1px rgba(101, 119, 134, 0.15); }
+.ytm-menu button, .ytm-menu a {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ytm-menu button:hover, .ytm-menu a:hover, .ytm-menu button:focus-visible, .ytm-menu a:focus-visible { background: var(--hover, rgba(231, 233, 234, 0.07)); outline: none; }
+.ytm-menu-sep { height: 1px; margin: 4px 0; background: var(--line); }
+.ytm-menu-label { margin: 6px 16px 2px; color: var(--muted); font-size: 13px; }
+.mu-now .ytm-tip { margin: 8px 0 0; text-align: left; }
+.mu-now .ytm-q { font-variant-numeric: tabular-nums; }
+@media (max-width: 499px) {
+  .ytm-thumb { width: 124px; height: 70px; }
+  .ytm-hero-art { width: 120px; height: 120px; }
+  .ytm-hero-copy h2 { font-size: 22px; line-height: 26px; }
 }

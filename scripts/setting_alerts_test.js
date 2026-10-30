@@ -540,4 +540,6 @@ const popsOf = (t, id) => t.shows.filter((s) => s.id === id);
   assert(/\.sa-note-ico svg[^}]*\}/.test(iconCss) && iconCss.includes("fill: currentColor"), "glyphs fill with currentColor");
   assert(!EMOJI.test(read("setting-alerts.js")), "setting-alerts.js has no emoji");
   console.log("ok setting alerts");
+  /* The local-store alert's numbers come from the localStorage budget. */
+  require("child_process").execFileSync(process.execPath, [require("path").join(__dirname, "local_budget_test.js")], { stdio: "inherit" });
 })().catch((err) => { console.error(err); process.exit(1); });

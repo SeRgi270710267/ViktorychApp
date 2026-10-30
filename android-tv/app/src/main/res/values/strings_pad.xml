@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Controller play (GameActivity). -->
+<resources>
+    <string name="pad_no_pad">Connect a controller to play. The remote works in menus.</string>
+    <string name="pad_title">Controller</string>
+    <string name="pad_resume">Resume</string>
+    <string name="pad_game_menu">Game menu</string>
+    <string name="pad_mode">Mode: %1$s</string>
+    <string name="pad_mode_play">Play</string>
+    <string name="pad_mode_cursor">Menu cursor</string>
+    <string name="pad_mode_watch">Spectate</string>
+    <string name="pad_controls">Controls</string>
+    <string name="pad_sensitivity">Look sensitivity: %1$d</string>
+    <string name="pad_invert_on">Invert look: On</string>
+    <string name="pad_invert_off">Invert look: Off</string>
+    <string name="pad_move_keys">Move with: W A S D keys</string>
+    <string name="pad_move_stick">Move with: on-screen joystick</string>
+    <string name="pad_glyphs">Button icons: %1$s</string>
+    <string name="pad_glyphs_xbox">Xbox</string>
+    <string name="pad_glyphs_ps">PlayStation</string>
+    <string name="pad_show_hints">Show controls</string>
+    <string name="pad_exit">Exit game</string>
+    <string name="pad_reset">Reset to default</string>
+    <string name="pad_back">Back</string>
+    <string name="pad_press">Press a button for %1$s (Menu cancels)</string>
+    <string name="act_jump">Jump</string>
+    <string name="act_crouch">Crouch</string>
+    <string name="act_reload">Reload</string>
+    <string name="act_use">Use</string>
+    <string name="act_sprint">Sprint</string>
+    <string name="act_prone">Prone</string>
+    <string name="act_binoculars">Binoculars</string>
+    <string name="act_buy">Buy</string>
+    <string name="act_inspect">Inspect</string>
+    <string name="act_melee">Melee</string>
+    <string name="act_scoreboard">Scoreboard</string>
+    <string name="act_fire">Fire</string>
+    <string name="act_aim">Aim</string>
+    <string name="act_weapon_next">Next weapon</string>
+    <string name="act_weapon_prev">Previous weapon</string>
+    <string name="act_none">Nothing</string>
+    <string name="hint_move">Move</string>
+    <string name="hint_look">Look</string>
+    <string name="hint_menu">Menu</string>
+    <string name="hint_tap">Tap</string>
+    <string name="hint_cursor">Cursor</string>
+    <string name="hint_back">Back</string>
+    <string name="hint_switch">+ Menu: switch mode</string>
+    <string name="hint_next">Next</string>
+    <string name="hint_prev">Previous</string>
+    <string name="hint_view">View</string>
+</resources>
