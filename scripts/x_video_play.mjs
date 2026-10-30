@@ -33,6 +33,7 @@ const PAGE = `<!doctype html>
 <button id="miss" type="button">Missing</button>
 <button id="fail" type="button">Fail file</button>
 <button id="gif" type="button">GIF</button>
+<button id="resolve" type="button">Resolve</button>
 <div id="slot"></div>
 <script src="/video-embed.js"></script>
 <script>
@@ -100,6 +101,18 @@ document.getElementById("fail").addEventListener("click", function () {
     stallMs: 3000
   });
   window.__file = slot.querySelector("video") ? "video" : (slot.querySelector("iframe") ? "embed" : "none");
+});
+document.getElementById("resolve").addEventListener("click", function () {
+  reset();
+  E.runXPlayback(slot, {
+    plan: { primary: null, embedUrl: E.xEmbedUrl(${JSON.stringify(STATUS)}), openUrl: E.xOpenUrl(${JSON.stringify(STATUS)}, "status") },
+    gif: true,
+    stallMs: 3000,
+    refresh: function () {
+      return Promise.resolve({ kind: "mp4", url: ${JSON.stringify(MP4)}, alts: [${JSON.stringify(GIF)}] });
+    }
+  });
+  window.__resolving = slot.classList.contains("is-resolving") && !slot.querySelector("iframe");
 });
 document.getElementById("gif").addEventListener("click", function () {
   reset();
@@ -292,6 +305,19 @@ async function main() {
     if (gif.frame) throw new Error("a playing GIF swapped to the embed");
     if (gif.shield) throw new Error("a shield covers the GIF");
     if (relayed.length) throw new Error("playback used the media relay");
+
+    // No file in our data: the resolver finds one, a failed direct file moves
+    // to the next route, and our own player plays it. No embed loads.
+    await page.click("#resolve");
+    if (!(await page.evaluate(() => window.__resolving))) throw new Error("a missing file did not resolve before the embed");
+    await page.waitForFunction(() => {
+      const video = document.querySelector("#slot video");
+      return !!(video && video.videoWidth > 0);
+    }, null, { timeout: 10000 });
+    const resolved = await page.evaluate(() => ({ frame: !!document.querySelector("#slot iframe, #slot .vembed-tap"), resolving: document.getElementById("slot").classList.contains("is-resolving"), src: (document.querySelector("#slot video") || {}).currentSrc || "" }));
+    if (resolved.frame) throw new Error("the embed loaded although a file resolved");
+    if (resolved.resolving) throw new Error("the resolving state stayed on");
+    if (resolved.src.indexOf(GIF_ID) < 0) throw new Error("resolved file src " + resolved.src);
   } finally {
     await browser.close();
     await new Promise((done) => server.close(done));
