@@ -111,8 +111,9 @@ function redact(text) {
     .replace(/\breader[a-z]{4,}\b/g, "[redacted]");
 }
 
-async function openFresh(browser, viewport) {
+async function openFresh(browser, viewport, extra = {}) {
   const context = await browser.newContext({
+    ...extra,
     viewport: { width: viewport.width, height: viewport.height },
     serviceWorkers: "block",
     permissions: ["clipboard-read", "clipboard-write", "notifications"]
@@ -151,8 +152,9 @@ async function logOut(page) {
 }
 
 async function openSignup(page) {
-  // Sign up opens the first-time setup: a welcome screen, then language,
-  // then the account steps inside the same full-screen frame.
+  // Sign up opens the first-time setup, one step per screen: welcome,
+  // language, a choice of how to start, then the account steps in the same
+  // full-screen frame.
   await page.getByRole("button", { name: "Sign up" }).first().click();
   // The welcome screen also offers a temporary account with its delete-time
   // picker; Back returns to the welcome screen.
@@ -161,7 +163,217 @@ async function openSignup(page) {
   await page.locator(".acct-temp-setup [data-acct='temp-setup-back']").click();
   await page.locator("#onb-layer [data-step='welcome'] [data-onb='next']").click({ timeout: 15000 });
   await page.locator("#onb-layer [data-step='language'] [data-onb='next']").click();
-  await page.locator(".acct-setup .acct-modal").waitFor();
+  await page.locator("#onb-layer [data-step='choose'] [data-onb='create']").click();
+  await page.locator(".acct-setup[data-step='name'] .acct-modal").waitFor();
+}
+
+// Esc walks back one step at a time; at the welcome screen it closes setup.
+async function leaveSetup(page) {
+  for (let i = 0; i < 10; i++) {
+    const open = await page.evaluate(() => !!document.querySelector("#account-layer .acct-modal, #onb-layer .oobe"));
+    if (!open) return;
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(450);
+  }
+  throw new Error("Esc never left setup");
+}
+
+// The step's title takes focus and the live region names the step.
+async function stepFocused(page, step) {
+  return page.waitForFunction((id) => {
+    // A touch screen focuses the title; with a mouse the step's one text
+    // field takes focus so typing can start.
+    const el = document.activeElement;
+    const live = document.getElementById("oobe-live");
+    const shell = document.querySelector(".oobe[data-step='" + id + "']");
+    const title = shell && shell.querySelector("#oobe-title");
+    if (!shell || !el || !title || !shell.contains(el)) return false;
+    if (el !== title && !(el.matches("input") && el.closest(".oobe-main"))) return false;
+    return !!live && live.textContent.indexOf(title.textContent.trim()) >= 0;
+  }, step, { timeout: 5000 }).then(() => true, () => false);
+}
+
+// Animation names seen while one step changes to the next.
+async function stepAnimations(page, selector) {
+  return page.evaluate(async (sel) => {
+    const seen = new Set();
+    const grab = () => { for (const a of document.getAnimations()) if (a.animationName) seen.add(a.animationName); };
+    document.querySelector(sel).click();
+    for (let i = 0; i < 20; i++) { grab(); await new Promise((r) => setTimeout(r, 20)); }
+    return [...seen];
+  }, selector);
+}
+
+// From the profile step to the timeline. Every post-account step is shown
+// once, and a reload resumes the step it was on.
+async function walkSetup(page, notes, label, opts = {}) {
+  const at = (id) => page.locator("#onb-layer [data-step='" + id + "']").waitFor({ timeout: 20000 }).then(() => true, () => false);
+  if (!(await at("profile"))) { notes.push(label + ": setup did not continue after the account was saved"); return; }
+  const named = await page.locator("#onb-layer input[name='onbName']").inputValue();
+  if (named !== "Example Reader") notes.push(label + ": setup did not prefill the display name");
+  await page.locator("#onb-layer [data-step='profile'] [data-onb='skip']").first().click();
+  if (!(await at("theme"))) { notes.push(label + ": theme step missing"); return; }
+  if (opts.reload) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    if (!(await at("theme"))) { notes.push(label + ": setup did not resume the same step after reload"); return; }
+  }
+  // The theme picker lists every theme from window.ViktorychThemes, flag
+  // themes included, and picking one applies it live.
+  const flagIds = await page.evaluate(() => Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}));
+  for (const id of flagIds) {
+    if (!(await page.locator(`#onb-layer [data-onb='theme'][data-mode='${id}']`).count())) notes.push(`${label}: setup theme picker is missing the ${id} theme`);
+  }
+  if (flagIds.length) {
+    await page.locator(`#onb-layer [data-onb='theme'][data-mode='${flagIds[0]}']`).click();
+    const applied = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+    if (applied !== flagIds[0]) notes.push(label + ": picking a flag theme in setup did not apply it");
+  }
+  await page.locator("#onb-layer [data-onb='theme'][data-mode='lightsout']").click();
+  await page.locator("#onb-layer [data-step='theme'] .oobe-foot [data-onb='next']").click();
+  if (!(await at("data"))) { notes.push(label + ": save-data step missing"); return; }
+  await page.locator("#onb-layer [data-step='data'] .oobe-foot [data-onb='next']").click();
+  if (!(await at("notify"))) { notes.push(label + ": notifications step missing"); return; }
+  // Notifications are explained first; nothing asks the browser yet.
+  if (!(await page.locator("#onb-layer [data-step='notify'] .oobe-foot [data-onb]").count())) notes.push(label + ": notifications step has no action");
+  await page.locator("#onb-layer [data-step='notify'] .oobe-foot [data-onb='skip'], #onb-layer [data-step='notify'] .oobe-foot [data-onb='next']").first().click();
+  if (!(await at("install"))) { notes.push(label + ": install step missing"); return; }
+  await page.locator("#onb-layer [data-step='install'] [data-onb='skip']").first().click();
+  if (!(await at("follow"))) { notes.push(label + ": follow step missing"); return; }
+  await page.locator("#onb-layer [data-step='follow'] .oobe-foot [data-onb='next']").click();
+  if (!(await at("done"))) { notes.push(label + ": finale missing"); return; }
+  await page.locator("#onb-layer [data-step='done'] [data-onb='finish']").click();
+  await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 });
+  const sheet = await page.locator("[data-act='welcome-skip']").count();
+  if (sheet) notes.push(label + ": the old welcome sheet opened after setup");
+  // Earlier runs share the local server and may have posted, so look for
+  // the home timeline itself rather than its empty state.
+  const timeline = await page.getByRole("tab", { name: "For you" }).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
+  if (!timeline) {
+    const text = await page.evaluate(() => (document.body ? document.body.innerText : "").replace(/\s+/g, " ").slice(0, 400));
+    notes.push(label + ": timeline did not open after setup: " + redact(text));
+  }
+}
+
+// Create an account through the step flow: name, username, passkey, save.
+async function createAccount(page, notes, label) {
+  await openSignup(page);
+  if (!(await stepFocused(page, "name"))) notes.push(label + ": name step title did not take focus");
+  await page.locator("#acct-displayName").fill("Example Reader");
+  await page.keyboard.press("Enter");
+  await page.locator(".acct-setup[data-step='handle'] #acct-handle").waitFor();
+  if (!(await stepFocused(page, "handle")) && !(await page.evaluate(() => document.activeElement && document.activeElement.id === "acct-handle"))) notes.push(label + ": handle step lost focus");
+  if (!(await typeHandle(page))) notes.push(label + ": signup handle was not filled");
+  await page.locator(".acct-setup [data-acct='handle-next']").click();
+  const passkey = await page.locator(".acct-setup[data-step='passkey']").waitFor({ timeout: 8000 }).then(() => true, () => false);
+  if (passkey) await page.locator(".acct-setup[data-step='passkey'] [data-acct='next']").click();
+  const reached = await page.getByText("This number is shown once.").waitFor({ timeout: 20000 }).then(() => true, () => false);
+  if (!reached) { notes.push(label + ": signup did not reach the number step"); return false; }
+  const codes = await page.locator("[data-recovery-code]").count();
+  if (codes !== 10) notes.push(label + ": expected 10 recovery codes, saw " + codes);
+  await page.locator(".acct-modal input[name='saved']").check();
+  await page.locator(".acct-modal [data-acct='saved']").click();
+  await page.waitForFunction(() => document.documentElement.getAttribute("data-wall") !== "1", null, { timeout: 20000 });
+  return true;
+}
+
+async function fullFlow(page, viewport) {
+  const notes = [];
+  const label = viewport.name + " full";
+  if (!(await createAccount(page, notes, label))) return notes;
+  await page.locator("#onb-layer [data-step='profile']").waitFor({ timeout: 20000 }).catch(() => {});
+  if (viewport.width >= 960) {
+    const rail = await page.locator("#onb-layer .oobe-rail li").count();
+    if (rail < 4) notes.push(label + ": desktop step rail missing");
+  } else {
+    const dots = await page.locator("#onb-layer .oobe-dots i").count();
+    if (dots < 8) notes.push(label + ": phone progress dots missing");
+  }
+  await walkSetup(page, notes, label);
+  return notes;
+}
+
+// Reduced motion swaps the slides for crossfades.
+async function motionPass(page, reduced) {
+  const notes = [];
+  const label = reduced ? "reduced motion" : "motion";
+  await page.getByRole("button", { name: "Sign up" }).first().click();
+  await page.locator("#onb-layer [data-step='welcome'] [data-onb='next']").waitFor({ timeout: 15000 });
+  const names = await stepAnimations(page, "#onb-layer [data-step='welcome'] [data-onb='next']");
+  await page.locator("#onb-layer [data-step='language']").waitFor();
+  const slides = names.filter((n) => /^oobe-(in|out)-(fwd|back)$/.test(n));
+  if (reduced && slides.length) notes.push(label + ": steps still slide (" + slides.join(", ") + ")");
+  if (!reduced && !slides.length) notes.push(label + ": steps change without the slide (" + names.join(", ") + ")");
+  if (!(await stepFocused(page, "language"))) notes.push(label + ": language step title did not take focus");
+  await page.keyboard.press("Escape");
+  if (!(await page.locator("#onb-layer [data-step='welcome']").waitFor({ timeout: 5000 }).then(() => true, () => false))) notes.push(label + ": Esc did not go back");
+  if (reduced) {
+    await page.locator("#onb-layer [data-step='welcome'] [data-onb='next']").click();
+    await page.locator("#onb-layer [data-step='language'] [data-onb='next']").click();
+    await page.locator("#onb-layer [data-step='choose'] [data-onb='create']").click();
+    await page.locator(".acct-setup[data-step='name']").waitFor();
+    await page.locator("#acct-displayName").fill("Example Reader");
+    await page.locator(".acct-setup [data-acct='next']").click();
+    await page.locator("#acct-handle").waitFor();
+    await typeHandle(page);
+    await page.locator(".acct-setup [data-acct='handle-next']").click();
+    const passkey = await page.locator(".acct-setup[data-step='passkey']").waitFor({ timeout: 8000 }).then(() => true, () => false);
+    if (passkey) await page.locator(".acct-setup[data-step='passkey'] [data-acct='next']").click();
+    await page.getByText("This number is shown once.").waitFor({ timeout: 20000 });
+    await page.locator(".acct-modal input[name='saved']").check();
+    await page.locator(".acct-modal [data-acct='saved']").click();
+    await walkSetup(page, notes, label);
+  }
+  return notes;
+}
+
+// Quick sign-up: one plain form, defaults for the rest, straight to the
+// timeline. The choice holds for the session and Back returns to welcome.
+async function quickFlow(page, viewport) {
+  const notes = [];
+  const label = viewport.name + " quick";
+  await page.getByRole("button", { name: "Sign up" }).first().click();
+  await page.locator("#onb-layer [data-step='welcome'] [data-onb='quick']").click({ timeout: 15000 });
+  await page.locator(".acct-quick #acct-displayName").waitFor();
+  for (const want of ["#acct-displayName", "#acct-handle", "[data-acct='quick-create']", "[data-acct='open-temp']", "[data-acct='login']"]) {
+    if (!(await page.locator(".acct-quick " + want).count())) notes.push(label + ": quick form is missing " + want);
+  }
+  await page.locator(".acct-quick [data-acct='quick-back']").click();
+  if (!(await page.locator("#onb-layer [data-step='welcome']").waitFor({ timeout: 8000 }).then(() => true, () => false))) notes.push(label + ": Back did not return to welcome");
+  await page.locator("#onb-layer [data-step='welcome'] [data-onb='quick']").click();
+  await page.locator(".acct-quick [data-acct='open-temp']").click();
+  if (!(await page.locator("[data-acct='temp-pick']").first().waitFor({ timeout: 8000 }).then(() => true, () => false))) notes.push(label + ": temporary account is not reachable from the quick form");
+  await page.locator("[data-acct='temp-setup-back'], [data-acct='temp-back']").first().click().catch(() => {});
+  await page.locator(".acct-quick #acct-displayName").waitFor({ timeout: 8000 }).catch(() => notes.push(label + ": temp Back did not return to the quick form"));
+  await page.locator(".acct-quick [data-acct='quick-create']").click();
+  if ((await page.locator("#acct-error").innerText().catch(() => "")) !== "What should we call you?") notes.push(label + ": empty name error missing");
+  await page.locator("#acct-displayName").fill("Example Reader");
+  await typeHandle(page);
+  await page.locator(".acct-quick [data-acct='quick-create']").click();
+  const reached = await page.getByText("This number is shown once.").waitFor({ timeout: 20000 }).then(() => true, () => false);
+  if (!reached) { notes.push(label + ": quick sign-up did not reach the number step"); return notes; }
+  await page.locator(".acct-modal input[name='saved']").check();
+  await page.locator(".acct-modal [data-acct='saved']").click();
+  const timeline = await page.getByRole("tab", { name: "For you" }).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
+  if (!timeline) notes.push(label + ": quick sign-up did not open the timeline");
+  const after = await page.evaluate(() => ({
+    onb: !!document.querySelector("#onb-layer .oobe"),
+    sheet: !!document.querySelector("[data-act='welcome-skip']"),
+    doc: localStorage.getItem("viktorychapp-onboard-v1"),
+    mode: sessionStorage.getItem("viktorychapp-setup-mode"),
+    theme: document.documentElement.getAttribute("data-theme") || ""
+  }));
+  if (after.onb || after.sheet) notes.push(label + ": quick sign-up still showed setup screens");
+  if (after.doc) notes.push(label + ": quick sign-up left setup progress behind");
+  if (after.mode !== "quick") notes.push(label + ": the quick choice was not kept for the session");
+  await openPage(page, "/#/settings");
+  const rerun = await page.locator("[data-act='run-setup']").waitFor({ timeout: 15000 }).then(() => true, () => false);
+  if (!rerun) notes.push(label + ": Settings has no Run setup again row");
+  else {
+    await page.evaluate(() => document.querySelector("[data-act='run-setup']").click());
+    const theme = await page.locator("#onb-layer [data-step='theme']").waitFor({ timeout: 15000 }).then(() => true, () => false);
+    if (!theme) notes.push(label + ": Run setup again did not open the theme step");
+  }
+  return notes;
 }
 
 async function openPage(page, path) {
@@ -216,7 +428,13 @@ async function layoutPass(page, viewport) {
     }
   }
   await openSignup(page);
-  await page.getByRole("heading", { name: "Create your account" }).waitFor();
+  await page.getByRole("heading", { name: "What's your name?" }).waitFor();
+  const fits = await page.evaluate(() => {
+    const card = document.querySelector(".oobe-card");
+    const r = card.getBoundingClientRect();
+    return r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && document.documentElement.scrollWidth <= innerWidth + 1;
+  });
+  if (!fits) notes.push(viewport.name + ": setup card does not fit the screen");
   await page.locator("#acct-displayName").fill("");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-error").waitFor();
@@ -225,18 +443,18 @@ async function layoutPass(page, viewport) {
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
   await page.locator("#acct-handle").fill("");
-  await page.locator(".acct-modal [data-acct='next']").click();
+  await page.locator(".acct-modal [data-acct='handle-next']").click();
   if ((await page.locator("#acct-error").innerText()) !== "Choose a handle.") notes.push(viewport.name + ": empty handle error missing");
   await page.locator("#acct-handle").fill("!!");
-  await page.locator(".acct-modal [data-acct='next']").click();
+  await page.locator(".acct-modal [data-acct='handle-next']").click();
   if ((await page.locator("#acct-error").innerText()) !== "That handle is not allowed.") notes.push(viewport.name + ": bad handle error missing");
   await page.locator("#acct-handle").fill("admin");
-  await page.locator(".acct-modal [data-acct='next']").click();
+  await page.locator(".acct-modal [data-acct='handle-next']").click();
   if ((await page.locator("#acct-error").innerText()) !== "That handle is reserved.") notes.push(viewport.name + ": reserved handle error missing");
   const described = await page.locator("#acct-handle").getAttribute("aria-describedby");
   const invalid = await page.locator("#acct-handle").getAttribute("aria-invalid");
   if (described !== "acct-error" || invalid !== "true") notes.push(viewport.name + ": error not tied to the field");
-  await page.keyboard.press("Escape");
+  await leaveSetup(page);
   await page.waitForFunction(() => !document.querySelector(".acct-modal"));
   await page.getByRole("button", { name: "Log in" }).first().click();
   await page.getByRole("heading", { name: "Sign in to ViktorychApp" }).waitFor();
@@ -314,9 +532,13 @@ async function firstRun(page) {
   });
   if (honeypot === "none" || honeypot === "missing") notes.push("honeypot is missing or hidden with display none");
   if (!(await typeHandle(page))) notes.push("signup handle was not filled");
+  await page.locator(".acct-modal [data-acct='handle-next']").click();
+  // With passkeys the next screen offers one; the plain path continues.
+  const keyStep = await page.locator(".acct-setup[data-step='passkey']").waitFor({ timeout: 8000 }).then(() => true, () => false);
   const next = page.locator(".acct-modal [data-acct='next']");
   await next.click();
   if ((await next.getAttribute("aria-busy")) !== "true") notes.push("signup has no loading state");
+  if (!keyStep) notes.push("passkey step did not show");
   const reached = await page.getByText("This number is shown once.").waitFor({ timeout: 20000 }).then(() => true, () => false);
   if (!reached) {
     notes.push("signup did not reach the number step (" + signupStatus + ")");
@@ -360,36 +582,7 @@ async function firstRun(page) {
   await page.locator(".acct-modal input[name='saved']").check();
   await page.locator(".acct-modal [data-acct='saved']").click();
   await page.waitForFunction(() => document.documentElement.getAttribute("data-wall") !== "1", null, { timeout: 20000 });
-  const setup = await page.locator("#onb-layer [data-step='profile']").waitFor({ timeout: 20000 }).then(() => true, () => false);
-  if (!setup) notes.push("first-time setup did not continue after the account was saved");
-  else {
-    const named = await page.locator("#onb-layer input[name='onbName']").inputValue();
-    if (named !== "Example Reader") notes.push("setup did not prefill the display name");
-    await page.locator("#onb-layer [data-onb='skip']").click();
-    await page.locator("#onb-layer [data-step='follow']").waitFor();
-    await page.reload({ waitUntil: "domcontentloaded" });
-    const resumed = await page.locator("#onb-layer [data-step='follow']").waitFor({ timeout: 20000 }).then(() => true, () => false);
-    if (!resumed) notes.push("first-time setup did not resume the same step after reload");
-    else {
-      await page.locator("#onb-layer [data-onb='skip']").click();
-      await page.locator("#onb-layer [data-step='prefs']").waitFor();
-      // The theme picker lists every theme from window.ViktorychThemes,
-      // flag themes included, and picking one applies it.
-      const flagIds = await page.evaluate(() => Object.keys((window.ViktorychThemes && window.ViktorychThemes.flags) || {}));
-      for (const id of flagIds) {
-        if (!(await page.locator(`#onb-layer [data-onb='theme'][data-mode='${id}']`).count())) notes.push(`setup theme picker is missing the ${id} theme`);
-      }
-      if (flagIds.length) {
-        await page.locator(`#onb-layer [data-onb='theme'][data-mode='${flagIds[0]}']`).click();
-        const applied = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
-        if (applied !== flagIds[0]) notes.push("picking a flag theme in setup did not apply it");
-        await page.locator("#onb-layer [data-onb='theme'][data-mode='lightsout']").click();
-      }
-      await page.locator("#onb-layer [data-onb='skip']").click();
-      await page.locator("#onb-layer [data-step='done'] [data-onb='finish']").click();
-      await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 });
-    }
-  }
+  await walkSetup(page, notes, "phone", { reload: true });
   const welcome = page.locator("[data-act='welcome-skip']");
   if (await welcome.count()) await welcome.click();
   const timeline = await page.getByText("No posts yet").first().waitFor({ timeout: 20000 }).then(() => true, () => false);
@@ -509,16 +702,18 @@ async function firstRun(page) {
     return /^[a-z0-9_]{4,15}$/.test(String(handle || ""));
   });
   if (!reused) notes.push("saved handle was not available");
-  await page.locator(".acct-modal [data-acct='next']").click();
+  await page.locator(".acct-modal [data-acct='handle-next']").click();
+  if (await page.locator(".acct-setup[data-step='passkey']").waitFor({ timeout: 8000 }).then(() => true, () => false)) await page.locator(".acct-modal [data-acct='next']").click();
   await page.getByText("That handle is taken.").waitFor({ timeout: 20000 });
-  await page.keyboard.press("Escape");
+  await leaveSetup(page);
   await page.context().setOffline(true);
   await openSignup(page);
   await page.locator("#acct-displayName").fill("Offline Reader");
   await page.locator(".acct-modal [data-acct='next']").click();
   await page.locator("#acct-handle").waitFor();
   await typeHandle(page);
-  await page.locator(".acct-modal [data-acct='next']").click();
+  await page.locator(".acct-modal [data-acct='handle-next']").click();
+  if (await page.locator(".acct-setup[data-step='passkey']").waitFor({ timeout: 8000 }).then(() => true, () => false)) await page.locator(".acct-modal [data-acct='next']").click();
   await page.getByText("Can't reach the server.").waitFor({ timeout: 15000 });
   await page.context().setOffline(false);
   return notes;
@@ -542,24 +737,11 @@ async function tvWorker(route, body) {
 }
 
 async function signUpQuick(page) {
+  // The same step flow as fullFlow: account steps, then skip through setup.
   await gotoFresh(page);
-  await openSignup(page);
-  await page.locator("#acct-displayName").fill("Example Viewer");
-  await page.locator(".acct-modal [data-acct='next']").click();
-  await page.locator("#acct-handle").waitFor();
-  await typeHandle(page);
-  await page.locator(".acct-modal [data-acct='next']").click();
-  await page.getByText("This number is shown once.").waitFor({ timeout: 20000 });
-  await page.locator(".acct-modal input[name='saved']").check();
-  await page.locator(".acct-modal [data-acct='saved']").click();
-  await page.waitForFunction(() => document.documentElement.getAttribute("data-wall") !== "1", null, { timeout: 20000 });
-  for (const step of ["profile", "follow", "prefs"]) {
-    const here = await page.locator(`#onb-layer [data-step='${step}']`).waitFor({ timeout: 15000 }).then(() => true, () => false);
-    if (here) await page.locator("#onb-layer [data-onb='skip']").click();
-  }
-  const done = page.locator("#onb-layer [data-step='done'] [data-onb='finish']");
-  if (await done.waitFor({ timeout: 10000 }).then(() => true, () => false)) await done.click();
-  await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 });
+  const notes = [];
+  if (!(await createAccount(page, notes, "tv ask"))) throw new Error("tv ask signup: " + notes.join("; "));
+  await walkSetup(page, [], "tv ask");
 }
 
 async function tvNotes(page, code) {
@@ -671,13 +853,16 @@ worker = new Miniflare({
 const bindings = await worker.getBindings();
 await bindings.DATA.put("feeds.json", JSON.stringify({
   updated: "2026-01-01T00:00:00Z", preview: true,
-  feeds: [{ id: "x:example", platform: "x", handle: "example", name: "Example", configured: true }],
+  feeds: [
+    { id: "x:example", platform: "x", handle: "example", name: "Example", configured: true },
+    { id: "x:sample", platform: "x", handle: "sample", name: "Sample", configured: true }
+  ],
   posts: []
 }));
 const browser = await launch();
 const failures = [];
 try {
-  for (const viewport of VIEWPORTS) {
+  for (const viewport of process.env.ONLY ? [] : VIEWPORTS) {
     const { context, page, problems } = await openFresh(browser, viewport);
     try {
       const ms = await gotoFresh(page);
@@ -693,6 +878,30 @@ try {
     }
   }
   failures.push(...await tvAskFlow(browser));
+  // The whole step flow at phone and desktop size, the quick path at both,
+  // and both motion settings.
+  const runs = [
+    { name: "phone full", viewport: VIEWPORTS[0], run: fullFlow },
+    { name: "desktop full", viewport: VIEWPORTS[3], run: fullFlow },
+    { name: "phone quick", viewport: VIEWPORTS[0], run: quickFlow },
+    { name: "desktop quick", viewport: VIEWPORTS[3], run: quickFlow },
+    { name: "motion", viewport: VIEWPORTS[3], run: (page) => motionPass(page, false) },
+    { name: "reduced motion", viewport: VIEWPORTS[0], reduced: true, run: (page) => motionPass(page, true) }
+  ];
+  for (const item of runs.filter((r) => !process.env.ONLY || r.name === process.env.ONLY)) {
+    const { context, page, problems } = await openFresh(browser, item.viewport, item.reduced ? { reducedMotion: "reduce" } : {});
+    try {
+      await gotoFresh(page);
+      const started = Date.now();
+      failures.push(...await item.run(page, item.viewport));
+      console.log(item.name + " " + item.viewport.width + "x" + item.viewport.height + " " + (Date.now() - started) + "ms");
+      failures.push(...problems.map((p) => item.name + " pageerror: " + p.slice(0, 180)));
+    } catch (err) {
+      failures.push(item.name + " failed: " + redact(err && err.stack || err).slice(0, 1200));
+    } finally {
+      await context.close();
+    }
+  }
 } finally {
   await browser.close();
   server.close();
