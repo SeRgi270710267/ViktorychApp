@@ -25,6 +25,7 @@ import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlayl
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys, readUsableKey, markKeyAttention } from "./owner-keys.js";
+import { cleanSignupKey, findUndelivered, rememberSignup, replayPrefix } from "./signup-replay.js";
 import { TEMP_SCHEMA, cleanDeviceKey, decorateTemporary, handleTemporary, markTemporary, sweepTemporary, tempBlockedPointsRoute, tempExpiry, tempSignupsPerDay, isTemporary } from "./temp-accounts.js";
 import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
@@ -834,6 +835,14 @@ async function handleSignup(request, env) {
   if (!(await verifyTurnstile(request, env, body.turnstileToken))) return json(403, { error: "turnstile" });
   const guard = await verifySignupGuard(env, body);
   if (!guard.ok) return json(guard.status || 400, { error: guard.error || "guard_required" });
+  // A retry of a sign-up whose answer was lost takes over the account the
+  // first try made (src/signup-replay.js). The owner handle never replays.
+  const replay = checked.owner ? "" : await replayPrefix(sha256Hex, cleanSignupKey(body.signupKey));
+  if (replay) {
+    const earlier = await findUndelivered(env, replay, Date.now());
+    const again = earlier ? await resumeSignup(env, request, earlier, { temporary, tempUntil, displayName, handle: checked.handle, replay }) : null;
+    if (again) return again;
+  }
   if (checked.owner) {
     const code = String(body.claimCode || "");
     const secret = String(env.OWNER_CLAIM_CODE || "");
@@ -867,6 +876,10 @@ async function handleSignup(request, env) {
     profileLess: isProfileLess
   });
   if (created.error) return json(created.error === "handle_taken" ? 409 : 503, { error: created.error });
+  if (replay) {
+    try { await rememberSignup(env, replay, created.account.publicId, Date.now()); }
+    catch (err) { /* a retry then makes a new account instead */ }
+  }
   await rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
   if (temporary) {
     try {
@@ -892,6 +905,39 @@ async function handleSignup(request, env) {
     recoveryCodes: recoveryCodes,
     account: created.account
   });
+}
+
+/* Hand over an account an earlier try of this same sign-up made but whose
+   answer never arrived: a new account number, a new session (the lost one
+   is revoked) and new recovery codes. Returns null when that account is
+   gone or does not match this request, and the sign-up goes on as new. */
+async function resumeSignup(env, request, publicId, opts) {
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (!row || Number(row.owner) === 1) return null;
+  const temp = await env.DB.prepare("SELECT expires_at FROM account_temp WHERE public_id = ?").bind(publicId).first().catch(() => null);
+  if (!!temp !== !!opts.temporary) return null;
+  if (!opts.temporary && String(row.handle || "") !== String(opts.handle || "")) return null;
+  const now = Date.now();
+  const rounds = iterationsOf(env);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const number = randomDigits(16);
+  const lookup = await hmacHex(env.ACCOUNT_PEPPER, number);
+  const hash = encodeNumberHash(rounds, await slowHash(number, salt, rounds));
+  await env.DB.batch([
+    env.DB.prepare("UPDATE accounts SET number_lookup = ?, number_hash = ?, salt = ?, display_name = ? WHERE public_id = ?").bind(lookup, hash, bytesToB64(salt), opts.displayName || row.display_name, publicId),
+    env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId)
+  ]);
+  if (opts.temporary) await markTemporary(env, publicId, opts.tempUntil, now);
+  const token = await mintSession(env, publicId);
+  try { await rememberSignup(env, opts.replay, publicId, now); } catch (err) { /* the window just ends sooner */ }
+  const fresh = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  const account = await presentAccount(env, request, fresh || row, true);
+  if (opts.temporary) {
+    account.temporary = { expiresAt: opts.tempUntil };
+    return json(201, { token: token, accountNumber: number, recoveryCodes: [], account: account, temporary: { expiresAt: opts.tempUntil }, resumed: true });
+  }
+  const recoveryCodes = await issueRecoveryCodes(env, publicId, recoveryDeps());
+  return json(201, { token: token, accountNumber: number, recoveryCodes: recoveryCodes, account: account, resumed: true });
 }
 
 /* A new account starts out following only the owner's own accounts: the
