@@ -438,7 +438,7 @@
   function audienceHtml(slotName) {
     var slot = slots[slotName];
     var open = panel === "audience";
-    var menu = open ? '<div class="xc-menu" role="menu" aria-label="' + esc(tr("Audience")) + '">' + AUDIENCES.map(function (row) {
+    var menu = open ? '<div class="xc-menu" role="menu" aria-label="' + esc(tr("Audience")) + '">' + AUDIENCES.filter(function (row) { return row[0] !== "friends" || !(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff()); }).map(function (row) {
       return '<button type="button" role="menuitemradio" aria-checked="' + (slot.audience === row[0] ? "true" : "false") + '" data-act="xc-audience" data-slot="' + esc(slotName) + '" data-value="' + row[0] + '">' + esc(tr(row[1])) + "</button>";
     }).join("") + "</div>" : "";
     return '<span class="xc-aud-wrap">' + '<button class="xc-audience" type="button" data-act="xc-audience-menu" data-slot="' + esc(slotName) + '" aria-haspopup="menu" aria-expanded="' + (open ? "true" : "false") + '" aria-label="' + esc(tr("Audience")) + '">' + esc(tr(labelOf(AUDIENCES, slot.audience))) + icon(ICONS.chev) + "</button>" + menu + "</span>";
