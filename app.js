@@ -15805,12 +15805,15 @@ const here = parseRoute();
     }
     if (section === "devices") return myDevicesView();
     if (section === "keys") {
-      const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
+      const ownerKeys = window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible();
+      /* Every user can keep their own spare Discord key on this device. */
+      const localKeys = window.DiscordLocal && window.DiscordLocal.sectionHtml ? window.DiscordLocal.sectionHtml() : "";
+      const keys = ownerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
-        : `<div class="set-block"><p class="phandle">${esc(tr("Keys are available only to the owner."))}</p></div>`;
-      return settingsHead(tr("Connected keys"), "#/settings") + keys;
+        : (localKeys ? "" : `<div class="set-block"><p class="phandle">${esc(tr("Keys are available only to the owner."))}</p></div>`);
+      return settingsHead(tr("Connected keys"), "#/settings") + localKeys + keys;
     }
-    const keysRow = window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()
+    const keysRow = (window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()) || window.DiscordLocal
       ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
       : "";
     return settingsHead(tr("Settings"), "") + settingsSearchHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>

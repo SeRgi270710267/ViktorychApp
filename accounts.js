@@ -5268,7 +5268,7 @@ function signupPayload() {
       sessionStorage.clear();
       sessionStorage.setItem(DELETED_KEY, "1");
     } catch (err) { /* the screen still replaces the page */ }
-    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord", "viktorych-notes"];
+    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord", "viktorych-discord-local", "viktorych-notes"];
     if (window.indexedDB && indexedDB.deleteDatabase) {
       databases.forEach(function (name) {
         try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
