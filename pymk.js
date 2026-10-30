@@ -313,6 +313,72 @@
     return out.join("");
   }
 
+  /* ---------- Desktop right column: one "Who to follow" panel ---------- */
+
+  /* Account groups from the Worker merged with outside sources the user can
+     follow (host.feedPeople), one row per person: same id, same handle or
+     same display name counts as the same person. Viktorych accounts first
+     (they carry a real reason), then outside sources. */
+  var SIDE_GROUPS = ["people", "creators", "accounts", "media", "companies", "organizations"];
+  function normKey(text) { return String(text || "").trim().toLowerCase().replace(/^@/, "").replace(/\s+/g, " "); }
+  function feedRows() {
+    var list = host && host.feedPeople ? host.feedPeople() : [];
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (f) { return f && f.id && !isHidden(String(f.id)); }).map(function (f) {
+      return { id: String(f.id), h: f.handle || "", n: f.name || f.handle || "", a: f.avatar || "", v: f.verifiedType || "", b: f.bio || "", src: f.platform || "", href: f.href || "", card: f.id, feed: true, k: "person" };
+    });
+  }
+  function mergedPeople(limit) {
+    var seen = {};
+    var out = [];
+    function take(group, item) {
+      var keys = ["i:" + normKey(item.id)];
+      if (item.h) keys.push("h:" + normKey(item.h));
+      if (normKey(item.n).length >= 3) keys.push("n:" + normKey(item.n));
+      for (var i = 0; i < keys.length; i++) if (seen[keys[i]]) return;
+      keys.forEach(function (k) { seen[k] = true; });
+      out.push({ group: group, item: item });
+    }
+    if (me()) SIDE_GROUPS.forEach(function (g) { rowsFor(g).forEach(function (item) { take(g, item); }); });
+    feedRows().forEach(function (item) { take("people", item); });
+    return limit ? out.slice(0, limit) : out;
+  }
+
+  function reasonIcon(item) {
+    var r = item.r || {};
+    var name = item.feed ? "" : r.k === "cm" ? "communities" : r.k === "new" ? "spark" : "user";
+    return name && host && host.icon ? '<span class="pymk-why-ico" aria-hidden="true">' + host.icon(name) + "</span>" : "";
+  }
+
+  function sideRowHtml(entry) {
+    var group = entry.group;
+    var item = entry.item;
+    var reason = item.feed ? tr("Suggested for you") : reasonText(group, item);
+    var link = item.feed ? (item.href || "#/feeds") : href(group, item);
+    var src = item.feed && item.src && host && host.sourceBadge ? host.sourceBadge(item.src) : "";
+    var key = item.feed ? item.id : rowKey(group, item);
+    return '<div class="who-row pymk-row pymk-side-row" data-pymk-row="' + esc(key) + '">' +
+      '<a class="who-main" href="' + esc(link) + '"' + (item.card ? ' data-card="' + esc(item.card) + '"' : "") + ">" + face(group, item) +
+      '<span class="who-copy"><span class="name">' + nameHtml(group, item) + "</span>" +
+      '<span class="handle">' + (item.h ? "@" + esc(item.h) : "") + (src ? " " + src : "") + "</span>" +
+      (item.b ? '<span class="pymk-bio">' + esc(String(item.b).slice(0, 160)) + "</span>" : "") +
+      (reason ? '<span class="pymk-why">' + reasonIcon(item) + "<span>" + esc(reason) + "</span></span>" : "") + "</span></a>" +
+      '<span class="pymk-side-act">' + actionHtml(group, item) +
+      '<button class="pymk-x" type="button" data-act="pymk-dismiss" data-group="' + esc(group) + '"' + (item.feed ? ' data-src="feed"' : "") + ' data-key="' + esc(key) + '" aria-label="' + esc(tr("Not interested in this person")) + '" title="' + esc(tr("Not interested in this person")) + '">' + (host && host.icon ? host.icon("close") : "✕") + "</button></span>" +
+      "</div>";
+  }
+
+  /* The permanent panel in the desktop right column (styles: .pymk-side). */
+  function sideHtml(opts) {
+    opts = opts || {};
+    refresh(false);
+    var rows = mergedPeople(opts.rows || 5);
+    var body = rows.length ? rows.map(sideRowHtml).join("")
+      : '<p class="pymk-side-empty">' + esc(tr("No suggestions right now")) + "</p>";
+    return '<section class="card pymk-side" data-pymk-side aria-label="' + esc(tr("Who to follow")) + '"><h2>' + esc(tr("Who to follow")) + "</h2>" + body +
+      '<a class="show-more-row" href="#/connect">' + esc(tr("Show more")) + "</a></section>";
+  }
+
   /* ---------- Full page (#/connect) ---------- */
 
   function pageHtml(route) {
@@ -320,13 +386,15 @@
     var want = typeof query.get === "function" ? query.get("type") : query.type;
     if (!me()) return '<div class="empty"><h2>' + esc(tr("Sign in to see people you may know")) + "</h2></div>";
     refresh(false);
-    var groups = GROUPS.filter(function (g) { return rowsFor(g).length > 0; });
+    var outside = feedRows().length > 0;
+    var groups = GROUPS.filter(function (g) { return rowsFor(g).length > 0 || (g === "people" && outside); });
     var group = groups.indexOf(want) >= 0 ? want : (groups[0] || "people");
     var tabs = groups.length > 1 ? '<div class="pymk-tabs" role="tablist">' + groups.map(function (g) {
       return '<a role="tab" class="pymk-tab' + (g === group ? " on" : "") + '" aria-selected="' + (g === group ? "true" : "false") + '" href="#/connect?type=' + esc(g) + '">' + esc(TITLES[g]()) + "</a>";
     }).join("") + "</div>" : "";
     var rows = rowsFor(group);
-    var list = rows.length ? rows.map(function (item) { return rowHtml(group, item); }).join("")
+    var list = group === "people" && outside ? mergedPeople(0).filter(function (e) { return e.group === "people"; }).map(sideRowHtml).join("")
+      : rows.length ? rows.map(function (item) { return rowHtml(group, item); }).join("")
       : '<div class="empty"><h2>' + esc(tr("No suggestions right now")) + "</h2><p>" + esc(tr("Follow a few people or join a community and suggestions show up here.")) + "</p></div>";
     return tabs + '<div class="pymk-page">' + list + "</div>";
   }
@@ -439,7 +507,7 @@
       var rowKeyText = el.dataset.key || "";
       if (!rowKeyText) return true;
       if (p.hidden.indexOf(rowKeyText) < 0) p.hidden.push(rowKeyText);
-      p.pending.push(rowKeyText.indexOf("c:") === 0 ? { community: rowKeyText.slice(2) } : { id: rowKeyText });
+      if (el.dataset.src !== "feed") p.pending.push(rowKeyText.indexOf("c:") === 0 ? { community: rowKeyText.slice(2) } : { id: rowKeyText });
       savePrefs();
       flushPending();
       redraw();
@@ -471,7 +539,7 @@
   /* Rows followed from a card keep showing "Following" until the next visit. */
   function noteFollowClick(ev) {
     var t = ev.target && ev.target.closest ? ev.target.closest('[data-act="follow"]') : null;
-    if (!t || !t.closest || !t.closest(".pymk, .pymk-page")) return;
+    if (!t || !t.closest || !t.closest(".pymk, .pymk-page, .pymk-side")) return;
     var id = t.dataset.id || "";
     if (id) mem.followedNow[id] = true;
   }
@@ -528,6 +596,8 @@
     rotation: rotation,
     interleave: interleave,
     cardHtml: cardHtml,
+    sideHtml: sideHtml,
+    mergedPeople: mergedPeople,
     pageHtml: pageHtml,
     pageTitle: pageTitle,
     settingsPageHtml: settingsPageHtml,
