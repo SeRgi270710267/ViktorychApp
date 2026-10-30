@@ -1018,8 +1018,10 @@
   function cleanBellNotes(list) {
     if (!Array.isArray(list)) return [];
     const out = [];
+    const noFriends = friendsOffNow();
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
+      if (noFriends && (item.kind === "friend_request" || item.kind === "friend_accept")) return;
       const hash = String(item.hash || "#/");
       const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1, feed_request: 1, feed_approved: 1, feed_rejected: 1 };
       out.push({
@@ -1782,7 +1784,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests"];
+  /* Friends master switch (friends-pref.js): true while the signed-in
+     person has Friends off, so every friend surface is left out. */
+  function friendsOffNow() {
+    return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff());
+  }
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "friends_off"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1863,7 +1870,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
       nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")],
       bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")],
-      feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")]
+      feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")],
+      friends_off: [tr("Friends switch"), tr("Lets each person turn Friends off: no friend requests, no friends lists, counts or online status.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -10389,7 +10397,7 @@ const here = parseRoute();
       <form class="side-search" data-act="search-form">
         <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="${tr("Search")}" aria-label="${tr("Search")}"></label>
       </form>
-      ${(!STATE.settings || STATE.settings.friendsRail !== false) && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
+      ${(!STATE.settings || STATE.settings.friendsRail !== false) && !friendsOffNow() && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
       ${window.ViktorychPYMK && window.ViktorychPYMK.sideHtml ? window.ViktorychPYMK.sideHtml() : people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
@@ -14221,7 +14229,8 @@ const here = parseRoute();
     const friendN = mineGraph && window.ViktorychAccounts.pendingFriendRequests ? window.ViktorychAccounts.pendingFriendRequests() : 0;
     const requestN = followN + friendN;
     const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
+    const friendsOffHere = (mineGraph && friendsOffNow()) || !!(window.ViktorychAccounts && window.ViktorychAccounts.friendsOffFor && window.ViktorychAccounts.friendsOffFor(subject.id));
+    const friendsTabHtml = subject.kind === "account" && !friendsOffHere ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -16965,7 +16974,7 @@ const here = parseRoute();
       ${sec(tr("Home"), `${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
         ${sw("story-notes", notesOn, tr("Show notes"), tr("Notes sit above stories. Turn this off to hide them."))}
-        ${sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}`)}
+        ${friendsOffNow() ? "" : sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}`)}
       ${sec(tr("Your feed"), `${sw("pz-feed", st.forYouReposts !== false, tr("Show reposts"), "", ` data-key="forYouReposts"`)}
         ${sw("pz-feed", st.forYouReplies !== false, tr("Show replies in tab"), "", ` data-key="forYouReplies"`)}
         ${sw("pz-feed", st.communitiesHome !== false, tr("Communities in Home"), "", ` data-key="communitiesHome"`)}
@@ -17299,6 +17308,7 @@ const here = parseRoute();
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
       return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
     }
+    if (section === "friends") return settingsHead(tr("Friends"), "#/settings/privacy") + `<div class="set-block">${window.ViktorychFriendsPref ? window.ViktorychFriendsPref.pageHtml() : ""}</div>`;
     if (section === "muted") return settingsHead(tr("Muted & blocked"), "#/settings/privacy") + `<div class="set-block">${mutedSettingsHtml()}</div>`;
     if (section === "privacy") {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
@@ -17317,9 +17327,10 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("Notes sit above stories. Turn this off to hide them."))}</p>`;
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${notesSwitch}
+        ${acct && window.ViktorychFriendsPref && !serverOffList().includes("friends_off") ? `<h2>${esc(tr("Friends"))}</h2><div class="set-list">${settingsRow("#/settings/friends", tr("Friends"), window.ViktorychFriendsPref.summary())}</div>` : ""}
         ${presenceBlock}
         ${acct && window.ViktorychGameSocial ? window.ViktorychGameSocial.privacyHtml() : ""}
-        ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
+        ${friendsOffNow() ? "" : optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
         ${window.ViktorychNostr && window.ViktorychNostr.allowed() ? `<div class="set-list">${settingsRow("#/settings/nostr", tr("Nostr"), tr("Follow Nostr profiles, send your posts to relays, and see Nostr replies."))}</div>` : ""}
@@ -19765,6 +19776,7 @@ if (STATE.histClear) {
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
     if (route.name === "connect") return pageHead(window.ViktorychPYMK ? window.ViktorychPYMK.pageTitle(route) : tr("People you may know"), "", true) + (window.ViktorychPYMK ? window.ViktorychPYMK.pageHtml(route) : "");
+    if (route.name === "online" && friendsOffNow()) return pageHead(tr("Friends")) + emptyBlock(tr("Friends is off"), tr("Turn Friends on in Settings to see friends and their online status.")) + `<div class="set-list">${settingsRow("#/settings/friends", tr("Friends"), tr("Off"))}</div>`;
     if (route.name === "online") return pageHead(tr("Friends")) + ((window.ViktorychPresence && window.ViktorychPresence.pageHtml && window.ViktorychPresence.pageHtml()) || "");
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces" && !route.id) {
@@ -27747,6 +27759,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!res || res.status !== 200 || !Array.isArray(res.items)) failed = true;
       else {
       notesPhase = "ready";
+      if (friendsOffNow()) res.items = res.items.filter((item) => !item || (item.kind !== "friend_request" && item.kind !== "friend_accept"));
       applyServerNotes(res);
       if (window.ViktorychNotifPrivacy) window.ViktorychNotifPrivacy.remember(res.items, notifPrivacy());
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));

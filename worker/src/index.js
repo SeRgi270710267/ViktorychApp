@@ -69,6 +69,7 @@ import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingReq
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { SUGGEST_SCHEMA, handleSuggestRoutes } from "./suggest.js";
+import { friendPrefs, friendsOffAmong, friendOnSql, friendFilterReady, handleFriendPrefs } from "./friends-pref.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
 import { syncVk, vkDue } from "./vk.js";
 import { handlePackagesRoute, pollPackages, packageNotifier } from "./packages.js";
@@ -1139,6 +1140,14 @@ async function liveProfileCounts(env, row, account, viewer) {
   account.friendsCount = await friendCount(env, row.public_id);
   account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
   account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
+  const prefs = await friendPrefs(env, row.public_id);
+  if (!prefs.enabled) {
+    account.friendsOff = true;
+    account.friendsCount = 0;
+    account.mutualFriendsCount = 0;
+  } else if (viewer && viewer.public_id !== row.public_id) {
+    account.canRequest = await canSendFriendRequest(env, viewer.public_id, row.public_id, prefs);
+  }
   return account;
 }
 
@@ -5238,7 +5247,8 @@ async function handleFollowGet(request, env, url) {
 
 async function friendCount(env, publicId) {
   try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends WHERE user_id = ?").bind(publicId).first();
+    const on = await friendFilterReady(env);
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f WHERE f.user_id = ?" + (on ? friendOnSql("f.friend_id") : "")).bind(publicId).first();
     return (row && Number(row.n)) || 0;
   } catch (err) {
     return 0;
@@ -5248,7 +5258,8 @@ async function friendCount(env, publicId) {
 async function mutualFriendCount(env, userA, userB) {
   if (!userA || !userB || userA === userB) return 0;
   try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f1 JOIN account_friends f2 ON f1.friend_id = f2.friend_id WHERE f1.user_id = ? AND f2.user_id = ?").bind(userA, userB).first();
+    const on = await friendFilterReady(env);
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f1 JOIN account_friends f2 ON f1.friend_id = f2.friend_id WHERE f1.user_id = ? AND f2.user_id = ?" + (on ? friendOnSql("f1.friend_id") : "")).bind(userA, userB).first();
     return (row && Number(row.n)) || 0;
   } catch (err) {
     return 0;
@@ -5259,6 +5270,7 @@ async function getFriendStatus(env, viewerId, targetId) {
   if (!viewerId || !targetId) return "none";
   if (viewerId === targetId) return "self";
   try {
+    if ((await friendsOffAmong(env, [viewerId, targetId])).size) return "none";
     const isFriend = await env.DB.prepare("SELECT friend_id FROM account_friends WHERE user_id = ? AND friend_id = ?").bind(viewerId, targetId).first();
     if (isFriend) return "friends";
     const sent = await env.DB.prepare("SELECT receiver_id FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(viewerId, targetId).first();
@@ -5286,10 +5298,14 @@ async function handleFriendsGet(request, env, url) {
   if (!targetId) return json(400, { error: "bad_target" });
 
   if (tab === "requests") {
+    // Friends off: pending requests are kept but paused, so none are listed.
+    const mine = await friendPrefs(env, viewer.public_id);
+    if (!mine.enabled) return json(200, { incoming: [], outgoing: [], requestsCount: 0, friendsOff: true });
     const incomingRows = await env.DB.prepare("SELECT sender_id, created_at FROM account_friend_requests WHERE receiver_id = ? ORDER BY created_at DESC LIMIT 100").bind(viewer.public_id).all();
     const outgoingRows = await env.DB.prepare("SELECT receiver_id, created_at FROM account_friend_requests WHERE sender_id = ? ORDER BY created_at DESC LIMIT 100").bind(viewer.public_id).all();
 
-    const incomingCards = await followCards(env, request, ((incomingRows && incomingRows.results) || []).map((r) => r.sender_id));
+    const pausedIds = await friendsOffAmong(env, ((incomingRows && incomingRows.results) || []).map((r) => r.sender_id).concat(((outgoingRows && outgoingRows.results) || []).map((r) => r.receiver_id)));
+    const incomingCards = await followCards(env, request, ((incomingRows && incomingRows.results) || []).map((r) => r.sender_id).filter((x) => !pausedIds.has(String(x))));
     for (let i = 0; i < incomingCards.length; i++) {
       const card = incomingCards[i];
       const sId = await cleanFriendTargetId(env, card.handle || card.id);
@@ -5297,7 +5313,7 @@ async function handleFriendsGet(request, env, url) {
       card.friendStatus = "received";
     }
 
-    const outgoingCards = await followCards(env, request, ((outgoingRows && outgoingRows.results) || []).map((r) => r.receiver_id));
+    const outgoingCards = await followCards(env, request, ((outgoingRows && outgoingRows.results) || []).map((r) => r.receiver_id).filter((x) => !pausedIds.has(String(x))));
     for (let i = 0; i < outgoingCards.length; i++) {
       const card = outgoingCards[i];
       const rId = await cleanFriendTargetId(env, card.handle || card.id);
@@ -5321,11 +5337,21 @@ async function handleFriendsGet(request, env, url) {
     const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
     return json(200, redactPublicIds({ id: shown, friendsCount: 0, status: "none", mutualCount: 0, blocked: true, friends: [] }));
   }
-  const isPrivate = !!(targetAccount && targetAccount.private_follows === 1);
+  let isPrivate = !!(targetAccount && targetAccount.private_follows === 1);
+  const prefs = await friendPrefs(env, targetId);
+  if (!prefs.enabled) {
+    // Friends off: no list, no count, no button, for everyone (the person too).
+    const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
+    return json(200, redactPublicIds({ id: shown, friendsCount: 0, status: "none", mutualCount: 0, friendsOff: true, canRequest: false, friends: [] }));
+  }
+  const viewerPrefs = isOwner ? prefs : await friendPrefs(env, viewer.public_id);
 
   const friendsCount = await friendCount(env, targetId);
   const status = await getFriendStatus(env, viewer.public_id, targetId);
   const mutualCount = await mutualFriendCount(env, viewer.public_id, targetId);
+  const canRequest = !isOwner && viewerPrefs.enabled && await canSendFriendRequest(env, viewer.public_id, targetId, prefs);
+  if (!isOwner && (prefs.listAudience === "me" || (prefs.listAudience === "friends" && status !== "friends"))) isPrivate = true;
+  else if (!isOwner && prefs.listAudience === "friends" && status === "friends") isPrivate = false;
 
   if (tab === "friends") {
     const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
@@ -5335,17 +5361,20 @@ async function handleFriendsGet(request, env, url) {
         return json(200, redactPublicIds({ id: shown, friendsCount, status, mutualCount, locked: true, friends: [] }));
       }
     }
-    if (!isOwner && isPrivate && status !== "friends") {
+    const onlyMe = !isOwner && prefs.listAudience === "me";
+    if (onlyMe || (!isOwner && isPrivate && status !== "friends")) {
       return json(200, redactPublicIds({
         id: shown,
         friendsCount,
         status,
         mutualCount,
+        canRequest,
         isPrivate: true,
         friends: []
       }));
     }
-    const friendRows = await env.DB.prepare("SELECT friend_id, created_at FROM account_friends WHERE user_id = ? ORDER BY created_at DESC LIMIT 300").bind(targetId).all();
+    const listOn = await friendFilterReady(env);
+    const friendRows = await env.DB.prepare("SELECT f.friend_id, f.created_at FROM account_friends f WHERE f.user_id = ?" + (listOn ? friendOnSql("f.friend_id") : "") + " ORDER BY f.created_at DESC LIMIT 300").bind(targetId).all();
     const ids = ((friendRows && friendRows.results) || []).map((r) => r.friend_id);
     const cards = await followCards(env, request, ids);
     for (let i = 0; i < cards.length; i++) {
@@ -5359,6 +5388,7 @@ async function handleFriendsGet(request, env, url) {
       friendsCount,
       status,
       mutualCount,
+      canRequest,
       isPrivate: false,
       friends: cards
     }));
@@ -5368,8 +5398,19 @@ async function handleFriendsGet(request, env, url) {
     id: targetAccount.handle ? "app:@" + targetAccount.handle : "",
     friendsCount,
     status,
-    mutualCount
+    mutualCount,
+    canRequest
   }));
+}
+
+/* Whether `viewerId` may send `targetId` a friend request under the target's
+   choices. Friends off or "Nobody" always says no; "Friends of friends"
+   needs at least one friend in common. */
+async function canSendFriendRequest(env, viewerId, targetId, targetPrefs) {
+  const prefs = targetPrefs || await friendPrefs(env, targetId);
+  if (!prefs.enabled || prefs.whoCanRequest === "nobody") return false;
+  if (prefs.whoCanRequest === "fof") return (await mutualFriendCount(env, viewerId, targetId)) > 0;
+  return true;
 }
 
 async function handleFriendAction(request, env, action) {
@@ -5413,6 +5454,13 @@ async function friendAction(request, env, action) {
 
   const now = Date.now();
 
+  if (action === "request" || action === "accept") {
+    const mine = await friendPrefs(env, viewer.public_id);
+    if (!mine.enabled) return json(403, { error: "friends_off_self", message: "Turn Friends on in Settings to do this." });
+    const theirs = await friendPrefs(env, targetId);
+    if (!theirs.enabled) return json(403, { error: "friends_off", message: "This account isn’t accepting friend requests." });
+  }
+
   if (action === "request") {
     const alreadyFriends = await env.DB.prepare("SELECT user_id FROM account_friends WHERE user_id = ? AND friend_id = ?").bind(viewer.public_id, targetId).first();
     if (alreadyFriends) {
@@ -5426,6 +5474,9 @@ async function friendAction(request, env, action) {
         env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
       ]);
       return friendDone(json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "friend_accept");
+    }
+    if (!(await canSendFriendRequest(env, viewer.public_id, targetId))) {
+      return json(403, { error: "not_accepting", message: "This account isn’t accepting friend requests." });
     }
     const paced = await rateHit(env, "freq:" + viewer.public_id, 40, 10 * 60 * 1000);
     if (!paced.ok) return limited(paced);
@@ -5745,6 +5796,9 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/friends/presence" && request.method === "GET") {
     return handleFriendPresence(request, env, { json, readJson, rateHit, limited, sessionAccount });
+  }
+  if (path === "/v1/friends/settings") {
+    return handleFriendPrefs(request, env, { json, readJson, rateHit, limited, sessionAccount, signal: async (e, ids) => { const notes = await import("./notifications.js"); await notes.signalFriends(e, ids); } });
   }
   if (path === "/v1/friends" && request.method === "GET") return handleFriendsGet(request, env, url);
   if (path === "/v1/friends/request" && request.method === "POST") return handleFriendAction(request, env, "request");

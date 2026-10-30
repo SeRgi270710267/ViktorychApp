@@ -3527,12 +3527,21 @@ function signupPayload() {
     if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
     if (account.viewerFriendStatus != null && !(graphCounts[id].friendAt && Date.now() - graphCounts[id].friendAt < 60000)) graphCounts[id].friendStatus = account.viewerFriendStatus;
     if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
+    if (account.friendsCount != null) graphCounts[id].friendsOff = account.friendsOff === true;
+    if (typeof account.canRequest === "boolean") graphCounts[id].canRequest = account.canRequest;
     graphCounts[id].pending = !!account.viewerPending;
     graphCounts[id].viewerBlocks = !!account.viewerBlocks;
     graphCounts[id].blockedBy = !!account.blockedBy;
     graphCounts[id].muted = !!account.viewerMutes;
     graphCounts[id].locked = !!account.locked;
     if (account.followingCount != null || account.followersCount != null || account.friendsCount != null) countsChanged(id);
+  }
+  function friendsOffNow() { return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff()); }
+  function friendsHiddenFor(account) {
+    var ref = accountRef(account);
+    if (account && account.friendsOff) return true;
+    if (ref && graphCounts[ref] && graphCounts[ref].friendsOff) return true;
+    return !!(account && profileMine(account) && friendsOffNow());
   }
   function countLink(account, tab, n, label) {
     var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
@@ -3541,7 +3550,7 @@ function signupPayload() {
   function accountCountsHtml(account) {
     var ref = accountRef(account);
     if (ref && (accountStat(account, "following") == null || accountStat(account, "followers") == null)) ensureCounts(ref);
-    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + "</div>";
+    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + (friendsHiddenFor(account) ? "" : countLink(account, "friends", accountStat(account, "friends"), tr("Friends"))) + "</div>";
   }
   function followersOf(id) {
     var known = graphCounts[id];
@@ -3854,6 +3863,13 @@ function signupPayload() {
     var session = readSession();
     var ref = accountRef(account);
     if (!session || !account || !ref || profileMine(account)) return "";
+    // Friends off for me: no friend buttons anywhere.
+    if (friendsOffNow()) return "";
+    var known = graphCounts[ref] || {};
+    var curStatus = known.friendStatus || account.viewerFriendStatus || "none";
+    if (account.friendsOff || known.friendsOff || ((account.canRequest === false || known.canRequest === false) && curStatus === "none")) {
+      return '<span class="friend-off-note" role="note">' + esc(tr("Not accepting friend requests")) + "</span>";
+    }
     if (!friendRequestsLoaded && Date.now() - friendReqTriedAt > 60000) { friendReqTriedAt = Date.now(); ensureFriendRequests(); }
     var status = (graphCounts[ref] && graphCounts[ref].friendStatus) || account.viewerFriendStatus || "none";
     var recent = graphCounts[ref] && graphCounts[ref].friendAt && Date.now() - graphCounts[ref].friendAt < 60000;
@@ -3892,6 +3908,8 @@ function signupPayload() {
       if (res.friendsCount != null) graphCounts[id].friends = res.friendsCount;
       if (friendWord(res)) graphCounts[id].friendStatus = friendWord(res);
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
+      graphCounts[id].friendsOff = res.friendsOff === true;
+      if (typeof res.canRequest === "boolean") graphCounts[id].canRequest = res.canRequest;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { friendsLoads[key] = false; friendsFailedAt[key] = Date.now(); });
   }
@@ -3990,6 +4008,14 @@ function signupPayload() {
 
     var ep = "/v1/friends/" + action;
     api(ep, { method: "POST", token: session.token, body: { targetId: tId } }).then(function (res) {
+      if (res && res.status === 403 && (res.error === "friends_off" || res.error === "not_accepting")) {
+        if (res.error === "friends_off") graphCounts[idKey].friendsOff = true;
+        graphCounts[idKey].canRequest = false;
+        if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(tr("This account isn’t accepting friend requests."));
+      }
+      if (res && res.status === 403 && res.error === "friends_off_self" && window.ViktorychAccounts && window.ViktorychAccounts.toast) {
+        window.ViktorychAccounts.toast(tr("Turn Friends on in Settings to do this."));
+      }
       if (!res || res.status !== 200) {
         graphCounts[idKey].friendStatus = prevStatus;
         graphCounts[idKey].friendAt = 0;
@@ -6548,6 +6574,7 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
     profileTabPlan: profileTabPlan,
     onHistoryReady: onHistoryReady,
     requestRender: null,
+    friendsOffFor: function (id) { var k = graphCounts[id]; return !!(k && k.friendsOff); },
     profilePostsHtml: null,
     call: api,
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
