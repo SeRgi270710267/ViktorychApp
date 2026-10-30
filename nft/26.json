@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Hamster",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/hamster.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "hamster"
+    },
+    {
+      "trait_type": "Index",
+      "value": 26
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreichjhd74nruhausm7tffld2lfp24ehdjznpmttva6jolf2cpwbnpq",
+  "image_sha256": "4749c7fe36343829267e652ac7a595fae10e34e5af64e750792e597427d82d7c"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Doughnut",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/doughnut.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "doughnut"
+    },
+    {
+      "trait_type": "Index",
+      "value": 20
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreia66r2s5xgbmh7arh2h5y2wffgrisatqot64pzgjlwgqtcc44ftk4",
+  "image_sha256": "1ef4752edcc161fe089f47ee356294d14481383a7ee3f264aec684c42e70b357"
+}

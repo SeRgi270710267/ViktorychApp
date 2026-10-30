@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Koala",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/koala.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "koala"
+    },
+    {
+      "trait_type": "Index",
+      "value": 34
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreicsot3ri3nh2x6yt5ytmkqmq5xjtqfzmf5dg4t7zxduudneg2w44e",
+  "image_sha256": "5274f7146da7d5fd89f71362a0c876e99c0b9617a33727fcdc74a0da436adce1"
+}

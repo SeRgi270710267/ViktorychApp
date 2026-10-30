@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Sloth",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/sloth.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "sloth"
+    },
+    {
+      "trait_type": "Index",
+      "value": 57
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreihqjayox4clnkeegpnp6osn4yhdj3ho7aozhhurpaflm2u5gs5sue",
+  "image_sha256": "f04830ebf04b6a88433daff3a4de60e34eceef81d939e91780ab66a9d34bb2a1"
+}

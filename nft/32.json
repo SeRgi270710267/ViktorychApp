@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Little devil",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/imp.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "imp"
+    },
+    {
+      "trait_type": "Index",
+      "value": 32
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreihtskfz74srvhxdpcqmbx6lgir3hmn7ner26yigwbi7cplkaenhty",
+  "image_sha256": "f3928b9ff251a9ee378a0c0dfcb3223b3b1bf6923af6106b051f13d6a011a79e"
+}

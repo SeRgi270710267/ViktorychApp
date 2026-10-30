@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Heart in a box",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/gift_heart.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "gift_heart"
+    },
+    {
+      "trait_type": "Index",
+      "value": 25
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreica5civ74fk7xel7pstq36nqudhih7ya54d34j2ybxch3iohwx5sy",
+  "image_sha256": "40e8915ff0aafdc8bfbe5386fcd8506741ff807783df13ac06e23ed0e3dafd96"
+}

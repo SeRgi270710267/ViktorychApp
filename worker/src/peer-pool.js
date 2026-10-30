@@ -150,7 +150,11 @@ export async function handlePool(request, env, url, deps) {
 export async function poolUsage(env) {
   if (!env.ACCOUNT_CHANNEL) return null;
   try {
-    const res = await poolRoom(env).fetch("https://pool.internal/stats");
+    let timer = 0;
+    const res = await Promise.race([
+      poolRoom(env).fetch("https://pool.internal/stats"),
+      new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error("pool stats timeout")), 2500); })
+    ]).finally(() => clearTimeout(timer));
     const body = await res.json();
     const days = Array.isArray(body.days) ? body.days.slice(-7) : [];
     return Object.assign(poolSummary(days), { online: Number(body.online) || 0 });
