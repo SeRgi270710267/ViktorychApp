@@ -4308,5 +4308,16 @@ SI18n.addPack("en", {
   "Paste the key you copied. It is checked straight from this device and kept here only.": "Paste the key you copied. It is checked straight from this device and kept here only.",
   "Your spare account": "Your spare account",
   "Check key": "Check key",
-  "Couldn’t check the key. Try again.": "Couldn’t check the key. Try again."
+  "Couldn’t check the key. Try again.": "Couldn’t check the key. Try again.",
+  "Full screen isn’t available here.": "Full screen isn’t available here.",
+  "Some of what you were writing can’t be saved on this device, like attached photos or video. Close anyway?": "Some of what you were writing can’t be saved on this device, like attached photos or video. Close anyway?",
+  "Your browser kept this window open. Press {keys} to close it.": "Your browser kept this window open. Press {keys} to close it.",
+  "Close app": "Close app",
+  "Title bar": "Title bar",
+  "Desktop app": "Desktop app",
+  "Show scrollbar": "Show scrollbar",
+  "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.",
+  "Full screen shortcut": "Full screen shortcut",
+  "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.",
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them."
 });

@@ -15981,6 +15981,7 @@ const here = parseRoute();
         ${logoSettingsHtml()}
         ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
         ${window.ViktorychDock && window.ViktorychDock.settingsHtml ? window.ViktorychDock.settingsHtml() : ""}
+        ${window.ViktorychDesktop && window.ViktorychDesktop.settingsHtml ? window.ViktorychDesktop.settingsHtml() : ""}
         <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">${esc(tr("Collapse sidebar"))}</button></div>
       </div>`;
     }
@@ -16579,7 +16580,7 @@ const here = parseRoute();
       if (!item.href) return "";
       return `<a href="${esc(item.href)}">${esc(item.label)}</a>`;
     }).join("");
-    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${rows}</div></div>`;
+    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${window.ViktorychDesktop && window.ViktorychDesktop.menuRowsHtml ? window.ViktorychDesktop.menuRowsHtml("popup") : ""}${rows}</div></div>`;
   }
 
   function drawerEditModal() {
@@ -16600,6 +16601,7 @@ const here = parseRoute();
         ${rows}
         ${STATE.drawerEdit ? "" : '<div class="live-row drawer-lives" data-live-row hidden></div>'}
         ${install}
+        ${!STATE.drawerEdit && window.ViktorychDesktop && window.ViktorychDesktop.menuRowsHtml ? window.ViktorychDesktop.menuRowsHtml("drawer") : ""}
       </div>
       <div class="drawer-foot"><button class="drawer-theme" type="button" data-act="explore-theme" aria-label="${esc(tr("Theme"))}">${icon("moon")}</button></div>
     </div></div>`;
@@ -19739,6 +19741,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     /* live-preview is the Data usage setting, not a Live action. */
     if ((act === "go-live" || (act && act !== "live-preview" && act.indexOf("live-") === 0)) && window.ViktorychLive && window.ViktorychLive.onAct) {
       window.ViktorychLive.onAct(act, el);
+      return;
+    }
+    if (act && act.indexOf("desk-") === 0 && window.ViktorychDesktop && window.ViktorychDesktop.onAct) {
+      // Full screen must start inside this click (a user gesture), so it runs before render.
+      window.ViktorychDesktop.onAct(act, el);
+      if (act !== "desk-pref") { STATE.drawer = false; STATE.accountMenu = false; }
+      render();
       return;
     }
     if (act === "dock-pref") {
@@ -22903,7 +22912,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         railObserver.observe(el);
       }
     }
-    const top = Math.min(0, Math.round((window.innerHeight || 0) - el.offsetHeight));
+    // The installed app's own title bar (Window Controls Overlay) sits above the rail.
+    const bar = document.documentElement.classList.contains("vk-wco") ? (document.querySelector(".wco") || {}).offsetHeight || 0 : 0;
+    const top = Math.min(bar, Math.round((window.innerHeight || 0) - el.offsetHeight));
     const want = top + "px";
     if (el.style.getPropertyValue("--rail-top") !== want) el.style.setProperty("--rail-top", want);
   }
