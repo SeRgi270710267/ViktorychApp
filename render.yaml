@@ -49,6 +49,8 @@ services:
       - key: TURNSTILE_SECRET
         sync: false
       - key: PBKDF2_ITERATIONS
+        value: "30000"
+      - key: PBKDF2_LEGACY_ITERATIONS
         value: "8000"
       - key: TIKTOK_AUDIENCE
         value: "owner"
