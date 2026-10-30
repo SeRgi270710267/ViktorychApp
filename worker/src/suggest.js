@@ -16,6 +16,7 @@
 
    Reasons never name anyone whose follows are private, and the payload
    carries handles (as the viewer may see them), never account numbers. */
+import { notLocked } from "./locked-sql.js";
 
 import { resolveName, viewerHandle } from "./usernames.js";
 
@@ -122,7 +123,7 @@ async function signalsFor(env, viewerId, now) {
       "SELECT substr(f2.target_id, 5) AS cid, COUNT(*) AS n, MIN(f2.follower_id) AS via FROM account_follows f1 " +
       "JOIN account_follows f2 ON f2.follower_id = substr(f1.target_id, 5) " +
       "JOIN accounts va ON va.public_id = f2.follower_id AND va.private_follows = 0 AND va.protected_account = 0 " +
-      "WHERE f1.follower_id = ? AND f1.target_id LIKE 'app:%' AND f2.target_id LIKE 'app:%' " +
+      "WHERE f1.follower_id = ? AND f1.target_id LIKE 'app:%' AND f2.target_id LIKE 'app:%'" + notLocked("f1") + " " +
       "GROUP BY f2.target_id ORDER BY n DESC LIMIT " + POOL, viewerId),
     all(env, "SELECT follower_id AS cid FROM account_follows WHERE target_id = ? ORDER BY created_at DESC LIMIT " + POOL, "app:" + viewerId),
     all(env,
@@ -139,7 +140,7 @@ async function signalsFor(env, viewerId, now) {
       "JOIN community_members m ON m.public_id = substr(f.target_id, 5) " +
       "LEFT JOIN community_meta meta ON meta.community_id = m.community_id " +
       "LEFT JOIN community_members mine ON mine.community_id = m.community_id AND mine.public_id = ? " +
-      "WHERE f.follower_id = ? AND f.target_id LIKE 'app:%' AND mine.public_id IS NULL AND COALESCE(meta.visibility, 'public') = 'public' " +
+      "WHERE f.follower_id = ? AND f.target_id LIKE 'app:%' AND mine.public_id IS NULL AND COALESCE(meta.visibility, 'public') = 'public'" + notLocked("f") + " " +
       "GROUP BY m.community_id ORDER BY n DESC LIMIT 20", viewerId, viewerId)
   ]);
   return { fof, follower, community, interact, communities };

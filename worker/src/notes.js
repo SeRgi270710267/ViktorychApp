@@ -3,6 +3,7 @@
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { blocksEither, actorHidden } from "./social.js";
+import { notLocked } from "./locked-sql.js";
 import { canSeeAudience, normalizeAudience, setListGrants, grantsFor } from "./audience.js";
 import { emitNotification } from "./notifications.js";
 
@@ -142,7 +143,7 @@ async function listNotes(env, viewer) {
   const mineRow = await loadNote(env, viewer.public_id);
   const mine = mineRow && live(mineRow, now) ? await present(env, mineRow, true) : null;
   const followed = await env.DB.prepare(
-    "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id LIKE 'app:%' LIMIT 200"
+    "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id LIKE 'app:%'" + notLocked("account_follows") + " LIMIT 200"
   ).bind(viewer.public_id).all();
   const ids = [];
   rowsOf(followed).forEach((row) => {

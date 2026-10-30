@@ -17,6 +17,7 @@ import { visibleAvatarUrl } from "./profile-media.js";
 import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 import { actorHidden, canMention } from "./social.js";
 import { viewerDisplay } from "./name-rules.js";
+import { lockedAccountSet, notLocked } from "./locked-sql.js";
 
 const encoder = new TextEncoder();
 const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1, package: 1, game_invite: 1, tv_signin: 1, community_note: 1, feed_request: 1, feed_approved: 1, feed_rejected: 1 };
@@ -400,7 +401,8 @@ async function unreadCount(env, publicId, readUntil, viewer) {
   const prefs = await readPrefs(env, publicId);
   const follows = await followedActorSet(env, publicId);
   const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, readUntil));
-  const visible = items.filter((item) => !item.read && prefVisible(prefs, item, !!follows[item.actorId]) && !tiktokNoteHidden(item, view));
+  const held = await lockedAccountSet(env, publicId);
+  const visible = items.filter((item) => !item.read && !held.has(item.actorId) && prefVisible(prefs, item, !!follows[item.actorId]) && !tiktokNoteHidden(item, view));
   const kept = await dropHiddenNotes(env, publicId, visible);
   return kept.length;
 }
@@ -431,7 +433,7 @@ async function listBells(env, publicId) {
 
 async function followedActorSet(env, publicId) {
   const listed = await env.DB.prepare(
-    "SELECT target_id FROM account_follows WHERE follower_id = ? LIMIT 500"
+    "SELECT target_id FROM account_follows WHERE follower_id = ?" + notLocked("account_follows") + " LIMIT 500"
   ).bind(publicId).all();
   const set = {};
   ((listed && listed.results) || []).forEach((row) => {
@@ -457,12 +459,15 @@ async function viewFor(env, publicId, since, lockedOverride, request) {
     ).bind(publicId).all();
   const raw = (listed && listed.results) || [];
   const items = [];
+  const held = await lockedAccountSet(env, publicId);
   let cursor = sinceN;
   for (let i = 0; i < raw.length; i++) {
     const row = raw[i];
     const at = Number(row.updated_at) || Number(row.at) || 0;
     if (at > cursor) cursor = at;
     const item = itemFromRow(row, state.readUntil);
+    // Notes from a locked follow are held for the Locked area.
+    if (item.actorId && held.has(item.actorId)) continue;
     if (!prefVisible(prefs, item, !!follows[item.actorId])) continue;
     if (tiktokNoteHidden(item, viewer)) continue;
     if (await actorHidden(env, publicId, item.actorId)) continue;
@@ -678,6 +683,8 @@ async function sendPush(env, publicId, item, viewer) {
     if (presence && presence.preference) account.presence = presence.preference;
   } catch (err) { /* presence is optional; the in-app list still updates */ }
   if (pushSuppressed(account, Date.now())) return { ok: true, skipped: true };
+  // No push for a locked follow: the note waits in the Locked area.
+  if (item && item.actorId && (await lockedAccountSet(env, publicId)).has(String(item.actorId))) return { ok: true, skipped: true };
   const keys = await vapidPublic(env);
   if (!keys.publicKey || !keys.privateJwk) return { ok: true, skipped: true };
   const subs = await env.DB.prepare(
@@ -1637,4 +1644,24 @@ if (typeof process !== "undefined" && process.argv && process.argv.indexOf("--se
     console.error(err && err.message ? err.message : "notifications selftest failed");
     process.exit(1);
   });
+}
+
+/* Notes from locked follows, for the Locked area only (the route checks the
+   unlock grant). Same shape as the main list, without the actor id. */
+export async function heldNotes(env, request, publicId, actorIds) {
+  const ids = Array.from(actorIds || []).filter((id) => /^\d{12}$/.test(String(id))).slice(0, 200);
+  if (!ids.length) return [];
+  const state = await readState(env, publicId);
+  const marks = ids.map(() => "?").join(",");
+  const listed = await env.DB.prepare(
+    "SELECT note_id, kind, at, read_at, actor_id, payload, updated_at FROM notifications WHERE public_id = ? AND actor_id IN (" + marks + ") ORDER BY at DESC, note_id ASC LIMIT 80"
+  ).bind(publicId, ...ids).all();
+  const out = [];
+  const mediaViewer = { public_id: publicId };
+  for (const row of (listed && listed.results) || []) {
+    const item = await presentNote(env, request, mediaViewer, itemFromRow(row, state.readUntil));
+    delete item.actorId;
+    out.push(item);
+  }
+  return out;
 }
