@@ -47,6 +47,7 @@ from adapters.common import (  # noqa: E402
     post_is_bridge_error,
     save_document,
 )
+import busy_sources  # noqa: E402
 from meta_media import refresh_saved  # noqa: E402
 import source_breaker  # noqa: E402
 from site_paths import user_agent  # noqa: E402
@@ -1147,6 +1148,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
 
     health = {key: dict(value) for key, value in (existing.get("sourceHealth") or {}).items() if isinstance(value, dict)}
     stamp = now_iso()
+    replies_read = set()
+    replies_skipped = 0
     if not use_fixtures:
         try:
             from auto_add import apply_auto_adds
@@ -1378,6 +1381,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             reply_url = ""
             if feed.get("fetchReplies", True):
                 reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
+            # A busy source's replies page is read hourly, not every run; its
+            # last replies ride along from the previous feeds.json meanwhile.
+            if reply_url and not busy_sources.replies_due(health.get(feed["id"]), busy_sources.still_busy(health.get(feed["id"]), time.time()), time.time()):
+                reply_url = ""
+                replies_skipped += 1
+                print(f"[busy] {feed['id']}: replies page skipped this run")
+            elif reply_url:
+                replies_read.add(feed["id"])
             articles_url = ""
             if feed.get("fetchArticles", True):
                 bare = source_url.split("?")[0].rstrip("/")
@@ -1570,6 +1581,15 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             if profile.get("id") in configured_ids:
                 profile["configured"] = True
     health = prune_health(health, configured_ids)
+    for feed_id in replies_read:
+        if isinstance(health.get(feed_id), dict):
+            health[feed_id]["repliesAt"] = stamp
+    try:
+        collected, trimmed = busy_sources.settle(collected, health, stamp, cap=int(config.get("cap") or 300))
+        if trimmed or replies_skipped:
+            print(f"[busy] {trimmed} posts left to the archive, {replies_skipped} replies pages skipped")
+    except Exception as exc:
+        print(f"[busy] {exc}", file=sys.stderr)
     posts = dedupe_posts(collected, cap=int(config.get("cap") or 300))
     try:
         from adapters.common import credit_carried
