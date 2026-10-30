@@ -17,6 +17,7 @@
    GET /v1/owner/inspector/audit            (latest audit rows) */
 
 import { loadNames } from "./usernames.js";
+import { loadDisplayNames } from "./display-names.js";
 
 export const INSPECTOR_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS owner_access_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, owner_id TEXT NOT NULL, target_id TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'view')",
@@ -209,6 +210,16 @@ async function accountDetail(env, id, deps) {
     names = [{ handle: acct.handle, primary: true, audience: audienceSummary({ include: { public: true } }) }];
   }
 
+  // Display names: every one, with its audience, ignoring privacy (owner view).
+  let displayNames = [];
+  try {
+    const dset = await loadDisplayNames(env, id);
+    displayNames = ((dset && dset.names) || []).map((n) => ({ name: String(n.name || ""), primary: !!n.primary, audience: audienceSummary(n.audience) }));
+  } catch (err) {
+    displayNames = [];
+  }
+  if (!displayNames.length) displayNames = [{ name: String(acct.display_name || ""), primary: true, audience: audienceSummary({ include: { public: true } }) }];
+
   const presence = has("account_presence") ? await first(env, "SELECT preference, activity, seen_privacy, last_seen, last_beat FROM account_presence WHERE public_id = ?", [id]) : null;
   const devices = has("session_devices") ? await all(env, "SELECT type, created_at, last_seen FROM session_devices WHERE public_id = ? ORDER BY last_seen DESC LIMIT 20", [id]) : [];
   const sessions = await count(env, tables, "sessions", "SELECT COUNT(*) AS n FROM sessions WHERE public_id = ? AND expires_at > ?", [id, now]);
@@ -324,6 +335,7 @@ async function accountDetail(env, id, deps) {
     },
     presence: presence ? { preference: presence.preference, activity: presence.activity, lastSeenPrivacy: presence.seen_privacy } : null,
     names,
+    displayNames,
     signIn,
     passkeys: passkeys || 0,
     recoveryCodesLeft: recovery || 0,

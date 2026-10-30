@@ -80,6 +80,7 @@ import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
 import { USERNAME_SCHEMA, handleUsernames, nameTaken, resolveName, viewerHandle } from "./usernames.js";
 import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.js";
+import { DISPLAY_NAME_SCHEMA, handleDisplayNames, withDisplayNames } from "./display-names.js";
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { GAMES_SCHEMA, handleGames } from "./games.js";
@@ -344,7 +345,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA, SUGGEST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA, DISPLAY_NAME_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA, SUGGEST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -1197,7 +1198,8 @@ async function handleProfileGet(request, env, handle) {
     account.handle = seen.handle;
     if (seen.hidden) account.handleHidden = true;
     const shown = await viewerDisplay(env, request, row.public_id, viewer ? viewer.public_id : "", account.displayName);
-    account.displayName = shown.name;
+    account.displayName = shown.hidden ? (account.handle || "") : shown.name;
+    if (shown.hidden) account.displayNameHidden = true;
     if (shown.nickname) account.nickname = shown.nickname;
     if (shown.friendName) account.friendName = shown.friendName;
   }
@@ -5759,6 +5761,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/nicknames" || path === "/v1/usernames/friend-name" || path === "/v1/usernames/mentions") {
     return handleNameRules(request, env, path, { json, readJson, rateHit, limited, sessionAccount, invalidate: (e, id) => invalidate(e, "p:" + id) });
   }
+  if (path === "/v1/display-names" || path.startsWith("/v1/display-names/")) {
+    return handleDisplayNames(request, env, path, { json, readJson, rateHit, limited, sessionAccount, invalidate: (e, id) => invalidate(e, "p:" + id) });
+  }
   if (path === "/v1/usernames" || path.startsWith("/v1/usernames/")) {
     return handleUsernames(request, env, path, { json, readJson, rateHit, limited, sessionAccount, invalidate: (e, id) => invalidate(e, "p:" + id) });
   }
@@ -5893,6 +5898,15 @@ const ETAG_MAX = 262144;
    avatars and media are never sent. */
 const BLOCK_PATHS = /^\/v1\/(?:data\/(?:feeds\.json|(?:comments|live|communities)\/.+\.json)|posts(?:\/thread)?|communities(?:\/.*)?|x\/thread|thread)$/;
 const BLOCK_MAX = 4 * 1024 * 1024;
+/* Every JSON GET that pairs a handle with a name gets the one display name
+   this viewer may see (display-names.js); nicknames still win. */
+function displayNameDeps(env) {
+  return {
+    viewerId: async (request) => { const viewer = await sessionAccount(env, request); return viewer ? viewer.public_id : ""; },
+    nameFor: (request, ownerId, viewerId, fallback) => viewerDisplay(env, request, ownerId, viewerId, fallback)
+  };
+}
+
 export async function withBlocks(request, response) {
   if (!request || request.method !== "GET" || !response || response.status !== 200 || response.webSocket) return response;
   if (response.headers.has("x-block-removed")) return response;
@@ -5979,7 +5993,7 @@ export default {
         const take = takeToken(guardKey(request), kind, Date.now());
         if (!take.ok) return withCors(request, env, json(429, { error: "rate_limited", scope: "device" }, { "retry-after": String(take.retry), "x-limit-scope": "device" }));
       }
-      const response = scopeLimit(await withEtag(request, await withBlocks(request, await route(request, env, ctx))));
+      const response = scopeLimit(await withEtag(request, await withBlocks(request, await withDisplayNames(request, env, await route(request, env, ctx), displayNameDeps(env)))));
       return withCors(request, env, response);
     } catch (err) {
       logError(areaFor(path, request.method), err);

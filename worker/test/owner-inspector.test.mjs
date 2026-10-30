@@ -62,6 +62,9 @@ test("only the owner inspects accounts; hidden usernames show; each open is audi
   // A second username only friends can see.
   const added = await call("/v1/usernames", { method: "POST", ip: "203.0.113.33", token: member.token, body: { handle: "willow_quiet", audience: { include: { friends: true } } } });
   assert.equal(added.status, 201, JSON.stringify(added.body));
+  // A second display name only friends can see.
+  const dn = await call("/v1/display-names", { method: "POST", ip: "203.0.113.34", token: member.token, body: { name: "Willow Q", audience: { include: { friends: true } } } });
+  assert.ok(dn.status === 200 || dn.status === 201, JSON.stringify(dn.body));
 
   // Non-owners: 403. Anonymous: 401.
   assert.equal((await call("/v1/owner/inspector/accounts", { token: other.token })).status, 403);
@@ -89,6 +92,10 @@ test("only the owner inspects accounts; hidden usernames show; each open is audi
   const quiet = detail.body.names.find((n) => n.handle === "willow_quiet");
   assert.ok(quiet, "hidden username is visible to the owner");
   assert.equal(quiet.audience.level, "friends");
+  const dq = (detail.body.displayNames || []).find((n) => n.name === "Willow Q");
+  assert.ok(dq, "hidden display name is visible to the owner");
+  assert.equal(dq.audience.level, "friends");
+  assert.equal(dq.audience.hidden, true);
   assert.deepEqual(detail.body.signIn.slice(0, 1), ["account_number"]);
   assert.equal(detail.body.email.stored, false);
 

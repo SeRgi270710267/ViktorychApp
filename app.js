@@ -29137,6 +29137,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         render: render
       });
     }
+    if (window.ViktorychDisplayNames) {
+      window.ViktorychDisplayNames.bind({
+        token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
+        api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+        render: render
+      });
+    }
     if (window.ViktorychUsernames) {
       window.ViktorychUsernames.bind({
         token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },

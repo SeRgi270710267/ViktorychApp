@@ -1,6 +1,6 @@
-/* Usernames: several usernames, who sees which one, "Preview as", the name
-   friends see and who can mention you live in Edit profile > Usernames
-   (profileHtml). Settings > Usernames keeps a shortcut to that subpage plus
+/* Usernames: several usernames, who sees which one, "Preview as" and who
+   can mention you live in Edit profile > Usernames (profileHtml). The name
+   friends see is now one of the display names (display-names-ui.js). Settings > Usernames keeps a shortcut to that subpage plus
    your private nicknames for others (settingsHtml). Everything is enforced
    by the server; this only edits. */
 (function (root) {
@@ -10,7 +10,6 @@
   var data = null;
   var lists = [];
   var mentions = null;
-  var friendName = "";
   var nicknames = [];
   var openHandle = "";
   var preview = null;
@@ -93,14 +92,12 @@
       call("/v1/usernames"),
       call("/v1/audience-lists"),
       call("/v1/usernames/mentions"),
-      call("/v1/usernames/friend-name"),
       call("/v1/nicknames")
     ]).then(function (got) {
       if (got[0] && got[0].status === 200) data = got[0];
       if (got[1] && got[1].status === 200) lists = got[1].lists || [];
       if (got[2] && got[2].status === 200) mentions = got[2];
-      if (got[3] && got[3].status === 200) friendName = got[3].name || "";
-      if (got[4] && got[4].status === 200) nicknames = got[4].nicknames || [];
+      if (got[3] && got[3].status === 200) nicknames = got[3].nicknames || [];
       redraw();
     }).catch(function () {});
   }
@@ -191,7 +188,7 @@
   }
 
   /* Edit profile > Usernames: your names, who sees each, list priority,
-     Preview as, the name for friends and who can mention you. */
+     Preview as and who can mention you. */
   function profileHtml() {
     ready();
     if (!data) return '<div class="un-settings un-in-edit"><p class="phandle">' + esc(tr("Loading")) + "</p></div>";
@@ -212,9 +209,6 @@
       ((data.names || []).length < (data.cap || 5) ? '<div class="un-row"><input class="un-input" data-un-new aria-label="' + esc(tr("New username")) + '" placeholder="' + esc(tr("New username")) + '" maxlength="15"><button type="button" class="un-btn" data-un="add">' + esc(tr("Add")) + "</button></div>" : "") +
       '<p class="phandle">' + esc(tr("Removed usernames stay reserved for you for {days} days.", { days: data.releaseDays || 30 })) + "</p>" +
       order + previewHtml() +
-      "<h2>" + esc(tr("Name for friends")) + "</h2>" +
-      '<p class="phandle">' + esc(tr("Friends see this instead of your display name.")) + "</p>" +
-      '<div class="un-row"><input class="un-input" data-un-friend-name maxlength="50" aria-label="' + esc(tr("Name for friends")) + '" value="' + esc(friendName) + '"><button type="button" class="un-btn" data-un="friend-name">' + esc(tr("Save")) + "</button></div>" +
       mentionsHtml() + "</div>";
   }
 
@@ -302,10 +296,6 @@
         else { preview = null; note = tr("No account found."); }
         redraw();
       });
-      return;
-    }
-    if (act === "friend-name") {
-      call("/v1/usernames/friend-name", { method: "PUT", body: { name: value("[data-un-friend-name]") } }).then(function (res) { if (said(res)) { settle(); friendName = res.name || ""; redraw(); } });
       return;
     }
     if (act === "nick-set" || act === "nick-clear") {
