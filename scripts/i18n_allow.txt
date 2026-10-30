@@ -287,5 +287,6 @@ shared/regone.js|NZlay Large 01 - USA
 shared/regone.js|NZlay Large 02 - USA
 
 discord-key-helper.js
+nzlay-forum.js|NZlay Forums
 # The OS close shortcut shown in the desktop close hint.
 desktop-app.js|Alt+F4

@@ -171,10 +171,10 @@
      but they are not Reddit: label and link them as their own forum. */
   function isForum(name) {
     var row = indexRow(name);
-    if (row && row.type === "discourse") return true;
+    if (row && (row.type === "discourse" || row.type === "nzlay")) return true;
     var builtins = DEFAULT_INDEX.communities || [];
     for (var i = 0; i < builtins.length; i++) {
-      if (builtins[i] && builtins[i].name === name && builtins[i].type === "discourse") return true;
+      if (builtins[i] && builtins[i].name === name && (builtins[i].type === "discourse" || builtins[i].type === "nzlay")) return true;
     }
     var doc = state.docs && state.docs[name];
     return !!(doc && (doc.type === "discourse" || doc.source === "discourse" || doc.source === "flarum"));
@@ -298,6 +298,17 @@
       }
     ]
   };
+
+  /* The NZlay forum is its own X-style community, drawn by nzlay-forum.js.
+     It joins the hub only when its switch is on, and page() hands its pages
+     straight to that module. */
+  if (typeof window !== "undefined" && window.ViktorychNzlayForum && window.ViktorychNzlayForum.enabled() && window.ViktorychNzlayForum.row) {
+    DEFAULT_INDEX.communities.unshift(window.ViktorychNzlayForum.row);
+  }
+
+  function nzlayActive(route) {
+    return route && route.sub === "nzlay" && window.ViktorychNzlayForum && window.ViktorychNzlayForum.enabled();
+  }
 
   /* Built-in communities always stay in the hub. A stale, partial, or empty index
      (service worker cache, a sync run between Reddit and Discourse, a failed
@@ -1259,6 +1270,7 @@
   }
 
   function page(route) {
+    if (nzlayActive(route)) return window.ViktorychNzlayForum.page(route, { head: head, toast: toast, requestRender: render });
     if (route.post) return threadPage(route);
     if (route.sub) return communityPage(route);
     return listPage();
