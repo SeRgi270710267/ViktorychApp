@@ -224,8 +224,42 @@
       (note && !document.querySelector(".un-in-edit") ? '<p class="un-note" role="alert">' + esc(note) + "</p>" : "") +
       "<h2>" + esc(tr("Your nicknames for others")) + "</h2>" +
       '<p class="phandle">' + esc(tr("Only you see these.")) + "</p>" + nicks +
-      '<div class="un-row"><input class="un-input" data-un-nick-handle aria-label="' + esc(tr("Account")) + '" placeholder="@name"><input class="un-input" data-un-nick-name maxlength="50" aria-label="' + esc(tr("Nickname")) + '" placeholder="' + esc(tr("Nickname")) + '"><button type="button" class="un-btn" data-un="nick-set">' + esc(tr("Save")) + "</button></div>" +
+      '<div class="un-row"><input class="un-input" data-un-nick-handle aria-label="' + esc(tr("Account")) + '" placeholder="@name"><input class="un-input" data-un-nick-name maxlength="50" aria-label="' + esc(tr("Nickname")) + '" placeholder="' + esc(tr("Nickname")) + '"><button type="button" class="un-btn" data-un="nick-set">' + esc(tr("Save")) + "</button></div>" + externalNicksHtml() +
       "</div>";
+  }
+
+  /* Private names for accounts on other networks (nicknames.js keeps them
+     cached on this device and synced to the account). */
+  var EXT_PLATFORMS = ["x", "threads", "instagram", "youtube", "bluesky", "mastodon", "reddit", "tiktok", "telegram", "vk", "discord", "rss", "nzlay"];
+  function nickLib() { return root.ViktorychNicknames || null; }
+  function platformOf(p) { return p === "bsky" ? "bluesky" : p; }
+  function platformName(p) {
+    if (p === "person") return tr("Linked accounts");
+    if (p === "forum" || p === "nzlay") return "NZlay";
+    if (deps.platformName) { var n = deps.platformName(platformOf(p)); if (n) return n; }
+    return p;
+  }
+  function shownId(row) {
+    if (row.platform === "person") return tr("All their linked accounts");
+    if (row.platform === "reddit" && row.id.indexOf("r/") === 0) return row.id;
+    if (row.platform === "rss" || row.platform === "youtube" && /^uc[\w-]{20,}$/.test(row.id)) return row.id;
+    return "@" + row.id;
+  }
+  function externalNicksHtml() {
+    var lib = nickLib();
+    if (!lib || (deps.nickEnabled && !deps.nickEnabled())) return "";
+    var rows = lib.list().map(function (row) {
+      var glyph = deps.platformGlyph ? deps.platformGlyph(platformOf(row.platform)) : "";
+      return '<div class="un-row un-ext" data-nick-key="' + esc(row.key) + '">' +
+        '<span class="un-ext-ico" title="' + esc(platformName(row.platform)) + '">' + (glyph || esc(platformName(row.platform).slice(0, 1))) + "</span>" +
+        '<span class="un-ext-copy"><b>' + esc(row.name) + '</b><span class="un-ext-id">' + esc(platformName(row.platform)) + " · " + esc(shownId(row)) + "</span></span>" +
+        '<button type="button" class="un-btn outline" data-act="nick-edit" data-platform="' + esc(platformOf(row.platform)) + '" data-handle="' + esc(row.id) + '">' + esc(tr("Edit")) + "</button>" +
+        '<button type="button" class="un-btn outline" data-un="ext-clear" data-key="' + esc(row.key) + '">' + esc(tr("Remove")) + "</button></div>";
+    }).join("");
+    var opts = EXT_PLATFORMS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(platformName(p)) + "</option>"; }).join("");
+    return "<h3 class=\"un-sub\">" + esc(tr("Accounts on other networks")) + "</h3>" +
+      (rows || '<p class="phandle">' + esc(tr("Set a custom name from any profile's menu.")) + "</p>") +
+      '<div class="un-row"><select class="un-select" data-un-ext-platform aria-label="' + esc(tr("Network")) + '">' + opts + '</select><input class="un-input" data-un-ext-handle aria-label="' + esc(tr("Account")) + '" placeholder="@name"><input class="un-input" data-un-ext-name maxlength="50" aria-label="' + esc(tr("Nickname")) + '" placeholder="' + esc(tr("Nickname")) + '"><button type="button" class="un-btn" data-un="ext-set">' + esc(tr("Save")) + "</button></div>";
   }
 
   function orderedLists() {
@@ -264,6 +298,18 @@
     event.preventDefault();
     var act = el.getAttribute("data-un");
     var handle = el.getAttribute("data-handle") || "";
+    if (act === "ext-clear" || act === "ext-set") {
+      var lib = nickLib();
+      if (!lib) return;
+      if (act === "ext-clear") { lib.setKey(el.getAttribute("data-key") || "", ""); return; }
+      var who = value("[data-un-ext-handle]");
+      var name = value("[data-un-ext-name]");
+      var plat = value("[data-un-ext-platform]") || "x";
+      if (!who || !name) return;
+      settle();
+      if (!lib.set(plat, who, name)) { note = tr("That account name isn't valid."); redraw(); return; }
+      return;
+    }
     if (act === "toggle") { openHandle = openHandle === handle ? "" : handle; redraw(); return; }
     if (act === "add") {
       var fresh = value("[data-un-new]").replace(/^@/, "").trim();

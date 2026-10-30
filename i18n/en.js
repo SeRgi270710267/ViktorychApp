@@ -5506,5 +5506,19 @@ SI18n.addPack("en", {
   "New display name": "New display name",
   "New names start visible to friends only.": "New names start visible to friends only.",
   "Remove this display name?": "Remove this display name?",
-  "Quick settings": "Quick settings"
+  "Quick settings": "Quick settings",
+  "Set custom name": "Set custom name",
+  "Only you see this name. It shows everywhere this account appears.": "Only you see this name. It shows everywhere this account appears.",
+  "Use for all their linked accounts": "Use for all their linked accounts",
+  "Reset to: {name}": "Reset to: {name}",
+  "Custom name saved": "Custom name saved",
+  "Name reset": "Name reset",
+  "Custom names": "Custom names",
+  "Lets people give any account, from any network, a private name only they see.": "Lets people give any account, from any network, a private name only they see.",
+  "Linked accounts": "Linked accounts",
+  "All their linked accounts": "All their linked accounts",
+  "Accounts on other networks": "Accounts on other networks",
+  "Set a custom name from any profile's menu.": "Set a custom name from any profile's menu.",
+  "Network": "Network",
+  "That account name isn't valid.": "That account name isn't valid."
 });

@@ -5509,5 +5509,19 @@ SI18n.addPack("es", {
   "New display name": "Nuevo nombre",
   "New names start visible to friends only.": "Los nombres nuevos empiezan visibles solo para amigos.",
   "Remove this display name?": "¿Quitar este nombre?",
-  "Quick settings": "Ajustes rápidos"
+  "Quick settings": "Ajustes rápidos",
+  "Set custom name": "Editar nombre",
+  "Only you see this name. It shows everywhere this account appears.": "Solo tú ves este nombre. Aparece en todos los sitios donde sale esta cuenta.",
+  "Use for all their linked accounts": "Usar en todas sus cuentas vinculadas",
+  "Reset to: {name}": "Restablecer a: {name}",
+  "Custom name saved": "Nombre guardado",
+  "Name reset": "Nombre restablecido",
+  "Custom names": "Nombres personalizados",
+  "Lets people give any account, from any network, a private name only they see.": "Permite poner a cualquier cuenta, de cualquier red, un nombre privado que solo ve quien lo pone.",
+  "Linked accounts": "Cuentas vinculadas",
+  "All their linked accounts": "Todas sus cuentas vinculadas",
+  "Accounts on other networks": "Cuentas de otras redes",
+  "Set a custom name from any profile's menu.": "Pon un nombre desde el menú de cualquier perfil.",
+  "Network": "Red",
+  "That account name isn't valid.": "Ese nombre de cuenta no es válido."
 });

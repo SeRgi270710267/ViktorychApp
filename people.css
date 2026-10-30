@@ -97,3 +97,38 @@
 }
 html.tv-on .pchip-follow, body.tv .pfrom-pill, body.tv .pm-btn { min-height: 44px; font-size: 18px; }
 .pglyph-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 12px; font-weight: 800; line-height: 1; }
+
+/* Private custom names (nicknames.js): the pen next to a profile name and
+   the "Set custom name" sheet. A bottom sheet on phones, a card on wide screens. */
+.nick-pen { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin-left: 4px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; vertical-align: middle; }
+.nick-pen svg { width: 16px; height: 16px; }
+.nick-pen:hover, .nick-pen:focus-visible { background: var(--blue-dim); color: var(--blue); }
+.nick-sheet-wrap { position: fixed; inset: 0; z-index: 9100; display: flex; align-items: center; justify-content: center; background: rgba(91, 112, 131, .4); }
+.nick-sheet { box-sizing: border-box; width: min(420px, calc(100vw - 32px)); padding: 0 16px 20px; border-radius: 16px; background: var(--sheet, var(--bg)); color: var(--text); box-shadow: 0 0 15px var(--shadow, rgba(255,255,255,.2)); }
+.nick-sheet-head { display: flex; align-items: center; gap: 12px; min-height: 53px; }
+.nick-sheet-head h2 { flex: 1; margin: 0; font: 700 20px/24px var(--font); }
+.nick-x { width: 36px; height: 36px; margin-left: -8px; border: 0; border-radius: 999px; background: transparent; color: var(--text); font-size: 24px; line-height: 1; cursor: pointer; }
+.nick-x:hover { background: var(--hover); }
+.nick-save { min-height: 32px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--text); color: var(--bg); font: 700 14px/16px var(--font); cursor: pointer; }
+.nick-sub { margin: 0 0 16px; color: var(--muted); font: 15px/20px var(--font); }
+.nick-field { position: relative; display: block; padding: 8px 8px 6px; border: 1px solid var(--line); border-radius: 4px; }
+.nick-field:focus-within { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.nick-label { display: block; color: var(--muted); font: 13px/16px var(--font); }
+.nick-field:focus-within .nick-label { color: var(--blue); }
+.nick-field input { box-sizing: border-box; width: 100%; padding: 4px 56px 0 0; border: 0; outline: 0; background: transparent; color: var(--text); font: 17px/24px var(--font); }
+.nick-count { position: absolute; top: 8px; right: 8px; color: var(--muted); font: 13px/16px var(--font); }
+.nick-scope { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--text); font: 15px/20px var(--font); cursor: pointer; }
+.nick-scope input { width: 18px; height: 18px; accent-color: var(--blue); }
+.nick-reset { display: block; width: 100%; margin-top: 16px; min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--red); font: 700 15px/20px var(--font); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nick-reset:hover { background: rgba(244, 33, 46, .1); }
+@media (max-width: 700px) {
+  .nick-sheet-wrap { align-items: flex-end; }
+  .nick-sheet { width: 100%; border-radius: 16px 16px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+}
+.un-sub { margin: 16px 0 4px; font: 700 15px/20px var(--font); }
+.un-ext { justify-content: flex-start; padding: 6px 0; }
+.un-ext-ico { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: var(--search); color: var(--text); }
+.un-ext-ico .src { margin: 0; }
+.un-row > .un-ext-copy { flex: 1; display: flex; flex-direction: column; min-width: 0; white-space: normal; }
+.un-ext-copy b, .un-ext-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.un-ext-id { color: var(--muted); font-size: 13px; line-height: 16px; }

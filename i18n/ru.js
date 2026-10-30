@@ -5508,5 +5508,19 @@ SI18n.addPack("ru", {
   "New display name": "Новое отображаемое имя",
   "New names start visible to friends only.": "Новые имена сначала видны только друзьям.",
   "Remove this display name?": "Удалить это отображаемое имя?",
-  "Quick settings": "Быстрые настройки"
+  "Quick settings": "Быстрые настройки",
+  "Set custom name": "Задать своё имя",
+  "Only you see this name. It shows everywhere this account appears.": "Это имя видите только вы. Оно показывается везде, где появляется этот аккаунт.",
+  "Use for all their linked accounts": "Использовать для всех связанных аккаунтов",
+  "Reset to: {name}": "Вернуть: {name}",
+  "Custom name saved": "Имя сохранено",
+  "Name reset": "Имя сброшено",
+  "Custom names": "Свои имена",
+  "Lets people give any account, from any network, a private name only they see.": "Позволяет дать любому аккаунту из любой сети личное имя, которое видите только вы.",
+  "Linked accounts": "Связанные аккаунты",
+  "All their linked accounts": "Все связанные аккаунты",
+  "Accounts on other networks": "Аккаунты в других сетях",
+  "Set a custom name from any profile's menu.": "Задайте имя в меню любого профиля.",
+  "Network": "Сеть",
+  "That account name isn't valid.": "Неверное имя аккаунта."
 });
