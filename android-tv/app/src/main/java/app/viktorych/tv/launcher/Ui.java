@@ -13,29 +13,29 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 /** Colours, type and small view builders shared by the launcher screens. */
-final class Ui {
+public final class Ui {
     private Ui() {}
 
     // Google TV's dark surface palette (Material dark grey tones).
-    static final int BG = 0xFF101114;
-    static final int TEXT = 0xFFE8EAED;
-    static final int TEXT_DIM = 0xB3E8EAED;
-    static final int TEXT_ON_LIGHT = 0xFF202124;
-    static final int PILL_SELECTED = 0xFF3C4043;
-    static final int ROUND_BG = 0x33FFFFFF;
-    static final int PANEL = 0xFF2B2E33;
-    static final int PANEL_TILE = 0xFF3A3D43;
-    static final int FOCUS = 0xFFFFFFFF;
-    static final int ACCENT = 0xFF1D9BF0;
+    public static final int BG = 0xFF101114;
+    public static final int TEXT = 0xFFE8EAED;
+    public static final int TEXT_DIM = 0xB3E8EAED;
+    public static final int TEXT_ON_LIGHT = 0xFF202124;
+    public static final int PILL_SELECTED = 0xFF3C4043;
+    public static final int ROUND_BG = 0x33FFFFFF;
+    public static final int PANEL = 0xFF2B2E33;
+    public static final int PANEL_TILE = 0xFF3A3D43;
+    public static final int FOCUS = 0xFFFFFFFF;
+    public static final int ACCENT = 0xFF1D9BF0;
 
-    static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
-    static final Typeface REGULAR = Typeface.create("sans-serif", Typeface.NORMAL);
+    public static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+    public static final Typeface REGULAR = Typeface.create("sans-serif", Typeface.NORMAL);
 
-    static int dp(Context c, float v) {
+    public static int dp(Context c, float v) {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, c.getResources().getDisplayMetrics()));
     }
 
-    static TextView text(Context c, CharSequence s, float sp, int color, Typeface tf) {
+    public static TextView text(Context c, CharSequence s, float sp, int color, Typeface tf) {
         TextView t = new TextView(c);
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
@@ -46,14 +46,14 @@ final class Ui {
         return t;
     }
 
-    static GradientDrawable round(int color, float radius) {
+    public static GradientDrawable round(int color, float radius) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);
         g.setCornerRadius(radius);
         return g;
     }
 
-    static GradientDrawable oval(int color) {
+    public static GradientDrawable oval(int color) {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setColor(color);
@@ -61,14 +61,14 @@ final class Ui {
     }
 
     /** White when focused, otherwise the given colour (pills and round buttons). */
-    static StateListDrawable focusBg(Drawable focused, Drawable normal) {
+    public static StateListDrawable focusBg(Drawable focused, Drawable normal) {
         StateListDrawable s = new StateListDrawable();
         s.addState(new int[]{android.R.attr.state_focused}, focused);
         s.addState(new int[]{}, normal);
         return s;
     }
 
-    static ImageView icon(Context c, int res, int sizeDp, int color) {
+    public static ImageView icon(Context c, int res, int sizeDp, int color) {
         ImageView v = new ImageView(c);
         v.setImageResource(res);
         v.setColorFilter(color);
@@ -77,13 +77,13 @@ final class Ui {
     }
 
     /** Round 32 dp button with a Material icon; white with a dark icon when focused (as on Google TV). */
-    static RoundButton roundButton(Context c, int res, CharSequence desc) {
+    public static RoundButton roundButton(Context c, int res, CharSequence desc) {
         RoundButton b = new RoundButton(c, res);
         b.setContentDescription(desc);
         return b;
     }
 
-    static final class RoundButton extends ImageView {
+    public static final class RoundButton extends ImageView {
         RoundButton(Context c, int res) {
             super(c);
             setImageResource(res);
@@ -101,7 +101,7 @@ final class Ui {
     }
 
     /** A tab pill ("Home"): grey when it is the current tab, white when focused. */
-    static TextView pill(Context c, CharSequence s, boolean selected) {
+    public static TextView pill(Context c, CharSequence s, boolean selected) {
         TextView t = text(c, s, 16, TEXT, MEDIUM);
         t.setGravity(Gravity.CENTER);
         t.setFocusable(true);
@@ -113,7 +113,7 @@ final class Ui {
         return t;
     }
 
-    static void scale(View v, float s) {
+    public static void scale(View v, float s) {
         v.animate().scaleX(s).scaleY(s).setDuration(Spec.FOCUS_MS)
             .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
     }

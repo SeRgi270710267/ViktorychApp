@@ -385,8 +385,60 @@
         '<p class="tv-set-note">' + esc(tr("Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.")) + "</p>" +
         '<div class="theme-row"><a class="outline" data-tv-defaults="1" href="intent://defaults#Intent;scheme=viktorychtv;package=' + esc(b.APP_PACKAGE || "app.viktorych.tv") + ';end">' + esc(tr("Home screen and defaults")) + "</a></div>";
     }
+    if (b && b.appVersion() >= 6) {
+      // TV app 1.5.0+: photos from posts seen on this TV go to its screensaver.
+      var dream = dreamLink(b);
+      html += "<h2>" + esc(tr("TV screensaver")) + "</h2>" +
+        '<p class="tv-set-note">' + esc(tr("Photos and short clips from posts you have seen on this TV, with their text. They stay on the TV.")) + "</p>" +
+        (dream ? '<div class="theme-row"><a class="outline" data-tv-dream="1" href="' + esc(dream) + '">' + esc(tr("Use my feed for the screensaver")) + "</a></div>"
+          : '<p class="tv-set-note">' + esc(tr("Scroll your feed on this TV first, then come back here.")) + "</p>");
+    }
     html += appCardHtml("settings");
     return html;
+  }
+
+  // Screensaver photos: kept from posts already on screen (nothing extra is
+  // loaded), newest first, only https files, only on this TV.
+  var DREAM_KEY = "viktorych-tv-dream";
+  var DREAM_MAX = 30;
+  function scheduleDream() {
+    if (TV.dreamTimer) return;
+    TV.dreamTimer = setTimeout(function () { TV.dreamTimer = 0; collectDream(); }, 4000);
+  }
+  function readDream() {
+    try { var v = JSON.parse(localStorage.getItem(DREAM_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function collectDream() {
+    var b = boot();
+    if (!b || b.appVersion() < 6) return;
+    var posts = document.querySelectorAll("article.post[data-post]");
+    if (!posts.length) return;
+    var list = readDream();
+    var seen = {};
+    list.forEach(function (it) { seen[it.u] = 1; });
+    var fresh = [];
+    Array.prototype.forEach.call(posts, function (post) {
+      var text = post.querySelector(".post-text");
+      var who = post.querySelector(".name");
+      var t = text ? String(text.textContent || "").replace(/\s+/g, " ").trim().slice(0, 140) : "";
+      var a = who ? String(who.textContent || "").replace(/\s+/g, " ").trim().slice(0, 50) : "";
+      var vid = post.querySelector(".media video[src^='https://']");
+      if (vid && /\.mp4(\?|$)/i.test(vid.src) && !seen[vid.src]) { seen[vid.src] = 1; fresh.push({ k: "v", u: vid.src, a: a, t: t }); return; }
+      var img = post.querySelector(".media img");
+      var src = img ? String(img.currentSrc || img.src || "") : "";
+      if (!/^https:\/\//.test(src) || seen[src] || (img.naturalWidth && img.naturalWidth < 400)) return;
+      seen[src] = 1;
+      fresh.push({ k: "i", u: src, a: a, t: t });
+    });
+    if (!fresh.length) return;
+    try { localStorage.setItem(DREAM_KEY, JSON.stringify(fresh.concat(list).slice(0, DREAM_MAX))); } catch (e) { /* storage full */ }
+  }
+  function dreamLink(b) {
+    var list = readDream();
+    if (!list.length) return "";
+    var clean = function (v) { return String(v || "").replace(/[\t\r\n]+/g, " "); };
+    var lines = list.map(function (it) { return [it.k === "v" ? "v" : "i", clean(it.u), clean(it.a), clean(it.t)].join("\t"); }).join("\n");
+    return "intent://dream?d=" + encodeURIComponent(lines) + "#Intent;scheme=viktorychtv;package=" + (b.APP_PACKAGE || "app.viktorych.tv") + ";end";
   }
 
   function checkInstalled() {
@@ -1302,7 +1354,7 @@
     });
     var root = document.getElementById("app");
     if (root && window.MutationObserver) {
-      var obs = new MutationObserver(function () { if (TV.on) scheduleRestore(); });
+      var obs = new MutationObserver(function () { if (TV.on) { scheduleRestore(); scheduleDream(); } });
       obs.observe(root, { childList: true, subtree: true });
     }
     var layer = document.getElementById("account-layer");
