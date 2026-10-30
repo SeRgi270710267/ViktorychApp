@@ -231,12 +231,85 @@ async function stepAnimations(page, selector) {
 
 // From the profile step to the timeline. Every post-account step is shown
 // once, and a reload resumes the step it was on.
+// SHOTS=dir saves a picture of each setup step (for review only).
+async function shot(page, name) {
+  if (!process.env.SHOTS) return;
+  fs.mkdirSync(process.env.SHOTS, { recursive: true });
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: path.join(process.env.SHOTS, name + ".png") }).catch(() => {});
+}
+
+// The settings steps: every row is a switch wired to a real setting, each
+// step has Skip, and a change shows at once and survives in the settings.
+async function settingsSteps(page, notes, label, step) {
+  const scope = "#onb-layer [data-step='" + step + "']";
+  await shot(page, "setup-" + step);
+  if (!(await page.locator(scope + " .oobe-head [data-onb='skip']").count())) notes.push(`${label}: ${step} step has no Skip`);
+  const subs = await page.locator(scope + " .oobe-sub").count();
+  if (subs > 1) notes.push(`${label}: ${step} step has more than one line under the title`);
+  const sw = (id) => page.locator(scope + " [data-onb='pref'][data-id='" + id + "']");
+  const checked = async (id) => (await sw(id).getAttribute("aria-checked")) === "true";
+  if (step === "privacy") {
+    for (const id of ["protected", "privateFollows", "discoverable", "online"]) {
+      if (!(await sw(id).count())) notes.push(`${label}: privacy switch ${id} missing`);
+    }
+    if (!(await page.locator(scope + " .oobe-foot [data-onb='skip-all']").count())) notes.push(label + ": privacy step has no Skip all");
+    if (await checked("protected")) notes.push(label + ": protected posts is on by default");
+    if (!(await checked("discoverable"))) notes.push(label + ": suggestions are off by default");
+    await sw("protected").click();
+    const saved = await page.waitForFunction(() => {
+      const a = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+      return !!(a && a.protected);
+    }, null, { timeout: 15000 }).then(() => true, () => false);
+    if (!saved) notes.push(label + ": protect your posts did not save to the account");
+    await sw("protected").click();
+    await page.waitForFunction(() => {
+      const a = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+      return !!(a && !a.protected);
+    }, null, { timeout: 15000 }).catch(() => notes.push(label + ": protect your posts did not turn back off"));
+    await sw("online").click();
+    const hidden = await page.waitForFunction(() => window.ViktorychPresence && window.ViktorychPresence.seenPrivacy() === "nobody", null, { timeout: 15000 }).then(() => true, () => false);
+    if (!hidden) notes.push(label + ": online status switch did not save");
+    await sw("online").click();
+    await page.waitForFunction(() => window.ViktorychPresence && window.ViktorychPresence.seenPrivacy() === "everyone", null, { timeout: 15000 }).catch(() => {});
+  } else if (step === "look") {
+    await page.locator(scope + " [data-onb='accent'][data-mode='pink']").click();
+    await page.locator(scope + " [data-onb='size'][data-mode='17']").click();
+    const look = await page.evaluate(() => ({ accent: document.documentElement.getAttribute("data-accent"), fs: document.documentElement.getAttribute("data-fs"), saved: window.ViktorychSetup.get("accent") + "/" + window.ViktorychSetup.get("fontSize") }));
+    if (look.accent !== "pink" || look.fs !== "17" || look.saved !== "pink/17") notes.push(`${label}: accent or text size did not apply (${JSON.stringify(look)})`);
+    await page.locator(scope + " [data-onb='accent'][data-mode='blue']").click();
+    await page.locator(scope + " [data-onb='size'][data-mode='15']").click();
+  } else if (step === "content") {
+    if (!(await checked("translateAuto"))) notes.push(label + ": Live Translate is off by default");
+    await sw("translateAuto").click();
+    if ((await page.evaluate(() => window.ViktorychSetup.get("translateAuto"))) !== false) notes.push(label + ": Live Translate switch did not save");
+    await sw("translateAuto").click();
+    await page.locator(scope + " [data-onb='autoplay'][data-mode='wifi']").click();
+    if ((await page.evaluate(() => window.ViktorychSetup.get("autoplay"))) !== "wifi") notes.push(label + ": autoplay choice did not save");
+    await page.locator(scope + " [data-onb='autoplay'][data-mode='all']").click();
+  } else if (step === "alerts") {
+    for (const id of ["haptics", "names", "preview"]) {
+      if (!(await sw(id).count())) notes.push(`${label}: alerts switch ${id} missing`);
+      else if (!(await checked(id))) notes.push(`${label}: alerts switch ${id} is off by default`);
+    }
+    await sw("haptics").click();
+    await sw("preview").click();
+    const st = await page.evaluate(() => ({ haptics: window.ViktorychSetup.get("haptics"), preview: window.ViktorychSetup.notifPrivacy().preview }));
+    if (st.haptics !== false || st.preview !== false) notes.push(`${label}: alert switches did not save (${JSON.stringify(st)})`);
+    await sw("haptics").click();
+    await sw("preview").click();
+  }
+}
+
 async function walkSetup(page, notes, label, opts = {}) {
   const at = (id) => page.locator("#onb-layer [data-step='" + id + "']").waitFor({ timeout: 20000 }).then(() => true, () => false);
   if (!(await at("profile"))) { notes.push(label + ": setup did not continue after the account was saved"); return; }
   const named = await page.locator("#onb-layer input[name='onbName']").inputValue();
   if (named !== "Example Reader") notes.push(label + ": setup did not prefill the display name");
   await page.locator("#onb-layer [data-step='profile'] [data-onb='skip']").first().click();
+  if (!(await at("privacy"))) { notes.push(label + ": privacy step missing"); return; }
+  await settingsSteps(page, notes, label, "privacy");
+  await page.locator("#onb-layer [data-step='privacy'] .oobe-foot [data-onb='next']").click();
   if (!(await at("theme"))) { notes.push(label + ": theme step missing"); return; }
   if (opts.reload) {
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -255,17 +328,30 @@ async function walkSetup(page, notes, label, opts = {}) {
   }
   await page.locator("#onb-layer [data-onb='theme'][data-mode='lightsout']").click();
   await page.locator("#onb-layer [data-step='theme'] .oobe-foot [data-onb='next']").click();
+  if (!(await at("look"))) { notes.push(label + ": look step missing"); return; }
+  await settingsSteps(page, notes, label, "look");
+  await page.locator("#onb-layer [data-step='look'] .oobe-foot [data-onb='next']").click();
+  if (!(await at("content"))) { notes.push(label + ": content step missing"); return; }
+  await settingsSteps(page, notes, label, "content");
+  await page.locator("#onb-layer [data-step='content'] [data-onb='skip']").first().click();
   if (!(await at("data"))) { notes.push(label + ": save-data step missing"); return; }
   await page.locator("#onb-layer [data-step='data'] .oobe-foot [data-onb='next']").click();
   if (!(await at("notify"))) { notes.push(label + ": notifications step missing"); return; }
   // Notifications are explained first; nothing asks the browser yet.
   if (!(await page.locator("#onb-layer [data-step='notify'] .oobe-foot [data-onb]").count())) notes.push(label + ": notifications step has no action");
+  if (!(await page.locator("#onb-layer [data-step='notify'] .oobe-head [data-onb='skip']").count())) notes.push(label + ": notifications step has no Skip");
   await page.locator("#onb-layer [data-step='notify'] .oobe-foot [data-onb='skip'], #onb-layer [data-step='notify'] .oobe-foot [data-onb='next']").first().click();
+  if (!(await at("alerts"))) { notes.push(label + ": alerts step missing"); return; }
+  await settingsSteps(page, notes, label, "alerts");
+  await page.locator("#onb-layer [data-step='alerts'] .oobe-foot [data-onb='next']").click();
   if (!(await at("install"))) { notes.push(label + ": install step missing"); return; }
   await page.locator("#onb-layer [data-step='install'] [data-onb='skip']").first().click();
   if (!(await at("follow"))) { notes.push(label + ": follow step missing"); return; }
   await page.locator("#onb-layer [data-step='follow'] .oobe-foot [data-onb='next']").click();
   if (!(await at("done"))) { notes.push(label + ": finale missing"); return; }
+  await shot(page, "setup-done");
+  const doneSub = await page.locator("#onb-layer [data-step='done'] .oobe-sub").textContent().catch(() => "");
+  if (!/change these anytime in Settings/.test(doneSub || "")) notes.push(label + ": the finale does not say settings can change later");
   await page.locator("#onb-layer [data-step='done'] [data-onb='finish']").click();
   await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 });
   const sheet = await page.locator("[data-act='welcome-skip']").count();
@@ -395,8 +481,19 @@ async function quickFlow(page, viewport) {
   if (!rerun) notes.push(label + ": Settings has no Run setup again row");
   else {
     await page.evaluate(() => document.querySelector("[data-act='run-setup']").click());
-    const theme = await page.locator("#onb-layer [data-step='theme']").waitFor({ timeout: 15000 }).then(() => true, () => false);
-    if (!theme) notes.push(label + ": Run setup again did not open the theme step");
+    const first = await page.locator("#onb-layer [data-step='privacy']").waitFor({ timeout: 15000 }).then(() => true, () => false);
+    if (!first) notes.push(label + ": Run setup again did not open the privacy step");
+    else {
+      // Skip all keeps the defaults and goes straight to the finale.
+      await page.locator("#onb-layer [data-step='privacy'] [data-onb='skip-all']").click();
+      const done = await page.locator("#onb-layer [data-step='done']").waitFor({ timeout: 10000 }).then(() => true, () => false);
+      if (!done) notes.push(label + ": Skip all did not jump to the finale");
+      else {
+        await page.locator("#onb-layer [data-step='done'] [data-onb='finish']").click();
+        const closed = await page.waitForFunction(() => !document.documentElement.hasAttribute("data-onb-open"), null, { timeout: 10000 }).then(() => true, () => false);
+        if (!closed) notes.push(label + ": setup stayed open after Skip all");
+      }
+    }
   }
   return notes;
 }
