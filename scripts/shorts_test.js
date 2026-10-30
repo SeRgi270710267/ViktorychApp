@@ -184,7 +184,7 @@ const sitePosts = [
 ];
 
 const siteFeeds = [
-  { id: "x:copperlane", platform: "x", handle: "copperlane", name: "Elon Musk" },
+  { id: "x:copperlane", platform: "x", handle: "copperlane", name: "Copper Lane" },
   { id: "tiktok:sampleclip", platform: "tiktok", handle: "sampleclip", name: "Sampleclip" },
   { id: "tiktok:lockclip", platform: "tiktok", handle: "lockclip", name: "Gabii" },
   { id: "tiktok:another_locked", platform: "tiktok", handle: "another_locked", name: "Another" }
