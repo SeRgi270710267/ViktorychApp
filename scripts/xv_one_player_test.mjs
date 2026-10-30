@@ -107,7 +107,9 @@ try {
     if (!geo.more) fail(tag + "Show more cue missing on a clamped post");
     if (geo.pills.bottom > geo.chrome.top + 1 || geo.info.bottom > geo.chrome.top + 1) fail(tag + "post text or pills overlap the controls " + JSON.stringify(geo));
     if (Math.abs(geo.player.bottom - vp.height) > 1) fail(tag + "player does not reach the bottom of the screen " + JSON.stringify(geo.player));
+    await page.evaluate(() => document.querySelector("#viewer .xv-cur .xv-media")._ytPlayer.resetAutoHide_());
     await page.click('#viewer .ytp-pill-right [data-act="xv-speed"]');
+    await page.waitForFunction(() => document.querySelector("#viewer .xv-cur video"), null, { timeout: 5000 });
     const rate = await page.evaluate(() => [document.querySelector("#viewer .xv-cur video").playbackRate, document.querySelector("#viewer .xv-speed").textContent]);
     if (rate[0] !== 1.25 || rate[1] !== "1.25x") fail(tag + "speed button did not step to 1.25x: " + rate);
     if (vp.touch) {
