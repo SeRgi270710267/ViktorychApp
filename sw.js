@@ -4,7 +4,7 @@ const VERSION = "viktorych-a230-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T15:44:26Z-locked-follows
+// cache-bust: 2026-10-30T16:13:09Z-locked-follows
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -153,6 +153,7 @@ const SHELL_FILES = [
   "./community-notes.css",
   "./settings-sync.js",
   "./notif-privacy.js",
+  "./shared/birth-date.js",
   "./accounts.js",
   "./locked-follows.js",
   "./passkeys.js",
