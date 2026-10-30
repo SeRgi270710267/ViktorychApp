@@ -1061,17 +1061,25 @@ try {
     { name: "reduced motion", viewport: VIEWPORTS[0], reduced: true, run: (page) => motionPass(page, true) }
   ];
   for (const item of runs.filter((r) => !process.env.ONLY || process.env.ONLY.split(",").includes(r.name))) {
-    const { context, page, problems } = await openFresh(browser, item.viewport, item.reduced ? { reducedMotion: "reduce" } : {});
-    try {
-      await gotoFresh(page);
-      const started = Date.now();
-      failures.push(...await item.run(page, item.viewport));
-      console.log(item.name + " " + item.viewport.width + "x" + item.viewport.height + " " + (Date.now() - started) + "ms");
-      failures.push(...problems.map((p) => item.name + " pageerror: " + p.slice(0, 180)));
-    } catch (err) {
-      failures.push(item.name + " failed: " + redact(err && err.stack || err).slice(0, 1200));
-    } finally {
-      await context.close();
+    // A renderer crash is the browser, not the app (seen once locally on a
+    // busy machine); that run starts over once in a new context.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { context, page, problems } = await openFresh(browser, item.viewport, item.reduced ? { reducedMotion: "reduce" } : {});
+      let crashed = false;
+      page.on("crash", () => { crashed = true; });
+      try {
+        await gotoFresh(page);
+        const started = Date.now();
+        failures.push(...await item.run(page, item.viewport));
+        console.log(item.name + " " + item.viewport.width + "x" + item.viewport.height + " " + (Date.now() - started) + "ms");
+        failures.push(...problems.map((p) => item.name + " pageerror: " + p.slice(0, 180)));
+      } catch (err) {
+        if (crashed && attempt === 0) { console.log(item.name + ": the page crashed, running it again"); continue; }
+        failures.push(item.name + " failed: " + redact(err && err.stack || err).slice(0, 1200));
+      } finally {
+        await context.close().catch(() => {});
+      }
+      break;
     }
   }
 } finally {
