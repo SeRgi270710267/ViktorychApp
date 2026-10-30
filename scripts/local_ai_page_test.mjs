@@ -85,6 +85,17 @@ async function main() {
       await page.waitForSelector(".lai-open.danger", { timeout: 10000 });
       const danger = await page.evaluate(() => ({ cards: document.querySelectorAll(".lai-msg.ai:last-child .lai-card").length, href: document.querySelector(".lai-open.danger").getAttribute("href") }));
       check(danger.cards === 0 && /^#\/settings/.test(danger.href), "delete account is only a link");
+      // Quick settings: a tap on a toggle makes the same confirm card.
+      await page.click('.lai-head [data-lai="new"]');
+      await page.waitForSelector('.lai.is-empty [data-lai="tab"]', { timeout: 10000 });
+      await page.click('[data-lai="tab"][data-cat="media"]');
+      await page.waitForSelector('[data-lai="quick"][data-id="autoplay"]', { timeout: 5000 });
+      await page.click('[data-lai="quick"][data-id="autoplay"]');
+      await page.waitForSelector('[data-lai="apply"]', { timeout: 10000 });
+      check((await page.evaluate(() => document.querySelectorAll(".lai-msg.ai:last-child .lai-ch-name").length)) === 1, size.name + " a quick tap lists one change");
+      await page.click('[data-lai="apply"]');
+      await page.waitForSelector('[data-lai="undo-one"]', { timeout: 10000 });
+      check((await settings(page)).autoplay === "wifi", size.name + " a quick tap saves after Apply");
       if (size.mobile) check(await page.evaluate(() => { const n = document.querySelector(".bottom-nav"); return !n || getComputedStyle(n).display === "none"; }), "phone hides the bottom bar on this page");
       check(errors.length === 0, size.name + " page errors: " + errors.join(" | "));
       await context.close();

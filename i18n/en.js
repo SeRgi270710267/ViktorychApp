@@ -5217,5 +5217,7 @@ SI18n.addPack("en", {
   "Nicknames people give you privately still win in their own view.": "Nicknames people give you privately still win in their own view.",
   "New display name": "New display name",
   "New names start visible to friends only.": "New names start visible to friends only.",
-  "Remove this display name?": "Remove this display name?"
+  "Remove this display name?": "Remove this display name?",
+  "Quick settings": "Quick settings",
+  "Or tap one to change it": "Or tap one to change it"
 });

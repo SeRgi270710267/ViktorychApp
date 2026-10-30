@@ -5219,5 +5219,7 @@ SI18n.addPack("ru", {
   "Nicknames people give you privately still win in their own view.": "Личные прозвища, которые вам дают другие, по-прежнему важнее в их собственном виде.",
   "New display name": "Новое отображаемое имя",
   "New names start visible to friends only.": "Новые имена сначала видны только друзьям.",
-  "Remove this display name?": "Удалить это отображаемое имя?"
+  "Remove this display name?": "Удалить это отображаемое имя?",
+  "Quick settings": "Быстрые настройки",
+  "Or tap one to change it": "Или нажмите, чтобы изменить"
 });

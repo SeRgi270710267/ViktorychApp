@@ -273,3 +273,37 @@ html.lai-on #dock-root, html.lai-on .fab { display: none !important; }
   .lai-side, .lai-prog-track i { transition: none; }
 }
 html[data-motion="reduce"] .lai-dots i { animation: none; }
+
+/* ---------- quick settings under the chips (empty state) ---------- */
+.lai-browse { max-width: 752px; margin: 22px auto 0; text-align: left; }
+.lai-browse-head { margin: 0 0 8px; font-size: 13px; color: var(--lai-sub); text-align: center; }
+.lai-tabs { display: flex; justify-content: center; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.lai-tabs::-webkit-scrollbar { display: none; }
+.lai-tab {
+  flex: 0 0 auto; height: 32px; padding: 0 12px; border: 0; border-radius: 9999px; background: transparent;
+  color: var(--lai-sub); font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.lai-tab:hover { background: var(--lai-hover); color: var(--text); }
+.lai-tab.on { background: var(--lai-hover); color: var(--text); }
+.lai-tab:focus-visible, .lai-q:focus-visible { outline: 2px solid var(--lai-accent); outline-offset: 2px; }
+.lai-qs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; margin-top: 8px; }
+.lai-q {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 12px;
+  border: 0; border-radius: 14px; background: transparent; color: var(--text); font-size: 14px; text-align: left; cursor: pointer;
+}
+.lai-q:hover { background: var(--lai-hover); }
+.lai-q-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lai-q-val { flex: 0 0 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lai-sub); font-size: 13px; }
+.lai-sw { flex: 0 0 auto; position: relative; width: 36px; height: 20px; border-radius: 9999px; background: color-mix(in srgb, var(--text) 22%, transparent); transition: background .15s ease; }
+.lai-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+.lai-sw.is-on { background: var(--lai-accent); }
+.lai-sw.is-on::after { transform: translateX(16px); }
+@media (max-width: 699px) {
+  .lai.is-empty .lai-browse-slot { order: 0; }
+  .lai-browse { margin: 0 0 12px; }
+  .lai-browse-head { display: none; }
+  .lai-tabs { justify-content: flex-start; margin: 0 -8px; padding: 0 8px 2px; }
+  .lai-qs { grid-template-columns: 1fr; max-height: 34dvh; overflow-y: auto; }
+  .lai-q { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .lai-sw, .lai-sw::after { transition: none; } }

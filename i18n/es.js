@@ -5220,5 +5220,7 @@ SI18n.addPack("es", {
   "Nicknames people give you privately still win in their own view.": "Los apodos privados que otros te ponen siguen ganando en su propia vista.",
   "New display name": "Nuevo nombre",
   "New names start visible to friends only.": "Los nombres nuevos empiezan visibles solo para amigos.",
-  "Remove this display name?": "¿Quitar este nombre?"
+  "Remove this display name?": "¿Quitar este nombre?",
+  "Quick settings": "Ajustes rápidos",
+  "Or tap one to change it": "O toca uno para cambiarlo"
 });

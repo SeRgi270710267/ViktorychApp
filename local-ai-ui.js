@@ -176,6 +176,7 @@
 
   /* ---------- answering ---------- */
   function answer(text, opts) {
+    if (opts && opts.calls) return Promise.resolve({ reply: "", calls: opts.calls, unknown: [], engine: "tap" });
     var A = core();
     var h = host();
     var values = h ? h.values() : {};
@@ -270,6 +271,7 @@
     }
     if (!(opts && opts.regen)) c.msgs.push({ role: "user", text: text, at: Date.now() });
     var msg = { role: "ai", text: "", at: Date.now(), streaming: true, q: text };
+    if (opts && opts.calls) msg.calls = opts.calls;
     c.msgs.push(msg);
     c.at = Date.now();
     S.busy = true;
@@ -279,7 +281,7 @@
     var box = S.root && S.root.querySelector(".lai-input");
     if (box) { box.value = ""; grow(box); }
     var shownText = "";
-    answer(text, { onDelta: function (t) { shownText = t; msg.text = t; paintMsg(msg); } }).then(function (res) {
+    answer(text, { calls: opts && opts.calls, onDelta: function (t) { shownText = t; msg.text = t; paintMsg(msg); } }).then(function (res) {
       var h = host();
       var values = h ? h.values() : {};
       var plan = core().plan(res.calls, values);
@@ -416,6 +418,49 @@
   function heroHtml() {
     return '<div class="lai-hero"><span class="lai-hero-mark">' + mark() + "</span><h1>" + esc(tr("What should we change?")) + "</h1></div>";
   }
+  /* Quick settings: a tab per group and the settings in it, each with its
+     value. A tap makes the same confirm card as typing, so risky changes
+     still ask and Undo still works. */
+  function groups() { return [["look", tr("Display")], ["privacy", tr("Privacy")], ["notifications", tr("Notifications")], ["media", tr("Media")], ["feed", tr("Feed")], ["friends", tr("Friends")]]; }
+  function quickRows(cat) {
+    var R = reg();
+    if (!R || !R.editable) return [];
+    return R.editable().filter(function (row) {
+      return row.cat === cat && row.label && row.risk !== "danger" && (row.type === "bool" || (row.type === "enum" && row.values && row.values.length > 1));
+    }).slice(0, 8);
+  }
+  function nextValue(row, v) {
+    if (row.type === "bool") return !v;
+    var i = row.values.indexOf(v);
+    return row.values[(i + 1) % row.values.length];
+  }
+  function browseHtml() {
+    var h = host();
+    var values = h ? h.values() : {};
+    var cur = S.browse || "look";
+    var tabs = groups().filter(function (g) { return quickRows(g[0]).length; }).map(function (g) {
+      return '<button type="button" role="tab" class="lai-tab' + (g[0] === cur ? " on" : "") + '" aria-selected="' + (g[0] === cur ? "true" : "false") + '" data-lai="tab" data-cat="' + g[0] + '">' + esc(g[1]) + "</button>";
+    }).join("");
+    var rows = quickRows(cur).map(function (row) {
+      var v = values[row.id];
+      if (v === undefined) v = row.def;
+      var on = row.type === "bool" ? (v ? " is-on" : "") : "";
+      var val = row.type === "bool" ? '<i class="lai-sw' + on + '" aria-hidden="true"></i>' : '<span class="lai-q-val">' + esc(shown(row, v)) + "</span>";
+      return '<button type="button" class="lai-q" data-lai="quick" data-id="' + esc(row.id) + '"><span class="lai-q-name">' + esc(tr(row.label)) + "</span>" + val + "</button>";
+    }).join("");
+    return '<section class="lai-browse" aria-label="' + esc(tr("Quick settings")) + '"><p class="lai-browse-head">' + esc(tr("Or tap one to change it")) + '</p><div class="lai-tabs" role="tablist">' + tabs + '</div><div class="lai-qs" role="tabpanel">' + rows + "</div></section>";
+  }
+  function quick(id) {
+    var R = reg();
+    var row = R && R.get(id);
+    if (!row) return;
+    var h = host();
+    var values = h ? h.values() : {};
+    var v = values[id];
+    if (v === undefined) v = row.def;
+    var to = nextValue(row, v);
+    send(tr(row.label) + " → " + shown(row, to), { calls: [{ fn: "set", id: id, value: to }] });
+  }
   function chipsHtml() {
     return '<div class="lai-chips">' + chips().map(function (c) { return '<button type="button" class="lai-chip" data-lai="chip">' + esc(c) + "</button>"; }).join("") + "</div>";
   }
@@ -470,7 +515,7 @@
   function msgHtml(msg, mi) {
     if (msg.role === "user") return '<div class="lai-msg user" data-i="' + mi + '"><div class="lai-bubble">' + esc(msg.text) + "</div></div>";
     var body = msg.text ? esc(msg.text).replace(/\n/g, "<br>") : (msg.streaming ? '<span class="lai-dots"><i></i><i></i><i></i></span>' : "");
-    var actions = msg.streaming ? "" : '<div class="lai-acts"><button type="button" class="lai-icon sm" data-lai="copy" data-m="' + mi + '" aria-label="' + esc(tr("Copy")) + '" title="' + esc(tr("Copy")) + '">' + I.copy + '</button><button type="button" class="lai-icon sm" data-lai="regen" data-m="' + mi + '" aria-label="' + esc(tr("Regenerate")) + '" title="' + esc(tr("Regenerate")) + '">' + I.redo + "</button>" + (msg.engine && msg.engine !== "instant" ? '<span class="lai-engine">' + esc(engineLabel(msg.engine)) + "</span>" : "") + "</div>";
+    var actions = msg.streaming ? "" : '<div class="lai-acts"><button type="button" class="lai-icon sm" data-lai="copy" data-m="' + mi + '" aria-label="' + esc(tr("Copy")) + '" title="' + esc(tr("Copy")) + '">' + I.copy + '</button><button type="button" class="lai-icon sm" data-lai="regen" data-m="' + mi + '" aria-label="' + esc(tr("Regenerate")) + '" title="' + esc(tr("Regenerate")) + '">' + I.redo + "</button>" + (msg.engine && msg.engine !== "instant" && msg.engine !== "tap" ? '<span class="lai-engine">' + esc(engineLabel(msg.engine)) + "</span>" : "") + "</div>";
     return '<div class="lai-msg ai' + (msg.streaming ? " streaming" : "") + '" data-i="' + mi + '"><div class="lai-text">' + body + "</div>" + (msg.streaming ? "" : cardHtml(msg, mi) + opensHtml(msg)) + actions + "</div>";
   }
   function engineLabel(e) {
@@ -504,7 +549,7 @@
     el.className = "lai";
     el.innerHTML = '<aside class="lai-side" aria-label="' + esc(tr("Chats")) + '"></aside><div class="lai-scrim" data-lai="side"></div>' +
       '<section class="lai-main"><header class="lai-head"><a class="lai-icon lai-back" href="#/settings" aria-label="' + esc(tr("Back")) + '">' + I.back + '</a><button type="button" class="lai-icon lai-menu-btn" data-lai="side" aria-label="' + esc(tr("Chats")) + '">' + I.menu + '</button><span class="lai-title"></span><button type="button" class="lai-icon" data-lai="new" aria-label="' + esc(tr("New chat")) + '">' + I.edit + "</button></header>" +
-      '<div class="lai-scroll"><div class="lai-thread" aria-live="polite"></div></div><div class="lai-dock"><div class="lai-hero-slot"></div><div class="lai-prog-slot"></div><div class="lai-bar-slot"></div><div class="lai-chips-slot"></div><p class="lai-note">' + esc(tr("Runs on this device. Nothing you type is sent anywhere.")) + "</p></div></section><div class=\"lai-sheet-slot\"></div>";
+      '<div class="lai-scroll"><div class="lai-thread" aria-live="polite"></div></div><div class="lai-dock"><div class="lai-hero-slot"></div><div class="lai-prog-slot"></div><div class="lai-bar-slot"></div><div class="lai-chips-slot"></div><div class="lai-browse-slot"></div><p class="lai-note">' + esc(tr("Runs on this device. Nothing you type is sent anywhere.")) + "</p></div></section><div class=\"lai-sheet-slot\"></div>";
     el.addEventListener("click", onClick);
     el.addEventListener("submit", function (e) { e.preventDefault(); onSend(); });
     el.addEventListener("keydown", onKey);
@@ -523,6 +568,8 @@
     S.root.querySelector(".lai-title").textContent = c && c.title ? c.title : tr("Local AI");
     S.root.querySelector(".lai-hero-slot").innerHTML = empty ? heroHtml() : "";
     S.root.querySelector(".lai-chips-slot").innerHTML = empty ? chipsHtml() : "";
+    var bs = S.root.querySelector(".lai-browse-slot");
+    if (bs) bs.innerHTML = empty ? browseHtml() : "";
     S.root.querySelector(".lai-thread").innerHTML = threadHtml();
     S.root.querySelector(".lai-sheet-slot").innerHTML = sheetHtml();
     paintBar();
@@ -597,6 +644,8 @@
     if (act === "open-chat") { S.chatId = el.getAttribute("data-id"); S.sideOpen = false; paint(); return; }
     if (act === "del-chat") { var id = el.getAttribute("data-id"); S.chats = S.chats.filter(function (c) { return c.id !== id; }); if (S.chatId === id) S.chatId = ""; saveChats(); paint(); return; }
     if (act === "chip") { send(el.textContent); return; }
+    if (act === "tab") { S.browse = el.getAttribute("data-cat"); var b = S.root.querySelector(".lai-browse-slot"); if (b) b.innerHTML = browseHtml(); var t = S.root.querySelector('.lai-tab.on'); if (t) t.focus(); return; }
+    if (act === "quick") { quick(el.getAttribute("data-id")); return; }
     if (act === "models") { S.menu = !S.menu; detectOnce(); paintBar(); return; }
     if (act === "pick") {
       var m = core().model(el.getAttribute("data-id"));
@@ -617,7 +666,7 @@
       if (!rmsg || !c || S.busy) return;
       var q = rmsg.q;
       c.msgs.splice(c.msgs.indexOf(rmsg), 1);
-      send(q, { regen: true });
+      send(q, { regen: true, calls: rmsg.calls });
       return;
     }
     if (act === "apply") { var am = msgAt(el); if (am) applyPlan(am, false); return; }

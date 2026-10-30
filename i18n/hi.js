@@ -5206,5 +5206,7 @@ SI18n.addPack("hi", {
   "Nicknames people give you privately still win in their own view.": "लोग आपको निजी तौर पर जो उपनाम देते हैं, वे उनके अपने दृश्य में ही प्राथमिक रहते हैं।",
   "New display name": "नया डिस्प्ले नाम",
   "New names start visible to friends only.": "नए नाम शुरू में केवल दोस्तों को दिखते हैं।",
-  "Remove this display name?": "यह डिस्प्ले नाम हटाएँ?"
+  "Remove this display name?": "यह डिस्प्ले नाम हटाएँ?",
+  "Quick settings": "झटपट सेटिंग्स",
+  "Or tap one to change it": "या बदलने के लिए किसी पर टैप करें"
 });
