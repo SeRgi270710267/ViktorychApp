@@ -4,7 +4,7 @@
    cannot claim more time than really passed. */
 
 import { awardActivity } from "./points.js";
-import { emitNotification } from "./notifications.js";
+import { handleGameSocial, afterBeat, roomsFor, canSeeGame, GAME_SOCIAL_SCHEMA } from "./game-social.js";
 
 export const GAMES = { regone: "ReGone" };
 const BEAT_MAX_MS = 60 * 1000;
@@ -31,7 +31,7 @@ export const GAMES_SCHEMA = [
     PRIMARY KEY (public_id, game_id, day)
   )`,
   "CREATE INDEX IF NOT EXISTS game_days_day ON game_days(day)"
-];
+].concat(GAME_SOCIAL_SCHEMA);
 
 function utcDay(ms) {
   return new Date(ms).toISOString().slice(0, 10);
@@ -118,8 +118,10 @@ async function play(request, env, viewer, deps) {
     const got = await awardActivity(env, viewer.public_id, "game_streak", day + ":" + game);
     awarded += Number(got && got.awarded) || 0;
   }
+  const achievements = await afterBeat(env, viewer.public_id, game, body && body.tz, now);
   return deps.json(200, {
     gameId: game,
+    achievements: achievements,
     credited: credit,
     todayMs: today,
     totalMs: (Number(prev && prev.total_ms) || 0) + credit,
@@ -172,36 +174,10 @@ async function board(request, env, viewer, deps, url) {
   return deps.json(200, { gameId: game, name: GAMES[game], people: list }, { "cache-control": "private, no-store" });
 }
 
-async function invite(request, env, viewer, deps) {
-  const body = await deps.readJson(request, 1000);
-  const game = gameOf(body && body.gameId);
-  const to = String((body && body.to) || "");
-  if (!game || !/^\d{12}$/.test(to) || to === viewer.public_id) return deps.json(400, { error: "bad_invite" });
-  const paced = await deps.rateHit(env, "game-invite:" + viewer.public_id, 10, 10 * 60 * 1000);
-  if (!paced.ok) return deps.limited(paced);
-  const friend = await env.DB.prepare("SELECT 1 AS ok FROM account_friends WHERE user_id = ? AND friend_id = ?").bind(viewer.public_id, to).first();
-  if (!friend) return deps.json(403, { error: "friends_only" });
-  const now = Date.now();
-  // One invite per friend per game per hour.
-  const slot = Math.floor(now / (60 * 60 * 1000));
-  const sent = await emitNotification(env, {
-    publicId: to,
-    kind: "game_invite",
-    at: now,
-    actorId: viewer.public_id,
-    idempotencyKey: "gameinv:" + viewer.public_id + ":" + to + ":" + game + ":" + slot,
-    handle: viewer.handle,
-    name: viewer.display_name,
-    text: GAMES[game],
-    hash: "#/games/" + game,
-    platform: "app",
-    feedId: "app:" + viewer.public_id
-  });
-  return deps.json(200, { ok: true, sent: !!(sent && sent.created) });
-}
-
-/* Friends playing a game right now, for the presence line. */
-export async function playingNow(env, ids) {
+/* Friends playing a game right now, for the presence line. With a viewer,
+   people who hide their room / Playing now from that viewer are left out
+   and a room they set themselves comes along. */
+export async function playingNow(env, ids, viewerId) {
   const out = new Map();
   const list = (ids || []).filter((id) => /^\d{12}$/.test(String(id))).slice(0, 100);
   if (!list.length) return out;
@@ -211,7 +187,23 @@ export async function playingNow(env, ids) {
     ).bind(Date.now() - PLAYING_MS, ...list).all();
     rows(got).forEach((row) => { if (GAMES[row.game_id]) out.set(String(row.public_id), GAMES[row.game_id]); });
   } catch (err) { /* no table yet */ }
-  return out;
+  if (viewerId === undefined) return out;
+  const rooms = await roomsFor(env, viewerId, list);
+  const shown = new Map();
+  for (const [id, name] of out) {
+    if (rooms.has(id) || await visibleRoom(env, id, viewerId)) shown.set(id, name);
+  }
+  rooms.forEach((value, id) => shown.set(id, GAMES[value.gameId] || "ReGone"));
+  shown.rooms = rooms;
+  return shown;
+}
+
+async function visibleRoom(env, id, viewerId) {
+  return canSeeGame(env, id, viewerId, "room");
+}
+
+async function playingIds(env, ids) {
+  return playingNow(env, ids);
 }
 
 export async function handleGames(request, env, path, url, deps) {
@@ -220,6 +212,7 @@ export async function handleGames(request, env, path, url, deps) {
   if (!viewer) return deps.json(401, { error: "auth_required" });
   if (path === "/v1/games/play" && request.method === "POST") return play(request, env, viewer, deps);
   if (path === "/v1/games/board" && request.method === "GET") return board(request, env, viewer, deps, url);
-  if (path === "/v1/games/invite" && request.method === "POST") return invite(request, env, viewer, deps);
+  const social = await handleGameSocial(request, env, path, url, viewer, deps, { playingIds });
+  if (social) return social;
   return deps.json(404, { error: "not_found" });
 }

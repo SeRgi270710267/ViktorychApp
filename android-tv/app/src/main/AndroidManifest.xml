@@ -4,6 +4,8 @@
     <!-- A remote is enough: no touchscreen needed, and phones can install it too. -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
+    <!-- Controllers are optional: the app still installs on TVs without one. -->
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Lets "Update TV app" hand the new APK to the system installer. Android still asks. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -179,6 +181,24 @@
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize"
             android:exported="false"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- viktorychtv://game/regone: ReGone with a controller, always in our own WebView
+             so the controller can be turned into keys and touches. -->
+        <activity
+            android:name=".GameActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize|uiMode"
+            android:exported="true"
+            android:hardwareAccelerated="true"
+            android:label="ReGone"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="viktorychtv" android:host="game" />
+            </intent-filter>
+        </activity>
 
         <!-- viktorychtv://mesh: nearby chat, offered by the site only when loading fails. -->
         <activity
