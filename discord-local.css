@@ -97,3 +97,12 @@
   #dloc-host { align-items: center; }
   .dloc-sheet { border-radius: 16px; }
 }
+
+.dloc-get { margin: 12px 0 4px; }
+.dloc-get .dloc-btn { width: 100%; }
+.dloc-get .dloc-hint { margin-top: 8px; }
+.dloc-acts .dloc-btn + .dloc-btn { margin-left: 8px; }
+@media (max-width: 420px) {
+  .dloc-acts { display: flex; flex-direction: column; gap: 8px; }
+  .dloc-acts .dloc-btn + .dloc-btn { margin-left: 0; }
+}

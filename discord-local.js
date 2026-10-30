@@ -475,7 +475,10 @@
       (status ? '<p class="dloc-status' + (state.status === "replace" ? " is-calm" : "") + '">' + esc(status) + "</p>" : "") +
       (state.status === "replace" ? replaceNote() : "") +
       '<div class="dloc-acts">' +
-      '<button type="button" class="dloc-btn" data-dloc="open">' + esc(state.has ? (state.status === "replace" ? tr("Replace key") : tr("Open")) : tr("Connect")) + "</button>" +
+      (state.has
+        ? '<button type="button" class="dloc-btn" data-dloc="open">' + esc(state.status === "replace" ? tr("Replace key") : tr("Open")) + "</button>"
+        : '<button type="button" class="dloc-btn" data-dloc="get-key">' + esc(tr("Get your key")) + "</button>" +
+          '<button type="button" class="dloc-btn ghost" data-dloc="open">' + esc(tr("I already have a key")) + "</button>") +
       (state.has ? '<button type="button" class="dloc-btn ghost" data-dloc="remove">' + esc(tr("Remove key")) + "</button>" : "") +
       (state.note && !state.open ? '<span class="dloc-note">' + esc(state.note) + "</span>" : "") +
       "</div>";
@@ -486,7 +489,10 @@
   }
 
   function keyForm() {
-    return '<form class="dloc-key" data-dloc-form="key" autocomplete="off">' +
+    return '<div class="dloc-get">' +
+      '<button type="button" class="dloc-btn" data-dloc="get-key">' + esc(tr("Get your key")) + "</button>" +
+      '<p class="dloc-hint">' + esc(tr("A short guided walkthrough. Or paste a key you already have below.")) + "</p></div>" +
+      '<form class="dloc-key" data-dloc-form="key" autocomplete="off">' +
       '<label class="dloc-label" for="dloc-key">' + esc(tr("Spare account key")) + "</label>" +
       '<input id="dloc-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="' + esc(tr("Paste the key")) + '">' +
       '<button type="submit" class="dloc-btn"' + (state.busy ? " disabled" : "") + ">" + esc(state.busy ? tr("Checking…") : tr("Save on this device")) + "</button>" +
@@ -642,6 +648,10 @@
     event.preventDefault();
     var act = btn.getAttribute("data-dloc");
     if (act === "open") open();
+    else if (act === "get-key") {
+      if (root.DiscordKeyHelper && root.DiscordKeyHelper.open) root.DiscordKeyHelper.open();
+      else open();
+    }
     else if (act === "close") close();
     else if (act === "remove") {
       if (!root.confirm || root.confirm(tr("Remove the Discord key from this device?"))) remove();
@@ -683,6 +693,7 @@
     open: open,
     close: close,
     remove: remove,
+    connect: connect,
     status: function () { return boot().then(function () { return state.status; }); },
     _test: { cleanKey: cleanKey, inviteCode: inviteCode, state: state, unseal: unseal, get: get, API: API }
   };
