@@ -621,6 +621,33 @@
       writeStore(DRAFT_KEY, { items: next.slice(0, 21) });
     }, 400);
   }
+  // Write every open draft now (closing the app skips the 400 ms save delay).
+  // Text is kept on this device; attached media can't be, so it is counted.
+  function flushDrafts() {
+    clearTimeout(saveTimer);
+    var doc = draftDoc();
+    var unsaved = 0;
+    var wrote = false;
+    ["post", "reply", "quote"].forEach(function (name) {
+      var slot = slots[name];
+      if (!slot) return;
+      var hasText = slot.posts.some(function (post) { return String(post.text || "").trim(); });
+      var media = (slot.media || []).length;
+      if (!hasText && !media && !slot.poll) return;
+      var snap = snapshot(name);
+      doc.items = [snap].concat(doc.items.filter(function (item) { return item.id !== snap.id; }));
+      unsaved += media;
+      wrote = true;
+    });
+    if (!wrote) return { unsaved: 0, failed: false };
+    doc.items = doc.items.slice(0, 21);
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(doc));
+    } catch (err) {
+      return { unsaved: unsaved, failed: true };
+    }
+    return { unsaved: unsaved, failed: false };
+  }
   function toast(message) {
     if (host && host.toast) host.toast(message);
   }
@@ -1331,6 +1358,7 @@
     requestClose: requestClose,
     onEscape: onEscape,
     publish: publish,
+    flushDrafts: flushDrafts,
     bind: function (next) { host = next || null; }
   };
 })();

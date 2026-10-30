@@ -7,6 +7,7 @@
   <meta name="format-detection" content="telephone=no">
   <script src="shared/ios.js"></script>
   <script src="shared/tv-boot.js"></script>
+  <script src="shared/short-link.js"></script>
   <script>
     (function () {
       try {
@@ -169,6 +170,15 @@
       try {
         installed = navigator.standalone === true || (window.matchMedia && (window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches));
       } catch (err2) { installed = false; }
+      // Installed desktop chrome before first paint (desktop-app.js keeps it in sync).
+      try {
+        var rootEl = document.documentElement;
+        var wco = navigator.windowControlsOverlay;
+        if (installed || (window.matchMedia && window.matchMedia("(display-mode: minimal-ui)").matches)) rootEl.classList.add("vk-installed");
+        if ((wco && wco.visible === true) || (window.matchMedia && window.matchMedia("(display-mode: window-controls-overlay)").matches)) rootEl.classList.add("vk-wco");
+        var desk = JSON.parse(localStorage.getItem("viktorych-desktop-v1") || "{}");
+        if (desk && desk.showScrollbar === true) rootEl.classList.add("vk-show-scrollbar");
+      } catch (err3) { /* old browser */ }
       if (cfg.gate === true && !signed && !installed) {
         document.documentElement.setAttribute("data-wall", "1");
         var theme = document.documentElement.getAttribute("data-theme");
@@ -194,6 +204,31 @@
           return saved && saved.token ? String(saved.token) : "";
         } catch (err) { return ""; }
       }
+      function bytes(text) {
+        var raw = atob(String(text || ""));
+        var out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+      }
+      /* The sealed copy on Pages first (accounts.js keeps today's key);
+         anything missing, old, or unreadable goes to the API as before. */
+      function sealedCatalog(key, auth) {
+        var subtle = window.crypto && window.crypto.subtle;
+        var st = null;
+        try { st = JSON.parse(localStorage.getItem("viktorychapp-seal-v1") || "null"); } catch (err) { st = null; }
+        if (!subtle || !st || !st.keys || st.use === false || st.tail !== auth.slice(-12) || cfg.sealed === false || typeof TextEncoder !== "function") return Promise.resolve(null);
+        var maxAge = (Number(cfg.sealMaxAgeMin) || 75) * 60000;
+        return fetch("sealed/" + key, { credentials: "omit" }).then(function (res) {
+          return res && res.ok ? res.json() : null;
+        }).then(function (doc) {
+          if (!doc || doc.v !== 1 || !st.keys[doc.day] || !(Date.now() - Date.parse(doc.at) < maxAge)) return null;
+          return subtle.importKey("raw", bytes(st.keys[doc.day]), { name: "AES-GCM" }, false, ["decrypt"]).then(function (k) {
+            return subtle.decrypt({ name: "AES-GCM", iv: bytes(doc.iv), additionalData: new TextEncoder().encode(key) }, k, bytes(doc.ct));
+          }).then(function (plain) {
+            return new Response(new TextDecoder().decode(plain), { status: 200, headers: { "Content-Type": "application/json", "X-Sealed": "pages" } });
+          });
+        }).catch(function () { return null; });
+      }
       function loadCatalog(key) {
         var api = String(cfg.api || "").replace(/\/$/, "");
         var gated = !!(cfg.gate && api);
@@ -201,10 +236,14 @@
         var headers = { "X-Feed-Refresh": "1" };
         var auth = gated ? sessionToken() : "";
         if (auth) headers.Authorization = "Bearer " + auth;
-        return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
-          if (!res || !res.ok) return emptyBody(key);
-          return res;
-        }).catch(function () { return emptyBody(key); });
+        function fromApi() {
+          return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
+            if (!res || !res.ok) return emptyBody(key);
+            return res;
+          }).catch(function () { return emptyBody(key); });
+        }
+        if (!auth) return fromApi();
+        return sealedCatalog(key, auth).then(function (res) { return res || fromApi(); });
       }
       var boot = window.__homeFreshBoot || {};
       if (boot.feeds) return;
@@ -584,6 +623,7 @@
   <template id="late-scripts">
     <link rel="stylesheet" href="presence.css">
     <link rel="stylesheet" href="reactions.css">
+    <link rel="stylesheet" href="community-notes.css">
     <link rel="stylesheet" href="affiliations.css">
     <link rel="stylesheet" href="translate.css">
     <link rel="stylesheet" href="live-translate.css">
@@ -591,12 +631,15 @@
     <link rel="stylesheet" href="pymk.css">
     <link rel="stylesheet" href="tv.css">
     <link rel="stylesheet" href="discord-ui.css">
+    <link rel="stylesheet" href="discord-local.css">
+    <link rel="stylesheet" href="discord-key-helper.css">
     <link rel="stylesheet" href="spaces.css">
     <link rel="stylesheet" href="stories.css">
     <link rel="stylesheet" href="music.css">
     <link rel="stylesheet" href="accounts.css">
     <link rel="stylesheet" href="gifts.css">
     <link rel="stylesheet" href="badges.css">
+    <link rel="stylesheet" href="game-social.css">
     <link rel="stylesheet" href="setting-alerts.css">
     <link rel="stylesheet" href="storage.css">
     <link rel="stylesheet" href="yt-player.css">
@@ -623,7 +666,9 @@
     <script src="discord-picks.js" defer></script>
   </template>
   <script src="shared/mirror.js" defer></script>
+  <script src="shared/x-range.js" defer></script>
   <script src="dock.js" defer></script>
+  <script src="desktop-app.js" defer></script>
   <script src="video-embed.js" defer></script>
   <template id="late-scripts-rest">
     <script src="shared/pill-data.js" type="module"></script>
@@ -634,6 +679,7 @@
     <script src="highlights.js" defer></script>
     <script src="audience-ui.js" defer></script>
     <script src="usernames-ui.js" defer></script>
+    <script src="ytm.js" defer></script>
     <script src="music.js" defer></script>
     <script src="shared/handle-skeleton.js" type="module"></script>
     <script src="shared/reposts.js" type="module"></script>
@@ -645,9 +691,13 @@
     <script src="gifts-ui.js" defer></script>
     <script src="shared/gift-catalog.js" type="module"></script>
     <script src="badges.js" defer></script>
+    <script src="shared/regone.js" type="module"></script>
+    <script src="game-social.js" defer></script>
+    <script src="shared/local-budget.js" defer></script>
     <script src="setting-alerts.js" defer></script>
     <script src="data-saver.js" defer></script>
     <script src="reactions.js" defer></script>
+    <script src="community-notes.js" defer></script>
     <script src="settings-sync.js" defer></script>
     <script src="notif-privacy.js" defer></script>
     <script src="pulse.js" defer></script>
@@ -656,6 +706,8 @@
     <script src="settings-assistant.js" defer></script>
     <script src="nostr.js" defer></script>
     <script src="owner-keys.js" defer></script>
+    <script src="discord-local.js" defer></script>
+    <script src="discord-key-helper.js" defer></script>
     <script src="yt-player.js" defer></script>
     <script src="update.js" defer></script>
     <script src="storage.js" defer></script>

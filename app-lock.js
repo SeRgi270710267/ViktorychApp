@@ -643,7 +643,7 @@ async function wipeData(keepPrefs) {
   if (!keepPrefs) {
     try { sessionStorage.clear(); } catch (err) { /* already clear */ }
   }
-  const names = [DB_NAME, DOC_DB, "superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "viktorych-discord", "viktorych-notes"];
+  const names = [DB_NAME, DOC_DB, "superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "viktorych-discord", "viktorych-discord-local", "viktorych-notes", "viktorych-swr"];
   names.forEach(function (name) {
     try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
   });

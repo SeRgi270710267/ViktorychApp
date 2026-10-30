@@ -302,9 +302,35 @@
     return b.isAndroidTv();
   }
 
+  // TVs that can't take the Android TV app: show how to keep the site one button away.
+  function pinCardHtml(where) {
+    if (where !== "home") return "";
+    var ua = String(navigator.userAgent || "");
+    var tip;
+    if (/Tizen/i.test(ua)) tip = tr("Samsung: in Internet, open the menu and add a bookmark. Some models can also add it to the Home screen.");
+    else if (/Web0S|webOS/i.test(ua)) tip = tr("LG: in Web Browser, open the menu and add a bookmark. Some models can also pin it to Home.");
+    else if (/\bAFT|Silk/i.test(ua)) tip = tr("Fire TV: in Silk, open the menu and add a bookmark.");
+    else tip = tr("Add this page to your TV browser's bookmarks, or its home screen if it offers that.");
+    return '<div class="tv-app-card" data-tv-app-card="' + esc(where) + '">' +
+      '<div class="tv-app-copy"><strong>' + esc(tr("Keep it one button away")) + '</strong>' +
+      '<span>' + esc(tip) + '</span></div>' +
+      '<button class="tv-app-x" type="button" data-tv-hint-close="1" aria-label="' + esc(tr("Not now")) + '">&times;</button>' +
+      '</div>';
+  }
+
   function appCardHtml(where) {
     if (TV.update) return updateCardHtml(where);
-    if (!canInstallApp()) return "";
+    if (!canInstallApp()) return TV.installed || standalone() ? "" : pinCardHtml(where);
+    return installCardHtml(where);
+  }
+
+  function standalone() {
+    var b = boot();
+    if (b && b.inApp()) return true;
+    try { return !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches); } catch (err) { return false; }
+  }
+
+  function installCardHtml(where) {
     return '<div class="tv-app-card" data-tv-app-card="' + esc(where) + '">' +
       '<div class="tv-app-copy"><strong>' + esc(tr("Get the TV app")) + '</strong>' +
       '<span>' + esc(tr("Put ViktorychApp on your TV home screen. One download, then press Install.")) + '</span></div>' +
@@ -385,7 +411,8 @@
     if (document.querySelector('[data-tv-app-card="home"], [data-tv-update-card="home"]')) return;
     var html = appCardHtml("home");
     if (!html) return;
-    var main = document.querySelector("main");
+    if (landRoot()) return;
+    var main = document.querySelector("#app main") || document.querySelector("main");
     var anchor = main && (main.querySelector(".tabs") || main.firstElementChild);
     if (!anchor) return;
     var wrap = document.createElement("div");
@@ -540,7 +567,14 @@
     return columnItems(".side");
   }
 
+  // The signed-out TV landing sits outside #app; arrows move inside it.
+  function landRoot() {
+    return document.querySelector("#account-layer .tv-land");
+  }
+
   function overlayRoot() {
+    var acct = document.querySelector("#account-layer .acct-modal");
+    if (acct) return acct;
     var viewer = document.getElementById("viewer");
     if (viewer && !viewer.hidden) return viewer;
     var sheet = document.querySelector(".modal-back, .drawer-back, .share-back, .tab-sheet, .bell-sheet");
@@ -775,7 +809,7 @@
     moveModel(dir);
     var after = current();
     if (after !== before || !before) return;
-    var over = overlayRoot();
+    var over = overlayRoot() || landRoot();
     var next = spatial(dir, before, over || null);
     if (next) setFocus(next, false);
     else if (dir === "ArrowDown" || dir === "ArrowUp") {
@@ -786,6 +820,18 @@
 
   function moveModel(dir) {
     var over = overlayRoot();
+    var land = over ? null : landRoot();
+    if (land) {
+      var from = current();
+      if (!from || !land.contains(from)) {
+        var start = land.querySelector("[data-tv-first]") || land.querySelector("button, a[href]");
+        if (start) setFocus(start, false);
+        return;
+      }
+      var to = spatial(dir, from, land);
+      if (to) setFocus(to, false);
+      return;
+    }
     if (over) {
       var inside = list(over.querySelectorAll("a, button, input, textarea, select"));
       if (!inside.length) return;
@@ -1141,6 +1187,16 @@
       document.documentElement.setAttribute("data-tv-ready", "1");
       return;
     }
+    var land = landRoot();
+    if (land) {
+      var at = current();
+      if (!at || !land.contains(at)) {
+        var first = land.querySelector("[data-tv-first]") || land.querySelector("button, a[href]");
+        if (first) setFocus(first, false);
+      }
+      document.documentElement.setAttribute("data-tv-ready", "1");
+      return;
+    }
     if (TV.wantSearch) {
       TV.wantSearch = false;
       var box = document.getElementById("explore-q");
@@ -1197,7 +1253,7 @@
 
   function onFocusIn(event) {
     if (!TV.on || !event.target || !event.target.classList) return;
-    if (event.target.closest && !event.target.closest("#app, #viewer")) return;
+    if (event.target.closest && !event.target.closest("#app, #viewer, #account-layer")) return;
     remember(event.target);
     paint(event.target);
   }
@@ -1226,6 +1282,11 @@
     if (root && window.MutationObserver) {
       var obs = new MutationObserver(function () { if (TV.on) scheduleRestore(); });
       obs.observe(root, { childList: true, subtree: true });
+    }
+    var layer = document.getElementById("account-layer");
+    if (layer && window.MutationObserver) {
+      var watch = new MutationObserver(function () { if (TV.on) scheduleRestore(); });
+      watch.observe(layer, { childList: true });
     }
     applyMode();
   }

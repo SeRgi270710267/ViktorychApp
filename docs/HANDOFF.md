@@ -75,6 +75,17 @@ Rules:
 8. If main's own smoke check fails, every PR fails it too. Fix main first in a tiny PR at the top of the queue.
 9. Never edit `.github/workflows/`, never force-push main, never merge old main back into a branch, never use `git stash`. No account handles or IDs in commits, PR text or logs.
 
+## TV sign-in
+
+Short address for people: `viktorychapp.pages.dev` (`SHORT_ORIGIN` in `shared/short-link.js`; `/tv`, `/p/CODE`, `/join`, `/go` via `_redirects`, and `404.html` on GitHub Pages).
+A signed-out TV opens "Sign in with your phone" by itself: a QR code for `/p/CODE` plus a 6-character code, ten minutes, one use, renewed by itself, through `/v1/tv-pair/*`.
+A signed-in phone confirms with one tap; a signed-out phone signs in or up and the TV finishes right after.
+The TV can also ask an account by username: the Worker sends an "Approve sign-in on TV?" notification (Approve / Deny) to that account's devices; the TV never learns whether the name exists; limited per TV, per name and per IP (`tv_pair_asks`, migration 0085). On a computer, the code box takes paste and sends itself at 6 characters. See [TV-SIGN-IN.md](TV-SIGN-IN.md).
+
+## TV controller play
+
+The TV app 1.2.0 (versionCode 3) plays ReGone with a controller in its own WebView screen (`GameActivity`, `viktorychtv://game/regone`); controller input becomes real key presses and touches. Design, layout, limits and the device test checklist: [TV-CONTROLLER.md](TV-CONTROLLER.md). Still needs a real-TV test: whether ReGone reads keys while its touch controls are on (fallback: Menu > Move with > On-screen joystick). After the PR merges, upload `tv/ViktorychTV.apk` to the latest GitHub release as `ViktorychTV.apk`.
+
 ## 6. Gotchas
 
 - `scripts/handle_guard.py` rejects any token from the private owner catalog, including product and assistant names used as handles. Keep docs neutral.

@@ -230,6 +230,9 @@ async function main() {
     /* The menu's Customize row opens the Customize page; its own check runs here so CI covers it. */
     const pz = spawnSync(process.execPath, [path.join(root, "scripts", "customize_page_test.mjs")], { stdio: "inherit", env: process.env });
     if (pz.status !== 0) fail("customize page check failed");
+    // The installed desktop app checks ride along here so the smoke workflow runs them.
+    const desk = spawnSync(process.execPath, [path.join(root, "scripts", "desktop_app_test.mjs")], { stdio: "inherit", env: process.env });
+    if (desk.status !== 0) fail("desktop app check failed");
   } finally {
     await browser.close();
     server.close();

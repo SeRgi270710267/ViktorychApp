@@ -13,9 +13,10 @@ name: Backup Warmup
 # To change the window, edit the hour range below (cron is always in UTC).
 # "*/10 * * * *" would keep it warm around the clock at ~730 hours/month.
 
+# The Worker cron now keeps the backup warm (worker/src/render-warm.js) and
+# stops at 90% of the free hours, so this schedule is off. Run it by hand
+# to wake the backup once.
 on:
-  schedule:
-    - cron: "*/10 5-21 * * *"
   workflow_dispatch:
 
 permissions:
