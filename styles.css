@@ -425,14 +425,6 @@ html[data-theme="default"] .m-logo { color: #000; }
   border: 2px solid var(--bg);
 }
 .nav-folder-wrapper.open .nav-dot { display: none; }
-.nav-customize-btn {
-  cursor: pointer;
-  color: var(--muted);
-  margin-top: 2px;
-}
-.nav-customize-btn:hover {
-  color: var(--text);
-}
 .post-btn {
   margin: 16px 0 12px;
   width: 233px;
@@ -530,13 +522,6 @@ html[data-nav="icons"] .nav-folder-children-inner {
   gap: 4px;
 }
 html[data-nav="icons"] .nav-folder-child {
-  width: 50px;
-  height: 50px;
-  justify-content: center;
-  padding: 0;
-  gap: 0;
-}
-html[data-nav="icons"] .nav-customize-btn {
   width: 50px;
   height: 50px;
   justify-content: center;
@@ -2782,7 +2767,6 @@ button.show-replies {
     gap: 4px;
   }
   .nav-folder-child { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
-  .nav-customize-btn { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
   .center { width: auto; flex: 1 1 0%; max-width: none; min-width: 0; }
 }
 @media (max-width: 999px) {
@@ -5235,131 +5219,9 @@ html[data-theme="default"] .dloc-section.xk-device .dloc-status.is-calm { color:
 }
 
 
-/* Customize Sidebar Modal */
+/* Edit menu modal (desktop) */
 .nav-customize-modal {
   width: min(640px, 100%);
-}
-.nav-customize-intro {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-}
-.nav-customize-intro p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 18px;
-}
-.nav-new-folder-form {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  margin-bottom: 16px;
-}
-.nav-cust-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.nav-cust-item-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  min-height: 48px;
-}
-.nav-cust-item-row.is-hidden {
-  opacity: 0.5;
-}
-.nav-cust-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--text);
-  flex: none;
-}
-.nav-cust-icon svg {
-  width: 22px;
-  height: 22px;
-  fill: currentColor;
-}
-.nav-cust-name {
-  font-weight: 600;
-  font-size: 15px;
-  flex: 1;
-  min-width: 0;
-}
-.nav-cust-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-.nav-move-select {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 9999px;
-  padding: 4px 10px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  cursor: pointer;
-}
-.nav-cust-folder-box {
-  display: flex;
-  flex-direction: column;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  overflow: hidden;
-}
-.nav-cust-folder-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--hover);
-  border-bottom: 1px solid var(--line);
-}
-.nav-cust-folder-head .nav-cust-name {
-  font-size: 16px;
-  font-weight: 700;
-}
-.nav-cust-folder-items {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-}
-.nav-cust-folder-subrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  font-size: 14px;
-}
-.nav-cust-folder-subrow.is-hidden {
-  opacity: 0.5;
-}
-.icon-btn.danger:hover {
-  color: var(--red-text, var(--red));
-  background: rgba(244, 33, 46, 0.1);
 }
 
 body.upd-open { overflow: hidden; }
