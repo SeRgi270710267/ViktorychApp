@@ -153,8 +153,13 @@ try {
   await page.goto(base + "/index.html#/home", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => document.querySelectorAll("#app article.post").length >= 3, null, { timeout: 30000 });
   await page.waitForFunction((n) => Array.from(document.querySelectorAll("#app article.post")).some((a) => a.textContent.indexOf(n) >= 0), NICK, { timeout: 8000 });
-  await page.waitForFunction(() => /R\u00edo Ejemplo|Sol Muestra/.test(document.querySelector("#app").innerText), null, { timeout: 8000 }).catch(() => {});
-  const homeText = await page.evaluate(() => document.querySelector("#app").innerText);
+  // The home feed can repaint (or the page reload once) while it settles, so poll for the other names.
+  let homeText = "";
+  for (let i = 0; i < 40; i++) {
+    homeText = await page.evaluate(() => (document.querySelector("#app") || document.body).innerText).catch(() => "");
+    if (/R\u00edo Ejemplo|Sol Muestra/.test(homeText) && homeText.indexOf(NICK) >= 0) break;
+    await page.waitForTimeout(200);
+  }
   if (homeText.indexOf(ORIGINAL) >= 0) fail("the original name still shows in the timeline");
   if (homeText.indexOf("Río Ejemplo") < 0 && homeText.indexOf("Sol Muestra") < 0) fail("other accounts must keep their names: " + homeText.slice(0, 600));
   await page.evaluate(() => {
