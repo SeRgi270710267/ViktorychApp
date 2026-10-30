@@ -163,17 +163,23 @@ async function check(browser, origin, size) {
   await page.waitForTimeout(1500);
   await page.evaluate(() => { location.hash = "#/games"; });
   await page.waitForSelector(".games-board .games-person", { timeout: 10000 }).catch(() => fail(label + ": no friends board"));
-  const after = await page.evaluate(() => ({ busy: window.ViktorychGames.busy(), gameOn: document.documentElement.classList.contains("game-on"), immersive: document.documentElement.classList.contains("game-immersive"), hidden: document.getElementById("game-host").hidden, rows: [...document.querySelectorAll(".games-person .games-pname")].map((e) => e.textContent), tabH: document.querySelector(".games-tabs").getBoundingClientRect().height, wide: document.scrollingElement.scrollWidth > innerWidth + 1 }));
-  if (after.busy || after.gameOn || after.immersive || !after.hidden) fail(label + ": leaving the game left it running");
+  const after = await page.evaluate(() => ({ busy: window.ViktorychGames.busy(), gameOn: document.documentElement.classList.contains("game-on"), immersive: document.documentElement.classList.contains("game-immersive"), hidden: document.getElementById("game-host").hidden, mini: document.getElementById("game-host").classList.contains("mini") && window.ViktorychGames.isMini(), rows: [...document.querySelectorAll(".games-person .games-pname")].map((e) => e.textContent), tabH: document.querySelector(".games-tabs").getBoundingClientRect().height, wide: document.scrollingElement.scrollWidth > innerWidth + 1 }));
+  // Leaving keeps the same game running in the mini player, but the page itself is back to normal.
+  if (after.busy || after.gameOn || after.immersive || after.hidden || !after.mini) fail(label + ": leaving the game should leave only the mini player " + JSON.stringify(after));
   if (after.rows[0] !== "User B") fail(label + ": board order " + after.rows.join(","));
   if (after.tabH > 44) fail(label + ": board tabs are " + after.tabH + "px tall");
   if (after.wide) fail(label + ": hub scrolls sideways");
+  await page.click("#game-host [data-game-close]");
+  await page.waitForFunction(() => document.getElementById("game-host").hidden && !window.ViktorychGames.isMini(), null, { timeout: 5000 }).catch(() => fail(label + ": X did not close the mini player"));
   if (!plays.length || plays[0].gameId !== "regone" || !(plays[0].ms >= 1000)) fail(label + ": play time was not sent " + JSON.stringify(plays));
   await page.click('[data-game-board-tab="streak"]');
   const streakFirst = await page.evaluate(() => document.querySelector(".games-person .games-pname").textContent);
   if (streakFirst !== "You") fail(label + ": streak tab order " + streakFirst);
-  await page.click('[data-game-invite="100000000002"]');
-  await page.waitForFunction(() => document.querySelector('[data-game-invite="100000000002"]').disabled, null, { timeout: 5000 }).catch(() => fail(label + ": invite did not finish"));
+  // The board's invite button opens the invite sheet for that friend.
+  await page.click('[data-gs-invite="100000000002"]');
+  await page.waitForSelector(".gs-sheet [data-gs-submit]", { timeout: 5000 }).catch(() => fail(label + ": the invite sheet did not open"));
+  await page.click(".gs-sheet [data-gs-submit]");
+  await page.waitForFunction(() => !document.querySelector(".gs-sheet"), null, { timeout: 5000 }).catch(() => fail(label + ": invite did not finish"));
   if (invites.length !== 1 || invites[0].to !== "100000000002") fail(label + ": invite " + JSON.stringify(invites));
   if (errors.length) fail(label + ": " + errors[0]);
   await context.close();

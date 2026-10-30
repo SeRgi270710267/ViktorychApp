@@ -808,11 +808,7 @@
       fill("ai");
     });
   }
-  function typingTarget(event) {
-    var el = event.target;
-    if (!el || !el.closest) return false;
-    return !!el.closest("input, textarea, select, [contenteditable='true']");
-  }
+
   function onKey(event) {
     if (event.key === "Enter" && event.target && event.target.getAttribute && event.target.getAttribute("data-compose")) {
       if (event.shiftKey) return;
@@ -910,12 +906,12 @@
       saveChat(again).then(function () { sendAi("", { reuse: true }); });
     }
   }
-  function onShortcut(event) {
-    if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
-    if (typingTarget(event)) return;
-    var key = String(event.key || "").toLowerCase();
-    if (key === "c" && shown("chat")) { event.preventDefault(); toggle("chat"); }
-    if (key === "a" && shown("ai")) { event.preventDefault(); toggle("ai"); }
+  // Alt+Shift+C and Alt+Shift+A are bound in keys.js; it calls this.
+  function toggleShown(kind) {
+    if (kind !== "chat" && kind !== "ai") return false;
+    if (!shown(kind)) return false;
+    toggle(kind);
+    return true;
   }
   function boot() {
     var document = doc();
@@ -951,7 +947,6 @@
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden && opened("chat")) refreshChat(true);
     });
-    root.addEventListener("keydown", onShortcut, true);
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(function () {
       if (document.hidden || !opened("chat")) return;
@@ -989,6 +984,7 @@
     demoOn: demoOn,
     createMemoryStore: createMemoryStore,
     setPref: setPref,
+    toggle: toggleShown,
     replaceState: function (next) { save(normalize(next)); paint(true); },
     seedChat: function (mem) {
       var channels = (mem.conversations || []).map(function (row) {

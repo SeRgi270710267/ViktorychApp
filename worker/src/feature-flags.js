@@ -9,6 +9,19 @@ export const FEATURES = {
   lives: { paths: ["/v1/live"] },
   telegram: { paths: ["/tg"] },
   pills: { paths: ["/v1/pills"] },
+  // NZlay's public Top 100 on the Games page. On by default.
+  regone_leaderboard: { paths: ["/v1/games/regone/top"] },
+  // ReGone extras read from NZlay's public pages, each on by default and
+  // switchable here: players online, the room list, and stats for a name
+  // someone linked to their own account.
+  regone_online: { paths: ["/v1/games/regone/online"] },
+  regone_rooms: { paths: ["/v1/games/regone/rooms", "/v1/games/rooms"] },
+  regone_profile_stats: { paths: ["/v1/games/regone/profile-stats"] },
+  // NZlay's forum in Communities (read through the Worker), signing in to
+  // post and reply there, and the ReGone links inside it. On by default.
+  nzlay_forum: { paths: ["/v1/nzlay/forum"] },
+  nzlay_forum_post: { paths: ["/v1/nzlay/relay"] },
+  nzlay_forum_regone: { paths: ["/v1/games/regone/forum-badges"] },
   // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
   nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true },
   // Nearby chat (Bitchat). No server endpoints; clients stop offering it when off.
