@@ -65,9 +65,25 @@
     });
     return out;
   }
+  var again = false;
+  function keep(list) {
+    map = { at: Date.now(), who: viewerKey(), list: list.slice(0, 500) };
+    index = build(map.list);
+    try { localStorage.setItem(KEY, JSON.stringify(map)); } catch (err) { /* private mode */ }
+  }
+  /* Your own change shows at once; the server's answer follows. */
+  function noteOwn(item) {
+    var m = me();
+    if (!item || !m) return;
+    var key = plat(item.platform) + ":" + low(item.handle);
+    var list = map.list.filter(function (row) { return plat(row.platform) + ":" + low(row.handle) !== key; });
+    if (item.merged !== false && item.hidden !== true && item.verified !== false) list.push({ platform: plat(item.platform), handle: item.handle, to: m.handle, name: m.displayName || m.handle, avatar: m.avatar || "" });
+    keep(list);
+  }
   function refresh(force) {
     var a = accounts();
     var t = token();
+    if (loading && force) { again = true; return; }
     if (!a || !a.call || !t || !enabled() || loading) return;
     if (!force && map.who === viewerKey() && Date.now() - map.at < STALE_MS) return;
     loading = true;
@@ -75,13 +91,12 @@
       loading = false;
       return res && res.status === 200 ? res : null;
     }).then(function (body) {
+      if (again) { again = false; refresh(true); return; }
       if (!body || !Array.isArray(body.merged)) return;
       var before = JSON.stringify(map.list);
-      map = { at: Date.now(), who: viewerKey(), list: body.merged.slice(0, 500) };
-      index = build(map.list);
-      try { localStorage.setItem(KEY, JSON.stringify(map)); } catch (err) { /* private mode */ }
+      keep(body.merged);
       if (JSON.stringify(map.list) !== before) host.render();
-    }).catch(function () { loading = false; });
+    }).catch(function () { loading = false; if (again) { again = false; refresh(true); } });
   }
   /* The internal profile an external one is merged into, for this viewer. */
   function target(platform, handle) {
@@ -271,6 +286,7 @@
       edit.busy = false;
       var next = data && data.identity;
       if (next) store(ownLinks().map(function (it) { return String(it.id) === String(next.id) ? Object.assign({}, it, next) : it; }));
+      if (next) noteOwn(Object.assign({}, item, next));
       refresh(true);
       edit.people = false;
       editSheet(edit.id);
@@ -289,6 +305,7 @@
     a.call("/v1/account/identities/" + encodeURIComponent(edit.id), { method: "DELETE", token: token() }).then(function (res) {
       if (!res || res.status !== 200) throw new Error("unlink");
       store(ownLinks().filter(function (it) { return String(it.id) !== String(edit.id); }));
+      noteOwn(Object.assign({}, item, { merged: false }));
       refresh(true);
       closeSheet();
       host.render();
@@ -379,6 +396,7 @@
     pageHtml: pageHtml,
     summary: summary,
     refresh: refresh,
+    noteOwn: noteOwn,
     setHost: setHost,
     enabled: enabled,
     platformName: platformName
