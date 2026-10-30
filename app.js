@@ -422,6 +422,8 @@
     if (isShortsLocked()) {
       list = list.filter((feed) => !isLockedTiktok(feed));
     }
+    const locked = window.ViktorychLocked;
+    if (locked && locked.hidesId && list.some((feed) => feed && locked.hidesId(feed.id))) list = list.filter((feed) => !(feed && locked.hidesId(feed.id)));
     return list;
   }
 
@@ -1789,7 +1791,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function friendsOffNow() {
     return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff());
   }
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "friends_off"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "friends_off", "local_ai"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1871,7 +1873,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")],
       bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")],
       feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")],
-      friends_off: [tr("Friends switch"), tr("Lets each person turn Friends off: no friend requests, no friends lists, counts or online status.")]
+      friends_off: [tr("Friends switch"), tr("Lets each person turn Friends off: no friend requests, no friends lists, counts or online status.")],
+      local_ai: [tr("Local AI"), tr("The Local AI page that changes settings from plain words. Models run on each person's device; nothing is sent to us.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -6618,6 +6621,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
     // Hook for the shared blocklist (mute/block data): checked before a reply
     // card or its media is built.
+    // Locked follows stay off every timeline until the Locked area opens.
+    const locked = window.ViktorychLocked;
+    if (locked && typeof locked.hides === "function") {
+      try { if (locked.hides(post)) return true; } catch (err) { /* never hide on a broken filter */ }
+    }
     const list = window.ViktorychBlocklist;
     if (list && typeof list.hides === "function") {
       try { if (list.hides(post)) return true; } catch (err) { /* a broken list must not hide the thread */ }
@@ -10007,6 +10015,7 @@ const here = parseRoute();
     if (parts[0] === "packages") return { name: "packages", tab: parts[1] || "active", query };
     if (parts[0] === "communitynotes") return { name: "communitynotes", tab: parts[1] || "", query };
     if (parts[0] === "customize") return { name: "customize", query };
+    if (parts[0] === "ai") return { name: "localai", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     if (parts[0] === "feeds" && parts[1] === "lists") return { name: "sourcelists", query };
     if (parts[0] === "feeds" && parts[1] === "requests") return { name: "feedrequests", query };
@@ -14002,6 +14011,8 @@ const here = parseRoute();
       if (!target.own && (target.feedId || target.handle) && target.platform !== "app") rows.push(profileSheetRow("busy-menu", tr("Posting volume"), `data-key="${esc(target.feedId || ((target.platform || "x") + ":" + String(target.handle || "").toLowerCase()))}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}" data-platform="${esc(target.platform || "x")}"`));
       const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
       if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
+      const lockId = target.feedId || (target.platform === "app" && target.handle ? "app:@" + String(target.handle).replace(/^@/, "") : "");
+      if (!target.own && lockId && signed && window.ViktorychLocked && isFollowed(lockId)) rows.push(profileSheetRow("profile-lock-follow", tr("Lock follow"), `data-id="${esc(lockId)}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}"`));
       if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
       if (target.feedId || target.handle) rows.push(profileSheetRow("profile-cm-tab", tr("Add to Communities tab"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}" data-name="${esc(target.name || target.handle || "")}"`));
     }
@@ -15284,6 +15295,7 @@ const here = parseRoute();
     const map = new Map();
     function take(row, fromLocal) {
       if (!row || (row.kind !== "video" && row.kind !== "article") || !row.id) return;
+      if (row.feedId && window.ViktorychLocked && window.ViktorychLocked.hidesId && window.ViktorychLocked.hidesId(row.feedId)) return;
       if (fromLocal && row.kind === "video" && pause.videos) return;
       if (fromLocal && row.kind === "article" && pause.articles) return;
       const at = Number(row.at) || 0;
@@ -16912,6 +16924,7 @@ const here = parseRoute();
       else if (section === "privacy") key = tr("Privacy and safety");
       else if (section === "muted") key = tr("Muted & blocked");
       else if (section === "usernames") key = tr("Usernames");
+      else if (section === "locked-follows") key = tr("Locked follows");
       else if (section === "nostr") key = tr("Nostr");
       else if (section === "live-translate") key = tr("Live Translate");
       else if (section === "content") key = tr("Custom tabs");
@@ -17113,7 +17126,8 @@ const here = parseRoute();
       ${sec(tr("Home"), `${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
         ${sw("story-notes", notesOn, tr("Show notes"), tr("Notes sit above stories. Turn this off to hide them."))}
-        ${friendsOffNow() ? "" : sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}`)}
+        ${friendsOffNow() ? "" : sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}
+        ${localAiOn() ? sw("ai-fab", !!st.aiFab, tr("Local AI button"), tr("A round button on every page that opens Local AI."), "") : ""}`)}
       ${sec(tr("Your feed"), `${sw("pz-feed", st.forYouReposts !== false, tr("Show reposts"), "", ` data-key="forYouReposts"`)}
         ${sw("pz-feed", st.forYouReplies !== false, tr("Show replies in tab"), "", ` data-key="forYouReplies"`)}
         ${sw("pz-feed", st.communitiesHome !== false, tr("Communities in Home"), "", ` data-key="communitiesHome"`)}
@@ -17159,6 +17173,29 @@ const here = parseRoute();
 
   /* Search Settings, like X. Words match every page; a question in plain
      words also goes to the browser's built-in model when it has one. */
+  /* Local AI (local-ai-ui.js): an owner switch, an entry at the top of
+     Settings, the side menu, and an optional floating button. */
+  function localAiOn() { return !serverOffList().includes("local_ai"); }
+  function localAiEntryHtml() {
+    if (!localAiOn() || String(STATE.settingsQ || "").trim()) return "";
+    return `<a class="lai-entry" href="#/ai"><span class="lai-entry-ico" aria-hidden="true">${icon("spark")}</span><span class="lai-entry-copy"><b>${esc(tr("Ask Local AI"))}</b><span>${esc(tr("Say what you want changed, like “bigger text” or “make it private”. It runs on this device."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
+  }
+  function paintAiFab(route) {
+    let fab = document.getElementById("lai-fab");
+    const want = localAiOn() && !!(STATE.settings && STATE.settings.aiFab) && route && route.name !== "localai" && route.name !== "watch" && route.name !== "shorts" && route.name !== "tv";
+    if (!want) { if (fab) fab.remove(); return; }
+    if (!fab) {
+      fab = document.createElement("a");
+      fab.id = "lai-fab";
+      fab.className = "lai-fab";
+      fab.href = "#/ai";
+      document.body.appendChild(fab);
+    }
+    fab.setAttribute("aria-label", tr("Local AI"));
+    fab.title = tr("Local AI");
+    if (!fab.firstChild) fab.innerHTML = icon("spark");
+  }
+
   function settingsSearchHtml() {
     if (!window.ViktorychSettingsAssistant) return "";
     const q = String(STATE.settingsQ || "");
@@ -17447,6 +17484,7 @@ const here = parseRoute();
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
       return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
     }
+    if (section === "locked-follows") return settingsHead(tr("Locked follows"), "#/settings/privacy") + `<div class="set-block">${window.ViktorychLocked ? window.ViktorychLocked.settingsHtml() : ""}</div>`;
     if (section === "friends") return settingsHead(tr("Friends"), "#/settings/privacy") + `<div class="set-block">${window.ViktorychFriendsPref ? window.ViktorychFriendsPref.pageHtml() : ""}</div>`;
     if (section === "muted") return settingsHead(tr("Muted & blocked"), "#/settings/privacy") + `<div class="set-block">${mutedSettingsHtml()}</div>`;
     if (section === "privacy") {
@@ -17473,6 +17511,7 @@ const here = parseRoute();
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
         ${window.ViktorychNostr && window.ViktorychNostr.allowed() ? `<div class="set-list">${settingsRow("#/settings/nostr", tr("Nostr"), tr("Follow Nostr profiles, send your posts to relays, and see Nostr replies."))}</div>` : ""}
+        ${acct && window.ViktorychLocked ? `<div class="set-list">${settingsRow("#/settings/locked-follows", tr("Locked follows"), tr("Hide people you follow everywhere until you unlock."))}</div>` : ""}
         ${acct && window.ViktorychUsernames ? `<div class="set-list">${settingsRow("#/settings/usernames", tr("Usernames"), tr("Choose who sees which username, nicknames, and who can mention you."))}</div>` : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
@@ -17569,7 +17608,7 @@ const here = parseRoute();
     const keysRow = (window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()) || window.DiscordLocal || (window.NzlayKeys && window.NzlayKeys.enabled())
       ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
       : "";
-    return settingsHead(tr("Settings"), "") + settingsSearchHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
+    return settingsHead(tr("Settings"), "") + settingsSearchHtml() + localAiEntryHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
       ${settingsRow("#/customize", tr("Customize"), tr("Theme, colour, text size, profile pictures and your feed, all in one place."))}
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
@@ -17594,7 +17633,7 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "localai", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "packages", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
@@ -17787,6 +17826,7 @@ const here = parseRoute();
     if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests"), extra: requestsCountHtml() };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
+    if (id === "localai") return localAiOn() ? { id: id, href: "#/ai", icon: "spark", label: tr("Local AI") } : null;
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
     if (id === "logout") return { id: id, href: "", icon: "user", label: mine ? tr("Log out") : tr("Sign in"), locked: true, accountMenu: true };
     if (id === "customize") return { id: id, href: "", icon: "sliders", label: tr("Customize"), locked: true, act: "customize-page" };
@@ -18171,7 +18211,7 @@ if (STATE.histClear) {
 
   function shell(main, route) {
     const gamePlay = route.name === "games" && !!route.game;
-    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "localai" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
     const tall = route.name === "home" || wide || ["feeds", "sourcelists", "feedrequests", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
@@ -18180,7 +18220,7 @@ if (STATE.histClear) {
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
     const slimTabs = route.name === "home" || route.name === "notifications";
     let bar = 53;
-    if (route.name === "profile" || route.name === "user" || route.name === "person" || route.name === "tv" || route.name === "shorts" || route.name === "messages" || explore) bar = 0;
+    if (route.name === "profile" || route.name === "user" || route.name === "person" || route.name === "tv" || route.name === "shorts" || route.name === "messages" || route.name === "localai" || explore) bar = 0;
     else if (slimTabs && !musicHome) bar = 97;
     else if (tall && !musicHome) bar = 106;
     const top = bar + rowExtra + storyExtra + liveExtra;
@@ -19842,6 +19882,12 @@ if (STATE.histClear) {
       if (!window.ViktorychShorts) { ensureLazy("shorts"); return lazySkeleton(tr("Shorts")); }
       return pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     }
+    if (route.name === "localai") {
+      if (!localAiOn()) return pageHead(tr("Local AI")) + emptyBlock(tr("Local AI"), tr("Local AI is turned off right now."));
+      if (window.ViktorychLocalAIPage) return window.ViktorychLocalAIPage.page(route);
+      ensureLazy("localai");
+      return lazySkeleton(tr("Local AI"));
+    }
     if (route.name === "drive") {
       loadDeviceCore().then((dev) => {
         if (!dev) return;
@@ -20886,6 +20932,11 @@ if (STATE.histClear) {
         if (route.name === "drive") window.ViktorychDrive.mount(route);
         else window.ViktorychDrive.unmount();
       }
+      if (window.ViktorychLocalAIPage) {
+        if (route.name === "localai") window.ViktorychLocalAIPage.mount(route);
+        else window.ViktorychLocalAIPage.unmount();
+      }
+      paintAiFab(route);
       if (window.ViktorychVault) {
         if (route.name === "vault") window.ViktorychVault.mount(route);
         else window.ViktorychVault.unmount();
@@ -21876,6 +21927,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "device-own-ui") {
       const accounts = window.ViktorychAccounts || {};
       if (accounts.setDeviceOwnUi) accounts.setDeviceOwnUi(!(accounts.deviceOwnUi && accounts.deviceOwnUi()));
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "ai-fab") {
+      STATE.settings.aiFab = !STATE.settings.aiFab;
       saveSettings();
       render();
       return;
@@ -22888,6 +22945,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       STATE.profileMenu = null;
       toast(tr("We'll show you less of this."));
       render();
+      return;
+    }
+    if (act === "profile-lock-follow") {
+      STATE.profileMenu = null;
+      render();
+      if (window.ViktorychLocked && el.dataset.id) window.ViktorychLocked.lockFlow(el.dataset.id, el.dataset.name || "", el.dataset.handle || "");
       return;
     }
     if (act === "profile-block") {
@@ -26762,7 +26825,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const body = text ? linkify(text, shown.links || [], post.platform, post.handle) : "";
     return `<div class="xv-info">
       <div class="xv-who">${avatar(face.avatar, name)}<div class="xv-names"><span class="xv-name">${esc(name || "")}${badge(face.verified)}</span>${handle ? `<span class="xv-handle">@${esc(handle)}</span>` : ""}</div></div>
-      ${body ? `<div class="xv-text" role="button" tabindex="0" data-act="xv-more" aria-expanded="false" aria-label="${esc(tr("Show more"))}"><div class="xv-body" dir="auto">${body}</div></div>` : ""}
+      ${body ? `<div class="xv-text" role="button" tabindex="0" data-act="xv-more" aria-expanded="false" aria-label="${esc(tr("Show more"))}"><div class="xv-body" dir="auto">${body}</div><span class="xv-more-cue" aria-hidden="true">${esc(tr("Show more"))}</span></div>` : ""}
       ${post.date ? `<div class="xv-when">${esc(relTime(post.date))}</div>` : ""}
       <div class="xv-pills">${actionBar(post, true)}</div>
     </div>`;
@@ -26866,6 +26929,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (view.rate) video.playbackRate = view.rate;
       events.forEach((name) => video.addEventListener(name, paint));
       video.addEventListener("playing", () => { if (next) xvPreload(box, next); }, { once: true });
+      xvMerge(box, stage);
       paint();
     };
     const watch = typeof MutationObserver === "function" && stage ? new MutationObserver(attach) : null;
@@ -26874,7 +26938,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     // Capture phase: the chrome owns taps on the clip, so the player's own
     // tap handlers below do not toggle it a second time.
     const onTap = (event) => {
-      if (event.target.closest("button, a, .xv-info, .xv-bar, .xv-top, .menu")) return;
+      if (event.target.closest("button, a, .xv-info, .xv-bar, .xv-top, .menu, .ytp-chrome-bottom, .ytp-settings-menu")) return;
       if (!event.target.closest(".xv-cur")) return;
       event.stopPropagation();
       const menu = box.querySelector(".xv-menu");
@@ -26882,8 +26946,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (box.classList.contains("xv-open")) { xvMore(box, false); return; }
       const video = xvVideo(box);
       if (!video) return;
+      // One player: on a touch screen a tap shows or hides the controls and
+      // the post text together, like X; the play button plays and pauses.
+      const yt = xvYt(box);
+      if (yt && xvTouch()) {
+        // The browser sends a mouse move ahead of the click, which already
+        // shows the controls; go by how they looked when the finger landed.
+        const wasHidden = Date.now() - downAt < 1500 ? downHidden : yt.el.classList.contains("ytp-autohide");
+        if (wasHidden) yt.resetAutoHide_(); else yt.setAutoHide_(true);
+        return;
+      }
       if (video.paused) video.play().catch(() => {}); else video.pause();
+      if (yt) yt.resetAutoHide_();
     };
+    let downAt = 0;
+    let downHidden = false;
+    const onDown = () => {
+      const yt = xvYt(box);
+      downAt = Date.now();
+      downHidden = !!(yt && yt.el.classList.contains("ytp-autohide"));
+    };
+    box.addEventListener("pointerdown", onDown, true);
     box.addEventListener("click", onTap, true);
     // Seek on the progress line: tap or drag.
     const prog = box.querySelector(".xv-prog");
@@ -26923,6 +27006,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       settle = setTimeout(() => {
         const cur = box.querySelector(".xv-cur");
         if (!track || !cur || STATE.viewer !== view) return;
+        if (track._xvQuiet && Date.now() < track._xvQuiet) { track.scrollTop = cur.offsetTop; return; }
         const h = track.clientHeight || 1;
         const delta = Math.round((track.scrollTop - cur.offsetTop) / h);
         if (delta) xvStep(delta > 0 ? 1 : -1);
@@ -26930,12 +27014,112 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     };
     if (track) track.addEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll, { passive: true });
     attach();
+    const wake = () => { const yt = xvYt(box); if (yt && !xvTouch()) yt.resetAutoHide_(); };
+    box.addEventListener("mousemove", wake, { passive: true });
+    const clamp = () => xvClamp(box);
+    window.addEventListener("resize", clamp);
+    requestAnimationFrame(clamp);
     box._xvStop = () => {
       clearTimeout(settle);
+      box.removeEventListener("mousemove", wake);
+      window.removeEventListener("resize", clamp);
+      if (box._xvUnmerge) { box._xvUnmerge(); box._xvUnmerge = null; }
+      box.classList.remove("xv-yt", "xv-chrome-off");
       if (watch) watch.disconnect();
       if (bound) events.forEach((name) => bound.removeEventListener(name, paint));
       box.removeEventListener("click", onTap, true);
+      box.removeEventListener("pointerdown", onDown, true);
       if (track) track.removeEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll);
+    };
+  }
+
+  /* One player in the viewer. When the clip plays in our YouTube-style
+     player, its bottom chrome is the only control bar: the red progress
+     line, play, next, sound and time on the left, our speed button, the
+     player's settings and picture in picture, and exit full screen on the
+     right. The old bar under the clip goes away, the post text and the
+     X action pills sit right above the chrome, and both hide together. */
+  function xvYt(box) {
+    const stage = box && box.querySelector(".xv-cur .xv-media");
+    const yt = stage && stage._ytPlayer;
+    return yt && yt.el && yt.el.isConnected ? yt : null;
+  }
+
+  function xvTouch() {
+    return !!(window.matchMedia && window.matchMedia("(hover: none)").matches);
+  }
+
+  function xvClamp(box) {
+    if (!box || !box.isConnected) return;
+    box.querySelectorAll(".xv-text").forEach((el) => {
+      const body = el.querySelector(".xv-body");
+      if (body && !box.classList.contains("xv-open")) el.classList.toggle("is-clamped", body.scrollHeight > body.clientHeight + 1);
+    });
+  }
+
+  function xvMerge(box, stage) {
+    const yt = stage && stage._ytPlayer;
+    const player = yt && yt.el;
+    if (!player || !player.isConnected) return;
+    const had = box.classList.contains("xv-yt");
+    box.classList.add("xv-yt");
+    const bar = box.querySelector(".xv-bar");
+    if (bar) bar.remove();
+    // The track just grew by the old bar's height; keep this clip in place.
+    const track = box.querySelector(".xv-track");
+    const cur = box.querySelector(".xv-cur");
+    if (!had && track && cur) {
+      track._xvQuiet = Date.now() + 400;
+      track.scrollTop = cur.offsetTop;
+    }
+    if (player._xvMerged) return;
+    player._xvMerged = true;
+    if (box._xvUnmerge) box._xvUnmerge();
+    if (yt.options) yt.options.onNext = () => { xvStep(1); };
+    const right = player.querySelector(".ytp-pill-right");
+    if (right) {
+      const speed = document.createElement("button");
+      speed.type = "button";
+      speed.className = "ytp-button xv-speed";
+      speed.dataset.act = "xv-speed";
+      speed.setAttribute("aria-label", tr("Playback speed"));
+      speed.title = tr("Playback speed");
+      speed.textContent = String((stage.querySelector("video") || {}).playbackRate || 1).replace(/^0\./, ".") + "x";
+      right.insertBefore(speed, right.firstChild);
+      const exit = document.createElement("button");
+      exit.type = "button";
+      exit.className = "ytp-button xv-exit";
+      exit.dataset.act = "close-viewer";
+      exit.setAttribute("aria-label", tr("Exit full screen"));
+      exit.title = tr("Exit full screen");
+      exit.innerHTML = icon("exitFull");
+      right.appendChild(exit);
+    }
+    const chrome = player.querySelector(".ytp-chrome-bottom");
+    const size = () => { if (chrome && chrome.offsetHeight) box.style.setProperty("--xv-chrome", chrome.offsetHeight + "px"); };
+    const sizer = typeof ResizeObserver === "function" && chrome ? new ResizeObserver(size) : null;
+    if (sizer) sizer.observe(chrome);
+    size();
+    const sync = () => box.classList.toggle("xv-chrome-off", player.classList.contains("ytp-autohide") && !box.classList.contains("xv-open"));
+    const watch = typeof MutationObserver === "function" ? new MutationObserver(sync) : null;
+    if (watch) watch.observe(player, { attributes: true, attributeFilter: ["class"] });
+    sync();
+    // j, up and down still move between posts while a player button has
+    // focus, as they do everywhere else in the viewer.
+    const keys = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const down = event.key === "ArrowDown" || event.key === "j" || event.key === "J";
+      if (!down && event.key !== "ArrowUp") return;
+      if (event.target.closest && event.target.closest(".ytp-volume-area, .ytp-settings-menu")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      xvStep(down ? 1 : -1);
+    };
+    stage.addEventListener("keydown", keys, true);
+    box._xvUnmerge = () => {
+      if (sizer) sizer.disconnect();
+      if (watch) watch.disconnect();
+      stage.removeEventListener("keydown", keys, true);
     };
   }
 
@@ -26966,6 +27150,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function xvMore(box, open) {
     const want = open == null ? !box.classList.contains("xv-open") : !!open;
     box.classList.toggle("xv-open", want);
+    const yt = xvYt(box);
+    if (yt) { if (want) yt.clearAutoHide_(); else yt.resetAutoHide_(); }
     box.querySelectorAll(".xv-cur .xv-text").forEach((el) => {
       el.setAttribute("aria-expanded", want ? "true" : "false");
       el.setAttribute("aria-label", want ? tr("Show less") : tr("Show more"));
@@ -29862,6 +30048,162 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
   /* First-time setup (onboarding.js) reads suggestions and changes a few
      settings through this small surface. */
+  /* Local AI host: reads and writes every setting in settings-registry.js
+     through the same save, apply and sync steps the Settings toggles use. */
+  function aiRegistry() { return window.ViktorychSettingsRegistry || null; }
+  function aiStateValue(row) {
+    const st = STATE.settings || {};
+    const parts = String(row.key).split(".");
+    let v = st[parts[0]];
+    if (parts.length > 1) v = v && typeof v === "object" ? v[parts[1]] : undefined;
+    if (row.id === "privacyEmbedShield" || row.id === "privacyZeroTrace") return v === true;
+    if (row.id === "fontSize") return LOOK_FONTS.indexOf(Number(v)) >= 0 ? Number(v) : 15;
+    if (row.id === "accent") return LOOK_ACCENTS[v] ? v : "blue";
+    if (row.id === "homePills" || row.id === "stories") return userFeatureOn(row.key);
+    if (row.id === "notify") return !!(v && typeof Notification !== "undefined" && Notification.permission === "granted");
+    if (row.type === "bool") return typeof v === "boolean" ? v : row.def;
+    if (row.type === "enum") return row.values.indexOf(v) >= 0 ? v : row.def;
+    return v === undefined ? row.def : v;
+  }
+  function aiValue(id) {
+    const R = aiRegistry();
+    const row = R && R.get(id);
+    if (!row) return undefined;
+    if (row.store === "state") return aiStateValue(row);
+    if (row.store === "saver") return !!(STATE.settings && STATE.settings.saveData === true);
+    if (row.store === "lang") return window.SI18n ? window.SI18n.getLang() : "en";
+    if (row.store === "notifPrivacy") {
+      const NP = window.ViktorychNotifPrivacy;
+      const np = NP ? NP.normalize(STATE.settings && STATE.settings.notifPrivacy) : null;
+      if (!np) return row.def;
+      const parts = row.key.split(".");
+      return parts.length > 1 ? np.types[parts[1]] !== false : np[row.key] !== false;
+    }
+    if (row.store === "device") {
+      const dev = window.ViktorychDevice;
+      const perf = readDevicePerf();
+      const level = String(perf.level || perf.profile || "balanced");
+      return level === "max" || level === "full" ? "max" : (level === "light" || level === "lite" || level === "low" ? "light" : "balanced");
+    }
+    if (row.store === "account") {
+      const acc = window.ViktorychAccounts;
+      const now = acc && acc.aiSettings ? acc.aiSettings() : null;
+      return now ? now[row.key] : undefined;
+    }
+    if (row.store === "pymk") {
+      const P = window.ViktorychPYMK;
+      return P && P.discoverable ? P.discoverable() !== false : undefined;
+    }
+    if (row.store === "presence") {
+      const pr = window.ViktorychPresence;
+      return pr && pr.seenPrivacy && accountToken() ? pr.seenPrivacy() : undefined;
+    }
+    return undefined;
+  }
+  /* Apply checked changes [{ id, to }]. Resolves [{ id, ok }]. */
+  function aiApply(changes) {
+    const R = aiRegistry();
+    if (!R || !STATE.settings) return Promise.resolve([]);
+    const jobs = [];
+    let save = false, look = false, theme = false, privacy = false, nav = false, reloadFor = "";
+    const stamp = (key) => { STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { [key]: Date.now() }); };
+    (changes || []).forEach((change) => {
+      const row = R.get(change.id);
+      const check = row ? R.validate(row.id, change.to) : { ok: false };
+      if (!row || !check.ok) { jobs.push(Promise.resolve({ id: change.id, ok: false })); return; }
+      const v = check.value;
+      if (row.store === "state") {
+        const parts = row.key.split(".");
+        if (row.id === "notify") {
+          if (v) { jobs.push(enableNotifications().then(() => ({ id: row.id, ok: !!STATE.settings.notify }))); return; }
+          STATE.settings.notify = false;
+        } else if (parts[0] === "historyPause") {
+          STATE.settings.historyPause = cleanHistoryPause(STATE.settings.historyPause);
+          STATE.settings.historyPause[parts[1]] = v;
+        } else {
+          STATE.settings[row.key] = v;
+        }
+        if (row.id === "accent" || row.id === "fontSize" || row.id === "density" || row.id === "reduceMotion") { stamp(row.key); look = true; }
+        if (row.id === "appearance" || row.id === "avatarShape") theme = true;
+        if (row.id === "homePills" || row.id === "stories") { stamp(row.key); if (featureLoaded(row.key) !== featureOn(row.key)) reloadFor = row.id; }
+        if (/^privacy|^friendsRail$/.test(row.id)) privacy = true;
+        if (/^navLayout/.test(row.id)) nav = true;
+        if (row.id === "forYouReposts" || row.id === "forYouReplies") STATE.forYouSnap = null;
+        if (row.id === "communitiesHome") accountCall("/v1/communities/home", { method: "POST", body: { showHome: v !== false } }).then(() => { publicStamp = 0; schedulePublicPosts(); }).catch(() => {});
+        if (row.id === "networkMode") {
+          try { localStorage.setItem("viktorychapp-network-mode", v); } catch (err) {}
+          if (v === "max") window.__VIKTORYCH_IS_RU = true;
+          else if (v === "direct") window.__VIKTORYCH_IS_RU = false;
+        }
+        save = true;
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "saver") {
+        const saver = dataSaver();
+        if (saver) saver.apply(!!v);
+        else { STATE.settings.saveData = !!v; save = true; }
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "notifPrivacy") {
+        const NP = window.ViktorychNotifPrivacy;
+        if (!NP) { jobs.push(Promise.resolve({ id: row.id, ok: false })); return; }
+        const np = NP.normalize(STATE.settings.notifPrivacy);
+        const parts = row.key.split(".");
+        if (parts.length > 1) np.types[parts[1]] = v; else np[row.key] = v;
+        STATE.settings.notifPrivacy = np;
+        if (!np.names) NP.wipe();
+        save = true;
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "lang") {
+        try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
+        if (window.SI18n) window.SI18n.setLang(v);
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "device") {
+        if (window.ViktorychDevice && window.ViktorychDevice.applyLevel) {
+          STATE.settings.devicePerf = window.ViktorychDevice.applyLevel(v);
+          save = true;
+        }
+        jobs.push(Promise.resolve({ id: row.id, ok: !!window.ViktorychDevice }));
+      } else if (row.store === "account" || row.store === "pymk") {
+        const acc = window.ViktorychAccounts;
+        jobs.push(acc && acc.aiSetting ? acc.aiSetting(row.key, v).then((ok) => ({ id: row.id, ok: ok })) : Promise.resolve({ id: row.id, ok: false }));
+      } else if (row.store === "presence") {
+        const pr = window.ViktorychPresence;
+        jobs.push(pr && pr.setSeenPrivacy ? pr.setSeenPrivacy(v).then((ok) => ({ id: row.id, ok: ok })) : Promise.resolve({ id: row.id, ok: false }));
+      } else {
+        jobs.push(Promise.resolve({ id: row.id, ok: false }));
+      }
+    });
+    if (save) saveSettings();
+    if (look) applyLook();
+    if (theme) applyTheme();
+    if (privacy) applyPrivacyProtections();
+    if (nav) applyNavLayout();
+    if (save || look || theme) syncFeatureFlags();
+    return Promise.all(jobs).then((out) => {
+      render();
+      if (reloadFor) setTimeout(() => location.reload(), 900);
+      return out;
+    });
+  }
+  window.ViktorychSettingsHost = {
+    get: aiValue,
+    values: () => {
+      const R = aiRegistry();
+      const out = {};
+      if (R) R.editable().forEach((row) => { out[row.id] = aiValue(row.id); });
+      return out;
+    },
+    apply: aiApply,
+    signedIn: () => !!accountToken(),
+    lang: () => (window.SI18n ? window.SI18n.getLang() : "en"),
+    lowEnd: () => {
+      const perf = readDevicePerf();
+      return String(perf.level || "") === "light" || !!(STATE.settings && STATE.settings.saveData === true);
+    },
+    go: (hash) => goHash(hash),
+    toast: (msg) => toast(msg),
+    icon: (name) => icon(name)
+  };
+
   window.ViktorychSetup = {
     ready: () => !!(STATE.data && Array.isArray(STATE.data.feeds) && STATE.data.feeds.length),
     suggestions: (n) => followSuggestions().slice(0, n || 8).map((f) => ({
