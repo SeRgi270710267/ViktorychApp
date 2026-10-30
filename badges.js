@@ -462,31 +462,114 @@
       '<span class="ach-shine" aria-hidden="true"></span></button>';
   }
 
+  /* The same pop-out carries setting alerts. Variants: info, warning,
+     critical, limit (100%) and countdown. They never mark badges as seen,
+     never chime, and only critical ones rumble. */
+  var POP_VARIANTS = { info: 1, warning: 1, critical: 1, limit: 1, countdown: 1, invite: 1, game: 1 };
+  var POP_HOLD = { info: 7000, warning: 9000, critical: 12000, limit: 12000, countdown: 3200, invite: 30000, game: 6000 };
+  var achCurrent = null;
+
+  /* Pop-out icons are names from the app's icon set, drawn as one-colour SVG in
+     the variant's accent, never emoji. */
+  var POP_GLYPH = { info: "info", warning: "warning", critical: "alert", limit: "block", countdown: "alert", invite: "games", game: "games" };
+  function popGlyph(name) {
+    var I = root.ViktorychIcons;
+    return I && I.svg ? I.svg(String(name)) : "";
+  }
+
+  function popHtml(notice) {
+    var v = notice.variant;
+    var label = (notice.kicker ? notice.kicker + ": " : "") + (notice.title || "");
+    var buttons = "";
+    if (notice.action) buttons += '<button type="button" class="ach-btn ach-btn-main" data-pop-act="action">' + esc(notice.action) + "</button>";
+    if (notice.cancel) buttons += '<button type="button" class="ach-btn" data-pop-act="cancel">' + esc(notice.cancel) + "</button>";
+    if (notice.dismiss !== false) buttons += '<button type="button" class="ach-btn" data-pop-act="dismiss">' + esc(notice.dismissLabel || tr("Dismiss")) + "</button>";
+    if (notice.mute) buttons += '<button type="button" class="ach-btn ach-btn-quiet" data-pop-act="mute">' + esc(tr("Don't warn me about this")) + "</button>";
+    return '<div class="ach-pill ach-card" data-pop-id="' + esc(notice.id || "") + '" aria-label="' + esc(label) + '">' +
+      '<span class="ach-orb" aria-hidden="true"><span class="ach-ring"></span><span class="ach-ico">' + popOrb(notice, v) + "</span></span>" +
+      '<span class="ach-copy"><span class="ach-kicker">' + esc(notice.kicker || "") + "</span>" +
+      '<span class="ach-name" data-pop-title="1">' + esc(notice.title || "") + "</span>" +
+      (notice.desc ? '<span class="ach-desc" data-pop-desc="1">' + esc(notice.desc) + "</span>" : "") +
+      (buttons ? '<span class="ach-actions">' + buttons + "</span>" : "") + "</span>" +
+      (v === "countdown" || notice.countdownMs ? '<span class="ach-count" aria-hidden="true"' + (notice.countdownMs ? ' style="animation-duration:' + Math.max(1000, Number(notice.countdownMs) || 0) + 'ms"' : "") + "></span>" : "") + "</div>";
+  }
+
+  /* Game invites show the inviter's photo; game achievements bring their
+     own outline badge (a trusted SVG string built by game-social.js). */
+  function popOrb(notice, v) {
+    if (notice.avatar && /^(https:|data:image\/|\.\/|blob:)/.test(String(notice.avatar))) return '<img class="ach-ava" src="' + esc(notice.avatar) + '" alt="">';
+    if (notice.avatarText) return '<span class="ach-ava ach-ava-text">' + esc(String(notice.avatarText).charAt(0).toUpperCase()) + "</span>";
+    if (notice.svg && /^<svg[\s>]/.test(String(notice.svg))) return String(notice.svg);
+    return popGlyph(notice.icon || POP_GLYPH[v] || "info");
+  }
+
+  function popTimes(notice) {
+    var hold = Number(notice.hold) || POP_HOLD[notice.variant] || ACH_TIMES.hold;
+    return { open: ACH_TIMES.open, hold: hold, fold: ACH_TIMES.fold, fade: ACH_TIMES.fade };
+  }
+
+  function popFinish(cur) {
+    if (!cur || achCurrent !== cur) return;
+    achCurrent = null;
+    if (cur.el.parentNode) cur.el.parentNode.removeChild(cur.el);
+    achBusy = false;
+    if (cur.notice.onClose) try { cur.notice.onClose(cur.reason || "timeout"); } catch (err) { /* the queue moves on */ }
+    achNext();
+  }
+
+  /* Close the pop-out on screen now (Dismiss, Cancel, or a newer alert). */
+  function popClose(reason) {
+    var cur = achCurrent;
+    if (!cur) return false;
+    cur.reason = reason || "closed";
+    cur.timers.forEach(function (id) { clearTimeout(id); });
+    cur.timers = [];
+    cur.el.classList.remove("open");
+    cur.el.classList.add("out");
+    setTimeout(function () { popFinish(cur); }, ACH_TIMES.fade);
+    return true;
+  }
+
+  function popout(notice) {
+    if (!notice || !POP_VARIANTS[notice.variant]) return null;
+    notice.alert = true;
+    if (notice.id && achQueue.some(function (n) { return n.alert && n.id === notice.id; })) return null;
+    if (notice.id && achCurrent && achCurrent.notice.id === notice.id) return null;
+    if (notice.front) achQueue.unshift(notice); else achQueue.push(notice);
+    achNext();
+    return notice;
+  }
+
   function achNext() {
     if (achBusy) return;
     var notice = achQueue.shift();
     if (!notice) return;
     achBusy = true;
-    if (!notice.preview) {
+    var alert = !!notice.alert;
+    if (!notice.preview && !alert) {
       markShown(notice);
       ack(notice);
     }
+    var times = alert ? popTimes(notice) : ACH_TIMES;
     var el = document.createElement("div");
-    el.className = "ach tier-" + (notice.tier || "none") + (reducedMotion() ? " calm" : "");
-    el.setAttribute("role", "status");
-    el.setAttribute("aria-live", "polite");
-    el.innerHTML = achHtml(notice);
+    el.className = alert
+      ? "ach ach-alert v-" + notice.variant + (reducedMotion() ? " calm" : "")
+      : "ach tier-" + (notice.tier || "none") + (reducedMotion() ? " calm" : "");
+    el.setAttribute("role", alert && (notice.variant === "critical" || notice.variant === "limit") ? "alert" : "status");
+    el.setAttribute("aria-live", alert && (notice.variant === "critical" || notice.variant === "limit") ? "assertive" : "polite");
+    el.innerHTML = alert ? popHtml(notice) : achHtml(notice);
     document.body.appendChild(el);
-    var step = function (fn, ms) { return setTimeout(fn, ms); };
-    step(function () { el.classList.add("in"); chime(); rumble("pop"); }, 30);
-    step(function () { el.classList.add("open"); rumble("open"); }, ACH_TIMES.open);
-    step(function () { el.classList.remove("open"); }, ACH_TIMES.open + ACH_TIMES.hold);
-    step(function () { el.classList.add("out"); }, ACH_TIMES.open + ACH_TIMES.hold + ACH_TIMES.fold);
+    var cur = { notice: notice, el: el, timers: [] };
+    achCurrent = cur;
+    var step = function (fn, ms) { var id = setTimeout(fn, ms); cur.timers.push(id); return id; };
     step(function () {
-      if (el.parentNode) el.parentNode.removeChild(el);
-      achBusy = false;
-      achNext();
-    }, ACH_TIMES.open + ACH_TIMES.hold + ACH_TIMES.fold + ACH_TIMES.fade);
+      el.classList.add("in");
+      if (!alert) { chime(); rumble("pop"); } else if (notice.variant === "critical" || notice.variant === "limit") rumble("pop");
+    }, 30);
+    step(function () { el.classList.add("open"); if (!alert) rumble("open"); if (notice.onShow) try { notice.onShow(el); } catch (err) { /* shown anyway */ } }, times.open);
+    step(function () { el.classList.remove("open"); }, times.open + times.hold);
+    step(function () { el.classList.add("out"); }, times.open + times.hold + times.fold);
+    step(function () { cur.reason = "timeout"; popFinish(cur); }, times.open + times.hold + times.fold + times.fade);
   }
 
   function celebrate(notices) {
@@ -567,6 +650,15 @@
       if (set && set.tagName !== "INPUT") { event.preventDefault(); if (!set.disabled) onSetting(set); return; }
       var preview = target.closest("[data-ach-preview]");
       if (preview) { event.preventDefault(); if (!preview.disabled) onPreview(preview); return; }
+      var pop = target.closest("[data-pop-act]");
+      if (pop && achCurrent && achCurrent.el.contains && achCurrent.el.contains(pop)) {
+        event.preventDefault();
+        var cur = achCurrent;
+        var act = pop.getAttribute("data-pop-act");
+        if (cur.notice.onAction) try { cur.notice.onAction(act); } catch (err) { /* close anyway */ }
+        popClose(act);
+        return;
+      }
       var ach = target.closest("[data-ach-open]");
       if (ach) {
         event.preventDefault();
@@ -621,6 +713,16 @@
     chimes: CHIMES,
     wasShown: wasShown,
     pending: function () { return achQueue.length + (achBusy ? 1 : 0); },
+    popout: popout,
+    popClose: popClose,
+    popCurrent: function () { return achCurrent ? { id: achCurrent.notice.id, variant: achCurrent.notice.variant, el: achCurrent.el } : null; },
+    popAction: function (act) {
+      var cur = achCurrent;
+      if (!cur || !cur.notice.alert) return false;
+      if (cur.notice.onAction) cur.notice.onAction(act);
+      popClose(act);
+      return true;
+    },
     times: ACH_TIMES
   };
   root.ProfileBadges = {

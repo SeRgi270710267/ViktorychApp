@@ -1,15 +1,15 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a134-__SW_VERSION__";
+const VERSION = "viktorych-a150-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T15:52:29Z-xmatch
+// cache-bust: 2026-10-30T03:01:00Z-xmatch
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./i18n/hi.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./i18n/hi.js?" + VERSION, "./codec.js?" + VERSION, "./media-opfs.js?" + VERSION, "./notif-privacy.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -50,8 +50,10 @@ const SHELL_FILES = [
   "./",
   "./index.html",
   "./styles.css",
+  "./customize.css",
   "./dock.css",
   "./dock.js",
+  "./desktop-app.js",
   "./i18n.js",
   "./i18n/en.js",
   "./i18n/ru.js",
@@ -87,12 +89,19 @@ const SHELL_FILES = [
   "./friend-p2p.js",
   "./people.js",
   "./people.css",
+  "./pymk.js",
+  "./pymk.css",
   "./tv.js",
   "./tv.css",
   "./shared/tv-boot.js",
+  "./shared/short-link.js",
+  "./shared/x-range.js",
   "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",
+  "./tv-pair.js",
+  "./tv-pair.css",
+  "./vendor/qrcode-1.4.4.js",
   "./split.js",
   "./discord-ui.js",
   "./discord-picks.js",
@@ -107,6 +116,7 @@ const SHELL_FILES = [
   "./live.css",
   "./marks.js",
   "./logo-text.js",
+  "./ytm.js",
   "./music.js",
   "./music.css",
   "./presence.js",
@@ -116,13 +126,19 @@ const SHELL_FILES = [
   "./about-ui.js",
   "./gifts-ui.js",
   "./reactions.js",
+  "./community-notes.js",
   "./shared/gift-catalog.js",
   "./badges.js",
   "./badges.css",
+  "./shared/local-budget.js",
+  "./setting-alerts.js",
+  "./setting-alerts.css",
   "./audience-ui.js",
   "./gifts.css",
   "./reactions.css",
+  "./community-notes.css",
   "./settings-sync.js",
+  "./notif-privacy.js",
   "./accounts.js",
   "./passkeys.js",
   "./app-lock.js",
@@ -131,6 +147,10 @@ const SHELL_FILES = [
   "./shared/app-lock-crypto.js",
   "./shared/ios.js",
   "./owner-keys.js",
+  "./discord-local.js",
+  "./discord-local.css",
+  "./discord-key-helper.js",
+  "./discord-key-helper.css",
   "./accounts.css",
   "./landing.css",
   "./landing/og.jpg",
@@ -154,6 +174,8 @@ const SHELL_FILES = [
   "./drive.js",
   "./drive.css",
   "./games.js",
+  "./game-social.js",
+  "./game-social.css",
   "./games.css",
   "./communities.js",
   "./communities.css",
@@ -221,7 +243,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a134-";
+  const prefix = "viktorych-a150-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -320,6 +342,7 @@ self.addEventListener("activate", (event) => {
     if (activateBeat) { clearInterval(activateBeat); activateBeat = null; }
     // Move what older versions saved into the stable caches in the background.
     adoptOldCaches().catch(() => {});
+    purgeOpaquePictures().catch(() => {});
     try { await self.clients.claim(); } catch (err) { /* the page reloads once the worker is active */ }
     try {
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
@@ -924,10 +947,11 @@ async function fetchMediaOrigin(request, headers, authed) {
     if (isRuVisitor && !authed) {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 2000);
-      try { return await fetch(request, { signal: ctrl.signal }); }
+      try { return corsPictureHost(request) ? await fetchPicture(request, ctrl.signal) : await fetch(request, { signal: ctrl.signal }); }
       finally { clearTimeout(tid); }
     }
-    if (authed) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    if (authed) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow", referrerPolicy: "no-referrer" });
+    if (corsPictureHost(request)) return fetchPicture(request);
     return fetch(request);
   };
   let attempt = 0;
@@ -964,13 +988,62 @@ function teachOrigin(request, response) {
   }).catch(() => {});
 }
 
+/* X's picture host answers 403 to any request that carries a referrer from
+   another site, and an opaque (no-cors) answer hides that status, so a 403
+   used to be stored as if it were the picture. Pictures from that host are
+   asked for in CORS mode without a referrer: the status is visible and only
+   real pictures are stored. Original bytes, never re-encoded. */
+function corsPictureHost(request) {
+  try {
+    const url = new URL(request.url);
+    return url.hostname === "pbs.twimg.com" && request.method === "GET" && !request.headers.get("Range");
+  } catch (err) {
+    return false;
+  }
+}
+
+async function fetchPicture(request, signal) {
+  const init = { method: "GET", mode: "cors", credentials: "omit", referrerPolicy: "no-referrer", redirect: "follow" };
+  if (signal) init.signal = signal;
+  try {
+    return await fetch(request.url, init);
+  } catch (err) {
+    if (signal && signal.aborted) throw err;
+    return fetch(request);
+  }
+}
+
+async function dropMediaCopy(url) {
+  const cache = await caches.open(MEDIA);
+  await cache.delete(new Request(url, { method: "GET" }));
+  const opfs = self.ViktorychOpfs;
+  if (opfs && opfs.supported && opfs.supported() && opfs.remove) {
+    try { await opfs.remove(url); } catch (err) { /* Cache Storage was the usual home */ }
+  }
+}
+
+/* Opaque copies from X's picture host may be stored 403s from older
+   versions. They are dropped once on activate; real pictures come back on
+   the next view. */
+async function purgeOpaquePictures() {
+  const cache = await caches.open(MEDIA);
+  const keys = await cache.keys();
+  for (const req of keys) {
+    let host = "";
+    try { host = new URL(req.url).hostname; } catch (err) { continue; }
+    if (host !== "pbs.twimg.com") continue;
+    const res = await cache.match(req);
+    if (!res || res.type === "opaque" || !res.ok) await cache.delete(req);
+  }
+}
+
 async function serveMedia(request, extraHeaders) {
   const parsed = new URL(request.url);
   const headers = new Headers(extraHeaders || undefined);
   const rangeHeader = request.headers.get("Range");
   if (!self.ViktorychStorage.shouldCacheMedia(parsed)) {
     if (rangeHeader) headers.set("Range", rangeHeader);
-    if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow", referrerPolicy: "no-referrer" });
     return fetch(request);
   }
   const opfs = self.ViktorychOpfs;
@@ -1043,7 +1116,7 @@ async function serveMedia(request, extraHeaders) {
     const authed = headers.has("Authorization");
     if (authed && rangeHeader) headers.set("Range", rangeHeader);
     const res = await fetchMediaOrigin(request, headers, authed);
-    const store = res && (res.type === "opaque" || self.ViktorychStorage.revalidateAction(res.status) === "store");
+    const store = res && ((res.type === "opaque" && !corsPictureHost(request)) || self.ViktorychStorage.revalidateAction(res.status) === "store");
     if (store && !rangeHeader) {
       let inOpfs = false;
       const length = self.ViktorychStorage.byteLengthOf(res);
@@ -1138,7 +1211,7 @@ async function cacheBookmark(urls) {
     try {
       // A readable copy can also go to friends' devices; opaque is the fallback.
       const readable = url.startsWith(self.location.origin + "/") || /^https:\/\/(?:[a-z0-9-]+\.)*(?:twimg\.com|r2\.dev|workers\.dev)\//i.test(url);
-      const res = readable ? await fetch(url, { mode: "cors", credentials: "omit" }).catch(() => fetch(url, { mode: "no-cors" })) : await fetch(url, { mode: "no-cors" });
+      const res = readable ? await fetch(url, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => fetch(url, { mode: "no-cors", referrerPolicy: "no-referrer" })) : await fetch(url, { mode: "no-cors", referrerPolicy: "no-referrer" });
       if (res && (res.ok || res.type === "opaque")) {
         await cache.put(url, res.clone());
         await rememberMedia(url, Number(res.headers.get("content-length")) || 200 * 1024);
@@ -1638,6 +1711,13 @@ self.addEventListener("message", (event) => {
     gameBusyUntil = data.on ? Date.now() + 3 * 60 * 1000 : 0;
     return;
   }
+  if (data.type === "media-drop" && typeof data.url === "string" && /^https:\/\//i.test(data.url)) {
+    // A picture that did not load on the page: forget any stored copy so a
+    // cached failure (an opaque error is indistinguishable from a picture)
+    // never sticks to this device.
+    event.waitUntil(dropMediaCopy(data.url).catch(() => {}));
+    return;
+  }
   if (data.type === "drop-profile-media") {
     event.waitUntil((async () => {
       const names = await caches.keys();
@@ -1934,6 +2014,14 @@ self.addEventListener("fetch", (event) => {
     })().catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
     return;
   }
+  // Sealed catalogs are encrypted copies whose age the app checks itself:
+  // network (or a mirror when Pages is blocked), never this worker's cache.
+  if (url.origin === self.location.origin && /\/sealed\/[^/]+\.json$/.test(url.pathname)) {
+    event.respondWith(mirrorFetch(request).catch(() => new Response("", { status: 504 })));
+    return;
+  }
+  // A local Discord key: these requests go straight to Discord, never cached here.
+  if (url.hostname === "discord.com" || /(^|\.)hcaptcha\.com$/.test(url.hostname)) return;
   if (isGameHost(url)) return;
   if (isTikTokCdn(url)) return;
   if (isArchiveStore(url)) return;
@@ -2108,7 +2196,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|tv-pair\.js|tv-pair\.css|qrcode-1\.4\.4\.js|split\.js|discord-ui\.js|discord-ui\.css|discord-key-helper\.js|discord-key-helper\.css|community-notes\.js|community-notes\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|game-social\.js|game-social\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -2317,12 +2405,14 @@ async function deliverBellNotesNow(notes, dnd) {
     delivered.push(note);
     if (quiet || Notification.permission !== "granted") continue;
     try {
-      await self.registration.showNotification(note.name || ("@" + (note.handle || "post")), {
-        body: note.text || tr("New post"),
-        icon: note.avatar || "icons/icon-192.png",
-        image: note.image || undefined,
+      const NPB = self.ViktorychNotifPrivacy;
+      const shownB = NPB ? NPB.present(Object.assign({ kind: "post" }, note), await NPB.load(), { title: note.name || ("@" + (note.handle || "post")) }) : null;
+      await self.registration.showNotification(shownB ? shownB.title : (note.name || ("@" + (note.handle || "post"))), {
+        body: shownB ? shownB.body : (note.text || tr("New post")),
+        icon: shownB ? shownB.icon : (note.avatar || "icons/icon-192.png"),
+        image: shownB ? shownB.image : (note.image || undefined),
         tag: "note-" + id,
-        data: { hash: note.hash || "#/", id: id }
+        data: { hash: shownB && shownB.generic ? "#/notifications" : (note.hash || "#/"), id: id }
       });
     } catch (err) { /* the page still keeps the in-app row */ }
   }
@@ -2333,7 +2423,7 @@ async function deliverBellNotesNow(notes, dnd) {
   if (!visible) {
     const queued = ((await idbGet(db, "bell-queue")) || []).concat(delivered).slice(-80);
     await idbSet(db, "bell-queue", queued);
-    if (navigator.setAppBadge) {
+    if (navigator.setAppBadge && await swBadgeAllowed()) {
       try { await navigator.setAppBadge(queued.length); } catch (err) { /* badges are optional */ }
     }
   }
@@ -2484,7 +2574,7 @@ async function refreshAndNotify() {
     if (!(await swNoteHidden(fresh[i]))) visibleFresh.push(fresh[i]);
   }
   if (!visibleFresh.length || notifyAll !== true) return;
-  if (navigator.setAppBadge) {
+  if (navigator.setAppBadge && await swBadgeAllowed()) {
     try { await navigator.setAppBadge(visibleFresh.length); } catch (err) { /* badges are optional */ }
   }
   if (Notification.permission === "granted") {
@@ -2610,6 +2700,99 @@ self.addEventListener("sync", (event) => {
   if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
 });
 
+// Notification privacy (notif-privacy.js). The badge follows the person's choice.
+async function swBadgeAllowed() {
+  const NP = self.ViktorychNotifPrivacy;
+  if (!NP) return true;
+  try { return (await NP.load()).badge !== false; } catch (err) { return true; }
+}
+
+// One small server read when this device has no copy of a note and names
+// are allowed. Hidden names never trigger a request.
+async function fetchPushNote(sid) {
+  const NP = self.ViktorychNotifPrivacy;
+  const db = await idb();
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  if (!auth || !auth.token || !api || !sid) return null;
+  const since = Date.now() - 15 * 60 * 1000;
+  const res = await fetch(String(api).replace(/\/$/, "") + "/v1/notifications?since=" + since, {
+    headers: { Authorization: "Bearer " + auth.token },
+    cache: "no-store"
+  });
+  if (!res || !res.ok) return null;
+  const view = await res.json().catch(() => null);
+  const items = (view && Array.isArray(view.items)) ? view.items : [];
+  await NP.remember(items, await NP.load());
+  return NP.lookup(sid);
+}
+
+// Compact pushes: {v:2,k,i,n}. Text comes from this device only.
+async function showCompactPush(c) {
+  const NP = self.ViktorychNotifPrivacy;
+  const db = await idb();
+  const mark = c.sid + ":" + c.count;
+  if (c.sid) {
+    const seen = (await idbGet(db, "push-seen")) || [];
+    if (seen.indexOf(mark) >= 0) return;
+    await idbSet(db, "push-seen", seen.concat([mark]).slice(-300));
+  }
+  const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (open.some((client) => client.visibilityState === "visible")) {
+    open.forEach((client) => {
+      try { client.postMessage({ type: "push-note", note: {} }); }
+      catch (err) { /* the page polls when it is next visible */ }
+    });
+    return;
+  }
+  await ensureUiLang();
+  const prefs = await NP.load();
+  let note = null;
+  if (NP.showNames(prefs, c.kind)) {
+    note = await NP.lookup(c.sid);
+    if (!note || (c.count && Number(note.others || 0) !== c.count)) {
+      try { note = (await fetchPushNote(c.sid)) || note; } catch (err) { /* generic copy below */ }
+    }
+  }
+  if (note && await swNoteHidden(note)) return;
+  const shown = NP.present(note ? Object.assign({}, note, { kind: note.kind || c.kind, others: c.count || note.others }) : null, prefs, { kind: c.kind });
+  await self.registration.showNotification(shown.title, {
+    body: shown.body,
+    icon: shown.icon,
+    image: shown.image,
+    tag: "n-" + (c.sid || c.kind),
+    data: { hash: shown.hash, id: (note && note.id) || "", invite: gameInviteId(c.kind, shown.hash) },
+    ...gameInviteActions(c.kind, shown.hash)
+  });
+}
+
+// Game invites get Join and Not now buttons. Join opens the game; Not now
+// answers from here without opening a window.
+function gameInviteId(kind, hash) {
+  if (kind !== "game_invite") return "";
+  const m = /[?&]invite=([a-f0-9]{24})(?:&|$)/.exec(String(hash || ""));
+  return m ? m[1] : "";
+}
+function gameInviteActions(kind, hash) {
+  if (!gameInviteId(kind, hash)) return {};
+  return {
+    requireInteraction: true,
+    actions: [{ action: "join", title: tr("Join") }, { action: "decline", title: tr("Not now") }]
+  };
+}
+async function declineGameInvite(id) {
+  const db = await idb();
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  if (!auth || !auth.token || !api || !id) return;
+  await fetch(String(api).replace(/\/$/, "") + "/v1/games/invite/answer", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + auth.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: id, answer: "decline" }),
+    cache: "no-store"
+  }).catch(() => null);
+}
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let data = {};
@@ -2617,6 +2800,11 @@ self.addEventListener("push", (event) => {
     catch (err) { data = {}; }
     if (await pushIsDnd(!!(data && data.dnd))) return;
     if (data && data.silent) return;
+    const compact = self.ViktorychNotifPrivacy ? self.ViktorychNotifPrivacy.parsePush(data) : null;
+    if (compact) {
+      await showCompactPush(compact);
+      return;
+    }
     const hasCopy = !!(data && (data.titleKey || data.body));
     if (!hasCopy) return;
     if (await swNoteHidden(data)) return;
@@ -2643,11 +2831,14 @@ self.addEventListener("push", (event) => {
     await ensureUiLang();
     const vars = data && data.titleVars && typeof data.titleVars === "object" ? data.titleVars : {};
     const title = data && data.titleKey ? tr(data.titleKey, vars) : tr("New post");
-    await self.registration.showNotification(title, {
-      body: (data && data.body) || "",
-      icon: (data && data.icon) || "icons/icon-192.png",
+    const NPL = self.ViktorychNotifPrivacy;
+    const shownL = NPL ? NPL.present({ kind: NPL.kindFromTitleKey(data && data.titleKey), name: vars.name || "", handle: vars.handle || "", text: (data && data.body) || "", avatar: (data && data.icon) || "", hash: (data && data.hash) || "#/" }, await NPL.load(), { title: title }) : null;
+    await self.registration.showNotification(shownL ? shownL.title : title, {
+      body: shownL ? shownL.body : ((data && data.body) || ""),
+      icon: shownL ? shownL.icon : ((data && data.icon) || "icons/icon-192.png"),
       tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
-      data: { hash: (data && data.hash) || "#/", id: (data && data.id) || "" }
+      data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "", invite: gameInviteId(data && data.kind, data && data.hash) },
+      ...gameInviteActions(data && data.kind, data && data.hash)
     });
   })());
 });
@@ -2656,7 +2847,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
     const payload = event.notification.data || {};
-    const hash = payload.hash || "#/";
+    if (payload.invite && event.action === "decline") {
+      await declineGameInvite(payload.invite);
+      const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      open.forEach((client) => {
+        try { client.postMessage({ type: "game-invite-answer", id: payload.invite, act: "decline", done: true }); }
+        catch (err) { /* the page refreshes invites on its own */ }
+      });
+      return;
+    }
+    const hash = payload.invite && event.action === "join" ? "#/games/regone?invite=" + payload.invite + "&act=join" : (payload.hash || "#/");
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     if (clients[0]) {
       try { clients[0].postMessage({ type: "note-open", id: payload.id || "", hash: hash }); }

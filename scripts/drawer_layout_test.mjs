@@ -68,7 +68,12 @@ async function check(lang, width) {
   if (head.order[0] !== "name-row-text" || head.order[1] !== "protected-badge") fail(label + " name row order " + head.order.join(","));
 
   await page.evaluate(() => {
-    const btn = document.querySelector("[data-act='drawer-edit']");
+    const btn = document.querySelector("[data-act='customize-page']");
+    if (btn) btn.click();
+  });
+  await page.waitForSelector(".pz-page [data-act='drawer-edit']", { timeout: 10000 });
+  await page.evaluate(() => {
+    const btn = document.querySelector(".pz-page [data-act='drawer-edit']");
     if (btn) btn.click();
   });
   await page.waitForSelector(".drawer-edit-row", { timeout: 10000 });

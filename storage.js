@@ -9,7 +9,12 @@
   if (typeof document !== "undefined") api.start();
 })(typeof self !== "undefined" ? self : this, function () {
   var GB = 1024 * 1024 * 1024;
-  var MAX_STEPS = [1 * GB, 5 * GB, 10 * GB, 20 * GB];
+  var MB = 1024 * 1024;
+  /* Cache size choices on the slider. The last slider stop is Unlimited.
+     Defaults still pick from 1, 5, 10 or 20 GB. */
+  var MAX_STEPS = [250 * MB, 500 * MB, 1 * GB, 2 * GB, 3 * GB, 5 * GB, 10 * GB, 20 * GB, 50 * GB];
+  var DEFAULT_STEPS = [1 * GB, 5 * GB, 10 * GB, 20 * GB];
+  var quotaHint = 0;
   var POLICY_KEY = "viktorychapp-storage";
   var DB_NAME = "superintelapp-sw";
   var DB_VERSION = 3;
@@ -154,11 +159,18 @@
   function defaultMaxBytes(quota) {
     var budget = Number(quota) > 0 ? Math.floor(Number(quota) * 0.2) : 0;
     if (!budget) return 5 * GB;
-    var pick = MAX_STEPS[0];
+    var pick = DEFAULT_STEPS[0];
     if (budget < pick) return pick;
-    for (var i = 0; i < MAX_STEPS.length; i++) {
-      if (MAX_STEPS[i] <= budget) pick = MAX_STEPS[i];
+    for (var i = 0; i < DEFAULT_STEPS.length; i++) {
+      if (DEFAULT_STEPS[i] <= budget) pick = DEFAULT_STEPS[i];
     }
+    return pick;
+  }
+
+  /* Largest slider step at or under a byte cap (256 MB -> 250 MB). */
+  function floorStep(bytes) {
+    var pick = MAX_STEPS[0];
+    for (var i = 0; i < MAX_STEPS.length; i++) if (MAX_STEPS[i] <= bytes) pick = MAX_STEPS[i];
     return pick;
   }
 
@@ -166,15 +178,19 @@
     var fallback = defaultMaxBytes(quota);
     var keep = raw && (raw.keep === "3d" || raw.keep === "week" || raw.keep === "month" || raw.keep === "forever") ? raw.keep : "week";
     var prefetch = !(raw && raw.prefetch === false);
-    if (raw && raw.unlimited) return { keep: keep, maxBytes: 0, unlimited: true, prefetch: prefetch };
+    if (raw && raw.unlimited) return { keep: keep, maxBytes: 0, unlimited: true, prefetch: prefetch, picked: !!raw.picked };
     var maxBytes = raw ? Number(raw.maxBytes) : 0;
     if (MAX_STEPS.indexOf(maxBytes) < 0) maxBytes = fallback;
+    /* A size the person picked on the slider wins over the device
+       preset's cap. The cap only lowers the automatic default. */
+    var picked = !!(raw && raw.picked && MAX_STEPS.indexOf(Number(raw.maxBytes)) >= 0);
+    if (picked) return { keep: keep, maxBytes: maxBytes, unlimited: false, prefetch: prefetch, picked: true };
     var dev = null;
     if (typeof self !== "undefined" && self.ViktorychDevice) dev = self.ViktorychDevice;
     else if (typeof window !== "undefined" && window.ViktorychDevice) dev = window.ViktorychDevice;
     var cap = dev && dev.capForPolicy ? Number(dev.capForPolicy()) : 0;
-    if (cap > 0 && maxBytes > cap) maxBytes = cap;
-    return { keep: keep, maxBytes: maxBytes, unlimited: false, prefetch: prefetch };
+    if (cap > 0 && maxBytes > cap) maxBytes = floorStep(cap);
+    return { keep: keep, maxBytes: maxBytes, unlimited: false, prefetch: prefetch, picked: false };
   }
 
   function planEviction(rows, maxBytes, now, keepFor) {
@@ -625,15 +641,48 @@
     });
   }
 
-  function stepIndex(saved) {
-    if (saved && saved.unlimited) return MAX_STEPS.length;
-    var found = MAX_STEPS.indexOf(saved && saved.maxBytes);
-    return found < 0 ? 1 : found;
+  /* Slider stops: every step that fits this device's quota, the saved
+     size even if it does not, then Unlimited. */
+  function sliderSteps(quota, saved) {
+    quota = Number(quota) || 0;
+    var list = MAX_STEPS.filter(function (b) { return !quota || b <= quota; });
+    var cur = saved && !saved.unlimited ? Number(saved.maxBytes) : 0;
+    if (cur > 0 && list.indexOf(cur) < 0) list.push(cur);
+    if (!list.length) list.push(MAX_STEPS[0]);
+    list.sort(function (a, b) { return a - b; });
+    return list;
   }
 
-  function stepLabel(index) {
-    if (index >= MAX_STEPS.length) return tr("Unlimited");
-    return tr((MAX_STEPS[index] / GB) + " GB");
+  function stepIndex(saved, steps) {
+    steps = steps || MAX_STEPS;
+    if (saved && saved.unlimited) return steps.length;
+    var found = steps.indexOf(saved && saved.maxBytes);
+    if (found >= 0) return found;
+    var near = 0;
+    for (var i = 0; i < steps.length; i++) if (steps[i] <= Number(saved && saved.maxBytes)) near = i;
+    return near;
+  }
+
+  function sizeLabel(bytes) {
+    bytes = Number(bytes) || 0;
+    if (bytes < GB) return tr(Math.round(bytes / MB) + " MB");
+    return tr((Math.round(bytes / GB * 10) / 10) + " GB");
+  }
+
+  function stepLabel(index, steps) {
+    steps = steps || MAX_STEPS;
+    if (index >= steps.length) return tr("Unlimited");
+    return sizeLabel(steps[index]);
+  }
+
+  function policyLabel(saved) {
+    return saved && saved.unlimited ? tr("Unlimited") : sizeLabel(saved && saved.maxBytes);
+  }
+
+  function readSteps(el) {
+    var raw = String(el && el.getAttribute("data-steps") || "");
+    var list = raw.split(",").map(Number).filter(function (n) { return n > 0; });
+    return list.length ? list : MAX_STEPS;
   }
 
   function keepLabel(keep) {
@@ -754,16 +803,76 @@
     } catch (err) { return Promise.resolve(null); }
   }
 
+  function localBudget() {
+    return typeof self !== "undefined" && self.ViktorychLocalBudget ? self.ViktorychLocalBudget : null;
+  }
+
+  /* localStorage size in the units the browser counts against its limit:
+     one per character of key plus value. */
   function localBytes() {
     try {
       if (typeof localStorage === "undefined") return 0;
+      var budget = localBudget();
+      if (budget) return budget.measure(localStorage).total;
       var n = 0;
       for (var i = 0; i < localStorage.length; i++) {
         var key = localStorage.key(i) || "";
-        n += (key.length + String(localStorage.getItem(key) || "").length) * 2;
+        n += key.length + String(localStorage.getItem(key) || "").length;
       }
       return n;
     } catch (err) { return 0; }
+  }
+
+  var LOCAL_COLORS = { settings: "#1d9bf0", snapshots: "#e8a33d", caches: "#53b35b", legacy: "#a46cff", other: "#8e8e93" };
+
+  function localCatLabel(cat) {
+    if (cat === "settings") return tr("Settings, drafts and sign-in");
+    if (cat === "snapshots") return tr("Saved screens");
+    if (cat === "caches") return tr("Small caches");
+    if (cat === "legacy") return tr("Old copies");
+    return tr("Other pages on this address");
+  }
+
+  function localCatNote(cat) {
+    if (cat === "settings") return tr("Never cleared here");
+    if (cat === "snapshots") return tr("Pages you opened, so they show at once. Rebuilt as you browse");
+    if (cat === "caches") return tr("Link previews, translations and profile headers. Rebuilt when needed");
+    if (cat === "legacy") return tr("Duplicates left by older versions of the app");
+    return tr("Saved by other pages on the same address. Not cleared here");
+  }
+
+  /* Settings storage (localStorage): what fills it and a button that clears
+     only what the app can rebuild. The "Saved settings are full" alert
+     opens this section. */
+  function localHtml() {
+    var budget = localBudget();
+    if (!budget || typeof localStorage === "undefined") return "";
+    var read = null;
+    try { read = budget.reading(localStorage, typeof navigator !== "undefined" ? navigator : null); } catch (err) { read = null; }
+    if (!read) return "";
+    var pct = Math.min(100, Math.round(read.pct));
+    var rows = budget.ORDER.map(function (cat) {
+      var row = read.by[cat] || { units: 0, count: 0 };
+      if (!row.units && cat !== "settings") return "";
+      var width = read.used && row.units ? Math.max(2, Math.round(row.units / read.used * 100)) : 0;
+      var clear = budget.safeToClear(cat) && row.units ? '<button class="outline stor-clear" type="button" data-stor="local-clear" data-cat="' + cat + '">' + esc(tr("Clear")) + "</button>" : "";
+      return '<div class="stor-row" data-local-cat="' + cat + '"><i class="stor-swatch" style="background:' + LOCAL_COLORS[cat] + '"></i><div class="stor-meta"><b>' + esc(localCatLabel(cat)) + '</b><span class="stor-sub">' + esc(localCatNote(cat)) + '</span><div class="stor-bar"><i style="width:' + width + "%;background:" + LOCAL_COLORS[cat] + '"></i></div></div><span class="stor-size">' + esc(formatBytes(row.units)) + "</span>" + clear + "</div>";
+    }).join("");
+    var free = read.safe > 0
+      ? '<button class="outline" type="button" data-stor="local-clear" data-cat="all">' + esc(tr("Free up {size}", { size: formatBytes(read.safe) })) + "</button>"
+      : '<p class="phandle">' + esc(tr("Nothing to clear. Only settings are saved here.")) + "</p>";
+    return '<div class="set-block stor-section" id="stor-local"><h2>' + esc(tr("Settings storage")) + '</h2><p class="phandle">' +
+      esc(tr("{used} of about {limit} ({pct}%)", { used: formatBytes(read.used), limit: formatBytes(read.limit), pct: String(pct) })) + "</p></div>" +
+      '<div class="stor-list">' + rows + "</div>" + '<div class="set-block stor-local-actions">' + free + "</div>";
+  }
+
+  function clearLocal(cat) {
+    var budget = localBudget();
+    if (!budget || typeof localStorage === "undefined") return 0;
+    var freed = budget.clearSafe(localStorage, cat === "all" ? "" : cat);
+    var alerts = typeof self !== "undefined" ? self.ViktorychSettingAlerts : null;
+    if (alerts && alerts.check) { try { alerts.check(); } catch (err) { /* the next check runs on its own */ } }
+    return freed;
   }
 
   function measureNow() {
@@ -934,7 +1043,12 @@
   function controlsHtml() {
     var saved = currentPolicy();
     var keep = saved.keep || "week";
-    var index = stepIndex(saved);
+    var steps = sliderSteps(quotaHint, saved);
+    var index = stepIndex(saved, steps);
+    var max = steps.length;
+    var fill = max ? Math.round(index / max * 1000) / 10 : 0;
+    var ticks = "";
+    for (var t = 0; t <= max; t++) ticks += '<i class="' + (t <= index ? "on" : "") + '" style="left:' + (Math.round(t / max * 1000) / 10) + '%"></i>';
     var button = function (id, label) {
       return '<button class="outline' + (keep === id ? " on" : "") + '" type="button" data-stor="keep" data-keep="' + id + '">' + esc(label) + "</button>";
     };
@@ -942,9 +1056,12 @@
       '<p class="phandle">' + esc(tr("Media you have not opened in this time is removed.")) + "</p>" +
       '<div class="theme-row" role="group" aria-label="' + esc(tr("Keep media")) + '">' +
       button("3d", tr("3 days")) + button("week", tr("1 week")) + button("month", tr("1 month")) + button("forever", tr("Forever")) +
-      "</div><h2>" + esc(tr("Maximum cache size")) + "</h2>" +
-      '<p class="phandle" id="stor-max-label">' + esc(stepLabel(index)) + "</p>" +
-      '<input class="stor-slider" id="stor-max" type="range" min="0" max="' + MAX_STEPS.length + '" step="1" value="' + index + '" aria-label="' + esc(tr("Maximum cache size")) + '" aria-valuetext="' + esc(stepLabel(index)) + '">' +
+      "</div>" +
+      '<div class="x-range-row stor-max-row" id="stor-max-row">' +
+      '<div class="x-range-head"><h2 id="stor-max-title">' + esc(tr("Maximum cache size")) + '</h2><output class="x-range-value" id="stor-max-label" for="stor-max">' + esc(stepLabel(index, steps)) + "</output></div>" +
+      '<div class="x-range-wrap"><input class="x-range stor-slider" id="stor-max" type="range" min="0" max="' + max + '" step="1" value="' + index + '" data-steps="' + steps.join(",") + '" style="--x-fill:' + fill + '%" aria-labelledby="stor-max-title" aria-valuetext="' + esc(stepLabel(index, steps)) + '">' +
+      '<span class="x-range-ticks" aria-hidden="true">' + ticks + "</span></div>" +
+      '<div class="x-range-scale" aria-hidden="true"><span>' + esc(stepLabel(0, steps)) + "</span><span>" + esc(tr("Unlimited")) + "</span></div></div>" +
       '<button class="outline danger" type="button" data-stor="clear-all">' + esc(tr("Clear cache")) + "</button>" +
       "<h2>" + esc(tr("Prefetch media")) + "</h2>" +
       '<p class="phandle">' + esc(tr("Prefetch the next posts when the connection is fast.")) + "</p>" +
@@ -953,7 +1070,7 @@
 
   function dataHtml() {
     var saved = currentPolicy();
-    var sub = keepLabel(saved.keep) + " · " + (saved.unlimited ? tr("Unlimited") : stepLabel(stepIndex(saved)));
+    var sub = keepLabel(saved.keep) + " · " + policyLabel(saved);
     var pressureLine = pressureState === "critical" || pressureState === "warning" ? '<p class="phandle">' + esc(tr("Storage is nearly full on this device.")) + "</p>" : "";
     return '<div class="set-list"><a class="set-row" href="#/settings/storage/usage"><span class="set-copy"><b>' + esc(tr("Storage usage")) + "</b><span class=\"set-sub\">" + esc(sub) + '</span></span><span class="set-chev" aria-hidden="true">›</span></a></div>' +
       '<p class="phandle" id="stor-persist">' + esc(persistText(snap && snap.persisted)) + "</p>" + pressureLine + controlsHtml();
@@ -998,7 +1115,7 @@
     return '<div class="stor-hero"><div class="stor-donut" style="' + storeDonut(stores.list, Math.max(shown, 1)) + '" role="img" aria-label="' + esc(tr("{size} used", { size: label })) + '"><div class="stor-hole"><b>' + esc(label) + "</b><span>" + esc(tr("Used on this device")) + "</span></div></div>" +
       '<p class="stor-free">' + esc(freeLine) + "</p>" + browserLine + '<p class="phandle">' + esc(persistLine) + "</p>" + retry + "</div>" +
       '<div class="set-block stor-section"><h2>' + esc(tr("Where it’s stored")) + '</h2></div><div class="stor-list">' + where + "</div>" +
-      '<div class="set-block stor-section"><h2>' + esc(tr("What’s saved")) + '</h2></div><div class="stor-list">' + list + "</div>" + controlsHtml() +
+      '<div class="set-block stor-section"><h2>' + esc(tr("What’s saved")) + '</h2></div><div class="stor-list">' + list + "</div>" + localHtml() + controlsHtml() +
       '<p class="stor-debug">' + esc(tr("Cache hits {count}", { count: String(stats.hits) })) + " · " + esc(tr("Network requests {count}", { count: String(stats.network) })) + " · " + esc(tr("Hit rate {percent}", { percent: hitRate(stats) + "%" })) + " · " + esc(tr("Saved {size}", { size: formatBytes(stats.savedBytes || 0) })) + " · " + esc(tr("Saved requests {count}", { count: String(stats.savedRequests || 0) })) + " · " + esc(tr("Direct {count}", { count: String(stats.direct || 0) })) + " · " + esc(tr("Server {count}", { count: String(stats.server || 0) })) + " · " + esc(tr("From peers {size}", { size: formatBytes(stats.peerBytes || 0) })) + " · " + esc(tr("From origin {size}", { size: formatBytes(stats.originBytes || 0) })) + "</p>";
   }
 
@@ -1102,6 +1219,17 @@
       requestRender();
       return;
     }
+    if (kind === "local-clear") {
+      var which = el.getAttribute("data-cat") || "all";
+      var ask = which === "all"
+        ? tr("Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay.")
+        : tr("Clear {category} from this device?", { category: localCatLabel(which) });
+      if (typeof confirm === "function" && !confirm(ask)) return;
+      clearLocal(which);
+      stale = true;
+      requestRender();
+      return;
+    }
     if (kind === "clear" || kind === "clear-all") {
       var cat = kind === "clear-all" ? "all" : (el.getAttribute("data-cat") || "");
       var question = cat === "all"
@@ -1113,25 +1241,43 @@
     }
   }
 
+  function paintSlider(el) {
+    var steps = readSteps(el);
+    var index = Number(el.value);
+    var text = stepLabel(index, steps);
+    var label = document.getElementById("stor-max-label");
+    if (label) label.textContent = text;
+    el.setAttribute("aria-valuetext", text);
+    var wrap = el.parentNode;
+    var dots = wrap && wrap.querySelectorAll ? wrap.querySelectorAll(".x-range-ticks i") : [];
+    for (var i = 0; i < dots.length; i++) dots[i].className = i <= index ? "on" : "";
+    var max = Number(el.max) || 1;
+    el.style.setProperty("--x-fill", (Math.round(index / max * 1000) / 10) + "%");
+  }
+
   function onInput(event) {
     var el = event.target;
     if (!el || el.id !== "stor-max") return;
-    var label = document.getElementById("stor-max-label");
-    var text = stepLabel(Number(el.value));
-    if (label) label.textContent = text;
-    el.setAttribute("aria-valuetext", text);
+    paintSlider(el);
   }
 
+  /* Saved on every step (drag release, tap or arrow key). The saved size is
+     marked as picked so the device preset's cap cannot pull it back down,
+     and the cache limit alert re-checks right away. */
   function onChange(event) {
     var el = event.target;
     if (!el || el.id !== "stor-max") return;
     var saved = currentPolicy();
+    var steps = readSteps(el);
     var index = Number(el.value);
-    var next = index >= MAX_STEPS.length
-      ? { keep: saved.keep, maxBytes: 0, unlimited: true, prefetch: saved.prefetch }
-      : { keep: saved.keep, maxBytes: MAX_STEPS[index], unlimited: false, prefetch: saved.prefetch };
+    var next = index >= steps.length
+      ? { keep: saved.keep, maxBytes: 0, unlimited: true, prefetch: saved.prefetch, picked: true }
+      : { keep: saved.keep, maxBytes: steps[index], unlimited: false, prefetch: saved.prefetch, picked: true };
     saveLocal(next);
+    paintSlider(el);
     askPersist();
+    var alerts = typeof window !== "undefined" ? window.ViktorychSettingAlerts : null;
+    if (alerts && alerts.check) { try { alerts.check(); } catch (err) { /* alerts re-check on their own timer */ } }
   }
 
   function applyDeviceCap() {
@@ -1146,6 +1292,9 @@
 
   function start() {
     policy = loadLocal() || normalizePolicy(null);
+    if (typeof navigator !== "undefined" && navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(function (est) { quotaHint = Number(est && est.quota) || 0; }).catch(function () {});
+    }
     if (!loadLocal() && typeof navigator !== "undefined" && navigator.storage && navigator.storage.estimate) {
       navigator.storage.estimate().then(function (est) {
         if (loadLocal()) return;
@@ -1172,6 +1321,8 @@
   return {
     GB: GB,
     MAX_STEPS: MAX_STEPS,
+    sliderSteps: sliderSteps,
+    sizeLabel: sizeLabel,
     categoryOf: categoryOf,
     shouldCacheMedia: shouldCacheMedia,
     shouldCacheFeed: shouldCacheFeed,
@@ -1189,6 +1340,8 @@
     byteLengthOf: byteLengthOf,
     formatBytes: formatBytes,
     storeList: storeList,
+    localHtml: localHtml,
+    clearLocal: clearLocal,
     clearStored: clearStored,
     pressureLevel: pressureLevel,
     persistText: persistText,
