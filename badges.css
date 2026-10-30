@@ -97,22 +97,184 @@
 .bdg-btn.ghost { background: transparent; color: var(--text, #e7e9ea); border: 1px solid var(--line, #536471); line-height: 38px; }
 .bdg-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 15px; text-align: left; }
 .bdg-field select { max-width: 60%; height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg, #000); color: var(--text, #e7e9ea); font: inherit; }
-.badge-note { color: var(--red, #f4212e); }
-.badge-toast {
+.badge-note { color: var(--red-text, var(--red, #f4212e)); }
+/* Achievement unlocked: orb first, then the pill opens sideways. */
+.ach {
+  --ach-accent: var(--blue, #1d9bf0);
+  --ach-glow: rgba(29, 155, 240, 0.55);
   position: fixed;
   left: 50%;
-  bottom: 76px;
-  transform: translateX(-50%);
-  max-width: calc(100% - 32px);
-  padding: 10px 14px;
+  bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  z-index: 95;
+  transform: translate(-50%, 24px) scale(0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 420ms cubic-bezier(0.2, 1.4, 0.4, 1), opacity 260ms ease;
+}
+.ach.tier-bronze { --ach-accent: #d98a4a; --ach-glow: rgba(217, 138, 74, 0.55); }
+.ach.tier-silver { --ach-accent: #c9d1d9; --ach-glow: rgba(201, 209, 217, 0.5); }
+.ach.tier-gold { --ach-accent: #ffd400; --ach-glow: rgba(255, 212, 0, 0.5); }
+.ach.in { transform: translate(-50%, 0) scale(1); opacity: 1; pointer-events: auto; }
+.ach.out { transform: translate(-50%, 12px) scale(0.9); opacity: 0; pointer-events: none; }
+.ach-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  max-width: 64px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, #2f3336);
   border-radius: 9999px;
-  background: var(--text, #e7e9ea);
-  color: var(--bg, #000);
+  background: #16181c;
+  color: var(--text, #e7e9ea);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 8px 28px rgba(0, 0, 0, 0.7), 0 0 24px var(--ach-glow);
+  transition: max-width 520ms cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.ach.open .ach-pill { max-width: min(460px, calc(100vw - 24px)); padding-right: 22px; }
+.ach-pill:focus-visible { outline: 2px solid var(--ach-accent); outline-offset: 3px; }
+.ach-orb {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #202327 0%, #000 72%);
+  box-shadow: inset 0 0 0 2px var(--ach-accent), 0 0 18px var(--ach-glow);
+}
+.ach-ico { font-size: 28px; line-height: 1; transform: scale(0.2); transition: transform 380ms cubic-bezier(0.2, 1.6, 0.4, 1) 120ms; }
+.ach.in .ach-ico { transform: scale(1); }
+.ach-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--ach-accent);
+  opacity: 0;
+}
+.ach.in .ach-ring { animation: ach-ring 1100ms ease-out 80ms 2; }
+@keyframes ach-ring {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+.ach-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 240ms ease, transform 300ms ease;
+  white-space: nowrap;
+}
+.ach.open .ach-copy { opacity: 1; transform: none; transition-delay: 220ms; }
+.ach-kicker { color: var(--ach-accent); font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 16px; }
+.ach-name { font-size: 15px; font-weight: 700; line-height: 20px; overflow: hidden; text-overflow: ellipsis; }
+.ach-desc { color: var(--muted, #71767b); font-size: 13px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; }
+.ach-shine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+.ach.open .ach-shine { animation: ach-shine 1200ms ease-in-out 700ms 1; }
+@keyframes ach-shine {
+  0% { left: -40%; opacity: 1; }
+  100% { left: 120%; opacity: 1; }
+}
+@media (max-width: 699px) {
+  .ach { bottom: calc(53px + 14px + env(safe-area-inset-bottom, 0px)); }
+}
+html.tv-on .ach { bottom: 56px; }
+html.tv-on .ach-pill { height: 80px; max-width: 80px; }
+html.tv-on .ach.open .ach-pill { max-width: 620px; }
+html.tv-on .ach-orb { width: 78px; height: 78px; }
+.ach.calm, .ach.calm .ach-pill, .ach.calm .ach-copy, .ach.calm .ach-ico { transition: opacity 300ms ease !important; animation: none !important; }
+.ach.calm { transform: translate(-50%, 0); }
+.ach.calm .ach-pill { max-width: min(460px, calc(100vw - 24px)); padding-right: 22px; }
+.ach.calm .ach-copy, .ach.calm .ach-ico { opacity: 1; transform: none; }
+.ach.calm .ach-ring, .ach.calm .ach-shine { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ach, .ach-pill, .ach-copy, .ach-ico { transition: opacity 300ms ease !important; animation: none !important; }
+  .ach, .ach.in, .ach.out { transform: translate(-50%, 0); }
+  .ach-ring, .ach-shine { display: none; }
+}
+.ach-settings { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line, #2f3336); }
+.ach-settings h2 { font-size: 20px; font-weight: 800; margin: 0 0 4px; }
+.ach-sub { font-size: 15px; font-weight: 700; margin: 16px 0 8px; }
+.ach-demo { margin: 8px 0 12px; }
+.ach-volume { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 15px; }
+.ach-volume input { flex: 1; }
+.ach-chimes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.ach-chime { display: flex; gap: 6px; }
+.ach-chime .outline { flex: 1; }
+.ach-chime .outline.on { background: var(--blue, #1d9bf0); color: #fff; border-color: var(--blue, #1d9bf0); }
+.ach-play { width: 36px; min-height: 36px; border: 1px solid var(--line, #536471); border-radius: 9999px; background: transparent; color: var(--text, #e7e9ea); cursor: pointer; }
+.ach-settings button[disabled], .ach-settings input[disabled] { opacity: 0.45; cursor: default; }
+/* Setting alerts reuse the achievement pop-out. Accents follow X: blue info,
+   amber warning, red critical and limit reached. The card wraps its text and
+   carries its own buttons; only the card takes taps, never the page under it. */
+.ach.v-info { --ach-accent: #1d9bf0; --ach-glow: rgba(29, 155, 240, 0.35); }
+.ach.v-warning { --ach-accent: #ffad1f; --ach-glow: rgba(255, 173, 31, 0.38); }
+.ach.v-critical, .ach.v-countdown { --ach-accent: #f4212e; --ach-glow: rgba(244, 33, 46, 0.42); }
+.ach.v-limit { --ach-accent: #f4212e; --ach-glow: rgba(244, 33, 46, 0.6); }
+.ach-alert { width: max-content; max-width: min(520px, calc(100vw - 24px)); }
+.ach-alert .ach-card { height: 64px; cursor: default; align-items: center; }
+.ach-alert.open .ach-card { height: auto; min-height: 64px; max-width: min(520px, calc(100vw - 24px)); padding: 10px 18px 10px 0; border-radius: 20px; align-items: flex-start; }
+.ach-alert.open .ach-card .ach-orb { margin: 0 0 0 1px; }
+.ach-alert .ach-copy { white-space: normal; }
+.ach-alert .ach-name, .ach-alert .ach-desc { overflow: visible; }
+.ach-alert .ach-desc { color: #e7e9ea; opacity: 0.8; margin-top: 2px; }
+.ach.v-warning .ach-card { border-color: rgba(255, 173, 31, 0.55); }
+.ach.v-critical .ach-card, .ach.v-countdown .ach-card { border-color: rgba(244, 33, 46, 0.7); }
+.ach.v-limit .ach-card { border-color: #f4212e; background: linear-gradient(0deg, rgba(244, 33, 46, 0.14), rgba(244, 33, 46, 0.14)), #16181c; }
+.ach.v-limit .ach-orb { background: radial-gradient(circle at 50% 40%, #3a0a0e 0%, #000 72%); }
+.ach.v-critical .ach-ring, .ach.v-limit .ach-ring { animation-iteration-count: 3; }
+.ach-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ach-btn {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid #536471;
+  border-radius: 9999px;
+  background: transparent;
+  color: #e7e9ea;
+  font: inherit;
   font-size: 14px;
   font-weight: 700;
-  line-height: 18px;
-  z-index: 80;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
 }
+.ach-btn:hover { background: rgba(231, 233, 234, 0.1); }
+.ach-btn:focus-visible { outline: 2px solid var(--ach-accent); outline-offset: 2px; }
+.ach-btn-main { border-color: transparent; background: #eff3f4; color: #0f1419; }
+.ach-btn-main:hover { background: #d7dbdc; }
+.ach.v-critical .ach-btn-main, .ach.v-limit .ach-btn-main, .ach.v-countdown .ach-btn-main { background: #f4212e; color: #fff; }
+.ach.v-critical .ach-btn-main:hover, .ach.v-limit .ach-btn-main:hover { background: #dc1e29; }
+.ach-btn-quiet { border-color: transparent; color: #71767b; padding: 0 6px; }
+.ach-count { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--ach-accent); transform-origin: left; }
+.ach-alert.open .ach-count { animation: ach-count 3000ms linear forwards; }
+@keyframes ach-count { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+html.tv-on .ach-alert .ach-card { height: 80px; }
+html.tv-on .ach-alert.open .ach-card { height: auto; max-width: 620px; }
+/* Alert glyphs: one-colour SVG from the app icon set, in the variant accent. */
+.ach-alert .ach-ico { display: grid; place-items: center; color: var(--ach-accent); }
+.ach-alert .ach-ico svg { display: block; width: 26px; height: 26px; fill: currentColor; }
+html.tv-on .ach-alert .ach-ico svg { width: 32px; height: 32px; }
+/* Game invites (blue, with the inviter's photo and a countdown) and game
+   achievements (gold outline badge). */
+.ach.v-invite { --ach-accent: #1d9bf0; --ach-glow: rgba(29, 155, 240, 0.4); }
+.ach.v-game { --ach-accent: #ffd400; --ach-glow: rgba(255, 212, 0, 0.35); }
+.ach.v-invite .ach-card { border-color: rgba(29, 155, 240, 0.65); }
+.ach-alert .ach-ava { display: block; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+.ach-alert .ach-ava-text { display: grid; place-items: center; background: #333639; color: #e7e9ea; font-weight: 800; font-size: 18px; }
+.ach.v-invite .ach-btn-main { background: #1d9bf0; color: #fff; }
+.ach.v-invite .ach-btn-main:hover { background: #1a8cd8; }
+.ach-alert .ach-ico svg.gs-badge { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 499px) { .ach.v-invite .ach-btn { min-height: 56px; padding: 0 20px; } }

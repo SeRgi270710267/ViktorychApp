@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#000000">
+  <title>ViktorychApp for TV</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="icon" href="../favicon.svg">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #000; color: #e7e9ea; font: 18px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 5vh 5vw; }
+    h1 { font-size: 40px; line-height: 1.15; margin: 0 0 8px; font-weight: 800; }
+    h2 { font-size: 24px; margin: 32px 0 10px; font-weight: 800; }
+    p { margin: 6px 0; color: #e7e9ea; }
+    .muted { color: #71767b; }
+    .row { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+    .col { flex: 1 1 520px; min-width: 0; }
+    .qr { flex: 0 0 auto; text-align: center; }
+    .qr img { width: 200px; height: 200px; background: #fff; border-radius: 16px; padding: 8px; display: block; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 64px; padding: 0 36px; border-radius: 999px; font-size: 24px; font-weight: 800; text-decoration: none; border: 0; cursor: pointer; margin: 16px 16px 0 0; }
+    .primary { background: #eff3f4; color: #0f1419; }
+    .ghost { background: transparent; color: #e7e9ea; border: 1px solid #536471; }
+    .btn:focus, .btn:focus-visible { outline: 5px solid #1d9bf0; outline-offset: 4px; }
+    ol { padding-left: 28px; margin: 8px 0; }
+    li { margin: 8px 0; }
+    code, .url { font-family: ui-monospace, Menlo, Consolas, monospace; background: #16181c; border: 1px solid #2f3336; border-radius: 8px; padding: 2px 8px; color: #fff; }
+    .card { background: #16181c; border: 1px solid #2f3336; border-radius: 16px; padding: 16px 20px; margin-top: 16px; }
+    .ok { border-color: #00ba7c; }
+    [hidden] { display: none !important; }
+    input.name { font: inherit; font-size: 24px; width: min(520px, 100%); min-height: 60px; padding: 0 18px; border-radius: 12px; border: 1px solid #536471; background: #000; color: #fff; scroll-margin: 20vh; }
+    input.name:focus { outline: 5px solid #1d9bf0; outline-offset: 2px; }
+    .icons { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+    .icon { min-height: 56px; padding: 0 22px; border-radius: 999px; border: 1px solid #536471; background: transparent; color: #e7e9ea; font: inherit; font-weight: 700; cursor: pointer; }
+    .icon[aria-pressed="true"] { background: #eff3f4; color: #0f1419; }
+    .icon:focus { outline: 5px solid #1d9bf0; outline-offset: 4px; }
+    .pair { background: #000; border: 1px solid #2f3336; border-radius: 16px; padding: 20px; margin: 0 0 24px; animation: rise .28s ease-out both; }
+    .pair h2 { margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+    .pair svg { width: 28px; height: 28px; flex: 0 0 auto; }
+    .pair form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+    .pair input { font: 700 30px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; width: 9ch; min-height: 60px; padding: 0 14px; border-radius: 12px; border: 1px solid #536471; background: #000; color: #fff; }
+    .pair input:focus { outline: none; border-color: #1d9bf0; box-shadow: 0 0 0 1px #1d9bf0; }
+    .pair .btn { margin: 0; min-height: 60px; font-size: 20px; }
+    .pair .bad { color: #f4212e; min-height: 1.4em; }
+    .pair .hint { color: #71767b; margin: 8px 0 0; }
+    @media (min-width: 700px) { .pair input { font-size: 44px; width: 10ch; min-height: 76px; padding: 0 20px; letter-spacing: .24em; } .pair .btn { min-height: 76px; padding: 0 32px; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .pair { animation: none; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>ViktorychApp for Google TV and Android TV</h1>
+  <p class="muted">An icon on your TV home screen that opens ViktorychApp full screen. It updates itself with the site.</p>
+
+  <section class="pair" id="pair" aria-labelledby="pair-h">
+    <h2 id="pair-h"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 2h8c1.1 0 2 .9 2 2v16c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm0 1.8c-.1 0-.2.1-.2.2v16c0 .1.1.2.2.2h8c.1 0 .2-.1.2-.2V4c0-.1-.1-.2-.2-.2H8zm2.5 13.4h3V19h-3v-1.8z"/></svg><span data-tp="pair-title">Sign in a TV</span></h2>
+    <p class="muted" data-tp="pair-intro">Enter the code your TV shows. You confirm on the next screen.</p>
+    <form id="pair-form" autocomplete="off">
+      <input id="pair-code" name="code" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="ABC234" aria-labelledby="pair-h" aria-describedby="pair-hint">
+      <button class="btn primary" type="submit" data-tp="Continue">Continue</button>
+    </form>
+    <p class="hint" id="pair-hint" data-tp="hint">Type or paste the code. It is sent as soon as all 6 characters are in.</p>
+    <p class="bad" id="pair-bad" role="status" aria-live="polite"></p>
+  </section>
+  <div id="tv-pair-cta" hidden>
+    <a class="btn primary" id="tv-pair-go" href="../?tv=1#/home" data-tp="Sign in with your phone">Sign in with your phone</a>
+  </div>
+
+  <div class="card ok" id="have" hidden>
+    <p><strong>The TV app is already on this TV.</strong> Open it from the Apps row on the home screen.</p>
+  </div>
+  <div class="card" id="update" hidden>
+    <p><strong>A newer TV app is ready.</strong> Download it and press Update. Your sign-in stays.</p>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <a class="btn primary" id="get" href="ViktorychTV.apk" download="ViktorychTV.apk" type="application/vnd.android.package-archive" autofocus>Install TV app</a>
+      <a class="btn ghost" href="../?tv=1#/home">Open in browser</a>
+      <p class="muted" id="ver">Version 1.0.0, about 0.5 MB.</p>
+
+      <h2>On this TV</h2>
+      <ol>
+        <li>Press <strong>Install TV app</strong>. The file downloads in a few seconds.</li>
+        <li>Open the download. The first time, Android asks to <strong>allow installs from this app</strong>: choose <strong>Settings</strong>, turn on <strong>Allow from this source</strong>, then press Back.</li>
+        <li>Press <strong>Install</strong>, then <strong>Open</strong>. The ViktorychApp icon is now in the Apps row on the home screen. Hold OK on it to move it to Favourites.</li>
+      </ol>
+
+      <h2>If the download does not open</h2>
+      <ol>
+        <li>Install the free <strong>Downloader</strong> app (by AFTVnews) from Google Play on the TV.</li>
+        <li>Open it and type <span class="url">viktorychapp.pages.dev/tv</span> in the address box.</li>
+        <li>Press <strong>Install TV app</strong> on this page, then follow step 2 above. Android asks once to allow installs from Downloader.</li>
+      </ol>
+      <p class="muted">If Android shows no switch: open Settings &rsaquo; Apps &rsaquo; Security &amp; restrictions &rsaquo; Unknown sources (on Fire TV: Settings &rsaquo; My Fire TV &rsaquo; Developer options &rsaquo; Install unknown apps), turn on the browser or Downloader, then try again.</p>
+
+      <section id="custom">
+        <h2 data-t="Custom app name">Custom app name</h2>
+        <p data-t="custom-intro">Build your own copy of the TV app with any home-screen name. It installs over the normal app, keeps your sign-in, and keeps the name when the app updates.</p>
+        <p class="muted" data-t="custom-rules">Letters, numbers and spaces, up to 24 characters. Up to 3 builds a day. Sign in to ViktorychApp in this browser first.</p>
+        <label for="cname" class="muted" data-t="Home-screen name">Home-screen name</label><br>
+        <input class="name" id="cname" maxlength="24" autocomplete="off" autocapitalize="words" spellcheck="false">
+        <div class="icons" role="group" aria-label="Icon">
+          <button class="icon" type="button" data-icon="default" aria-pressed="true" data-t="App logo">App logo</button>
+          <button class="icon" type="button" data-icon="media" aria-pressed="false" data-t="Media">Media</button>
+          <button class="icon" type="button" data-icon="browser" aria-pressed="false" data-t="Browser">Browser</button>
+          <button class="icon" type="button" data-icon="player" aria-pressed="false" data-t="Player">Player</button>
+          <button class="icon" type="button" data-icon="notes" aria-pressed="false" data-t="Notes">Notes</button>
+        </div>
+        <button class="btn primary" id="cbuild" type="button" data-t="Build my app">Build my app</button>
+        <a class="btn primary" id="cget" hidden download="ViktorychTV.apk" type="application/vnd.android.package-archive" data-t="Download my app">Download my app</a>
+        <p class="muted" id="cstate" aria-live="polite"></p>
+      </section>
+    </div>
+    <div class="qr">
+      <img src="qr.svg" alt="QR code for this page" width="200" height="200">
+      <p class="muted">Scan to open these steps on a phone.</p>
+      <p><span class="url">viktorychapp.pages.dev/tv</span></p>
+    </div>
+  </div>
+</main>
+<script src="../accounts.config.js"></script>
+<script src="../shared/tv-boot.js"></script>
+<script src="../shared/tv-builder.js"></script>
+<script src="../shared/short-link.js"></script>
+<script>
+/* Phones: /tv?c=CODE or the typed code goes to the confirm screen.
+   TVs: the same page offers "Sign in with your phone" first. */
+(function () {
+  var S = window.ViktorychShort;
+  var WORDS = {
+    ru: { "pair-title": "Вход на телевизоре", "pair-intro": "Введите код с экрана телевизора. Подтвердите на следующем экране.", "Continue": "Продолжить", "bad": "Код состоит из 6 букв и цифр.", "Sign in with your phone": "Войти с телефона", "hint": "Введите или вставьте код. Он отправится, как только будут все 6 символов." },
+    es: { "pair-title": "Inicia sesión en una TV", "pair-intro": "Escribe el código que muestra tu TV. Lo confirmas en la siguiente pantalla.", "Continue": "Continuar", "bad": "Los códigos tienen 6 letras y números.", "Sign in with your phone": "Inicia sesión con tu teléfono", "hint": "Escribe o pega el código. Se envía en cuanto estén los 6 caracteres." },
+    hi: { "pair-title": "TV पर साइन इन करें", "pair-intro": "अपने TV पर दिख रहा कोड डालें। अगली स्क्रीन पर पुष्टि करें।", "Continue": "जारी रखें", "bad": "कोड में 6 अक्षर और अंक होते हैं।", "Sign in with your phone": "अपने फ़ोन से साइन इन करें", "hint": "कोड टाइप या पेस्ट करें। सभी 6 वर्ण आते ही यह भेज दिया जाता है।" },
+    en: { "bad": "Codes are 6 letters and numbers." }
+  };
+  var lang = "en";
+  try { lang = localStorage.getItem("superintelapp-lang") || ""; } catch (err) { lang = ""; }
+  if (!WORDS[lang]) lang = String(navigator.language || "en").slice(0, 2);
+  if (!WORDS[lang]) lang = "en";
+  function t(key, fallback) { return (WORDS[lang] && WORDS[lang][key]) || WORDS.en[key] || fallback || key; }
+  function go(code) { location.href = "../?pair=" + code; }
+  var m = /[?&]c=([^&#]+)/.exec(location.search || "");
+  var pre = m && S ? S.cleanCode(decodeURIComponent(m[1])) : "";
+  if (pre) { go(pre); return; }
+  var onTv = !!(window.ViktorychTVMode && window.ViktorychTVMode.on);
+  if (onTv) {
+    document.getElementById("pair").hidden = true;
+    document.getElementById("tv-pair-cta").hidden = false;
+  }
+  var bad = document.getElementById("pair-bad");
+  var box = document.getElementById("pair-code");
+  var sent = "";
+  // Typed or pasted ("abc-234", "ABC 234"): letters and numbers only;
+  // six good characters go straight on.
+  function typed() {
+    var text = String(box.value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    if (box.value !== text) box.value = text;
+    bad.textContent = "";
+    if (text.length < 6) { sent = ""; return; }
+    var code = S ? S.cleanCode(text) : "";
+    if (!code) { bad.textContent = t("bad"); return; }
+    if (code === sent) return;
+    sent = code;
+    go(code);
+  }
+  box.addEventListener("input", typed);
+  box.addEventListener("paste", function (e) {
+    var data = e.clipboardData || window.clipboardData;
+    var text = data && data.getData ? data.getData("text") : "";
+    if (!text) return;
+    e.preventDefault();
+    box.value = text;
+    typed();
+  });
+  document.getElementById("pair-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = S ? S.cleanCode(document.getElementById("pair-code").value) : "";
+    if (!code) { bad.textContent = t("bad"); return; }
+    go(code);
+  });
+  if (lang !== "en") {
+    var nodes = document.querySelectorAll("[data-tp]");
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute("data-tp"), nodes[i].textContent);
+  }
+})();
+</script>
+<script>
+/* Words for the custom-name builder. The rest of this page is English. */
+(function () {
+  var WORDS = {
+    ru: { "Custom app name": "Своё название приложения", "custom-intro": "Соберите свою копию ТВ-приложения с любым названием на главном экране. Она ставится поверх обычной, сохраняет вход и название при обновлениях.", "custom-rules": "Буквы, цифры и пробелы, до 24 символов. До 3 сборок в день. Сначала войдите в ViktorychApp в этом браузере.", "Home-screen name": "Название на главном экране", "App logo": "Логотип", "Media": "Медиа", "Browser": "Браузер", "Player": "Плеер", "Notes": "Заметки", "Build my app": "Собрать приложение", "Download my app": "Скачать приложение", "building": "Сборка… обычно 3–5 минут. Можно оставить страницу открытой.", "ready": "Готово. Нажмите «Скачать приложение», затем «Установить».", "signin": "Сначала войдите в ViktorychApp в этом браузере.", "limit": "На сегодня сборок больше нет. Попробуйте завтра.", "not_ready": "Сборщик ещё не настроен владельцем.", "bad_name": "Введите название: буквы, цифры или пробелы.", "failed": "Сборка не удалась. Попробуйте ещё раз." },
+    es: { "Custom app name": "Nombre propio de la app", "custom-intro": "Crea tu propia copia de la app de TV con el nombre que quieras en la pantalla de inicio. Se instala sobre la app normal, mantiene tu sesión y conserva el nombre al actualizar.", "custom-rules": "Letras, números y espacios, hasta 24 caracteres. Hasta 3 compilaciones al día. Inicia sesión en ViktorychApp en este navegador primero.", "Home-screen name": "Nombre en la pantalla de inicio", "App logo": "Logo de la app", "Media": "Multimedia", "Browser": "Navegador", "Player": "Reproductor", "Notes": "Notas", "Build my app": "Crear mi app", "Download my app": "Descargar mi app", "building": "Creando… suele tardar 3–5 minutos. Puedes dejar la página abierta.", "ready": "Lista. Pulsa Descargar mi app y luego Instalar.", "signin": "Inicia sesión en ViktorychApp en este navegador primero.", "limit": "No quedan compilaciones hoy. Inténtalo mañana.", "not_ready": "El propietario aún no ha activado el creador.", "bad_name": "Escribe un nombre con letras, números o espacios.", "failed": "No se pudo crear. Inténtalo de nuevo." },
+    hi: { "Custom app name": "अपना ऐप नाम", "custom-intro": "होम स्क्रीन पर किसी भी नाम के साथ TV ऐप की अपनी कॉपी बनाएँ। यह सामान्य ऐप के ऊपर इंस्टॉल होती है, साइन-इन बना रहता है और अपडेट के बाद भी नाम वही रहता है।", "custom-rules": "अक्षर, अंक और स्पेस, अधिकतम 24 वर्ण। दिन में 3 बिल्ड तक। पहले इस ब्राउज़र में ViktorychApp में साइन इन करें।", "Home-screen name": "होम स्क्रीन नाम", "App logo": "ऐप लोगो", "Media": "मीडिया", "Browser": "ब्राउज़र", "Player": "प्लेयर", "Notes": "नोट्स", "Build my app": "मेरा ऐप बनाएँ", "Download my app": "मेरा ऐप डाउनलोड करें", "building": "बन रहा है… आमतौर पर 3–5 मिनट। पेज खुला छोड़ सकते हैं।", "ready": "तैयार। मेरा ऐप डाउनलोड करें दबाएँ, फिर Install।", "signin": "पहले इस ब्राउज़र में ViktorychApp में साइन इन करें।", "limit": "आज के बिल्ड खत्म। कल फिर कोशिश करें।", "not_ready": "मालिक ने अभी बिल्डर चालू नहीं किया है।", "bad_name": "अक्षर, अंक या स्पेस वाला नाम लिखें।", "failed": "बिल्ड नहीं बन सका। फिर कोशिश करें।" },
+    en: { "building": "Building… usually 3 to 5 minutes. You can leave this page open.", "ready": "Ready. Press Download my app, then Install.", "signin": "Sign in to ViktorychApp in this browser first.", "limit": "No builds left today. Try again tomorrow.", "not_ready": "The owner has not switched the builder on yet.", "bad_name": "Type a name with letters, numbers or spaces.", "failed": "The build did not finish. Try again." }
+  };
+  var lang = "en";
+  try { lang = localStorage.getItem("superintelapp-lang") || ""; } catch (err) { lang = ""; }
+  if (!WORDS[lang]) lang = String(navigator.language || "en").slice(0, 2);
+  if (!WORDS[lang]) lang = "en";
+  function t(key) { return (WORDS[lang] && WORDS[lang][key]) || WORDS.en[key] || key; }
+  if (lang !== "en") {
+    var nodes = document.querySelectorAll("[data-t]");
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute("data-t"));
+  }
+  var B = window.ViktorychTVBuilder;
+  var TVM = window.ViktorychTVMode;
+  var input = document.getElementById("cname");
+  var build = document.getElementById("cbuild");
+  var getBtn = document.getElementById("cget");
+  var state = document.getElementById("cstate");
+  var icon = "default";
+  var saved = TVM && (TVM.custom() || TVM.wish());
+  if (saved) { input.value = saved.label; icon = saved.icon; }
+  function paintIcons() {
+    var btns = document.querySelectorAll("[data-icon]");
+    for (var i = 0; i < btns.length; i++) btns[i].setAttribute("aria-pressed", btns[i].getAttribute("data-icon") === icon ? "true" : "false");
+  }
+  paintIcons();
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-icon]") : null;
+    if (b) { icon = b.getAttribute("data-icon"); paintIcons(); }
+  });
+  function show(st, extra) {
+    state.textContent = t(st);
+    build.disabled = st === "building";
+    if (st === "ready" && extra && extra.download) {
+      getBtn.href = extra.download;
+      getBtn.hidden = false;
+      try { getBtn.focus(); } catch (err) {}
+    }
+  }
+  build.addEventListener("click", function () {
+    getBtn.hidden = true;
+    if (!B) { show("failed"); return; }
+    B.start(input.value, icon, show);
+  });
+  if (B) {
+    var job = B.pending();
+    if (job) { input.value = job.label || input.value; show("building"); B.poll(job, show); }
+  }
+  if (location.hash === "#custom") { try { input.focus(); input.scrollIntoView({ block: "center" }); } catch (err) {} }
+})();
+</script>
+<script>
+(function () {
+  var have = false;
+  try {
+    var st = JSON.parse(localStorage.getItem("viktorychapp-tv-v1") || "{}");
+    have = !!st.app;
+    var m = /[?&]tvapp=(\d+)/.exec(location.search);
+    var current = m ? Number(m[1]) : Number(st.appVersion || 0);
+    fetch("version.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (v) {
+      if (!v || !v.versionCode) return;
+      document.getElementById("ver").textContent = "Version " + v.versionName + ", about 0.5 MB.";
+      if (have && current && current < v.versionCode) {
+        document.getElementById("update").hidden = false;
+        document.getElementById("have").hidden = true;
+        document.getElementById("get").textContent = "Update TV app";
+      }
+    }).catch(function () {});
+  } catch (err) { /* private mode */ }
+  if (have) document.getElementById("have").hidden = false;
+  if (navigator.getInstalledRelatedApps) {
+    navigator.getInstalledRelatedApps().then(function (apps) {
+      if (apps && apps.length) document.getElementById("have").hidden = false;
+    }).catch(function () {});
+  }
+  var get = document.getElementById("get");
+  try { get.focus(); } catch (err) {}
+  document.addEventListener("keydown", function (e) {
+    var code = e.keyCode || 0;
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      var all = Array.prototype.filter.call(document.querySelectorAll("a[href].btn, button, input"), function (el) { return !el.hidden && !el.disabled && el.offsetParent !== null; });
+      var at = all.indexOf(document.activeElement);
+      var next = all[Math.max(0, Math.min(all.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))];
+      if (next && next !== document.activeElement) { e.preventDefault(); next.focus(); next.scrollIntoView({ block: "center" }); }
+      return;
+    }
+    if (document.activeElement && document.activeElement.tagName === "INPUT" && (e.key === "Backspace")) return;
+    if (e.key === "Escape" || code === 10009 || code === 461 || code === 4) {
+      if (history.length > 1) history.back();
+    }
+  });
+})();
+</script>
+</body>
+</html>

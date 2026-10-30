@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="format-detection" content="telephone=no">
   <script src="shared/ios.js"></script>
+  <script src="shared/tv-boot.js"></script>
+  <script src="shared/short-link.js"></script>
   <script>
     (function () {
       try {
@@ -67,19 +70,19 @@
         } catch (e) {}
 
         var saved = localStorage.getItem(key);
-        if ((userPicked || hasSession) && (saved === "ru" || saved === "es" || saved === "en")) {
+        if ((userPicked || hasSession) && (saved === "ru" || saved === "es" || saved === "hi" || saved === "en")) {
           code = saved;
         } else if (isRu) {
           code = "ru";
           try { localStorage.setItem(key, "ru"); } catch (err) {}
-        } else if (saved === "ru" || saved === "es" || saved === "en") {
+        } else if (saved === "ru" || saved === "es" || saved === "hi" || saved === "en") {
           code = saved;
         } else if (saved == null) {
           var list = navigator.languages || [navigator.language || ""];
           var i;
           for (i = 0; i < list.length; i++) {
             var item = String(list[i] || "").toLowerCase().split("-")[0];
-            if (item === "ru" || item === "es") { code = item; break; }
+            if (item === "ru" || item === "es" || item === "hi") { code = item; break; }
           }
           try { localStorage.setItem(key, code); } catch (err) {}
         }
@@ -167,6 +170,15 @@
       try {
         installed = navigator.standalone === true || (window.matchMedia && (window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches));
       } catch (err2) { installed = false; }
+      // Installed desktop chrome before first paint (desktop-app.js keeps it in sync).
+      try {
+        var rootEl = document.documentElement;
+        var wco = navigator.windowControlsOverlay;
+        if (installed || (window.matchMedia && window.matchMedia("(display-mode: minimal-ui)").matches)) rootEl.classList.add("vk-installed");
+        if ((wco && wco.visible === true) || (window.matchMedia && window.matchMedia("(display-mode: window-controls-overlay)").matches)) rootEl.classList.add("vk-wco");
+        var desk = JSON.parse(localStorage.getItem("viktorych-desktop-v1") || "{}");
+        if (desk && desk.showScrollbar === true) rootEl.classList.add("vk-show-scrollbar");
+      } catch (err3) { /* old browser */ }
       if (cfg.gate === true && !signed && !installed) {
         document.documentElement.setAttribute("data-wall", "1");
         var theme = document.documentElement.getAttribute("data-theme");
@@ -192,6 +204,31 @@
           return saved && saved.token ? String(saved.token) : "";
         } catch (err) { return ""; }
       }
+      function bytes(text) {
+        var raw = atob(String(text || ""));
+        var out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+      }
+      /* The sealed copy on Pages first (accounts.js keeps today's key);
+         anything missing, old, or unreadable goes to the API as before. */
+      function sealedCatalog(key, auth) {
+        var subtle = window.crypto && window.crypto.subtle;
+        var st = null;
+        try { st = JSON.parse(localStorage.getItem("viktorychapp-seal-v1") || "null"); } catch (err) { st = null; }
+        if (!subtle || !st || !st.keys || st.use === false || st.tail !== auth.slice(-12) || cfg.sealed === false || typeof TextEncoder !== "function") return Promise.resolve(null);
+        var maxAge = (Number(cfg.sealMaxAgeMin) || 75) * 60000;
+        return fetch("sealed/" + key, { credentials: "omit" }).then(function (res) {
+          return res && res.ok ? res.json() : null;
+        }).then(function (doc) {
+          if (!doc || doc.v !== 1 || !st.keys[doc.day] || !(Date.now() - Date.parse(doc.at) < maxAge)) return null;
+          return subtle.importKey("raw", bytes(st.keys[doc.day]), { name: "AES-GCM" }, false, ["decrypt"]).then(function (k) {
+            return subtle.decrypt({ name: "AES-GCM", iv: bytes(doc.iv), additionalData: new TextEncoder().encode(key) }, k, bytes(doc.ct));
+          }).then(function (plain) {
+            return new Response(new TextDecoder().decode(plain), { status: 200, headers: { "Content-Type": "application/json", "X-Sealed": "pages" } });
+          });
+        }).catch(function () { return null; });
+      }
       function loadCatalog(key) {
         var api = String(cfg.api || "").replace(/\/$/, "");
         var gated = !!(cfg.gate && api);
@@ -199,10 +236,20 @@
         var headers = { "X-Feed-Refresh": "1" };
         var auth = gated ? sessionToken() : "";
         if (auth) headers.Authorization = "Bearer " + auth;
-        return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
-          if (!res || !res.ok) return emptyBody(key);
-          return res;
-        }).catch(function () { return emptyBody(key); });
+        if (gated && key === "feeds.json") {
+          try {
+            var blockList = localStorage.getItem("viktorychapp-block-h");
+            if (blockList) headers["X-Block"] = blockList;
+          } catch (err) {}
+        }
+        function fromApi() {
+          return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
+            if (!res || !res.ok) return emptyBody(key);
+            return res;
+          }).catch(function () { return emptyBody(key); });
+        }
+        if (!auth) return fromApi();
+        return sealedCatalog(key, auth).then(function (res) { return res || fromApi(); });
       }
       var boot = window.__homeFreshBoot || {};
       if (boot.feeds) return;
@@ -212,6 +259,7 @@
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="customize.css">
   <script>
     (function () {
       try {
@@ -293,6 +341,29 @@
     })();
   </script>
   <script>
+    /* Theme registry. Flag themes are data: add one entry here (plus its name in i18n) and
+       the generic html[data-flag] rules in styles.css do the rest. flag = exact flag colours
+       [top, accent, alert]; tint = the same bands darkened to OLED level for the page background. */
+    (function () {
+      var T = window.ViktorychThemes = {
+        base: { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" },
+        flags: {
+          russia: { name: "Russia", flag: ["#FFFFFF", "#0039A6", "#D52B1E"], tint: ["#0b0b0d", "#00081a", "#1a0503"], surface: "#05070d" }
+        },
+        color: function (id) { var f = T.flags[id]; return f ? f.tint[0] : (T.base[id] || "#000000"); },
+        known: function (id) { return !!(T.base[id] || T.flags[id]); },
+        apply: function (id) {
+          var root = document.documentElement, f = T.flags[id], names = ["1", "2", "3"], i;
+          root.setAttribute("data-theme", id);
+          if (!f) { root.removeAttribute("data-flag"); for (i = 0; i < 3; i++) { root.style.removeProperty("--flag-" + names[i]); root.style.removeProperty("--flag-tint-" + names[i]); } root.style.removeProperty("--flag-surface"); return; }
+          root.setAttribute("data-flag", id);
+          for (i = 0; i < 3; i++) { root.style.setProperty("--flag-" + names[i], f.flag[i]); root.style.setProperty("--flag-tint-" + names[i], f.tint[i]); }
+          root.style.setProperty("--flag-surface", f.surface || f.tint[0]);
+        }
+      };
+    })();
+  </script>
+  <script>
     (function () {
       try {
         var key = "viktorychapp-settings-v1";
@@ -304,16 +375,21 @@
         }
         var mode = raw ? (JSON.parse(raw).appearance || "lightsout") : "lightsout";
         if (mode === "auto") mode = matchMedia("(prefers-color-scheme: light)").matches ? "default" : "lightsout";
-        if (mode !== "default" && mode !== "dim" && mode !== "lightsout") mode = "lightsout";
-        document.documentElement.setAttribute("data-theme", mode);
+        var themes = window.ViktorychThemes;
+        if (!themes.known(mode)) mode = "lightsout";
+        themes.apply(mode);
         var savedNav = raw ? JSON.parse(raw) : {};
         var navLayout = savedNav.navLayout === "bar" ? "bar" : "auto";
         document.documentElement.setAttribute("data-nav-layout", navLayout);
         if (navLayout === "bar" && savedNav.navLayoutLand === true) document.documentElement.setAttribute("data-nav-bar-land", "1");
         else document.documentElement.removeAttribute("data-nav-bar-land");
-        var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
+        var accents = { yellow: "#ffd400", pink: "#f91880", purple: "#7856ff", orange: "#ff7a00", green: "#00ba7c" };
+        if (accents[savedNav.accent]) document.documentElement.style.setProperty("--blue", accents[savedNav.accent]);
+        if ([14, 16, 17, 18].indexOf(Number(savedNav.fontSize)) >= 0) document.documentElement.setAttribute("data-fs", String(savedNav.fontSize));
+        if (savedNav.density === "compact" || savedNav.density === "comfy") document.documentElement.setAttribute("data-density", savedNav.density);
+        if (savedNav.reduceMotion === true) document.documentElement.setAttribute("data-motion", "reduce");
         var metas = document.querySelectorAll('meta[name="theme-color"]');
-        for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
+        for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", themes.color(mode));
         var scheme = document.querySelector('meta[name="color-scheme"]');
         if (scheme) scheme.setAttribute("content", mode === "default" ? "light" : "dark");
         var bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -379,19 +455,25 @@
         }
         root.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:16px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";
         root.textContent = "";
+        var words = {
+          en: ["Something went wrong", "Reload", "Reset app data"],
+          es: ["Algo salió mal", "Recargar", "Restablecer los datos de la app"],
+          ru: ["Что-то пошло не так", "Перезагрузить", "Сбросить данные приложения"],
+          hi: ["कुछ गड़बड़ हो गई", "फिर से लोड करें", "ऐप का डेटा रीसेट करें"]
+        }[String(document.documentElement.lang || "en").split("-")[0]] || ["Something went wrong", "Reload", "Reset app data"];
         var box = document.createElement("div");
         var title = document.createElement("p");
-        title.textContent = "Something went wrong";
+        title.textContent = words[0];
         var row = document.createElement("p");
         var reload = document.createElement("button");
         reload.type = "button";
         reload.id = "boot-reload";
-        reload.textContent = "Reload";
+        reload.textContent = words[1];
         reload.style.cssText = "margin:0 8px;padding:10px 16px;border-radius:999px;border:0;background:#fff;color:#000;font:inherit";
         var reset = document.createElement("button");
         reset.type = "button";
         reset.id = "boot-reset";
-        reset.textContent = "Reset app data";
+        reset.textContent = words[2];
         reset.style.cssText = reload.style.cssText;
         reload.addEventListener("click", function () { location.reload(); });
         reset.addEventListener("click", resetData);
@@ -424,7 +506,7 @@
     })();
   </script>
   <div class="wco" aria-hidden="true"></div>
-  <div id="app"><article class="post boot-card" data-boot-card="1"><div class="pbody"><b>Elon Musk</b><p>“Lack of electricity” is an oversimplification. Everything is hard about bringing massive compute online at extremely high speed. If there was twice as much time, this would be relatively easy, but there is not.</p></div></article><article class="post boot-card" data-boot-card="1"><div class="pbody"><b>Elon Musk</b><p>Johann Sebastian Bach is the Shakespeare of music. Best there ever was.</p></div></article></div>
+  <div id="app"><article class="post boot-card" data-boot-card="1"><div class="pbody"><b>Copper Lane</b><p>“Lack of electricity” is an oversimplification. Everything is hard about bringing massive compute online at extremely high speed. If there was twice as much time, this would be relatively easy, but there is not.</p></div></article><article class="post boot-card" data-boot-card="1"><div class="pbody"><b>Copper Lane</b><p>Johann Sebastian Bach is the Shakespeare of music. Best there ever was.</p></div></article></div>
   <script>
     (function () {
       var app = document.getElementById("app");
@@ -497,6 +579,18 @@
         if (snap && paintPosts(snap.posts)) return;
       } catch (err) { /* a broken saved copy must not stop the shell */ }
     })();
+    /* On a slow device the restored screen can be scrolled and tapped before
+       app.js runs. Remember how far down it was, so going back from the page
+       that was tapped lands on the same spot. app.js takes over at start. */
+    (function () {
+      var hash = location.hash || "#/";
+      var seen = window.__earlyScroll = { hash: hash, y: 0 };
+      function note() {
+        if (window.__earlyScroll !== seen) { window.removeEventListener("scroll", note); return; }
+        if ((location.hash || "#/") === hash) seen.y = window.scrollY || 0;
+      }
+      window.addEventListener("scroll", note, { passive: true });
+    })();
   </script>
   <div id="account-layer"></div>
   <script>
@@ -504,11 +598,12 @@
       if (document.documentElement.getAttribute("data-wall") !== "1") return;
       var root = document.getElementById("account-layer");
       if (!root || root.childElementCount) return;
-      var lang = document.documentElement.lang === "ru" || document.documentElement.lang === "es" ? document.documentElement.lang : "en";
+      var lang = ({ ru: 1, es: 1, hi: 1 })[String(document.documentElement.lang).split("-")[0]] ? String(document.documentElement.lang).split("-")[0] : "en";
       var pack = {
         en: ["ViktorychApp", "A home for posts, stories, and the people you choose.", "Sign up", "Log in"],
         es: ["ViktorychApp", "Un hogar para publicaciones, historias y las personas que eliges.", "Regístrate", "Entrar"],
-        ru: ["ВикторычАпп", "Дом для постов, историй и людей, которых вы выбираете.", "Регистрация", "Войти"]
+        ru: ["ВикторычАпп", "Дом для постов, историй и людей, которых вы выбираете.", "Регистрация", "Войти"],
+        hi: ["ViktorychApp", "पोस्ट, स्टोरीज़ और आपके चुने हुए लोगों का घर।", "साइन अप करें", "लॉग इन करें"]
       };
       var t = pack[lang];
       root.innerHTML = '<div class="x-shell land-page boot-land"><header class="land-bar"><a class="land-brand" href="./"><img alt="" src="favicon.svg" width="28" height="28"><span>' + t[0] + '</span></a><div class="land-bar-actions"><button class="land-btn land-btn-line" type="button" data-acct="login">' + t[3] + '</button><button class="land-btn land-btn-fill" type="button" data-acct="signup">' + t[2] + '</button></div></header><main><section class="land-hero x-land-copy"><h1>' + t[0] + '</h1><p class="land-tag">' + t[1] + "</p></section></main></div>";
@@ -534,42 +629,57 @@
   <template id="late-scripts">
     <link rel="stylesheet" href="presence.css">
     <link rel="stylesheet" href="reactions.css">
+    <link rel="stylesheet" href="community-notes.css">
     <link rel="stylesheet" href="affiliations.css">
     <link rel="stylesheet" href="translate.css">
     <link rel="stylesheet" href="live-translate.css">
     <link rel="stylesheet" href="people.css">
+    <link rel="stylesheet" href="pymk.css">
     <link rel="stylesheet" href="tv.css">
     <link rel="stylesheet" href="discord-ui.css">
+    <link rel="stylesheet" href="discord-local.css">
+    <link rel="stylesheet" href="discord-key-helper.css">
     <link rel="stylesheet" href="spaces.css">
     <link rel="stylesheet" href="stories.css">
     <link rel="stylesheet" href="music.css">
     <link rel="stylesheet" href="accounts.css">
     <link rel="stylesheet" href="gifts.css">
     <link rel="stylesheet" href="badges.css">
+    <link rel="stylesheet" href="game-social.css">
+    <link rel="stylesheet" href="setting-alerts.css">
     <link rel="stylesheet" href="storage.css">
     <link rel="stylesheet" href="yt-player.css">
     <link rel="stylesheet" href="scores.css">
     <link rel="stylesheet" href="weather.css">
     <link rel="stylesheet" href="x-compose.css">
+    <link rel="stylesheet" href="nzlay-forum.css">
+    <link rel="stylesheet" href="keys.css">
     <script src="i18n.js" defer></script>
     <script src="i18n/en.js" defer></script>
     <script src="i18n/ru.js" defer></script>
     <script src="i18n/es.js" defer></script>
+    <script src="i18n/hi.js" defer></script>
     <script src="marks.js" defer></script>
     <script src="logo-text.js" defer></script>
     <script src="translate.js" defer></script>
     <script src="live-translate.js" defer></script>
+    <script src="shared/blocklist.js" type="module"></script>
     <script src="shared/feed-order.js" type="module"></script>
     <script src="shared/for-you.js" type="module"></script>
     <script src="shared/home-fresh.js" defer></script>
+    <script src="busy.js" defer></script>
     <script src="people.js" defer></script>
+    <script src="pymk.js" defer></script>
     <script src="tv.js" defer></script>
     <script src="split.js" defer></script>
+    <script src="inbox.js" defer></script>
     <script src="discord-ui.js" defer></script>
     <script src="discord-picks.js" defer></script>
   </template>
   <script src="shared/mirror.js" defer></script>
+  <script src="shared/x-range.js" defer></script>
   <script src="dock.js" defer></script>
+  <script src="desktop-app.js" defer></script>
   <script src="video-embed.js" defer></script>
   <template id="late-scripts-rest">
     <script src="shared/pill-data.js" type="module"></script>
@@ -580,24 +690,38 @@
     <script src="highlights.js" defer></script>
     <script src="audience-ui.js" defer></script>
     <script src="usernames-ui.js" defer></script>
+    <script src="ytm.js" defer></script>
     <script src="music.js" defer></script>
     <script src="shared/handle-skeleton.js" type="module"></script>
     <script src="shared/reposts.js" type="module"></script>
     <script src="shared/lazy-modules.js" defer></script>
     <script src="presence.js" type="module"></script>
     <script src="friend-p2p.js" type="module"></script>
+    <script src="peer-pool.js" type="module"></script>
     <script src="about-ui.js" defer></script>
     <script src="gifts-ui.js" defer></script>
     <script src="shared/gift-catalog.js" type="module"></script>
     <script src="badges.js" defer></script>
+    <script src="shared/regone.js" type="module"></script>
+    <script src="game-social.js" defer></script>
+    <script src="shared/local-budget.js" defer></script>
+    <script src="setting-alerts.js" defer></script>
+    <script src="data-saver.js" defer></script>
     <script src="reactions.js" defer></script>
+    <script src="community-notes.js" defer></script>
     <script src="settings-sync.js" defer></script>
+    <script src="notif-privacy.js" defer></script>
     <script src="pulse.js" defer></script>
     <script src="accounts.js" defer></script>
     <script src="mention-suggest.js" defer></script>
     <script src="settings-assistant.js" defer></script>
     <script src="nostr.js" defer></script>
+    <script src="follow-lists.js" defer></script>
     <script src="owner-keys.js" defer></script>
+    <script src="discord-local.js" defer></script>
+    <script src="nzlay-keys.js" defer></script>
+    <script src="nzlay-forum.js" defer></script>
+    <script src="discord-key-helper.js" defer></script>
     <script src="yt-player.js" defer></script>
     <script src="update.js" defer></script>
     <script src="storage.js" defer></script>
@@ -607,6 +731,7 @@
     <script src="native.js" defer></script>
     <script src="shared/feed-sources.js" type="module"></script>
     <script src="feeds-page.js" defer></script>
+    <script src="source-lists.js" defer></script>
     <script src="shared/tiktok-lock.js" type="module"></script>
     <script src="shared/x-compose.js" type="module"></script>
     <link rel="stylesheet" href="live.css">
@@ -614,6 +739,8 @@
     <script src="x-compose.js" defer></script>
     <script src="affiliations.js" defer></script>
     <script src="app.js" defer></script>
+    <script src="keys.js" defer></script>
+    <script src="keys-ui.js" defer></script>
   </template>
   <script>
     (function () {
@@ -647,7 +774,7 @@
         nodes = nodes.filter(wanted);
         if (!links.length && !nodes.length) return;
         if (document.documentElement.getAttribute("data-wall") === "1") {
-          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "settings-sync.js", "accounts.js"];
+          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "i18n/hi.js", "marks.js", "shared/handle-skeleton.js", "settings-sync.js", "data-saver.js", "accounts.js"];
           function rank(node) {
             var src = node.getAttribute("src") || "";
             var at = first.indexOf(src.replace(/^\.\//, ""));
@@ -683,8 +810,9 @@
         try {
           var savedLang = localStorage.getItem("superintelapp-lang");
           var sure = localStorage.getItem("viktorychapp-lang-user-picked") === "1" || !!localStorage.getItem("viktorychapp-account-v1") || !!localStorage.getItem("viktorychapp-accounts-session-v1");
-          if (savedLang === "en" || savedLang === "ru" || savedLang === "es") {
+          if (savedLang === "en" || savedLang === "ru" || savedLang === "es" || savedLang === "hi") {
             if (savedLang !== "es") skipPack["i18n/es.js"] = 1;
+            if (savedLang !== "hi") skipPack["i18n/hi.js"] = 1;
             if (savedLang !== "ru" && sure) skipPack["i18n/ru.js"] = 1;
           }
         } catch (err) { /* private mode keeps every pack */ }

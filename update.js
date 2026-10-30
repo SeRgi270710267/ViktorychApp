@@ -1,5 +1,7 @@
-/* Full-screen update for the installed app. The worker stays waiting until
-   Update now, then reports real precache progress. Drafts, the route, and
+/* Full-screen update for the installed app. A new worker downloads its
+   files quietly in the background first; What's new shows only once they
+   are all in, so Update now just switches over. A failed background
+   download is never shown, it is tried again later. Drafts, the route, and
    the scroll position are written down before the reload. */
 (function (root, factory) {
   var api = factory();
@@ -7,7 +9,7 @@
   if (root) root.ViktorychUpdate = api;
   if (typeof document !== "undefined") api.start();
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var PREFIX = "viktorych-a124-";
+  var PREFIX = "viktorych-a153-";
   var SNOOZE_MS = 30 * 60 * 1000;
   var CHECK_MS = 3 * 60 * 1000;
   var RESTORE_MS = 2 * 60 * 1000;
@@ -51,6 +53,8 @@
   function decide(s, now) {
     if (!s || !s.pending) return "idle";
     if (s.phase === "working" || s.phase === "done" || s.phase === "error") return "overlay";
+    // The new version is still downloading in the background.
+    if (s.ready === false) return "idle";
     if (s.snoozeUntil && now < s.snoozeUntil) return "idle";
     if (s.forced) return "overlay";
     if (s.busy) return "pill";
@@ -140,6 +144,12 @@
     return manifestPending(state.remoteSha, state.currentSha, state.remoteBuilt, state.currentBuilt, appliedSha());
   }
 
+  /* Background download wait: 15s, 30s, 1m, 2m, then every 5 minutes. */
+  function predownloadDelay(tries) {
+    var n = Math.max(0, Number(tries) || 0);
+    return Math.min(5 * 60 * 1000, 15000 * Math.pow(2, Math.min(n, 5)));
+  }
+
   /* A waiting worker with the same sha as the running one only differs in
      its build stamp: nothing to offer. Ask it over a private port; an older
      worker that cannot answer falls back to the version.json check. */
@@ -152,7 +162,7 @@
       done = true;
       sha = String(sha || "").toLowerCase();
       var fresh = sha ? (sha !== state.currentSha && sha !== appliedSha()) : remotePending();
-      if (fresh) { state.pending = true; paint(); }
+      if (fresh) { state.pending = true; predownload(worker); paint(); }
       else if (!applying) { state.waiting = null; }
     }
     try {
@@ -216,6 +226,11 @@
     failures: 0,
     failureNoted: false,
     newerHops: 0,
+    ready: false,
+    preTries: 0,
+    preBusy: false,
+    preWorker: null,
+    applyRetries: 0,
     expectingController: false,
     reloaded: false,
     suppressAutoFallback: false,
@@ -228,6 +243,7 @@
   var checking = false;
   var reloadTimer = 0;
   var stallTimer = 0;
+  var preTimer = 0;
   var userScrolled = false;
   var pendingRestore = null;
   var dom = null;
@@ -335,8 +351,8 @@
       paint();
     });
     rootEl.querySelector("#upd-go").addEventListener("click", function () {
-      if (state.phase === "error") applyNow();
-      else if (state.phase !== "working" && state.phase !== "done") applyNow();
+      if (state.phase === "error") applyNow(false);
+      else if (state.phase !== "working" && state.phase !== "done") applyNow(false);
     });
     rootEl.querySelector("#upd-later").addEventListener("click", snooze);
     rootEl.querySelector("#upd-hard").addEventListener("click", hardReload);
@@ -483,6 +499,51 @@
     paint();
   }
 
+  /* Ask the waiting worker to fetch its files now, quietly. */
+  function predownload(worker) {
+    worker = worker || state.waiting;
+    if (!worker || state.ready && state.preWorker === worker) return;
+    if (worker.state === "redundant") return;
+    if (state.preBusy && state.preWorker === worker) return;
+    if (state.preWorker !== worker) { state.ready = false; state.preTries = 0; }
+    state.preWorker = worker;
+    state.preBusy = true;
+    clearTimeout(preTimer);
+    // A worker the browser stops mid-download never answers; ask again.
+    preTimer = setTimeout(function () { state.preBusy = false; retryPredownload(); }, 5 * 60 * 1000);
+    try { worker.postMessage({ type: "predownload" }); } catch (err) { state.preBusy = false; retryPredownload(); }
+  }
+
+  function retryPredownload() {
+    clearTimeout(preTimer);
+    var wait = predownloadDelay(state.preTries);
+    state.preTries += 1;
+    preTimer = setTimeout(function () {
+      if (state.ready || applying) return;
+      predownload(state.waiting);
+    }, wait);
+  }
+
+  function onPredownload(data) {
+    if (data.type === "shell-ready") {
+      clearTimeout(preTimer);
+      state.preBusy = false;
+      state.ready = true;
+      state.preTries = 0;
+      paint();
+      return;
+    }
+    // shell-pending: the files are not all in yet. Nothing is shown.
+    state.preBusy = false;
+    if (data.reason === "newer") {
+      // A newer deploy landed: fetch its worker and download that instead.
+      state.ready = false;
+      var reg = state.reg;
+      if (reg && reg.update) reg.update().catch(function () {});
+    }
+    retryPredownload();
+  }
+
   /* The worker sends a heartbeat every few seconds while it works. After 45
      seconds of silence the page asks it directly once and gives it a short
      grace before showing Retry, so a busy but healthy update is not cut off. */
@@ -595,7 +656,8 @@
     });
   }
 
-  function applyNow() {
+  function applyNow(auto) {
+    if (auto !== true) state.applyRetries = 0;
     var attempt = {};
     applying = attempt;
     state.pending = true;
@@ -619,7 +681,14 @@
       if (worker) {
         state.waiting = worker;
         armStall();
-        worker.postMessage({ type: "apply-update" });
+        // Files nearby devices already hold for this version go into a cache
+        // the worker reuses by hash. Bounded and skipped without peers.
+        var pool = window.ViktorychPool;
+        var prefill = pool && pool.prefillShell ? Promise.resolve().then(function () { return pool.prefillShell(); }).catch(function () { return 0; }) : Promise.resolve(0);
+        prefill.then(function () {
+          if (applying !== attempt) return;
+          worker.postMessage({ type: "apply-update" });
+        });
         return;
       }
       return readControllerSha().then(function (sha) {
@@ -714,6 +783,12 @@
       if (state.expectingController || state.phase === "working" || state.phase === "done") finishUpdate();
       return;
     }
+    if (data.type === "shell-ready" || data.type === "shell-pending") {
+      var from = String(data.sha || "").toLowerCase();
+      if (!from || from === state.currentSha) return;
+      onPredownload(data);
+      return;
+    }
     if (data.type !== "update-progress") return;
     if (state.phase !== "working" && state.phase !== "error") return;
     if (typeof data.files === "number") state.files = data.files;
@@ -734,7 +809,15 @@
             if (!reg || !reg.installing || Date.now() - since > 60000) { clearInterval(poll); resolve(); }
           }, 300);
         });
-      }).then(function () { applyNow(); });
+      }).then(function () { applyNow(true); });
+      return;
+    }
+    if (data.step === "error" && state.phase === "working" && data.reason !== "quota" && state.applyRetries < 2) {
+      // Try again on its own before showing anything; files already saved
+      // are kept, so this usually finishes at once.
+      state.applyRetries += 1;
+      clearTimeout(stallTimer);
+      setTimeout(function () { if (state.phase === "working") applyNow(true); }, 1500 * state.applyRetries);
       return;
     }
     if (data.step === "error") {
@@ -818,7 +901,12 @@
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
       if (applying) return;
-      requestUpdate(state.reg);
+      requestUpdate(state.reg).then(function (reg) {
+        // version.json can be newer than the sw.js the CDN still hands out
+        // for a few minutes. Offering then ended in an error, so the offer
+        // waits for the new worker and its files; each check asks again.
+        return reg;
+      });
     });
   }
 
@@ -951,6 +1039,7 @@
 
   function poke() {
     if (document.visibilityState === "hidden") return;
+    if (state.waiting && state.pending && !state.ready && !state.preBusy && !applying) predownload(state.waiting);
     checkRemote();
     refreshBusy();
   }
@@ -1008,6 +1097,7 @@
     shaFromVersion: shaFromVersion,
     notesOf: notesOf,
     decide: decide,
+    predownloadDelay: predownloadDelay,
     progressRatio: progressRatio,
     formatBytes: formatBytes,
     fieldSnapshot: fieldSnapshot,

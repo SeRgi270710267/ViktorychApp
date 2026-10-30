@@ -18,7 +18,7 @@
                                 "authorText": {
                                   "runs": [
                                     {
-                                      "text": "Canadian Prepper",
+                                      "text": "North Lamp",
                                       "navigationEndpoint": {
                                         "clickTrackingParams": "CLoBEPS8AiITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
                                         "commandMetadata": {
@@ -38,7 +38,7 @@
                                   ],
                                   "accessibility": {
                                     "accessibilityData": {
-                                      "label": "Canadian Prepper"
+                                      "label": "North Lamp"
                                     }
                                   }
                                 },
@@ -57,7 +57,7 @@
                                   ],
                                   "accessibility": {
                                     "accessibilityData": {
-                                      "label": "Canadian Prepper"
+                                      "label": "North Lamp"
                                     }
                                   }
                                 },
@@ -98,7 +98,7 @@
                                           "watchEndpointSupportedOnesieConfig": {
                                             "html5PlaybackOnesieConfig": {
                                               "commonConfig": {
-                                                "url": "https://rr3---sn-2oab55-5i.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&msp=1&odepv=1&id=97bb80a8ebf0f234&ip=3.231.131.238&initcwndbps=1370250&mt=1792542612&oweuc="
+                                                "url": "https://rr3---sn-2oab55-5i.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&msp=1&odepv=1&id=97bb80a8ebf0f234&ip=192.0.2.1&initcwndbps=1370250&mt=1792542612&oweuc="
                                               }
                                             }
                                           }

@@ -49,6 +49,8 @@ services:
       - key: TURNSTILE_SECRET
         sync: false
       - key: PBKDF2_ITERATIONS
+        value: "30000"
+      - key: PBKDF2_LEGACY_ITERATIONS
         value: "8000"
       - key: TIKTOK_AUDIENCE
         value: "owner"
@@ -64,4 +66,9 @@ services:
         value: "3500"
       # Optional: with this set, TikTok live watching moves here too.
       - key: GITHUB_DISPATCH_TOKEN
+        sync: false
+      # Optional: the same bot token as the Worker secret. With it this
+      # backup also serves /tg media, uploads, and the Telegram feed snapshots
+      # when R2 fails, so the Telegram copies work here too.
+      - key: TELEGRAM_BOT_TOKEN
         sync: false

@@ -210,9 +210,11 @@ test("a profile pages back through all of an account's posts", async () => {
   const cols = Object.keys(row);
   made.push(row.id);
   await db.prepare("UPDATE public_posts SET created_at = ? WHERE id = ?").bind(1700000000000, row.id).run();
-  // Copies past the posting rate limit, one second apart.
+  // Copies past the posting rate limit, one second apart. The suffix range
+  // skips the seed's own id so a random seed cannot collide with a copy.
+  const start = /^1[0-4]\d$/.test(String(row.id).slice(-3)) ? 200 : 100;
   for (let i = 1; i < 45; i++) {
-    const copy = Object.assign({}, row, { id: String(row.id).slice(0, -3) + String(100 + i), body: "post " + i, created_at: 1700000000000 + i * 1000 });
+    const copy = Object.assign({}, row, { id: String(row.id).slice(0, -3) + String(start + i), body: "post " + i, created_at: 1700000000000 + i * 1000 });
     await db.prepare("INSERT INTO public_posts (" + cols.join(",") + ") VALUES (" + cols.map(() => "?").join(",") + ")").bind(...cols.map((c) => copy[c])).run();
     made.push(copy.id);
   }
@@ -224,4 +226,26 @@ test("a profile pages back through all of an account's posts", async () => {
   const ids = new Set(first.body.posts.concat(next.body.posts).map((post) => post.id));
   assert.ok(made.every((id) => ids.has(id)), "every post shows across the two pages");
   assert.equal(next.body.more, false);
+});
+
+test("a profile opened by username lists that account's own posts for other viewers", async () => {
+  const ipA = "203.0.113.181";
+  const ipB = "203.0.113.182";
+  const author = await signup("byname_writer", ipA);
+  const viewer = await signup("byname_reader", ipB);
+  const made = await call("/v1/posts", { method: "POST", ip: ipA, token: author.token, json: { body: "first post by name" } });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  // Other viewers get no public id on the profile, so the client asks by name.
+  const profile = await call("/v1/profile/byname_writer", { ip: ipB, token: viewer.token });
+  assert.equal(profile.status, 200, JSON.stringify(profile.body));
+  assert.ok(!profile.body.account.publicId);
+  for (const name of ["byname_writer", "@BYNAME_WRITER"]) {
+    const listed = await call("/v1/posts?handle=" + encodeURIComponent(name), { ip: ipB, token: viewer.token });
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.ok(listed.body.posts.some((post) => post.id === made.body.post.id), name);
+    assert.equal(listed.body.author, "");
+  }
+  const missing = await call("/v1/posts?handle=nobody_here_zz", { ip: ipB, token: viewer.token });
+  assert.equal(missing.status, 200);
+  assert.deepEqual(missing.body.posts, []);
 });

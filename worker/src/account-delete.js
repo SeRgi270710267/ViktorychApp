@@ -20,8 +20,10 @@
    discord_alert_hits, and the native server tables (srv_*). notification_dead stores a salted hash only.
    push_vapid is the one global key and has no account column. The account
    channel object is wiped in the same database step. telegram_files is a
-   shared media index with no account column, so it is left alone. There is
-   no invites table. */
+   shared media index with no account column, so the generic sweep skips it;
+   forgetTelegram drops the rows for this account's own files instead, and
+   queues their message ids so the next Telegram backup run deletes them from
+   the channel. There is no invites table. */
 
 import { inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 import { wipeAccountChannel } from "./channel.js";
@@ -478,6 +480,66 @@ async function deletePrefix(bucket, prefix) {
   } while (cursor);
 }
 
+/* Post photos and videos live under post-media/ with no account in the key.
+   Their keys are read from D1 before the rows go, and the objects are
+   removed first, so a resumed job never leaves media behind. */
+async function wipePostMedia(env, publicId) {
+  if (!env.DATA || !/^\d{12}$/.test(publicId)) return;
+  const still = await env.DB.prepare("SELECT public_id, handle, skeleton, owner FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (still && await ownerProtected(env, still)) return;
+  let listed = null;
+  try {
+    listed = await env.DB.prepare("SELECT m.object_key FROM public_post_media m JOIN public_posts p ON p.id = m.post_id WHERE p.author_id = ?").bind(publicId).all();
+  } catch (err) { return; }
+  const keys = rowsOf(listed).map((row) => String(row.object_key || "")).filter((key) => /^post-media\/[A-Za-z0-9._-]+$/.test(key));
+  try { await forgetTelegram(env, publicId, keys); }
+  catch (err) { /* R2 and D1 are still wiped; a resumed job tries again */ }
+  for (let i = 0; i < keys.length; i++) await env.DATA.delete(keys[i]);
+}
+
+/* The Telegram backup copies uploads, avatars, banners, and stories. When an
+   account goes, its rows leave telegram_files (so no route can serve them),
+   and the message ids are written to backup/tg-forget/ for the backup job,
+   which holds the channel id, to delete from the channel. */
+export const TG_FORGET_PREFIX = "backup/tg-forget/";
+export function telegramPrefixes(publicId) {
+  if (!/^\d{12}$/.test(String(publicId || ""))) return [];
+  return OBJECT_PREFIXES.map((prefix) => prefix + publicId + "/");
+}
+
+export async function forgetTelegram(env, publicId, postKeys) {
+  if (!env.DB || !env.DATA) return 0;
+  const prefixes = telegramPrefixes(publicId);
+  if (!prefixes.length) return 0;
+  const found = [];
+  const select = "SELECT object_key, message_id FROM telegram_files WHERE ";
+  for (let i = 0; i < prefixes.length; i++) {
+    let listed = null;
+    try { listed = await env.DB.prepare(select + "substr(object_key, 1, ?) = ?").bind(prefixes[i].length, prefixes[i]).all(); }
+    catch (err) { return 0; }
+    rowsOf(listed).forEach((row) => found.push(row));
+  }
+  const exact = (postKeys || []).filter((key) => /^post-media\/[A-Za-z0-9._-]+$/.test(String(key || "")));
+  for (let i = 0; i < exact.length; i += 50) {
+    const chunk = exact.slice(i, i + 50);
+    let listed = null;
+    try { listed = await env.DB.prepare(select + "object_key IN (" + chunk.map(() => "?").join(",") + ")").bind(...chunk).all(); }
+    catch (err) { listed = null; }
+    rowsOf(listed).forEach((row) => found.push(row));
+  }
+  if (!found.length) return 0;
+  const keys = Array.from(new Set(found.map((row) => String(row.object_key || "")).filter(Boolean)));
+  const messages = Array.from(new Set(found.map((row) => Number(row.message_id) || 0).filter((id) => id > 0)));
+  await env.DATA.put(TG_FORGET_PREFIX + publicId + "-" + Date.now() + ".json", JSON.stringify({ v: 1, keys: keys, messages: messages, at: Date.now() }), {
+    httpMetadata: { contentType: "application/json", cacheControl: "private, no-store" }
+  });
+  for (let i = 0; i < keys.length; i += 50) {
+    const chunk = keys.slice(i, i + 50);
+    await env.DB.prepare("DELETE FROM telegram_files WHERE object_key IN (" + chunk.map(() => "?").join(",") + ")").bind(...chunk).run();
+  }
+  return keys.length;
+}
+
 async function wipeObjects(env, publicId) {
   if (!env.DATA || !/^\d{12}$/.test(publicId)) return;
   for (let i = 0; i < OBJECT_PREFIXES.length; i++) {
@@ -503,6 +565,10 @@ async function wipeDatabase(env, job) {
   push("DELETE FROM vault_shares WHERE item_id IN (SELECT id FROM vault_items WHERE owner_id = ?)", publicId);
   push("DELETE FROM community_likes WHERE item_id IN (SELECT id FROM community_posts WHERE author_id = ?)", publicId);
   const tables = rowsOf(await env.DB.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all());
+  // Post media rows carry only the post id. They go with the author's posts.
+  if (tables.some((t) => t.name === "public_post_media") && tables.some((t) => t.name === "public_posts")) {
+    push("DELETE FROM public_post_media WHERE post_id IN (SELECT id FROM public_posts WHERE author_id = ?)", publicId);
+  }
   if (tables.some((t) => t.name === "srv_members")) {
     // Native servers key memberships by account_id; reactions use the member id.
     push("DELETE FROM srv_reactions WHERE mid IN (SELECT mid FROM srv_members WHERE account_id = ?)", publicId);
@@ -601,6 +667,7 @@ async function runJob(env, job, opts) {
     await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId).run();
     try { await env.DB.prepare("DELETE FROM device_keys WHERE public_id = ?").bind(publicId).run(); } catch (err) { /* no device asked for a key yet */ }
     steps.sessions = true;
+    await wipePostMedia(env, publicId);
     await wipeDatabase(env, job);
     try { await wipeAccountChannel(env, publicId); }
     catch (err) { /* the rows are already gone; the next run closes the object */ }
@@ -784,6 +851,28 @@ export async function handleDeletionList(request, env, deps) {
   if (!gate.ok) return deps.limited(gate);
   const hashes = await deletionHashes(env);
   return jsonBody(deps, 200, { hashes });
+}
+
+/* Delete one account by id with no sign-in proof. Only the temporary
+   account sweep and its "delete now" route call this. The owner is refused
+   here and again inside the database step. */
+export async function deleteAccountById(env, publicId) {
+  const id = String(publicId || "");
+  if (!/^\d{12}$/.test(id)) return { status: "invalid" };
+  const row = await env.DB.prepare("SELECT public_id, handle, skeleton, owner FROM accounts WHERE public_id = ?").bind(id).first();
+  if (!row) return { status: "gone" };
+  if (await ownerProtected(env, row)) return { status: "owner_protected" };
+  let hash = await userHash(env, id);
+  if (!hash) hash = hex(crypto.getRandomValues(new Uint8Array(32)));
+  const job = await startJob(env, row, hash);
+  if (!job) return { status: "pending" };
+  try {
+    return await runJob(env, job, {});
+  } catch (err) {
+    if (err && err.code === "owner_protected") return { status: "owner_protected" };
+    await saveJob(env, job, parseSteps(job.steps), "pending", "retry");
+    return { status: "pending", steps: parseSteps(job.steps) };
+  }
 }
 
 export async function blockDeletedLogin(env, publicId) {

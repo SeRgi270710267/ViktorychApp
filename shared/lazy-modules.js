@@ -8,11 +8,15 @@
     shorts: { classic: true, scripts: ["shorts.js", "shorts.css"] },
     games: { classic: true, scripts: ["games.js", "games.css"] },
     tv: { classic: true, scripts: ["tv-page.js", "tv-page.css"] },
+    tvpair: { classic: true, scripts: ["vendor/qrcode-1.4.4.js", "tv-pair.js", "tv-pair.css"] },
+    sendtv: { classic: true, scripts: ["send-tv.js", "send-tv.css"] },
     vault: { classic: false, scripts: ["vault.js", "vault.css"] },
     packages: { classic: false, scripts: ["packages.js", "packages.css"] },
     drive: { classic: false, scripts: ["drive.js", "drive.css"] },
     communities: { classic: true, scripts: ["communities.js", "communities.css"] },
-    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] }
+    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] },
+    inboxsms: { classic: true, scripts: ["inbox-sms.js", "inbox-sms.css", "inbox-mail.css"] },
+    inboxmail: { classic: true, scripts: ["inbox-mail.js", "inbox-sms.css", "inbox-mail.css"] }
   };
   var loads = {};
   var preloadStarted = false;
@@ -83,6 +87,13 @@
     } catch (err) { return false; }
   }
 
+  /* TV "lighter start": only preload what a sidebar item depends on. */
+  var NAV_GATED = ["shorts"];
+  function tvLazyStart() {
+    var tv = window.ViktorychTVMode;
+    return !!(tv && tv.on && tv.pref("lazyStart") === true);
+  }
+
   /* Idle preloading is skipped on metered or slow connections. */
   function lightNetwork() {
     var c = navigator.connection || {};
@@ -102,6 +113,7 @@
     if (preloadStarted) return;
     preloadStarted = true;
     if (lightNetwork()) return;
+    if (tvLazyStart()) list = (list || []).filter(function (name) { return NAV_GATED.indexOf(name) !== -1; });
     var start = (typeof requestIdleCallback === "function")
       ? new Promise(function (resolve) { requestIdleCallback(function () { resolve(); }); })
       : new Promise(function (resolve) { setTimeout(resolve, 2500); });

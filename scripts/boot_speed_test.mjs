@@ -64,6 +64,14 @@ try {
 const packs = spawnSync(process.execPath, [path.join(root, "scripts", "i18n_pack_test.mjs")], { stdio: "inherit", env: process.env });
 if (packs.status !== 0) process.exit(packs.status || 1);
 
+/* Every page in Hindi and Russian, looking for English left on screen. */
+const routes = spawnSync(process.execPath, [path.join(root, "scripts", "i18n_routes_test.mjs")], { stdio: "inherit", env: process.env });
+if (routes.status !== 0) process.exit(routes.status || 1);
+
 /* Link preview cards share this browser setup too. */
 const previews = spawnSync(process.execPath, [path.join(root, "scripts", "link_preview_test.mjs")], { stdio: "inherit", env: process.env });
 if (previews.status !== 0) process.exit(previews.status || 1);
+
+/* Muted & blocked data savings share this browser setup too. */
+const savings = spawnSync(process.execPath, [path.join(root, "scripts", "blocklist_savings_test.mjs")], { stdio: "inherit", env: process.env });
+if (savings.status !== 0) process.exit(savings.status || 1);

@@ -18,6 +18,7 @@
   }
 
   const CACHE_KEY = "viktorychapp-translate-v1";
+  const CACHE_MAX_CHARS = 120000;
   const HEALTH_KEY = "viktorychapp-translate-health-v1";
   const SICK_MS = 10 * 60 * 1000;
   const LANGS = [
@@ -196,9 +197,15 @@
     const entries = box.entries || {};
     entries[cacheId(key, text)] = row;
     const ids = Object.keys(entries);
-    if (ids.length > 250) {
-      ids.sort((a, b) => (entries[a].at || 0) - (entries[b].at || 0));
-      ids.slice(0, ids.length - 250).forEach((id) => { delete entries[id]; });
+    ids.sort((a, b) => (entries[a].at || 0) - (entries[b].at || 0));
+    if (ids.length > 250) ids.splice(0, ids.length - 250).forEach((id) => { delete entries[id]; });
+    /* Bounded by size too: long translated threads must not fill the
+       localStorage that settings share. Oldest out first. */
+    let size = JSON.stringify(entries).length;
+    while (size > CACHE_MAX_CHARS && ids.length > 1) {
+      const id = ids.shift();
+      size -= JSON.stringify(entries[id] || "").length + id.length + 4;
+      delete entries[id];
     }
     writeStore(CACHE_KEY, { entries: entries });
   }
@@ -347,7 +354,7 @@
     }
     if (!textFor(key)) return "";
     const meta = (box.translateMeta && box.translateMeta[key]) || {};
-    const engine = meta.engine || tr("translation");
+    const engine = meta.engine === "Device" ? tr("on-device model") : (meta.engine || tr("translation"));
     const from = meta.source ? tr("Translated from {language} by {engine}", { language: languageName(meta.source), engine: engine }) : tr("Translated by {engine}", { engine: engine });
     return `<span>${esc(from)}</span> <button class="show-more" type="button" data-act="show-original" data-key="${esc(key)}">${tr("Show original")}</button>`;
   }
@@ -410,7 +417,7 @@
       const fill = bar.querySelector("span");
       const label = bar.querySelector("em");
       if (fill) fill.style.width = pct + "%";
-      if (label) label.textContent = pct ? "Downloading translation model · " + pct + "%" : "Downloading translation model";
+      if (label) label.textContent = pct ? tr("Downloading translation model · {pct}%", { pct: pct }) : tr("Downloading translation model");
     });
   }
 
