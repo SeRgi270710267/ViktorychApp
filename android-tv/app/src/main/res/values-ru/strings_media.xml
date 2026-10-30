@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViktorychTV Player and screensaver (player/). -->
+<resources>
+    <string name="player_label">Плеер ViktorychTV</string>
+    <string name="dream_label">Лента ViktorychTV</string>
+    <string name="mp_play">Воспроизвести</string>
+    <string name="mp_pause">Пауза</string>
+    <string name="mp_rewind">Назад на 10 секунд</string>
+    <string name="mp_forward">Вперёд на 10 секунд</string>
+    <string name="mp_mute">Без звука</string>
+    <string name="mp_unmute">Включить звук</string>
+    <string name="mp_seek">Прогресс</string>
+    <string name="mp_live">ЭФИР</string>
+    <string name="mp_video">Видео</string>
+    <string name="mp_music">Музыка</string>
+    <string name="mp_error">Эту ссылку здесь не воспроизвести, поэтому она откроется в браузере.</string>
+    <string name="mp_x_failed">Не удалось загрузить пост.</string>
+    <string name="dream_empty">Откройте ViktorychTV, зайдите в Настройки &gt; ТВ и нажмите «Моя лента для заставки», чтобы видеть здесь фото из ленты.</string>
+    <string name="dream_cleared">Фото для заставки удалены</string>
+    <string name="def_player">Ссылки на видео и музыку</string>
+    <string name="def_player_desc">Ссылки YouTube, X, Twitch и на видео или музыку открываются в плеере ViktorychTV: красная полоса прогресса, круглые кнопки и текст поста сверху. OK — пуск или пауза, влево и вправо — на 10 секунд. Остальные приложения работают как раньше.</string>
+    <string name="def_player_pending">Выберите «Плеер ViktorychTV» и «Всегда», когда откроется ссылка</string>
+    <string name="def_player_off">Не использовать плеер</string>
+    <string name="def_dream">Заставка</string>
+    <string name="def_dream_desc">Фото и короткие ролики без звука из вашей ленты с текстом поста и часами. Отправьте их с сайта: Настройки &gt; ТВ &gt; Моя лента для заставки. Они хранятся только на этом телевизоре.</string>
+    <string name="def_dream_pending">Выберите «Лента ViktorychTV» в настройках заставки телевизора</string>
+    <string name="def_dream_open">Открыть настройки заставки</string>
+    <string name="def_dream_off">Не использовать заставку</string>
+    <string name="def_dream_guide">На Google TV: Настройки &gt; Система &gt; Режим ambient &gt; Заставка. На других ТВ: Настройки &gt; Настройки устройства &gt; Заставка. Выберите «Лента ViktorychTV».</string>
+    <plurals name="dream_saved">
+        <item quantity="one">%d фото сохранено для заставки</item>
+        <item quantity="few">%d фото сохранено для заставки</item>
+        <item quantity="many">%d фото сохранено для заставки</item>
+        <item quantity="other">%d фото сохранено для заставки</item>
+    </plurals>
+    <plurals name="def_dream_items">
+        <item quantity="one">Готово фото: %d</item>
+        <item quantity="few">Готово фото: %d</item>
+        <item quantity="many">Готово фото: %d</item>
+        <item quantity="other">Готово фото: %d</item>
+    </plurals>
+</resources>
