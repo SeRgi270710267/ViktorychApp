@@ -189,11 +189,15 @@
       if (row.name) into[key] = { name: row.name, at: row.at };
       else delete into[key];
     });
+    /* Repaint only when a name really changed: a sync must not redraw the
+       page under someone who is typing. */
+    var names = function (map) { return Object.keys(map).sort().map(function (k) { return k + "=" + map[k].name; }).join("\n"); };
+    var differs = names(nextExt) !== names(store.ext) || (app && names(nextApp) !== names(store.app));
     store.ext = nextExt;
     if (app) store.app = nextApp;
     store.syncedAt = Date.now();
     save();
-    changed();
+    if (differs) changed();
   }
 
   /* Pull the server copy (at most every 10 minutes unless forced). */
