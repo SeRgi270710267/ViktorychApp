@@ -422,6 +422,8 @@
     if (isShortsLocked()) {
       list = list.filter((feed) => !isLockedTiktok(feed));
     }
+    const locked = window.ViktorychLocked;
+    if (locked && locked.hidesId && list.some((feed) => feed && locked.hidesId(feed.id))) list = list.filter((feed) => !(feed && locked.hidesId(feed.id)));
     return list;
   }
 
@@ -6619,6 +6621,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
     // Hook for the shared blocklist (mute/block data): checked before a reply
     // card or its media is built.
+    // Locked follows stay off every timeline until the Locked area opens.
+    const locked = window.ViktorychLocked;
+    if (locked && typeof locked.hides === "function") {
+      try { if (locked.hides(post)) return true; } catch (err) { /* never hide on a broken filter */ }
+    }
     const list = window.ViktorychBlocklist;
     if (list && typeof list.hides === "function") {
       try { if (list.hides(post)) return true; } catch (err) { /* a broken list must not hide the thread */ }
@@ -14004,6 +14011,8 @@ const here = parseRoute();
       if (!target.own && (target.feedId || target.handle) && target.platform !== "app") rows.push(profileSheetRow("busy-menu", tr("Posting volume"), `data-key="${esc(target.feedId || ((target.platform || "x") + ":" + String(target.handle || "").toLowerCase()))}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}" data-platform="${esc(target.platform || "x")}"`));
       const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
       if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
+      const lockId = target.feedId || (target.platform === "app" && target.handle ? "app:@" + String(target.handle).replace(/^@/, "") : "");
+      if (!target.own && lockId && signed && window.ViktorychLocked && isFollowed(lockId)) rows.push(profileSheetRow("profile-lock-follow", tr("Lock follow"), `data-id="${esc(lockId)}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}"`));
       if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
       if (target.feedId || target.handle) rows.push(profileSheetRow("profile-cm-tab", tr("Add to Communities tab"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}" data-name="${esc(target.name || target.handle || "")}"`));
     }
@@ -15286,6 +15295,7 @@ const here = parseRoute();
     const map = new Map();
     function take(row, fromLocal) {
       if (!row || (row.kind !== "video" && row.kind !== "article") || !row.id) return;
+      if (row.feedId && window.ViktorychLocked && window.ViktorychLocked.hidesId && window.ViktorychLocked.hidesId(row.feedId)) return;
       if (fromLocal && row.kind === "video" && pause.videos) return;
       if (fromLocal && row.kind === "article" && pause.articles) return;
       const at = Number(row.at) || 0;
@@ -16914,6 +16924,7 @@ const here = parseRoute();
       else if (section === "privacy") key = tr("Privacy and safety");
       else if (section === "muted") key = tr("Muted & blocked");
       else if (section === "usernames") key = tr("Usernames");
+      else if (section === "locked-follows") key = tr("Locked follows");
       else if (section === "nostr") key = tr("Nostr");
       else if (section === "live-translate") key = tr("Live Translate");
       else if (section === "content") key = tr("Custom tabs");
@@ -17473,6 +17484,7 @@ const here = parseRoute();
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
       return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
     }
+    if (section === "locked-follows") return settingsHead(tr("Locked follows"), "#/settings/privacy") + `<div class="set-block">${window.ViktorychLocked ? window.ViktorychLocked.settingsHtml() : ""}</div>`;
     if (section === "friends") return settingsHead(tr("Friends"), "#/settings/privacy") + `<div class="set-block">${window.ViktorychFriendsPref ? window.ViktorychFriendsPref.pageHtml() : ""}</div>`;
     if (section === "muted") return settingsHead(tr("Muted & blocked"), "#/settings/privacy") + `<div class="set-block">${mutedSettingsHtml()}</div>`;
     if (section === "privacy") {
@@ -17499,6 +17511,7 @@ const here = parseRoute();
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
         ${window.ViktorychNostr && window.ViktorychNostr.allowed() ? `<div class="set-list">${settingsRow("#/settings/nostr", tr("Nostr"), tr("Follow Nostr profiles, send your posts to relays, and see Nostr replies."))}</div>` : ""}
+        ${acct && window.ViktorychLocked ? `<div class="set-list">${settingsRow("#/settings/locked-follows", tr("Locked follows"), tr("Hide people you follow everywhere until you unlock."))}</div>` : ""}
         ${acct && window.ViktorychUsernames ? `<div class="set-list">${settingsRow("#/settings/usernames", tr("Usernames"), tr("Choose who sees which username, nicknames, and who can mention you."))}</div>` : ""}
         ${(window.AudienceLists && window.AudienceLists.settingsHtml) ? window.AudienceLists.settingsHtml() : ""}
         ${privSection}
@@ -22932,6 +22945,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       STATE.profileMenu = null;
       toast(tr("We'll show you less of this."));
       render();
+      return;
+    }
+    if (act === "profile-lock-follow") {
+      STATE.profileMenu = null;
+      render();
+      if (window.ViktorychLocked && el.dataset.id) window.ViktorychLocked.lockFlow(el.dataset.id, el.dataset.name || "", el.dataset.handle || "");
       return;
     }
     if (act === "profile-block") {
