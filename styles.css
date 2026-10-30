@@ -6625,6 +6625,96 @@ html[data-theme="default"] .logo-preview { color: #000; }
 .logo-preview .logo-preview-mark { display: block; height: 28px; width: auto; max-width: 100%; }
 .logo-preview-none { color: var(--muted); font-size: 14px; }
 
+/* X.com mobile and tablet timeline, measured from x.com (text-body 15/20,
+   subtext 13/16, 40px avatar in a 40px column, 8px gap, 16px side padding).
+   Desktop (1000px and up) keeps its own X desktop rules above. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.explain-btn { display: none; }
+/* The handle shrinks first and never grows, so "· 12h" sits right after it. */
+.byline .handle { flex: 0 100 auto; }
+@media (max-width: 999px) {
+  .post { padding: 12px 16px 0; }
+  .post-row { gap: 8px; }
+  .repost-line { margin: 0 0 4px 24px; gap: 8px; font-size: 13px; line-height: 16px; }
+  .post:has(.post-row > a:has(> .ava-none)) .repost-line,
+  .post:has(.ava-col:has(.ava-none)) .repost-line { margin-left: 0; }
+  .byline { gap: 4px; height: 20px; }
+  .byline .dot { margin: 0 -1px; }
+  .byline .explain-btn,
+  .byline .more-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    position: relative;
+    width: 28px;
+    min-width: 28px;
+    height: 20px;
+    min-height: 20px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    border-radius: 9999px;
+  }
+  .byline .explain-btn { margin-left: auto; }
+  .byline .explain-btn + .more-btn { margin-left: 2px; }
+  .byline .more-btn { margin-right: -6px; }
+  .byline .explain-btn::before,
+  .byline .more-btn::before { content: ""; position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; border-radius: 9999px; transform: translate(-50%, -50%); }
+  .byline .explain-btn svg, .byline .more-btn svg { width: 18.75px; height: 18.75px; fill: currentColor; }
+  .byline .more-btn svg { transform: rotate(90deg); }
+  .byline .explain-btn:active::before, .byline .more-btn:active::before { background: var(--blue-dim); }
+  .post .post-main > .odai-btn[data-act="odai-summarize"],
+  .post .quote > .odai-btn[data-act="odai-summarize"] { display: none; }
+  .post-main > .post-text, .post-main > [data-tr] { margin-top: 0; }
+  .replying { margin: 0 0 2px; font-size: 15px; line-height: 20px; }
+  .quote { margin-top: 12px; padding: 12px; border-radius: 16px; }
+  .quote-head { gap: 4px; font-size: 15px; line-height: 20px; }
+  .quote-head .name { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+  .quote-head .handle { flex: 0 100 auto; }
+  .quote-text { margin-top: 4px; }
+  .actions { margin-top: 2px; }
+  .action { min-height: 32px; }
+  .action-stats > .action,
+  .action-stats > .repost-wrap { min-width: max-content; }
+  .action-stats > .action, .action-stats > .repost-wrap > .action { overflow: visible; }
+  .action .count { overflow: visible; text-overflow: clip; }
+  .action-stats { margin-right: 4px; }
+  .action-more { gap: 8px; }
+  .action-more .action { min-width: 24px; }
+  .action-more .action.share { justify-content: flex-end; }
+  .action .ic, .action svg { width: 18.75px; height: 18.75px; }
+  .action .ic::after { width: 34px; height: 34px; }
+  .status-author { gap: 8px; }
+  .status-author .name { font-size: 15px; font-weight: 700; line-height: 20px; }
+  .status-author .handle { font-size: 15px; line-height: 20px; }
+}
+
+/* Profile picture shape (Settings > Display). Square is X's rounded square,
+   4px at 40px, the look X gives organisations. Story rings stay round. */
+html[data-ava-shape="square"] :is(.ava, .ava img, .pava, .pava img, .m-ava .ava, .drawer-ava, .drawer-ava .ava, .drawer-ava img, .drawer-ava .initials,
+  .friend-avatar, .note-face-wrap .ava, .note-face-wrap img, .note-face-wrap .note-face, .pill-ava, .yt-ch .ava, .yt-ch .ava img,
+  .about-ava, .acct-ava, .cm-app-ava, .cm-composer-ava, .cm-hub-bar .m-ava, .dmsg-ava, .dmsg-ava img, .dmsgs-head-face, .dmsgs-head-face img,
+  .xdock-ava, .shorts-ava, .shorts-account-face, .sp-stack .sp-face, .sp-ava .sp-initial, .tv-chat-ava, .feeds-face > :first-child) {
+  border-radius: clamp(2px, 10%, 12px) !important;
+}
+@media (max-width: 999px) {
+  .status-author .more-btn svg { transform: rotate(90deg); }
+}
+/* X mobile chrome: the translucent top bar slides away and the bottom bar
+   fades while scrolling down (html.chrome-hidden, set from one rAF scroll
+   handler). Transform and opacity only, so it stays on the compositor. */
+@media (max-width: 499px) {
+  .topbar { will-change: transform; }
+  .bottom-nav, .fab { transition: opacity 0.2s ease; }
+  html.chrome-hidden .bottom-nav { opacity: 0.45; }
+  html.chrome-hidden .fab { opacity: 0.45; }
+}
+@media (max-width: 499px) and (prefers-reduced-motion: reduce) {
+  .topbar, .bottom-nav, .fab { transition: none; }
+}
+
 /* Busy accounts: a folded run of posts is one thin row, X's "Show more" link
    style; a daily digest is one text-only card. Neither loads media. */
 .busy-more { border-bottom: 1px solid var(--line); }

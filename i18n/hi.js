@@ -3780,6 +3780,7 @@ SI18n.addPack("hi", {
   "Themes": "थीम",
   "Menus": "मेन्यू",
   "Menu: {name}": "मेन्यू: {name}",
+  "Explain this post": "इस पोस्ट को समझाएँ",
   "Site health": "साइट की स्थिति",
   "Site health: {count} problems need you": "साइट की स्थिति: {count} समस्याओं पर आपका ध्यान चाहिए",
   "Site health: all good": "साइट की स्थिति: सब ठीक है",
