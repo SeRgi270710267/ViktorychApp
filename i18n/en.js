@@ -4900,5 +4900,7 @@ SI18n.addPack("en", {
   "Rejected": "Rejected",
   "Sent to the owner": "Sent to the owner",
   "Source lists: extra sources only the accounts you pick see": "Source lists: extra sources only the accounts you pick see",
-  "Your extra sources and requests": "Your extra sources and requests"
+  "Your extra sources and requests": "Your extra sources and requests",
+  "Usage didn't load": "Usage didn't load",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers."
 });

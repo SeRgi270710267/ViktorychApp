@@ -4901,5 +4901,7 @@ SI18n.addPack("es", {
   "Rejected": "Rechazada",
   "Sent to the owner": "Enviada al propietario",
   "Source lists: extra sources only the accounts you pick see": "Listas de fuentes: fuentes extra que solo ven las cuentas que elijas",
-  "Your extra sources and requests": "Tus fuentes extra y solicitudes"
+  "Your extra sources and requests": "Tus fuentes extra y solicitudes",
+  "Usage didn't load": "El uso no se cargó",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "El servidor no respondió a tiempo. Tus servidores siguen funcionando; solo faltan los números de este panel."
 });

@@ -6555,6 +6555,12 @@ img, video { max-width: 100%; }
 .pool-cap .pool-origin.out { opacity: .72; }
 .pool-cap .pool-origin.resting { opacity: .8; }
 .pool-cap .pool-note.calm { color: var(--muted, #71767b); }
+/* Usage panel that could not load: calm X-style note with a Retry pill. */
+.usage-panel .usage-error { padding: 12px 0 4px; }
+.usage-panel .usage-error b { display: block; font-size: 15px; font-weight: 700; }
+.usage-panel .usage-error .set-sub { margin: 4px 0 12px; color: var(--muted, #71767b); }
+.usage-panel .usage-retry { border-radius: 9999px; padding: 0 16px; min-height: 32px; font-weight: 700; }
+.usage-panel .pool-cap .pool-origin .pool-note:empty { display: none; }
 
 /* Muted & blocked: placeholders load nothing (no avatar, media or preview). */
 .post.post-hidden .post-main { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 4px 0; }

@@ -4901,5 +4901,7 @@ SI18n.addPack("ru", {
   "Rejected": "Отклонено",
   "Sent to the owner": "Отправлено владельцу",
   "Source lists: extra sources only the accounts you pick see": "Списки источников: дополнительные источники, которые видят только выбранные вами аккаунты",
-  "Your extra sources and requests": "Ваши дополнительные источники и запросы"
+  "Your extra sources and requests": "Ваши дополнительные источники и запросы",
+  "Usage didn't load": "Не удалось загрузить использование",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "Сервер не ответил вовремя. Ваши серверы продолжают работать, просто в этой панели пока нет цифр."
 });

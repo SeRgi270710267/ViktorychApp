@@ -864,6 +864,10 @@
     if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path)) || /^\/v1\/ext-graph\/youtube\?/.test(String(path))) {
       var mainRoot = String(config().api || "").replace(/\/$/, "");
       if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
+      // Owner usage goes to the Worker only. Its analytics read can take a
+      // few seconds, and a hedged read to the backup used to win the race
+      // with an answer the panel cannot use, leaving it on "Loading" forever.
+      if (mainRoot && /^\/v1\/owner\/usage/.test(String(path))) list = [mainRoot];
     }
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     var headers = {};
@@ -4673,20 +4677,37 @@ function signupPayload() {
     }).catch(function () {});
   }
   /* Owner panel: usage against the free limits, read at most every five
-     minutes while settings are open. */
+     minutes while settings are open. The read never hangs the panel: after
+     USAGE_WAIT ms, or on any answer that is not a usable report, the panel
+     shows a calm error with Retry and each server as unknown. */
   var usageDoc = null;
   var usageAt = 0;
-  function loadUsage() {
+  var usageState = "idle"; // idle, loading, ok, failed
+  var usageTry = 0;
+  var USAGE_WAIT = 8000;
+  function usageSettle(state, body, tryId) {
+    if (tryId !== usageTry) return;
+    if (state === "ok") { usageDoc = body; usageState = "ok"; }
+    else if (usageState === "loading") usageState = "failed";
+    else return;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function loadUsage(force) {
     var session = readSession();
     if (!session || !session.token || !session.account || !session.account.owner) return;
-    if (Date.now() - usageAt < 5 * 60 * 1000) return;
+    if (usageState === "loading") return;
+    if (!force && usageState !== "failed" && Date.now() - usageAt < 5 * 60 * 1000) return;
+    // A failed read waits a little before the panel tries again on its own.
+    if (!force && usageState === "failed" && Date.now() - usageAt < 2 * 60 * 1000) return;
     usageAt = Date.now();
+    usageState = "loading";
+    var tryId = ++usageTry;
     loadBackupStatus();
+    later(function () { usageSettle("failed", null, tryId); }, Number(config().usageWaitMs) || USAGE_WAIT);
     api("/v1/owner/usage", { token: session.token }).then(function (body) {
-      if (!body || body.status !== 200) return;
-      usageDoc = body;
-      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-    }).catch(function () {});
+      if (!body || body.status !== 200 || !body.limits) return usageSettle("failed", null, tryId);
+      usageSettle("ok", body, tryId);
+    }).catch(function () { usageSettle("failed", null, tryId); });
   }
   /* Server pool: every origin that answers /v1 reads, with its own free
      daily capacity. The headline is total used over total capacity; each
@@ -4723,7 +4744,9 @@ function signupPayload() {
       var hours = backup && backup.hours ? backup.hours : backupHours();
       var resting = !!(hours && (hours.paused || Number(hours.pct) >= HOURS_PAUSE_PCT));
       var down = !resting && (!backup || backup.ok === false || (backup.egress && backup.egress.saver));
-      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down, resting: resting, restUntil: hours && (hours.resetAt || hours.reset) || "" });
+      // Usage did not load and the backup has not reported yet: unknown, not down.
+      var notYet = !!(u && u.failed && !backup && !resting);
+      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down && !notYet, unknown: notYet, resting: resting, restUntil: hours && (hours.resetAt || hours.reset) || "" });
     }
     var used = 0, cap = 0;
     var unknown = origins.some(function (o) { return o.unknown; });
@@ -4757,7 +4780,7 @@ function signupPayload() {
         '<div class="usage-top"><span>' + esc(o.name) + '</span><b>' + esc(shown) + "</b></div>" +
         '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(o.pct) + '" aria-label="' + esc(o.name) + '"><i style="width:' + pctOf(o.pct) + '%"></i></div>' +
         '<div class="pool-meta"><span>' + esc(o.unknown ? tr("— of {limit}", { limit: formatNum(o.cap) }) : tr("{used} of {limit}", { used: formatNum(o.used), limit: formatNum(o.cap) })) + "</span><span>" + esc(tr("Resets {time}", { time: when })) + "</span></div>" +
-        (note ? '<p class="pool-note' + (o.resting ? " calm" : "") + '">' + esc(note) + "</p>" : "") + "</div>";
+        (note ? '<p class="pool-note' + (o.resting || o.unknown ? " calm" : "") + '">' + esc(note) + "</p>" : "") + "</div>";
     }).join("");
     return '<section class="pool-cap' + lvl(pool.pct) + '" data-pool-cap>' +
       '<div class="pool-head"><span>' + esc(tr("Server pool today")) + '</span><b class="pool-pct">' + esc(pool.pct + "%") + "</b></div>" +
@@ -4773,8 +4796,13 @@ function signupPayload() {
   }
   function usageHtml() {
     var u = usageDoc;
-    var head = '<div class="set-block usage-panel"><h2>' + esc(tr("Free tier usage")) + "</h2>";
-    if (!u) return head + '<p class="phandle">' + esc(tr("Loading…")) + "</p></div>";
+    var head = '<div class="set-block usage-panel" data-usage-state="' + esc(u ? "ok" : usageState === "failed" ? "failed" : "loading") + '"><h2>' + esc(tr("Free tier usage")) + "</h2>";
+    if (!u && usageState === "failed") {
+      return head + '<div class="usage-error" role="status"><b>' + esc(tr("Usage didn't load")) + '</b><p class="set-sub">' + esc(tr("The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.")) + '</p>' +
+        '<button class="outline usage-retry" type="button" data-acct="usage-retry">' + esc(tr("Retry")) + "</button></div>" +
+        poolCapacityHtml(serverPool({ failed: true, limits: {} }, backupStatus)) + "</div>";
+    }
+    if (!u) return head + '<p class="phandle" aria-busy="true">' + esc(tr("Loading…")) + "</p></div>";
     var L = u.limits || {};
     var rows = "";
     if (!u.configured) {
@@ -5877,7 +5905,8 @@ function signupPayload() {
     else if (act === "add-channel") addBackupChannel();
     else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
-else if (act === "copy-id") copyAccountId();
+else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender(); }
+    else if (act === "copy-id") copyAccountId();
     else if (act === "open-gallery") openGallery(acct.dataset.kind || "photo");
     else if (act === "gallery-close") { gallery.open = false; redraw(); }
     else if (act === "gallery-prev" || act === "gallery-next") stepGallery(act === "gallery-next" ? 1 : -1);
@@ -6398,6 +6427,7 @@ else if (act === "copy-id") copyAccountId();
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
     originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted, weights: function () { return poolWeights(apiOrder()); }, pick: weightedPick, warm: poolWarm, originWarm: originWarm, warmNote: warmNote, sealedText: sealedText, dataDenied: dataDenied, paused: backupPaused, hoursFactor: hoursFactor, wake: wakeBackup },
     serverPool: function () { loadUsage(); return usageDoc ? serverPool(usageDoc, backupStatus) : null; },
+    usagePanel: { load: loadUsage, html: usageHtml, state: function () { return usageState; } },
     serverPoolFrom: serverPool,
     poolCapacityHtml: poolCapacityHtml,
     saveOwnAccount: applyOwnAccount,

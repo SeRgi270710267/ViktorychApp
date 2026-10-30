@@ -4889,5 +4889,7 @@ SI18n.addPack("hi", {
   "Your rules are stored on this device and synced privately to your account. They are never shared.": "आपके नियम इस डिवाइस पर सेव होते हैं और आपके खाते में निजी तौर पर सिंक होते हैं। उन्हें कभी साझा नहीं किया जाता।",
   "Your rules stay on this device.": "आपके नियम इसी डिवाइस पर रहते हैं।",
   "r/name or community": "r/name या समुदाय",
-  "this account": "यह खाता"
+  "this account": "यह खाता",
+  "Usage didn't load": "उपयोग लोड नहीं हुआ",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "सर्वर ने समय पर जवाब नहीं दिया। आपके सर्वर काम कर रहे हैं, बस इस पैनल में संख्याएँ नहीं हैं।"
 });
