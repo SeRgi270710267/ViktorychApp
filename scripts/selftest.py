@@ -1469,16 +1469,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a146-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a147-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a146-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a147-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in deployed_paths() and "spaces.css" in deployed_paths() and "live/" in deployed_paths(), "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a146-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a147-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -3449,6 +3449,53 @@ def discord_picks_checks(discord_live) -> None:
         picker.join(store["discord/x/request.json"])
         picker.join(store["discord/x/request.json"])
         check(len(seen_urls) == 1 and seen_urls[0].endswith("/invites/abc") and store["discord/x/join.json"]["status"] == "joined", "one confirmed join is sent once")
+        cap_seen = []
+
+        def cap_transport(url, headers):
+            cap_seen.append(dict(headers))
+            if headers.get("X-Captcha-Key"):
+                return 200, b'{"guild":{"id":"%s"}}' % g3.encode()
+            return 400, b'{"captcha_key":["captcha-required"],"captcha_sitekey":"site-key-1","captcha_service":"hcaptcha","captcha_rqdata":"rq-data","captcha_rqtoken":"rq-token","captcha_session_id":"sess-1"}'
+
+        picker.join_transport = cap_transport
+        ask2 = {"requestedAt": "2026-01-03", "guild": g3, "join": {"code": "abc", "id": "abcdefgh5678", "guild": g3}}
+        picker.join(ask2)
+        cap_doc = store.get("discord/x/captcha.json") or {}
+        check(store["discord/x/join.json"]["status"] == "needs_captcha" and cap_doc.get("sitekey") == "site-key-1" and cap_doc.get("rqtoken") == "rq-token" and "secret-token-value" not in json.dumps(cap_doc), "a captcha is saved privately for the owner, never solved")
+        ask3 = {"requestedAt": "2026-01-03", "guild": g3, "join": {"code": "abc", "id": "abcdefgh5678", "guild": g3, "captcha": {"sid": "solution0001", "key": "owner-answer", "rqtoken": "rq-token", "session": "sess-1"}}}
+        picker.join(ask3)
+        picker.join(ask3)
+        check(len(cap_seen) == 2 and cap_seen[1].get("X-Captcha-Key") == "owner-answer" and cap_seen[1].get("X-Captcha-Rqtoken") == "rq-token" and store["discord/x/join.json"]["status"] == "joined", "the owner's own answer is sent once with Discord's captcha headers")
+        picker.join({"requestedAt": "2026-01-04", "guild": g3, "join": {"code": "abc", "id": "abcdefgh9999", "guild": g3, "by": "worker"}})
+        check(len(cap_seen) == 2, "a join the Worker already sent is not sent again")
+        check(discord_picks.key_check_due({}, "2026-01-05T00:00:00Z") and not discord_picks.key_check_due({"checkedAt": "2026-01-05T08:00:00Z"}, "2026-01-05T23:00:00Z"), "the key check runs once a day")
+        me_calls = []
+
+        class FakeMe:
+            token = "secret-token-value"
+
+            def key_check(self):
+                me_calls.append("/users/@me")
+                return {"id": "1"}
+
+        wrote = []
+        real_write = discord_live.write_health
+        discord_live.write_health = lambda status, reason, token, checked=None: wrote.append((status, checked))
+        try:
+            discord_live.daily_key_check(FakeMe(), {"checkedAt": "2026-01-04T00:00:00Z"}, "2026-01-05T00:00:00Z")
+            discord_live.daily_key_check(FakeMe(), {"checkedAt": "2026-01-05T00:00:00Z"}, "2026-01-05T09:00:00Z")
+        finally:
+            discord_live.write_health = real_write
+        check(me_calls == ["/users/@me"] and wrote == [("ok", "2026-01-05T00:00:00Z")], "one light /users/@me read a day, recorded without ids")
+        from adapters.discord import Client as _DClient, user_get_allowed as _uga
+        seen_urls = []
+        probe = _DClient("t", transport=lambda url, headers: (seen_urls.append(url) or (200, {}, b"{}")), sleep=lambda s: None, auth="user", min_interval=0)
+        check(probe.get_json("/users/@me") is None and probe.key_check() == {} and probe.get_json("/users/@me") is None and len(seen_urls) == 1 and not _uga("https://discord.com/api/v10/users/@me"), "/users/@me is read only by the daily key check")
+        capped = _DClient("t", transport=lambda url, headers: (200, {}, b"[]"), sleep=lambda s: None, auth="user", min_interval=0)
+        capped.max_requests = 3
+        got = [capped.get_json("/users/@me/guilds") for _ in range(5)]
+        check(capped.requests == 3 and capped.capped and got[3] is None, "user reads stop at the per-run cap")
+        picker.join_transport = transport
         store["discord/x/picks.json"] = picks
         added = picker.reload()
         check(added == {"300000000000000010"}, "a new pick is polled right away")
@@ -4603,7 +4650,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "viktorych-a146-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-a147-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     lazy = (ROOT / "shared" / "lazy-modules.js").read_text(encoding="utf-8")
     check('shorts.js", "shorts.css"' in lazy and "shorts.js" in worker and "shorts.css" in worker and 'info.name === "shorts"' in app, "the page and the service worker load Shorts on demand")
     check('drive.js", "drive.css"' in lazy and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker and 'ensureLazy("drive")' in app, "the page and the service worker load Drive on demand")
@@ -4658,7 +4705,7 @@ def story_checks() -> None:
     shorts_js = (ROOT / "shorts.js").read_text(encoding="utf-8")
     check('tr("added accounts")' in shorts_js and 'data-shorts="remove-account"' in shorts_js and 'tr("Original quality")' in shorts_js and "tracked" not in shorts_js.lower(), "Shorts lets the owner add an account and does not call it tracked")
     check("isTikTokCdn(url)" in worker and "if (isTikTokCdn(url)) return;" in worker, "the service worker does not intercept TikTok CDN media")
-    check('VERSION = "viktorych-a146-__SW_VERSION__"' in worker, "the service worker cache stamp is a146")
+    check('VERSION = "viktorych-a147-__SW_VERSION__"' in worker, "the service worker cache stamp is a144")
     landing_css = (ROOT / "landing.css").read_text(encoding="utf-8")
     accounts_src = (ROOT / "accounts.js").read_text(encoding="utf-8")
     check("function showLanding(" in accounts_src and "function installedApp(" in accounts_src and "display-mode: standalone" in accounts_src and 'data-acct="signup"' in accounts_src and 'data-acct="login"' in accounts_src and "prefers-reduced-motion" in landing_css and "animation-timeline" in landing_css and "landing/timeline.webp" in accounts_src, "logged-out visitors get the marketing landing and an installed app skips it")

@@ -22,7 +22,7 @@ import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, wat
 import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
-import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
+import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys, readUsableKey, markKeyAttention } from "./owner-keys.js";
 import { TEMP_SCHEMA, cleanDeviceKey, decorateTemporary, handleTemporary, markTemporary, sweepTemporary, tempBlockedPointsRoute, tempExpiry, tempSignupsPerDay, isTemporary } from "./temp-accounts.js";
 import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
@@ -5645,7 +5645,7 @@ async function route(request, env, ctx) {
     if (handled) return handled;
   }
   if (isPickPath(path)) {
-    const handled = await handleDiscordPickRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    const handled = await handleDiscordPickRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited, readKey: (e) => readUsableKey(e, "discord"), markKey: (e, reason) => markKeyAttention(e, "discord", reason) });
     if (handled) return handled;
   }
   if (path === "/v1/discord/alerts" || path.startsWith("/v1/discord/alerts/")) {
