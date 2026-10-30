@@ -30,7 +30,11 @@
 .stor-bar i { display: block; height: 100%; border-radius: 4px; }
 .stor-size { color: var(--muted); font-size: 13px; flex: none; }
 .stor-clear { flex: none; min-height: 32px; padding: 4px 10px; }
-.stor-slider { width: 100%; margin: 4px 0 14px; accent-color: var(--blue, #1d9bf0); }
+.stor-slider { width: 100%; }
+.stor-max-row { margin: 16px 0 14px; padding: 4px 0; }
+/* The cache limit alert opens this page on the slider row: a quiet red ring
+   around the whole row, never a box over the slider, so input still works. */
+.stor-max-row.sa-pulse { outline: 1px solid rgba(244, 33, 46, .75); outline-offset: 6px; animation: none; box-shadow: 0 0 0 6px rgba(244, 33, 46, .06); pointer-events: auto; }
 .stor-debug { padding: 4px 16px 24px; }
 .stor-controls .danger { margin-top: 8px; }
 .stor-sub { display: block; color: var(--muted); font-size: 13px; line-height: 16px; margin-top: 2px; overflow-wrap: anywhere; }

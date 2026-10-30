@@ -575,6 +575,21 @@ test("discord alerts preview, dedupe, mutes, and quiet hours stay on already loa
   const box = await one("SELECT next_at FROM notification_outbox WHERE public_id = ? AND note_id = ?", alpha.account.publicId, "discord:" + sample.id);
   assert.ok(box && Number(box.next_at) > Date.now());
 
+  // A private channel still alerts, but the note never carries the text or author.
+  const hushed = Object.assign({}, sample, { id: "800000000000000009", channelId: "600000000000000016" });
+  const quiet = await call("/v1/discord/alerts/ingest", {
+    method: "POST",
+    ip: "203.0.113.140",
+    token: alpha.token,
+    body: { messages: [hushed], mutedChannels: [], mutedServers: [], privateChannels: ["600000000000000016"] }
+  });
+  assert.equal(quiet.status, 200);
+  assert.equal(quiet.body.created, 1);
+  const hushedNote = await one("SELECT payload FROM notifications WHERE public_id = ? AND idempotency_key = ?", alpha.account.publicId, "discord:" + hushed.id);
+  assert.ok(hushedNote);
+  assert.equal(hushedNote.payload.includes("zephyrword"), false);
+  assert.equal(hushedNote.payload.includes("Sample"), false);
+
   const view = await call("/v1/notifications", { ip: "203.0.113.123", token: alpha.token });
   const alert = (view.body.items || []).find((item) => item.kind === "discord");
   assert.ok(alert);

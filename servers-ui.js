@@ -107,6 +107,9 @@
     }
     lsSet("who", who);
   }
+  var FRESH_MS = 1500;
+  var fresh = {};
+  var inflight = {};
   function call(path, opts) {
     opts = opts || {};
     var base = api();
@@ -117,11 +120,61 @@
     var body = opts.body;
     if (body != null && !(body instanceof Blob) && typeof body !== "string") { headers["Content-Type"] = "application/json"; body = JSON.stringify(body); }
     if (opts.type) headers["Content-Type"] = opts.type;
-    return fetch(base + "/v1/servers" + path, { method: opts.method || "GET", headers: headers, body: body, cache: "no-store" })
+    var method = opts.method || "GET";
+    var reading = method === "GET";
+    var now = Date.now();
+    // A failed read waits before it is sent again, so a screen that repaints
+    // after every answer cannot turn one error into a request storm.
+    if (reading && now < coolDevice) return Promise.resolve({ status: 429, held: true, body: { error: "rate_limited", retry: Math.ceil((coolDevice - now) / 1000) } });
+    var held = reading ? cool[path] : null;
+    if (held && now < held.until) return Promise.resolve({ status: held.status, held: true, body: { error: held.status === 0 ? "offline" : held.status === 429 ? "rate_limited" : "backoff" } });
+    // The same read twice in a few seconds, or while the tab is hidden,
+    // reuses the last answer; two callers at once share one request.
+    if (reading) {
+      var last = fresh[path];
+      var hidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+      if (last && hidden) return Promise.resolve({ status: last.status, held: true, body: last.body });
+      if (last && now - last.at < FRESH_MS) return Promise.resolve({ status: last.status, body: last.body });
+      if (inflight[path]) return inflight[path];
+    }
+    var run = fetch(base + "/v1/servers" + path, { method: method, headers: headers, body: body, cache: "no-store" })
       .then(function (res) {
-        return res.json().catch(function () { return {}; }).then(function (data) { return { status: res.status, body: data || {} }; });
+        if (reading) noteRead(path, res.status, res);
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (reading && res.status === 200) fresh[path] = { at: Date.now(), status: 200, body: data || {} };
+          if (!reading) fresh = {};
+          return { status: res.status, body: data || {} };
+        });
       })
-      .catch(function () { return { status: 0, body: { error: "offline" } }; });
+      .catch(function () {
+        if (reading) noteRead(path, 0, null);
+        return { status: 0, body: { error: "offline" } };
+      });
+    if (!reading) return run;
+    inflight[path] = run;
+    return run.then(function (out) { delete inflight[path]; return out; }, function (err) { delete inflight[path]; throw err; });
+  }
+  var cool = {};
+  var coolDevice = 0;
+  function retryAfter(res) {
+    var raw = "";
+    try { raw = res && res.headers && res.headers.get ? res.headers.get("Retry-After") || "" : ""; } catch (err) { raw = ""; }
+    var secs = Number(raw);
+    return raw && isFinite(secs) ? Math.min(600000, Math.max(0, secs * 1000)) : 0;
+  }
+  function noteRead(path, status, res) {
+    if (status !== 0 && status !== 429 && status < 500) { delete cool[path]; return; }
+    var prev = cool[path] || { n: 0 };
+    var n = Math.min(prev.n + 1, 8);
+    var wait = Math.min(300000, 1000 * Math.pow(2, n - 1)) * (0.7 + Math.random() * 0.6);
+    if (status === 429) {
+      var told = retryAfter(res);
+      wait = Math.max(wait, told || 30000);
+      var scope = "";
+      try { scope = String(res.headers.get("X-Limit-Scope") || ""); } catch (err) { scope = ""; }
+      if (scope !== "action") coolDevice = Date.now() + Math.max(1000, told || 30000);
+    }
+    cool[path] = { n: n, status: status, until: Date.now() + wait };
   }
   function errText(res) {
     var e = res && res.body && res.body.error;
@@ -337,6 +390,9 @@
     if (!force && S.listAt && Date.now() - S.listAt < 4000) return Promise.resolve(S.list);
     S.listLoading = call("").then(function (res) {
       S.listLoading = null;
+      // Still waiting after a failed read: nothing changed, so no repaint
+      // (a repaint would ask again).
+      if (res.held) return S.list || [];
       if (res.status === 200) {
         S.list = res.body.servers || [];
         S.canCreate = !!res.body.canCreate;
@@ -377,6 +433,7 @@
     if (!force && st && st.at && Date.now() - st.at < 3000) return Promise.resolve(st);
     serverLoads[sid] = call("/" + sid).then(function (res) {
       delete serverLoads[sid];
+      if (res.held) return S.servers[sid] || null;
       if (res.status === 200) {
         var prev = S.servers[sid];
         var next = Object.assign({}, res.body, { at: Date.now() });
@@ -815,7 +872,7 @@
         '<span class="vsrv-rail-pill"></span>' + serverIcon(s) +
         (b.mentions ? '<span class="vsrv-badge vsrv-rail-badge">' + (b.mentions > 99 ? "99+" : b.mentions) + "</span>" : "") + "</a>";
     }).join("");
-    return '<a class="vsrv-rail-item vsrv-rail-home" href="#/messages" title="' + esc(tr("Messages")) + '" aria-label="' + esc(tr("Back to Messages")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("back") + "</span></a>" +
+    return '<a class="vsrv-rail-item vsrv-rail-home" href="#/messages" title="' + esc(tr("Inbox")) + '" aria-label="' + esc(tr("Back to Inbox")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("back") + "</span></a>" +
       '<span class="vsrv-rail-sep"></span>' + items +
       (S.canCreate ? '<button type="button" class="vsrv-rail-item vsrv-rail-add" data-vs="create-sheet" title="' + esc(tr("Create a server")) + '" aria-label="' + esc(tr("Create a server")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("plus") + "</span></button>" : "") +
       '<button type="button" class="vsrv-rail-item vsrv-rail-add" data-vs="join-sheet" title="' + esc(tr("Join a server")) + '" aria-label="' + esc(tr("Join a server")) + '"><span class="vsrv-sicon vsrv-initials">' + icon("compass") + "</span></button>";
@@ -840,7 +897,7 @@
   function sideInner() {
     var info = serverInfo(S.sid);
     if (!info) {
-      if (S.gone) return '<div class="vsrv-empty"><h2>' + esc(tr("Server not available")) + "</h2><p>" + esc(S.gone === "not_member" ? tr("You're not a member of this server.") : tr("It may have been deleted, or you were removed.")) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Messages")) + "</a></div>";
+      if (S.gone) return '<div class="vsrv-empty"><h2>' + esc(tr("Server not available")) + "</h2><p>" + esc(S.gone === "not_member" ? tr("You're not a member of this server.") : tr("It may have been deleted, or you were removed.")) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Inbox")) + "</a></div>";
       return '<div class="vsrv-side-skel" aria-busy="true"><span></span><span></span><span></span><span></span></div>';
     }
     var canChan = has(basePerms(), P.MANAGE_CHANNELS);
@@ -2419,7 +2476,7 @@
     var info = S.inviteInfo && S.inviteInfo.code === S.invite ? S.inviteInfo : null;
     var body;
     if (!info) body = '<div class="dmsgs-skel" aria-busy="true"><span></span><span></span></div>';
-    else if (info.error) body = '<div class="vsrv-join-card"><span class="vsrv-sicon vsrv-initials big">' + icon("compass") + "</span><h2>" + esc(tr("Invite invalid")) + "</h2><p>" + esc(errText({ status: 404, body: { error: info.error } })) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Messages")) + "</a></div>";
+    else if (info.error) body = '<div class="vsrv-join-card"><span class="vsrv-sicon vsrv-initials big">' + icon("compass") + "</span><h2>" + esc(tr("Invite invalid")) + "</h2><p>" + esc(errText({ status: 404, body: { error: info.error } })) + '</p><a class="vsrv-btn" href="#/messages">' + esc(tr("Back to Inbox")) + "</a></div>";
     else {
       var s = info.server || {};
       body = '<div class="vsrv-join-card">' + (s.banner ? '<img class="vsrv-join-banner" src="' + esc(s.banner) + '" alt="">' : "") + serverIcon(s, "vsrv-sicon big") +
