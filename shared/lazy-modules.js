@@ -9,6 +9,7 @@
     games: { classic: true, scripts: ["games.js", "games.css"] },
     tv: { classic: true, scripts: ["tv-page.js", "tv-page.css"] },
     tvpair: { classic: true, scripts: ["vendor/qrcode-1.4.4.js", "tv-pair.js", "tv-pair.css"] },
+    sendtv: { classic: true, scripts: ["send-tv.js", "send-tv.css"] },
     vault: { classic: false, scripts: ["vault.js", "vault.css"] },
     packages: { classic: false, scripts: ["packages.js", "packages.css"] },
     drive: { classic: false, scripts: ["drive.js", "drive.css"] },

@@ -96,3 +96,23 @@ The TV app 1.2.0 (versionCode 3) plays ReGone with a controller in its own WebVi
 ## Post schema
 
 Every source is normalized to one canonical post shape before it ships. See [POST-SCHEMA.md](POST-SCHEMA.md) and `docs/post.schema.json`; tests: `python3 scripts/normalize_test.py` (also run by `handle_guard.py --selftest` in CI).
+
+## Short TV address (owner step, free)
+
+To give TVs a short address, create the org Pages site once. It is free and stays on GitHub Pages:
+
+1. On GitHub, create a new public repository in the ViktorychGroup organization named exactly `viktorychgroup.github.io`.
+2. Add one file `index.html` with:
+   ```html
+   <!doctype html><meta charset="utf-8"><title>Viktorych</title>
+   <meta name="description" content="Viktorych: open the app.">
+   <link rel="canonical" href="https://viktorychgroup.github.io/ViktorychApp/">
+   <meta http-equiv="refresh" content="0; url=/ViktorychApp/">
+   <script>location.replace("/ViktorychApp/" + location.search + location.hash);</script>
+   <a href="/ViktorychApp/">Open Viktorych</a>
+   ```
+3. Settings > Pages: Source "Deploy from a branch", branch `main`, folder `/ (root)`. Save.
+4. After a minute, `https://viktorychgroup.github.io/` opens the app. TV mode still turns on by itself on TV browsers.
+5. Then ask the assistant to switch `DEFAULT_HOST` in `send-tv.js` to `viktorychgroup.github.io` so Send to my TV shows the new address.
+
+Send to my TV (`#/send-to-tv`) and what really works per TV brand: [SEND-TO-TV.md](SEND-TO-TV.md).
