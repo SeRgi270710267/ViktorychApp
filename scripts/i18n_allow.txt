@@ -7,6 +7,7 @@ keys: shared/gift-catalog.js
 keys: shared/presence.js
 keys: shared/pill-data.js
 keys: shared/owner-keys.js
+keys: mesh-chat.js
 # Pack keys picked by a ternary inside tr().
 x-compose.js|Reply
 x-compose.js|5 minutes
@@ -259,6 +260,10 @@ servers-ui.js|MANAGE_MESSAGES
 servers-ui.js|MANAGE_CHANNELS
 servers-ui.js|MANAGE_ROLES
 servers-ui.js|MANAGE_SERVER
+servers-ui.js|CREATE_THREADS
+servers-ui.js|MANAGE_THREADS
+servers-ui.js|MANAGE_EVENTS
+servers-ui.js|MUTE_MEMBERS
 servers-ui.js|Files
 people.js|Fediverse
 # onboarding.js carries its own en/es/hi/ru string tables
@@ -269,6 +274,18 @@ data-saver.js|Community Notes only for posts on screen, refreshed less often
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
+# Platform brand name in the link card video provider registry.
+video-providers.js|Kick
+video-providers.js|Vimeo
+video-providers.js|Dailymotion
+video-providers.js|Twitch
+video-providers.js|Streamable
+video-providers.js|Odysee
+video-providers.js|BitChute
+video-providers.js|Rumble
+video-providers.js|TikTok
+video-providers.js|Facebook
+video-providers.js|Instagram
 send-tv.js|Samsung
 send-tv.js|SmartThings
 send-tv.js|LG ThinQ
@@ -308,6 +325,10 @@ app.js|Mail
 app.js|SMS codes
 # The sharing pool public signing key (a technical token, not text).
 shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM
+# Wallet chain names and the network currency (proper nouns).
+nft-ui.js|Base
+nft-ui.js|Base Sepolia
+nft-ui.js|Ether
 shared/regone.js|NZlay Mini 01 - EU
 shared/regone.js|NZlay Medium 01 - EU
 shared/regone.js|NZlay Large 01 - EU
@@ -324,3 +345,4 @@ desktop-app.js|Alt+F4
 # app.js: keyboard registry labels are pack keys, translated where the registry renders them
 app.js|Next video
 app.js|Previous video
+own: tv-tune.js

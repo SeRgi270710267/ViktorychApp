@@ -36,6 +36,7 @@ from adapters import ADAPTERS  # noqa: E402
 from adapters.common import (  # noqa: E402
     BridgeError,
     canonical_status_id,
+    carry_reply_info,
     dedupe_posts,
     feed_sort_key,
     document_is_bridge_error,
@@ -1204,6 +1205,13 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             config["_catalogIds"] = cat_ids
         except Exception:
             print("[catalog] unavailable", file=sys.stderr)
+        # Sources the owner banned are dropped here, before any fetch.
+        try:
+            from feed_bans import drop_banned
+
+            feed_rows[:] = drop_banned(feed_rows)
+        except Exception:
+            print("[bans] unavailable", file=sys.stderr)
         for row in feed_rows:
             if isinstance(row, dict):
                 ensure_x_lanes(row, config)
@@ -1423,9 +1431,15 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     extra = {}
                     print(f"[keep] {feed['id']}: replies: {exc}", file=sys.stderr)
             have = {str(post.get("id") or "") for post in posts}
+            by_id = {str(post.get("id") or ""): post for post in posts}
             replies = []
             for post in extra.get("posts") or []:
-                if post.get("kind") != "reply" or str(post.get("id") or "") in have:
+                if post.get("kind") != "reply":
+                    continue
+                if str(post.get("id") or "") in have:
+                    # The timeline page already had this post, sometimes
+                    # without saying it is a reply. The replies page knows.
+                    carry_reply_info(by_id.get(str(post.get("id") or "")), post)
                     continue
                 have.add(str(post.get("id") or ""))
                 replies.append(post)
@@ -1513,6 +1527,9 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         for post in posts:
             old = stored.get(canonical_status_id(post)) or stored.get(str(post.get("id") or ""))
             lock_publish_time(old, post)
+            # A fresh copy from a lane without reply info must not wipe the
+            # reply line an earlier run stored for the same post.
+            carry_reply_info(post, old)
         for post in posts:
             post["feedId"] = feed["id"]
             post["platform"] = feed.get("platform") or post.get("platform")

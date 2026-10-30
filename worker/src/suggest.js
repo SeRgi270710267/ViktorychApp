@@ -153,7 +153,7 @@ async function eligibleRows(env, ids) {
     const part = ids.slice(i, i + 40);
     const marks = part.map(() => "?").join(",");
     const rows = await all(env,
-      "SELECT a.public_id, a.handle, a.display_name, a.avatar, a.hide_avatar, a.avatar_empty, a.owner, " +
+      "SELECT a.public_id, a.handle, a.display_name, a.bio, a.avatar, a.hide_avatar, a.avatar_empty, a.owner, " +
       "k.kind AS kind, k.owner_kind AS owner_kind, COALESCE(p.discoverable, 1) AS discoverable, COALESCE(p.temp_opt_in, 0) AS temp_opt_in, " +
       "CASE WHEN t.public_id IS NULL THEN 0 ELSE 1 END AS temp " +
       "FROM accounts a LEFT JOIN account_kind k ON k.public_id = a.public_id LEFT JOIN suggest_prefs p ON p.public_id = a.public_id " +
@@ -215,6 +215,8 @@ export async function computeSuggestions(env, request, viewerId, deps, now) {
       k: kind,
       r: await shownReason(env, request, viewerId, cand.reason, nameCache)
     };
+    const bio = String(row.bio || "").replace(/\s+/g, " ").trim();
+    if (bio) item.b = bio.slice(0, 160);
     if (Number(row.owner) === 1) item.v = "blue";
     groups[group].push(item);
   }

@@ -1,7 +1,7 @@
 {
-  "versionCode": 3,
-  "versionName": "1.2.0",
+  "versionCode": 7,
+  "versionName": "1.6.0",
   "apk": "tv/ViktorychTV.apk",
   "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
-  "notes": "Play ReGone with an Xbox, PlayStation or other controller. Also opens Sign in with your phone right away and falls back to GitHub Pages if the short address is down."
+  "notes": "New, optional: a keyboard made for the remote, with emoji and voice typing, and feed search from a search screen or the TV's own search. Turn them on in Make ViktorychTV your default. The player, screensaver and the app itself work as before."
 }

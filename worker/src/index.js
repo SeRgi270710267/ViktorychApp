@@ -1,6 +1,7 @@
 import { mentionSuggest } from "./mention-suggest.js";
 import { bindOwner, inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 import { handleFeatures, killedRoute, readFlags } from "./feature-flags.js";
+import { handleNft } from "./nft.js";
 import { parseRoomId, pickStreams, roomStats, isTopQuality } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
@@ -24,6 +25,7 @@ import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlayl
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys, readUsableKey, markKeyAttention } from "./owner-keys.js";
+import { cleanSignupKey, findUndelivered, rememberSignup, replayPrefix } from "./signup-replay.js";
 import { TEMP_SCHEMA, cleanDeviceKey, decorateTemporary, handleTemporary, markTemporary, sweepTemporary, tempBlockedPointsRoute, tempExpiry, tempSignupsPerDay, isTemporary } from "./temp-accounts.js";
 import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
@@ -41,6 +43,8 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleXVideo } from "./xvideo.js";
+import { handleNewsletter, sweepNewsletters } from "./newsletters.js";
 import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
 import { handleYtm } from "./ytmusic.js";
@@ -56,6 +60,7 @@ import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
 import { handleOwnerSourceLists, handleMySourceLists, refreshWanted } from "./source-lists.js";
+import { handleFeedRequests, handleOwnerFeedRequests, requestInsteadOfAdd, followGate, importFilter, feedRequestsOn, fileRequest, bannedKeys, newsletterBanned } from "./feed-requests.js";
 import { handleOwnerSms, handleMemberSms } from "./sms-pool.js";
 import { handleMail } from "./mail-relay.js";
 import { claimedJobs } from "./job-runner.js";
@@ -64,6 +69,7 @@ import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingReq
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { SUGGEST_SCHEMA, handleSuggestRoutes } from "./suggest.js";
+import { friendPrefs, friendsOffAmong, friendOnSql, friendFilterReady, handleFriendPrefs } from "./friends-pref.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
 import { syncVk, vkDue } from "./vk.js";
 import { handlePackagesRoute, pollPackages, packageNotifier } from "./packages.js";
@@ -74,8 +80,10 @@ import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
 import { USERNAME_SCHEMA, handleUsernames, nameTaken, resolveName, viewerHandle } from "./usernames.js";
 import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.js";
+import { DISPLAY_NAME_SCHEMA, handleDisplayNames, withDisplayNames, ownerSeesAll } from "./display-names.js";
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
+import { STORE_SCHEMA, handleStore } from "./store.js";
 import { GAMES_SCHEMA, handleGames } from "./games.js";
 import { SERVERS_SCHEMA, handleServers } from "./servers.js";
 import { REACTION_SCHEMA, handleReactions } from "./reactions.js";
@@ -338,7 +346,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA, SUGGEST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.concat(STORE_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA, DISPLAY_NAME_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA, SUGGEST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -596,7 +604,7 @@ function publicAccount(row, request, own) {
   return account;
 }
 
-const PROFILE_TAB_SYNC_IDS = ["posts", "replies", "media", "highlights", "friends", "about", "gifts"];
+const PROFILE_TAB_SYNC_IDS = ["posts", "replies", "media", "games", "highlights", "friends", "about", "gifts"];
 
 function cleanProfileTabsSync(raw) {
   if (typeof raw === "string") {
@@ -831,6 +839,14 @@ async function handleSignup(request, env) {
   if (!(await verifyTurnstile(request, env, body.turnstileToken))) return json(403, { error: "turnstile" });
   const guard = await verifySignupGuard(env, body);
   if (!guard.ok) return json(guard.status || 400, { error: guard.error || "guard_required" });
+  // A retry of a sign-up whose answer was lost takes over the account the
+  // first try made (src/signup-replay.js). The owner handle never replays.
+  const replay = checked.owner ? "" : await replayPrefix(sha256Hex, cleanSignupKey(body.signupKey));
+  if (replay) {
+    const earlier = await findUndelivered(env, replay, Date.now());
+    const again = earlier ? await resumeSignup(env, request, earlier, { temporary, tempUntil, displayName, handle: checked.handle, replay }) : null;
+    if (again) return again;
+  }
   if (checked.owner) {
     const code = String(body.claimCode || "");
     const secret = String(env.OWNER_CLAIM_CODE || "");
@@ -864,6 +880,10 @@ async function handleSignup(request, env) {
     profileLess: isProfileLess
   });
   if (created.error) return json(created.error === "handle_taken" ? 409 : 503, { error: created.error });
+  if (replay) {
+    try { await rememberSignup(env, replay, created.account.publicId, Date.now()); }
+    catch (err) { /* a retry then makes a new account instead */ }
+  }
   await rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
   if (temporary) {
     try {
@@ -889,6 +909,39 @@ async function handleSignup(request, env) {
     recoveryCodes: recoveryCodes,
     account: created.account
   });
+}
+
+/* Hand over an account an earlier try of this same sign-up made but whose
+   answer never arrived: a new account number, a new session (the lost one
+   is revoked) and new recovery codes. Returns null when that account is
+   gone or does not match this request, and the sign-up goes on as new. */
+async function resumeSignup(env, request, publicId, opts) {
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (!row || Number(row.owner) === 1) return null;
+  const temp = await env.DB.prepare("SELECT expires_at FROM account_temp WHERE public_id = ?").bind(publicId).first().catch(() => null);
+  if (!!temp !== !!opts.temporary) return null;
+  if (!opts.temporary && String(row.handle || "") !== String(opts.handle || "")) return null;
+  const now = Date.now();
+  const rounds = iterationsOf(env);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const number = randomDigits(16);
+  const lookup = await hmacHex(env.ACCOUNT_PEPPER, number);
+  const hash = encodeNumberHash(rounds, await slowHash(number, salt, rounds));
+  await env.DB.batch([
+    env.DB.prepare("UPDATE accounts SET number_lookup = ?, number_hash = ?, salt = ?, display_name = ? WHERE public_id = ?").bind(lookup, hash, bytesToB64(salt), opts.displayName || row.display_name, publicId),
+    env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId)
+  ]);
+  if (opts.temporary) await markTemporary(env, publicId, opts.tempUntil, now);
+  const token = await mintSession(env, publicId);
+  try { await rememberSignup(env, opts.replay, publicId, now); } catch (err) { /* the window just ends sooner */ }
+  const fresh = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  const account = await presentAccount(env, request, fresh || row, true);
+  if (opts.temporary) {
+    account.temporary = { expiresAt: opts.tempUntil };
+    return json(201, { token: token, accountNumber: number, recoveryCodes: [], account: account, temporary: { expiresAt: opts.tempUntil }, resumed: true });
+  }
+  const recoveryCodes = await issueRecoveryCodes(env, publicId, recoveryDeps());
+  return json(201, { token: token, accountNumber: number, recoveryCodes: recoveryCodes, account: account, resumed: true });
 }
 
 /* A new account starts out following only the owner's own accounts: the
@@ -1089,6 +1142,14 @@ async function liveProfileCounts(env, row, account, viewer) {
   account.friendsCount = await friendCount(env, row.public_id);
   account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
   account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
+  const prefs = await friendPrefs(env, row.public_id);
+  if (!prefs.enabled) {
+    account.friendsOff = true;
+    account.friendsCount = 0;
+    account.mutualFriendsCount = 0;
+  } else if (viewer && viewer.public_id !== row.public_id) {
+    account.canRequest = await canSendFriendRequest(env, viewer.public_id, row.public_id, prefs);
+  }
   return account;
 }
 
@@ -1146,9 +1207,13 @@ async function handleProfileGet(request, env, handle) {
     account.handle = seen.handle;
     if (seen.hidden) account.handleHidden = true;
     const shown = await viewerDisplay(env, request, row.public_id, viewer ? viewer.public_id : "", account.displayName);
-    account.displayName = shown.name;
+    account.displayName = shown.hidden ? (account.handle || "") : shown.name;
+    if (shown.hidden) account.displayNameHidden = true;
     if (shown.nickname) account.nickname = shown.nickname;
     if (shown.friendName) account.friendName = shown.friendName;
+    // The site owner sees every name, whatever its audience (audit-logged).
+    const allNames = viewer ? await ownerSeesAll(env, request, row.public_id, viewer.public_id) : null;
+    if (allNames) account.allDisplayNames = allNames;
   }
   await liveProfileCounts(env, row, account, viewer);
   account.identities = await visibleIdentities(env, row.public_id, viewer, own);
@@ -4067,6 +4132,7 @@ async function handleTikTokAccounts(request, env) {
     if (body.error) return json(400, { error: body.error });
     const typed = normalizeTikTokInput(body.handle || body.url || "");
     if (!typed) return json(400, { error: "bad_handle" });
+    if (await bannedKeys(env, ["tiktok:" + typed])) return json(403, { error: "banned" });
     const doc = await readTikTokAccounts(env);
     const existing = doc.added.find((item) => tiktokRowMatches(item, typed));
     if (!existing && doc.added.length >= TIKTOK_ACCOUNT_CAP) return json(400, { error: "full" });
@@ -4745,6 +4811,7 @@ async function handleAddedAccounts(request, env, url) {
     if (!addedPlatform(request, url, body)) return json(400, { error: "unsupported" });
     const typed = normalizeXInput(body.handle || body.url || "");
     if (!typed) return json(400, { error: "bad_handle" });
+    if (await bannedKeys(env, ["x:" + typed])) return json(403, { error: "banned" });
     const doc = await readAddedAccounts(env);
     const looked = await lookupXProfile(typed);
     if (looked.error) return json(looked.error === "not_found" ? 404 : 503, { error: looked.error });
@@ -4988,6 +5055,8 @@ async function handleFollowPut(request, env) {
   if (target.error) return target.error;
   const id = target.id;
   if (id === "app:" + gate.row.public_id) return json(400, { error: "bad_follow", message: "That account can’t be followed." });
+  const sourceGate = await followGate(env, gate.row, id, { json, rateHit, limited });
+  if (sourceGate) return sourceGate;
   const decision = await prepareFollowPut(env, gate.row.public_id, id);
   if (decision.mode === "blocked") return json(403, { error: "blocked", message: "You can’t follow this account." });
   if (decision.mode === "request" || decision.mode === "pending-exists") {
@@ -5068,6 +5137,10 @@ async function handleFollowImport(request, env) {
     }
     ids.push(id);
   }
+  // Banned sources and device sources nobody follows yet stay out of an import.
+  const kept = await importFilter(env, gate.row, ids);
+  ids.length = 0;
+  kept.forEach((id) => ids.push(id));
   const now = Date.now();
   // A bulk import must not notify. Only a new follow from PUT does.
   for (let i = 0; i < ids.length; i += 40) {
@@ -5180,7 +5253,8 @@ async function handleFollowGet(request, env, url) {
 
 async function friendCount(env, publicId) {
   try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends WHERE user_id = ?").bind(publicId).first();
+    const on = await friendFilterReady(env);
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f WHERE f.user_id = ?" + (on ? friendOnSql("f.friend_id") : "")).bind(publicId).first();
     return (row && Number(row.n)) || 0;
   } catch (err) {
     return 0;
@@ -5190,7 +5264,8 @@ async function friendCount(env, publicId) {
 async function mutualFriendCount(env, userA, userB) {
   if (!userA || !userB || userA === userB) return 0;
   try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f1 JOIN account_friends f2 ON f1.friend_id = f2.friend_id WHERE f1.user_id = ? AND f2.user_id = ?").bind(userA, userB).first();
+    const on = await friendFilterReady(env);
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f1 JOIN account_friends f2 ON f1.friend_id = f2.friend_id WHERE f1.user_id = ? AND f2.user_id = ?" + (on ? friendOnSql("f1.friend_id") : "")).bind(userA, userB).first();
     return (row && Number(row.n)) || 0;
   } catch (err) {
     return 0;
@@ -5201,6 +5276,7 @@ async function getFriendStatus(env, viewerId, targetId) {
   if (!viewerId || !targetId) return "none";
   if (viewerId === targetId) return "self";
   try {
+    if ((await friendsOffAmong(env, [viewerId, targetId])).size) return "none";
     const isFriend = await env.DB.prepare("SELECT friend_id FROM account_friends WHERE user_id = ? AND friend_id = ?").bind(viewerId, targetId).first();
     if (isFriend) return "friends";
     const sent = await env.DB.prepare("SELECT receiver_id FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(viewerId, targetId).first();
@@ -5228,10 +5304,14 @@ async function handleFriendsGet(request, env, url) {
   if (!targetId) return json(400, { error: "bad_target" });
 
   if (tab === "requests") {
+    // Friends off: pending requests are kept but paused, so none are listed.
+    const mine = await friendPrefs(env, viewer.public_id);
+    if (!mine.enabled) return json(200, { incoming: [], outgoing: [], requestsCount: 0, friendsOff: true });
     const incomingRows = await env.DB.prepare("SELECT sender_id, created_at FROM account_friend_requests WHERE receiver_id = ? ORDER BY created_at DESC LIMIT 100").bind(viewer.public_id).all();
     const outgoingRows = await env.DB.prepare("SELECT receiver_id, created_at FROM account_friend_requests WHERE sender_id = ? ORDER BY created_at DESC LIMIT 100").bind(viewer.public_id).all();
 
-    const incomingCards = await followCards(env, request, ((incomingRows && incomingRows.results) || []).map((r) => r.sender_id));
+    const pausedIds = await friendsOffAmong(env, ((incomingRows && incomingRows.results) || []).map((r) => r.sender_id).concat(((outgoingRows && outgoingRows.results) || []).map((r) => r.receiver_id)));
+    const incomingCards = await followCards(env, request, ((incomingRows && incomingRows.results) || []).map((r) => r.sender_id).filter((x) => !pausedIds.has(String(x))));
     for (let i = 0; i < incomingCards.length; i++) {
       const card = incomingCards[i];
       const sId = await cleanFriendTargetId(env, card.handle || card.id);
@@ -5239,7 +5319,7 @@ async function handleFriendsGet(request, env, url) {
       card.friendStatus = "received";
     }
 
-    const outgoingCards = await followCards(env, request, ((outgoingRows && outgoingRows.results) || []).map((r) => r.receiver_id));
+    const outgoingCards = await followCards(env, request, ((outgoingRows && outgoingRows.results) || []).map((r) => r.receiver_id).filter((x) => !pausedIds.has(String(x))));
     for (let i = 0; i < outgoingCards.length; i++) {
       const card = outgoingCards[i];
       const rId = await cleanFriendTargetId(env, card.handle || card.id);
@@ -5263,11 +5343,21 @@ async function handleFriendsGet(request, env, url) {
     const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
     return json(200, redactPublicIds({ id: shown, friendsCount: 0, status: "none", mutualCount: 0, blocked: true, friends: [] }));
   }
-  const isPrivate = !!(targetAccount && targetAccount.private_follows === 1);
+  let isPrivate = !!(targetAccount && targetAccount.private_follows === 1);
+  const prefs = await friendPrefs(env, targetId);
+  if (!prefs.enabled) {
+    // Friends off: no list, no count, no button, for everyone (the person too).
+    const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
+    return json(200, redactPublicIds({ id: shown, friendsCount: 0, status: "none", mutualCount: 0, friendsOff: true, canRequest: false, friends: [] }));
+  }
+  const viewerPrefs = isOwner ? prefs : await friendPrefs(env, viewer.public_id);
 
   const friendsCount = await friendCount(env, targetId);
   const status = await getFriendStatus(env, viewer.public_id, targetId);
   const mutualCount = await mutualFriendCount(env, viewer.public_id, targetId);
+  const canRequest = !isOwner && viewerPrefs.enabled && await canSendFriendRequest(env, viewer.public_id, targetId, prefs);
+  if (!isOwner && (prefs.listAudience === "me" || (prefs.listAudience === "friends" && status !== "friends"))) isPrivate = true;
+  else if (!isOwner && prefs.listAudience === "friends" && status === "friends") isPrivate = false;
 
   if (tab === "friends") {
     const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
@@ -5277,17 +5367,20 @@ async function handleFriendsGet(request, env, url) {
         return json(200, redactPublicIds({ id: shown, friendsCount, status, mutualCount, locked: true, friends: [] }));
       }
     }
-    if (!isOwner && isPrivate && status !== "friends") {
+    const onlyMe = !isOwner && prefs.listAudience === "me";
+    if (onlyMe || (!isOwner && isPrivate && status !== "friends")) {
       return json(200, redactPublicIds({
         id: shown,
         friendsCount,
         status,
         mutualCount,
+        canRequest,
         isPrivate: true,
         friends: []
       }));
     }
-    const friendRows = await env.DB.prepare("SELECT friend_id, created_at FROM account_friends WHERE user_id = ? ORDER BY created_at DESC LIMIT 300").bind(targetId).all();
+    const listOn = await friendFilterReady(env);
+    const friendRows = await env.DB.prepare("SELECT f.friend_id, f.created_at FROM account_friends f WHERE f.user_id = ?" + (listOn ? friendOnSql("f.friend_id") : "") + " ORDER BY f.created_at DESC LIMIT 300").bind(targetId).all();
     const ids = ((friendRows && friendRows.results) || []).map((r) => r.friend_id);
     const cards = await followCards(env, request, ids);
     for (let i = 0; i < cards.length; i++) {
@@ -5301,6 +5394,7 @@ async function handleFriendsGet(request, env, url) {
       friendsCount,
       status,
       mutualCount,
+      canRequest,
       isPrivate: false,
       friends: cards
     }));
@@ -5310,8 +5404,19 @@ async function handleFriendsGet(request, env, url) {
     id: targetAccount.handle ? "app:@" + targetAccount.handle : "",
     friendsCount,
     status,
-    mutualCount
+    mutualCount,
+    canRequest
   }));
+}
+
+/* Whether `viewerId` may send `targetId` a friend request under the target's
+   choices. Friends off or "Nobody" always says no; "Friends of friends"
+   needs at least one friend in common. */
+async function canSendFriendRequest(env, viewerId, targetId, targetPrefs) {
+  const prefs = targetPrefs || await friendPrefs(env, targetId);
+  if (!prefs.enabled || prefs.whoCanRequest === "nobody") return false;
+  if (prefs.whoCanRequest === "fof") return (await mutualFriendCount(env, viewerId, targetId)) > 0;
+  return true;
 }
 
 async function handleFriendAction(request, env, action) {
@@ -5355,6 +5460,13 @@ async function friendAction(request, env, action) {
 
   const now = Date.now();
 
+  if (action === "request" || action === "accept") {
+    const mine = await friendPrefs(env, viewer.public_id);
+    if (!mine.enabled) return json(403, { error: "friends_off_self", message: "Turn Friends on in Settings to do this." });
+    const theirs = await friendPrefs(env, targetId);
+    if (!theirs.enabled) return json(403, { error: "friends_off", message: "This account isn’t accepting friend requests." });
+  }
+
   if (action === "request") {
     const alreadyFriends = await env.DB.prepare("SELECT user_id FROM account_friends WHERE user_id = ? AND friend_id = ?").bind(viewer.public_id, targetId).first();
     if (alreadyFriends) {
@@ -5368,6 +5480,9 @@ async function friendAction(request, env, action) {
         env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
       ]);
       return friendDone(json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) }), viewer, targetId, "friend_accept");
+    }
+    if (!(await canSendFriendRequest(env, viewer.public_id, targetId))) {
+      return json(403, { error: "not_accepting", message: "This account isn’t accepting friend requests." });
     }
     const paced = await rateHit(env, "freq:" + viewer.public_id, 40, 10 * 60 * 1000);
     if (!paced.ok) return limited(paced);
@@ -5432,6 +5547,21 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
     return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
   }
+  if (path === "/v1/xv" && request.method === "GET") {
+    return handleXVideo(request, { fetch: (u, init) => fetch(u, init), cache: caches.default, waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
+  if ((path === "/v1/newsletter" || path === "/v1/newsletter/issue") && request.method === "GET") {
+    // A banned newsletter stops here, before anything is fetched for it.
+    if (env.DB && await newsletterBanned(env, url.searchParams.get("key"))) return json(403, { error: "banned" });
+    const letter = await handleNewsletter(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+    if (env.DB && path === "/v1/newsletter" && letter.status === 200 && url.searchParams.get("url")) {
+      try {
+        const doc = await letter.clone().json();
+        if (doc && await newsletterBanned(env, doc.key)) return json(403, { error: "banned" });
+      } catch (err) { /* not JSON: pass it through */ }
+    }
+    return letter;
+  }
   if (path === "/v1/comments" && request.method === "GET") {
     return handleComments(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
@@ -5478,6 +5608,25 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
   }
+  // Source requests: only the owner adds a source. A member's add becomes a request.
+  if (path === "/v1/feed-requests" || path.startsWith("/v1/feed-requests/")) {
+    return handleFeedRequests(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+  }
+  if (path === "/v1/owner/feed-requests" || path.startsWith("/v1/owner/feed-requests/") || path === "/v1/owner/feed-bans" || path.startsWith("/v1/owner/feed-bans/")) {
+    return handleOwnerFeedRequests(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, sessionAccount, dispatchWorkflows });
+  }
+  {
+    const asked = await requestInsteadOfAdd(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (asked) return asked;
+  }
+  if (path === "/v1/me/source-lists/requests" && request.method === "POST" && env.DB && await feedRequestsOn(env)) {
+    const me = await sessionAccount(env, request);
+    if (!me) return json(401, { error: "auth" });
+    const body = await readJson(request, 1500);
+    if (body.error) return json(400, { error: body.error });
+    const made = await fileRequest(env, me, { input: body.input, note: body.note }, { json, rateHit, limited });
+    return json(made.status, Object.assign({ ok: made.status === 200 }, made.body));
+  }
   if (path === "/v1/owner/source-lists" || path.startsWith("/v1/owner/source-lists/")) {
     return handleOwnerSourceLists(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
   }
@@ -5501,6 +5650,7 @@ async function route(request, env, ctx) {
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
   if (path === "/v1/features" || path === "/v1/owner/features") return handleFeatures(request, env, { json, requireOwner });
+  if (path === "/v1/nft" || path.startsWith("/v1/nft/")) return handleNft(request, env, { json });
   if (path.startsWith("/v1/nostr/")) {
     const linked = await handleNostr(request, env, path, recoveryDeps());
     if (linked) return linked;
@@ -5653,6 +5803,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/friends/presence" && request.method === "GET") {
     return handleFriendPresence(request, env, { json, readJson, rateHit, limited, sessionAccount });
   }
+  if (path === "/v1/friends/settings") {
+    return handleFriendPrefs(request, env, { json, readJson, rateHit, limited, sessionAccount, signal: async (e, ids) => { const notes = await import("./notifications.js"); await notes.signalFriends(e, ids); } });
+  }
   if (path === "/v1/friends" && request.method === "GET") return handleFriendsGet(request, env, url);
   if (path === "/v1/friends/request" && request.method === "POST") return handleFriendAction(request, env, "request");
   if (path === "/v1/friends/accept" && request.method === "POST") return handleFriendAction(request, env, "accept");
@@ -5661,6 +5814,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/friends/remove" && request.method === "POST") return handleFriendAction(request, env, "remove");
   if (path === "/v1/nicknames" || path === "/v1/usernames/friend-name" || path === "/v1/usernames/mentions") {
     return handleNameRules(request, env, path, { json, readJson, rateHit, limited, sessionAccount, invalidate: (e, id) => invalidate(e, "p:" + id) });
+  }
+  if (path === "/v1/display-names" || path.startsWith("/v1/display-names/")) {
+    return handleDisplayNames(request, env, path, { json, readJson, rateHit, limited, sessionAccount, invalidate: (e, id) => invalidate(e, "p:" + id) });
   }
   if (path === "/v1/usernames" || path.startsWith("/v1/usernames/")) {
     return handleUsernames(request, env, path, { json, readJson, rateHit, limited, sessionAccount, invalidate: (e, id) => invalidate(e, "p:" + id) });
@@ -5758,6 +5914,10 @@ async function route(request, env, ctx) {
     const paid = await handlePoints(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (paid) return paid;
   }
+  if (path.startsWith("/v1/store/") || path.startsWith("/v1/pay/") || path === "/v1/viktorychs/grant") {
+    const sold = await handleStore(request, env, path, { json, readJson, rateHit, limited, sessionAccount, originAllowed });
+    if (sold) return sold;
+  }
   if (path === "/v1/highlights" || path.startsWith("/v1/highlights/")) {
     const shown = await handleHighlights(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
     if (shown) return shown;
@@ -5796,6 +5956,15 @@ const ETAG_MAX = 262144;
    avatars and media are never sent. */
 const BLOCK_PATHS = /^\/v1\/(?:data\/(?:feeds\.json|(?:comments|live|communities)\/.+\.json)|posts(?:\/thread)?|communities(?:\/.*)?|x\/thread|thread)$/;
 const BLOCK_MAX = 4 * 1024 * 1024;
+/* Every JSON GET that pairs a handle with a name gets the one display name
+   this viewer may see (display-names.js); nicknames still win. */
+function displayNameDeps(env) {
+  return {
+    viewerId: async (request) => { const viewer = await sessionAccount(env, request); return viewer ? viewer.public_id : ""; },
+    nameFor: (request, ownerId, viewerId, fallback) => viewerDisplay(env, request, ownerId, viewerId, fallback)
+  };
+}
+
 export async function withBlocks(request, response) {
   if (!request || request.method !== "GET" || !response || response.status !== 200 || response.webSocket) return response;
   if (response.headers.has("x-block-removed")) return response;
@@ -5882,7 +6051,7 @@ export default {
         const take = takeToken(guardKey(request), kind, Date.now());
         if (!take.ok) return withCors(request, env, json(429, { error: "rate_limited", scope: "device" }, { "retry-after": String(take.retry), "x-limit-scope": "device" }));
       }
-      const response = scopeLimit(await withEtag(request, await withBlocks(request, await route(request, env, ctx))));
+      const response = scopeLimit(await withEtag(request, await withBlocks(request, await withDisplayNames(request, env, await route(request, env, ctx), displayNameDeps(env)))));
       return withCors(request, env, response);
     } catch (err) {
       logError(areaFor(path, request.method), err);
@@ -5915,6 +6084,7 @@ export default {
     // deploy and records health for the owner (src/watchdog.js).
     if (minute === 7) jobs.push(runWatchdog(env, at));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
+    if (minute === 23) jobs.push(sweepNewsletters(env.DATA, at).catch(() => 0));
     if (minute === 7) jobs.push(refreshWanted(env, at).catch(() => null));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));

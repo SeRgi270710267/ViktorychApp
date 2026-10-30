@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a155-__SW_VERSION__";
+const VERSION = "viktorych-a220-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T07:43:00Z-tabshortcuts
+// cache-bust: 2026-10-30T15:20:22Z-reply-parents
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -68,6 +68,8 @@ const SHELL_FILES = [
   "./storage.js",
   "./storage.css",
   "./localfirst.js",
+  "./device-seal.js",
+  "./device-data.js",
   "./direct.js",
   "./comments-client.js",
   "./device.js",
@@ -94,9 +96,12 @@ const SHELL_FILES = [
   "./people.js",
   "./people.css",
   "./pymk.js",
+  "./friends-pref.js",
   "./pymk.css",
   "./tv.js",
   "./tv.css",
+  "./tv-tune.js",
+  "./tv-tune.css",
   "./shared/tv-boot.js",
   "./shared/short-link.js",
   "./shared/x-range.js",
@@ -132,9 +137,11 @@ const SHELL_FILES = [
   "./shared/presence.js",
   "./about-ui.js",
   "./gifts-ui.js",
+  "./nft-ui.js",
   "./reactions.js",
   "./community-notes.js",
   "./shared/gift-catalog.js",
+  "./shared/store-catalog.js",
   "./badges.js",
   "./badges.css",
   "./shared/local-budget.js",
@@ -189,6 +196,9 @@ const SHELL_FILES = [
   "./games.css",
   "./communities.js",
   "./communities.css",
+  "./servers-voice.js",
+  "./servers-ui.js",
+  "./servers.css",
   "./yt-player.js",
   "./yt-player.css",
   "./scores.js",
@@ -199,9 +209,11 @@ const SHELL_FILES = [
   "./shared/drive-photos.js",
   "./shared/mirror.js",
   "./video-embed.js",
+  "./video-providers.js",
   "./mention-suggest.js",
   "./settings-assistant.js",
   "./nostr.js",
+  "./mesh-chat.js",
   "./follow-lists.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
@@ -214,6 +226,7 @@ const SHELL_FILES = [
   "./shared/feed-sources.js",
   "./feeds-page.js",
   "./source-lists.js",
+  "./feed-requests.js",
   "./shared/home-fresh.js",
   "./shared/pill-data.js",
   "./shared/tiktok-lock.js",
@@ -255,7 +268,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a155-";
+  const prefix = "viktorych-a220-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -2208,7 +2221,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|tv-pair\.js|tv-pair\.css|qrcode-1\.4\.4\.js|send-tv\.js|send-tv\.css|split\.js|discord-ui\.js|discord-ui\.css|discord-key-helper\.js|discord-key-helper\.css|community-notes\.js|community-notes\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|game-social\.js|game-social\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|busy\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|nzlay-keys\.js|nzlay-forum\.js|nzlay-forum\.css|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|tv-pair\.js|tv-pair\.css|qrcode-1\.4\.4\.js|send-tv\.js|send-tv\.css|split\.js|discord-ui\.js|discord-ui\.css|discord-key-helper\.js|discord-key-helper\.css|community-notes\.js|community-notes\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|game-social\.js|game-social\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|busy\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|nzlay-keys\.js|nzlay-forum\.js|nzlay-forum\.css|video-providers\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js|servers-voice\.js|servers-ui\.js|servers\.css)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -2697,7 +2710,54 @@ async function receiveShare(request) {
   return Response.redirect(new URL("./?" + params.toString() + "#/home", self.registration.scope), 303);
 }
 
+/* Inactivity expiry while the app stays closed (device-seal.js). The page
+   writes lastOpen and the policy into viktorych-device-key. When it is too
+   old, the device key is destroyed so the encrypted leftovers cannot be read,
+   private databases go, and the next open finishes the cleanup. */
+function expiryDb() {
+  return new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open("viktorych-device-key", 1); } catch (err) { resolve(null); return; }
+    req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains("k")) req.result.createObjectStore("k"); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+async function checkExpiry() {
+  const db = await expiryDb();
+  if (!db) return;
+  const meta = await new Promise((resolve) => {
+    try {
+      const req = db.transaction("k", "readonly").objectStore("k").get("meta");
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch (err) { resolve(null); }
+  });
+  const days = meta ? Number(meta.days) || 0 : 0;
+  if (!meta || meta.expired || !days || !meta.lastOpen || Date.now() - Number(meta.lastOpen) <= days * 86400000) { db.close(); return; }
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction("k", "readwrite");
+      const store = tx.objectStore("k");
+      store.delete("device");
+      store.put(Object.assign({}, meta, { expired: true }), "meta");
+      tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
+    } catch (err) { resolve(); }
+  });
+  db.close();
+  ["viktorych-lock", "viktorych-discord", "viktorych-servers", "viktorych-drive", "viktorychapp-device-search"].forEach((name) => {
+    try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
+  });
+  accountsAuthed = false;
+  playToken = "";
+  if (meta.dropPublic) {
+    const names = await caches.keys();
+    await Promise.all(names.filter((name) => name !== SHELL).map((name) => caches.delete(name)));
+  }
+}
+
 self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "vapp-expiry") event.waitUntil(checkExpiry());
   if (event.tag === "feeds" && !gameBusy()) event.waitUntil(refreshAndNotify());
   if (event.tag === "notifications") event.waitUntil(Promise.all([refreshAndNotify(), refreshAccountNotes()]));
   if (event.tag === "weather" && !gameBusy()) event.waitUntil(refreshWeather());

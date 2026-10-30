@@ -1,8 +1,9 @@
-/* Free points and gifts. Amounts are chosen here, never from the client.
+/* Viktorychs (free points earned by effort, never sold) and gifts. Amounts are chosen here, never from the client.
    The ledger is append-only. A repeated ref does not pay twice. */
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { GIFTS, SEASONS, FREE_PER_DAY, POPULAR } from "../../shared/gift-catalog.js";
+import { limitedById } from "../../shared/store-catalog.js";
 import { blocksEither } from "./social.js";
 import { planNotification } from "./notifications.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
@@ -64,28 +65,55 @@ export const POINTS_SCHEMA = [
     hide_tab INTEGER NOT NULL DEFAULT 0,
     who TEXT NOT NULL DEFAULT 'everyone',
     updated_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS point_engagers (
+    post_key TEXT NOT NULL,
+    engager_id TEXT NOT NULL,
+    author_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (post_key, engager_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS point_engagers_pair ON point_engagers(author_id, engager_id, created_at)",
+  `CREATE TABLE IF NOT EXISTS point_guard (
+    kind TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    CONSTRAINT balance CHECK (kind <> 'balance' OR ok = 1),
+    CONSTRAINT edition CHECK (kind <> 'edition' OR ok = 1)
   )`
 ];
 
+/* Viktorychs are earned by real effort only and are never sold.
+   - quality_post: 3 distinct real people engaged with your post.
+   - popular_post: 10 distinct real people engaged with your post.
+   - login: long daily streaks pay at milestones only (7, 30, 100, 365 days, then every 30).
+   - invite: someone you invited stayed and became active.
+   Engagement counts only from other accounts at least a week old, never from
+   yourself or anyone you blocked, and one person counts at most 3 times a week
+   toward the same author. Accounts younger than 3 days earn nothing. */
 export const RULES = {
-  signup: { points: 25, cap: 1 },
-  login: { points: 5, cap: 1, streak: 7 },
-  read: { points: 2, cap: 1, streak: 3 },
-  post: { points: 8, cap: 5 },
-  comment: { points: 3, cap: 10 },
-  repost: { points: 3, cap: 10 },
-  like_in: { points: 1, cap: 20 },
-  reply_in: { points: 2, cap: 10 },
-  follow: { points: 2, cap: 10 },
-  profile: { points: 15, cap: 1 },
-  invite: { points: 20, cap: 5 },
-  game: { points: 4, cap: 5 },
-  game_time: { points: 2, cap: 6 },
-  game_streak: { points: 5, cap: 1 },
+  quality_post: { points: 15, cap: 3 },
+  popular_post: { points: 25, cap: 2 },
+  login: { points: 10, cap: 1, milestones: [[7, 10], [30, 40], [100, 120], [365, 300]], every: [30, 40] },
+  invite: { points: 50, cap: 2 },
+  profile: { points: 5, cap: 1 },
   birthday: { points: 25, cap: 1 }
 };
 
+export const EARN = {
+  minAgeDays: 3,
+  engagerAgeDays: 7,
+  qualityAt: 3,
+  popularAt: 10,
+  pairPerWeek: 3,
+  inviteAgeDays: 7,
+  invitePosts: 3,
+  inviteStreak: 5,
+  redeemWithinDays: 3
+};
+
 const GAMES = { regone: 1 };
+/* Gifts one person may send another per day, across the gift sheet and the store. */
+export const GIFTS_PER_RECIPIENT_DAY = 10;
 const PUBLIC_ID = /^\d{12}$/;
 
 const SVG = {
@@ -162,8 +190,24 @@ export function ruleList() {
     id: id,
     points: RULES[id].points,
     cap: RULES[id].cap,
-    streak: RULES[id].streak || 0
+    milestones: RULES[id].milestones ? RULES[id].milestones.map((row) => ({ days: row[0], points: row[1] })) : []
   }));
+}
+
+/* The streak payout for day n of a login streak, or 0. */
+export function streakPayout(n) {
+  const rule = RULES.login;
+  const hit = rule.milestones.find((row) => row[0] === n);
+  if (hit) return hit[1];
+  const last = rule.milestones[rule.milestones.length - 1][0];
+  if (n > last && (n - last) % rule.every[0] === 0) return rule.every[1];
+  return 0;
+}
+
+async function accountAgeDays(env, publicId) {
+  const row = await env.DB.prepare("SELECT created_at FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (!row) return -1;
+  return (Date.now() - (Number(row.created_at) || Date.now())) / 86400000;
 }
 
 async function balanceOf(env, publicId) {
@@ -171,12 +215,8 @@ async function balanceOf(env, publicId) {
   return Number(row && row.balance) || 0;
 }
 
-export async function awardActivity(env, publicId, action, ref) {
+async function grant(env, publicId, action, mark, delta, now) {
   const rule = RULES[action];
-  if (!rule || !PUBLIC_ID.test(String(publicId || ""))) return { awarded: 0, balance: 0 };
-  const mark = String(ref || "").slice(0, 120);
-  if (!mark) return { awarded: 0, balance: await balanceOf(env, publicId) };
-  const now = Date.now();
   const day = utcDay(now);
   const prior = await env.DB.prepare(
     "SELECT id FROM point_ledger WHERE public_id = ? AND reason = ? AND ref = ?"
@@ -186,26 +226,11 @@ export async function awardActivity(env, publicId, action, ref) {
     "SELECT hits FROM point_daily WHERE public_id = ? AND day = ? AND action = ?"
   ).bind(publicId, day, action).first();
   if (Number(daily && daily.hits) >= rule.cap) return { awarded: 0, balance: await balanceOf(env, publicId), capped: true };
-  let bonus = 0;
-  if (rule.streak) {
-    const streakRow = await env.DB.prepare(
-      "SELECT last_day, streak FROM point_streaks WHERE public_id = ? AND kind = ?"
-    ).bind(publicId, action).first();
-    let streak = 1;
-    if (streakRow && streakRow.last_day === yesterday(day)) streak = Math.min(rule.streak, (Number(streakRow.streak) || 0) + 1);
-    else if (streakRow && streakRow.last_day === day) streak = Number(streakRow.streak) || 1;
-    bonus = Math.max(0, streak - 1);
-    await env.DB.prepare(
-      "INSERT INTO point_streaks (public_id, kind, last_day, streak) VALUES (?, ?, ?, ?) ON CONFLICT(public_id, kind) DO UPDATE SET last_day = excluded.last_day, streak = excluded.streak"
-    ).bind(publicId, action, day, streak).run();
-  }
-  const delta = rule.points + bonus;
-  const id = newId();
   try {
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO point_ledger (id, public_id, delta, reason, ref, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-      ).bind(id, publicId, delta, action, mark, now),
+      ).bind(newId(), publicId, delta, action, mark, now),
       env.DB.prepare(
         "INSERT INTO point_balances (public_id, balance, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET balance = balance + excluded.balance, updated_at = excluded.updated_at"
       ).bind(publicId, delta, now),
@@ -221,6 +246,97 @@ export async function awardActivity(env, publicId, action, ref) {
   return { awarded: delta, balance: await balanceOf(env, publicId) };
 }
 
+/* One distinct real person engaged with a post. Pays the author at 3 and 10. */
+export async function creditEngagement(env, authorId, postKey, engagerId) {
+  const author = String(authorId || "");
+  const engager = String(engagerId || "");
+  const key = String(postKey || "").slice(0, 120);
+  if (!PUBLIC_ID.test(author) || !PUBLIC_ID.test(engager) || !key || author === engager) return { awarded: 0 };
+  if (await accountAgeDays(env, author) < EARN.minAgeDays) return { awarded: 0, young: true };
+  if (await accountAgeDays(env, engager) < EARN.engagerAgeDays) return { awarded: 0, young: true };
+  if (await blocksEither(env, author, engager)) return { awarded: 0 };
+  const now = Date.now();
+  const pair = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM point_engagers WHERE author_id = ? AND engager_id = ? AND created_at > ?"
+  ).bind(author, engager, now - 7 * 86400000).first();
+  if (Number(pair && pair.n) >= EARN.pairPerWeek) return { awarded: 0, pair: true };
+  const added = await env.DB.prepare(
+    "INSERT INTO point_engagers (post_key, engager_id, author_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(post_key, engager_id) DO NOTHING"
+  ).bind(key, engager, author, now).run();
+  if (!(added && added.meta && added.meta.changes)) return { awarded: 0, duplicate: true };
+  const counted = await env.DB.prepare("SELECT COUNT(*) AS n FROM point_engagers WHERE post_key = ? AND author_id = ?").bind(key, author).first();
+  const n = Number(counted && counted.n) || 0;
+  if (n >= EARN.popularAt) return grant(env, author, "popular_post", key, RULES.popular_post.points, now);
+  if (n >= EARN.qualityAt) return grant(env, author, "quality_post", key, RULES.quality_post.points, now);
+  return { awarded: 0, engagers: n };
+}
+
+async function replyAuthor(env, replyId) {
+  const id = String(replyId || "");
+  let row = null;
+  try { row = await env.DB.prepare("SELECT author_id, parent_id FROM public_posts WHERE id = ?").bind(id).first(); }
+  catch (err) { row = null; }
+  if (!row) {
+    try { row = await env.DB.prepare("SELECT author_id, parent_id FROM account_content WHERE id = ?").bind(id).first(); }
+    catch (err) { row = null; }
+  }
+  return row;
+}
+
+async function loginStreak(env, publicId, now) {
+  const day = utcDay(now);
+  const row = await env.DB.prepare(
+    "SELECT last_day, streak FROM point_streaks WHERE public_id = ? AND kind = 'login'"
+  ).bind(publicId).first();
+  if (row && row.last_day === day) return { awarded: 0, balance: await balanceOf(env, publicId), streak: Number(row.streak) || 1 };
+  const streak = row && row.last_day === yesterday(day) ? (Number(row.streak) || 0) + 1 : 1;
+  await env.DB.prepare(
+    "INSERT INTO point_streaks (public_id, kind, last_day, streak) VALUES (?, 'login', ?, ?) ON CONFLICT(public_id, kind) DO UPDATE SET last_day = excluded.last_day, streak = excluded.streak"
+  ).bind(publicId, day, streak).run();
+  await payInviterIfActive(env, publicId, now, streak);
+  const pay = streakPayout(streak);
+  if (!pay || await accountAgeDays(env, publicId) < EARN.minAgeDays) return { awarded: 0, balance: await balanceOf(env, publicId), streak: streak };
+  const got = await grant(env, publicId, "login", "streak:" + day, pay, now);
+  got.streak = streak;
+  return got;
+}
+
+/* An invite pays once the invited person stayed a week, posted, and kept a streak. */
+async function payInviterIfActive(env, publicId, now, streak) {
+  const invite = await env.DB.prepare("SELECT code, inviter_id FROM point_invites WHERE redeemed_by = ?").bind(publicId).first();
+  if (!invite) return;
+  if (streak < EARN.inviteStreak || await accountAgeDays(env, publicId) < EARN.inviteAgeDays) return;
+  let posts = 0;
+  try {
+    const counted = await env.DB.prepare("SELECT COUNT(*) AS n FROM public_posts WHERE author_id = ? AND hidden = 0").bind(publicId).first();
+    posts = Number(counted && counted.n) || 0;
+  } catch (err) { posts = 0; }
+  if (posts < EARN.invitePosts) return;
+  if (await accountAgeDays(env, invite.inviter_id) < EARN.minAgeDays) return;
+  await grant(env, invite.inviter_id, "invite", invite.code, RULES.invite.points, now);
+}
+
+export async function awardActivity(env, publicId, action, ref) {
+  if (!PUBLIC_ID.test(String(publicId || ""))) return { awarded: 0, balance: 0 };
+  const mark = String(ref || "").slice(0, 120);
+  if (action === "like_in") {
+    const cut = mark.indexOf(":");
+    if (cut < 0) return { awarded: 0 };
+    return creditEngagement(env, publicId, mark.slice(cut + 1), mark.slice(0, cut));
+  }
+  if (action === "reply_in") {
+    const reply = await replyAuthor(env, mark);
+    if (!reply || !reply.parent_id) return { awarded: 0 };
+    return creditEngagement(env, publicId, reply.parent_id, reply.author_id);
+  }
+  const now = Date.now();
+  if (action === "login") return loginStreak(env, publicId, now);
+  const rule = RULES[action];
+  if (!rule || !mark) return { awarded: 0, balance: await balanceOf(env, publicId) };
+  if (await accountAgeDays(env, publicId) < EARN.minAgeDays) return { awarded: 0, balance: await balanceOf(env, publicId), young: true };
+  return grant(env, publicId, action, mark, rule.points, now);
+}
+
 async function tallyBadges(env, publicId) {
   try {
     const badges = await import("./badges.js");
@@ -229,6 +345,17 @@ async function tallyBadges(env, publicId) {
 }
 
 export async function clawback(env, publicId, action, ref) {
+  if (action === "post" || action === "comment") {
+    const first = await clawback(env, publicId, "quality_post", ref);
+    const second = await clawback(env, publicId, "popular_post", ref);
+    return { awarded: (first.awarded || 0) + (second.awarded || 0) };
+  }
+  if (action === "like_in") {
+    const cut = String(ref || "").indexOf(":");
+    if (cut < 0) return { awarded: 0 };
+    await env.DB.prepare("DELETE FROM point_engagers WHERE post_key = ? AND engager_id = ?").bind(String(ref).slice(cut + 1), String(ref).slice(0, cut)).run();
+    return { awarded: 0 };
+  }
   if (!PUBLIC_ID.test(String(publicId || "")) || !RULES[action]) return { awarded: 0 };
   const mark = String(ref || "").slice(0, 120);
   if (!mark) return { awarded: 0 };
@@ -256,23 +383,43 @@ export async function clawback(env, publicId, action, ref) {
   return { awarded: delta, balance: await balanceOf(env, publicId) };
 }
 
-export async function spendPoints(env, publicId, amount, reason, ref) {
-  const cost = Math.floor(Number(amount) || 0);
-  if (cost <= 0 || !PUBLIC_ID.test(String(publicId || ""))) return { ok: false, error: "cost" };
-  const balance = await balanceOf(env, publicId);
-  if (balance < cost) return { ok: false, error: "balance", balance: balance };
-  const now = Date.now();
-  const mark = String(ref || newId()).slice(0, 120);
-  await env.DB.batch([
+/* Atomic: the balance check, the debit and the ledger row are one transaction.
+   A guard row with a CHECK constraint aborts the whole batch on a short balance. */
+export function spendStatements(env, publicId, cost, reason, mark, now) {
+  return [
+    env.DB.prepare(
+      "UPDATE point_balances SET balance = balance - ?, updated_at = ? WHERE public_id = ? AND balance >= ?"
+    ).bind(cost, now, publicId, cost),
+    env.DB.prepare("INSERT INTO point_guard (kind, ok) SELECT 'balance', changes()"),
     env.DB.prepare(
       "INSERT INTO point_ledger (id, public_id, delta, reason, ref, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).bind(newId(), publicId, -cost, reason, mark, now),
-    env.DB.prepare(
-      "UPDATE point_balances SET balance = balance - ?, updated_at = ? WHERE public_id = ?"
-    ).bind(cost, now, publicId)
-  ]);
+    ).bind(newId(), publicId, -cost, reason, mark, now)
+  ];
+}
+
+export function guardFailure(err) {
+  const text = String(err && err.message || err);
+  if (/CHECK constraint failed: balance/i.test(text)) return "balance";
+  if (/CHECK constraint failed: edition/i.test(text)) return "sold_out";
+  return "";
+}
+
+export async function spendPoints(env, publicId, amount, reason, ref, extra) {
+  const cost = Math.floor(Number(amount) || 0);
+  if (cost <= 0 || !PUBLIC_ID.test(String(publicId || ""))) return { ok: false, error: "cost" };
+  const now = Date.now();
+  const mark = String(ref || newId()).slice(0, 120);
+  try {
+    await env.DB.batch(spendStatements(env, publicId, cost, reason, mark, now).concat(extra || [], [env.DB.prepare("DELETE FROM point_guard")]));
+  } catch (err) {
+    const why = guardFailure(err);
+    if (!why) throw err;
+    return { ok: false, error: why, balance: await balanceOf(env, publicId) };
+  }
   return { ok: true, balance: await balanceOf(env, publicId) };
 }
+
+export { balanceOf, newId, accountByHandle, prefsOf, cleanMessage, giftById, tallyBadges, birthdayGiftAllowed };
 
 async function history(env, publicId) {
   const listed = await env.DB.prepare(
@@ -305,10 +452,14 @@ async function prefsOf(env, publicId) {
 
 function presentGift(row, viewerId, owner) {
   const privacy = row.privacy === "private" || row.privacy === "anonymous" ? row.privacy : "public";
-  const gift = giftById(row.gift_id);
+  const limited = limitedById(row.gift_id);
+  const gift = giftById(limited ? limited.base : row.gift_id);
   const item = {
     id: row.id,
     giftId: row.gift_id,
+    base: limited ? limited.base : "",
+    edition: Number(row.edition) || 0,
+    wrapped: row.pay_method === "money" && !row.opened_at,
     svg: gift ? gift.svg : "",
     cp: gift ? gift.cp : "",
     message: row.message || "",
@@ -328,7 +479,7 @@ async function listGifts(env, ownerId, viewerId, owner) {
   const prefs = await prefsOf(env, ownerId);
   if (prefs.hideTab && !owner) return { hidden: true, who: prefs.who, gifts: [] };
   const listed = await env.DB.prepare(
-    "SELECT g.id, g.gift_id, g.sender_id, g.recipient_id, g.message, g.privacy, g.hidden, g.context, g.post_id, g.created_at, a.handle AS sender_handle, a.display_name AS sender_name FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.sender_id WHERE g.recipient_id = ? ORDER BY g.created_at DESC LIMIT 80"
+    "SELECT g.id, g.gift_id, g.sender_id, g.recipient_id, g.message, g.privacy, g.hidden, g.context, g.post_id, g.created_at, a.handle AS sender_handle, a.display_name AS sender_name, o.opened_at, so.method AS pay_method, so.edition FROM gift_sends g LEFT JOIN accounts a ON a.public_id = g.sender_id LEFT JOIN gift_opens o ON o.send_id = g.id LEFT JOIN store_orders so ON so.gift_send_id = g.id AND so.status = 'paid' WHERE g.recipient_id = ? ORDER BY g.created_at DESC LIMIT 80"
   ).bind(ownerId).all();
   const gifts = [];
   rowsOf(listed).forEach((row) => {
@@ -542,16 +693,18 @@ export async function handlePoints(request, env, path, deps) {
     const action = String(body.action || "");
     const day = utcDay(Date.now());
     let result = { awarded: 0 };
-    if (action === "login" || action === "read") result = await awardActivity(env, viewer.public_id, action, day);
-    else if (action === "game" && GAMES[String(body.gameId || "")]) result = await awardActivity(env, viewer.public_id, "game", day + ":" + body.gameId);
+    if (action === "login") result = await awardActivity(env, viewer.public_id, "login", day);
+    else if (action === "read" || (action === "game" && GAMES[String(body.gameId || "")])) result = { awarded: 0 };
     else if (action === "profile") {
       const ready = viewer.display_name && String(viewer.bio || "").trim() && (viewer.avatar || viewer.location);
       if (!ready) return deps.json(400, { error: "incomplete" });
       result = await awardActivity(env, viewer.public_id, "profile", "profile");
     } else return deps.json(400, { error: "action" });
-    return deps.json(200, { awarded: result.awarded || 0, balance: result.balance != null ? result.balance : await balanceOf(env, viewer.public_id) });
+    return deps.json(200, { awarded: result.awarded || 0, streak: result.streak || 0, balance: result.balance != null ? result.balance : await balanceOf(env, viewer.public_id) });
   }
   if (path === "/v1/points/invites" && request.method === "POST") {
+    const paced = await deps.rateHit(env, "invite:" + viewer.public_id, 10, 24 * 60 * 60 * 1000);
+    if (!paced.ok) return deps.limited(paced);
     const code = hex(crypto.getRandomValues(new Uint8Array(8)));
     await env.DB.prepare(
       "INSERT INTO point_invites (code, inviter_id, created_at, redeemed_by, redeemed_at) VALUES (?, ?, ?, '', 0)"
@@ -565,11 +718,15 @@ export async function handlePoints(request, env, path, deps) {
     if (!/^[a-f0-9]{16}$/.test(code)) return deps.json(400, { error: "code" });
     const row = await env.DB.prepare("SELECT inviter_id, redeemed_by FROM point_invites WHERE code = ?").bind(code).first();
     if (!row || row.redeemed_by || row.inviter_id === viewer.public_id) return deps.json(400, { error: "code" });
+    /* Only a brand-new account can use an invite, and only once. The inviter is
+       paid later, when this account has stayed and become active. */
+    if (await accountAgeDays(env, viewer.public_id) > EARN.redeemWithinDays) return deps.json(400, { error: "too_late" });
+    const used = await env.DB.prepare("SELECT code FROM point_invites WHERE redeemed_by = ?").bind(viewer.public_id).first();
+    if (used) return deps.json(400, { error: "code" });
     await env.DB.prepare(
       "UPDATE point_invites SET redeemed_by = ?, redeemed_at = ? WHERE code = ? AND redeemed_by = ''"
     ).bind(viewer.public_id, Date.now(), code).run();
-    const paid = await awardActivity(env, row.inviter_id, "invite", code);
-    return deps.json(200, { ok: true, awarded: 0, inviterAwarded: paid.awarded || 0 });
+    return deps.json(200, { ok: true, awarded: 0, inviterAwarded: 0, pending: true });
   }
   if (path === "/v1/gifts/prefs" && request.method === "PUT") {
     const body = await deps.readJson(request, 8000);
@@ -618,6 +775,8 @@ export async function handlePoints(request, env, path, deps) {
     const mode = body.mode === "reply" || body.mode === "dm" ? body.mode : "direct";
     const parentId = String(body.parentId || "").replace(/[^\w.:-]/g, "").slice(0, 80);
     if (mode === "reply" && !parentId) return deps.json(400, { error: "parent" });
+    const perRecipient = await deps.rateHit(env, "gift-to:" + viewer.public_id + ":" + recipient.public_id, GIFTS_PER_RECIPIENT_DAY, 24 * 60 * 60 * 1000);
+    if (!perRecipient.ok) return deps.limited(perRecipient);
     const sendId = newId();
     let paid;
     if (gift.price > 0) paid = await spendPoints(env, viewer.public_id, gift.price, "gift", sendId);

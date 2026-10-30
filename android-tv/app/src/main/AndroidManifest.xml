@@ -23,6 +23,35 @@
         <intent>
             <action android:name="android.support.customtabs.action.CustomTabsService" />
         </intent>
+        <!-- Optional home screen (launcher/HomeActivity): the TV apps it lists and
+             the system screens its top bar opens. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <intent>
+            <action android:name="android.search.action.GLOBAL_SEARCH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.ASSIST" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.WEB_SEARCH" />
+        </intent>
+        <!-- Voice typing (ime/) and voice search (search/) use the TV's own recognizer. -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="com.android.tv.action.VIEW_INPUTS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.TV_INPUT_SETTINGS" />
+        </intent>
     </queries>
 
     <application
@@ -220,6 +249,190 @@
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
             android:exported="false"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- Optional home screen ("Make ViktorychTV your default"). Off in the
+             manifest, so the TV never offers it and nothing changes until the user
+             turns it on from DefaultsActivity and confirms Android's own picker.
+             It never replaces TvLauncherActivity, which stays the app's entry. -->
+        <activity
+            android:name=".launcher.HomeActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="${launcherName}"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:clearTaskOnLaunch="true"
+            android:excludeFromRecents="true"
+            android:resumeWhilePausing="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize|locale|layoutDirection|uiMode"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- viktorychtv://defaults: one row per TV job with a Set button. -->
+        <activity
+            android:name=".launcher.DefaultsActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="viktorychtv" android:host="defaults" />
+            </intent-filter>
+        </activity>
+
+        <!-- Optional player and screensaver (player/). Both are off in the manifest:
+             no link opens differently and the TV lists no new screensaver until
+             the user turns them on in DefaultsActivity, and Android still asks. -->
+        <activity
+            android:name=".player.PlayerActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/player_label"
+            android:excludeFromRecents="true"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize|uiMode"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="youtube.com" />
+                <data android:host="www.youtube.com" />
+                <data android:host="m.youtube.com" />
+                <data android:host="music.youtube.com" />
+                <data android:path="/watch" />
+                <data android:pathPrefix="/shorts/" />
+                <data android:pathPrefix="/live/" />
+                <data android:pathPrefix="/embed/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="youtu.be" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="x.com" />
+                <data android:host="www.x.com" />
+                <data android:host="mobile.x.com" />
+                <data android:host="twitter.com" />
+                <data android:host="www.twitter.com" />
+                <data android:host="mobile.twitter.com" />
+                <data android:pathPattern="/.*/status/.*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="twitch.tv" />
+                <data android:host="www.twitch.tv" />
+                <data android:host="m.twitch.tv" />
+                <data android:pathPattern="/..*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/vnd.apple.mpegurl" />
+                <data android:mimeType="application/x-mpegURL" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".player.FeedDream"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/dream_label"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <!-- viktorychtv://dream?d=...: photos from the user's own feed for the screensaver. -->
+        <activity
+            android:name=".player.DreamFeedActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="viktorychtv" android:host="dream" />
+            </intent-filter>
+        </activity>
+
+        <!-- Optional remote keyboard (ime/). Off until chosen on the defaults screen,
+             and then the TV still asks before it is used. -->
+        <service
+            android:name=".ime.TvKeyboard"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/kb_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/kb_method" />
+        </service>
+
+        <activity
+            android:name=".ime.VoiceActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Optional feed search (search/). Off until chosen on the defaults screen. -->
+        <activity
+            android:name=".search.SearchActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/srch_label"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:windowSoftInputMode="stateVisible|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="android.app.searchable" android:resource="@xml/kb_searchable" />
+        </activity>
+
+        <provider
+            android:name=".search.SuggestProvider"
+            android:authorities="app.viktorych.tv.search"
+            android:enabled="false"
+            android:exported="true" />
 
     </application>
 </manifest>

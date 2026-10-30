@@ -404,7 +404,7 @@
     if (!slots[slotName].emoji) return "";
     return '<div class="xc-emoji">' + EMOJI.map(function (item, index) {
       return '<button type="button" data-act="xc-emoji-add" data-slot="' + esc(slotName) + '" data-i="' + index + '" aria-label="' + esc(item) + '">' + item + "</button>";
-    }).join("") + "</div>";
+    }).join("") + "</div>" + (window.ProfileGifts && window.ProfileGifts.stickerPicker ? window.ProfileGifts.stickerPicker(slotName) : "");
   }
   function threadHtml(slotName) {
     var slot = slots[slotName];
@@ -438,7 +438,7 @@
   function audienceHtml(slotName) {
     var slot = slots[slotName];
     var open = panel === "audience";
-    var menu = open ? '<div class="xc-menu" role="menu" aria-label="' + esc(tr("Audience")) + '">' + AUDIENCES.map(function (row) {
+    var menu = open ? '<div class="xc-menu" role="menu" aria-label="' + esc(tr("Audience")) + '">' + AUDIENCES.filter(function (row) { return row[0] !== "friends" || !(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff()); }).map(function (row) {
       return '<button type="button" role="menuitemradio" aria-checked="' + (slot.audience === row[0] ? "true" : "false") + '" data-act="xc-audience" data-slot="' + esc(slotName) + '" data-value="' + row[0] + '">' + esc(tr(row[1])) + "</button>";
     }).join("") + "</div>" : "";
     return '<span class="xc-aud-wrap">' + '<button class="xc-audience" type="button" data-act="xc-audience-menu" data-slot="' + esc(slotName) + '" aria-haspopup="menu" aria-expanded="' + (open ? "true" : "false") + '" aria-label="' + esc(tr("Audience")) + '">' + esc(tr(labelOf(AUDIENCES, slot.audience))) + icon(ICONS.chev) + "</button>" + menu + "</span>";
@@ -1025,6 +1025,14 @@
     }
     if (act === "xc-schedule-clear") { slot.scheduleAt = 0; panel = ""; paint(); return true; }
     if (act === "xc-emoji") { slot.emoji = !slot.emoji; paint(); return true; }
+    if (act === "xc-sticker-add") {
+      var sticker = String(el.getAttribute("data-sticker") || "");
+      if (/^\[\[sticker:[a-z0-9_]{1,24}\/[a-z0-9_]{1,32}\]\]$/.test(sticker)) insertText(slotName, 0, sticker);
+      slot.emoji = false;
+      paintChrome(slotName);
+      saveSoon(slotName);
+      return true;
+    }
     if (act === "xc-emoji-add") {
       insertText(slotName, 0, EMOJI[Number(el.getAttribute("data-i")) || 0] || "");
       slot.emoji = false;

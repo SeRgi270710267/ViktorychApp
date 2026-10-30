@@ -209,3 +209,12 @@ rows.forEach((row) => {
 const narrow = rows.filter((row) => row.case === "feed" && (row.w === 320 || row.w === 390));
 assert.strictEqual(narrow.length, 2, "320 and 390 timeline rows");
 console.log("action bar layout checks passed");
+
+// Rides along (workflow files are not edited here): Settings > Free tier
+// usage always finishes loading.
+{
+  const usage = spawnSync(process.execPath, [require("path").join(__dirname, "usage_panel_test.mjs")], { encoding: "utf8" });
+  if (usage.status !== 0) { console.error(usage.stdout, usage.stderr); }
+  assert.strictEqual(usage.status, 0, "usage panel test");
+  console.log(usage.stdout.trim());
+}

@@ -6,6 +6,7 @@
 import { resolveName, viewerHandle } from "./usernames.js";
 import { viewerDisplay } from "./name-rules.js";
 import { awardActivity, clawback, giftForPost } from "./points.js";
+import { keepOwnedStickers } from "./store.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
 import { addCommunityPost, communityHomeRows } from "./communities.js";
 import { attachParents } from "./reply-context.js";
@@ -528,6 +529,7 @@ async function listPosts(request, env, deps) {
     stamped.push({ at: Number(post.createdAt) || 0, post: post });
   }
   let communitiesHome = true;
+  let communityPrefs = null;
   if (author) {
     // Profiles list the account's community posts and replies too; they live in
     // community_posts, not public_posts.
@@ -548,6 +550,7 @@ async function listPosts(request, env, deps) {
   try {
     const pack = await communityHomeRows(env, request, session, deps.presentAccount);
     communitiesHome = !(pack && pack.communitiesHome === false);
+    communityPrefs = (pack && pack.prefs) || null;
     const extra = (pack && pack.posts) || [];
     for (let i = 0; i < extra.length; i++) {
       const post = extra[i];
@@ -563,7 +566,7 @@ async function listPosts(request, env, deps) {
   }
   await withParents(env, request, session, posts, skip);
   await decorate(env, posts, session.public_id);
-  return deps.json(200, { posts: posts, communitiesHome: communitiesHome });
+  return deps.json(200, communityPrefs ? { posts: posts, communitiesHome: communitiesHome, communityPrefs: communityPrefs } : { posts: posts, communitiesHome: communitiesHome });
 }
 
 async function replyAllowed(env, session, parent) {
@@ -595,7 +598,8 @@ async function createPost(request, env, deps) {
   const input = await readPostInput(request, deps);
   if (input.error) return deps.json(input.status || 400, { error: input.error });
   const poll = cleanPoll(input.fields.poll);
-  const body = cleanBody(input.fields.body);
+  /* Sticker tokens stay only for packs the author owns (bought, gifted or free). */
+  const body = cleanBody(await keepOwnedStickers(env, session.public_id, input.fields.body));
   const files = Array.isArray(input.files) ? input.files : (input.file ? [input.file] : []);
   if (!body && !files.length && !poll) return deps.json(400, { error: "bad_post" });
   if (poll && files.length) return deps.json(400, { error: "bad_post" });

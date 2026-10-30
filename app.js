@@ -60,6 +60,7 @@
   }
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
   const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", nostr: "Nostr" };
+  Object.defineProperty(PLATFORM, "news", { get: () => tr("Newsletter") });
 
   const PATH = {
     atSign: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z",
@@ -204,7 +205,6 @@
     quoteTarget: "",
     composeSeed: "",
     navEditingFolder: null,
-    navNewFolderOpen: false,
     shared: {},
     sharedState: {},
     chain: {},
@@ -1018,10 +1018,12 @@
   function cleanBellNotes(list) {
     if (!Array.isArray(list)) return [];
     const out = [];
+    const noFriends = friendsOffNow();
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
+      if (noFriends && (item.kind === "friend_request" || item.kind === "friend_accept")) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1, feed_request: 1, feed_approved: 1, feed_rejected: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -1574,6 +1576,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
   function followSnapshot(id) {
     if (!id || String(id).indexOf("app:") === 0) return null;
+    if (String(id).indexOf("news:") === 0) {
+      const nl = (STATE.settings.newsletters || {})[String(id).slice(5)];
+      return nl ? { name: String(nl.name || "").slice(0, 80), handle: String(id).slice(5), platform: "news", avatar: /^https:\/\//.test(String(nl.avatar || "")) ? nl.avatar : "", bio: "" } : null;
+    }
     const feed = feedById(id);
     if (!feed) return null;
     const avatar = /^https:\/\//.test(String(feed.avatar || "")) ? feed.avatar : "";
@@ -1778,13 +1784,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone"];
+  /* Friends master switch (friends-pref.js): true while the signed-in
+     person has Friends off, so every friend surface is left out. */
+  function friendsOffNow() {
+    return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff());
+  }
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "friends_off"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
       return Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
     } catch (err) { return []; }
   }
+  /* True only once the server list has been fetched and the feature is not
+     in it, so default-off features stay hidden until the owner turns them on. */
+  window.ViktorychServerFeature = function (name) {
+    let at = 0;
+    try { at = Number(localStorage.getItem(SERVER_OFF_KEY + "-at")) || 0; } catch (err) { at = 0; }
+    return at > 0 && SERVER_FEATURES.includes(name) && !serverOffList().includes(name);
+  };
   function storeServerOff(list) {
     try {
       localStorage.setItem(SERVER_OFF_KEY, JSON.stringify(list || []));
@@ -1849,7 +1867,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       regone_profile_stats: [tr("ReGone profile stats"), tr("Stats and achievements from the NZlay profile someone linked to their own account.")],
       nzlay_forum: [tr("NZlay forum community"), tr("The NZlay Forums community: topics and replies read live from nzlay.com.")],
       nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
-      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")]
+      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
+      nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")],
+      bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")],
+      feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")],
+      friends_off: [tr("Friends switch"), tr("Lets each person turn Friends off: no friend requests, no friends lists, counts or online status.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -2066,6 +2088,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function statusHash(post) {
+    if (post && post.cmHash) return post.cmHash;
     const platform = post.platform || "x";
     const handle = post.handle || "";
     const id = post.statusId || post.id;
@@ -2079,8 +2102,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!text || text.length > 300) return null;
     if (/^(?:nostr:)?(?:npub1|nprofile1)[02-9ac-hj-np-z]{20,}$/i.test(text)) return { platform: "nostr", account: text.replace(/^nostr:/i, "") };
     if (/^nostr:[A-Za-z0-9._-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/i.test(text)) return { platform: "nostr", account: text.slice(6) };
+    if (/^(?:news|newsletter):\S+$/i.test(text)) return { platform: "news", account: text };
     const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok|bsky|mastodon):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
+    if (/^(?:https?:\/\/)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:[/?#]\S*)?$/.test(text) && isNewsletterUrl(text) && !/^(?:https?:\/\/)?(?:www\.)?medium\.com\/?$/i.test(text)) return { platform: "news", account: text };
     if (/^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}(?:\/[A-Za-z0-9_/%?&=.+~-]*)?$/i.test(text)) return { platform: "x", account: text };
     if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
     if (/threads\.(?:com|net)\/@/i.test(text)) return { platform: "threads", account: text };
@@ -2464,8 +2489,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function sourceBadge(platform) {
     if (!platform || platform === "x" || platform === "app") return "";
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : "rss";
-    return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : platform === "news" ? "mail" : "rss";
+    return `<span class="src" title="${esc(platform === "news" ? tr("Newsletter") : (PLATFORM[platform] || "RSS"))}">${icon(name)}</span>`;
   }
 
   function platformGlyph(platform) {
@@ -2541,6 +2566,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           const label = shown.length > 30 ? shown.slice(0, 27) + "…" : shown;
           html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href)}">${esc(label)}</a>` + esc(trail);
           i += m[0].length;
+          continue;
+        }
+      }
+      if ((!platform || platform === "app") && src.startsWith("[[sticker:", i) && window.ProfileGifts && window.ProfileGifts.stickerHtml) {
+        const sticker = src.slice(i).match(/^\[\[sticker:([a-z0-9_]{1,24})\/([a-z0-9_]{1,32})\]\]/);
+        const shown = sticker ? window.ProfileGifts.stickerHtml(sticker[1], sticker[2]) : "";
+        if (shown) {
+          html += shown;
+          i += sticker[0].length;
           continue;
         }
       }
@@ -2716,7 +2750,31 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return foreignScript(sample);
   }
 
+  /* Reddit posts and forum topics carry a title apart from the body (separate
+     source fields): drawn as its own bold line above the text, like a titled
+     post on X. Bodies that repeat the title (older link previews) drop it. */
+  function postTitleOf(post) {
+    if (!post || !post.title || typeof post.title !== "string") return "";
+    if (!(post.cmMirror || post.platform === "reddit" || post.platform === "forum")) return "";
+    return post.title.trim();
+  }
+  function titledBody(post) {
+    const title = postTitleOf(post);
+    if (!title) return post;
+    const text = String(post.text || "");
+    if (text.trim().indexOf(title) !== 0) return post;
+    return Object.assign({}, post, { text: text.trim().slice(title.length).replace(/^\s+/, "") });
+  }
   function textBlock(post, key, full, cls) {
+    const title = postTitleOf(post);
+    if (title) {
+      post = titledBody(post);
+      const head = `<div class="post-title${cls === "status-text" ? " status-title" : cls === "quote-text" ? " quote-title" : ""}" dir="auto">${esc(title)}</div>`;
+      return head + (String(post.text || "").trim() ? textBlockBody(post, key, full, cls) : "");
+    }
+    return textBlockBody(post, key, full, cls);
+  }
+  function textBlockBody(post, key, full, cls) {
     const sample = String(post.text || "").trim().slice(0, 5000);
     if (sample) STATE.translateText[key] = sample;
     STATE.translateLinks = STATE.translateLinks || {};
@@ -3295,6 +3353,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (external && external.kind === "link" && external.openUrl) {
       return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(external.openUrl)}"><span class="link-card-copy"><span class="link-title">${esc(tr("Open on X"))}</span></span></a>`;
     }
+    const player = lvResolve(link.url, link);
+    if (player) return lvCard(player, link, post, false);
     const domain = link.domain || linkDomain(link.url);
     const blocked = linkImagesBlocked();
     const hasImage = !!link.image && !blocked;
@@ -3307,6 +3367,187 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const description = link.description && link.description !== link.title ? `<span class="link-desc">${esc(link.description)}</span>` : "";
     const cls = large ? "link-card lc-large" : (hasImage ? "link-card lc-small" : "link-card lc-text");
     return `<a class="${cls}" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
+  }
+
+  /* Video pages with an official embed player (video-providers.js) get a
+     lite card: a still and a play button. A tap swaps in the provider's own
+     iframe in place, never full screen, never autoplay before a tap. One
+     plays at a time and it pauses when scrolled away. The title row still
+     opens the page. Nothing is downloaded or relayed. */
+  function lvResolve(url, meta) {
+    const reg = window.ViktorychVideoProviders;
+    if (!reg || !url) return null;
+    try { return reg.resolve(url, meta || null, { origin: location.origin, host: location.hostname }); } catch (err) { return null; }
+  }
+
+  function lvCard(hit, link, post, pending) {
+    const pid = post && post.id ? String(post.id) : "";
+    const id = pid ? ` data-id="${esc(pid)}"` : "";
+    const domain = (link && link.domain) || linkDomain(hit.open);
+    const title = (link && (link.title || link.site)) || hit.name || domain;
+    const thumb = hit.thumb && !linkImagesBlocked() ? `<img decoding="async" class="link-card-img" src="${esc(hit.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
+    const desc = link && link.description && link.description !== link.title ? `<span class="link-desc">${esc(link.description)}</span>` : "";
+    const cls = "link-card lc-large lv-card" + (hit.aspect === "9:16" ? " lv-tall" : "") + (pending ? " lp-slot" : "");
+    const slot = pending ? ` data-lp="${esc(hit.open)}"` : "";
+    const facade = `<button type="button" class="lv-facade" data-act="lv-play" aria-label="${esc(tr("Play video") + ": " + title)}">${thumb}<span class="lv-name">${esc(hit.name)}</span><span class="link-card-play" aria-hidden="true">${icon("play")}</span></button>`;
+    const copy = `<a class="link-card-copy lv-copy" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(hit.open)}" title="${esc(tr("Open link"))}"><span class="link-site">${esc(domain || hit.name)}</span><span class="link-title">${esc(title)}</span>${desc}</a>`;
+    return `<div class="${cls}"${slot}${id} data-lv="${esc(hit.key)}" data-lv-src="${esc(hit.embed)}" data-lv-pause="${esc(hit.pause || "")}"><span class="lv-stage"><span class="lv-box">${facade}</span></span>${copy}</div>`;
+  }
+
+  function lvPlaying(card) {
+    return !!(card && card.classList.contains("lv-on") && !card.classList.contains("lv-paused"));
+  }
+
+  function lvUnload(card) {
+    if (!card) return;
+    const frame = card.querySelector("iframe.lv-frame");
+    if (frame) frame.remove();
+    card.classList.remove("lv-on", "lv-paused");
+    if (STATE.lvObserver) STATE.lvObserver.unobserve(card);
+    if (STATE.lvCard === card) STATE.lvCard = null;
+  }
+
+  /* Players with a documented pause message pause in place; the rest unload
+     back to the still, which also stops them. */
+  function lvPause(card) {
+    if (!lvPlaying(card)) return;
+    const frame = card.querySelector("iframe.lv-frame");
+    const reg = window.ViktorychVideoProviders;
+    const msg = reg && reg.pauseMessage ? reg.pauseMessage(card.getAttribute("data-lv-pause") || "") : "";
+    if (frame && msg && frame.contentWindow) {
+      try {
+        frame.contentWindow.postMessage(msg, new URL(frame.src).origin);
+        card.classList.add("lv-paused");
+        return;
+      } catch (err) { /* fall through to unload */ }
+    }
+    lvUnload(card);
+  }
+
+  function lvPauseAll(except) {
+    document.querySelectorAll(".lv-card.lv-on").forEach((card) => { if (card !== except) lvPause(card); });
+    if (STATE.lvCard && STATE.lvCard !== except && !STATE.lvCard.isConnected) lvUnload(STATE.lvCard);
+  }
+
+  function lvStopFeed() {
+    if (STATE.inlineEl) {
+      const el = STATE.inlineEl;
+      STATE.inlineEl = null;
+      setInlinePaused(el, false);
+      el.classList.remove("is-inline");
+      pausePreview(el);
+    }
+    if (STATE.autoEl) {
+      pausePreview(STATE.autoEl);
+      STATE.autoEl = null;
+    }
+  }
+
+  /* This card is the one playing now: everything else stops. */
+  function lvClaim(card) {
+    lvPauseAll(card);
+    lvStopFeed();
+    card.classList.remove("lv-paused");
+    STATE.lvCard = card;
+  }
+
+  function lvWatch(card) {
+    if (!("IntersectionObserver" in window)) return;
+    if (!STATE.lvObserver) {
+      STATE.lvObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => { if (entry.intersectionRatio < 0.25) lvPause(entry.target); });
+      }, { threshold: [0, 0.25, 0.5] });
+    }
+    STATE.lvObserver.observe(card);
+  }
+
+  function lvListen() {
+    if (STATE.lvListening) return;
+    STATE.lvListening = true;
+    // A tap inside a player moves focus into its frame: that card now owns playback.
+    window.addEventListener("blur", () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (active && active.tagName === "IFRAME" && active.classList.contains("lv-frame")) {
+          const card = active.closest(".lv-card");
+          if (card) lvClaim(card);
+        }
+      }, 0);
+    });
+    // YouTube and Vimeo report play; the page only reads that one fact.
+    window.addEventListener("message", (event) => {
+      const frames = document.querySelectorAll("iframe.lv-frame");
+      let card = null;
+      frames.forEach((frame) => { if (!card && frame.contentWindow === event.source) card = frame.closest(".lv-card"); });
+      if (!card) return;
+      let data = event.data;
+      if (typeof data === "string") { try { data = JSON.parse(data); } catch (err) { return; } }
+      if (!data || typeof data !== "object") return;
+      const ytPlaying = data.event === "onStateChange" ? data.info === 1 : (data.event === "infoDelivery" && data.info && data.info.playerState === 1);
+      if (ytPlaying || data.event === "play") {
+        if (STATE.lvCard !== card || card.classList.contains("lv-paused")) lvClaim(card);
+      }
+    });
+  }
+
+  function lvHello(frame, kind) {
+    let origin = "";
+    try { origin = new URL(frame.src).origin; } catch (err) { return; }
+    const send = (msg) => { try { if (frame.contentWindow) frame.contentWindow.postMessage(msg, origin); } catch (err) { /* frame gone */ } };
+    if (kind === "youtube") send(JSON.stringify({ event: "listening", id: "lv", channel: "widget" }));
+    if (kind === "vimeo") send(JSON.stringify({ method: "addEventListener", value: "play" }));
+  }
+
+  function lvPlay(btn) {
+    const card = btn && btn.closest(".lv-card");
+    if (!card) return;
+    const src = card.getAttribute("data-lv-src") || "";
+    const link = card.querySelector("a.lv-copy");
+    if (!/^https:\/\//i.test(src)) {
+      if (link) window.open(link.href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    lvListen();
+    lvClaim(card);
+    const box = card.querySelector(".lv-box");
+    let frame = card.querySelector("iframe.lv-frame");
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.className = "lv-frame";
+      frame.title = tr("Video player");
+      frame.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write");
+      frame.setAttribute("allowfullscreen", "");
+      // The page sends no referrer; official players need the origin to start.
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      const kind = card.getAttribute("data-lv-pause") || "";
+      frame.addEventListener("load", () => lvHello(frame, kind));
+      frame.src = src;
+      box.appendChild(frame);
+    }
+    card.classList.add("lv-on");
+    lvWatch(card);
+    try { frame.focus({ preventScroll: true }); } catch (err) { /* old browsers */ }
+  }
+
+  /* A full render swaps the feed for fresh nodes; the playing card moves
+     into its new spot (moveBefore keeps the frame alive where supported). */
+  function lvAdopt() {
+    const old = STATE.lvCard;
+    if (!old || old.isConnected) return;
+    const key = old.getAttribute("data-lv");
+    const pid = old.getAttribute("data-id") || "";
+    let fresh = null;
+    document.querySelectorAll(".lv-card[data-lv]").forEach((node) => {
+      if (!fresh && node.getAttribute("data-lv") === key && (node.getAttribute("data-id") || "") === pid) fresh = node;
+    });
+    if (!fresh || !fresh.parentNode) { lvUnload(old); return; }
+    const parent = fresh.parentNode;
+    try {
+      if (typeof parent.moveBefore === "function") { parent.moveBefore(old, fresh); fresh.remove(); }
+      else fresh.replaceWith(old);
+    } catch (err) {
+      fresh.replaceWith(old);
+    }
   }
 
   // Link previews, X style. A post with a link gets one card: an embedded
@@ -3441,6 +3682,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const slots = document.querySelectorAll(".lp-slot[data-lp]");
     slots.forEach((slot) => {
       if (slot.getAttribute("data-lp") !== url) return;
+      if (slot.classList.contains("lv-on")) return;
       const post = slot.dataset.id ? findAnyPost(slot.dataset.id) : null;
       const html = linkPreviewHtml(url, post, slot.dataset.id || "");
       if (html) slot.outerHTML = html;
@@ -3492,7 +3734,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         author: "r/" + (d.subreddit || ""),
         handle: "",
         avatar: "",
-        text: d.title + (d.selftext ? "\n\n" + String(d.selftext).slice(0, 400) : ""),
+        title: String(d.title),
+        text: d.selftext ? String(d.selftext).slice(0, 400) : "",
         date: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : "",
         url: "https://www.reddit.com" + (d.permalink || ""),
         media: media
@@ -3534,6 +3777,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const row = LINK_PREVIEW.mem[url];
     if (!row) {
       lpFetch(url);
+      // Known players draw their card at once; the title fills in later.
+      const reg = window.ViktorychVideoProviders;
+      const early = reg && reg.known && reg.known(url) ? lvResolve(url, null) : null;
+      if (early) return lvCard(early, null, post || (id ? { id: id } : null), true);
       return linkChip(url, id, true);
     }
     if (row.quoteRef) {
@@ -3545,6 +3792,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       return linkChip(url, id, true);
     }
     if (row.quote) return quoteCard(row.quote);
+    const player = lvResolve(url, row.meta || null);
+    if (player) return lvCard(player, row.meta || null, post || (id ? { id: id } : null), false);
     if (row.meta) return row.asPost ? linkPostCard(row.meta, id) : linkCard(row.meta, post || (id ? { id: id } : null));
     return linkChip(url, id, false);
   }
@@ -3598,6 +3847,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (post && list.length && list.every((item) => metaNeedsEmbed(post, item))) {
       const embed = metaEmbedHtml(post);
       if (embed) return embed + files;
+    }
+    if (list.length === 1 && list[0].type === "embed" && /(?:x|twitter)\.com\/(?:[\w]{1,20}|i(?:\/web)?)\/status(?:es)?\/\d{6,}|platform\.twitter\.com\/embed\/Tweet\.html/i.test(String(list[0].url || "") + " " + String(list[0].open || ""))) {
+      // An X post embed plays in our own player: the file is resolved on play.
+      const one = { type: "video", open: list[0].open || list[0].url, url: "", poster: list[0].poster || "" };
+      return `<div class="media m1">${playerTile(post || { media: [one] }, one, 0, "feed", true)}</div>` + files;
     }
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
@@ -4374,8 +4628,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if ((hls.levels || []).length) { hls.autoLevelCapping = sdTop(hls.levels); hls.capLevelToPlayerSize = true; }
       return;
     }
-    const top = (hls.levels || []).length - 1;
+    let top = (hls.levels || []).length - 1;
     if (top < 0) return;
+    // TV tuning: stay under this TV's max video quality, in a codec it decodes in hardware.
+    const tune = window.ViktorychTVTune;
+    const tvTop = tune && tune.pickTop ? tune.pickTop(hls.levels) : -1;
+    if (tvTop >= 0) top = tvTop;
     hls.capLevelToPlayerSize = false;
     hls.currentLevel = top;
   }
@@ -5119,43 +5377,49 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return true;
   }
 
+  /* Direct or relayed, by the network setting, plus the backup APIs. */
+  function xRouteFor(url) {
+    const helper = window.ViktorychEmbed;
+    const mode = (STATE.settings && STATE.settings.networkMode) || "auto";
+    const api = accountsApi();
+    const dev = window.ViktorychDevice;
+    let relay = "";
+    let backups = [];
+    try {
+      const host = new URL(url).hostname;
+      if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
+      if (/(^|\.)video\.twimg\.com$/i.test(host)) backups = backupApis(api).map((root) => root + "/v1/media?url=" + encodeURIComponent(url));
+    } catch (err) { relay = ""; }
+    if (!helper || !helper.xRoute) return { url: url, relay: relay, backups: backups };
+    const routed = helper.xRoute(url, {
+      networkMode: mode,
+      relay: relay,
+      preferRelay: mode === "auto" && isRuVisitor(),
+      playbackUrl: dev && dev.playbackUrl ? (direct, relayUrl) => dev.playbackUrl(direct, relayUrl, {
+        preferRelay: false,
+        settings: dev.read(),
+        signals: dev.signals()
+      }) : null
+    });
+    if (routed && typeof routed === "object") routed.backups = backups;
+    return routed;
+  }
+
   function xPlaybackPlan(post, media) {
     const helper = window.ViktorychEmbed;
     if (!helper || !helper.xPlan || !helper.xRoute) return null;
     if (youtubeId(post, media)) return null;
     const blob = [media && media.url, media && media.open, media && media.fallback, media && media.hls, post && post.url, post && post.link && post.link.url].join(" ");
     const platform = String((post && post.platform) || "");
-    const xish = platform === "x" || /video\.twimg\.com/i.test(blob) || /\/i\/spaces\//i.test(blob) || /\/i\/broadcasts\//i.test(blob) || /platform\.twitter\.com\/embed\/Tweet\.html/i.test(blob);
+    const mediaBlob = [media && media.url, media && media.open, media && media.fallback].join(" ");
+    const xish = platform === "x" || /video\.twimg\.com/i.test(blob) || /(?:^|\/\/)(?:www\.|mobile\.)?(?:x|twitter)\.com\/(?:[\w]{1,20}|i(?:\/web)?)\/status(?:es)?\/\d{6,}/i.test(mediaBlob) || /\/i\/spaces\//i.test(blob) || /\/i\/broadcasts\//i.test(blob) || /platform\.twitter\.com\/embed\/Tweet\.html/i.test(blob);
     if (!xish) return null;
-    const mode = (STATE.settings && STATE.settings.networkMode) || "auto";
-    const api = accountsApi();
-    const dev = window.ViktorychDevice;
     const plan = helper.xPlan({
       post: post,
       media: media,
       text: blob,
       expired: oePast,
-      route: (url) => {
-        let relay = "";
-        let backups = [];
-        try {
-          const host = new URL(url).hostname;
-          if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
-          if (/(^|\.)video\.twimg\.com$/i.test(host)) backups = backupApis(api).map((root) => root + "/v1/media?url=" + encodeURIComponent(url));
-        } catch (err) { relay = ""; }
-        const routed = helper.xRoute(url, {
-          networkMode: mode,
-          relay: relay,
-          preferRelay: mode === "auto" && isRuVisitor(),
-          playbackUrl: dev && dev.playbackUrl ? (direct, relayUrl) => dev.playbackUrl(direct, relayUrl, {
-            preferRelay: false,
-            settings: dev.read(),
-            signals: dev.signals()
-          }) : null
-        });
-        if (routed && typeof routed === "object") routed.backups = backups;
-        return routed;
-      }
+      route: xRouteFor
     });
     if (!plan || (!plan.primary && !plan.embedUrl && !plan.openUrl)) return null;
     return plan;
@@ -5219,7 +5483,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       linkLabel: tr("Open on X"),
       tapToLoad: true,
       tapLabel: tr("Play with the X player"),
-      refresh: () => xRefresh(post),
+      refresh: () => xRefresh(post, media),
       title: (post && (post.title || post.text)) || tr("Video"),
       active: opts.active,
       onFrame: (video) => {
@@ -5329,15 +5593,52 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }).catch(() => { if (el._gen === gen) giveUp(); });
   }
 
-  function xRefresh(post) {
-    const id = String((post && (post.statusId || post.id)) || "");
+  /* A fresh playable file for an X post, for our own player. Order:
+     fxtwitter (direct, cached), then our /v1/xv (X's syndication data read
+     on the edge, then fxtwitter and vxtwitter from there) on the main API and
+     the backup APIs, then vxtwitter direct. The best file is the highest
+     bitrate mp4, or the HLS playlist when that is the only one. Never stored. */
+  function xRefresh(post, media) {
+    const helper = window.ViktorychEmbed;
+    const fromMedia = helper && helper.xStatusId && media ? String(helper.xStatusId({ url: media.url, open: media.open, href: media.fallback }) || "") : "";
+    const fromPost = String((post && (post.statusId || (helper && helper.xStatusId ? helper.xStatusId(post) : "") || post.id)) || "");
+    const id = post && post.platform === "x" ? (fromPost || fromMedia) : (fromMedia || fromPost);
     if (!/^\d{6,}$/.test(id)) return Promise.resolve(null);
-    return fxStatusPost(id).then((extra) => {
-      const row = extra && (extra.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif"));
-      const url = row && (pickMp4(row.variants || []) || row.url);
-      if (!url || !playableFile(url) || oePast(url)) return null;
-      return { url: url };
-    }).catch(() => null);
+    const want = (() => {
+      const vids = ((post && post.media) || []).filter((item) => item && (item.type === "video" || item.type === "animated_gif"));
+      const at = media ? vids.indexOf(media) : -1;
+      return at > 0 ? at : 0;
+    })();
+    const pickFrom = (rows) => {
+      const list = (rows || []).filter((row) => row && (row.type === "video" || row.type === "animated_gif"));
+      const row = list[want] || list[0];
+      if (!row) return null;
+      const best = helper && helper.xPrimary ? helper.xPrimary(row, { expired: oePast }) : null;
+      if (best && best.url) return best;
+      const url = pickMp4(row.variants || []) || row.url;
+      return url && playableFile(url) && !oePast(url) ? { kind: /\.m3u8(\?|$)/i.test(url) ? "hls" : "mp4", url: url } : null;
+    };
+    const viaApi = (root) => fetchJson(String(root).replace(/\/$/, "") + "/v1/xv?id=" + encodeURIComponent(id)).then((data) => pickFrom((data && data.media) || [])).catch(() => null);
+    const viaVx = () => fetchJson("https://api.vxtwitter.com/Twitter/status/" + encodeURIComponent(id)).then((data) => pickFrom(((data && data.media_extended) || []).map((m) => ({
+      type: m && m.type === "gif" ? "animated_gif" : (m && m.type),
+      variants: m && m.url ? [{ url: m.url, bitrate: 1 }] : []
+    })))).catch(() => null);
+    const api = accountsApi();
+    const steps = [() => fxStatusPost(id).then((extra) => pickFrom((extra && extra.media) || [])).catch(() => null)];
+    if (api) steps.push(() => viaApi(api));
+    backupApis(api).forEach((root) => steps.push(() => viaApi(root)));
+    steps.push(viaVx);
+    const tryNext = (index) => {
+      if (index >= steps.length) return Promise.resolve(null);
+      return steps[index]().then((found) => (found && found.url ? found : tryNext(index + 1)));
+    };
+    return once("xrefresh:" + id + ":" + want, () => tryNext(0)).then((found) => {
+      if (!found) return null;
+      const routed = xRouteFor(found.url) || {};
+      const first = routed.url || found.url;
+      const alts = [found.url, routed.relay].concat(routed.backups || []).filter((url, i, all) => url && url !== first && all.indexOf(url) === i);
+      return { kind: found.kind, url: first, origin: found.url, alts: alts };
+    });
   }
 
   function recoverPreview(el, post, media, opts, gen) {
@@ -5373,7 +5674,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     el._recovered = 1;
     el._sources = [];
     notePlay(el, "refresh-" + platform);
-    const job = platform === "vk" ? vkRefresh(post, media) : platform === "x" ? xRefresh(post) : metaRefresh(post);
+    const job = platform === "vk" ? vkRefresh(post, media) : platform === "x" ? xRefresh(post, media) : metaRefresh(post);
     job.then((fresh) => {
       if (el._gen !== gen) return;
       if (!fresh || !fresh.url || !playableFile(fresh.url) || oePast(fresh.url)) { lastResort(); return; }
@@ -5667,6 +5968,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function inlineTap(tile) {
     bindInlineSeek();
+    lvPauseAll(null);
     const post = playPost(tile) || {};
     const media = playMedia(tile, post) || {};
     const gif = media.type === "animated_gif" || !!tile.querySelector(".gif-badge");
@@ -5795,6 +6097,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function syncPreview() {
+    lvAdopt();
+    if (STATE.viewer && STATE.lvCard) lvPause(STATE.lvCard);
+    // A link card player that is on screen holds the floor: no muted previews.
+    if (!STATE.inlineEl && lvPlaying(STATE.lvCard) && !STATE.viewer) {
+      if (STATE.autoEl) pausePreview(STATE.autoEl);
+      STATE.autoEl = null;
+      paintAutoplayDebug();
+      return;
+    }
     if (STATE.viewer && STATE.viewer.video && STATE.inlineEl) {
       pausePreview(STATE.inlineEl);
       STATE.inlineEl.classList.remove("is-inline");
@@ -5857,6 +6168,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function openFullVideo(tile) {
     const post = playPost(tile);
     if (!post) return;
+    lvPauseAll(null);
     const media = playMedia(tile, post) || {};
     const video = tile.querySelector("video");
     const time = video && isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : (Number(tile._hold) || 0);
@@ -5906,6 +6218,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (ids.some((item) => isFollowed(item))) {
       return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
     }
+    /* Not in the app yet: only the owner adds it, everyone else asks. */
+    const ask = window.FeedRequests && window.FeedRequests.gateButton ? window.FeedRequests.gateButton(ids, large) : "";
+    if (ask) return ask;
     return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
   }
 
@@ -6047,7 +6362,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${quotedHandle ? `<span class="handle">@${esc(quotedHandle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
-      ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
+      ${shown.text || postTitleOf(shown) ? textBlock(shown, key, false, "quote-text") : ""}
       ${articleCardHtml(asQuoted)}
       ${mediaHtml(asQuoted.media, false, asQuoted)}
       ${quoted.appPost && quoted.appExtra ? quoted.appExtra : ""}
@@ -9217,6 +9532,126 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return found;
   }
 
+  /* Reply context across sources. Copies of one post disagree: the replies
+     page and fxtwitter say who it answers, the plain timeline page, an RSS
+     lane or an older copy may not. The copy that knows wins the merge. */
+  function replyInfoOf(post) {
+    const to = post && post.replyingTo;
+    return to && typeof to === "object" && (to.handle || to.id || to.statusId) ? to : null;
+  }
+
+  function carryReplyInfo(kept, other) {
+    if (!kept || !other || kept === other || typeof kept !== "object" || typeof other !== "object") return false;
+    if (kept.kind === "repost" || other.kind === "repost") return false;
+    let changed = false;
+    if (other.conversationId && !kept.conversationId) { kept.conversationId = String(other.conversationId); changed = true; }
+    if (!kept.replyParent && other.replyParent) { kept.replyParent = other.replyParent; changed = true; }
+    const theirs = replyInfoOf(other);
+    if (!theirs) return changed;
+    const mine = replyInfoOf(kept) || {};
+    const merged = Object.assign({}, theirs);
+    Object.keys(mine).forEach((key) => { if (mine[key]) merged[key] = mine[key]; });
+    if (!mine.id && merged.statusId && !merged.id) merged.id = String(merged.statusId);
+    if (JSON.stringify(merged) !== JSON.stringify(kept.replyingTo || {})) { kept.replyingTo = merged; changed = true; }
+    if ((kept.kind || "post") === "post") { kept.kind = "reply"; changed = true; }
+    return changed;
+  }
+
+  /* An X post is known to be a reply when it says so, names a target, or
+     sits in someone else's conversation. */
+  function knownXReply(post) {
+    if (!post || post.tombstone || post.appPost || (post.platform || "x") !== "x" || post.kind === "repost") return false;
+    if (post.kind === "reply" || replyInfoOf(post)) return true;
+    const conv = String(post.conversationId || "");
+    return !!conv && conv !== String(post.statusId || post.id || "");
+  }
+
+  /* Timeline replies whose parent is not in the catalog: look the parent up
+     live (fxtwitter, cached), then draw it above the reply on X's thread
+     line. When the target is unknown, the reply itself is looked up first.
+     Until then, or when the lookup fails, the card keeps "Replying to". */
+  const PARENT_TTL = 6 * 60 * 60 * 1000;
+  const PARENT_Q = { want: [], busy: 0, done: {}, timer: 0 };
+
+  function parentStatusPost(id) {
+    const key = String(id || "");
+    if (!/^\d{1,25}$/.test(key)) return Promise.resolve(null);
+    return cacheGet("fx:status:" + key, PARENT_TTL).then((hit) => hit || fxStatusPost(key)).catch(() => null);
+  }
+
+  function wantLiveParent(post) {
+    if (!knownXReply(post) || post.replyParent) return;
+    const key = String(post.statusId || post.id || "");
+    if (!key || PARENT_Q.done[key] || PARENT_Q.want.indexOf(post) >= 0) return;
+    if (Object.keys(PARENT_Q.done).length >= 120) return;
+    PARENT_Q.done[key] = true;
+    PARENT_Q.want.push(post);
+    pumpLiveParents();
+  }
+
+  function pumpLiveParents() {
+    while (PARENT_Q.busy < 3 && PARENT_Q.want.length) {
+      const post = PARENT_Q.want.shift();
+      PARENT_Q.busy += 1;
+      resolveLiveParent(post).then((changed) => {
+        PARENT_Q.busy -= 1;
+        if (changed) redrawForParents();
+        pumpLiveParents();
+      });
+    }
+  }
+
+  function resolveLiveParent(post) {
+    let changed = false;
+    const known = () => String((replyInfoOf(post) || {}).id || (replyInfoOf(post) || {}).statusId || "");
+    const self = String(post.statusId || post.id || "");
+    const first = known() && (replyInfoOf(post) || {}).handle ? Promise.resolve(null) : parentStatusPost(self);
+    return first.then((fresh) => {
+      if (fresh && carryReplyInfo(post, fresh)) changed = true;
+      const parentId = known();
+      if (!parentId) return null;
+      const local = findAnyPost(parentId);
+      if (local && local !== post && !bridgeErrorPost(local)) return local;
+      return parentStatusPost(parentId);
+    }).then((parent) => {
+      if (parent && parent !== post && (parent.text || (parent.media || []).length || parent.quoted || parent.article)) {
+        post.replyParent = parent;
+        const to = replyInfoOf(post) || {};
+        if (!to.handle && parent.handle) post.replyingTo = Object.assign({}, to, { handle: parent.handle, name: to.name || parent.author || parent.handle });
+        changed = true;
+      }
+      return changed;
+    }).catch(() => changed);
+  }
+
+  function redrawForParents() {
+    if (PARENT_Q.timer) return;
+    PARENT_Q.timer = setTimeout(() => {
+      PARENT_Q.timer = 0;
+      let anchorId = "";
+      let anchorTop = 0;
+      const articles = document.querySelectorAll("article[data-post]");
+      for (let i = 0; i < articles.length; i++) {
+        const rect = articles[i].getBoundingClientRect();
+        if (rect.bottom > 0) { anchorId = articles[i].dataset.post || ""; anchorTop = rect.top; break; }
+      }
+      render(window.scrollY > 40 && anchorId ? { y: window.scrollY, anchorId: anchorId, anchorTop: anchorTop } : undefined);
+    }, 120);
+  }
+
+  /* As on X, a parent that is also in the timeline is drawn once, above
+     its reply, instead of a second time on its own. */
+  function groupThreads(list) {
+    const shownAbove = {};
+    (list || []).forEach((post) => {
+      if (!post || post.busyGroup || post.kind === "repost") return;
+      const parent = threadParent(post);
+      if (parent) shownAbove[String(parent.statusId || parent.id || "")] = true;
+    });
+    if (!Object.keys(shownAbove).length) return list;
+    return list.filter((post) => !post || post.busyGroup || post.kind === "repost" || !shownAbove[String(post.statusId || post.id || "")]);
+  }
+
   // Subreddit mirrors read "r/name"; internal communities and forums keep their own name.
   function communityName(name) {
     const lib = window.ViktorychCommunities;
@@ -9386,6 +9821,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!opts.inThread && mode !== "reply" && mode !== "status") {
       const parent = threadParent(post);
       if (parent) return threadPair(parent, post, mode, opts);
+      wantLiveParent(post);
     }
     const hideRepost = mode === "author" || mode === "status";
     const repost = repostBanner(post, hideRepost ? "author" : "");
@@ -9410,7 +9846,7 @@ const here = parseRoute();
     const busyItem = busyKey ? `<button data-act="busy-menu" data-key="${esc(busyKey)}" data-name="${esc(post.author || post.name || "")}" data-handle="${esc(post.handle || "")}" data-platform="${esc(post.platform || "x")}">${tr("Posting volume")}</button>` : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
     const blockItems = STATE.menu === post.id ? blockMenuItems(post, mode) : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: post.cmSource || PLATFORM[post.platform] || tr("Web") })}</a>${post.cmMirror ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : ""}`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -9421,7 +9857,10 @@ const here = parseRoute();
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
     const displayHandle = internalPostHandle(creator ? (post.handle || creator.handle || "") : (post.handle || ""), post, creator);
-    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
+    // Community mirror authors have no profile here: their links open the community.
+    const whoHref = post.cmMirror ? "#/communities/" + encodeURIComponent(post.community.name) : accountHash(post.platform, who);
+    const whoCard = post.cmMirror ? "" : ` data-card="${esc(post.platform + ":" + who)}"`;
+    const avaLink = `<a href="${esc(whoHref)}"${whoCard} aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
@@ -9429,7 +9868,7 @@ const here = parseRoute();
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     const community = post.community && post.community.name && !opts.parentShown
-      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(communityName(post.community.name))}</a></div>`
+      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(post.community.label || communityName(post.community.name))}</a></div>`
       : (redditSub(post) && !opts.parentShown
         ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(redditSub(post))}">${esc("r/" + redditSub(post))}</a></div>`
         : "");
@@ -9442,8 +9881,8 @@ const here = parseRoute();
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
-            ${displayHandle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(displayHandle)}</a>` : ""}
+            <a class="name" href="${esc(whoHref)}"${whoCard}>${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
+            ${displayHandle ? `<a class="handle" href="${esc(whoHref)}"${whoCard}>@${esc(displayHandle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${post.edited ? `<span class="edited">${tr("Edited")}</span>` : ""}
@@ -9453,7 +9892,7 @@ const here = parseRoute();
           </div>
           ${reply}
           ${discordMeta(post)}
-          ${shown.text ? textBlock(shown, post.id, false) : ""}
+          ${shown.text || postTitleOf(shown) ? textBlock(shown, post.id, false) : ""}
           ${articleCardHtml(post)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
@@ -9570,6 +10009,7 @@ const here = parseRoute();
     if (parts[0] === "customize") return { name: "customize", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     if (parts[0] === "feeds" && parts[1] === "lists") return { name: "sourcelists", query };
+    if (parts[0] === "feeds" && parts[1] === "requests") return { name: "feedrequests", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -9579,7 +10019,7 @@ const here = parseRoute();
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["bsky", "mastodon", "nostr"].includes(parts[0]) && parts[1]) {
+    } else if (["bsky", "mastodon", "nostr", "news"].includes(parts[0]) && parts[1]) {
       // Profiles followed on this device (fediverse, Bluesky, Nostr) open live.
       if (parts[2] === "status" && parts[3]) return { name: "status", platform: parts[0], handle: parts[1], id: parts.slice(3).join("/"), query };
       if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "followers_you_follow") return { name: "connections", platform: parts[0], handle: parts[1], tab: parts[2], query };
@@ -9593,6 +10033,7 @@ const here = parseRoute();
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
     if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "followers_you_follow" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
+    if (rest[0] === "games") return { name: "profile", platform, handle, tab: "games", query };
     return { name: "profile", platform, handle, query };
   }
 
@@ -9736,7 +10177,7 @@ const here = parseRoute();
       case "online":
         return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
-        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" };
+        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" || r.name === "feedrequests" };
       case "lists":
         return { id: "lists", href: "#/lists", icon: "lists", label: tr("Lists"), active: (r) => r.name === "lists" || r.name === "list" };
       case "history":
@@ -9977,11 +10418,6 @@ const here = parseRoute();
         <span class="nav-label">${esc(tr("Install app"))}</span>
       </button>`;
     }
-    html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
-      <span class="nav-ico">${icon("sliders")}</span>
-      <span class="nav-label">${tr("Customize sidebar")}</span>
-    </button>`;
-
     return html;
   }
 
@@ -10079,7 +10515,7 @@ const here = parseRoute();
   }
 
   function sidebar() {
-    const people = followSuggestions().slice(0, 3);
+    const people = window.ViktorychPYMK && window.ViktorychPYMK.sideHtml ? [] : followSuggestions().slice(0, 3);
     const rows = people.map((f) => `<div class="who-row">
       <a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">
         ${avatar(f.avatar, f.name)}
@@ -10091,15 +10527,22 @@ const here = parseRoute();
       <form class="side-search" data-act="search-form">
         <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="${tr("Search")}" aria-label="${tr("Search")}"></label>
       </form>
-      ${(!STATE.settings || STATE.settings.friendsRail !== false) && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
+      ${(!STATE.settings || STATE.settings.friendsRail !== false) && !friendsOffNow() && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
-      ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
+      ${window.ViktorychPYMK && window.ViktorychPYMK.sideHtml ? window.ViktorychPYMK.sideHtml() : people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
     </aside>`;
   }
 
   if (window.ViktorychPYMK && window.ViktorychPYMK.setHost) {
-    window.ViktorychPYMK.setHost({ esc, avatar, badge, icon, isFollowed, follow: followButtonClean, render: () => render() });
+    window.ViktorychPYMK.setHost({
+      esc, avatar, badge, icon, isFollowed, sourceBadge,
+      follow: followButtonClean,
+      render: () => render(),
+      /* Outside sources the user can follow, for the unified right-column
+         "Who to follow" panel and the people tab of #/connect. */
+      feedPeople: () => followSuggestions().slice(0, 40).map((f) => Object.assign({}, f, { href: accountHash(f.platform, f.channelId || f.handle) }))
+    });
   }
 
   const BOTTOM_NAV_MIN = 2;
@@ -10810,9 +11253,288 @@ const here = parseRoute();
     const api = busyApi();
     return api ? api.keyOf(post) : String((post && post.feedId) || "");
   }
+  /* Communities on For you. Mirrored communities (Reddit, Discourse forums) and
+     the NZlay forum are read by the Communities page only, so their posts never
+     reached Home. For you now mixes in recent posts from the communities the
+     reader joined (the owner reads all), at most one in four, each under X's
+     community line. Docs load lazily, a few per pass, and are kept on the
+     device for a while so Home doesn't add Worker reads on every visit. */
+  const CMFY_KEY = "foryou-communities-v1";
+  const CMFY_DOC_TTL = 15 * 60 * 1000;
+  const CMFY_NZLAY_TTL = 10 * 60 * 1000;
+  const CMFY_INDEX_TTL = 30 * 60 * 1000;
+  const CMFY_MAX_AGE = 14 * 86400000;
+  const CMFY_PER = 8;
+  const CMFY_BATCH = 3;
+  const CMFY_GAP = 3;
+  let cmFy = null;
+  function cmFyState() {
+    if (cmFy) return cmFy;
+    let saved = null;
+    try { saved = JSON.parse(readStored(localStorage, CMFY_KEY) || "null"); } catch (err) { saved = null; }
+    saved = saved && typeof saved === "object" ? saved : {};
+    cmFy = {
+      index: Array.isArray(saved.index) ? saved.index : [],
+      indexAt: Number(saved.indexAt) || 0,
+      docs: saved.docs && typeof saved.docs === "object" ? saved.docs : {},
+      prefs: saved.prefs && typeof saved.prefs === "object" ? saved.prefs : null,
+      hidden: Array.isArray(saved.hidden) ? saved.hidden : [],
+      mutedAt: saved.mutedAt && typeof saved.mutedAt === "object" ? saved.mutedAt : {},
+      busy: false,
+      nextAt: 0,
+      cards: null
+    };
+    return cmFy;
+  }
+  function cmFySave() {
+    const st = cmFyState();
+    st.cards = null;
+    try {
+      writeStored(localStorage, CMFY_KEY, JSON.stringify({ index: st.index, indexAt: st.indexAt, docs: st.docs, prefs: st.prefs, hidden: st.hidden.slice(-200), mutedAt: st.mutedAt }));
+    } catch (err) { /* storage full: the next pass refetches */ }
+  }
+  function cmFyPrefs(prefs) {
+    if (!prefs || typeof prefs !== "object") return;
+    const st = cmFyState();
+    const next = { joined: (prefs.joined || []).map(String), hidden: (prefs.hidden || []).map(String), all: !!prefs.all };
+    if (JSON.stringify(next) === JSON.stringify(st.prefs)) return;
+    st.prefs = next;
+    cmFySave();
+  }
+  // A mute holds on this device until the server's own list has caught up.
+  // The Communities page reads the joined list from here too.
+  window.ViktorychCommunityPrefs = () => (cmFyState().prefs ? { joined: cmFyState().prefs.joined.slice(), hidden: cmFyState().prefs.hidden.slice(), all: !!cmFyState().prefs.all } : null);
+  function cmFyMute(name) {
+    const st = cmFyState();
+    st.mutedAt[name] = Date.now();
+    cmFySave();
+  }
+  function cmFyHideId(id) {
+    const st = cmFyState();
+    if (st.hidden.indexOf(id) < 0) st.hidden.push(id);
+    cmFySave();
+  }
+  function cmFyNzlayOn() {
+    if (serverOffList().indexOf("nzlay_forum") >= 0) return false;
+    const api = window.ViktorychNzlayForum;
+    return !!(api && (!api.enabled || api.enabled()));
+  }
+  function cmFyNzlayTitle() {
+    const api = window.ViktorychNzlayForum;
+    return String((api && api.row && api.row.title) || "nzlay");
+  }
+  function cmFyKind(row) {
+    const type = String((row && (row.type || row.source)) || "");
+    if (type === "nzlay") return "nzlay";
+    if (type === "discourse" || type === "flarum" || type === "forum") return "forum";
+    return "reddit";
+  }
+  /* Which communities feed For you: the joined ones (all for the owner), minus
+     the ones hidden from Home or muted. Before joining anything a reader gets
+     the first few hub communities, as the Communities Home tab does. */
+  function cmFyCommunities() {
+    const st = cmFyState();
+    const prefs = st.prefs || { joined: [], hidden: [], all: false };
+    const hidden = new Set(prefs.hidden || []);
+    Object.keys(st.mutedAt).forEach((name) => {
+      if (Date.now() - (Number(st.mutedAt[name]) || 0) < 10 * 60 * 1000) hidden.add(name);
+      else delete st.mutedAt[name];
+    });
+    const rows = st.index.slice();
+    if (cmFyNzlayOn() && !rows.some((row) => row.name === "nzlay")) rows.unshift({ name: "nzlay", title: cmFyNzlayTitle(), type: "nzlay" });
+    const byName = {};
+    rows.forEach((row) => { if (row && row.name) byName[row.name] = row; });
+    let names;
+    if (prefs.all) names = rows.map((row) => row.name);
+    else {
+      names = (prefs.joined || []).filter((name) => byName[name]);
+      if (!names.length) names = rows.slice(0, 3).map((row) => row.name);
+    }
+    return names.filter((name, i) => name && names.indexOf(name) === i && !hidden.has(name) && !(name === "nzlay" && !cmFyNzlayOn())).map((name) => byName[name]);
+  }
+  function cmFyClean(raw) {
+    return String(raw || "")
+      .replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "")
+      .replace(/&#32;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+      .replace(/\[link\]|\[comments\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function cmFyMedia(list) {
+    return (Array.isArray(list) ? list : []).filter((m) => m && /^https:\/\//.test(String(m.url || ""))).slice(0, 4).map((m) => {
+      const item = { type: m.type === "video" ? "video" : "photo", url: String(m.url) };
+      if (m.poster && /^https:\/\//.test(String(m.poster))) item.poster = String(m.poster);
+      if (Number(m.width) > 0 && Number(m.height) > 0) { item.width = Number(m.width); item.height = Number(m.height); }
+      if (m.alt) item.alt = String(m.alt).slice(0, 300);
+      return item;
+    });
+  }
+  function cmFySlimMirror(doc) {
+    const now = Date.now();
+    return (Array.isArray(doc && doc.posts) ? doc.posts : []).map((p) => {
+      const at = (Number(p && p.created) || 0) * 1000;
+      if (!p || !p.id || !at || now - at > CMFY_MAX_AGE) return null;
+      return {
+        id: String(p.id), title: String(p.title || "").trim().slice(0, 300), text: cmFyClean(p.text).slice(0, 1500),
+        author: String(p.author || "").replace(/https?:\/\/\S*/g, "").replace(/^\/?u\//i, "").trim().slice(0, 60),
+        at: at, score: Number(p.score) || 0, comments: Number(p.comments) || 0, url: /^https:\/\//.test(String(p.url || "")) ? String(p.url) : "",
+        media: cmFyMedia(p.media)
+      };
+    }).filter(Boolean).sort((a, b) => b.at - a.at).slice(0, CMFY_PER);
+  }
+  function cmFySlimNzlay(feed) {
+    const now = Date.now();
+    return (Array.isArray(feed && feed.topics) ? feed.topics : []).map((t) => {
+      const starter = (t && t.starter) || {};
+      const at = Date.parse(starter.at || t.lastAt || "") || 0;
+      if (!t || !t.id || !at || now - at > CMFY_MAX_AGE) return null;
+      const author = starter.author || {};
+      return {
+        id: String(t.id), title: String(t.title || "").trim().slice(0, 300), text: String(starter.text || "").trim().slice(0, 1500),
+        author: String(author.name || "").slice(0, 60), avatar: /^https:\/\//.test(String(author.avatar || "")) ? String(author.avatar) : "",
+        at: at, score: 0, comments: Number(t.replies) || 0, views: Number(t.views) || 0, url: /^https:\/\//.test(String(t.url || "")) ? String(t.url) : "",
+        media: cmFyMedia(starter.media)
+      };
+    }).filter(Boolean).sort((a, b) => b.at - a.at).slice(0, CMFY_PER);
+  }
+  function cmFyFetchJson(url) {
+    return fetch(url, { cache: "no-cache" }).then((res) => (res && res.ok ? res.json() : null)).catch(() => null);
+  }
+  function cmFyLoadOne(row) {
+    const st = cmFyState();
+    const kind = cmFyKind(row);
+    if (kind === "nzlay") {
+      const api = window.ViktorychNzlayForum;
+      const cached = api && api._state && api._state.feed && Date.now() - (Number(api._state.feedAt) || 0) < CMFY_NZLAY_TTL ? api._state.feed : null;
+      const have = cached && Array.isArray(cached.topics) && cached.topics.length ? Promise.resolve(cached) : accountCall("/v1/nzlay/forum");
+      return have.then((feed) => {
+        if (!feed || !Array.isArray(feed.topics)) { st.docs.nzlay = Object.assign({}, st.docs.nzlay || { posts: [] }, { at: Date.now() }); return; }
+        st.docs.nzlay = { at: Date.now(), kind: "nzlay", title: cmFyNzlayTitle(), posts: cmFySlimNzlay(feed) };
+      }).catch(() => {});
+    }
+    return cmFyFetchJson("data/communities/" + encodeURIComponent(row.name) + ".json").then((doc) => {
+      const prev = st.docs[row.name];
+      if (!doc) { st.docs[row.name] = Object.assign({}, prev || { posts: [] }, { at: Date.now() }); return; }
+      st.docs[row.name] = { at: Date.now(), kind: kind === "reddit" && (doc.type === "discourse" || doc.source === "discourse" || doc.source === "flarum") ? "forum" : kind, title: String(doc.title || row.title || row.name).slice(0, 80), posts: cmFySlimMirror(doc) };
+    });
+  }
+  /* One lazy pass: refresh the index when stale, then up to CMFY_BATCH stale
+     community docs. Re-renders For you once when anything changed. */
+  function cmFyPump() {
+    const st = cmFyState();
+    const now = Date.now();
+    if (st.busy || now < st.nextAt) return;
+    if (gameBusy() || document.documentElement.getAttribute("data-wall") === "1" || !accountToken()) return;
+    if (STATE.settings && STATE.settings.communitiesHome === false) return;
+    st.busy = true;
+    const indexStep = now - st.indexAt > CMFY_INDEX_TTL
+      ? cmFyFetchJson("data/communities/index.json").then((doc) => {
+          st.indexAt = Date.now();
+          const rows = doc && Array.isArray(doc.communities) ? doc.communities : null;
+          if (rows) st.index = rows.filter((row) => row && row.name).slice(0, 60).map((row) => ({ name: String(row.name), title: String(row.title || row.name).slice(0, 80), type: String(row.type || row.source || ""), icon: /^https:\/\//.test(String(row.icon || "")) ? String(row.icon) : "" }));
+        })
+      : Promise.resolve();
+    indexStep.then(() => {
+      const stale = cmFyCommunities().filter((row) => {
+        const doc = st.docs[row.name];
+        return !doc || Date.now() - (Number(doc.at) || 0) > (row.name === "nzlay" ? CMFY_NZLAY_TTL : CMFY_DOC_TTL);
+      });
+      const batch = stale.slice(0, CMFY_BATCH);
+      return Promise.all(batch.map(cmFyLoadOne)).then(() => stale.length > batch.length);
+    }).then((more) => {
+      st.busy = false;
+      st.nextAt = Date.now() + (more ? 4000 : 60000);
+      cmFySave();
+      const route = parseRoute();
+      if (route.name === "home" && (route.tab || "foryou") === "foryou") render();
+    }).catch(() => {
+      st.busy = false;
+      st.nextAt = Date.now() + 60000;
+    });
+  }
+  function cmFyCard(row, doc, p) {
+    const name = row.name;
+    const id = "cm:" + name + ":" + p.id;
+    const kind = doc.kind || cmFyKind(row);
+    const label = kind === "reddit" ? "r/" + name : String(doc.title || row.title || name);
+    const sourceUrl = p.url || (kind === "reddit" ? "https://www.reddit.com/r/" + encodeURIComponent(name) + "/comments/" + encodeURIComponent(String(p.id).replace(/^t3_/, "")) : "");
+    const author = p.author || (kind === "reddit" ? "reddit" : label);
+    return {
+      id: id,
+      statusId: id,
+      kind: "post",
+      platform: kind === "reddit" ? "reddit" : "forum",
+      handle: /\s/.test(author) ? "" : author,
+      author: author,
+      avatar: p.avatar || "",
+      date: new Date(p.at).toISOString(),
+      title: p.title,
+      text: p.text,
+      links: [],
+      media: p.media || [],
+      url: sourceUrl,
+      score: kind === "reddit" ? (p.score || 0) : undefined,
+      stats: { replies: p.comments || 0, likes: kind === "reddit" ? 0 : Math.max(0, p.score || 0), views: p.views || 0 },
+      community: { name: name, rootId: p.id, label: label },
+      cmMirror: true,
+      cmHash: "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(p.id),
+      cmSource: kind === "reddit" ? "Reddit" : label,
+      cmScore: 0
+    };
+  }
+  function cmFyCards() {
+    const st = cmFyState();
+    if (st.cards) return st.cards;
+    const now = Date.now();
+    const joined = new Set((st.prefs && st.prefs.joined) || []);
+    const hiddenIds = new Set(st.hidden);
+    const out = [];
+    cmFyCommunities().forEach((row) => {
+      const doc = st.docs[row.name];
+      if (!doc || !Array.isArray(doc.posts)) return;
+      doc.posts.forEach((p) => {
+        const card = cmFyCard(row, doc, p);
+        if (hiddenIds.has(card.id)) return;
+        const ageH = Math.max(0, now - p.at) / 3600000;
+        const engagement = Math.log10(2 + Math.max(0, p.score || 0) + 2 * (p.comments || 0) + (p.views || 0) / 50);
+        card.cmScore = engagement / Math.pow(ageH + 2, 0.8) * (joined.has(row.name) ? 1.5 : 1);
+        STATE.shared[card.id] = card;
+        out.push(card);
+      });
+    });
+    out.sort((a, b) => b.cmScore - a.cmScore);
+    st.cards = out;
+    return out;
+  }
+  /* At most one community post in every four: CMFY_GAP Home posts between them. */
+  function cmFyMix(list) {
+    if (!Array.isArray(list)) return list;
+    if (STATE.settings && STATE.settings.communitiesHome === false) return list;
+    cmFyPump();
+    const extra = cmFyCards().filter((post) => !hiddenPost(post));
+    if (!extra.length) return list;
+    const out = [];
+    let since = 0;
+    let next = 0;
+    for (let i = 0; i < list.length; i++) {
+      out.push(list[i]);
+      since++;
+      if (since >= CMFY_GAP && next < extra.length) {
+        out.push(extra[next++]);
+        since = 0;
+      }
+    }
+    // A short Home still gets its share, keeping the one-in-four cap.
+    while (next < extra.length && since >= CMFY_GAP) { out.push(extra[next++]); since = 0; }
+    return out;
+  }
+
   /* The Home list with every account's choice applied and spread out so no
      single account fills a screen. Folded posts are never handed to card(). */
   function homeShaped(route) {
+    const tab = route.tab || "foryou";
+    const shaped = homeShapedBase(route);
+    return tab === "foryou" && tabView(tab) !== "reposts" ? cmFyMix(shaped) : shaped;
+  }
+  function homeShapedBase(route) {
     const tab = route.tab || "foryou";
     const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
     const api = busyApi();
@@ -10986,6 +11708,7 @@ const here = parseRoute();
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
       if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
+      if (res.communityPrefs) cmFyPrefs(res.communityPrefs);
       const merged = keepOwnPosts(res.posts);
       if (samePublicPosts(merged)) return;
       publicPosts = merged;
@@ -11823,7 +12546,7 @@ const here = parseRoute();
       : "";
     const tabLoading = !list.length && tabStillLoading(tab);
     if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
-    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(list.map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i === 0 })), tab) : emptyBlock(
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(groupThreads(list).map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i === 0 })), tab) : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -12762,6 +13485,198 @@ const here = parseRoute();
     });
   }
 
+  /* Newsletters (Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp
+     archives, any site with RSS/Atom) followed as senders. The Worker finds
+     the feed and keeps a short-lived sanitized copy; the feed URL each key
+     points to stays in this device's settings. Images are hotlinked. */
+  const NEWSLETTER_HOSTS = /(^|\.)(substack\.com|beehiiv\.com|buttondown\.(?:com|email)|ghost\.io|medium\.com|campaign-archive\d*\.com|list-manage\.com|mailchi\.mp|mailerlite\.com|kit\.com|convertkit\.com|tinyletter\.com|letterdrop\.com|revue\.co|getrevue\.co|substackcdn\.com)$/i;
+  const NL_ISSUES = {};
+  /* What was typed in the Newsletters box survives a re-render of the Feeds page. */
+  const NL_DRAFT = { text: "" };
+  document.addEventListener("input", (event) => {
+    if (event.target && event.target.id === "nl-add-input") NL_DRAFT.text = event.target.value;
+  });
+  function newsletterMap() {
+    const map = STATE.settings.newsletters;
+    if (map && typeof map === "object" && !Array.isArray(map)) return map;
+    STATE.settings.newsletters = {};
+    return STATE.settings.newsletters;
+  }
+  function isNewsletterUrl(text) {
+    const raw = String(text || "").trim();
+    if (/^(?:news|newsletter):\S+$/i.test(raw)) return true;
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : "https://" + raw);
+      return NEWSLETTER_HOSTS.test(url.hostname);
+    } catch (err) { return false; }
+  }
+  function newsProfile(doc) {
+    const p = (doc && doc.profile) || {};
+    return {
+      id: "news:" + doc.key,
+      platform: "news",
+      handle: doc.key,
+      displayHandle: p.host || doc.key,
+      name: p.name || p.host || doc.key,
+      avatar: /^https:\/\//.test(String(p.avatar || "")) ? p.avatar : "",
+      banner: "",
+      bio: p.bio || "",
+      website: /^https?:\/\//.test(String(p.site || "")) ? p.site : "",
+      url: p.site || "",
+      postsCount: null,
+      followers: null,
+      following: null
+    };
+  }
+  function newsPost(item, profile, key) {
+    if (!item || !item.id) return null;
+    const title = String(item.title || "").trim();
+    const excerpt = String(item.excerpt || "").trim();
+    const text = title && excerpt && excerpt.indexOf(title) !== 0 ? title + "\n\n" + excerpt : (title || excerpt);
+    const image = /^https:\/\//.test(String(item.image || "")) ? item.image : "";
+    return {
+      id: "nl" + item.id,
+      statusId: "nl" + item.id,
+      platform: "news",
+      kind: "post",
+      author: profile.name,
+      handle: key,
+      displayHandle: profile.displayHandle,
+      avatar: profile.avatar,
+      text: text,
+      title: title,
+      media: image ? [{ type: "photo", url: image, alt: title }] : [],
+      likes: 0,
+      reposts: 0,
+      replyCount: 0,
+      date: item.date || "",
+      url: item.link || profile.url,
+      newsletter: { key: key, id: item.id, byline: item.author || "" }
+    };
+  }
+  /* Waits a moment for the accounts API on a cold start instead of giving up. */
+  function newsletterApi(tries) {
+    const api = accountsApi();
+    if (api || (tries || 0) >= 20) return Promise.resolve(api);
+    return new Promise((resolve) => setTimeout(resolve, 250)).then(() => newsletterApi((tries || 0) + 1));
+  }
+  function newsletterFetch(query) {
+    return newsletterApi(0).then((api) => (api ? fetchJson(api + "/v1/newsletter?" + query) : null)).catch(() => null);
+  }
+  function newsDocToRow(row, doc) {
+    const profile = newsProfile(doc);
+    row.profile = profile;
+    row.posts = (doc.items || []).map((item) => newsPost(item, profile, doc.key)).filter(Boolean);
+    row.posts.forEach(rememberLive);
+    row.media = row.posts.filter((post) => post.media && post.media.length);
+    row.replies = [];
+    row.source = "news";
+    row.fetchedAt = Date.now();
+    const map = newsletterMap();
+    const was = map[doc.key];
+    if (isFollowed("news:" + doc.key) && (!was || was.feed !== doc.feed || was.name !== profile.name || was.avatar !== profile.avatar)) {
+      map[doc.key] = { feed: doc.feed, name: profile.name, avatar: profile.avatar };
+      saveSettings();
+    }
+    snapshotProfile("news:" + doc.key, row);
+  }
+  function loadNewsLive(row, key) {
+    const saved = newsletterMap()[key];
+    const query = saved && saved.feed ? "url=" + encodeURIComponent(saved.feed) : "key=" + encodeURIComponent(key);
+    if (!row.profile && saved) row.profile = newsProfile({ key: key, profile: { name: saved.name, avatar: saved.avatar } });
+    return newsletterFetch(query).then((doc) => {
+      if (doc && doc.key && Array.isArray(doc.items)) newsDocToRow(row, doc);
+      else {
+        row.error = "thin";
+        if (!row.profile) row.profile = limitedProfile("news", key);
+        row.fetchedAt = Date.now();
+      }
+    });
+  }
+  function followNewsletter(raw) {
+    const text = String(raw || "").trim().replace(/^(?:news|newsletter):/i, "");
+    toast(tr("Looking for the newsletter’s feed…"));
+    return newsletterFetch("url=" + encodeURIComponent(text)).then((doc) => {
+      if (!doc || !doc.key || !Array.isArray(doc.items)) {
+        toast(tr("Couldn’t find a feed or archive for that newsletter."));
+        return false;
+      }
+      const map = newsletterMap();
+      const profile = newsProfile(doc);
+      map[doc.key] = { feed: doc.feed, name: profile.name, avatar: profile.avatar };
+      const row = STATE.liveUsers[liveKey("news", doc.key)] || (STATE.liveUsers[liveKey("news", doc.key)] = blankLive("news", doc.key));
+      newsDocToRow(row, doc);
+      row.settled = true;
+      applyFollow(["news:" + doc.key], true);
+      location.hash = userHash("news", doc.key);
+      return true;
+    });
+  }
+  /* The full issue, sanitized again on this device before it is shown. */
+  const NL_TAGS = /^(A|P|BR|HR|B|STRONG|I|EM|U|S|DEL|INS|MARK|SMALL|SUB|SUP|CODE|PRE|KBD|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|Q|CITE|UL|OL|LI|DL|DT|DD|IMG|FIGURE|FIGCAPTION|PICTURE|SOURCE|VIDEO|TABLE|THEAD|TBODY|TFOOT|TR|TD|TH|CAPTION|DIV|SPAN|SECTION|ARTICLE|HEADER|FOOTER|CENTER|FONT|ABBR|TIME)$/;
+  const NL_ATTRS = { href: 1, src: 1, srcset: 1, alt: 1, title: 1, width: 1, height: 1, colspan: 1, rowspan: 1, start: 1, cite: 1, datetime: 1, poster: 1, controls: 1, preload: 1, playsinline: 1, loading: 1, decoding: 1, referrerpolicy: 1, target: 1, rel: 1, type: 1 };
+  function cleanIssueHtml(html) {
+    let doc;
+    try { doc = new DOMParser().parseFromString("<body>" + String(html || "") + "</body>", "text/html"); } catch (err) { return ""; }
+    const walk = (node) => {
+      Array.from(node.children).forEach((el) => {
+        if (!NL_TAGS.test(el.tagName)) {
+          if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|FORM|SVG|MATH|NOSCRIPT|TEMPLATE|LINK|META|BASE)$/.test(el.tagName)) { el.remove(); return; }
+          walk(el);
+          el.replaceWith.apply(el, Array.from(el.childNodes));
+          return;
+        }
+        Array.from(el.attributes).forEach((attr) => {
+          const name = attr.name.toLowerCase();
+          const value = String(attr.value || "");
+          if (!NL_ATTRS[name]) { el.removeAttribute(attr.name); return; }
+          if ((name === "href" || name === "src" || name === "poster" || name === "cite") && !/^(https:\/\/|http:\/\/|mailto:)/i.test(value.trim())) el.removeAttribute(attr.name);
+          if ((name === "src" || name === "poster") && !/^https:\/\//i.test(value.trim())) el.removeAttribute(attr.name);
+          if (name === "srcset" && /javascript:|data:/i.test(value)) el.removeAttribute(attr.name);
+        });
+        if (el.tagName === "A") { el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer nofollow"); }
+        if (el.tagName === "IMG") {
+          if (!el.getAttribute("src")) { el.remove(); return; }
+          el.setAttribute("loading", "lazy");
+          el.setAttribute("decoding", "async");
+          el.setAttribute("referrerpolicy", "no-referrer");
+        }
+        walk(el);
+      });
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  }
+  function newsletterIssue(post) {
+    const nl = post.newsletter || {};
+    const slot = NL_ISSUES[nl.id];
+    if (slot) return slot;
+    const saved = newsletterMap()[nl.key];
+    const entry = NL_ISSUES[nl.id] = { state: "loading", html: "" };
+    if (!nl.id) { entry.state = "error"; return entry; }
+    const q = "key=" + encodeURIComponent(nl.key || "") + "&id=" + encodeURIComponent(nl.id) + (saved && saved.feed ? "&url=" + encodeURIComponent(saved.feed) : "");
+    newsletterApi(0).then((api) => (api ? fetchJson(api + "/v1/newsletter/issue?" + q) : null)).then((data) => {
+      entry.html = data && data.html ? cleanIssueHtml(data.html) : "";
+      entry.state = entry.html ? "ok" : "empty";
+    }).catch(() => { entry.state = "error"; }).then(() => {
+      const route = parseRoute();
+      if (route.name === "status" && route.platform === "news") render();
+    });
+    return entry;
+  }
+  function newsletterBody(post) {
+    const issue = newsletterIssue(post);
+    const nl = post.newsletter || {};
+    const title = post.title ? `<h2 class="nl-title" dir="auto">${esc(post.title)}</h2>` : "";
+    const byline = nl.byline ? `<div class="nl-byline" dir="auto">${esc(nl.byline)}</div>` : "";
+    const open = post.url && /^https?:\/\//.test(post.url) ? `<a class="nl-open" data-act="stop" href="${esc(post.url)}" target="_blank" rel="noopener noreferrer">${icon("link")}<span>${tr("Open the original issue")}</span></a>` : "";
+    let body = "";
+    if (issue.state === "loading") body = `<div class="nl-loading" aria-busy="true">${tr("Loading the issue…")}</div>`;
+    else if (issue.state === "ok") body = `<div class="nl-body" dir="auto">${issue.html}</div>`;
+    else body = `<p class="nl-empty">${esc(String(post.text || "").replace(post.title || "", "").trim() || tr("This issue has no text in its feed."))}</p>`;
+    return `<div class="nl-issue">${title}${byline}${body}${open}</div>`;
+  }
+
   /* A Nostr profile and its notes, read from relays on this device. Only when
      the owner has Nostr on and this person opted in. */
   function nostrOn() {
@@ -12827,7 +13742,7 @@ const here = parseRoute();
 
   /* Profiles followed on this device that are not in the site's feed list
      (fediverse, Bluesky, Nostr) are read live here and join Home. */
-  const DEVICE_FOLLOW = ["mastodon", "bsky", "nostr"];
+  const DEVICE_FOLLOW = ["mastodon", "bsky", "nostr", "news"];
   function deviceFollowPosts(tab) {
     if (tab !== "foryou" && tab !== "following") return [];
     const out = [];
@@ -12862,6 +13777,7 @@ const here = parseRoute();
     const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
       : platform === "bsky" ? loadBskyHeader(clean)
       : platform === "mastodon" ? loadMastodonHeader(clean)
+      : platform === "news" ? Promise.resolve(null)
       : platform === "nostr" ? Promise.resolve(null)
       : platform === "vk" ? Promise.resolve(limitedProfile("vk", clean))
       : platform === "telegram" ? Promise.resolve(limitedProfile("telegram", clean))
@@ -12887,6 +13803,7 @@ const here = parseRoute();
     const job = platform === "youtube" ? loadYtLive(row, clean)
       : platform === "bsky" ? loadBskyLive(row, clean)
       : platform === "mastodon" ? loadMastodonLive(row, clean)
+      : platform === "news" ? loadNewsLive(row, clean)
       : platform === "nostr" ? loadNostrLive(row, clean)
       : platform === "vk" ? loadVkSaved(row, clean)
       : platform === "telegram" ? loadTelegramSaved(row, clean)
@@ -13001,10 +13918,12 @@ const here = parseRoute();
     if (platform === "youtube") return tr("View on YouTube");
     if (platform === "tiktok") return tr("Open on TikTok");
     if (platform === "x") return tr("View on X");
+    if (platform === "news") return tr("Open the newsletter’s website");
     return tr("View on {platform}", { platform: PLATFORM[platform] || tr("Web") });
   }
 
   function profileLinkLabel(platform) {
+    if (platform === "news") return tr("Website");
     return PLATFORM[platform] || tr("Web");
   }
 
@@ -13440,7 +14359,8 @@ const here = parseRoute();
     const friendN = mineGraph && window.ViktorychAccounts.pendingFriendRequests ? window.ViktorychAccounts.pendingFriendRequests() : 0;
     const requestN = followN + friendN;
     const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
+    const friendsOffHere = (mineGraph && friendsOffNow()) || !!(window.ViktorychAccounts && window.ViktorychAccounts.friendsOffFor && window.ViktorychAccounts.friendsOffFor(subject.id));
+    const friendsTabHtml = subject.kind === "account" && !friendsOffHere ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -13612,6 +14532,13 @@ const here = parseRoute();
     }
     let post = findPost(route.platform, route.handle, route.id);
     if (!post && route.platform === "nostr") nostrStatus(route.id);
+    if (!post && route.platform === "news" && route.handle) {
+      const row = ensureLiveUser("news", route.handle);
+      if (!row.settled) return pageHead(tr("Post noun"), "", true) + `<div class="reply-empty">${tr("Loading…")}</div>`;
+      post = STATE.shared[String(route.id)] || (row.posts || []).find((item) => item && String(item.statusId || item.id) === String(route.id)) || null;
+      if (post) rememberLive(post);
+      if (!post) return pageHead(tr("Post noun"), "", true) + emptyBlock(tr("Post unavailable"), tr("This issue is no longer in the newsletter’s feed."));
+    }
     if (!post && (route.platform === "instagram" || route.platform === "threads" || route.platform === "youtube")) {
       const archived = (ARCHIVE.posts || []).find((item) => item && item.p === route.platform && String(item.id) === String(route.id));
       const knownShape = route.platform !== "youtube" || ytVideoId(route.id) || !!(archived && archived.k);
@@ -13666,7 +14593,7 @@ const here = parseRoute();
     const focusPost = parentShown ? mentionless(post) : replyBody(post);
     const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? replyContextHtml(post).replace('<div class="replying">', '<div class="replying status-replying">') : "";
     const body = `${forwardLine(post)}${replyLine}
-        ${textBlock(focusPost, post.id, true, "status-text")}
+        ${post.platform === "news" && !hiddenPost(post) ? newsletterBody(post) : textBlock(focusPost, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">${tr("Muted on this device.")}</p>` : ""}
         ${pollHtml(post)}
         ${discordMeta(post)}
@@ -14248,8 +15175,25 @@ const here = parseRoute();
   }
 
   function feedsView() {
-    if (window.FeedsPage && window.FeedsPage.view) return window.FeedsPage.view();
-    return feedsViewLegacy();
+    if (window.FeedsPage && window.FeedsPage.view) return window.FeedsPage.view() + newslettersSection();
+    return feedsViewLegacy() + newslettersSection();
+  }
+
+  /* Newsletters this account follows, with an add box for a pasted link. */
+  function newslettersSection() {
+    const map = STATE.settings.newsletters || {};
+    const ids = (STATE.settings.follows || []).filter((id) => String(id).indexOf("news:") === 0);
+    const rows = ids.map((id) => {
+      const key = String(id).slice(5);
+      const nl = map[key] || {};
+      const row = STATE.liveUsers[liveKey("news", key)];
+      const profile = (row && row.profile) || {};
+      const name = profile.name || nl.name || key;
+      const face = profile.avatar || nl.avatar || "";
+      return `<div class="acct-row"><a class="who-main" href="${esc(userHash("news", key))}">${avatar(face, name)}<span class="who-copy"><span class="name">${esc(name)}</span><span class="handle">${esc(profile.displayHandle || key)}</span></span></a>${followButtonClean(id)}</div>`;
+    }).join("");
+    const box = `<form class="add-account nl-add"><label class="search"><span>${icon("mail")}</span><input id="nl-add-input" value="${esc(NL_DRAFT.text)}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="${esc(tr("Paste a newsletter link"))}" aria-label="${esc(tr("Add a newsletter"))}"></label><button class="follow" type="submit">${esc(window.FeedRequests && window.FeedRequests.asks && window.FeedRequests.asks() ? tr("Request") : tr("Add"))}</button></form>`;
+    return `<section class="feed-section nl-section"><h2>${esc(tr("Newsletters"))}</h2><p class="feeds-hint">${esc(tr("Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts."))}</p>${box}${rows}</section>`;
   }
 
   function feedsViewLegacy() {
@@ -15459,6 +16403,9 @@ const here = parseRoute();
     if (kind === "birthday_self") return tr("Happy birthday");
     if (kind === "package") return tr("Package update: {name}", { name: (note && note.name) || tr("Packages") });
     if (kind === "tv_signin") return esc(tr("Approve sign-in on TV?"));
+    if (kind === "feed_request") return tr("Source request: {name}", { name: who });
+    if (kind === "feed_approved") return tr("Source request approved: {name}", { name: who });
+    if (kind === "feed_rejected") return tr("Source request not approved: {name}", { name: who });
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
@@ -15529,6 +16476,7 @@ const here = parseRoute();
     if (kind === "live") return "mic";
     if (kind === "community_note") return "communities";
     if (kind === "tv_signin") return "tv";
+    if (kind === "feed_request" || kind === "feed_approved" || kind === "feed_rejected") return "rss";
     return "bellOn";
   }
 
@@ -15884,6 +16832,7 @@ const here = parseRoute();
       <div class="install-grab" aria-hidden="true"></div>
       <h2>${esc(tr("Install app"))}</h2>
       ${body}
+      ${window.ViktorychDeviceData ? `<p class="install-note">${esc(window.ViktorychDeviceData.tipText())}</p>` : ""}
       ${pointer}
       <div class="install-actions">
         <button type="button" data-act="install-later">${esc(tr("Later"))}</button>
@@ -16015,6 +16964,15 @@ const here = parseRoute();
         <a class="m-icon" href="#/settings" aria-label="${esc(tr("Settings"))}">${icon("spark")}</a>
       </div>
       <div class="page-head settings-head">${back}<div class="head-text grow"><h1>${esc(title)}</h1></div></div></div>`;
+  }
+
+  /* Viktorychs: the earned balance with its coin, then the store and purchases. */
+  function viktorychsRow() {
+    const gifts = window.ProfileGifts;
+    const amount = gifts && gifts.balance ? gifts.balance() : null;
+    const coin = gifts && gifts.coin ? gifts.coin() : "";
+    const sub = amount == null ? tr("Gifts, stickers and purchases") : tr("You have {n} Viktorychs", { n: String(amount) });
+    return `<a class="set-row set-vk" href="#/points"><span class="set-copy"><b>${coin}${esc(tr("Viktorychs"))}</b><span class="set-sub">${esc(sub)}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
   }
 
   function settingsRow(href, title, sub) {
@@ -16155,7 +17113,7 @@ const here = parseRoute();
       ${sec(tr("Home"), `${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
         ${sw("story-notes", notesOn, tr("Show notes"), tr("Notes sit above stories. Turn this off to hide them."))}
-        ${sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}`)}
+        ${friendsOffNow() ? "" : sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}`)}
       ${sec(tr("Your feed"), `${sw("pz-feed", st.forYouReposts !== false, tr("Show reposts"), "", ` data-key="forYouReposts"`)}
         ${sw("pz-feed", st.forYouReplies !== false, tr("Show replies in tab"), "", ` data-key="forYouReplies"`)}
         ${sw("pz-feed", st.communitiesHome !== false, tr("Communities in Home"), "", ` data-key="communitiesHome"`)}
@@ -16316,6 +17274,7 @@ const here = parseRoute();
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${esc(label)}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     const lang = window.SI18n ? window.SI18n.getLang() : "en";
+    if (section === "feed-requests" && window.FeedRequests) return window.FeedRequests.ownerView(sub);
     if ((section === "accessibility" && sub === "display-language") || section === "display-language") {
       const q = String(STATE.langQ || "").trim().toLowerCase();
       const choices = [
@@ -16488,6 +17447,7 @@ const here = parseRoute();
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
       return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
     }
+    if (section === "friends") return settingsHead(tr("Friends"), "#/settings/privacy") + `<div class="set-block">${window.ViktorychFriendsPref ? window.ViktorychFriendsPref.pageHtml() : ""}</div>`;
     if (section === "muted") return settingsHead(tr("Muted & blocked"), "#/settings/privacy") + `<div class="set-block">${mutedSettingsHtml()}</div>`;
     if (section === "privacy") {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
@@ -16506,9 +17466,10 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("Notes sit above stories. Turn this off to hide them."))}</p>`;
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${notesSwitch}
+        ${acct && window.ViktorychFriendsPref && !serverOffList().includes("friends_off") ? `<h2>${esc(tr("Friends"))}</h2><div class="set-list">${settingsRow("#/settings/friends", tr("Friends"), window.ViktorychFriendsPref.summary())}</div>` : ""}
         ${presenceBlock}
         ${acct && window.ViktorychGameSocial ? window.ViktorychGameSocial.privacyHtml() : ""}
-        ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
+        ${friendsOffNow() ? "" : optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
         ${window.ViktorychNostr && window.ViktorychNostr.allowed() ? `<div class="set-list">${settingsRow("#/settings/nostr", tr("Nostr"), tr("Follow Nostr profiles, send your posts to relays, and see Nostr replies."))}</div>` : ""}
@@ -16563,7 +17524,7 @@ const here = parseRoute();
         <label class="primary import-btn">${esc(tr("Import settings"))}<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
         <h2>${esc(tr("About"))}</h2>
         <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
-      </div>`;
+      </div>${window.ViktorychDeviceData ? window.ViktorychDeviceData.helpHtml() : ""}`;
     }
     if (section === "storage" && sub === "usage") {
       const body = window.ViktorychStorage ? window.ViktorychStorage.usageHtml() : "";
@@ -16571,7 +17532,8 @@ const here = parseRoute();
     }
     if (section === "storage") {
       const body = window.ViktorychStorage ? window.ViktorychStorage.dataHtml() : "";
-      return settingsHead(tr("Data and storage"), "#/settings") + body;
+      const device = window.ViktorychDeviceData ? window.ViktorychDeviceData.sectionHtml() : "";
+      return settingsHead(tr("Data and storage"), "#/settings") + device + body;
     }
     if (section === "delete-account") {
       const body = window.ViktorychAccounts && window.ViktorychAccounts.deleteAccountHtml
@@ -16617,15 +17579,17 @@ const here = parseRoute();
       ${accountToken() ? settingsRow("#/communitynotes", tr("Community Notes"), tr("Rate and write notes that add context to posts.")) : ""}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
+      ${accountToken() ? viktorychsRow() : ""}
       ${accountToken() ? settingsRow("#/link-tv", tr("Link a TV"), tr("Sign a TV in with the code it shows. Nothing to type on the TV.")) : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/suggestions", tr("Suggestions in your feed"), tr("People you may know, account types, and swipeable cards."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
+      ${window.FeedRequests ? window.FeedRequests.settingsRowHtml() : ""}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
       ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
-      ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Theme, data usage, notifications, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
+      ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Privacy, look, alerts, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
     </div>${settingsSearchOut()}` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
@@ -16957,7 +17921,7 @@ const here = parseRoute();
       return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Accounts"))}">${current}<button type="button" data-acct="login">${esc(tr("Add account"))}</button></div>`;
     }
     const status = mine ? `<button type="button" data-acct="presence-open">${esc(tr("Set a status"))}</button>` : "";
-    const leave = mine ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>` : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+    const leave = mine ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button><button type="button" data-acct="logout-wipe">${esc(tr("Sign out and delete data on this device"))}</button>` : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
     return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Account menu"))}">${status}${leave}</div>`;
   }
 
@@ -16997,7 +17961,7 @@ const here = parseRoute();
       if (!item) return "";
       if (id === "logout") {
         return mine
-          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button><button type="button" data-acct="logout-wipe">${esc(tr("Sign out and delete data on this device"))}</button>`
           : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
       }
       if (item.act) return `<button type="button" data-act="${esc(item.act)}">${esc(item.label)}</button>`;
@@ -17046,95 +18010,6 @@ const here = parseRoute();
       : tr("This removes the account from your Following.");
     const go = site ? tr("Remove") : tr("Unfollow");
     return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">${esc(go)}</button><button type="button" class="remove-cancel" data-act="close-remove">${tr("Cancel")}</button></div></div>`;
-  }
-
-  function navCustomizeModal() {
-    const custom = getNavCustom();
-    const hiddenSet = new Set(custom.hidden || []);
-    const folderMap = new Map();
-    custom.folders.forEach((f) => folderMap.set(f.id, f));
-
-    const rows = custom.order.map((entry, index) => {
-      if (entry.startsWith("folder:")) {
-        const fId = entry.slice(7);
-        const folder = folderMap.get(fId);
-        if (!folder) return "";
-        const dispName = folderDisplayName(folder);
-        const folderItems = (folder.items || []).map((itId, subIdx) => {
-          const def = navItemDef(itId);
-          if (!def) return "";
-          const isHidden = hiddenSet.has(itId);
-          return `<div class="nav-cust-folder-subrow${isHidden ? " is-hidden" : ""}">
-            <span class="nav-cust-icon">${icon(def.icon)}</span>
-            <span class="nav-cust-name">${esc(def.label)}</span>
-            <div class="nav-cust-actions">
-              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="-1" aria-label="${tr("Move up")}"${subIdx === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="1" aria-label="${tr("Move down")}"${subIdx === folder.items.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-              <button class="outline" type="button" data-act="nav-remove-from-folder" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" style="height:28px;padding:0 8px;font-size:12px;">${tr("Remove from folder")}</button>
-              ${itId === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(itId)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
-            </div>
-          </div>`;
-        }).join("");
-
-        return `<div class="nav-cust-folder-box">
-          <div class="nav-cust-folder-head">
-            <span class="nav-cust-icon">${icon("folder")}</span>
-            <span class="nav-cust-name">${esc(dispName)} <span class="muted small">(${folder.items.length})</span></span>
-            <div class="nav-cust-actions">
-              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-              <button class="icon-btn" type="button" data-act="nav-prompt-rename" data-folder-id="${esc(folder.id)}" aria-label="${tr("Rename folder")}" data-tooltip="${tr("Rename folder")}">${icon("pencil")}</button>
-              <button class="icon-btn danger" type="button" data-act="nav-delete-folder" data-folder-id="${esc(folder.id)}" aria-label="${tr("Delete folder")}" data-tooltip="${tr("Delete folder")}">${icon("trash")}</button>
-            </div>
-          </div>
-          <div class="nav-cust-folder-items">
-            ${folderItems || `<div class="muted small" style="padding:4px 8px;">${tr("This folder is empty.")}</div>`}
-          </div>
-        </div>`;
-      } else {
-        const def = navItemDef(entry);
-        if (!def) return "";
-        const isHidden = hiddenSet.has(entry);
-        return `<div class="nav-cust-item-row${isHidden ? " is-hidden" : ""}">
-          <span class="nav-cust-icon">${icon(def.icon)}</span>
-          <span class="nav-cust-name">${esc(def.label)}</span>
-          <div class="nav-cust-actions">
-            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-            <select class="nav-move-select" data-act="nav-select-folder" data-id="${esc(entry)}">
-              <option value="">${tr("Move to folder")}...</option>
-              ${custom.folders.map((f) => `<option value="${esc(f.id)}">${esc(folderDisplayName(f))}</option>`).join("")}
-            </select>
-            ${entry === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(entry)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
-          </div>
-        </div>`;
-      }
-    }).join("");
-
-    return `<div class="modal-back" data-act="close-modal"><div class="modal nav-customize-modal" role="dialog" aria-label="${tr("Customize sidebar")}" data-act="stop">
-      <div class="modal-head">
-        <button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button>
-        <h2>${tr("Customize sidebar")}</h2>
-        <button class="outline" type="button" data-act="nav-reset-default" style="height:32px;padding:0 12px;font-size:13px;">${tr("Reset to default")}</button>
-        <button class="save" type="button" data-act="close-modal">${tr("Done")}</button>
-      </div>
-      <div class="modal-body">
-        <div class="nav-customize-intro">
-          <p class="muted">${tr("Reorder items and organize them into folders.")}</p>
-          <button class="outline primary" type="button" data-act="nav-open-new-folder" style="height:32px;padding:0 12px;font-size:13px;display:flex;align-items:center;gap:6px;">${icon("plus")} ${tr("New folder")}</button>
-        </div>
-        ${STATE.navNewFolderOpen ? `
-          <form class="nav-new-folder-form" data-act="nav-create-folder-submit">
-            <input type="text" id="nav-new-folder-input" class="nav-folder-rename-input" placeholder="${tr("Folder name")}" maxlength="30" required autofocus />
-            <button type="submit" class="save" style="height:32px;padding:0 14px;">${tr("Save")}</button>
-            <button type="button" class="outline" data-act="nav-close-new-folder" style="height:32px;padding:0 10px;">${tr("Cancel")}</button>
-          </form>
-        ` : ""}
-        <div class="nav-cust-list">
-          ${rows}
-        </div>
-      </div>
-    </div></div>`;
   }
 
   function postAskDialog() {
@@ -17265,7 +18140,6 @@ if (STATE.histClear) {
         </div>
       </div></div>`;
     }
-    if (STATE.modal === "nav-customize") return navCustomizeModal();
     if (STATE.modal === "tabs") {
       const pinned = STATE.settings.lists.filter((list) => list.pinned);
       const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${trn("members", (list.members || []).length)}</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="${esc(tr("Move {name} left", { name: list.name }))}"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="${esc(tr("Move {name} right", { name: list.name }))}"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">${tr("Unpin")}</button></div>`).join("");
@@ -17300,7 +18174,7 @@ if (STATE.histClear) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "feedrequests", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
@@ -17310,10 +18184,9 @@ if (STATE.histClear) {
     else if (slimTabs && !musicHome) bar = 97;
     else if (tall && !musicHome) bar = 106;
     const top = bar + rowExtra + storyExtra + liveExtra;
-    const giftsWide = route.name === "store";
-    const mode = (wide || giftsWide ? " wide" : "") + (giftsWide ? " gifts-mode" : "") + (explore ? " explore-mode" : "");
+    const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${busySheet()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}${blockSheet()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${busySheet()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}${blockSheet()}`;
   }
 
   function toggleReaction(act, id) {
@@ -18662,6 +19535,7 @@ if (STATE.histClear) {
     let current = focus;
     let loading = false;
     const seen = new Set([postKey(focus), String((focus && focus.id) || "")]);
+    if (focus && !(replyInfoOf(focus) || {}).id && !focus.replyParent && knownXReply(focus)) wantLiveParent(focus);
     for (let guard = 0; guard < 12; guard++) {
       const parentId = String((current.replyingTo || {}).id || (current.replyParent && (current.replyParent.statusId || current.replyParent.id)) || "");
       if (!parentId || seen.has(parentId)) break;
@@ -18932,7 +19806,7 @@ if (STATE.histClear) {
      screen now; the live render replaces it in place when data arrives. Each
      finished screen is saved (bounded, least recently used first out, wiped on
      sign-out). Pages that hold secrets, private lists or live media are never saved. */
-  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1 };
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1, feedrequests: 1 };
   function routeLoading(html) {
     if (!html) return true;
     if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
@@ -19042,6 +19916,7 @@ if (STATE.histClear) {
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
     if (route.name === "connect") return pageHead(window.ViktorychPYMK ? window.ViktorychPYMK.pageTitle(route) : tr("People you may know"), "", true) + (window.ViktorychPYMK ? window.ViktorychPYMK.pageHtml(route) : "");
+    if (route.name === "online" && friendsOffNow()) return pageHead(tr("Friends")) + emptyBlock(tr("Friends is off"), tr("Turn Friends on in Settings to see friends and their online status.")) + `<div class="set-list">${settingsRow("#/settings/friends", tr("Friends"), tr("Off"))}</div>`;
     if (route.name === "online") return pageHead(tr("Friends")) + ((window.ViktorychPresence && window.ViktorychPresence.pageHtml && window.ViktorychPresence.pageHtml()) || "");
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces" && !route.id) {
@@ -19058,6 +19933,7 @@ if (STATE.histClear) {
     if (route.name === "explore") return exploreView(route);
     if (route.name === "feeds") return feedsView();
     if (route.name === "sourcelists") return window.SourceLists ? window.SourceLists.view() : feedsView();
+    if (route.name === "feedrequests") return window.FeedRequests ? window.FeedRequests.myView() : feedsView();
     if (route.name === "lists") return listsView();
     if (route.name === "list") return listView(route);
     if (route.name === "history" || route.name === "bookmarks") return historyView(route.name === "history" ? route : { name: "history", tab: "bookmarks", query: route.query });
@@ -20557,33 +21433,6 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
-    if (act === "open-nav-customize") {
-      STATE.drawerEdit = true;
-      STATE.accountMenu = false;
-      STATE.modal = null;
-      STATE.navNewFolderOpen = false;
-      STATE.drawer = !sidebarOwnsNav();
-      render();
-      return;
-    }
-    if (act === "nav-open-new-folder") {
-      STATE.navNewFolderOpen = true;
-      render();
-      const input = document.getElementById("nav-new-folder-input");
-      if (input) input.focus();
-      return;
-    }
-    if (act === "nav-close-new-folder") {
-      STATE.navNewFolderOpen = false;
-      render();
-      return;
-    }
-    if (act === "nav-reset-default") {
-      saveNavCustom(DEFAULT_NAV_CUSTOM);
-      render();
-      toast(tr("Reset to default"));
-      return;
-    }
     if (act === "bottom-nav-move") {
       moveBottomNav(el.dataset.id, Number(el.dataset.dir));
       refocusBottom(el.dataset.id, "move", el.dataset.dir);
@@ -20627,100 +21476,6 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
-    if (act === "nav-order-move") {
-      const idx = Number(el.dataset.idx);
-      const dir = Number(el.dataset.dir);
-      const custom = getNavCustom();
-      const target = idx + dir;
-      if (target >= 0 && target < custom.order.length) {
-        const tmp = custom.order[idx];
-        custom.order[idx] = custom.order[target];
-        custom.order[target] = tmp;
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-subitem-move") {
-      const folderId = el.dataset.folderId;
-      const itemId = el.dataset.id;
-      const dir = Number(el.dataset.dir);
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        const idx = folder.items.indexOf(itemId);
-        const target = idx + dir;
-        if (idx !== -1 && target >= 0 && target < folder.items.length) {
-          const tmp = folder.items[idx];
-          folder.items[idx] = folder.items[target];
-          folder.items[target] = tmp;
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
-    if (act === "nav-remove-from-folder") {
-      const folderId = el.dataset.folderId;
-      const itemId = el.dataset.id;
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        folder.items = folder.items.filter((it) => it !== itemId);
-        const fKey = "folder:" + folderId;
-        const fIdx = custom.order.indexOf(fKey);
-        if (fIdx !== -1) custom.order.splice(fIdx + 1, 0, itemId);
-        else custom.order.push(itemId);
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-prompt-rename") {
-      const folderId = el.dataset.folderId;
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        const next = window.prompt(tr("Folder name"), folder.name);
-        if (next && next.trim()) {
-          folder.name = next.trim().slice(0, 30);
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
-    if (act === "nav-delete-folder") {
-      const folderId = el.dataset.folderId;
-      const custom = getNavCustom();
-      const folderIdx = custom.folders.findIndex((f) => f.id === folderId);
-      if (folderIdx !== -1) {
-        const folder = custom.folders[folderIdx];
-        const fKey = "folder:" + folderId;
-        const ordIdx = custom.order.indexOf(fKey);
-        if (ordIdx !== -1) {
-          custom.order.splice(ordIdx, 1, ...(folder.items || []));
-        }
-        custom.folders.splice(folderIdx, 1);
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-toggle-vis") {
-      const itemId = el.dataset.id;
-      if (itemId === "settings" || itemId === "home") return;
-      const custom = getNavCustom();
-      const idx = custom.hidden.indexOf(itemId);
-      if (idx !== -1) {
-        custom.hidden.splice(idx, 1);
-      } else {
-        custom.hidden.push(itemId);
-      }
-      saveNavCustom(custom);
-      render();
-      return;
-    }
     if (act === "reply-others") {
       let handles = [];
       try { handles = JSON.parse(el.dataset.handles || "[]"); } catch (err) { handles = []; }
@@ -20736,7 +21491,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "close-modal" || act === "close-remove") {
       if (act === "close-modal" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.requestClose && window.ViktorychXCompose.requestClose()) return;
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
-      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; STATE.navNewFolderOpen = false; render(); return;
+      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; render(); return;
     }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
@@ -20885,6 +21640,9 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "mute-community") {
       const name = el.dataset.name || "";
+      cmFyMute(name);
+      STATE.menu = null;
+      render();
       accountCall("/v1/communities/" + encodeURIComponent(name) + "/feed", { method: "POST", body: { muted: true } }).then(() => {
         publicPosts = publicPosts.filter((item) => !(item.community && item.community.name === name));
         toast(tr("Mute community"));
@@ -20994,6 +21752,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "foryou-hide" || act === "foryou-less") {
       const post = findAnyPost(el.dataset.id);
+      if (post && post.cmMirror && act === "foryou-hide") cmFyHideId(String(post.id));
       const memory = forYouMemory();
       if (post && memory && window.ForYou) {
         window.ForYou.note(memory, post, act === "foryou-hide" ? "hide" : "less");
@@ -21454,6 +22213,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "open-article") {
       const post = findAnyPost(el.dataset.id);
       if (post) noteArticle(post, {});
+      return;
+    }
+    if (act === "lv-play") {
+      lvPlay(el);
       return;
     }
     if (act === "open-link") {
@@ -23316,26 +24079,6 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       render();
       return;
     }
-    const newFolderForm = event.target.closest && event.target.closest("form[data-act='nav-create-folder-submit']");
-    if (newFolderForm) {
-      event.preventDefault();
-      const input = newFolderForm.querySelector("#nav-new-folder-input");
-      const val = input ? input.value.trim().slice(0, 30) : "";
-      if (val) {
-        const custom = getNavCustom();
-        const newId = "f_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        custom.folders.push({
-          id: newId,
-          name: val,
-          items: []
-        });
-        custom.order.push("folder:" + newId);
-        saveNavCustom(custom);
-      }
-      STATE.navNewFolderOpen = false;
-      render();
-      return;
-    }
     if (event.target.closest && event.target.closest("form.hist-search")) {
       event.preventDefault();
       const input = event.target.querySelector("#hist-q");
@@ -23414,6 +24157,32 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     const addForm = event.target.closest("form.add-account");
     if (addForm) {
       event.preventDefault();
+      const nlInput = addForm.querySelector("input");
+      const nlParsed = parseAccountInput(nlInput && nlInput.value);
+      /* Only the owner adds sources. Everyone else's add box sends a request,
+         unless the source is already in the app or allowed for them. */
+      if (addForm.dataset.frPass === "1") delete addForm.dataset.frPass;
+      else if (window.FeedRequests && window.FeedRequests.gateAdd && window.FeedRequests.gateAdd({
+        raw: nlInput && nlInput.value,
+        parsed: nlParsed,
+        existing: nlParsed && !addForm.classList.contains("nl-add") ? feedIdFromPaste(nlParsed) : "",
+        newsletter: addForm.classList.contains("nl-add") || !!(nlParsed && (nlParsed.platform === "news" || nlParsed.platform === "rss")),
+        proceed: () => {
+          addForm.dataset.frPass = "1";
+          if (addForm.requestSubmit) addForm.requestSubmit();
+          else addForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        },
+        done: () => { addForm.reset(); if (addForm.classList.contains("nl-add")) NL_DRAFT.text = ""; }
+      })) return;
+      /* Newsletter links follow on this device for everyone; other feed URLs too unless the owner adds them to the catalog. */
+      if (addForm.classList.contains("nl-add") && nlInput && String(nlInput.value || "").trim()) {
+        followNewsletter(nlInput.value).then((ok) => { if (ok) { NL_DRAFT.text = ""; addForm.reset(); } });
+        return;
+      }
+      if (nlParsed && (nlParsed.platform === "news" || (nlParsed.platform === "rss" && !(signedOwner() && accountsApi() && accountToken())))) {
+        followNewsletter(nlParsed.account).then((ok) => { if (ok) addForm.reset(); });
+        return;
+      }
       if (window.FeedsPage && window.FeedsPage.onAdd && window.FeedsPage.onAdd(addForm)) return;
       const input = addForm.querySelector("input");
       const parsed = parseAccountInput(input && input.value);
@@ -23453,23 +24222,6 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   });
 
   document.addEventListener("change", (event) => {
-    const navSel = event.target && event.target.closest && event.target.closest("select[data-act='nav-select-folder']");
-    if (navSel) {
-      const folderId = navSel.value;
-      const itemId = navSel.dataset.id;
-      if (folderId && itemId) {
-        const custom = getNavCustom();
-        const targetFolder = custom.folders.find((f) => f.id === folderId);
-        if (targetFolder) {
-          custom.order = custom.order.filter((it) => it !== itemId);
-          custom.folders.forEach((f) => { f.items = f.items.filter((it) => it !== itemId); });
-          targetFolder.items.push(itemId);
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
     if (event.target.id === "translate-to" && window.FeedsTranslate) {
       window.FeedsTranslate.setTarget(event.target.value);
       return;
@@ -24559,10 +25311,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!doc) return doc;
     const posts = (doc.posts || []).slice();
     const have = {};
-    posts.forEach((post) => { have[memoryKey(post)] = true; });
+    posts.forEach((post) => { have[memoryKey(post)] = post; });
     memoryPosts().forEach((post) => {
       const key = memoryKey(post);
-      if (have[key]) return;
+      if (have[key]) { carryReplyInfo(have[key], post); return; }
       have[key] = true;
       posts.push(post);
     });
@@ -25482,6 +26234,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const kept = byKey[id];
       if (kept) {
         if (patchPostDates(kept, post)) changed = true;
+        if (carryReplyInfo(kept, post)) changed = true;
         return;
       }
       byKey[id] = post;
@@ -25609,6 +26362,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         </ul>
         <h2>${esc(tr("In Russia"))}</h2>
         <p class="phandle">${esc(tr("Smart Auto sends blocked photos and videos through our own servers, and friends who already have a post can pass it to you directly (peer sharing). This helps, but some blocks can't be avoided without a VPN, so we can't promise everything will load."))}</p>
+        ${window.ViktorychMesh && window.ViktorychMesh.settingsHtml ? window.ViktorychMesh.settingsHtml() : ""}
       </div>`;
   }
 
@@ -25657,7 +26411,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     el.hidden = false;
     // Say so when the newest posts reached us from other devices instead.
     const viaPeers = STATE.netPeerAt && Date.now() - STATE.netPeerAt < 10 * 60 * 1000;
-    el.innerHTML = `${esc(viaPeers ? tr("Connection is slow - new posts came from other devices") : tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>`;
+    el.innerHTML = `${esc(viaPeers ? tr("Connection is slow - new posts came from other devices") : tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>${viaPeers ? "" : meshOffer("limited")}`;
+  }
+
+  /* Nearby chat (Bitchat): offered only once every normal path has failed,
+     peers included (new posts from other devices mean P2P still works). */
+  function meshOffer(kind) {
+    return window.ViktorychMesh && window.ViktorychMesh.buttonHtml ? window.ViktorychMesh.buttonHtml(kind) : "";
   }
 
   function setOffline(offline) {
@@ -25668,6 +26428,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     el.hidden = !offline;
     el.dataset.mode = offline ? "offline" : "";
     el.textContent = tr("Offline - showing saved");
+    if (offline) { const mesh = meshOffer("offline"); if (mesh) el.insertAdjacentHTML("beforeend", mesh); }
     if (!offline) paintNetNote();
     if (was && !offline) {
       toast(tr("You're back online"));
@@ -27139,6 +27900,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!res || res.status !== 200 || !Array.isArray(res.items)) failed = true;
       else {
       notesPhase = "ready";
+      if (friendsOffNow()) res.items = res.items.filter((item) => !item || (item.kind !== "friend_request" && item.kind !== "friend_accept"));
       applyServerNotes(res);
       if (window.ViktorychNotifPrivacy) window.ViktorychNotifPrivacy.remember(res.items, notifPrivacy());
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
@@ -28369,7 +29131,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     } else if (parts[0].charAt(0) === "@") {
       platform = "x";
       handle = parts[0].slice(1);
-    } else if (["x", "threads", "instagram", "youtube", "vk", "discord", "telegram", "tiktok", "bsky", "mastodon", "app"].indexOf(parts[0]) >= 0 && parts[1] && parts[2] !== "status") {
+    } else if (["x", "threads", "instagram", "youtube", "vk", "discord", "telegram", "tiktok", "bsky", "mastodon", "news", "app"].indexOf(parts[0]) >= 0 && parts[1] && parts[2] !== "status") {
       platform = parts[0];
       handle = parts[1];
     }
@@ -28500,6 +29262,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (window.Stories && featureOn("stories")) window.Stories.start();
     if (window.AudienceLists) {
       window.AudienceLists.bind({
+        token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
+        api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
+        render: render
+      });
+    }
+    if (window.ViktorychDisplayNames) {
+      window.ViktorychDisplayNames.bind({
         token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
         api: function (path, opts) { return window.ViktorychAccounts && window.ViktorychAccounts.call ? window.ViktorychAccounts.call(path, opts) : Promise.resolve({ status: 503 }); },
         render: render
@@ -28848,6 +29617,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       STATE.settings.communityTabs = bag;
       saveSettings();
     };
+    window.ViktorychCommunities.readFolders = function () { return STATE.settings ? STATE.settings.communityFolders : null; };
+    window.ViktorychCommunities.writeFolders = function (bag) {
+      if (!STATE.settings) return;
+      STATE.settings.communityFolders = bag;
+      saveSettings();
+    };
     window.ViktorychCommunities.profileInfo = function (id) {
       const feed = memberFeed(id);
       if (!feed) return null;
@@ -29104,6 +29879,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       Object.assign(STATE.settings, patch);
       saveSettings();
       applyTheme();
+      render();
+    },
+    notifPrivacy: () => {
+      const NP = window.ViktorychNotifPrivacy;
+      return NP ? NP.normalize(STATE.settings && STATE.settings.notifPrivacy) : null;
+    },
+    /* Same effect as the switches in Settings > Notifications. */
+    setNotifPrivacy: (patch) => {
+      const NP = window.ViktorychNotifPrivacy;
+      if (!NP || !STATE.settings || !patch) return;
+      const next = Object.assign({}, NP.normalize(STATE.settings.notifPrivacy));
+      ["names", "preview"].forEach((key) => { if (typeof patch[key] === "boolean") next[key] = patch[key]; });
+      STATE.settings.notifPrivacy = NP.normalize(next);
+      if (!STATE.settings.notifPrivacy.names) NP.wipe();
+      saveSettings();
+      updateBadge(bellUnread());
       render();
     },
     skipWelcome: () => writeWelcome({ step: 2, done: true }),
@@ -29553,6 +30344,35 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       accountHash: accountHash,
       platformIcon: platformIcon,
       STATE: STATE
+    });
+  }
+  if (window.FeedRequests) {
+    window.FeedRequests.attach({
+      tr: tr,
+      esc: esc,
+      avatar: avatar,
+      icon: icon,
+      pageHead: pageHead,
+      settingsHead: settingsHead,
+      signedOwner: signedOwner,
+      accountsApi: accountsApi,
+      accountToken: accountToken,
+      toast: toast,
+      render: () => render({ y: window.scrollY }),
+      readStored: readStored,
+      writeStored: writeStored,
+      STATE: STATE,
+      lang: () => (window.SI18n ? window.SI18n.getLang() : "en"),
+      serverOff: () => serverOffList(),
+      inCatalog: (id) => !!feedById(id),
+      follow: (id) => applyFollow([id], true),
+      followedIds: () => (STATE.settings.follows || []).slice(),
+      unfollowLocal: (ids) => { ids.forEach((id) => setFollowed(id, false)); saveSettings(); render({ y: window.scrollY }); },
+      newsletterInfo: (raw) => newsletterFetch("url=" + encodeURIComponent(String(raw || "").trim().replace(/^(?:news|newsletter):/i, ""))).then((doc) => {
+        if (!doc || !doc.key) return null;
+        const profile = newsProfile(doc);
+        return { key: doc.key, name: profile.name || "", avatar: profile.avatar || "" };
+      })
     });
   }
   if (window.SourceLists) {

@@ -230,11 +230,30 @@ jobs:
       pages: write
       id-token: write
       actions: write
+    outputs:
+      sha: ${{ steps.head.outputs.sha }}
+      # One name per run attempt, so a rerun never finds two artifacts.
+      pages_artifact: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
     # The feed refresh is a separate job. This job only publishes the shell.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      # A run that waited in the queue still ships main's current app shell,
+      # so an older run can never publish stale files or version.json.
+      - name: Build from the latest main
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python3 scripts/pages_guard.py pick-head
+          sha="$(grep '^sha=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2)"
+          if [ -n "$sha" ] && [ "$sha" != "$GITHUB_SHA" ]; then git checkout --quiet --detach "$sha"; fi
+          git log -1 --format='building %h'
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -246,7 +265,9 @@ jobs:
       - name: Assemble the site and check its size
         env:
           GH_TOKEN: ${{ github.token }}
+          BUILD_SHA: ${{ steps.head.outputs.sha }}
         run: |
+          if [ -n "${BUILD_SHA:-}" ]; then export GITHUB_SHA="$BUILD_SHA"; fi
           rm -rf _site
           python3 scripts/assemble_site.py --site _site
           export VERSION_BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -304,6 +325,7 @@ jobs:
           path: _site
           include-hidden-files: true
           retention-days: 1
+          overwrite: true
 
       - name: Keep the version manifest until the assets are live
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -311,6 +333,7 @@ jobs:
           name: version-next
           path: version-next/version.json
           retention-days: 1
+          overwrite: true
 
       - name: Record whether the login wall is on
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -319,10 +342,13 @@ jobs:
           path: accounts-wall/on
           if-no-files-found: ignore
           retention-days: 1
+          overwrite: true
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: _site
+          include-hidden-files: true
 
   # Feed refresh does not block Pages. One slow source is skipped, and the
   # catalog is written to R2 so the app can read it without another deploy.
@@ -702,14 +728,18 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: python3 scripts/cf_pages_deploy.py --dir "$GITHUB_WORKSPACE/_mirror"
+          BUILD_SHA: ${{ needs.build.outputs.sha || github.sha }}
+        run: GITHUB_SHA="$BUILD_SHA" python3 scripts/cf_pages_deploy.py --dir "$GITHUB_WORKSPACE/_mirror"
 
   deploy:
     needs: [gate, build, wait-accounts]
     if: needs.gate.outputs.go == 'true'
+    # One Pages lock for every job that publishes Pages (this deploy and
+    # publish-version). Only these short jobs queue; builds, the feed refresh
+    # and the mirror still run in parallel. Discord live checks the same jobs
+    # through scripts/pages_guard.py before it publishes.
     concurrency:
-      group: pages
+      group: pages-deploy
       # A running deploy on main is never cancelled; a newer run waits, then deploys the latest.
       cancel-in-progress: false
     runs-on: ubuntu-latest
@@ -726,6 +756,8 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ needs.build.outputs.pages_artifact || 'github-pages' }}
 
   verify-live:
     needs: [gate, deploy]
@@ -761,6 +793,9 @@ jobs:
   publish-version:
     needs: [gate, verify-live, pages-mirror]
     if: always() && needs.gate.outputs.go == 'true' && needs.verify-live.result == 'success' && (needs.pages-mirror.result == 'success' || needs.pages-mirror.result == 'skipped')
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -798,27 +833,45 @@ jobs:
           path: version-next
 
       - name: Publish the version manifest after the assets
+        id: manifest
         run: |
           found=$(find version-next -name version.json -type f | head -n 1)
           test -n "$found"
           cp "$found" _site/version.json
+          sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("sha") or "")' "$found")"
+          echo "sha=${sha:-$GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      # A newer run may have put a newer shell live while this one waited
+      # for the lock. Then this run does not put its older files back; the
+      # newer run publishes its own version.json.
+      - name: Check that no newer shell is live
+        id: fresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BUILD_SHA: ${{ steps.manifest.outputs.sha }}
+        run: python3 scripts/pages_guard.py superseded --sha "$BUILD_SHA" --url "https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/sw.js"
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: steps.fresh.outputs.go != 'false'
         with:
-          name: app-shell-version
+          name: app-shell-version-${{ github.run_id }}-${{ github.run_attempt }}
           path: _site
+          include-hidden-files: true
 
       - name: Deploy the version manifest
         id: deploy
+        if: steps.fresh.outputs.go != 'false'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         with:
-          artifact_name: app-shell-version
+          artifact_name: app-shell-version-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Deploy the version manifest to the Pages mirror
+        if: steps.fresh.outputs.go != 'false'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_SHA: ${{ steps.manifest.outputs.sha }}
         run: |
           python3 scripts/cf_pages_prepare.py --site _site --out _mirror
           python3 scripts/cf_pages_deploy.py --dir "$GITHUB_WORKSPACE/_mirror"

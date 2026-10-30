@@ -19,14 +19,14 @@ function read(name) {
 function staticChecks() {
   const css = read("gifts.css");
   if (/position:\s*fixed/.test(css.slice(0, css.indexOf(".gift-sheet")))) fail("points page must stay in flow");
-  if (!css.includes("max-width: 499px") || !css.includes("min-width: 500px) and (max-width: 999px)")) fail("points need phone and tablet rules");
+  if (!css.includes("max-width: 499px") || !css.includes("@media (min-width: 500px) {")) fail("points need phone and tablet rules");
   const app = read("app.js");
   if (!app.includes('name: "points"') || !app.includes('"#/points"')) fail("points route missing");
   if (!app.includes('data-gift="reply"') || !app.includes("giftChip")) fail("a reply needs a gift button and an attached gift");
   if (!read("gifts-ui.js").includes('data-gift="dm"')) fail("messages need a direct gift action");
   const external = app.slice(app.indexOf("function profileView"), app.indexOf("function statusView"));
   if (external.includes("?tab=gifts") || external.includes("ProfileGifts")) fail("external profiles must not show gifts");
-  if (!read("sw.js").includes('VERSION = "viktorych-a155-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a220-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok points layout rules");
 }
 
@@ -110,7 +110,7 @@ async function browserChecks() {
         const rows = Array.from(document.querySelectorAll(".vkg-chiprow"));
         const shelves = Array.from(document.querySelectorAll(".vkg-shelf")).map((node) => node.getAttribute("data-shelf"));
         const row = document.querySelector(".vkg-row");
-        const head = document.querySelector(".vkg-head");
+        const head = document.querySelector(".vkg-top .page-head");
         const free = document.querySelectorAll(".vkg-price.is-free").length;
         const seasons = GiftCatalog.activeSeasons();
         const scrolls = row ? row.scrollWidth > row.clientWidth : false;
@@ -123,7 +123,7 @@ async function browserChecks() {
           shelves: shelves,
           seasons: seasons,
           scrolls: scrolls,
-          headIcons: head ? head.querySelectorAll(".vkg-btn").length : 0,
+          headIcons: head ? head.querySelectorAll(".icon-btn").length : 0,
           free: free,
           grid: grid,
           pageWidth: document.documentElement.scrollWidth

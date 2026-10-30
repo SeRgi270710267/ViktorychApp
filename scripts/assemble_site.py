@@ -195,6 +195,7 @@ def published_text(root: Path) -> str:
             "data/music.json",
             "live/",
             "icons/",
+            "nft/",
             "splash/",
             "screenshots/",
             "i18n/",
@@ -258,6 +259,9 @@ def copy_payload(root: Path, dest: Path) -> None:
     _copy_tree(root / "icons", dest / "icons")
     _copy_tree(root / "splash", dest / "splash")
     _copy_tree(root / "screenshots", dest / "screenshots")
+    # Gift NFT token metadata (nft/<index>.json), public by design.
+    if (root / "nft").is_dir():
+        _copy_tree(root / "nft", dest / "nft")
     if (root / "i18n").is_dir():
         _copy_tree(root / "i18n", dest / "i18n")
     music = root / "data" / "music.json"

@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Christmas tree",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/xmas_tree.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "xmas_tree"
+    },
+    {
+      "trait_type": "Index",
+      "value": 73
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreibpalxdaf7fzl62jz3ric7r66e7vwsjjrjzs265g2g6bzyoqsuqs4",
+  "image_sha256": "2f02ee3017e5cafda4e77140bf1f789fada494c53996bdd368de0e70e84a9097"
+}
