@@ -4510,5 +4510,20 @@ SI18n.addPack("ru", {
   "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "Установленное приложение скрывает полосу прокрутки страницы. Прокручивать можно колесом, тачпадом, клавиатурой или касанием. Во вкладках браузера она всегда видна.",
   "Full screen shortcut": "Сочетание клавиш для полноэкранного режима",
   "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (⌘+Shift+F на Mac) включает и выключает полноэкранный режим. Выйти также можно клавишами Esc или F11.",
-  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Собственные кнопки компьютера «Свернуть», «Развернуть» и «Закрыть» всегда остаются в углу. Приложение рисует свою строку заголовка рядом с ними."
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Собственные кнопки компьютера «Свернуть», «Развернуть» и «Закрыть» всегда остаются в углу. Приложение рисует свою строку заголовка рядом с ними.",
+  "Followers you know": "Знакомые подписчики",
+  "This platform doesn’t show who follows this account publicly": "Эта платформа не показывает публично, кто подписан на этот аккаунт",
+  "This platform doesn’t show who this account follows publicly": "Эта платформа не показывает публично, на кого подписан этот аккаунт",
+  "{platform} shows {count} followers, but only lists them inside its own app.": "{platform} показывает {count} подписчиков, но сам список виден только в его приложении.",
+  "{platform} shows {count} following, but only lists them inside its own app.": "{platform} показывает {count} подписок, но сам список виден только в его приложении.",
+  "{platform} only shows this list inside its own app.": "{platform} показывает этот список только в своём приложении.",
+  "Turn on Nostr to see this list": "Включите Nostr, чтобы увидеть этот список",
+  "Nostr lists are read from relays on this device.": "Списки Nostr читаются с релеев на этом устройстве.",
+  "Open Nostr settings": "Открыть настройки Nostr",
+  "This list is hidden": "Этот список скрыт",
+  "This account chose not to show this list publicly.": "Владелец аккаунта решил не показывать этот список публично.",
+  "Couldn’t load this list right now": "Сейчас не удалось загрузить этот список",
+  "The public sources for this list are busy. Try again in a bit.": "Публичные источники этого списка заняты. Попробуйте чуть позже.",
+  "No followers you know yet": "Пока нет знакомых подписчиков",
+  "When someone you follow follows this account, they’ll show up here.": "Когда кто-то из ваших подписок подпишется на этот аккаунт, он появится здесь."
 });
