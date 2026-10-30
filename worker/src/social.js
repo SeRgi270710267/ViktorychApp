@@ -6,6 +6,9 @@
 import { tempDmGate } from "./temp-accounts.js";
 import { viewerDisplay } from "./name-rules.js";
 
+import { notLocked, isLockedFollow, lockedAccountSet } from "./locked-sql.js";
+import { grantOk, ownerSees } from "./locked-follows.js";
+
 export const SOCIAL_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS account_blocks (
     blocker_id TEXT NOT NULL,
@@ -347,6 +350,9 @@ export async function readFollowRows(env, viewer, account, subject, tab, url) {
   const viewerId = viewer.public_id;
   const ownerId = account ? account.public_id : "";
   const isOwner = !!(account && ownerId === viewerId);
+  // The app owner reads the real list, locked follows included (audited by
+  // the caller). Everyone else, the account itself included, never sees them.
+  const lockSql = (alias) => (ownerSees(viewer, ownerId) ? "" : notLocked(alias));
   if (tab === "requests") {
     if (!isOwner) return { rows: [], cursor: "", denied: "private" };
     const clause = cursorClause(cursor, "r.created_at", "r.requester_id");
@@ -368,7 +374,7 @@ export async function readFollowRows(env, viewer, account, subject, tab, url) {
     const clause = cursorClause(cursor, "f1.created_at", "f1.target_id");
     const term = q || "%";
     const listed = await env.DB.prepare(
-      "SELECT f1.target_id AS id, f1.created_at FROM account_follows f1 JOIN account_follows f2 ON f2.follower_id = substr(f1.target_id, 5) AND f2.target_id = ('app:' || f1.follower_id) LEFT JOIN accounts a ON f1.target_id = ('app:' || a.public_id) WHERE f1.follower_id = ? AND f1.target_id LIKE 'app:%' AND (? = '' OR lower(coalesce(a.handle, '')) LIKE ? OR lower(coalesce(a.display_name, '')) LIKE ?)" + clause.sql + " ORDER BY f1.created_at DESC, f1.target_id ASC LIMIT ?"
+      "SELECT f1.target_id AS id, f1.created_at FROM account_follows f1 JOIN account_follows f2 ON f2.follower_id = substr(f1.target_id, 5) AND f2.target_id = ('app:' || f1.follower_id) LEFT JOIN accounts a ON f1.target_id = ('app:' || a.public_id) WHERE f1.follower_id = ? AND f1.target_id LIKE 'app:%'" + lockSql("f1") + " AND (? = '' OR lower(coalesce(a.handle, '')) LIKE ? OR lower(coalesce(a.display_name, '')) LIKE ?)" + clause.sql + " ORDER BY f1.created_at DESC, f1.target_id ASC LIMIT ?"
     ).bind(ownerId, q, term, term, ...clause.args, limit + 1).all();
     return pageRows((listed && listed.results) || [], limit, "account-target");
   }
@@ -383,7 +389,7 @@ export async function readFollowRows(env, viewer, account, subject, tab, url) {
   const clause = cursorClause(cursor, "f.created_at", "f.target_id");
   const term = q || "%";
   const listed = await env.DB.prepare(
-    "SELECT f.target_id AS id, f.snapshot, f.created_at FROM account_follows f LEFT JOIN accounts a ON f.target_id = ('app:' || a.public_id) WHERE f.follower_id = ? AND (? = '' OR lower(coalesce(a.handle, '')) LIKE ? OR lower(coalesce(a.display_name, '')) LIKE ? OR lower(coalesce(f.snapshot, '')) LIKE ? OR lower(f.target_id) LIKE ?)" + clause.sql + " ORDER BY f.created_at DESC, f.target_id ASC LIMIT ?"
+    "SELECT f.target_id AS id, f.snapshot, f.created_at FROM account_follows f LEFT JOIN accounts a ON f.target_id = ('app:' || a.public_id) WHERE f.follower_id = ?" + lockSql("f") + " AND (? = '' OR lower(coalesce(a.handle, '')) LIKE ? OR lower(coalesce(a.display_name, '')) LIKE ? OR lower(coalesce(f.snapshot, '')) LIKE ? OR lower(f.target_id) LIKE ?)" + clause.sql + " ORDER BY f.created_at DESC, f.target_id ASC LIMIT ?"
   ).bind(ownerId, q, term, term, term, term, ...clause.args, limit + 1).all();
   return pageRows((listed && listed.results) || [], limit, "mixed");
 }
@@ -451,7 +457,7 @@ export async function handleSocialRoutes(request, env, path, url, deps) {
   if (isPeople && method === "GET") return peopleSearch(env, request, url, viewer, deps);
   if (isPosts && method === "GET") return readPosts(env, url, viewer, deps);
   if (isPosts && method === "POST") return writePost(request, env, viewer, deps);
-  if (isMessages && method === "GET") return readMessages(env, url, viewer, deps);
+  if (isMessages && method === "GET") return readMessages(env, url, viewer, Object.assign({}, deps, { request }));
   if (isMessages && method === "POST") return writeMessage(request, env, viewer, deps);
   return null;
 }
@@ -526,7 +532,9 @@ async function peopleSearch(env, request, url, viewer, deps) {
   ).bind(viewer.public_id, term, term, term).all();
   const core = term.slice(1, -1);
   const ids = [];
+  const lockedIds = await lockedAccountSet(env, viewer.public_id);
   for (const row of (listed && listed.results) || []) {
+    if (lockedIds.has(String(row.public_id))) continue;
     // A name match counts only for the one display name this viewer sees.
     if (String(row.handle || "").toLowerCase().indexOf(core) < 0) {
       const shown = await viewerDisplay(env, request, row.public_id, viewer.public_id, row.display_name || "");
@@ -610,6 +618,11 @@ async function readMessages(env, url, viewer, deps) {
   const listed = await env.DB.prepare(
     "SELECT id, sender_id, recipient_id, body, created_at FROM account_messages WHERE deleted_at = 0 AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) ORDER BY created_at DESC LIMIT 50"
   ).bind(viewer.public_id, otherId, otherId, viewer.public_id).all();
+  // A chat with a locked follow opens only inside the Locked area, like
+  // WhatsApp's locked chats.
+  if (await isLockedFollow(env, viewer.public_id, "app:" + otherId) && !(await grantOk(env, deps.request || { headers: new Headers() }, viewer.public_id))) {
+    return deps.json(200, { messages: [] });
+  }
   const muted = await one(env, "SELECT muted_id FROM account_mutes WHERE muter_id = ? AND muted_id = ?", viewer.public_id, otherId);
   const messages = [];
   for (const row of (listed && listed.results) || []) {
