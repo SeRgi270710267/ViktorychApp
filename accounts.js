@@ -4310,7 +4310,7 @@ function signupPayload() {
       (items.length > 1 ? '<button class="photo-gallery-nav next" type="button" data-acct="gallery-next" aria-label="' + esc(tr("Next")) + '">›</button>' : "") +
       "</div>";
   }
-  var PROFILE_TAB_IDS = ["posts", "replies", "media", "highlights", "friends", "about", "gifts"];
+  var PROFILE_TAB_IDS = ["posts", "replies", "media", "games", "highlights", "friends", "about", "gifts"];
   function profileTabLabel(id) {
     if (id === "posts") return tr("Posts");
     if (id === "replies") return tr("Replies");
@@ -4319,6 +4319,7 @@ function signupPayload() {
     if (id === "friends") return tr("Friends");
     if (id === "about") return tr("About");
     if (id === "gifts") return tr("Gifts");
+    if (id === "games") return tr("Games");
     return id;
   }
   function cleanProfileTabs(raw) {
@@ -4383,6 +4384,7 @@ function signupPayload() {
       if (id === "about") return !!showAbout;
       if (id === "gifts") return !!showGifts;
       if (id === "highlights") return !!(mine || highlightHtml);
+      if (id === "games") return !!(window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabAvailable && window.ViktorychGameSocial.profileTabAvailable(account, mine));
       return true;
     }
     var editing = !!(mine && profileTabEdit);
@@ -4555,14 +4557,14 @@ function signupPayload() {
     var aboutBody = activeTab === "about" && window.ProfileAbout ? window.ProfileAbout.html(account) : "";
     var giftsBody = activeTab === "gifts" && window.ProfileGifts ? window.ProfileGifts.giftsHtml(account.gifts, mine) : "";
     var highlightsBody = bar.highlightHtml || '<div class="empty"><h2>' + esc(tr("Highlights")) + "</h2></div>";
-    var body = activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
+    var gamesBody = activeTab === "games" && window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabHtml ? window.ViktorychGameSocial.profileTabHtml(account, mine) : "";
+    var body = activeTab === "games" ? gamesBody : activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
 
     var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
     var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tn("mutualFriends", mutualCount, { count: mutualCount })) + '</div>' : '';
 
     var tabs = bar.html;
 
-    var gameInviteBtn = !mine && !account.viewerBlocks && account.publicId && window.ViktorychGameSocial ? window.ViktorychGameSocial.inviteButtonHtml(account.publicId, account.name || account.handle, false) : "";
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
     var top = window.ViktorychProfile && window.ViktorychProfile.top ? window.ViktorychProfile.top({
       name: account.displayName || account.handle || "",
@@ -4574,7 +4576,7 @@ function signupPayload() {
       count: count === "" ? "" : tn("posts", Number(count), { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
-    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + gameInviteBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + (window.ViktorychGameSocial ? window.ViktorychGameSocial.profileHtml(account, mine) : "") + "</div>" + tabs + body + galleryHtml(account);
+    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -4595,7 +4597,7 @@ function signupPayload() {
     if (!account.repostsLoaded) loadProfile(route.handle);
     if (account.handle && skel(account.handle) !== key) {
       var nextHash = "#/@" + encodeURIComponent(account.handle);
-      var tab = route.query && route.query.get && route.query.get("tab");
+      var tab = (route.query && route.query.get && route.query.get("tab")) || route.tab || "";
       if (tab) nextHash += "?tab=" + encodeURIComponent(tab);
       if ((location.hash || "") !== nextHash) location.replace(nextHash);
     }
