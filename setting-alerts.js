@@ -139,7 +139,7 @@
           [tr("Cache is almost at your limit", v), tr("{used} of {limit} ({pct}%). Raise the limit or clear the cache.", v), tr("Raise limit")],
           [tr("Cache limit reached", v), tr("{used} of {limit}. Older media is now removed to make room.", v), tr("Raise limit")]);
       } },
-    { id: "local-store", icon: "sliders", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: ".set-block",
+    { id: "local-store", icon: "sliders", kind: "percent", canAuto: true, href: "#/settings/storage/usage", target: "#stor-local",
       label: function () { return tr("Settings and sync storage"); },
       page: function () { return tr("Storage settings"); },
       copy: function (level, v) {
@@ -880,17 +880,26 @@
     writeJson(ls(), SCREEN_KEY, s);
   }
 
-  function localBytes() {
+  /* localStorage as the browser counts it: UTF-16 code units of key plus
+     value (one per character, not two bytes) against this browser's real
+     limit, about 5 Mi in Chromium and Firefox and 2.5 Mi in Safari and on
+     iOS. Counting two bytes a character against 5 MB, as before, showed
+     twice the real fill. */
+  function localReading() {
     var store = ls();
-    if (!store) return 0;
+    var budget = root.ViktorychLocalBudget;
+    if (!store) return null;
+    if (budget && budget.reading) {
+      try { return budget.reading(store, root.navigator); } catch (err) { return null; }
+    }
     var n = 0;
     try {
       for (var i = 0; i < store.length; i++) {
         var key = store.key(i) || "";
-        n += (key.length + String(store.getItem(key) || "").length) * 2;
+        n += key.length + String(store.getItem(key) || "").length;
       }
-    } catch (err) { return 0; }
-    return n;
+    } catch (err) { return null; }
+    return { used: n, limit: LOCAL_LIMIT, pct: n / LOCAL_LIMIT * 100 };
   }
 
   var DAMAGE_CHECK = [[SETTINGS_KEY, function () { return tr("Your settings"); }], [STORAGE_POLICY_KEY, function () { return tr("Storage settings"); }], [DEVICE_KEY, function () { return tr("Device performance"); }], [PREFS_KEY, function () { return tr("Settings alerts"); }]];
@@ -943,8 +952,8 @@
         out["persist-denied"] = !ok && persistAsked ? { level: "info", vars: {} } : null;
       }).catch(function () {}));
     }
-    var lb = localBytes();
-    out["local-store"] = { used: lb, limit: LOCAL_LIMIT, pct: lb / LOCAL_LIMIT * 100 };
+    var lr = localReading();
+    out["local-store"] = lr ? { used: lr.used, limit: lr.limit, pct: lr.pct } : null;
 
     dataReadings(out);
 

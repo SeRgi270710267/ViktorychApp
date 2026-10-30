@@ -803,16 +803,76 @@
     } catch (err) { return Promise.resolve(null); }
   }
 
+  function localBudget() {
+    return typeof self !== "undefined" && self.ViktorychLocalBudget ? self.ViktorychLocalBudget : null;
+  }
+
+  /* localStorage size in the units the browser counts against its limit:
+     one per character of key plus value. */
   function localBytes() {
     try {
       if (typeof localStorage === "undefined") return 0;
+      var budget = localBudget();
+      if (budget) return budget.measure(localStorage).total;
       var n = 0;
       for (var i = 0; i < localStorage.length; i++) {
         var key = localStorage.key(i) || "";
-        n += (key.length + String(localStorage.getItem(key) || "").length) * 2;
+        n += key.length + String(localStorage.getItem(key) || "").length;
       }
       return n;
     } catch (err) { return 0; }
+  }
+
+  var LOCAL_COLORS = { settings: "#1d9bf0", snapshots: "#e8a33d", caches: "#53b35b", legacy: "#a46cff", other: "#8e8e93" };
+
+  function localCatLabel(cat) {
+    if (cat === "settings") return tr("Settings, drafts and sign-in");
+    if (cat === "snapshots") return tr("Saved screens");
+    if (cat === "caches") return tr("Small caches");
+    if (cat === "legacy") return tr("Old copies");
+    return tr("Other pages on this address");
+  }
+
+  function localCatNote(cat) {
+    if (cat === "settings") return tr("Never cleared here");
+    if (cat === "snapshots") return tr("Pages you opened, so they show at once. Rebuilt as you browse");
+    if (cat === "caches") return tr("Link previews, translations and profile headers. Rebuilt when needed");
+    if (cat === "legacy") return tr("Duplicates left by older versions of the app");
+    return tr("Saved by other pages on the same address. Not cleared here");
+  }
+
+  /* Settings storage (localStorage): what fills it and a button that clears
+     only what the app can rebuild. The "Saved settings are full" alert
+     opens this section. */
+  function localHtml() {
+    var budget = localBudget();
+    if (!budget || typeof localStorage === "undefined") return "";
+    var read = null;
+    try { read = budget.reading(localStorage, typeof navigator !== "undefined" ? navigator : null); } catch (err) { read = null; }
+    if (!read) return "";
+    var pct = Math.min(100, Math.round(read.pct));
+    var rows = budget.ORDER.map(function (cat) {
+      var row = read.by[cat] || { units: 0, count: 0 };
+      if (!row.units && cat !== "settings") return "";
+      var width = read.used && row.units ? Math.max(2, Math.round(row.units / read.used * 100)) : 0;
+      var clear = budget.safeToClear(cat) && row.units ? '<button class="outline stor-clear" type="button" data-stor="local-clear" data-cat="' + cat + '">' + esc(tr("Clear")) + "</button>" : "";
+      return '<div class="stor-row" data-local-cat="' + cat + '"><i class="stor-swatch" style="background:' + LOCAL_COLORS[cat] + '"></i><div class="stor-meta"><b>' + esc(localCatLabel(cat)) + '</b><span class="stor-sub">' + esc(localCatNote(cat)) + '</span><div class="stor-bar"><i style="width:' + width + "%;background:" + LOCAL_COLORS[cat] + '"></i></div></div><span class="stor-size">' + esc(formatBytes(row.units)) + "</span>" + clear + "</div>";
+    }).join("");
+    var free = read.safe > 0
+      ? '<button class="outline" type="button" data-stor="local-clear" data-cat="all">' + esc(tr("Free up {size}", { size: formatBytes(read.safe) })) + "</button>"
+      : '<p class="phandle">' + esc(tr("Nothing to clear. Only settings are saved here.")) + "</p>";
+    return '<div class="set-block stor-section" id="stor-local"><h2>' + esc(tr("Settings storage")) + '</h2><p class="phandle">' +
+      esc(tr("{used} of about {limit} ({pct}%)", { used: formatBytes(read.used), limit: formatBytes(read.limit), pct: String(pct) })) + "</p></div>" +
+      '<div class="stor-list">' + rows + "</div>" + '<div class="set-block stor-local-actions">' + free + "</div>";
+  }
+
+  function clearLocal(cat) {
+    var budget = localBudget();
+    if (!budget || typeof localStorage === "undefined") return 0;
+    var freed = budget.clearSafe(localStorage, cat === "all" ? "" : cat);
+    var alerts = typeof self !== "undefined" ? self.ViktorychSettingAlerts : null;
+    if (alerts && alerts.check) { try { alerts.check(); } catch (err) { /* the next check runs on its own */ } }
+    return freed;
   }
 
   function measureNow() {
@@ -1055,7 +1115,7 @@
     return '<div class="stor-hero"><div class="stor-donut" style="' + storeDonut(stores.list, Math.max(shown, 1)) + '" role="img" aria-label="' + esc(tr("{size} used", { size: label })) + '"><div class="stor-hole"><b>' + esc(label) + "</b><span>" + esc(tr("Used on this device")) + "</span></div></div>" +
       '<p class="stor-free">' + esc(freeLine) + "</p>" + browserLine + '<p class="phandle">' + esc(persistLine) + "</p>" + retry + "</div>" +
       '<div class="set-block stor-section"><h2>' + esc(tr("Where it’s stored")) + '</h2></div><div class="stor-list">' + where + "</div>" +
-      '<div class="set-block stor-section"><h2>' + esc(tr("What’s saved")) + '</h2></div><div class="stor-list">' + list + "</div>" + controlsHtml() +
+      '<div class="set-block stor-section"><h2>' + esc(tr("What’s saved")) + '</h2></div><div class="stor-list">' + list + "</div>" + localHtml() + controlsHtml() +
       '<p class="stor-debug">' + esc(tr("Cache hits {count}", { count: String(stats.hits) })) + " · " + esc(tr("Network requests {count}", { count: String(stats.network) })) + " · " + esc(tr("Hit rate {percent}", { percent: hitRate(stats) + "%" })) + " · " + esc(tr("Saved {size}", { size: formatBytes(stats.savedBytes || 0) })) + " · " + esc(tr("Saved requests {count}", { count: String(stats.savedRequests || 0) })) + " · " + esc(tr("Direct {count}", { count: String(stats.direct || 0) })) + " · " + esc(tr("Server {count}", { count: String(stats.server || 0) })) + " · " + esc(tr("From peers {size}", { size: formatBytes(stats.peerBytes || 0) })) + " · " + esc(tr("From origin {size}", { size: formatBytes(stats.originBytes || 0) })) + "</p>";
   }
 
@@ -1156,6 +1216,17 @@
       next.keep = el.getAttribute("data-keep") || "week";
       saveLocal(next);
       askPersist();
+      requestRender();
+      return;
+    }
+    if (kind === "local-clear") {
+      var which = el.getAttribute("data-cat") || "all";
+      var ask = which === "all"
+        ? tr("Clear saved screens and caches from settings storage? Your settings, drafts and sign-in stay.")
+        : tr("Clear {category} from this device?", { category: localCatLabel(which) });
+      if (typeof confirm === "function" && !confirm(ask)) return;
+      clearLocal(which);
+      stale = true;
       requestRender();
       return;
     }
@@ -1269,6 +1340,8 @@
     byteLengthOf: byteLengthOf,
     formatBytes: formatBytes,
     storeList: storeList,
+    localHtml: localHtml,
+    clearLocal: clearLocal,
     clearStored: clearStored,
     pressureLevel: pressureLevel,
     persistText: persistText,
