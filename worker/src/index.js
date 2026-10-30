@@ -44,6 +44,7 @@ import { handleUnfurl } from "./unfurl.js";
 import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
 import { handleYtm } from "./ytmusic.js";
+import { handleNzlay } from "./nzlay-forum.js";
 import { logError } from "./log.js";
 import { tiktokPublic, ownerOnlyItem, stripOwnerOnly } from "./owner-only.js";
 import { handleSeal } from "./data-seal.js";
@@ -5620,6 +5621,12 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/reactions")) {
     const reacted = await handleReactions(request, env, path, url, recoveryDeps());
     if (reacted) return reacted;
+  }
+  // NZlay's forum as a Community: cached public reads, and a relay that
+  // keeps nothing for the person's own posts. Each half has a kill switch.
+  if (path.startsWith("/v1/nzlay/")) {
+    const forum = await handleNzlay(request, env, path, url, { json, readJson, rateHit, limited, clientIp });
+    if (forum) return forum;
   }
   if (path.startsWith("/v1/games/")) {
     const played = await handleGames(request, env, path, url, recoveryDeps());
