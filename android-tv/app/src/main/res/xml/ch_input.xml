@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live channels input (channels/). Android shows this source only after it is turned on. -->
+<tv-input xmlns:android="http://schemas.android.com/apk/res/android"
+    android:setupActivity="app.viktorych.tv.channels.ChannelsSetupActivity" />

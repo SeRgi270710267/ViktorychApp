@@ -199,4 +199,18 @@ for (const [name, ua] of Object.entries(UAS)) {
   assert.ok(!/RECEIVE_BOOT_COMPLETED|FOREGROUND_SERVICE|WAKE_LOCK/.test(manifest), "no keep-alive permissions");
 }
 
+{
+  // Optional Live channels (TV app 1.9.0+): the input and its setup screen ship turned off,
+  // only the system can bind the input, the TV still installs without live TV support, and
+  // there is no job, receiver or sync service keeping it up to date in the background.
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  const input = /<service[^>]*channels\.LoopInputService[^>]*>/.exec(manifest);
+  assert.ok(input && input[0].includes('android:enabled="false"') && input[0].includes("BIND_TV_INPUT"), "the channel input ships off and only the system can bind it");
+  const setup = /<activity[^>]*channels\.ChannelsSetupActivity[^>]*>/.exec(manifest);
+  assert.ok(setup && setup[0].includes('android:enabled="false"'), "channel setup ships off");
+  assert.ok(/<uses-feature android:name="android.software.live_tv" android:required="false"/.test(manifest), "live TV support stays optional for installs");
+  assert.ok(!/<(receiver|provider)[^>]*\.channels\./.test(manifest) && !/JobService|SyncAdapter/.test(manifest), "channels never refresh in the background");
+  assert.ok(!manifest.includes("READ_EPG_DATA"), "channels only write their own guide");
+}
+
 console.log("tv boot checks passed");

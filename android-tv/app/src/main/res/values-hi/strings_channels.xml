@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live channels (channels/). -->
+<resources>
+    <string name="channels_label">ViktorychTV चैनल</string>
+    <string name="ch_station">ViktorychMusic</string>
+    <string name="ch_station_desc">ViktorychApp का अपना म्यूज़िक स्टेशन, चौबीसों घंटे।</string>
+    <string name="ch_program">ViktorychMusic, चौबीसों घंटे</string>
+    <string name="ch_program_desc">स्टेशन का लूप, ठीक उसी पल से जो ViktorychApp में चल रहा है।</string>
+    <string name="ch_live_chip">लाइव</string>
+    <string name="ch_tuning">ट्यून हो रहा है…</string>
+    <string name="ch_playing">ऑन एयर</string>
+    <string name="ch_offline">अभी स्टेशन से कनेक्ट नहीं हो पा रहा। चैनल बदलकर वापस आएं और फिर से कोशिश करें।</string>
+    <string name="ch_setup_title">ViktorychMusic को अपने चैनलों में जोड़ें</string>
+    <string name="ch_setup_body">यह टीवी की अपनी चैनल सूची और गाइड में चैनल 1 के रूप में आपके दूसरे चैनलों के साथ जुड़ जाएगा। यह सिर्फ़ तभी चलता है जब आप इसे देख रहे हों।</string>
+    <string name="ch_setup_adding">चैनल और उसकी गाइड जोड़ी जा रही है…</string>
+    <string name="ch_setup_done">जुड़ गया। इसे Live Channels या लाइव टैब में देखें, या अभी चलाएं।</string>
+    <string name="ch_setup_failed">इस टीवी ने चैनल जोड़ने नहीं दिया। फिर से कोशिश करें, या देखें कि इसमें Live Channels ऐप है या नहीं।</string>
+    <string name="ch_try_again">फिर से कोशिश करें</string>
+    <string name="ch_watch">अभी देखें</string>
+    <string name="ch_done">हो गया</string>
+    <string name="ch_no_live_app">इस टीवी में खोलने के लिए Live Channels ऐप नहीं है। चैनल को इसके लाइव टैब या गाइड में ढूंढें।</string>
+    <string name="def_channels">लाइव चैनल</string>
+    <string name="def_channels_desc">ViktorychMusic को टीवी की अपनी चैनल सूची और गाइड में एक चैनल के रूप में जोड़ता है। यह सिर्फ़ देखते समय चलता है, बैकग्राउंड में कुछ नहीं चलता।</string>
+    <string name="def_channels_added">चैनल 1 गाइड में है</string>
+    <string name="def_channels_pending">आगे: चैनल जोड़ें</string>
+    <string name="def_channels_add">चैनल जोड़ें या रीफ़्रेश करें</string>
+    <string name="def_channels_watch">ViktorychMusic देखें</string>
+    <string name="def_channels_off">लाइव चैनल का इस्तेमाल बंद करें</string>
+</resources>

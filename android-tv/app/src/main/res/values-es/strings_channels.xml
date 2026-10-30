@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live channels (channels/). -->
+<resources>
+    <string name="channels_label">Canales de ViktorychTV</string>
+    <string name="ch_station">ViktorychMusic</string>
+    <string name="ch_station_desc">La emisora de música de ViktorychApp, sonando a todas horas.</string>
+    <string name="ch_program">ViktorychMusic, a todas horas</string>
+    <string name="ch_program_desc">El bucle de la emisora, en el mismo momento en que suena en ViktorychApp.</string>
+    <string name="ch_live_chip">EN DIRECTO</string>
+    <string name="ch_tuning">Sintonizando…</string>
+    <string name="ch_playing">En antena</string>
+    <string name="ch_offline">Ahora no se puede conectar con la emisora. Cambia de canal y vuelve para intentarlo de nuevo.</string>
+    <string name="ch_setup_title">Añade ViktorychMusic a tus canales</string>
+    <string name="ch_setup_body">Se une a la lista de canales y a la guía de la tele como canal 1, junto a tus otros canales. Solo suena mientras lo ves.</string>
+    <string name="ch_setup_adding">Añadiendo el canal y su guía…</string>
+    <string name="ch_setup_done">Añadido. Búscalo en Live Channels o en la pestaña En directo, o míralo ahora.</string>
+    <string name="ch_setup_failed">Esta tele no nos dejó añadir el canal. Vuelve a intentarlo o comprueba que tenga una app de Live Channels.</string>
+    <string name="ch_try_again">Reintentar</string>
+    <string name="ch_watch">Ver ahora</string>
+    <string name="ch_done">Listo</string>
+    <string name="ch_no_live_app">Esta tele no tiene una app de Live Channels que abrir. Busca el canal en su pestaña En directo o en la guía.</string>
+    <string name="def_channels">Canales en directo</string>
+    <string name="def_channels_desc">Añade ViktorychMusic como canal en la lista de canales y la guía de la tele. Solo suena mientras lo ves, sin nada funcionando en segundo plano.</string>
+    <string name="def_channels_added">El canal 1 está en la guía</string>
+    <string name="def_channels_pending">Siguiente: añade el canal</string>
+    <string name="def_channels_add">Añadir o actualizar el canal</string>
+    <string name="def_channels_watch">Ver ViktorychMusic</string>
+    <string name="def_channels_off">Dejar de usar Canales en directo</string>
+</resources>
