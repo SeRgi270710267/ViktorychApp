@@ -36,6 +36,8 @@ async function loadPlaywright() {
 }
 function check(ok, msg) { if (!ok) throw new Error("local ai page: " + msg); }
 const settings = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}"));
+// Saves can land a moment after the click on a busy runner, so wait for them.
+const settled = (page, fn) => page.waitForFunction(fn, null, { timeout: 8000 }).catch(() => {});
 
 async function main() {
   const chromium = await loadPlaywright();
@@ -73,11 +75,12 @@ async function main() {
       check((await settings(page)).fontSize === undefined || (await settings(page)).fontSize === 15, "nothing changes before Apply");
       await page.click('[data-lai="apply"]');
       await page.waitForSelector('[data-lai="undo-all"]', { timeout: 10000 });
+      await settled(page, () => JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}").fontSize === 16);
       let s = await settings(page);
       check(s.fontSize === 16 && s.autoplay === "wifi", size.name + " Apply saves through the settings path: " + JSON.stringify({ f: s.fontSize, a: s.autoplay }));
       check(await page.evaluate(() => document.documentElement.getAttribute("data-fs") === "16"), "text size applies at once");
       await page.click('[data-lai="undo-all"]');
-      await page.waitForTimeout(400);
+      await settled(page, () => { const v = JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}"); return v.fontSize === 15 && v.autoplay === "all"; });
       s = await settings(page);
       check(s.fontSize === 15 && s.autoplay === "all", size.name + " Undo puts it back");
       await page.fill(".lai-input", "delete my account");
@@ -95,6 +98,7 @@ async function main() {
       check((await page.evaluate(() => document.querySelectorAll(".lai-msg.ai:last-child .lai-ch-name").length)) === 1, size.name + " a quick tap lists one change");
       await page.click('[data-lai="apply"]');
       await page.waitForSelector('[data-lai="undo-one"]', { timeout: 10000 });
+      await settled(page, () => JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}").autoplay === "wifi");
       check((await settings(page)).autoplay === "wifi", size.name + " a quick tap saves after Apply");
       if (size.mobile) check(await page.evaluate(() => { const n = document.querySelector(".bottom-nav"); return !n || getComputedStyle(n).display === "none"; }), "phone hides the bottom bar on this page");
       check(errors.length === 0, size.name + " page errors: " + errors.join(" | "));

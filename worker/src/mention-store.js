@@ -168,7 +168,11 @@ export async function handleContentRoutes(request, env, path, deps) {
     const body = await readJson(request, 8000);
     if (body.error) return json(body.error === "too_large" ? 413 : 400, { error: body.error });
     const kind = KINDS[body.kind] ? body.kind : "";
-    const text = cleanText(body.text || body.body || "");
+    let text = cleanText(body.text || body.body || "");
+    if (text.indexOf("[[sticker:") >= 0) {
+      const store = await import("./store.js");
+      text = cleanText(await store.keepOwnedStickers(env, row.public_id, text));
+    }
     if (!kind || !text) return json(400, { error: "bad_post" });
     let id = String(body.id || "");
     if (id && !/^ct_[a-f0-9]{16}$/.test(id)) return json(400, { error: "bad_post" });
@@ -239,7 +243,11 @@ export async function handleContentRoutes(request, env, path, deps) {
   if (edit && request.method === "PATCH") {
     const body = await readJson(request, 8000);
     if (body.error) return json(400, { error: body.error });
-    const text = cleanText(body.text || body.body || "");
+    let text = cleanText(body.text || body.body || "");
+    if (text.indexOf("[[sticker:") >= 0) {
+      const store = await import("./store.js");
+      text = cleanText(await store.keepOwnedStickers(env, row.public_id, text));
+    }
     if (!text) return json(400, { error: "bad_post" });
     const id = edit[1];
     const existing = await env.DB.prepare(
