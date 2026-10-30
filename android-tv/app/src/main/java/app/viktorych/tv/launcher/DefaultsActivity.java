@@ -89,9 +89,9 @@ public class DefaultsActivity extends Activity {
 
         // Video and music links (player/PlayerActivity).
         boolean playerOn = MediaDefaults.enabled(this, MediaDefaults.player(this));
-        boolean playerDefault = playerOn && MediaDefaults.isDefaultPlayer(this);
+        // The row says On or Off; how to finish picking it is in the side panel.
         View player = row(R.drawable.mp_play_circle, getString(R.string.def_player),
-            getString(playerDefault ? R.string.def_on : playerOn ? R.string.def_player_pending : R.string.def_off), playerOn);
+            getString(playerOn ? R.string.def_on : R.string.def_off), playerOn);
         player.setOnClickListener(v -> {
             MediaDefaults.enable(this, MediaDefaults.player(this), true);
             guideFor = false;
@@ -103,9 +103,8 @@ public class DefaultsActivity extends Activity {
 
         // Screensaver (player/FeedDream).
         boolean dreamOn = MediaDefaults.enabled(this, MediaDefaults.dream(this));
-        boolean dreamDefault = dreamOn && MediaDefaults.isDefaultDream(this);
         View dream = row(R.drawable.mp_slideshow, getString(R.string.def_dream),
-            getString(dreamDefault ? R.string.def_on : dreamOn ? R.string.def_dream_pending : R.string.def_off), dreamOn);
+            getString(dreamOn ? R.string.def_on : R.string.def_off), dreamOn);
         dream.setOnClickListener(v -> {
             MediaDefaults.enable(this, MediaDefaults.dream(this), true);
             if (!MediaDefaults.openDreamSettings(this)) { render(); focusRow(2); }
@@ -159,7 +158,10 @@ public class DefaultsActivity extends Activity {
         int n = MediaDefaults.savedCount(this);
         if (n > 0) addSideText(col, getResources().getQuantityString(R.plurals.def_dream_items, n, n), 13, 0xFF81C995, 10);
         if (MediaDefaults.enabled(this, MediaDefaults.dream(this))) {
-            if (!MediaDefaults.isDefaultDream(this)) addSideText(col, getString(R.string.def_dream_guide), 12, Ui.TEXT_DIM, 14);
+            if (!MediaDefaults.isDefaultDream(this)) {
+                addSideText(col, getString(R.string.def_dream_pending), 13, 0xFF8AB4F8, 14);
+                addSideText(col, getString(R.string.def_dream_guide), 12, Ui.TEXT_DIM, 8);
+            }
             sideButton(col, getString(R.string.def_dream_open), () -> MediaDefaults.openDreamSettings(this));
             sideButton(col, getString(R.string.def_dream_off), () -> {
                 MediaDefaults.enable(this, MediaDefaults.dream(this), false);
