@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViktorychTV Player and screensaver (player/). -->
+<resources>
+    <string name="player_label">ViktorychTV प्लेयर</string>
+    <string name="dream_label">ViktorychTV फ़ीड</string>
+    <string name="mp_play">चलाएं</string>
+    <string name="mp_pause">रोकें</string>
+    <string name="mp_rewind">10 सेकंड पीछे</string>
+    <string name="mp_forward">10 सेकंड आगे</string>
+    <string name="mp_mute">म्यूट</string>
+    <string name="mp_unmute">अनम्यूट</string>
+    <string name="mp_seek">प्रगति</string>
+    <string name="mp_live">लाइव</string>
+    <string name="mp_video">वीडियो</string>
+    <string name="mp_music">संगीत</string>
+    <string name="mp_error">यह लिंक यहां नहीं चल सकता, इसलिए यह ब्राउज़र में खुलेगा।</string>
+    <string name="mp_x_failed">यह पोस्ट लोड नहीं हो सकी।</string>
+    <string name="dream_empty">ViktorychTV खोलें, सेटिंग्स &gt; TV में जाएं और \"स्क्रीनसेवर के लिए मेरी फ़ीड\" दबाएं, ताकि यहां आपकी फ़ीड की तस्वीरें दिखें।</string>
+    <string name="dream_cleared">स्क्रीनसेवर की तस्वीरें हटा दी गईं</string>
+    <string name="def_player">वीडियो और संगीत लिंक</string>
+    <string name="def_player_desc">YouTube, X, Twitch और वीडियो या संगीत लिंक ViktorychTV प्लेयर में खुलते हैं: लाल प्रगति बार, गोल बटन और ऊपर पोस्ट का टेक्स्ट। OK चलाता या रोकता है, बाएं और दाएं 10 सेकंड कूदते हैं। बाकी ऐप पहले की तरह चलते हैं।</string>
+    <string name="def_player_pending">लिंक खुलने पर ViktorychTV प्लेयर और हमेशा चुनें</string>
+    <string name="def_player_off">प्लेयर का इस्तेमाल बंद करें</string>
+    <string name="def_dream">स्क्रीनसेवर</string>
+    <string name="def_dream_desc">आपकी फ़ीड की तस्वीरें और बिना आवाज़ की छोटी क्लिप, पोस्ट के टेक्स्ट और घड़ी के साथ। इन्हें साइट से भेजें: सेटिंग्स &gt; TV &gt; स्क्रीनसेवर के लिए मेरी फ़ीड। ये सिर्फ़ इसी TV पर रहती हैं।</string>
+    <string name="def_dream_pending">TV की स्क्रीनसेवर सेटिंग्स में ViktorychTV फ़ीड चुनें</string>
+    <string name="def_dream_open">स्क्रीनसेवर सेटिंग्स खोलें</string>
+    <string name="def_dream_off">स्क्रीनसेवर का इस्तेमाल बंद करें</string>
+    <string name="def_dream_guide">Google TV पर: सेटिंग्स &gt; सिस्टम &gt; एंबिएंट मोड &gt; स्क्रीनसेवर। दूसरे TV पर: सेटिंग्स &gt; डिवाइस प्राथमिकताएं &gt; स्क्रीन सेवर। ViktorychTV फ़ीड चुनें।</string>
+    <plurals name="dream_saved">
+        <item quantity="one">स्क्रीनसेवर के लिए %d तस्वीर सहेजी गई</item>
+        <item quantity="other">स्क्रीनसेवर के लिए %d तस्वीरें सहेजी गईं</item>
+    </plurals>
+    <plurals name="def_dream_items">
+        <item quantity="one">%d तस्वीर तैयार</item>
+        <item quantity="other">%d तस्वीरें तैयार</item>
+    </plurals>
+</resources>
