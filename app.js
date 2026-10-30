@@ -1329,7 +1329,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", saveData: false, videoHd: true, imageLoad: "always", imageSize: "auto", linkPreviews: "full", preload: "idle", syncEvery: "normal", backgroundLive: true, updateDownload: "always", brandLogo: { mode: "default", text: "" }, busyPrefs: { at: 0, modes: {}, mutes: {}, server: true }, avatarShape: "round", blocks: { at: 0, accounts: [], posts: [], sources: [], types: {}, showHidden: false } });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", saveData: false, videoHd: true, imageLoad: "always", imageSize: "auto", linkPreviews: "full", preload: "idle", syncEvery: "normal", backgroundLive: true, updateDownload: "always", brandLogo: { mode: "default", text: "" }, busyPrefs: { at: 0, modes: {}, mutes: {}, server: true }, avatarShape: "round", blocks: { at: 0, accounts: [], posts: [], sources: [], types: {}, showHidden: false }, haptics: true });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1370,6 +1370,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.forYouReplies = parsed.forYouReplies !== false;
       parsed.brandLogo = cleanBrandLogo(parsed.brandLogo);
       parsed.avatarShape = parsed.avatarShape === "square" ? "square" : "round";
+      parsed.haptics = parsed.haptics !== false;
       parsed.busyPrefs = cleanBusyPrefs(parsed.busyPrefs);
       parsed.tabViews = cleanTabViews(parsed.tabViews);
       parsed.translateTo = window.FeedsTranslate && window.FeedsTranslate.normalizeTarget ? window.FeedsTranslate.normalizeTarget(parsed.translateTo) : (parsed.translateTo || "ui");
@@ -15883,6 +15884,7 @@ const here = parseRoute();
       <div class="install-grab" aria-hidden="true"></div>
       <h2>${esc(tr("Install app"))}</h2>
       ${body}
+      ${window.ViktorychDeviceData ? `<p class="install-note">${esc(window.ViktorychDeviceData.tipText())}</p>` : ""}
       ${pointer}
       <div class="install-actions">
         <button type="button" data-act="install-later">${esc(tr("Later"))}</button>
@@ -16310,6 +16312,8 @@ const here = parseRoute();
     };
     const shape = STATE.settings && STATE.settings.avatarShape === "square" ? "square" : "round";
     const shapeBtn = (mode, label) => `<button class="outline${shape === mode ? " on" : ""}" type="button" data-act="ava-shape" data-mode="${mode}" aria-pressed="${shape === mode ? "true" : "false"}">${esc(label)}</button>`;
+    const hapticsNow = !(STATE.settings && STATE.settings.haptics === false);
+    const hapticBtn = (on, label) => `<button class="outline${hapticsNow === on ? " on" : ""}" type="button" data-act="haptics-pref" data-mode="${on ? "on" : "off"}" aria-pressed="${hapticsNow === on ? "true" : "false"}">${esc(label)}</button>`;
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${esc(label)}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     const lang = window.SI18n ? window.SI18n.getLang() : "en";
@@ -16376,6 +16380,12 @@ const here = parseRoute();
           ${shapeBtn("round", tr("Round"))}
           ${shapeBtn("square", tr("Square"))}
         </div>
+        <h2>${esc(tr("Haptics"))}</h2>
+        <div class="theme-row" role="group" aria-label="${esc(tr("Haptics"))}">
+          ${hapticBtn(true, tr("On"))}
+          ${hapticBtn(false, tr("Off"))}
+        </div>
+        <p class="phandle set-block">${esc(tr("A light tap when you press and hold a tab or pick from a shortcut menu."))}</p>
         <h2>${esc(tr("Home"))}</h2>
         ${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
@@ -16554,7 +16564,7 @@ const here = parseRoute();
         <label class="primary import-btn">${esc(tr("Import settings"))}<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
         <h2>${esc(tr("About"))}</h2>
         <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
-      </div>`;
+      </div>${window.ViktorychDeviceData ? window.ViktorychDeviceData.helpHtml() : ""}`;
     }
     if (section === "storage" && sub === "usage") {
       const body = window.ViktorychStorage ? window.ViktorychStorage.usageHtml() : "";
@@ -16562,7 +16572,8 @@ const here = parseRoute();
     }
     if (section === "storage") {
       const body = window.ViktorychStorage ? window.ViktorychStorage.dataHtml() : "";
-      return settingsHead(tr("Data and storage"), "#/settings") + body;
+      const device = window.ViktorychDeviceData ? window.ViktorychDeviceData.sectionHtml() : "";
+      return settingsHead(tr("Data and storage"), "#/settings") + device + body;
     }
     if (section === "delete-account") {
       const body = window.ViktorychAccounts && window.ViktorychAccounts.deleteAccountHtml
@@ -16948,7 +16959,7 @@ const here = parseRoute();
       return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Accounts"))}">${current}<button type="button" data-acct="login">${esc(tr("Add account"))}</button></div>`;
     }
     const status = mine ? `<button type="button" data-acct="presence-open">${esc(tr("Set a status"))}</button>` : "";
-    const leave = mine ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>` : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
+    const leave = mine ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button><button type="button" data-acct="logout-wipe">${esc(tr("Sign out and delete data on this device"))}</button>` : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
     return `<div class="drawer-pop" data-act="stop" role="menu" aria-label="${esc(tr("Account menu"))}">${status}${leave}</div>`;
   }
 
@@ -16988,7 +16999,7 @@ const here = parseRoute();
       if (!item) return "";
       if (id === "logout") {
         return mine
-          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button>`
+          ? `<button type="button" data-acct="logout">${esc(tr("Log out"))}</button><button type="button" data-acct="logout-wipe">${esc(tr("Sign out and delete data on this device"))}</button>`
           : `<button type="button" data-acct="login">${esc(tr("Sign in"))}</button>`;
       }
       if (item.act) return `<button type="button" data-act="${esc(item.act)}">${esc(item.label)}</button>`;
@@ -20200,7 +20211,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
   }
 
   function tapHaptic() {
-    if (!navigator.vibrate) return;
+    if (!navigator.vibrate || (STATE.settings && STATE.settings.haptics === false)) return;
     try { navigator.vibrate(10); } catch (err) { /* haptics are optional */ }
   }
 
@@ -21591,6 +21602,17 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "navmenu") {
+      navMenuDo(el);
+      return;
+    }
+    if (act === "haptics-pref") {
+      STATE.settings.haptics = el.dataset.mode !== "off";
+      saveSettings();
+      render();
+      if (STATE.settings.haptics) tapHaptic();
+      return;
+    }
     if (act === "ava-shape") {
       STATE.settings.avatarShape = el.dataset.mode === "square" ? "square" : "round";
       saveSettings();
@@ -22692,6 +22714,395 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     event.preventDefault();
     openAssignFromPost(article.dataset.post, event.clientX, event.clientY);
   });
+
+  /* Nav shortcut menus: press and hold a bottom tab (or the compose button, or
+     the header avatar) on a phone, or right-click / Shift+F10 / the menu key on
+     a desktop sidebar item. Built from data already on the device, so they open
+     at once. window.openNavMenu(tabId) lets other code open one. */
+  const NAV_MENU_IDS = ["home", "explore", "communities", "notifications", "messages", "profile", "compose"];
+  const NAV_HOLD_MS = 400;
+  let navMenu = null;
+  let navHold = null;
+  let navDrag = null;
+  let swallowNavClick = 0;
+
+  function hapticsOn() {
+    return !(STATE.settings && STATE.settings.haptics === false);
+  }
+
+  function buzz(ms) {
+    if (!hapticsOn() || !navigator.vibrate) return;
+    try { navigator.vibrate(ms); } catch (err) { /* haptics are optional */ }
+  }
+
+  function navMenuIdForHref(href) {
+    const raw = String(href || "");
+    const path = raw.split("?")[0];
+    if (path === "#/" || path === "#" || path === "") return raw.indexOf("#") === 0 ? "home" : "";
+    if (path === "#/explore") return "explore";
+    if (path === "#/notifications") return "notifications";
+    if (path === "#/messages") return "messages";
+    if (path === "#/communities") return "communities";
+    const mine = drawerProfileHref();
+    if (mine && path === mine) return "profile";
+    return "";
+  }
+
+  function navMenuTarget(node) {
+    if (!node || !node.closest) return null;
+    const el = node.closest(".bottom-nav a[href], .nav a.nav-item[href], .fab, .post-btn[data-act='compose'], .m-ava[data-act='drawer'], .account-pill");
+    if (!el) return null;
+    let id = "";
+    if (el.matches(".fab, .post-btn")) id = el.dataset.act === "compose" ? "compose" : "";
+    else if (el.matches(".m-ava, .account-pill")) id = "profile";
+    else id = navMenuIdForHref(el.getAttribute("href"));
+    return id && NAV_MENU_IDS.indexOf(id) >= 0 ? { el: el, id: id } : null;
+  }
+
+  function navRow(label, attrs, opts) {
+    const o = opts || {};
+    const glyph = o.icon ? `<span class="navm-ico" aria-hidden="true">${icon(o.icon)}</span>` : (o.face || "");
+    const sub = o.sub ? `<span class="navm-sub">${esc(o.sub)}</span>` : "";
+    const check = o.on ? `<span class="navm-on" aria-hidden="true">${icon("tick")}</span>` : "";
+    const body = `${glyph}<span class="navm-text"><span class="navm-label">${esc(label)}</span>${sub}</span>${check}`;
+    const extra = Object.keys(attrs || {}).filter((key) => key !== "href").map((key) => ` ${key}="${esc(attrs[key])}"`).join("");
+    const state = o.on ? ' aria-current="true"' : "";
+    if (attrs && attrs.href) return `<a class="navm-item" role="menuitem" tabindex="-1" href="${esc(attrs.href)}"${extra}${state}>${body}</a>`;
+    return `<button class="navm-item" role="menuitem" tabindex="-1" type="button"${extra}${state}>${body}</button>`;
+  }
+
+  function navSep() { return '<div class="navm-sep" role="separator"></div>'; }
+  function navHead(text) { return `<div class="navm-head" role="presentation">${esc(text)}</div>`; }
+  function navEmpty(text) { return `<div class="navm-empty" role="presentation">${esc(text)}</div>`; }
+
+  function navMenuRows(id) {
+    const route = parseRoute();
+    if (id === "home") {
+      const now = route.name === "home" ? (route.tab || "foryou") : "";
+      const lists = (STATE.settings.lists || []).filter((list) => list && list.id).slice(0, 6);
+      return [
+        navRow(tr("For you"), { "data-act": "navmenu", "data-do": "home", "data-tab": "foryou" }, { icon: "home", on: now === "foryou" }),
+        navRow(tr("Following"), { "data-act": "navmenu", "data-do": "home", "data-tab": "following" }, { icon: "user", on: now === "following" })
+      ].concat(lists.length ? [navHead(tr("Lists"))] : [])
+        .concat(lists.map((list) => navRow(list.name || tr("Lists"), { "data-act": "navmenu", "data-do": "home", "data-tab": "list:" + list.id }, { icon: "lists", on: now === "list:" + list.id })))
+        .concat([navSep(), navRow(tr("Scroll to top & refresh"), { "data-act": "navmenu", "data-do": "top" }, { icon: "arrowUp" })]);
+    }
+    if (id === "explore") {
+      const recent = recentSearches().slice(0, 4);
+      return [navRow(tr("Search"), { "data-act": "navmenu", "data-do": "search" }, { icon: "search" })]
+        .concat(recent.length ? [navHead(tr("Recent searches"))] : [])
+        .concat(recent.map((q) => navRow(q, { href: "#/explore?q=" + encodeURIComponent(q) }, { icon: "clock" })))
+        .concat([navSep(), navRow(tr("Trending"), { "data-act": "navmenu", "data-do": "trending" }, { icon: "spark" })]);
+    }
+    if (id === "communities") {
+      const cm = window.ViktorychCommunities;
+      const mine = cm && cm.mine ? cm.mine() : { tabs: [], joined: [] };
+      const tabs = (mine.tabs || []).slice().sort((a, b) => (b.home ? 1 : 0) - (a.home ? 1 : 0)).slice(0, 5);
+      const joined = (mine.joined || []).slice(0, Math.max(0, 6 - tabs.length));
+      const rows = tabs.map((tab) => navRow(tab.name, { "data-act": "navmenu", "data-do": "cmtab", "data-id": tab.id }, { icon: tab.home ? "pin" : "communities", sub: tab.home ? tr("Pinned") : "" }))
+        .concat(joined.map((row) => navRow(row.label || row.name, { href: "#/communities/" + encodeURIComponent(row.name) }, { icon: "communities" })));
+      return (rows.length ? rows : [navEmpty(tr("No communities yet"))]).concat([navSep(), navRow(tr("Communities"), { href: "#/communities" }, { icon: "grid" })]);
+    }
+    if (id === "notifications") {
+      const now = route.name === "notifications" ? (route.tab || "all") : "";
+      const tabs = visibleNoteTabs().filter((tab) => tab && (tab.kind === "verified" || tab.kind === "mentions"));
+      const mentions = tabs.find((tab) => tab.kind === "mentions");
+      const verified = tabs.find((tab) => tab.kind === "verified");
+      const rows = [navRow(tr("All"), { "data-act": "note-tab", "data-tab": "all" }, { icon: "bell", on: now === "all" })];
+      if (mentions) rows.push(navRow(noteTabLabel(mentions), { "data-act": "note-tab", "data-tab": mentions.id }, { icon: "reply", on: now === mentions.id }));
+      if (verified) rows.push(navRow(noteTabLabel(verified), { "data-act": "note-tab", "data-tab": verified.id }, { icon: "check", on: now === verified.id }));
+      return rows.concat([navSep(), navRow(tr("Mark all as read"), { "data-act": "note-mark-all" }, { icon: "tick" })]);
+    }
+    if (id === "messages") {
+      const feed = window.FeedsDiscord;
+      const chats = feed && feed.recent ? feed.recent(4) : [];
+      const rows = chats.map((chat) => navRow(chat.name ? "#" + chat.name : tr("Messages"), { href: chat.href || "#/messages" }, { icon: "mail", sub: chat.preview ? (chat.author ? chat.author + ": " : "") + chat.preview.slice(0, 60) : "" }));
+      return (rows.length ? rows : [navEmpty(tr("No messages yet"))]).concat([navSep(), navRow(tr("Messages"), { href: "#/messages" }, { icon: "mail" })]);
+    }
+    if (id === "profile") {
+      const me = signedAccount();
+      if (!me) return [navRow(tr("Sign in"), { "data-acct": "login" }, { icon: "user" })];
+      const name = me.profileLess ? (me.displayName || tr("Anonymous")) : (me.displayName || me.handle || "");
+      const href = drawerProfileHref() || "#/settings";
+      const face = `<span class="navm-face" aria-hidden="true">${viewerFace()}</span>`;
+      return [
+        navRow(name, { href: href }, { face: face, sub: me.profileLess ? tr("Profile-less") : (me.handle ? "@" + me.handle : ""), on: true }),
+        navSep(),
+        navRow(tr("Add account"), { "data-acct": "login" }, { icon: "plus" }),
+        navRow(tr("Log out"), { "data-acct": "logout" }, { icon: "back" })
+      ];
+    }
+    if (id === "compose") {
+      return [
+        navRow(tr("Post"), { "data-act": "compose" }, { icon: "feather" }),
+        navRow(tr("Poll"), { "data-act": "navmenu", "data-do": "poll" }, { icon: "lists" }),
+        navRow(tr("Photo"), { "data-act": "navmenu", "data-do": "photo" }, { icon: "grid" }),
+        navRow(tr("Drafts"), { "data-act": "navmenu", "data-do": "drafts" }, { icon: "article" })
+      ];
+    }
+    return [];
+  }
+
+  function navMenuLabel(id) {
+    const names = { home: tr("Home"), explore: tr("Explore"), communities: tr("Communities"), notifications: tr("Notifications"), messages: tr("Messages"), profile: tr("Accounts"), compose: tr("Post") };
+    return tr("{name} shortcuts", { name: names[id] || "" });
+  }
+
+  function navMenuItems() {
+    return navMenu ? Array.prototype.slice.call(navMenu.el.querySelectorAll(".navm-item")) : [];
+  }
+
+  function placeNavMenu(el, anchor) {
+    const rect = anchor.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const gap = 8;
+    let left;
+    let top;
+    const side = anchor.closest(".nav, .sidebar, .left") || anchor.matches(".account-pill, .post-btn");
+    if (vw >= 500 && side) {
+      left = rect.right + gap;
+      top = rect.top + rect.height / 2 - 24;
+      if (left + w > vw - gap) left = Math.max(gap, rect.left - w - gap);
+    } else if (rect.top > vh / 2) {
+      left = rect.left + rect.width / 2 - w / 2;
+      top = rect.top - h - gap;
+      el.classList.add("navm-up");
+    } else {
+      left = rect.left;
+      top = rect.bottom + gap;
+    }
+    left = Math.max(gap, Math.min(left, vw - w - gap));
+    top = Math.max(gap, Math.min(top, vh - h - gap));
+    el.style.left = Math.round(left) + "px";
+    el.style.top = Math.round(top) + "px";
+  }
+
+  function openNavMenu(id, opts) {
+    const o = opts || {};
+    if (NAV_MENU_IDS.indexOf(id) < 0) return false;
+    let anchor = o.anchor || null;
+    if (!anchor) {
+      const all = Array.prototype.slice.call(document.querySelectorAll(".bottom-nav a[href], .nav a.nav-item[href], .fab, .post-btn, .m-ava[data-act='drawer'], .account-pill"));
+      anchor = all.find((node) => { const t = navMenuTarget(node); return t && t.id === id && node.getClientRects().length > 0; }) || null;
+    }
+    closeNavMenu(false);
+    const el = document.createElement("div");
+    el.className = "navm";
+    el.setAttribute("role", "menu");
+    el.setAttribute("aria-label", navMenuLabel(id));
+    el.setAttribute("data-navm", id);
+    el.innerHTML = navMenuRows(id).join("");
+    document.body.appendChild(el);
+    if (anchor) placeNavMenu(el, anchor);
+    else el.classList.add("navm-center");
+    navMenu = { id: id, el: el, anchor: anchor, via: o.via || "api", hot: null };
+    if (anchor) anchor.setAttribute("aria-expanded", "true");
+    el.addEventListener("click", onNavMenuClick);
+    el.addEventListener("keydown", onNavMenuKey);
+    const items = navMenuItems();
+    if (o.via !== "touch" && items[0]) items[0].focus({ preventScroll: true });
+    return true;
+  }
+
+  function closeNavMenu(refocus) {
+    if (!navMenu) return;
+    const menu = navMenu;
+    navMenu = null;
+    navDrag = null;
+    document.removeEventListener("touchmove", onNavTouchMove, { capture: true });
+    if (menu.anchor) menu.anchor.removeAttribute("aria-expanded");
+    if (menu.el.parentNode) menu.el.parentNode.removeChild(menu.el);
+    if (refocus && menu.anchor && menu.anchor.isConnected && menu.via !== "touch") menu.anchor.focus({ preventScroll: true });
+  }
+
+  function onNavMenuClick(event) {
+    const item = event.target.closest && event.target.closest(".navm-item");
+    if (!item) return;
+    /* The document handlers still run the item (data-act, data-acct, href). */
+    closeNavMenu(false);
+  }
+
+  function onNavMenuKey(event) {
+    const items = navMenuItems();
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement);
+    const go = (i) => { const next = items[(i + items.length) % items.length]; if (next) next.focus({ preventScroll: true }); };
+    if (event.key === "ArrowDown") { event.preventDefault(); go(at + 1); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); go(at < 0 ? items.length - 1 : at - 1); }
+    else if (event.key === "Home") { event.preventDefault(); go(0); }
+    else if (event.key === "End") { event.preventDefault(); go(items.length - 1); }
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeNavMenu(true); }
+    else if (event.key === "Tab") { closeNavMenu(false); }
+    else if ((event.key === "Enter" || event.key === " ") && at >= 0) { event.preventDefault(); items[at].click(); }
+  }
+
+  function navMenuDo(el) {
+    const what = el.dataset.do || "";
+    if (what === "home") {
+      const tab = el.dataset.tab || "foryou";
+      const route = parseRoute();
+      if (route.name === "home" && (route.tab || "foryou") === tab) { smoothTop(); return; }
+      STATE.tabMenu = null;
+      refreshHomeTabs([tab]);
+      goHash(homeHash(tab));
+      return;
+    }
+    if (what === "top") {
+      if (parseRoute().name !== "home") { goHash("#/"); return; }
+      smoothTop();
+      reloadAtTop();
+      return;
+    }
+    if (what === "search" || what === "trending") {
+      if (what === "trending") STATE.exploreTrends = true;
+      if (parseRoute().name !== "explore" || (location.hash || "").indexOf("?q=") >= 0) goHash("#/explore");
+      else render();
+      let tries = 0;
+      const land = () => {
+        const node = what === "search" ? document.getElementById("explore-q") : document.querySelector(".gtrend");
+        if (node && parseRoute().name === "explore") {
+          if (what === "search") node.focus();
+          else node.scrollIntoView({ block: "nearest" });
+          return;
+        }
+        if (tries++ < 30) requestAnimationFrame(land);
+      };
+      requestAnimationFrame(land);
+      return;
+    }
+    if (what === "cmtab") {
+      const cm = window.ViktorychCommunities;
+      if (cm && cm.openTab) cm.openTab(el.dataset.id || "");
+      if (parseRoute().name !== "communities" || (location.hash || "").split("?")[0] !== "#/communities") goHash("#/communities");
+      else render();
+      return;
+    }
+    if (what === "poll" || what === "photo" || what === "drafts") {
+      onAct(composeEl());
+      const sel = what === "poll" ? '[data-act="xc-poll"]' : (what === "photo" ? '[data-act="xc-file"][data-kind="image"]' : '[data-act="xc-drafts"]');
+      const btn = document.querySelector(".xc-modal " + sel) || document.querySelector(sel);
+      if (btn) btn.click();
+    }
+  }
+
+  function composeEl() {
+    const btn = document.createElement("button");
+    btn.dataset.act = "compose";
+    return btn;
+  }
+
+  /* Touch: hold, then slide to an item and let go. */
+  function onNavTouchMove(event) {
+    if (!navDrag) return;
+    if (event.cancelable) event.preventDefault();
+    const t = event.touches && event.touches[0];
+    if (t) navDragTo(t.clientX, t.clientY);
+  }
+
+  function navDragTo(x, y) {
+    if (!navMenu || !navDrag) return;
+    const hit = document.elementFromPoint ? document.elementFromPoint(x, y) : null;
+    let item = hit && hit.closest ? hit.closest(".navm-item") : null;
+    if (item && !navMenu.el.contains(item)) item = null;
+    if (Math.abs(x - navDrag.x) > 10 || Math.abs(y - navDrag.y) > 10) navDrag.moved = true;
+    if (item === navMenu.hot) return;
+    if (navMenu.hot) navMenu.hot.classList.remove("is-hot");
+    navMenu.hot = item;
+    if (item) { item.classList.add("is-hot"); buzz(5); }
+  }
+
+  function navDragEnd(x, y) {
+    if (!navMenu || !navDrag) return;
+    navDragTo(x, y);
+    const drag = navDrag;
+    navDrag = null;
+    document.removeEventListener("touchmove", onNavTouchMove, { capture: true });
+    const item = navMenu.hot;
+    if (item) { item.classList.remove("is-hot"); item.click(); return; }
+    /* Let go on the tab itself without sliding: the menu stays open for a tap. */
+    if (!drag.moved) return;
+    closeNavMenu(false);
+  }
+
+  document.addEventListener("pointerdown", (event) => {
+    if (navMenu && !(event.target.closest && event.target.closest(".navm"))) {
+      const again = navMenuTarget(event.target);
+      closeNavMenu(false);
+      if (again) swallowNavClick = Date.now();
+      return;
+    }
+    if (event.pointerType === "mouse" || event.button > 0) return;
+    const target = navMenuTarget(event.target);
+    if (!target) return;
+    clearTimeout(navHold && navHold.timer);
+    const x = event.clientX;
+    const y = event.clientY;
+    navHold = { x: x, y: y, pointer: event.pointerId, timer: setTimeout(() => {
+      navHold = null;
+      swallowNavClick = Date.now();
+      buzz(5);
+      if (openNavMenu(target.id, { anchor: target.el, via: "touch" })) {
+        navDrag = { x: x, y: y, moved: false };
+        document.addEventListener("touchmove", onNavTouchMove, { capture: true, passive: false });
+      }
+    }, NAV_HOLD_MS) };
+  }, { capture: true, passive: true });
+  document.addEventListener("pointermove", (event) => {
+    if (navHold && event.pointerId === navHold.pointer && (Math.abs(event.clientX - navHold.x) > 10 || Math.abs(event.clientY - navHold.y) > 10)) {
+      clearTimeout(navHold.timer);
+      navHold = null;
+    }
+  }, { capture: true, passive: true });
+  const endNavHold = (event) => {
+    if (navHold && event.pointerId === navHold.pointer) { clearTimeout(navHold.timer); navHold = null; }
+  };
+  document.addEventListener("pointerup", (event) => {
+    endNavHold(event);
+    if (navDrag && event.pointerType !== "mouse") navDragEnd(event.clientX, event.clientY);
+  }, { capture: true, passive: true });
+  document.addEventListener("pointercancel", endNavHold, { capture: true, passive: true });
+  document.addEventListener("touchend", (event) => {
+    if (!navDrag) return;
+    const t = event.changedTouches && event.changedTouches[0];
+    if (t) navDragEnd(t.clientX, t.clientY);
+  }, { capture: true, passive: true });
+  document.addEventListener("click", (event) => {
+    if (!swallowNavClick || Date.now() - swallowNavClick > 1500) return;
+    if (event.target.closest && event.target.closest(".navm")) return;
+    if (!navMenuTarget(event.target)) return;
+    swallowNavClick = 0;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  document.addEventListener("contextmenu", (event) => {
+    const target = navMenuTarget(event.target);
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    /* A touch hold opens the menu from its own timer. */
+    if (swallowNavClick && Date.now() - swallowNavClick < 1500) return;
+    if (navHold) return;
+    if (event.pointerType && event.pointerType !== "mouse") return;
+    openNavMenu(target.id, { anchor: target.el, via: "mouse" });
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (!((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu")) return;
+    const target = navMenuTarget(document.activeElement);
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openNavMenu(target.id, { anchor: target.el, via: "key" });
+  }, true);
+  window.addEventListener("hashchange", () => closeNavMenu(false));
+  window.addEventListener("resize", () => closeNavMenu(false), { passive: true });
+  window.addEventListener("scroll", () => { if (navMenu && !navDrag) closeNavMenu(false); }, { passive: true });
+  window.openNavMenu = (id, opts) => openNavMenu(String(id || ""), Object.assign({ via: "key" }, opts || {}));
+  window.closeNavMenu = () => closeNavMenu(true);
+  window.navMenuIds = () => NAV_MENU_IDS.slice();
+
 
   let notePress = 0;
   let notePoint = null;
@@ -29074,7 +29485,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "reactionsData", "communityNotesData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "inboxLayout", "busyPrefs", "avatarShape", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "communityNotesData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "inboxLayout", "busyPrefs", "avatarShape", "accent", "fontSize", "density", "reduceMotion", "haptics"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;

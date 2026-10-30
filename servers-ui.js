@@ -262,7 +262,10 @@
   }
   function wipeCache() {
     try {
-      Object.keys(localStorage).forEach(function (k) { if (k.indexOf(LS) === 0) localStorage.removeItem(k); });
+      // key()/length also list the encrypted copies (device-seal.js).
+      var names = [];
+      for (var i = 0; i < localStorage.length; i++) names.push(localStorage.key(i));
+      names.forEach(function (k) { if (k && k.indexOf(LS) === 0) localStorage.removeItem(k); });
     } catch (err) { /* private mode */ }
     db().then(function (d) { if (d) { try { d.transaction("ch", "readwrite").objectStore("ch").clear(); } catch (err) { /* closed */ } } });
   }
