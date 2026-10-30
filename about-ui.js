@@ -601,6 +601,8 @@
     previewHtml: previewHtml,
     privacyHtml: privacyHtml,
     privacyOpen: function () { return privacyOpen; },
+    /* Edit profile saved the birthday: the next About view reads it fresh. */
+    forget: function () { aboutCache = {}; },
     lists: null
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

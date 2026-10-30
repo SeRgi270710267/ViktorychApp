@@ -5075,6 +5075,17 @@ SI18n.addPack("ru", {
   "Sent to the network. It shows in your wallet once it is confirmed.": "Отправлено в сеть. Появится в кошельке после подтверждения.",
   "Cancelled.": "Отменено.",
   "Couldn't make this gift an NFT.": "Не удалось сделать NFT из этого подарка.",
+  "Birth date": "Дата рождения",
+  "Add your birth date": "Добавьте дату рождения",
+  "This should be the date of your birthday. It is only on your profile if you choose who sees it.": "Укажите дату своего дня рождения. Она появится в профиле, только если вы выберете, кто её видит.",
+  "Others see the day and month only when this is off.": "Когда выключено, другие видят только день и месяц.",
+  "Remove birth date": "Удалить дату рождения",
+  "@{handle} and {count} more": "@{handle} и ещё {count}",
+  "Choose who sees which username and who can mention you.": "Выберите, кто какое имя пользователя видит и кто может вас упоминать.",
+  "Discard changes?": "Отменить изменения?",
+  "This can’t be undone and you’ll lose your changes.": "Это действие нельзя отменить, и ваши изменения пропадут.",
+  "Your usernames": "Ваши имена пользователя",
+  "Edit them in Edit profile: who sees which one, Preview as and who can mention you.": "Они редактируются в «Изменить профиль»: кто какое видит, «Посмотреть как» и кто может вас упоминать.",
   "@usernames, comma separated": "@имена пользователей через запятую",
   "Accounts and feeds you asked the owner to add.": "Аккаунты и ленты, которые вы попросили владельца добавить.",
   "Add a note for the owner (optional)": "Добавьте заметку для владельца (необязательно)",
@@ -5155,5 +5166,8 @@ SI18n.addPack("ru", {
   "Move communities here with Move to folder.": "Перенесите сюда сообщества через «Переместить в папку».",
   "Join a community to see it here.": "Вступите в сообщество, чтобы увидеть его здесь.",
   "Pinned communities show first on Explore for everyone.": "Закреплённые сообщества показываются первыми в «Обзоре» для всех.",
-  "Couldn't save the pins.": "Не удалось сохранить закрепления."
+  "Couldn't save the pins.": "Не удалось сохранить закрепления.",
+  "TV home screen": "Главный экран ТВ",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "По желанию. Сделайте это приложение главным экраном ТВ: большие плитки приложений, папки, поиск, входы и настройки. Само приложение остаётся точно таким же.",
+  "Home screen and defaults": "Главный экран и приложения по умолчанию"
 });
