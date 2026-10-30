@@ -144,9 +144,11 @@ def _reply_target(tweet: dict, users: dict):
         person = _brief(users[uid])
     else:
         match = re.match(r"@([A-Za-z0-9_]{1,30})", tweet.get("text") or "")
-        if not match:
+        if not match and not replied_id:
             return None
-        person = {"name": match.group(1), "handle": match.group(1), "avatar": ""}
+        # Without the user expansion or a leading @mention the parent id still
+        # says it is a reply; the reader looks the handle up live.
+        person = {"name": match.group(1), "handle": match.group(1), "avatar": ""} if match else {"name": "", "handle": "", "avatar": ""}
     if replied_id:
         person["id"] = replied_id
     return person
