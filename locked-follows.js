@@ -44,7 +44,23 @@
   function accounts() { return root.ViktorychAccounts || null; }
   function me() { var a = accounts(); return a && a.account ? a.account() : null; }
   function token() { var a = accounts(); return a && a.token ? a.token() : ""; }
-  function owner() { var m = me(); return m ? String(m.publicId || m.handle || "") : ""; }
+  /* owner() sits on the hottest path in the app: the timeline asks
+     hidesId() for every feed and post on every paint. Reading the session
+     means a localStorage read plus a JSON parse, so it is remembered for a
+     moment and dropped whenever the session can have changed. */
+  var ownerMemo = { value: "", at: -1e9 };
+  function owner() {
+    var now = Date.now();
+    if (now - ownerMemo.at < 2000) return ownerMemo.value;
+    var m = me();
+    var next = m ? String(m.publicId || m.handle || "") : "";
+    if (next !== ownerMemo.value) hideMemo.clear();
+    ownerMemo.value = next; ownerMemo.at = now;
+    return next;
+  }
+  function forgetOwner() { ownerMemo.at = -1e9; hideMemo.clear(); }
+  var hideMemo = new Map();
+  var filterVersion = 0;
   function redraw() { var a = accounts(); if (a && a.requestRender) a.requestRender(); }
 
   /* ---------- the device filter ---------- */
@@ -69,18 +85,33 @@
     return null;
   }
   function saveFilter(f) {
+    forgetOwner();
+    filterVersion++;
     filter = f ? { owner: owner(), salt: f.salt, set: new Set(f.hashes || []) } : null;
     try {
       if (f) localStorage.setItem(FILTER_KEY, JSON.stringify({ owner: owner(), salt: f.salt, hashes: f.hashes || [] }));
       else localStorage.removeItem(FILTER_KEY);
     } catch (err) { /* private mode */ }
   }
+  /* True only when this device holds a filter with someone in it for the
+     signed-in account. Lets callers skip per-item checks entirely. */
+  function active() {
+    if (!filter || !filter.set.size) return false;
+    var o = owner();
+    return !!o && filter.owner === o;
+  }
   function hidesId(id) {
-    if (!filter || !id || !owner() || filter.owner !== owner()) return false;
-    return filter.set.has(filterHash(filter.salt, String(id)));
+    if (!id || !active()) return false;
+    var key = String(id);
+    var hit = hideMemo.get(key);
+    if (hit !== undefined) return hit;
+    hit = filter.set.has(filterHash(filter.salt, key));
+    if (hideMemo.size > 20000) hideMemo.clear();
+    hideMemo.set(key, hit);
+    return hit;
   }
   function hides(post) {
-    if (!post || !filter || !owner() || filter.owner !== owner()) return false;
+    if (!post || !active()) return false;
     if (hidesId(post.feedId)) return true;
     var handle = String(post.authorHandle || (post.platform === "app" ? post.handle : "") || "").replace(/^@/, "");
     if (handle && hidesId("app:@" + handle)) return true;
@@ -653,6 +684,16 @@
     }
   }
 
+  /* Another tab signed in, out, or changed the filter: forget what was
+     remembered so the next check reads it fresh. */
+  if (root.addEventListener) {
+    root.addEventListener("storage", function (e) {
+      if (e && e.key && !/account-v1|accounts-session|locked-filter/.test(e.key)) return;
+      if (!e || !e.key || /locked-filter/.test(e.key)) { filter = readFilter(); filterVersion++; }
+      forgetOwner();
+    });
+  }
+
   if (doc) {
     doc.addEventListener("click", onClick, true);
     doc.addEventListener("submit", onSubmit, true);
@@ -683,6 +724,8 @@
   root.ViktorychLocked = {
     hides: hides,
     hidesId: hidesId,
+    active: active,
+    version: function () { return filterVersion + ":" + (active() ? owner() : ""); },
     load: load,
     lockFlow: lockFlow,
     openArea: openArea,

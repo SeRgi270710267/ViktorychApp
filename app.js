@@ -417,13 +417,30 @@
     return "(" + (count > 20 ? "20+" : String(count)) + ") " + base;
   }
 
+  // feeds() runs for every card on every paint, so the filtered list is
+  // remembered per (source list, shorts lock, locked-follows filter) and the
+  // locked-follows pass is skipped when nothing is locked.
+  const FEEDS_MEMO = { src: null, key: "", out: null, live: false };
   function feeds() {
-    let list = (STATE.data && STATE.data.feeds) || [];
-    if (isShortsLocked()) {
+    const src = (STATE.data && STATE.data.feeds) || [];
+    const shorts = isShortsLocked();
+    const locked = window.ViktorychLocked;
+    const lockOn = !!(locked && locked.hidesId && (!locked.active || locked.active()));
+    const key = src.length + (shorts ? "s" : "") + "|" + (lockOn ? (locked.version ? locked.version() : "") : "-");
+    // TikTok unlocks can change between tasks, so with shorts locked the
+    // answer is only kept until the current task ends.
+    if (FEEDS_MEMO.src === src && FEEDS_MEMO.key === key && (!lockOn || locked.version) && (!shorts || FEEDS_MEMO.live)) return FEEDS_MEMO.out;
+    let list = src;
+    if (shorts) {
       list = list.filter((feed) => !isLockedTiktok(feed));
     }
-    const locked = window.ViktorychLocked;
-    if (locked && locked.hidesId && list.some((feed) => feed && locked.hidesId(feed.id))) list = list.filter((feed) => !(feed && locked.hidesId(feed.id)));
+    if (lockOn && list.some((feed) => feed && locked.hidesId(feed.id))) list = list.filter((feed) => !(feed && locked.hidesId(feed.id)));
+    FEEDS_MEMO.src = src; FEEDS_MEMO.key = key; FEEDS_MEMO.out = list;
+    if (shorts && !FEEDS_MEMO.live) {
+      FEEDS_MEMO.live = true;
+      const drop = () => { FEEDS_MEMO.live = false; };
+      if (typeof queueMicrotask === "function") queueMicrotask(drop); else Promise.resolve().then(drop);
+    }
     return list;
   }
 
@@ -18605,8 +18622,21 @@ if (STATE.histClear) {
     return (post.media || []).some((item) => item && (item.type === "video" || item.type === "animated_gif"));
   }
 
+  // followedPost() asks for this once per post while a timeline is built, and
+  // each call walks every follow against every feed. The answer cannot change
+  // inside one synchronous paint, so it is kept until the current task ends.
+  let FOLLOW_IDS_MEMO = null;
   function followIdsNow() {
     const settings = STATE.settings || {};
+    const feedList = feeds();
+    if (FOLLOW_IDS_MEMO && FOLLOW_IDS_MEMO.follows === settings.follows && FOLLOW_IDS_MEMO.accountFollows === settings.accountFollows && FOLLOW_IDS_MEMO.feeds === feedList && FOLLOW_IDS_MEMO.n === feedList.length) return FOLLOW_IDS_MEMO.out;
+    const out = followIdsCompute(settings);
+    FOLLOW_IDS_MEMO = { follows: settings.follows, accountFollows: settings.accountFollows, feeds: feedList, n: feedList.length, out };
+    const drop = () => { FOLLOW_IDS_MEMO = null; };
+    if (typeof queueMicrotask === "function") queueMicrotask(drop); else Promise.resolve().then(drop);
+    return out;
+  }
+  function followIdsCompute(settings) {
     const raw = (settings.follows || []).concat(settings.accountFollows || []);
     const out = [];
     const seen = {};
