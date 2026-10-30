@@ -909,4 +909,3 @@ body:has(.dmsgs) .fab { display: none; }
 .inbox-chip:hover { background: rgba(231, 233, 234, .1); }
 .inbox-chip.on { background: var(--text, #e7e9ea); border-color: var(--text, #e7e9ea); color: var(--bg, #000); }
 .inbox-chip:focus-visible { outline: 2px solid var(--blue, #1d9bf0); outline-offset: 2px; }
-||||||| base
