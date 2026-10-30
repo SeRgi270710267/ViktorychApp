@@ -1,9 +1,10 @@
 # Status snapshot
 
-Written 2026-10-30, about 10:00 CET (09:00 UTC). Main was at `a70f29f8` and the latest D1 migration was `0102_regone_social.sql`. This is a snapshot: check `gh pr list` and `git log origin/main` before acting on it, and update this file in a small PR after a big session.
+Written 2026-10-30, about 10:00 CET (09:00 UTC). Main was at `f353f771` and the latest D1 migration was `0102_regone_social.sql`. This is a snapshot: check `gh pr list` and `git log origin/main` before acting on it, and update this file in a small PR after a big session.
 
 ## Live on main (recent)
 
+- Newsletters as posts: follow Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any RSS site (#359).
 - Usage panel in Settings never sticks on "Loading" (#456).
 - Profile Games tab: ReGone link/unlink, stats and rooms live in an X-style Games tab instead of the profile header (#457).
 - Delete all data on this device, local data encrypted at rest, inactivity expiry (#395).
@@ -26,7 +27,6 @@ Written 2026-10-30, about 10:00 CET (09:00 UTC). Main was at `a70f29f8` and the 
 | #376 Dependabot actions group (major bumps across about 30 workflows) | CLEAN, green | Owner approval (workflow change). Medium risk: artifact upload/download formats changed. |
 | #367 Nearby chat (Bitchat) web fallback | DIRTY | Merge main, fix the failing check. |
 | #365 Gifts and store with a payment adapter | DIRTY | Payment keys and owner decision; ships switched off; migration `0090_store.sql` must be renumbered above the latest. |
-| #359 Newsletters as posts | BLOCKED, old base | Merge main, re-run checks. |
 | #357 X video always in our own player | DIRTY | Merge main, fix the failing check. |
 | #355 Messages servers phase 3 (voice, video, screen share) | DIRTY, 1 failing check | Renumber migrations 0082–0084 above the latest, merge main. |
 | #352 Messages servers phase 2 (threads, forums, events, polls) | DIRTY, 2 failing checks | Renumber migration 0083, merge main. Ship before #355. |
