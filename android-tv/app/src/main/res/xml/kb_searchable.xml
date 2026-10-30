@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Feed search (search/). The TV's own search can list these results. -->
+<searchable xmlns:android="http://schemas.android.com/apk/res/android"
+    android:label="@string/srch_label"
+    android:hint="@string/srch_hint"
+    android:voiceSearchMode="showVoiceSearchButton|launchRecognizer"
+    android:searchSuggestAuthority="app.viktorych.tv.search"
+    android:searchSuggestIntentAction="android.intent.action.SEARCH"
+    android:searchSuggestSelection=" ?"
+    android:searchSuggestThreshold="1"
+    android:includeInGlobalSearch="true"
+    android:queryAfterZeroResults="true" />
