@@ -1782,7 +1782,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1861,7 +1861,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       nzlay_forum: [tr("NZlay forum community"), tr("The NZlay Forums community: topics and replies read live from nzlay.com.")],
       nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
       nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
-      nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")]
+      nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")],
+      bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -25659,6 +25660,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         </ul>
         <h2>${esc(tr("In Russia"))}</h2>
         <p class="phandle">${esc(tr("Smart Auto sends blocked photos and videos through our own servers, and friends who already have a post can pass it to you directly (peer sharing). This helps, but some blocks can't be avoided without a VPN, so we can't promise everything will load."))}</p>
+        ${window.ViktorychMesh && window.ViktorychMesh.settingsHtml ? window.ViktorychMesh.settingsHtml() : ""}
       </div>`;
   }
 
@@ -25707,7 +25709,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     el.hidden = false;
     // Say so when the newest posts reached us from other devices instead.
     const viaPeers = STATE.netPeerAt && Date.now() - STATE.netPeerAt < 10 * 60 * 1000;
-    el.innerHTML = `${esc(viaPeers ? tr("Connection is slow - new posts came from other devices") : tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>`;
+    el.innerHTML = `${esc(viaPeers ? tr("Connection is slow - new posts came from other devices") : tr("Connection is slow - showing saved posts"))} <button type="button" class="net-note-btn" data-act="net-retry">${esc(tr("Try again"))}</button> <a class="net-note-btn" href="#/settings/network">${esc(tr("Help"))}</a>${viaPeers ? "" : meshOffer("limited")}`;
+  }
+
+  /* Nearby chat (Bitchat): offered only once every normal path has failed,
+     peers included (new posts from other devices mean P2P still works). */
+  function meshOffer(kind) {
+    return window.ViktorychMesh && window.ViktorychMesh.buttonHtml ? window.ViktorychMesh.buttonHtml(kind) : "";
   }
 
   function setOffline(offline) {
@@ -25718,6 +25726,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     el.hidden = !offline;
     el.dataset.mode = offline ? "offline" : "";
     el.textContent = tr("Offline - showing saved");
+    if (offline) { const mesh = meshOffer("offline"); if (mesh) el.insertAdjacentHTML("beforeend", mesh); }
     if (!offline) paintNetNote();
     if (was && !offline) {
       toast(tr("You're back online"));
