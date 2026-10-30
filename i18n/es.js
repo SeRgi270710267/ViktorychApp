@@ -5216,5 +5216,14 @@ SI18n.addPack("es", {
   "You’re the owner. Add it directly.": "Eres el propietario. Añádela directamente.",
   "{count} requests": "{count} solicitudes",
   "{count} updated": "{count} actualizadas",
-  "{count} waiting": "{count} pendientes"
+  "{count} waiting": "{count} pendientes",
+  "Featured": "Destacada",
+  "All communities": "Todas las comunidades",
+  "No folder": "Sin carpeta",
+  "Open folder {name}": "Abrir la carpeta {name}",
+  "Delete folder {name}? Its communities stay joined.": "¿Eliminar la carpeta {name}? Seguirás unido a sus comunidades.",
+  "Move communities here with Move to folder.": "Mueve comunidades aquí con Mover a una carpeta.",
+  "Join a community to see it here.": "Únete a una comunidad para verla aquí.",
+  "Pinned communities show first on Explore for everyone.": "Las comunidades fijadas aparecen primero en Explorar para todos.",
+  "Couldn't save the pins.": "No se pudieron guardar las fijadas."
 });

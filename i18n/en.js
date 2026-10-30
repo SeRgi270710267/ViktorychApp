@@ -5213,5 +5213,14 @@ SI18n.addPack("en", {
   "You’re the owner. Add it directly.": "You’re the owner. Add it directly.",
   "{count} requests": "{count} requests",
   "{count} updated": "{count} updated",
-  "{count} waiting": "{count} waiting"
+  "{count} waiting": "{count} waiting",
+  "Featured": "Featured",
+  "All communities": "All communities",
+  "No folder": "No folder",
+  "Open folder {name}": "Open folder {name}",
+  "Delete folder {name}? Its communities stay joined.": "Delete folder {name}? Its communities stay joined.",
+  "Move communities here with Move to folder.": "Move communities here with Move to folder.",
+  "Join a community to see it here.": "Join a community to see it here.",
+  "Pinned communities show first on Explore for everyone.": "Pinned communities show first on Explore for everyone.",
+  "Couldn't save the pins.": "Couldn't save the pins."
 });
