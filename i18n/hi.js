@@ -4928,5 +4928,7 @@ SI18n.addPack("hi", {
   "Removes your ReGone name, rank and stats from your profile.": "आपकी प्रोफ़ाइल से ReGone नाम, रैंक और आँकड़े हटाता है।",
   "Who can see my games": "मेरे गेम कौन देख सकता है",
   "Privacy > Games": "गोपनीयता > गेम",
-  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "ReGone हटाएँ? आपका ReGone नाम, रैंक और आँकड़े प्रोफ़ाइल से हट जाएँगे।"
+  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "ReGone हटाएँ? आपका ReGone नाम, रैंक और आँकड़े प्रोफ़ाइल से हट जाएँगे।",
+  "Usage didn't load": "उपयोग लोड नहीं हुआ",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "सर्वर ने समय पर जवाब नहीं दिया। आपके सर्वर काम कर रहे हैं, बस इस पैनल में संख्याएँ नहीं हैं।"
 });
