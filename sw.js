@@ -97,6 +97,7 @@ const SHELL_FILES = [
   "./people.css",
   "./pymk.js",
   "./friends-pref.js",
+  "./linked-profiles.js",
   "./pymk.css",
   "./tv.js",
   "./tv.css",
