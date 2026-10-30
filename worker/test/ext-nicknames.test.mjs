@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
+import { readdirSync, readFileSync } from "node:fs";
 
 let mf;
 
@@ -111,4 +112,32 @@ test("external nicknames: PUT, GET, DELETE, reset and isolation between viewers"
   // Public profile data never carries another viewer's external nicknames.
   const pub = await call("/v1/profile/viewertwo");
   assert.ok(!JSON.stringify(pub.body || {}).includes("Other name"));
+});
+
+test("the owner cannot read another viewer's custom names", async () => {
+  const created = await call("/v1/signup", { method: "POST", ip: "203.0.113.61", body: { displayName: "Owner Test", handle: "ownertest", claimCode: "claim-test" } });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const owner = created.body;
+  const v = await signup(62, "Viewer Three", "viewerthree");
+  await call("/v1/nicknames/external", { method: "PUT", token: v.token, body: { key: "x:sample_secret", name: "Secret name" } });
+  const id = (v.account && (v.account.id || v.account.publicId)) || "viewerthree";
+  for (const q of ["", "?viewer=" + id, "?user=" + id, "?id=" + id, "?handle=viewerthree", "?viewer_id=" + id]) {
+    const res = await call("/v1/nicknames/external" + q, { token: owner.token });
+    assert.equal(res.status, 200);
+    assert.ok(!JSON.stringify(res.body).includes("Secret name"), "owner saw a viewer's name via " + (q || "plain GET"));
+  }
+  const res = await call("/v1/nicknames/external", { token: v.token });
+  assert.deepEqual(res.body.nicknames.map((n) => n.name), ["Secret name"]);
+});
+
+test("no other worker module reads the private nickname tables", async () => {
+  const { VIEWER_PRIVATE_TABLES } = await import("../src/name-rules.js");
+  const dir = fileURLToPath(new URL("../src/", import.meta.url));
+  const hits = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith(".js") || f === "name-rules.js") continue;
+    const src = readFileSync(dir + f, "utf8");
+    for (const table of VIEWER_PRIVATE_TABLES) if (new RegExp("\\b(FROM|JOIN|INTO|UPDATE|TABLE)\\s+[\"'`]?" + table + "\\b", "i").test(src)) hits.push(f + ": " + table);
+  }
+  assert.deepEqual(hits, [], "private nickname tables are only read in name-rules.js, keyed by the viewer");
 });

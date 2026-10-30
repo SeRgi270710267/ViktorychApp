@@ -28,6 +28,12 @@ export const NAME_RULES_SCHEMA = [
 const EXT_MAX = 2000;
 const PLATFORM_ALIAS = { bluesky: "bsky", twitter: "x", fediverse: "mastodon" };
 
+// Names a viewer gives other accounts are private to that viewer. No owner,
+// admin or inspector route may read these tables for anyone else; every read
+// is keyed by the signed-in viewer's own id. Generic tooling that walks all
+// tables (inspectors, exports for someone else) must skip them.
+export const VIEWER_PRIVATE_TABLES = Object.freeze(["display_nicknames", "ext_nicknames"]);
+
 export function normalizeSourceKey(raw) {
   const text = String(raw == null ? "" : raw).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "").trim().toLowerCase();
   const cut = text.indexOf(":");
