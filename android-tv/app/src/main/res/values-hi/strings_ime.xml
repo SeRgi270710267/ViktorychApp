@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remote keyboard (ime/) and feed search (search/). -->
+<resources>
+    <string name="kb_label">ViktorychTV कीबोर्ड</string>
+    <string name="kb_search">खोजें</string>
+    <string name="kb_go">जाएं</string>
+    <string name="kb_send">भेजें</string>
+    <string name="kb_next">अगला</string>
+    <string name="kb_done">हो गया</string>
+    <string name="srch_label">ViktorychApp</string>
+    <string name="srch_title">ViktorychApp में खोजें</string>
+    <string name="srch_hint">पोस्ट, लोग और विषय खोजें</string>
+    <string name="srch_voice">बोलकर खोजें</string>
+    <string name="srch_recent">हाल की खोजें</string>
+    <string name="srch_clear">साफ़ करें</string>
+    <string name="srch_for">ViktorychApp में “%1$s” खोजें</string>
+    <string name="srch_where">ViktorychApp में एक्सप्लोर खोलता है</string>
+    <string name="srch_note">नतीजे एक्सप्लोर में खुलते हैं। हाल की खोजें इसी टीवी पर रहती हैं।</string>
+    <string name="def_keyboard">कीबोर्ड</string>
+    <string name="def_keyboard_desc">रिमोट के लिए बना कीबोर्ड: तीर से चलें, OK से टाइप करें, बड़े अक्षर के लिए OK दबाए रखें। अंग्रेज़ी, स्पेनिश, रूसी और हिंदी अक्षर, चिह्न, इमोजी और टीवी की अपनी आवाज़ पहचान से बोलकर टाइपिंग। आपका टाइप किया हुआ इसी टीवी पर रहता है।</string>
+    <string name="def_keyboard_allow">अगला: टीवी की कीबोर्ड सूची में ViktorychTV कीबोर्ड चालू करें। टीवी किसी भी कीबोर्ड के लिए अपनी सामान्य चेतावनी दिखाता है।</string>
+    <string name="def_keyboard_pick">अगला: इस्तेमाल के लिए ViktorychTV कीबोर्ड चुनें</string>
+    <string name="def_keyboard_next">अगला कदम</string>
+    <string name="def_keyboard_settings">कीबोर्ड सेटिंग खोलें</string>
+    <string name="def_keyboard_off">कीबोर्ड का इस्तेमाल बंद करें</string>
+    <string name="def_search">खोज</string>
+    <string name="def_search_desc">आवाज़ वाली खोज स्क्रीन से अपनी फ़ीड में खोजें, और उन टीवी पर टीवी की अपनी खोज से भी जो ऐप के नतीजे दिखाते हैं। नतीजे एक्सप्लोर में खुलते हैं।</string>
+    <string name="def_search_try">खोजकर देखें</string>
+    <string name="def_search_off">खोज का इस्तेमाल बंद करें</string>
+</resources>
