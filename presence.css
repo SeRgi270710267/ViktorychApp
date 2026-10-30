@@ -497,3 +497,14 @@
 .friends-rail-count:hover { background: var(--hover-soft); color: var(--text); }
 .friends-rail-live { width: 8px; height: 8px; border-radius: 9999px; background: var(--green); }
 .friends-rail-peek-note { color: var(--muted); font-size: 13px; line-height: 18px; }
+/* Earlier faces sit on top so every presence dot stays visible. */
+.friends-rail-face:nth-child(1) { z-index: 7; }
+.friends-rail-face:nth-child(2) { z-index: 6; }
+.friends-rail-face:nth-child(3) { z-index: 5; }
+.friends-rail-face:nth-child(4) { z-index: 4; }
+.friends-rail-face:nth-child(5) { z-index: 3; }
+.friends-rail-face:nth-child(6) { z-index: 2; }
+.friends-rail-face:nth-child(7) { z-index: 1; }
+.friends-rail-face:hover, .friends-rail-face:focus-visible { z-index: 8; }
+.friends-rail-face .presence-dot { width: 12px; height: 12px; right: -1px; bottom: -1px; }
+.friends-rail-face .ava-presence { position: relative; display: block; }
