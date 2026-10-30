@@ -4129,6 +4129,13 @@ SI18n.addPack("es", {
   "Today's server pool is used up": "El grupo de servidores de hoy está agotado",
   "All {n} servers reached their free daily requests. Resets {reset}.": "Los {n} servidores alcanzaron sus solicitudes diarias gratis. Se reinicia a las {reset}.",
   "{name} is used up, so reads skip it.": "{name} está agotado, así que las lecturas lo omiten.",
+  "{a} and {b}": "{a} y {b}",
+  "{a} {b} and {c}": "{a} {b} y {c}",
+  "{a} {b} and {others}": "{a} {b} y {others}",
+  "reply.others.one": "{n} más",
+  "reply.others.few": "{n} más",
+  "reply.others.many": "{n} más",
+  "reply.others.other": "{n} más",
   "Run setup again": "Volver a ejecutar la configuración",
   "Theme, data usage, notifications, install and follows.": "Tema, uso de datos, notificaciones, instalación y cuentas que sigues.",
   "Theme, save data and notifications keep their defaults. Change them in Settings.": "El tema, el ahorro de datos y las notificaciones quedan con sus valores predeterminados. Cámbialos en Configuración."

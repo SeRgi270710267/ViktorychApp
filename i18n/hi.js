@@ -4121,6 +4121,13 @@ SI18n.addPack("hi", {
   "Today's server pool is used up": "आज का सर्वर पूल खत्म हो गया",
   "All {n} servers reached their free daily requests. Resets {reset}.": "सभी {n} सर्वर अपने मुफ़्त दैनिक अनुरोधों तक पहुँच गए। {reset} पर रीसेट।",
   "{name} is used up, so reads skip it.": "{name} खत्म हो गया है, इसलिए पढ़ना इसे छोड़ देता है।",
+  "{a} and {b}": "{a} और {b}",
+  "{a} {b} and {c}": "{a} {b} और {c}",
+  "{a} {b} and {others}": "{a} {b} और {others}",
+  "reply.others.one": "{n} अन्य",
+  "reply.others.few": "{n} अन्य",
+  "reply.others.many": "{n} अन्य",
+  "reply.others.other": "{n} अन्य",
   "Run setup again": "सेटअप फिर से चलाएँ",
   "Theme, data usage, notifications, install and follows.": "थीम, डेटा उपयोग, सूचनाएँ, इंस्टॉल और फ़ॉलो।",
   "Theme, save data and notifications keep their defaults. Change them in Settings.": "थीम, डेटा बचत और सूचनाएँ डिफ़ॉल्ट पर रहती हैं। इन्हें सेटिंग्स में बदलें।"

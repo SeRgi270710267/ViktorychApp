@@ -3016,6 +3016,69 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return Object.assign({}, post, { text: text, html: html });
   }
 
+  /* X's reply context, for every source (X, Threads, Instagram, RSS). The
+     @mentions prefixed to a reply are its targets: X shows them once, in
+     "Replying to @a" under the name row, and hides them from the body. A
+     mention later in the text stays. Formats follow x.com: "@a", "@a and @b",
+     "@a @b and @c", "@a @b and N others" (the others open a list). */
+  function leadMentionRun(text) {
+    const handles = [];
+    let rest = String(text || "");
+    for (let guard = 0; guard < 50; guard++) {
+      const m = rest.match(/^\s*@([A-Za-z0-9_](?:[A-Za-z0-9_.]{0,28}[A-Za-z0-9_])?)(?=\s|$)/);
+      if (!m) break;
+      handles.push(m[1]);
+      rest = rest.slice(m[0].length);
+    }
+    return { handles: handles, rest: rest.replace(/^\s+/, "") };
+  }
+
+  function replyTargets(post) {
+    const to = post && post.replyingTo;
+    const first = to ? internalPostHandle(to.handle) : "";
+    if (!first) return { handles: [], strip: false, rest: "" };
+    const run = leadMentionRun(post.text || "");
+    const low = (h) => String(h || "").toLowerCase();
+    const strip = run.handles.some((h) => low(h) === low(first));
+    const handles = [first];
+    if (strip) run.handles.forEach((h) => { if (!handles.some((x) => low(x) === low(h))) handles.push(h); });
+    return { handles: handles, strip: strip, rest: run.rest };
+  }
+
+  function replyBody(post) {
+    const t = replyTargets(post);
+    if (!t.strip) return post;
+    const html = post.html ? stripLeadMentionHtml(post.html) : (post.html || "");
+    return Object.assign({}, post, { text: t.rest, html: html });
+  }
+
+  function replyContextHtml(post) {
+    const t = replyTargets(post);
+    const hs = t.handles;
+    if (!hs.length) return "";
+    const platform = post.platform || "x";
+    const link = (h) => `<a data-act="stop" data-card="${esc(platform + ":" + h)}" href="${esc(accountHash(platform, h))}">@${esc(h)}</a>`;
+    let who = link(hs[0]);
+    if (hs.length === 2) who = tr("{a} and {b}", { a: link(hs[0]), b: link(hs[1]) });
+    else if (hs.length === 3) who = tr("{a} {b} and {c}", { a: link(hs[0]), b: link(hs[1]), c: link(hs[2]) });
+    else if (hs.length > 3) {
+      const others = `<button type="button" class="reply-others" data-act="reply-others" data-platform="${esc(platform)}" data-handles="${esc(JSON.stringify(hs))}">${esc(trn("reply.others", hs.length - 2))}</button>`;
+      who = tr("{a} {b} and {others}", { a: link(hs[0]), b: link(hs[1]), others: others });
+    }
+    return `<div class="replying">${tr("Replying to")} ${who}</div>`;
+  }
+
+  function replyListDialog() {
+    const box = STATE.replyList || { platform: "x", handles: [] };
+    const rows = (box.handles || []).map((h) => {
+      const acct = catalogAccount(box.platform, h) || {};
+      return `<a class="acct-row" href="${esc(accountHash(box.platform, h))}" data-act="close-reply-list">${avatar(acct.avatar || "", acct.name || h)}<span class="rl-copy"><span class="rl-name">${esc(acct.name || h)}</span><span class="handle">@${esc(h)}</span></span></a>`;
+    }).join("");
+    return `<div class="modal-back" data-act="close-modal"><div class="modal reply-list-modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Replying to"))}" data-act="stop">
+      <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Replying to")}</h2></div>
+      <div class="modal-body">${rows}</div></div></div>`;
+  }
+
   function clipLoops(media, seconds) {
     if (media && media.type === "animated_gif") return true;
     const dur = Number(seconds != null ? seconds : (media && media.duration)) || 0;
@@ -8920,9 +8983,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const repost = repostBanner(post, hideRepost ? "author" : "");
     const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
-    const showReply = opts.parentShown ? (mode !== "status" && !!(post.replyingTo && post.replyingTo.handle)) : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
-    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
-    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    /* As on X: no "Replying to" when the parent sits right above on the thread line. */
+    const showReply = opts.parentShown ? false : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
+    const reply = showReply ? replyContextHtml(post) : "";
     const repostFeed = feedOf(post);
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
       ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? tr("Turn on reposts") : tr("Turn off reposts")}</button>`
@@ -8942,7 +9005,7 @@ const here = parseRoute();
     const creator = isRepost(post) ? creatorOf(post) : null;
     const eager = !!opts.eager;
     watchArticle(post);
-    const shown = opts.parentShown ? mentionless(displayPost(post)) : displayPost(post);
+    const shown = opts.parentShown ? mentionless(displayPost(post)) : replyBody(displayPost(post));
     const dest = articleOf(post) ? articleHash(post) : (post.watch ? watchHash(post) : statusHash(post));
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
@@ -12849,9 +12912,8 @@ const here = parseRoute();
     const slice = talk == null ? replySlice(post) : { loading: false, shown: [] };
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
     const parentShown = chain.nodes.length > 0;
-    const focusPost = parentShown ? mentionless(post) : post;
-    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
-    const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">${tr("Replying to")} <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    const focusPost = parentShown ? mentionless(post) : replyBody(post);
+    const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? replyContextHtml(post).replace('<div class="replying">', '<div class="replying status-replying">') : "";
     const body = `${forwardLine(post)}${replyLine}
         ${textBlock(focusPost, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">${tr("Muted on this device.")}</p>` : ""}
@@ -16314,6 +16376,7 @@ if (STATE.histClear) {
         <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (!STATE.modal) return "";
+    if (STATE.modal === "reply-list") return replyListDialog();
     if (STATE.modal === "install") return installOfferHtml();
     if (STATE.modal === "compose") {
       if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
@@ -17828,11 +17891,10 @@ if (STATE.histClear) {
 
   function ancestorCard(post, parentShown) {
     const showReply = !parentShown && !!(post.replyingTo && post.replyingTo.handle);
-    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
-    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    const reply = showReply ? replyContextHtml(post) : "";
     const face = authorFace(post);
     const ancHandle = internalPostHandle(post.handle || "", post);
-    const shown = parentShown ? mentionless(post) : post;
+    const shown = parentShown ? mentionless(post) : replyBody(post);
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
       <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
@@ -19741,6 +19803,18 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }
       saveNavCustom(custom);
       render();
+      return;
+    }
+    if (act === "reply-others") {
+      let handles = [];
+      try { handles = JSON.parse(el.dataset.handles || "[]"); } catch (err) { handles = []; }
+      STATE.replyList = { platform: el.dataset.platform || "x", handles: handles.map((h) => String(h || "")).filter(Boolean).slice(0, 50) };
+      STATE.modal = "reply-list";
+      render();
+      return;
+    }
+    if (act === "close-reply-list") {
+      STATE.modal = null; STATE.replyList = null;
       return;
     }
     if (act === "close-modal" || act === "close-remove") {
