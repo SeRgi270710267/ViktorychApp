@@ -130,7 +130,11 @@ async function check(browser, port, size, lang) {
 
   /* Birth date, then save. */
   await page.click('.ep [data-acct="bday-edit"]');
-  await page.fill('.ep input[type="date"]', "1995-03-14");
+  await page.click('[data-acct="bday-warn-yes"]');
+  for (const [sheet, value] of [["month", "3"], ["day", "14"], ["year", "1995"]]) {
+    await page.click('.ep [data-acct="ep-sheet"][data-sheet="' + sheet + '"]');
+    await page.click('.ep-sheet [data-acct="ep-pick"][data-value="' + value + '"]');
+  }
   await page.fill("#acct-bio", "Another placeholder bio.");
   await page.click('.ep [data-acct="save-profile"]');
   await page.waitForFunction(() => !document.querySelector(".ep"), null, { timeout: 5000 }).catch(() => fail(label + ": save did not close"));
