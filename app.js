@@ -16258,8 +16258,21 @@ const here = parseRoute();
     return new RegExp("(^|[^A-Za-z0-9_])@" + me + "(?![A-Za-z0-9_])", "i").test(String(note.text || ""));
   }
 
+  /* Hook point for other features (for example a Locked area for locked
+     follows): a hold returns true for a notification that should stay out of
+     every Notifications tab, All included. Register with
+     window.ViktorychNoteTabs.addHold(fn). */
+  const NOTE_TAB_HOLDS = [];
+  function noteHeld(note) {
+    for (let i = 0; i < NOTE_TAB_HOLDS.length; i++) {
+      try { if (NOTE_TAB_HOLDS[i](note)) return true; } catch (err) {}
+    }
+    return false;
+  }
+
   function notesForTab(tab, list) {
-    const notes = Array.isArray(list) ? list.filter(Boolean) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
+    let notes = Array.isArray(list) ? list.filter(Boolean) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
+    if (NOTE_TAB_HOLDS.length) notes = notes.filter((note) => !noteHeld(note));
     if (!tab) return notes;
     if (tab.kind === "verified") return notes.filter(noteIsVerified);
     if (tab.kind === "mentions") return notes.filter(noteIsMention);
@@ -16278,6 +16291,15 @@ const here = parseRoute();
     if (members.length && !noteInTab(note, tab)) return false;
     return true;
   }
+
+  window.ViktorychNoteTabs = {
+    addHold(fn) { if (typeof fn === "function" && NOTE_TAB_HOLDS.indexOf(fn) < 0) { NOTE_TAB_HOLDS.push(fn); if (typeof render === "function") render(); } return () => { const at = NOTE_TAB_HOLDS.indexOf(fn); if (at >= 0) NOTE_TAB_HOLDS.splice(at, 1); }; },
+    held: (note) => noteHeld(note),
+    typeKey: (note) => noteTypeKey(note),
+    matches: (note, tab) => noteMatchesTab(note, tab),
+    forTab: (tab, list) => notesForTab(tab, list),
+    tabs: () => allNoteTabs()
+  };
 
   function noteTabUnread(tab) {
     if (!tab || tab.badge === false) return 0;
@@ -16682,7 +16704,7 @@ const here = parseRoute();
     ensureNotesLoad();
     const active = settleNoteTab(route || parseRoute());
     const current = active === "all" ? null : noteTabById(active);
-    const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
+    const notes = notesForTab(current || null);
     /* Marking the tab read happens in this same paint. Keep the ids that were
        unread when they appeared so the row stays highlighted for this visit. */
     if (!STATE.noteUnreadPaint || STATE.noteUnreadPaint.tab !== active) STATE.noteUnreadPaint = { tab: active, ids: {} };
@@ -21219,7 +21241,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
           const route = parseRoute();
           if (route && route.name === "notifications") {
             const active = route.tab && route.tab !== "all" ? noteTabById(route.tab) : null;
-            const notes = active ? notesForTab(active) : ((STATE.settings && STATE.settings.bellNotes) || []);
+            const notes = active ? notesForTab(active) : notesForTab(null, (STATE.settings && STATE.settings.bellNotes) || []);
             return notes.map((note) => note && note.text).filter(Boolean).slice(0, 20);
           }
           const sorted = homeSorted(route || { tab: "foryou" });

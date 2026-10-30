@@ -173,7 +173,19 @@ const INSPECT = `(() => {
     retry: !!el.querySelector("[data-act='notes-retry']"),
     skel: el.querySelectorAll(".skel").length,
     text: String(el.innerText || "").replace(/\\s+/g, " ").trim().slice(0, 180),
-    coarse: !!(window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches)
+    coarse: !!(window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches),
+    // Other features (a Locked area for locked follows) hold notes out of every tab.
+    hold: (() => {
+      const api = window.ViktorychNoteTabs;
+      if (!api || !api.addHold) return "missing";
+      const notes = [{ id: "h1", kind: "like", at: 1 }, { id: "h2", kind: "game_invite", at: 2 }];
+      const off = api.addHold((note) => note.id === "h1");
+      const all = api.forTab(null, notes).map((note) => note.id).join(",");
+      const games = api.forTab({ kind: "games" }, notes).length;
+      const custom = api.forTab({ id: "t", types: ["like"] }, notes).length;
+      off();
+      return all + "|" + games + "|" + custom + "|" + api.forTab(null, notes).length + "|" + api.typeKey({ kind: "game_join" });
+    })()
   };
 })()`;
 
@@ -198,6 +210,7 @@ function assertVisible(info, allowed, label) {
   if (info.tabCount !== 5) fail(label + " tab count " + info.tabCount);
   if (!info.gamesTab) fail(label + " Games tab missing");
   if (!info.customTab) fail(label + " custom tab missing from the bar");
+  if (info.hold !== "h2|1|0|2|game_other") fail(label + " tab hold hook " + info.hold);
   if (info.allOn !== info.bell) fail(label + " bell on the selected All tab");
   if (info.kind === "loading") {
     if (info.skel < 1) fail(label + " skeleton missing");
