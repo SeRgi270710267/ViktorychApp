@@ -1782,7 +1782,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "local_ai"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1863,7 +1863,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
       nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")],
       bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")],
-      feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")]
+      feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")],
+      local_ai: [tr("Local AI"), tr("The Local AI page that changes settings from plain words. Models run on each person's device; nothing is sent to us.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -9869,6 +9870,7 @@ const here = parseRoute();
     if (parts[0] === "packages") return { name: "packages", tab: parts[1] || "active", query };
     if (parts[0] === "communitynotes") return { name: "communitynotes", tab: parts[1] || "", query };
     if (parts[0] === "customize") return { name: "customize", query };
+    if (parts[0] === "ai") return { name: "localai", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     if (parts[0] === "feeds" && parts[1] === "lists") return { name: "sourcelists", query };
     if (parts[0] === "feeds" && parts[1] === "requests") return { name: "feedrequests", query };
@@ -16965,7 +16967,8 @@ const here = parseRoute();
       ${sec(tr("Home"), `${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
         ${sw("story-notes", notesOn, tr("Show notes"), tr("Notes sit above stories. Turn this off to hide them."))}
-        ${sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}`)}
+        ${sw("toggle-privacy-pref", friendsOn, tr("Friends panel"), tr("Show active friends beside the home feed."), ` data-key="friendsRail"`)}
+        ${localAiOn() ? sw("ai-fab", !!st.aiFab, tr("Local AI button"), tr("A round button on every page that opens Local AI."), "") : ""}`)}
       ${sec(tr("Your feed"), `${sw("pz-feed", st.forYouReposts !== false, tr("Show reposts"), "", ` data-key="forYouReposts"`)}
         ${sw("pz-feed", st.forYouReplies !== false, tr("Show replies in tab"), "", ` data-key="forYouReplies"`)}
         ${sw("pz-feed", st.communitiesHome !== false, tr("Communities in Home"), "", ` data-key="communitiesHome"`)}
@@ -17011,6 +17014,29 @@ const here = parseRoute();
 
   /* Search Settings, like X. Words match every page; a question in plain
      words also goes to the browser's built-in model when it has one. */
+  /* Local AI (local-ai-ui.js): an owner switch, an entry at the top of
+     Settings, the side menu, and an optional floating button. */
+  function localAiOn() { return !serverOffList().includes("local_ai"); }
+  function localAiEntryHtml() {
+    if (!localAiOn() || String(STATE.settingsQ || "").trim()) return "";
+    return `<a class="lai-entry" href="#/ai"><span class="lai-entry-ico" aria-hidden="true">${icon("spark")}</span><span class="lai-entry-copy"><b>${esc(tr("Ask Local AI"))}</b><span>${esc(tr("Say what you want changed, like “bigger text” or “make it private”. It runs on this device."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
+  }
+  function paintAiFab(route) {
+    let fab = document.getElementById("lai-fab");
+    const want = localAiOn() && !!(STATE.settings && STATE.settings.aiFab) && route && route.name !== "localai" && route.name !== "watch" && route.name !== "shorts" && route.name !== "tv";
+    if (!want) { if (fab) fab.remove(); return; }
+    if (!fab) {
+      fab = document.createElement("a");
+      fab.id = "lai-fab";
+      fab.className = "lai-fab";
+      fab.href = "#/ai";
+      document.body.appendChild(fab);
+    }
+    fab.setAttribute("aria-label", tr("Local AI"));
+    fab.title = tr("Local AI");
+    if (!fab.firstChild) fab.innerHTML = icon("spark");
+  }
+
   function settingsSearchHtml() {
     if (!window.ViktorychSettingsAssistant) return "";
     const q = String(STATE.settingsQ || "");
@@ -17419,7 +17445,7 @@ const here = parseRoute();
     const keysRow = (window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()) || window.DiscordLocal || (window.NzlayKeys && window.NzlayKeys.enabled())
       ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
       : "";
-    return settingsHead(tr("Settings"), "") + settingsSearchHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
+    return settingsHead(tr("Settings"), "") + settingsSearchHtml() + localAiEntryHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
       ${settingsRow("#/customize", tr("Customize"), tr("Theme, colour, text size, profile pictures and your feed, all in one place."))}
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
@@ -17443,7 +17469,7 @@ const here = parseRoute();
   }
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
-  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "settings", "help", "logout", "customize"];
+  const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "localai", "settings", "help", "logout", "customize"];
   const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "packages", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
@@ -17636,6 +17662,7 @@ const here = parseRoute();
     if (id === "requests") return { id: id, href: drawerRequestsHref(), icon: "user", label: tr("Requests"), extra: requestsCountHtml() };
     if (id === "studio") return { id: id, href: "#/feeds", icon: "spark", label: tr("Creator Studio") };
     if (id === "help") return { id: id, href: "#/settings/resources", icon: "help", label: tr("Help Center") };
+    if (id === "localai") return localAiOn() ? { id: id, href: "#/ai", icon: "spark", label: tr("Local AI") } : null;
     if (id === "settings") return { id: id, href: "#/settings", icon: "gear", label: tr("Settings and privacy"), locked: true };
     if (id === "logout") return { id: id, href: "", icon: "user", label: mine ? tr("Log out") : tr("Sign in"), locked: true, accountMenu: true };
     if (id === "customize") return { id: id, href: "", icon: "sliders", label: tr("Customize"), locked: true, act: "customize-page" };
@@ -18020,7 +18047,7 @@ if (STATE.histClear) {
 
   function shell(main, route) {
     const gamePlay = route.name === "games" && !!route.game;
-    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "localai" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
     const tall = route.name === "home" || wide || ["feeds", "sourcelists", "feedrequests", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
@@ -18029,7 +18056,7 @@ if (STATE.histClear) {
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
     const slimTabs = route.name === "home" || route.name === "notifications";
     let bar = 53;
-    if (route.name === "profile" || route.name === "user" || route.name === "person" || route.name === "tv" || route.name === "shorts" || route.name === "messages" || explore) bar = 0;
+    if (route.name === "profile" || route.name === "user" || route.name === "person" || route.name === "tv" || route.name === "shorts" || route.name === "messages" || route.name === "localai" || explore) bar = 0;
     else if (slimTabs && !musicHome) bar = 97;
     else if (tall && !musicHome) bar = 106;
     const top = bar + rowExtra + storyExtra + liveExtra;
@@ -19691,6 +19718,12 @@ if (STATE.histClear) {
       if (!window.ViktorychShorts) { ensureLazy("shorts"); return lazySkeleton(tr("Shorts")); }
       return pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     }
+    if (route.name === "localai") {
+      if (!localAiOn()) return pageHead(tr("Local AI")) + emptyBlock(tr("Local AI"), tr("Local AI is turned off right now."));
+      if (window.ViktorychLocalAIPage) return window.ViktorychLocalAIPage.page(route);
+      ensureLazy("localai");
+      return lazySkeleton(tr("Local AI"));
+    }
     if (route.name === "drive") {
       loadDeviceCore().then((dev) => {
         if (!dev) return;
@@ -20734,6 +20767,11 @@ if (STATE.histClear) {
         if (route.name === "drive") window.ViktorychDrive.mount(route);
         else window.ViktorychDrive.unmount();
       }
+      if (window.ViktorychLocalAIPage) {
+        if (route.name === "localai") window.ViktorychLocalAIPage.mount(route);
+        else window.ViktorychLocalAIPage.unmount();
+      }
+      paintAiFab(route);
       if (window.ViktorychVault) {
         if (route.name === "vault") window.ViktorychVault.mount(route);
         else window.ViktorychVault.unmount();
@@ -21724,6 +21762,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "device-own-ui") {
       const accounts = window.ViktorychAccounts || {};
       if (accounts.setDeviceOwnUi) accounts.setDeviceOwnUi(!(accounts.deviceOwnUi && accounts.deviceOwnUi()));
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "ai-fab") {
+      STATE.settings.aiFab = !STATE.settings.aiFab;
       saveSettings();
       render();
       return;
@@ -29701,6 +29745,162 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
   /* First-time setup (onboarding.js) reads suggestions and changes a few
      settings through this small surface. */
+  /* Local AI host: reads and writes every setting in settings-registry.js
+     through the same save, apply and sync steps the Settings toggles use. */
+  function aiRegistry() { return window.ViktorychSettingsRegistry || null; }
+  function aiStateValue(row) {
+    const st = STATE.settings || {};
+    const parts = String(row.key).split(".");
+    let v = st[parts[0]];
+    if (parts.length > 1) v = v && typeof v === "object" ? v[parts[1]] : undefined;
+    if (row.id === "privacyEmbedShield" || row.id === "privacyZeroTrace") return v === true;
+    if (row.id === "fontSize") return LOOK_FONTS.indexOf(Number(v)) >= 0 ? Number(v) : 15;
+    if (row.id === "accent") return LOOK_ACCENTS[v] ? v : "blue";
+    if (row.id === "homePills" || row.id === "stories") return userFeatureOn(row.key);
+    if (row.id === "notify") return !!(v && typeof Notification !== "undefined" && Notification.permission === "granted");
+    if (row.type === "bool") return typeof v === "boolean" ? v : row.def;
+    if (row.type === "enum") return row.values.indexOf(v) >= 0 ? v : row.def;
+    return v === undefined ? row.def : v;
+  }
+  function aiValue(id) {
+    const R = aiRegistry();
+    const row = R && R.get(id);
+    if (!row) return undefined;
+    if (row.store === "state") return aiStateValue(row);
+    if (row.store === "saver") return !!(STATE.settings && STATE.settings.saveData === true);
+    if (row.store === "lang") return window.SI18n ? window.SI18n.getLang() : "en";
+    if (row.store === "notifPrivacy") {
+      const NP = window.ViktorychNotifPrivacy;
+      const np = NP ? NP.normalize(STATE.settings && STATE.settings.notifPrivacy) : null;
+      if (!np) return row.def;
+      const parts = row.key.split(".");
+      return parts.length > 1 ? np.types[parts[1]] !== false : np[row.key] !== false;
+    }
+    if (row.store === "device") {
+      const dev = window.ViktorychDevice;
+      const perf = readDevicePerf();
+      const level = String(perf.level || perf.profile || "balanced");
+      return level === "max" || level === "full" ? "max" : (level === "light" || level === "lite" || level === "low" ? "light" : "balanced");
+    }
+    if (row.store === "account") {
+      const acc = window.ViktorychAccounts;
+      const now = acc && acc.aiSettings ? acc.aiSettings() : null;
+      return now ? now[row.key] : undefined;
+    }
+    if (row.store === "pymk") {
+      const P = window.ViktorychPYMK;
+      return P && P.discoverable ? P.discoverable() !== false : undefined;
+    }
+    if (row.store === "presence") {
+      const pr = window.ViktorychPresence;
+      return pr && pr.seenPrivacy && accountToken() ? pr.seenPrivacy() : undefined;
+    }
+    return undefined;
+  }
+  /* Apply checked changes [{ id, to }]. Resolves [{ id, ok }]. */
+  function aiApply(changes) {
+    const R = aiRegistry();
+    if (!R || !STATE.settings) return Promise.resolve([]);
+    const jobs = [];
+    let save = false, look = false, theme = false, privacy = false, nav = false, reloadFor = "";
+    const stamp = (key) => { STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { [key]: Date.now() }); };
+    (changes || []).forEach((change) => {
+      const row = R.get(change.id);
+      const check = row ? R.validate(row.id, change.to) : { ok: false };
+      if (!row || !check.ok) { jobs.push(Promise.resolve({ id: change.id, ok: false })); return; }
+      const v = check.value;
+      if (row.store === "state") {
+        const parts = row.key.split(".");
+        if (row.id === "notify") {
+          if (v) { jobs.push(enableNotifications().then(() => ({ id: row.id, ok: !!STATE.settings.notify }))); return; }
+          STATE.settings.notify = false;
+        } else if (parts[0] === "historyPause") {
+          STATE.settings.historyPause = cleanHistoryPause(STATE.settings.historyPause);
+          STATE.settings.historyPause[parts[1]] = v;
+        } else {
+          STATE.settings[row.key] = v;
+        }
+        if (row.id === "accent" || row.id === "fontSize" || row.id === "density" || row.id === "reduceMotion") { stamp(row.key); look = true; }
+        if (row.id === "appearance" || row.id === "avatarShape") theme = true;
+        if (row.id === "homePills" || row.id === "stories") { stamp(row.key); if (featureLoaded(row.key) !== featureOn(row.key)) reloadFor = row.id; }
+        if (/^privacy|^friendsRail$/.test(row.id)) privacy = true;
+        if (/^navLayout/.test(row.id)) nav = true;
+        if (row.id === "forYouReposts" || row.id === "forYouReplies") STATE.forYouSnap = null;
+        if (row.id === "communitiesHome") accountCall("/v1/communities/home", { method: "POST", body: { showHome: v !== false } }).then(() => { publicStamp = 0; schedulePublicPosts(); }).catch(() => {});
+        if (row.id === "networkMode") {
+          try { localStorage.setItem("viktorychapp-network-mode", v); } catch (err) {}
+          if (v === "max") window.__VIKTORYCH_IS_RU = true;
+          else if (v === "direct") window.__VIKTORYCH_IS_RU = false;
+        }
+        save = true;
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "saver") {
+        const saver = dataSaver();
+        if (saver) saver.apply(!!v);
+        else { STATE.settings.saveData = !!v; save = true; }
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "notifPrivacy") {
+        const NP = window.ViktorychNotifPrivacy;
+        if (!NP) { jobs.push(Promise.resolve({ id: row.id, ok: false })); return; }
+        const np = NP.normalize(STATE.settings.notifPrivacy);
+        const parts = row.key.split(".");
+        if (parts.length > 1) np.types[parts[1]] = v; else np[row.key] = v;
+        STATE.settings.notifPrivacy = np;
+        if (!np.names) NP.wipe();
+        save = true;
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "lang") {
+        try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
+        if (window.SI18n) window.SI18n.setLang(v);
+        jobs.push(Promise.resolve({ id: row.id, ok: true }));
+      } else if (row.store === "device") {
+        if (window.ViktorychDevice && window.ViktorychDevice.applyLevel) {
+          STATE.settings.devicePerf = window.ViktorychDevice.applyLevel(v);
+          save = true;
+        }
+        jobs.push(Promise.resolve({ id: row.id, ok: !!window.ViktorychDevice }));
+      } else if (row.store === "account" || row.store === "pymk") {
+        const acc = window.ViktorychAccounts;
+        jobs.push(acc && acc.aiSetting ? acc.aiSetting(row.key, v).then((ok) => ({ id: row.id, ok: ok })) : Promise.resolve({ id: row.id, ok: false }));
+      } else if (row.store === "presence") {
+        const pr = window.ViktorychPresence;
+        jobs.push(pr && pr.setSeenPrivacy ? pr.setSeenPrivacy(v).then((ok) => ({ id: row.id, ok: ok })) : Promise.resolve({ id: row.id, ok: false }));
+      } else {
+        jobs.push(Promise.resolve({ id: row.id, ok: false }));
+      }
+    });
+    if (save) saveSettings();
+    if (look) applyLook();
+    if (theme) applyTheme();
+    if (privacy) applyPrivacyProtections();
+    if (nav) applyNavLayout();
+    if (save || look || theme) syncFeatureFlags();
+    return Promise.all(jobs).then((out) => {
+      render();
+      if (reloadFor) setTimeout(() => location.reload(), 900);
+      return out;
+    });
+  }
+  window.ViktorychSettingsHost = {
+    get: aiValue,
+    values: () => {
+      const R = aiRegistry();
+      const out = {};
+      if (R) R.editable().forEach((row) => { out[row.id] = aiValue(row.id); });
+      return out;
+    },
+    apply: aiApply,
+    signedIn: () => !!accountToken(),
+    lang: () => (window.SI18n ? window.SI18n.getLang() : "en"),
+    lowEnd: () => {
+      const perf = readDevicePerf();
+      return String(perf.level || "") === "light" || !!(STATE.settings && STATE.settings.saveData === true);
+    },
+    go: (hash) => goHash(hash),
+    toast: (msg) => toast(msg),
+    icon: (name) => icon(name)
+  };
+
   window.ViktorychSetup = {
     ready: () => !!(STATE.data && Array.isArray(STATE.data.feeds) && STATE.data.feeds.length),
     suggestions: (n) => followSuggestions().slice(0, n || 8).map((f) => ({

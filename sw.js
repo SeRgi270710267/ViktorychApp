@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a188-__SW_VERSION__";
+const VERSION = "viktorych-a198-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T13:09:31Z-ytsquare-auto4
+// cache-bust: 2026-10-30T13:40:00Z-local-ai
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -188,6 +188,11 @@ const SHELL_FILES = [
   "./shorts.css",
   "./drive.js",
   "./drive.css",
+  "./settings-registry.js",
+  "./local-ai.js",
+  "./local-ai-ui.js",
+  "./local-ai.css",
+  "./local-ai-worker.js",
   "./games.js",
   "./game-social.js",
   "./game-social.css",
@@ -263,7 +268,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a188-";
+  const prefix = "viktorych-a198-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
