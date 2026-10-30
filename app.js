@@ -15569,6 +15569,7 @@ const here = parseRoute();
       if (sub === "display-language" || section === "display-language") key = tr("Display language");
       else if (section === "accessibility") key = tr("Accessibility, display and languages");
       else if (section === "display") key = tr("Display");
+      else if (section === "keyboard") key = tr("Keyboard shortcuts");
       else if (section === "device") key = tr("Device performance");
       else if (section === "languages") key = tr("Languages");
       else if (section === "data") key = tr("Data usage");
@@ -15944,7 +15945,11 @@ const here = parseRoute();
         ${settingsRow("#/settings/display", tr("Display"))}
         ${settingsRow("#/settings/languages", tr("Languages"))}
         ${settingsRow("#/settings/data", tr("Data usage"))}
+        ${settingsRow("#/settings/keyboard", tr("Keyboard shortcuts"))}
       </div>`;
+    }
+    if (section === "keyboard") {
+      return settingsHead(tr("Keyboard shortcuts"), "#/settings/accessibility") + (window.ViktorychKeysUi ? window.ViktorychKeysUi.settingsHtml() : "");
     }
     if (section === "display" && sub === "navigation") return bottomNavSettings();
     if (section === "device") {
@@ -22586,42 +22591,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
       }
     }
-    if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !STATE.modal && !STATE.drawer && !STATE.viewer) {
-      const tag = event.target && event.target.tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (event.target && event.target.isContentEditable);
-      if (!typing) {
-        const box = visibleSearch();
-        if (box) {
-          event.preventDefault();
-          box.focus();
-          return;
-        }
-      }
-    }
-    if (event.key === "Tab" && STATE.modal && !document.querySelector("#account-layer .acct-modal")) {
-      const modal = document.querySelector(".modal[role='dialog']");
-      if (modal) {
-        const items = [...modal.querySelectorAll("button, a[href], input, select, textarea")].filter((el) => !el.disabled && el.tabIndex !== -1);
-        if (items.length) {
-          const first = items[0];
-          const last = items[items.length - 1];
-          const active = document.activeElement;
-          if (event.shiftKey && (active === first || !modal.contains(active))) {
-            event.preventDefault();
-            last.focus();
-            return;
-          }
-          if (!event.shiftKey && (active === last || !modal.contains(active))) {
-            event.preventDefault();
-            first.focus();
-            return;
-          }
-        }
-      }
-    }
-    if (event.key === "Escape" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.onEscape && window.ViktorychXCompose.onEscape()) return;
-    if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.drawerEdit || STATE.accountMenu || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.busySheet || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
+  });
+
+  /* Shortcut keys live in keys.js (one registry). These are the app actions
+     it calls: Esc, the dialog focus trap, search focus and the rest. */
+  function escapeOverlays() {
+    if (STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.onEscape && window.ViktorychXCompose.onEscape()) return true;
+    if (STATE.viewer) { closeViewer(); return true; }
+    if (STATE.modal || STATE.drawer || STATE.drawerEdit || STATE.accountMenu || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.busySheet || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || STATE.repostMenu || (STATE.confirm && STATE.confirm.kind === "feed-tab")) {
       STATE.modal = null;
       STATE.composeVia = "";
       STATE.drawer = false;
@@ -22641,9 +22618,87 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       STATE.confirm = null;
       STATE.histClear = "";
       STATE.removeFeed = null;
+      STATE.repostMenu = null;
       render();
+      return true;
     }
-  });
+    return false;
+  }
+
+  function trapModalTab(back) {
+    if (!STATE.modal || document.querySelector("#account-layer .acct-modal")) return false;
+    const modal = document.querySelector(".modal[role='dialog']");
+    if (!modal) return false;
+    const items = [...modal.querySelectorAll("button, a[href], input, select, textarea")].filter((el) => !el.disabled && el.tabIndex !== -1);
+    if (!items.length) return false;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (back && (active === first || !modal.contains(active))) { last.focus(); return true; }
+    if (!back && (active === last || !modal.contains(active))) { first.focus(); return true; }
+    return false;
+  }
+
+  function keysAct(name, data) {
+    const el = document.createElement("button");
+    el.dataset.act = name;
+    Object.keys(data || {}).forEach((key) => { el.dataset[key] = String(data[key]); });
+    onAct(el);
+    return true;
+  }
+
+  window.ViktorychKeysHost = {
+    state: () => ({
+      route: parseRoute().name,
+      modal: STATE.modal || "",
+      drawer: !!STATE.drawer,
+      menu: !!(STATE.menu || STATE.accountMenu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.repostMenu || STATE.tabContext || STATE.tabAssign || STATE.drawerEdit || STATE.noteGear || STATE.removeFeed || (STATE.confirm && STATE.confirm.kind === "feed-tab")),
+      viewer: STATE.viewer ? (STATE.viewer.video ? "video" : "photo") : ""
+    }),
+    act: keysAct,
+    escape: escapeOverlays,
+    trapTab: trapModalTab,
+    go: (hash) => { goHash(hash); return true; },
+    focusSearch: () => {
+      const box = visibleSearch();
+      if (box) { box.focus(); return true; }
+      goHash("#/explore");
+      setTimeout(() => { const next = visibleSearch(); if (next) next.focus(); }, 150);
+      return true;
+    },
+    profileHash: () => drawerProfileHref() || "",
+    muteAuthor: (id) => {
+      const post = findAnyPost(id);
+      if (!post || !post.handle || !STATE.settings) return false;
+      const handle = String(post.handle).replace(/^@/, "");
+      const muted = STATE.settings.mutedAccounts || (STATE.settings.mutedAccounts = []);
+      if (!matchesMute(muted, handle, post.platform, post.feedId)) muted.push((post.platform || "x") + ":" + handle);
+      saveSettings();
+      toast(tr("Account muted"));
+      render();
+      return true;
+    },
+    viewerStep: (delta) => {
+      const view = STATE.viewer;
+      if (!view || view.video) return false;
+      const photos = photoList(findAnyPost(view.id));
+      if (photos.length < 2) return false;
+      openViewer(view.id, (view.index + delta + photos.length) % photos.length);
+      return true;
+    },
+    themes: () => ["default", "dim", "lightsout"].concat(FLAG_THEME_IDS),
+    theme: () => (STATE.settings && STATE.settings.appearance) || "lightsout",
+    themeLabel: (id) => themeLabel(id),
+    accounts: () => shownFeeds(feeds()).slice(0, 3000).map((f) => ({ name: f.name || f.handle || "", handle: f.handle || "", platform: f.platform || "x", hash: accountHash(f.platform, f.handle) })),
+    keyboardPrefs: () => (STATE.settings && STATE.settings.keyboard) || null,
+    saveKeyboardPrefs: (prefs) => {
+      if (!STATE.settings) return;
+      STATE.settings.keyboard = prefs;
+      saveSettings();
+    },
+    toast: (text) => toast(text),
+    render: () => render()
+  };
 
   function primeTelegramImages(root) {
     const scope = root && root.querySelectorAll ? root : document;
