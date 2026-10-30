@@ -1,0 +1,216 @@
+/* ReGone social: invite sheet, room hint, lobby, achievements, presence,
+   Top Players and the mini player. X black, outline icons in currentColor. */
+.gs-ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; }
+svg.gs-badge { fill: none; stroke: currentColor; flex: none; }
+.gs-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.gs-muted { margin: 0; color: var(--muted); font-size: 14px; }
+.gs-small { font-size: 13px; }
+.gs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 12px; }
+.gs-section h2 small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.gs-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 40px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent; color: inherit;
+  font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.gs-btn:hover { background: var(--hover-soft, rgba(231, 233, 234, 0.1)); }
+.gs-btn:disabled { opacity: 0.5; }
+.gs-primary { background: #eff3f4; color: #0f1419; border-color: #eff3f4; }
+.gs-primary:hover { background: #d7dbdc; }
+.gs-danger { color: #f4212e; border-color: rgba(244, 33, 46, 0.5); }
+.gs-linkbtn { border: 0; background: none; color: var(--blue); font: inherit; cursor: pointer; padding: 0; }
+.gs-ava { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
+.gs-ava-text { display: inline-grid; place-items: center; background: #333639; color: #e7e9ea; font-weight: 800; font-size: 14px; }
+.gs-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00ba7c; flex: none; }
+
+/* Players online */
+.gs-online { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 13px; white-space: nowrap; }
+.gs-online i { width: 8px; height: 8px; border-radius: 50%; background: #00ba7c; }
+.gs-online[hidden] { display: none; }
+.game-card .gs-online { position: absolute; left: 8px; top: 8px; background: rgba(0, 0, 0, 0.7); color: #fff; border-color: transparent; }
+
+/* Sheet */
+.gs-sheet { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(91, 112, 131, 0.4); }
+.gs-panel {
+  width: min(600px, 100%); max-height: min(90vh, 760px); overflow: auto;
+  background: #000; color: #e7e9ea; border-radius: 16px; padding: 0 0 12px;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+html.light .gs-panel { background: #fff; color: #0f1419; }
+.gs-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 16px; background: inherit; }
+.gs-head h2 { flex: 1; margin: 0; font-size: 20px; font-weight: 800; line-height: 24px; }
+.gs-x { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; display: inline-grid; place-items: center; cursor: pointer; }
+.gs-x:hover { background: rgba(231, 233, 234, 0.1); }
+.gs-panel h3 { margin: 12px 16px 8px; font-size: 15px; font-weight: 700; }
+.gs-panel > .gs-muted, .gs-panel > .gs-error { padding: 0 16px; }
+.gs-friends { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 4px; }
+.gs-friend { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 72px; min-height: 72px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; position: relative; }
+.gs-friend span { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-friend.on { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.gs-friend .gs-dot { position: absolute; top: 8px; right: 12px; }
+.gs-search { display: flex; align-items: center; gap: 8px; margin: 0 16px 8px; padding: 0 14px; height: 44px; border-radius: 999px; background: #202327; color: var(--muted); }
+html.light .gs-search { background: #eff3f4; }
+.gs-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 15px; outline: none; }
+.gs-search:focus-within { box-shadow: inset 0 0 0 1px var(--blue); color: var(--blue); }
+.gs-filters { display: flex; gap: 8px; padding: 0 16px 8px; overflow-x: auto; }
+.gs-filter select { height: 36px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; font-size: 14px; }
+.gs-filter select option { background: #000; color: #e7e9ea; }
+.gs-rooms { display: flex; flex-direction: column; max-height: 240px; overflow: auto; margin: 0 16px 8px; border: 1px solid var(--line); border-radius: 12px; }
+.gs-rooms > .gs-muted { padding: 12px; }
+.gs-room { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0 8px; min-height: 52px; padding: 6px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.gs-room:last-child { border-bottom: 0; }
+.gs-room:hover { background: rgba(231, 233, 234, 0.06); }
+.gs-room.on { background: rgba(29, 155, 240, 0.12); }
+.gs-room .gs-ico { grid-row: 1 / span 2; grid-column: 2; color: var(--blue); }
+.gs-room-name { font-weight: 700; font-size: 15px; }
+.gs-room-meta { color: var(--muted); font-size: 13px; }
+.gs-field { display: flex; flex-direction: column; gap: 4px; margin: 8px 16px; position: relative; }
+.gs-field > span:first-child { color: var(--muted); font-size: 13px; }
+.gs-field input, .gs-field textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 16px; resize: vertical; }
+.gs-field input:focus, .gs-field textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.gs-count { align-self: flex-end; color: var(--muted); font-size: 13px; }
+.gs-count.over { color: #f4212e; }
+.gs-switch { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 8px 16px; padding: 10px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.gs-switch > span { flex: 1; display: grid; grid-template-columns: auto 1fr; gap: 0 8px; align-items: center; }
+.gs-switch small { grid-column: 2; color: var(--muted); font-size: 13px; }
+.gs-switch i { width: 40px; height: 22px; border-radius: 999px; background: #536471; position: relative; flex: none; }
+.gs-switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.gs-switch.on i { background: var(--blue); }
+.gs-switch.on i::after { transform: translateX(18px); }
+.gs-error { min-height: 18px; margin: 4px 0; color: #f4212e; font-size: 14px; }
+.gs-error:empty { min-height: 0; }
+.gs-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 16px 0; }
+
+/* Room hint over the game (our own layer, outside the game frame). */
+.gs-hint {
+  position: absolute; z-index: 6; left: 50%; top: calc(64px + env(safe-area-inset-top)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; width: min(92%, 460px); padding: 8px 8px 8px 14px;
+  border-radius: 16px; background: rgba(0, 0, 0, 0.88); border: 1px solid rgba(29, 155, 240, 0.7); color: #fff;
+}
+.gs-hint-ico { color: #1d9bf0; display: inline-flex; }
+.gs-hint-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gs-hint-copy b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-hint-copy span { font-size: 13px; color: rgba(255, 255, 255, 0.75); }
+.gs-hint-btn { width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: #fff; display: inline-grid; place-items: center; cursor: pointer; flex: none; }
+.game-room { display: inline-flex; align-items: center; gap: 6px; height: 44px; max-width: 220px; padding: 0 14px; color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+.game-room span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Games page sections */
+.gs-tabs { display: flex; height: 53px; border-bottom: 1px solid var(--line); }
+.gs-tabs .tab { flex: 1; }
+.gs-actions { padding-top: 12px; }
+.gs-invites, .gs-members { list-style: none; margin: 0; padding: 0 0 8px; }
+.gs-invite, .gs-member { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 6px 16px; }
+.gs-invite-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gs-invite-copy span { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-member-name { flex: 1; font-weight: 700; }
+.gs-member-name small { color: var(--muted); font-weight: 400; }
+.gs-ready { color: var(--muted); font-size: 13px; }
+.gs-ready.on { color: #00ba7c; }
+.gs-private { display: inline-flex; align-items: center; gap: 4px; }
+.gs-private .gs-ico { width: 14px; height: 14px; }
+.gs-roomgroup { margin: 0 16px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 16px; }
+.gs-roomgroup-head { display: flex; align-items: center; gap: 8px; }
+.gs-roomgroup-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-roomgroup-people { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+.gs-person { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; font-size: 14px; }
+.gs-ach-grid { list-style: none; margin: 0; padding: 0 16px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.gs-ach { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border: 1px solid var(--line); border-radius: 16px; text-align: center; color: var(--muted); }
+.gs-ach.got { color: #ffd400; border-color: rgba(255, 212, 0, 0.45); }
+.gs-ach:not(.got) svg { opacity: 0.45; }
+.gs-ach-name { font-weight: 700; font-size: 14px; color: var(--text, #e7e9ea); }
+.gs-ach-desc { font-size: 12px; line-height: 15px; color: var(--muted); }
+
+/* Profile */
+.gs-profile { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
+.gs-profile:empty { display: none; }
+.gs-prof-ach summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; color: inherit; font-weight: 700; }
+.gs-prof-ach summary svg { color: #ffd400; }
+.gs-prof-ach summary small { color: var(--muted); font-weight: 400; }
+.gs-prof-ach .gs-ach-grid { padding: 4px 0 8px; }
+.gs-link { align-self: flex-start; }
+.gs-rank { padding: 12px; border: 1px solid var(--line); border-radius: 16px; }
+.gs-rank-head { display: flex; align-items: center; gap: 10px; color: #ffd400; }
+.gs-rank-head span:not(.gs-rank-no) { flex: 1; display: flex; flex-direction: column; color: var(--text, #e7e9ea); }
+.gs-rank-head small { color: var(--muted); font-size: 12px; }
+.gs-rank-no { font-size: 22px; font-weight: 800; }
+.gs-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin: 10px 0 0; }
+.gs-stats div { display: flex; flex-direction: column; }
+.gs-stats dt { color: var(--muted); font-size: 12px; }
+.gs-stats dd { margin: 0; font-weight: 800; font-size: 17px; }
+.gs-source { margin: 8px 0; color: var(--muted); font-size: 12px; }
+.gs-source a { color: var(--muted); text-decoration: underline; }
+.gs-together h3 { margin: 4px 0; font-size: 15px; }
+
+/* Presence: Playing now, room, Join */
+.gs-presence { display: inline-flex; }
+.gs-presence:empty { display: none; }
+.gs-live { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border-radius: 999px; border: 1px solid rgba(0, 186, 124, 0.5); color: #00ba7c; font-size: 13px; max-width: 100%; }
+.gs-live > span:not(.gs-join-chip) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-join-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border-radius: 999px; background: #eff3f4; color: #0f1419; font-weight: 700; cursor: pointer; }
+.gs-invite-btn { display: inline-flex; align-items: center; gap: 6px; }
+.online-row .gs-live { margin-left: auto; flex: none; }
+.ava-presence[data-playing="1"]::after {
+  content: ""; position: absolute; left: -2px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #000 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ba7c' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M7.8 8.5h8.4a3.6 3.6 0 0 1 3.5 2.9l.7 3.6a1.7 1.7 0 0 1-3 1.4l-1.2-1.6H7.8l-1.2 1.6a1.7 1.7 0 0 1-3-1.4l.7-3.6a3.6 3.6 0 0 1 3.5-2.9z'/%3E%3C/svg%3E") center / 11px no-repeat;
+  border: 1.5px solid #000;
+}
+
+/* Top Players */
+.gs-table-wrap { overflow-x: auto; padding: 0 16px; }
+.gs-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.gs-table th { text-align: left; border-bottom: 1px solid var(--line); }
+.gs-table th button { min-height: 40px; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 700; cursor: pointer; padding: 0 6px 0 0; }
+.gs-table td { padding: 8px 6px 8px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.gs-pname { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.gs-friend-row { background: rgba(29, 155, 240, 0.1); }
+.gs-me-row { background: rgba(255, 212, 0, 0.08); }
+.gs-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: rgba(29, 155, 240, 0.2); color: inherit; font-size: 12px; text-decoration: none; }
+.gs-tag .gs-ava { width: 16px; height: 16px; font-size: 10px; }
+.gs-top .gs-source { padding: 0 16px 16px; }
+
+/* Settings */
+.gs-aud { flex-wrap: wrap; }
+.gs-exclude summary { cursor: pointer; color: var(--muted); min-height: 36px; }
+.gs-quiet label { display: inline-flex; align-items: center; gap: 6px; }
+.gs-quiet select { height: 36px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; }
+
+/* Mini player: the same game frame in a corner window. */
+#game-host.mini {
+  top: auto; left: auto;
+  right: 16px; bottom: 16px;
+  width: 320px !important; height: 180px !important;
+  z-index: 950; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+#game-host.mini.placed { right: auto; bottom: auto; }
+#game-host.mini .game-bar, #game-host.mini .game-credit, #game-host.mini .game-rotate,
+#game-host.mini .game-handle, #game-host.mini .game-pad-note, #game-host.mini .gs-hint { display: none !important; }
+#game-host.mini .game-frame { position: absolute; inset: 0; }
+#game-host.mini .game-loading, #game-host.mini .game-fail { top: 0; bottom: 0; }
+.game-mini-cover { display: none; }
+#game-host.mini .game-mini-cover {
+  display: block; position: absolute; inset: 0; z-index: 7; cursor: grab; touch-action: none;
+  background: linear-gradient(rgba(0, 0, 0, 0.45), transparent 45%);
+}
+#game-host.mini.dragging .game-mini-cover { cursor: grabbing; }
+.game-mini-label { position: absolute; left: 10px; top: 8px; color: #fff; font-size: 13px; font-weight: 700; pointer-events: none; }
+.game-mini-close {
+  position: absolute; z-index: 8; top: 4px; right: 4px; width: 44px; height: 44px;
+  border: 0; border-radius: 50%; background: rgba(0, 0, 0, 0.7); color: #fff; display: none; place-items: center; cursor: pointer;
+}
+#game-host.mini .game-mini-close { display: grid; }
+@media (max-width: 499px) {
+  #game-host.mini { width: 208px !important; height: 117px !important; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .game-mini-close { width: 56px; height: 56px; top: 0; right: 0; }
+  .gs-btn { min-height: 56px; padding: 0 20px; }
+  .gs-room { min-height: 56px; }
+  .gs-x { width: 56px; height: 56px; }
+  .gs-hint-btn { width: 56px; height: 56px; }
+  .gs-join-chip { min-height: 56px; padding: 0 16px; }
+  .gs-aud button, .gs-filters button, .gs-tabs { min-height: 56px; }
+  .gs-tabs { height: 56px; }
+  .gs-sheet { align-items: flex-end; }
+  .gs-panel { border-radius: 16px 16px 0 0; max-height: 92vh; }
+  .game-room { max-width: 140px; }
+}

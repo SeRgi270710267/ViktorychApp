@@ -33,6 +33,7 @@ ALLOW_IDENTICAL = {
     "GitHub",
     "GIF",
     "RSS",
+    "YouTube Music",
     "ALT",
     "https://",
     "Wi-Fi",
@@ -279,6 +280,22 @@ def main() -> int:
     if hits:
         print(f"{len(hits)} UI strings are not in the language packs. Wrap them in tr() and add the key to every pack, or list a proper noun in scripts/i18n_allow.txt.")
         print("\n".join(f"{rel}:{line}: {text[:140]}" for rel, line, text in hits[:120]))
+        return 1
+    # Settings alerts and pop-outs: every tr("...") literal must be a pack key,
+    # so a new warning never shows up in English only.
+    strict_missing = []
+    for name in ("setting-alerts.js", "badges.js"):
+        path = ROOT / name
+        if not path.exists():
+            continue
+        src = path.read_text(encoding="utf-8")
+        for match in re.finditer(r'\btr\(\s*"((?:[^"\\]|\\.)*)"', src):
+            key = json.loads('"' + match.group(1) + '"')
+            if key not in packs["en"]:
+                strict_missing.append(f"{name}:{line_of(src, match.start())}: {key[:140]}")
+    if strict_missing:
+        print(f"{len(strict_missing)} tr() keys are missing from the language packs")
+        print("\n".join(strict_missing[:120]))
         return 1
     print(f"i18n ok ({len(packs['en'])} keys)")
     return 0

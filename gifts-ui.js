@@ -77,13 +77,49 @@
     }).catch(function () {});
   }
 
+  /* Daily visit, reading and game points are awarded at most once per UTC
+     day, so a reload, a second tab or another visit the same day has nothing
+     to ask for. Each touch is remembered on this device until the day ends,
+     or until the server's wait ends when it paced us. */
+  var touching = {};
+  function touchWho() {
+    try {
+      var acct = root.ViktorychAccounts && root.ViktorychAccounts.account && root.ViktorychAccounts.account();
+      if (acct && acct.publicId) return String(acct.publicId);
+    } catch (err) { /* fall back to the token */ }
+    return String(token()).slice(-12);
+  }
+  function touchKey(action, gameId) {
+    return "vk-points-touch:" + touchWho() + ":" + action + ":" + (gameId || "");
+  }
+  function dayEnd(now) {
+    var d = new Date(now);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+  }
+  function touchHeld(key, now) {
+    try { return Number(root.localStorage.getItem(key) || 0) > now; } catch (err) { return false; }
+  }
+  function touchHold(key, until) {
+    try { root.localStorage.setItem(key, String(until)); } catch (err) { /* private mode */ }
+  }
+
   function touch(action, gameId) {
     var auth = token();
-    if (!auth) return Promise.resolve();
-    return call("/v1/points/touch", { method: "POST", token: auth, body: { action: action, gameId: gameId || "" } }).then(function (body) {
+    if (!auth) return Promise.resolve(false);
+    var key = touchKey(action, gameId);
+    var now = Date.now();
+    if (touchHeld(key, now)) return Promise.resolve(false);
+    if (touching[key]) return touching[key];
+    touching[key] = call("/v1/points/touch", { method: "POST", token: auth, body: { action: action, gameId: gameId || "" } }).then(function (body) {
+      delete touching[key];
+      var code = body && body.status;
+      if (code === 200) touchHold(key, dayEnd(Date.now()));
+      else if (code === 429) touchHold(key, Date.now() + Math.max(60, Number(body.retry) || 0) * 1000 + 15 * 60 * 1000);
       if (body && body.balance != null) balance = Number(body.balance) || 0;
       paintBalance();
-    }).catch(function () {});
+      return code === 200 && Number(body.awarded) > 0;
+    }).catch(function () { delete touching[key]; return false; });
+    return touching[key];
   }
 
   function start() {
@@ -91,7 +127,10 @@
     started = true;
     loadCatalog();
     loadPoints().then(function () {
-      touch("login").then(function () { return touch("read"); }).then(loadPoints);
+      var gained = false;
+      touch("login").then(function (got) { gained = gained || got; return touch("read"); }).then(function (got) {
+        if (gained || got) return loadPoints();
+      });
     });
   }
 

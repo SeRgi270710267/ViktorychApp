@@ -32,7 +32,7 @@ function load(extra) {
     addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true,
     CustomEvent: function () {}, t: (k) => k,
     SI18n: { productName: () => "ViktorychApp" },
-    VIKTORYCH_ACCOUNTS: Object.assign({ api: "https://a.test", backupApi: "https://b.test", gate: false, hedgeMs: 60, readTimeoutMs: 400 }, extra || {}),
+    VIKTORYCH_ACCOUNTS: Object.assign({ api: "https://a.test", backupApi: "https://b.test", gate: false, hedgeMs: 60, readTimeoutMs: 400, poolBalance: false }, extra || {}),
     fetch: (u, i) => fakeFetch(u, i),
     location: { hash: "#/", replace() {} },
     matchMedia: () => ({ matches: false }),

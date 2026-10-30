@@ -11,7 +11,8 @@ import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
 import { usageReport } from "./usage.js";
-import { guardClass, guardKey, takeToken, publishPulse, pulseResponse } from "./guard.js";
+import { quotaPct, refreshQuota } from "./quota.js";
+import { guardClass, guardKey, takeToken, noteGuardTier, tokenGuardKey, publishPulse, pulseResponse } from "./guard.js";
 import { handleNostr } from "./nostr.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
@@ -21,12 +22,13 @@ import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, wat
 import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
-import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
+import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys, readUsableKey, markKeyAttention } from "./owner-keys.js";
 import { TEMP_SCHEMA, cleanDeviceKey, decorateTemporary, handleTemporary, markTemporary, sweepTemporary, tempBlockedPointsRoute, tempExpiry, tempSignupsPerDay, isTemporary } from "./temp-accounts.js";
 import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
+import { handleTvPair } from "./tv-pair.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handlePool, notePoolDocument, poolSignable, poolUsage } from "./peer-pool.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
@@ -40,7 +42,10 @@ import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
 import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
+import { handleYtm } from "./ytmusic.js";
 import { logError } from "./log.js";
+import { tiktokPublic, ownerOnlyItem, stripOwnerOnly } from "./owner-only.js";
+import { handleSeal } from "./data-seal.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
 import { warmRender } from "./render-warm.js";
@@ -53,6 +58,7 @@ import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingRequest, importAllowed, readFollowRows, outgoingRequestIds, requestCount, followsYouSet, handleSocialRoutes, blockedProfile, stripBlockedView, blocksEither, pairState } from "./social.js";
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
+import { SUGGEST_SCHEMA, handleSuggestRoutes } from "./suggest.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
 import { syncVk, vkDue } from "./vk.js";
 import { handlePackagesRoute, pollPackages, packageNotifier } from "./packages.js";
@@ -66,7 +72,9 @@ import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { GAMES_SCHEMA, handleGames } from "./games.js";
+import { SERVERS_SCHEMA, handleServers } from "./servers.js";
 import { REACTION_SCHEMA, handleReactions } from "./reactions.js";
+import { handleCommunityNotes, runCommunityNotes } from "./community-notes.js";
 import { handleP2p } from "./p2p.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
@@ -120,7 +128,7 @@ function originAllowed(env, origin) {
 
 function areaFor(path, method) {
   const text = String(path || "");
-  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/") || text.startsWith("/v1/webauthn/")) return "auth";
+  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/") || text.startsWith("/v1/tv-pair/") || text.startsWith("/v1/webauthn/")) return "auth";
   if (text === "/v1/sync" || text.startsWith("/v1/sync/")) return "sync";
   if (text === "/v1/owner/keys" || text.startsWith("/v1/owner/keys/")) return "owner-keys";
   if (text.startsWith("/v1/media/") || (text === "/v1/profile" && method === "PATCH")) return "upload";
@@ -162,7 +170,9 @@ function withCors(request, env, response) {
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
   headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent");
-  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag");
+  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag, Retry-After, X-Limit-Scope, X-Quota-Pct");
+  const quota = quotaPct(Date.now());
+  if (quota >= 0) headers.set("x-quota-pct", String(quota));
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
   headers.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
@@ -264,7 +274,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA, SUGGEST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -310,8 +320,21 @@ async function rateHit(env, bucket, limit, windowMs) {
   return { ok: true, retry: 0 };
 }
 
+/* Every 429 a route returns is about that one action. Only the request
+   guard above answers "device". Clients fail over to the backup server only
+   for a device limit or a bare 429 from Cloudflare itself. */
+function scopeLimit(response) {
+  if (!response || response.status !== 429 || response.webSocket || response.headers.get("x-limit-scope")) return response;
+  const headers = new Headers(response.headers);
+  headers.set("x-limit-scope", "action");
+  return new Response(response.body, { status: 429, headers });
+}
+
+/* One action (follows, gifts, sign-in tries...) is paced. The device itself
+   is not throttled, so the client shows the action's own message and keeps
+   using this server. */
 function limited(result) {
-  return json(429, { error: "rate_limited" }, { "retry-after": String(result.retry || 60) });
+  return json(429, { error: "rate_limited" }, { "retry-after": String(result.retry || 60), "x-limit-scope": "action" });
 }
 
 function cleanName(value) {
@@ -607,6 +630,8 @@ async function sessionAccount(env, request) {
   } catch (err) {
     row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty, a.private_follows, a.profile_less, a.protected_account FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
   }
+  // A live session lifts this token into the signed-in (or owner) guard bucket.
+  if (row) noteGuardTier(tokenGuardKey(token), Number(row.owner) === 1 ? "owner" : "signed");
   return row || null;
 }
 
@@ -1488,40 +1513,6 @@ function dataKey(pathname) {
   if (!key || key.indexOf("..") >= 0 || key.charAt(0) === "/" || key.indexOf("\\") >= 0) return "";
   if (key === "archive/ia-state.json" || key === "archive/ia-manifest.json") return "";
   return DATA_KEY.test(key) ? key : "";
-}
-
-function tiktokPublic(env) {
-  return String((env && env.TIKTOK_AUDIENCE) || "owner") === "all";
-}
-
-function ownerOnlyItem(item, env) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) return false;
-  if (item.ownerOnly === true) return true;
-  const platform = String(item.platform || "").toLowerCase();
-  if (platform === "tiktok" && !tiktokPublic(env)) return true;
-  const kind = String(item.kind || item.type || "").toLowerCase();
-  if (kind === "short" || kind === "shorts") return true;
-  if (item.short === true || item.isShort === true) return true;
-  const blob = [item.url, item.link, item.watch, item.external, item.canonical].filter(Boolean).join(" ");
-  return /\/shorts\//i.test(blob);
-}
-
-function stripOwnerOnly(value, env) {
-  if (Array.isArray(value)) {
-    const out = [];
-    for (let i = 0; i < value.length; i++) {
-      const item = value[i];
-      if (item && typeof item === "object" && !Array.isArray(item) && ownerOnlyItem(item, env)) continue;
-      out.push(stripOwnerOnly(item, env));
-    }
-    return out;
-  }
-  if (value && typeof value === "object") {
-    const out = {};
-    Object.keys(value).forEach((key) => { out[key] = stripOwnerOnly(value[key], env); });
-    return out;
-  }
-  return value;
 }
 
 function etagMatches(header, etag) {
@@ -5377,6 +5368,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/unfurl" && request.method === "GET") {
     return handleUnfurl(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
+  if (path.startsWith("/v1/ytm/") && request.method === "GET") {
+    return handleYtm(request, env, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
   await ensureSchema(env);
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {
     const isTor = !!(request.cf && request.cf.isTor) || request.headers.get("cf-ipcountry") === "T1";
@@ -5405,6 +5399,7 @@ async function route(request, env, ctx) {
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   const viewMedia = path.match(/^\/v1\/media\/view\/([a-f0-9]{32})$/);
   if (viewMedia && request.method === "GET") return handleMediaView(request, env, viewMedia[1]);
+  if (path === "/v1/seal") return handleSeal(request, env, { json, sessionAccount });
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path, ctx);
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
@@ -5446,6 +5441,12 @@ async function route(request, env, ctx) {
   if (path === "/v1/signup/challenge" && request.method === "GET") return json(200, await issueChallenge(env));
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
+  if (path.startsWith("/v1/tv-pair/")) return handleTvPair(request, env, {
+    json, sha256Hex, rateHit, limited, clientIp, mintSession, sessionAccount, presentAccount, blockDeletedLogin,
+    notify: emitNotification,
+    findAccount: async (db, name) => { const found = await resolveName(db, name, ""); return found ? found.publicId : ""; },
+    waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null
+  });
   if (path === "/v1/recovery/restore" && request.method === "POST") return handleRecoveryRestore(request, env, recoveryDeps());
   if (path === "/v1/recovery/codes" && request.method === "POST") return handleRecoveryRegenerate(request, env, recoveryDeps());
   if (path.startsWith("/v1/webauthn/")) {
@@ -5524,6 +5525,8 @@ async function route(request, env, ctx) {
     if (!viewer) return json(401, { error: "unauthorized" });
     return mentionSuggest(env, request, url, viewer, { json, rateHit, mediaUrl: mediaPublicUrl });
   }
+  const suggested = await handleSuggestRoutes(request, env, path, url, { json, readJson, rateHit, sessionAccount, mediaUrl: mediaPublicUrl });
+  if (suggested) return suggested;
   const social = await handleSocialRoutes(request, env, path, url, {
     json,
     readJson,
@@ -5541,6 +5544,10 @@ async function route(request, env, ctx) {
   if (path === "/v1/p2p/signal") {
     const signaled = await handleP2p(request, env, path, url, recoveryDeps());
     if (signaled) return signaled;
+  }
+  if (path.startsWith("/v1/cnotes")) {
+    const noted = await handleCommunityNotes(request, env, path, url, Object.assign(recoveryDeps(), { emit: emitNotification }), ctx);
+    if (noted) return noted;
   }
   if (path.startsWith("/v1/reactions")) {
     const reacted = await handleReactions(request, env, path, url, recoveryDeps());
@@ -5643,7 +5650,7 @@ async function route(request, env, ctx) {
     if (handled) return handled;
   }
   if (isPickPath(path)) {
-    const handled = await handleDiscordPickRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    const handled = await handleDiscordPickRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited, readKey: (e) => readUsableKey(e, "discord"), markKey: (e, reason) => markKeyAttention(e, "discord", reason) });
     if (handled) return handled;
   }
   if (path === "/v1/discord/alerts" || path.startsWith("/v1/discord/alerts/")) {
@@ -5752,12 +5759,13 @@ export default {
       if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
       // One client cannot spend the free daily budget alone. Sync jobs that
       // sign with the bot secret are not counted. Tests leave REQUEST_GUARD unset.
+      try { refreshQuota(env, ctx, Date.now()); } catch (err) { /* the header just stays stale */ }
       const kind = guardClass(request.method, path);
       if (kind && String(env.REQUEST_GUARD || "") === "on" && !bearerIsBot(env, request)) {
         const take = takeToken(guardKey(request), kind, Date.now());
-        if (!take.ok) return withCors(request, env, json(429, { error: "rate_limited" }, { "retry-after": String(take.retry) }));
+        if (!take.ok) return withCors(request, env, json(429, { error: "rate_limited", scope: "device" }, { "retry-after": String(take.retry), "x-limit-scope": "device" }));
       }
-      const response = await withEtag(request, await route(request, env, ctx));
+      const response = scopeLimit(await withEtag(request, await route(request, env, ctx)));
       return withCors(request, env, response);
     } catch (err) {
       logError(areaFor(path, request.method), err);
@@ -5796,6 +5804,9 @@ export default {
     jobs.push(warmRender(env, at).catch(() => null));
     jobs.push(maybeBackupSettings(env, at));
     if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
+    // Community Notes: score and publish three times an hour, and only when
+    // a rating, a note or the X mirror changed since the last run.
+    if (minute % 20 === 3 && !off.communityNotes) run("communityNotes", () => runCommunityNotes(env, at, emitNotification));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") logError("cron", results[i].reason);

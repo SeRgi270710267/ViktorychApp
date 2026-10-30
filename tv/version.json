@@ -1,7 +1,7 @@
 {
-  "versionCode": 1,
-  "versionName": "1.0.0",
+  "versionCode": 3,
+  "versionName": "1.2.0",
   "apk": "tv/ViktorychTV.apk",
   "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
-  "notes": "First TV app: ViktorychApp on the Google TV home screen."
+  "notes": "Play ReGone with an Xbox, PlayStation or other controller. Also opens Sign in with your phone right away and falls back to GitHub Pages if the short address is down."
 }
