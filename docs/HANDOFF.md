@@ -4,6 +4,8 @@ A takeover guide for the next assistant or coding agent. Written from the state 
 
 > **Keep usage low:** read [LOW-USAGE.md](LOW-USAGE.md) before doing any work.
 
+> **AI agents start here:** [`AGENTS.md`](../AGENTS.md) is the single source of truth for rules, architecture and shipping. Current snapshot: [STATUS.md](STATUS.md). Opening the repo in Google Antigravity, with starter prompts: [ANTIGRAVITY.md](ANTIGRAVITY.md). Antigravity rules are in `.agents/rules/` and slash-command skills in `.agents/skills/`.
+
 ## 0. Running with nobody
 
 If no assistant is working on the project, read `docs/RUNNING-WITHOUT-BOT.md`. The Worker watchdog (`worker/src/watchdog.js`) keeps workflows on, re-runs a stuck deploy and reports health.

@@ -512,6 +512,8 @@ direct.setFetch(function (url) {
   assert.strictEqual(body.via, "server");
   delete global.window;
   console.log("device performance ok");
+  // "Delete all data on this device", encryption at rest and expiry.
+  require("child_process").execFileSync(process.execPath, [require("path").join(__dirname, "device_seal_test.js")], { stdio: "inherit" });
 }).catch(function (err) {
   console.error(err);
   process.exit(1);

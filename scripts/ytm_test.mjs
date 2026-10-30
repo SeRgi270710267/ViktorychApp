@@ -212,6 +212,10 @@ async function exercise(browser, origin, vp) {
   await until(page, where + " best quality asked", () => (window.__ytcmds || []).some((c) => c.indexOf('setPlaybackQuality:["hd1080"]') === 0));
   let s = await ev(page, look);
   if (!/is-card/.test(s.cls) && !/is-mini/.test(s.cls)) fail(where + " player mode on the music page is " + s.cls);
+  /* Wide screens: the one music square in the corner row, never a second
+     floating card over the side column. Phones keep the card over the bar. */
+  if (vp.width >= 500 && (!/is-mini/.test(s.cls) || !s.dockYt)) fail(where + " YouTube on the music page is not in the music square " + s.cls);
+  if (vp.width < 500 && !/is-card/.test(s.cls)) fail(where + " phone YouTube on the music page is not the card " + s.cls);
   onScreen(where + " music page", s);
 
   /* Elsewhere in the app the dock grows to 200x200 for YouTube only. */
@@ -248,6 +252,8 @@ async function exercise(browser, origin, vp) {
   await until(page, where + " ours page", () => !!document.querySelector(".mu-tile[data-id='tone-a']"));
   await page.click(".mu-tile[data-id='tone-a']");
   await until(page, where + " own song plays", () => { const a = document.getElementById("mu-audio"); return a && !a.paused && a.currentTime > 0.1; }, null, 15000);
+  /* Back to our own song on the music page: the full bar again. */
+  await until(page, where + " full bar for our song", () => { const d = document.getElementById("mu-dock"); return d && !document.documentElement.classList.contains("music-mini") && !d.classList.contains("is-yt") && d.getBoundingClientRect().width > 300; });
   await ev(page, () => { location.hash = "#/explore"; });
   await until(page, where + " small dock again", () => { const h = document.getElementById("mu-yt-host"); const d = document.getElementById("mu-dock"); return h && /is-off/.test(h.className) && d && !d.classList.contains("is-yt") && !d.hidden && d.getBoundingClientRect().width <= 60; });
   s = await ev(page, look);

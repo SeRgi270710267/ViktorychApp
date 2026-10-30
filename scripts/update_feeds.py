@@ -1204,6 +1204,13 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             config["_catalogIds"] = cat_ids
         except Exception:
             print("[catalog] unavailable", file=sys.stderr)
+        # Sources the owner banned are dropped here, before any fetch.
+        try:
+            from feed_bans import drop_banned
+
+            feed_rows[:] = drop_banned(feed_rows)
+        except Exception:
+            print("[bans] unavailable", file=sys.stderr)
         for row in feed_rows:
             if isinstance(row, dict):
                 ensure_x_lanes(row, config)

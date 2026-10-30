@@ -164,6 +164,10 @@ export async function communityHomeRows(env, request, viewer, presentAccount, op
     return { posts: [], communitiesHome: true };
   }
   if (!communitiesHome) return { posts: [], communitiesHome: false };
+  // For you also mixes in mirrored communities (Reddit, forums), which the app
+  // reads from the data mirror, not D1: hand back which ones the viewer joined or
+  // hid so the client picks without another Worker request.
+  const prefs = authorId ? null : await communityPrefs(env, viewerId, ownerView);
   let listed;
   if (authorId) try {
     listed = await env.DB.prepare(
@@ -229,7 +233,28 @@ export async function communityHomeRows(env, request, viewer, presentAccount, op
       community: { name: row.community_id, rootId: rootOf(row.parent_id, row.id) }
     });
   }
-  return { posts: posts, communitiesHome: true };
+  return prefs ? { posts: posts, communitiesHome: true, prefs: prefs } : { posts: posts, communitiesHome: true };
+}
+
+async function communityPrefs(env, viewerId, ownerView) {
+  const out = { joined: [], hidden: [], all: !!ownerView };
+  if (!viewerId) return out;
+  try {
+    const got = await env.DB.prepare(
+      "SELECT community_id AS id, 1 AS j, 1 AS s, 0 AS m FROM community_members WHERE public_id = ? UNION ALL SELECT community_id AS id, 0 AS j, show_home AS s, muted AS m FROM community_feed_prefs WHERE public_id = ? AND community_id != ''"
+    ).bind(viewerId, viewerId).all();
+    const joined = new Set();
+    const hidden = new Set();
+    ((got && got.results) || []).forEach((row) => {
+      const id = String(row.id || "");
+      if (!id) return;
+      if (Number(row.j) === 1) joined.add(id);
+      if (Number(row.s) === 0 || Number(row.m) === 1) hidden.add(id);
+    });
+    out.joined = Array.from(joined).slice(0, 200);
+    out.hidden = Array.from(hidden).slice(0, 200);
+  } catch (err) { /* the client falls back to its own join list */ }
+  return out;
 }
 
 export async function addCommunityPost(env, request, opts) {
@@ -349,6 +374,7 @@ export async function handleCommunityRoute(request, env, path, url, deps) {
   const row = gate.row;
   if (path === "/v1/communities/notes" && request.method === "GET") return listNotes(request, env, row, json, rateHit, limited);
   if (path === "/v1/communities/notes/seen" && request.method === "POST") return seeNotes(request, env, row, json, readJson, rateHit, limited);
+  if (path === "/v1/communities/featured" && request.method === "GET") return readFeaturedRoute(env, row, json, rateHit, limited);
   if (path === "/v1/communities/home" && request.method === "GET") return readGlobalHome(env, row, json);
   if (path === "/v1/communities/home" && request.method === "POST") return writeGlobalHome(request, env, row, json, readJson, rateHit, limited);
   const parts = path.split("/").filter(Boolean);
@@ -365,6 +391,37 @@ export async function handleCommunityRoute(request, env, path, url, deps) {
   if (parts.length === 4 && parts[3] === "feed" && request.method === "POST") return writeCommunityFeed(request, env, name, row, json, readJson, rateHit, limited);
   if (parts.length === 4 && parts[3] === "visibility" && request.method === "POST") return writeVisibility(request, env, name, row, json, readJson, rateHit, limited);
   return json(404, { error: "not_found" });
+}
+
+/* The owner add, also used when the owner allows a community request. */
+export async function addOwnerCommunity(env, raw, deps) {
+  const name = communityName(raw);
+  if (!name) return { error: "bad_community", status: 400 };
+  const feedRequests = await import("./feed-requests.js");
+  if (await feedRequests.bannedKeys(env, ["reddit:r:" + name, "reddit:" + name])) return { error: "banned", status: 403 };
+  const doc = await readOwner(env);
+  doc.removed = doc.removed.filter((item) => item !== name);
+  if (!doc.added.some((item) => item.name === name)) {
+    if (doc.added.length >= CAP) return { error: "full", status: 400 };
+    doc.added.push({ name, title: "", addedAt: Date.now() });
+  }
+  await writeOwner(env, doc);
+  let dispatched = false;
+  try { dispatched = await deps.dispatchWorkflows(env, ["sync.yml", "reddit.yml"]); }
+  catch (err) { dispatched = false; }
+  return { community: { name }, dispatched };
+}
+
+/* A banned subreddit leaves the owner list, so the sync stops fetching it. */
+export async function dropOwnerCommunities(env, names) {
+  const want = (names || []).map((name) => communityName(name)).filter(Boolean);
+  if (!want.length || !env.DATA) return 0;
+  const doc = await readOwner(env);
+  const before = doc.added.length;
+  doc.added = doc.added.filter((item) => want.indexOf(item.name) < 0);
+  want.forEach((name) => { if (doc.removed.indexOf(name) < 0) doc.removed.push(name); });
+  await writeOwner(env, doc);
+  return before - doc.added.length;
 }
 
 async function handleOwner(request, env, path, deps) {
@@ -384,19 +441,18 @@ async function handleOwner(request, env, path, deps) {
     if (!hit.ok) return limited(hit);
     const body = await readJson(request, 2000);
     if (body.error) return json(400, { error: body.error });
-    const name = communityName(body.name || body.url || "");
-    if (!name) return json(400, { error: "bad_community" });
-    const doc = await readOwner(env);
-    doc.removed = doc.removed.filter((item) => item !== name);
-    if (!doc.added.some((item) => item.name === name)) {
-      if (doc.added.length >= CAP) return json(400, { error: "full" });
-      doc.added.push({ name, title: "", addedAt: Date.now() });
-    }
-    await writeOwner(env, doc);
-    let dispatched = false;
-    try { dispatched = await dispatchWorkflows(env, ["sync.yml", "reddit.yml"]); }
-    catch (err) { dispatched = false; }
-    return json(200, { community: { name }, dispatched });
+    const added = await addOwnerCommunity(env, body.name || body.url || "", deps);
+    if (added.error) return json(added.status || 400, { error: added.error });
+    return json(200, added);
+  }
+  if (path === "/v1/owner/communities/featured" && request.method === "POST") {
+    const hit = await rateHit(env, bucket + ":featured", 60, 60 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const body = await readJson(request, 4000);
+    if (body.error) return json(400, { error: body.error });
+    if (!Array.isArray(body.names)) return json(400, { error: "bad_community" });
+    const names = await writeFeatured(env, body.names);
+    return json(200, { featured: names });
   }
   const match = path.match(/^\/v1\/owner\/communities\/([^/]+)$/);
   if (match && request.method === "DELETE") {
@@ -696,4 +752,74 @@ async function seeNotes(request, env, row, json, readJson, rateHit, limited) {
     await env.DB.prepare("UPDATE community_notes SET seen = 1 WHERE id = ? AND public_id = ?").bind(String(id), row.public_id).run();
   }
   return json(200, { ok: true });
+}
+
+/* Featured communities: the owner's pinned order for the Explore row. One
+   small D1 table holds names and positions only (no account ids); every
+   isolate keeps the list for 30 seconds. Anyone signed in reads it, only the
+   owner writes it (through the owner route above). */
+export const FEATURED_CAP = 24;
+const FEATURED_MEMO_MS = 30 * 1000;
+let featuredMemo = null;
+let featuredMemoAt = 0;
+let featuredSchema = null;
+
+function ensureFeaturedSchema(env) {
+  if (!featuredSchema) {
+    featuredSchema = env.DB.prepare("CREATE TABLE IF NOT EXISTS community_featured (name TEXT PRIMARY KEY, pos INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)").run()
+      .catch((err) => { featuredSchema = null; throw err; });
+  }
+  return featuredSchema;
+}
+
+export function forgetFeatured() {
+  featuredMemo = null;
+  featuredMemoAt = 0;
+  featuredSchema = null;
+}
+
+export function cleanFeatured(list) {
+  const out = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const name = communityName(item);
+    if (name && out.indexOf(name) < 0) out.push(name);
+    if (out.length >= FEATURED_CAP) break;
+  }
+  return out;
+}
+
+export async function readFeatured(env) {
+  const now = Date.now();
+  if (featuredMemo && now - featuredMemoAt < FEATURED_MEMO_MS) return featuredMemo.slice();
+  let names = [];
+  try {
+    await ensureFeaturedSchema(env);
+    const rows = await env.DB.prepare("SELECT name FROM community_featured ORDER BY pos ASC, name ASC LIMIT ?").bind(FEATURED_CAP).all();
+    names = cleanFeatured(((rows && rows.results) || []).map((item) => item.name));
+  } catch (err) {
+    return featuredMemo ? featuredMemo.slice() : [];
+  }
+  featuredMemo = names;
+  featuredMemoAt = now;
+  return names.slice();
+}
+
+async function writeFeatured(env, list) {
+  const names = cleanFeatured(list);
+  await ensureFeaturedSchema(env);
+  const now = Date.now();
+  const steps = [env.DB.prepare("DELETE FROM community_featured")];
+  names.forEach((name, pos) => {
+    steps.push(env.DB.prepare("INSERT INTO community_featured (name, pos, updated_at) VALUES (?, ?, ?)").bind(name, pos, now));
+  });
+  await env.DB.batch(steps);
+  featuredMemo = names;
+  featuredMemoAt = now;
+  return names.slice();
+}
+
+async function readFeaturedRoute(env, row, json, rateHit, limited) {
+  const hit = await rateHit(env, "community-featured:" + row.public_id, 60, 10 * 60 * 1000);
+  if (!hit.ok) return limited(hit);
+  return json(200, { featured: await readFeatured(env), canEdit: row.owner === 1 });
 }

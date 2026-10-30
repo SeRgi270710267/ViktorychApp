@@ -864,6 +864,10 @@
     if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path)) || /^\/v1\/ext-graph\/youtube\?/.test(String(path))) {
       var mainRoot = String(config().api || "").replace(/\/$/, "");
       if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
+      // Owner usage goes to the Worker only. Its analytics read can take a
+      // few seconds, and a hedged read to the backup used to win the race
+      // with an answer the panel cannot use, leaving it on "Loading" forever.
+      if (mainRoot && /^\/v1\/owner\/usage/.test(String(path))) list = [mainRoot];
     }
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     var headers = {};
@@ -1056,7 +1060,25 @@
     if (code === "bad_expiry") return tr("Pick a time between 15 minutes and 90 days from now.");
     if (code === "temporary_account") return tr("Temporary accounts can't do this. Save the account first.");
     if (code === "temporary_dm_limit") return tr("Temporary accounts can only send a few messages a day to people they don't know.");
+    if (code === "timeout") return tr("The server took too long to answer. Try again in a minute.");
+    if (code === "turnstile") return tr("The security check didn't pass. Reload the page and try again.");
     return tr("Something went wrong. Try again.");
+  }
+  /* Sign-up answers in words that say what happened: a stalled or failing
+     server, a limit, or the plain code when nothing else fits. */
+  function signupError(res, temporary) {
+    res = res || {};
+    var code = res.error || "";
+    var status = Number(res.status) || 0;
+    if (status === 429) {
+      if (temporary && code !== "rate_limited") return tr("Too many temporary accounts today. Try again tomorrow.");
+      return tr("Too many attempts. Try again later.");
+    }
+    if (code === "timeout" || code === "all_endpoints_failed" || code === "unavailable") return tr("Sign-up is temporarily unavailable. Try again in a few minutes.");
+    if (code === "not_configured") return tr("Sign-up is temporarily unavailable. Try again in a few minutes.");
+    var text = errorMessage(code);
+    if (text === tr("Something went wrong. Try again.")) return tr("Something went wrong (error {code}). Try again.", { code: code || status || "?" });
+    return text;
   }
   function layer() {
     return document.getElementById("account-layer");
@@ -1315,6 +1337,7 @@
     return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + quiet + invalid + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
   }
   function errorHtml() {
+    if (!errorText && authBusy && signupSlow) return '<p class="acct-wait" id="acct-error" role="status">' + esc(tr("The server is slow. Still trying…")) + "</p>";
     return '<p class="acct-error" id="acct-error"' + (errorText ? ' role="alert"' : "") + ">" + esc(errorText) + "</p>";
   }
   function nextButton(act, label, extraDisabled) {
@@ -1658,22 +1681,131 @@ var numberNote = form.passkey
     var removeBanner = banner ? '<button class="acct-cam acct-banner-x" type="button" data-acct="banner-clear" aria-label="' + esc(tr("Remove banner")) + '">' + closeIcon() + "</button>" : "";
     var removeAvatar = avatar ? '<button class="acct-cam acct-ava-x" type="button" data-acct="avatar-clear" aria-label="' + esc(tr("Remove photo")) + '">' + closeIcon() + "</button>" : "";
     var face = avatar ? photoHtml(avatar, "") : (avatarNone ? "" : '<span class="acct-silhouette">' + PERSON + "</span>");
-    return '<div class="' + hero + '"><div class="acct-banner">' + (banner ? photoHtml(banner, "") : "") +
+    return '<div class="' + hero + '"><div class="acct-banner' + (banner ? " has-photo" : "") + '">' + (banner ? photoHtml(banner, "") : "") +
       '<button class="acct-cam" type="button" data-acct="media-menu" data-kind="banner" aria-label="' + esc(tr("Add photo")) + '" aria-expanded="' + (form.mediaMenu === "banner" ? "true" : "false") + '">' + cameraIcon() + "</button>" + removeBanner +
-      '</div><div class="acct-ava' + (avatarNone ? " is-none" : "") + '">' + face +
+      '</div><div class="acct-ava' + (avatarNone ? " is-none" : "") + (avatar ? " has-photo" : "") + '">' + face +
       '<button class="acct-cam" type="button" data-acct="media-menu" data-kind="avatar" aria-label="' + esc(tr("Add photo")) + '" aria-expanded="' + (form.mediaMenu === "avatar" ? "true" : "false") + '">' + cameraIcon() + "</button>" + removeAvatar +
       "</div>" + mediaMenu("banner") + mediaMenu("avatar") + "</div>" +
       '<input class="acct-hidden" name="avatar" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1">' +
       '<input class="acct-hidden" name="banner" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1">';
   }
+  /* Edit profile, X's own sheet: a centered 600px modal on desktop and a
+     full-screen sheet on phones. Usernames open as a subpage with a back
+     arrow; unsaved changes ask before they are thrown away. */
+  function chevronIcon() {
+    return '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M14.586 12 7.543 4.96l1.414-1.42L17.414 12l-8.457 8.46-1.414-1.42z"/></svg>';
+  }
+  function epRow(act, title, sub, extra) {
+    return '<button class="ep-row" type="button" data-acct="' + act + '"' + (extra || "") + '><span class="ep-row-copy"><b>' + esc(title) + "</b>" + (sub ? "<span>" + esc(sub) + "</span>" : "") + '</span><span class="ep-chev">' + chevronIcon() + "</span></button>";
+  }
+  function epSwitch(act, on, title, sub) {
+    return '<div class="acct-pref-row ep-switch"><div class="acct-pref-text"><b>' + esc(title) + "</b><p>" + esc(sub) + '</p></div><button class="tab-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" aria-label="' + esc(title) + '" data-acct="' + act + '"><i></i></button></div>';
+  }
+  var EP_KEYS = ["displayName", "bio", "location", "website", "privateFollows", "profileLess", "bdayText", "bdayAudience", "bdayShowYear"];
+  function epSnapshot() {
+    var snap = {};
+    EP_KEYS.forEach(function (key) { snap[key] = form[key] == null ? "" : form[key]; });
+    return snap;
+  }
+  function editDirty() {
+    if (view !== "edit" && view !== "crop") return false;
+    if (form.avatarTouched || form.bannerTouched) return true;
+    var start = form.initial || {};
+    return EP_KEYS.some(function (key) {
+      var now = form[key] == null ? "" : form[key];
+      var was = start[key] == null ? "" : start[key];
+      return typeof now === "string" || typeof was === "string" ? String(now).trim() !== String(was).trim() : now !== was;
+    });
+  }
+  function uiLang() {
+    var lang = document.documentElement.getAttribute("lang") || "en";
+    return lang || "en";
+  }
+  function bdayLabel(text) {
+    var raw = String(text || "").trim();
+    var full = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    var short = raw.match(/^(\d{2})-(\d{2})$/);
+    try {
+      if (full) return new Intl.DateTimeFormat(uiLang(), { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(+full[1], +full[2] - 1, +full[3])));
+      if (short) return new Intl.DateTimeFormat(uiLang(), { month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(2000, +short[1] - 1, +short[2])));
+    } catch (err) { /* the raw text is still readable */ }
+    return raw;
+  }
+  function bdayAudienceSelect() {
+    var current = form.bdayAudience || "only";
+    var options = [["public", tr("Everyone")], ["followers", tr("Followers")], ["friends", tr("Mutuals")], ["only", tr("Only me")]];
+    if (current === "list") options.push(["list", tr("Custom list")]);
+    return '<div class="acct-field ep-select"><select id="acct-bdayAudience" name="bdayAudience">' + options.map(function (pair) {
+      return '<option value="' + pair[0] + '"' + (pair[0] === current ? " selected" : "") + ">" + esc(pair[1]) + "</option>";
+    }).join("") + '</select><label for="acct-bdayAudience">' + esc(tr("Who can see this")) + "</label></div>";
+  }
+  function bdayBlock() {
+    var value = form.bdayText ? bdayLabel(form.bdayText) : "";
+    var head = '<div class="ep-bday"><div class="ep-bday-head"><span>' + esc(tr("Birth date")) + '</span><span aria-hidden="true"> · </span><button class="ep-link" type="button" data-acct="bday-edit" aria-expanded="' + (form.bdayOpen ? "true" : "false") + '">' + esc(form.bdayOpen ? tr("Cancel") : tr("Edit")) + "</button></div>";
+    if (!form.bdayOpen) {
+      var shown = form.bdayState === "loading" && !value ? tr("Loading…") : (value || tr("Add your birth date"));
+      return head + '<p class="ep-bday-value' + (value ? "" : " muted") + '">' + esc(shown) + "</p></div>";
+    }
+    var dateValue = /^\d{4}-\d{2}-\d{2}$/.test(String(form.bdayText || "")) ? form.bdayText : "";
+    var now = new Date();
+    var max = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    return head + '<p class="ep-bday-note">' + esc(tr("This should be the date of your birthday. It is only on your profile if you choose who sees it.")) + "</p>" +
+      '<div class="acct-field"><input id="acct-bdayText" name="bdayText" type="date" min="1900-01-01" max="' + max + '" placeholder=" " value="' + esc(dateValue) + '"><label for="acct-bdayText">' + esc(tr("Birth date")) + "</label></div>" +
+      bdayAudienceSelect() +
+      epSwitch("toggle-bday-year", !!form.bdayShowYear, tr("Show year"), tr("Others see the day and month only when this is off.")) +
+      (form.bdayText ? '<button class="ep-link ep-bday-clear" type="button" data-acct="bday-clear">' + esc(tr("Remove birth date")) + "</button>" : "") +
+      "</div>";
+  }
+  function usernamesSub() {
+    var api = window.ViktorychUsernames;
+    var names = api && api.names ? api.names() : null;
+    var account = (readSession() || {}).account || {};
+    if (!names || !names.length) return account.handle ? "@" + account.handle : tr("Choose who sees which username and who can mention you.");
+    var main = names.filter(function (n) { return n.primary; })[0] || names[0];
+    return names.length > 1 ? tr("@{handle} and {count} more", { handle: main.handle, count: names.length - 1 }) : "@" + main.handle;
+  }
+  function displayNamesSub() {
+    var api = window.ViktorychDisplayNames;
+    var names = api && api.names ? api.names() : null;
+    if (!names || names.length < 2) return tr("Choose which name each audience sees.");
+    var main = names.filter(function (n) { return n.primary; })[0] || names[0];
+    return tr("{name} and {count} more", { name: main.name, count: names.length - 1 });
+  }
   function editBody() {
-    var privRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Keep followers and following private")) + '</b><p>' + esc(tr("Only you can see your followers and following lists.")) + '</p></div><button class="tab-switch' + (form.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.privateFollows ? "true" : "false") + '" data-acct="toggle-form-private"><i></i></button></div>';
-    var profLessRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" data-acct="toggle-form-profileless"><i></i></button></div>';
-    var linkRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Linked social accounts")) + '</b><p>' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p></div><button class="outline" type="button" data-acct="open-link-identity">' + esc(tr("Link social account")) + '</button></div>';
-    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + privRow + profLessRow + linkRow + '<p class="acct-error">' + esc(errorText) + "</p>";
+    if (form.sub === "displaynames") {
+      var dn = window.ViktorychDisplayNames;
+      return '<div class="ep-subpage">' + (dn && dn.profileHtml ? dn.profileHtml() : '<p class="acct-sub">' + esc(tr("Loading…")) + "</p>") + "</div>";
+    }
+    if (form.sub === "usernames") {
+      var api = window.ViktorychUsernames;
+      return '<div class="ep-subpage">' + (api && api.profileHtml ? api.profileHtml() : '<p class="acct-sub">' + esc(tr("Loading…")) + "</p>") + "</div>";
+    }
+    var privRow = epSwitch("toggle-form-private", form.privateFollows, tr("Keep followers and following private"), tr("Only you can see your followers and following lists."));
+    var profLessRow = epSwitch("toggle-form-profileless", form.profileLess, tr("Profile-less account"), tr("No public profile. Browse and comment anonymously."));
+    var rows = '<div class="ep-rows">' +
+      (window.ViktorychDisplayNames ? epRow("edit-sub", tr("Display names"), displayNamesSub(), ' data-sub="displaynames"') : "") +
+      (window.ViktorychUsernames ? epRow("edit-sub", tr("Usernames"), usernamesSub(), ' data-sub="usernames"') : "") +
+      epRow("open-link-identity", tr("Linked social accounts"), tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) +
+      "</div>";
+    return editMedia() + '<div class="ep-fields">' + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + bdayBlock() + "</div>" + rows + privRow + profLessRow + errorHtml();
+  }
+  function discardHtml() {
+    if (!form.confirmDiscard) return "";
+    return '<div class="ep-confirm" role="alertdialog" aria-modal="true" aria-labelledby="ep-confirm-title" aria-describedby="ep-confirm-text"><div class="ep-confirm-box"><h2 id="ep-confirm-title">' + esc(tr("Discard changes?")) + '</h2><p id="ep-confirm-text">' + esc(tr("This can’t be undone and you’ll lose your changes.")) + '</p><button class="ep-danger" type="button" data-acct="discard-yes">' + esc(tr("Discard")) + '</button><button class="ep-cancel" type="button" data-acct="discard-no">' + esc(tr("Cancel")) + "</button></div></div>";
   }
   function editModal(body) {
-    return '<div class="acct-back"><div class="acct-modal acct-edit" role="dialog" aria-modal="true" aria-label="' + esc(tr("Edit profile")) + '"><div class="acct-head acct-edit-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><h1>' + esc(tr("Edit profile")) + '</h1><button class="acct-save" type="button" data-acct="save-profile">' + esc(tr("Save")) + '</button></div><div class="acct-body acct-edit-body">' + body + "</div></div></div>";
+    var anim = form.anim || "";
+    form.anim = "";
+    var sub = form.sub === "usernames" || form.sub === "displaynames";
+    var title = form.sub === "displaynames" ? tr("Display names") : sub ? tr("Usernames") : tr("Edit profile");
+    var lead = sub
+      ? '<button class="icon-btn" type="button" data-acct="edit-back" aria-label="' + esc(tr("Back")) + '">' + backIcon() + "</button>"
+      : '<button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button>";
+    var save = sub ? "<span></span>" : '<button class="acct-save" type="button" data-acct="save-profile"' + (form.saving ? ' disabled aria-busy="true"' : "") + ">" + esc(tr("Save")) + "</button>";
+    var backCls = "acct-back ep-back" + (anim === "enter" ? " ep-enter" : "");
+    var cls = "acct-modal acct-edit ep" + (sub ? " ep-is-sub" : "") + (anim === "enter" ? " ep-enter" : "");
+    var bodyCls = "acct-body acct-edit-body" + (anim === "sub" ? " ep-slide-in" : anim === "back" ? " ep-slide-back" : "");
+    return '<div class="' + backCls + '" data-ep-back="1"><div class="' + cls + '" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head acct-edit-head"><span class="ep-lead">' + lead + "</span><h1>" + esc(title) + "</h1>" + save + '</div><div class="' + bodyCls + '">' + body + "</div>" + discardHtml() + "</div></div>";
   }
   function cropModal() {
     var title = form.cropKind === "banner" ? tr("Edit banner") : tr("Edit photo");
@@ -1874,8 +2006,139 @@ var numberNote = form.passkey
       form.avatarTouched = false;
       form.bannerTouched = false;
       form.mediaMenu = "";
+      form.bdayText = "";
+      form.bdayAudience = "only";
+      form.bdayShowYear = false;
+      form.bdayOpen = false;
+      form.sub = "";
+      form.anim = "enter";
+      form.initial = epSnapshot();
+      loadBirthday(account);
+      watchUsernames();
+      watchDisplayNames();
     }
     paint();
+  }
+  /* Opens Edit profile, straight on a subpage when asked (Settings >
+     Usernames uses this); back from a subpage opened that way closes. */
+  function openEdit(sub, from) {
+    if (!readSession()) return;
+    if (view !== "edit") openAuth("edit");
+    if (sub === "usernames") {
+      form.sub = "usernames";
+      form.subFrom = from === "settings" ? "settings" : "";
+      paint();
+    }
+  }
+  /* Making another display name the main one changes Name; the open form
+     follows unless it was edited by hand. */
+  var displayNamesWatched = false;
+  function watchDisplayNames() {
+    var api = window.ViktorychDisplayNames;
+    if (displayNamesWatched || !api || !api.watch) return;
+    displayNamesWatched = true;
+    api.watch(function () {
+      if (view !== "edit") return;
+      var names = api.names ? api.names() : null;
+      var main = names ? names.filter(function (n) { return n.primary; })[0] : null;
+      var start = form.initial || {};
+      if (main && main.name && String(form.displayName || "") === String(start.displayName || "") && main.name !== form.displayName) {
+        form.displayName = main.name;
+        start.displayName = main.name;
+      }
+      paint();
+    });
+  }
+  var usernamesWatched = false;
+  function watchUsernames() {
+    var api = window.ViktorychUsernames;
+    if (usernamesWatched || !api || !api.watch) return;
+    usernamesWatched = true;
+    api.watch(function () { if (view === "edit") paint(); });
+  }
+  /* The birthday lives in About (personal details); Edit profile shows and
+     edits that same field, like X's "Birth date · Edit". */
+  function loadBirthday(account) {
+    var session = readSession();
+    if (!session || !account || !account.handle) return;
+    var seq = (form.bdaySeq = (form.bdaySeq || 0) + 1);
+    form.bdayState = "loading";
+    var mine = form;
+    api("/v1/about?handle=" + encodeURIComponent(account.handle), { token: session.token }).then(function (body) {
+      if (form !== mine || mine.bdaySeq !== seq) return;
+      var found = null;
+      ((body && body.sections) || []).forEach(function (section) {
+        ((section && section.fields) || []).forEach(function (f) { if (!found && f && f.kind === "birthday") found = f; });
+      });
+      var untouched = !mine.bdayOpen;
+      mine.bdayState = "ready";
+      if (found) {
+        mine.bdayId = found.id || "";
+        if (untouched) {
+          mine.bdayText = String(found.text || "");
+          mine.bdayAudience = found.audience || "only";
+          mine.bdayShowYear = !!found.showYear;
+          mine.bdayTz = found.tz || "";
+          if (mine.initial) {
+            mine.initial.bdayText = mine.bdayText;
+            mine.initial.bdayAudience = mine.bdayAudience;
+            mine.initial.bdayShowYear = mine.bdayShowYear;
+          }
+        }
+      }
+      if (view === "edit") paint();
+    }).catch(function () {
+      if (form !== mine) return;
+      mine.bdayState = "error";
+      if (view === "edit") paint();
+    });
+  }
+  function birthdayChanged() {
+    var start = form.initial || {};
+    return String(form.bdayText || "") !== String(start.bdayText || "") || String(form.bdayAudience || "") !== String(start.bdayAudience || "") || !!form.bdayShowYear !== !!start.bdayShowYear;
+  }
+  function saveBirthday(token) {
+    if (!birthdayChanged()) return Promise.resolve(true);
+    var text = String(form.bdayText || "").trim();
+    var ok = function (res) { return !!res && (!res.status || res.status < 400); };
+    if (!text) {
+      if (!form.bdayId) return Promise.resolve(true);
+      return api("/v1/about/" + form.bdayId, { method: "DELETE", token: token }).then(ok);
+    }
+    var zone = form.bdayTz || "";
+    if (!zone) { try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (err) { zone = ""; } }
+    var body = { section: "personal", kind: "birthday", text: text, audience: form.bdayAudience || "only", showYear: !!form.bdayShowYear, tz: zone };
+    if (form.bdayAudience === "list") delete body.audience;
+    if (form.bdayId) return api("/v1/about/" + form.bdayId, { method: "PATCH", token: token, body: body }).then(ok);
+    return api("/v1/about", { method: "POST", token: token, body: body }).then(ok);
+  }
+  /* Close with X's short fade/scale; asks first when something changed. */
+  var epClosing = false;
+  function requestEditClose(force) {
+    if (view !== "edit") return;
+    if (form.confirmDiscard && !force) return;
+    if (!force && editDirty()) {
+      form.confirmDiscard = true;
+      paint();
+      var keep = document.querySelector('#account-layer [data-acct="discard-no"]');
+      if (keep) keep.focus();
+      return;
+    }
+    if (epClosing) return;
+    var back = document.querySelector("#account-layer .ep-back");
+    var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var finish = function () {
+      epClosing = false;
+      if (view !== "edit") return;
+      view = "";
+      errorText = "";
+      form = {};
+      paint();
+    };
+    if (!back || still) { finish(); return; }
+    epClosing = true;
+    back.classList.add("ep-leave");
+    setTimeout(finish, 170);
   }
   function closeAuth() {
     if (view === "crop") {
@@ -1884,6 +2147,12 @@ var numberNote = form.passkey
       form.cropReady = false;
       view = "edit";
       paint();
+      return;
+    }
+    if (view === "edit") {
+      if (form.confirmDiscard) { form.confirmDiscard = false; paint(); return; }
+      if (form.sub && form.subFrom !== "settings") { form.sub = ""; form.anim = "back"; paint(); return; }
+      requestEditClose(false);
       return;
     }
     if (view === "signup" && step < 2 && setupOn()) writeOnb(null);
@@ -2026,6 +2295,7 @@ var numberNote = form.passkey
       savedPosts: settings.savedPosts || {},
       feedTabs: settings.feedTabs || [],
       communityTabs: cleanCommunityTabs(settings.communityTabs),
+      communityFolders: cleanCommunityFolders(settings.communityFolders),
       noteTabs: settings.noteTabs || [],
       lastNoteTab: settings.lastNoteTab || "all",
       mutedWords: settings.mutedWords || [],
@@ -2141,6 +2411,38 @@ var numberNote = form.passkey
       tabs.push({ id: id, name: name, sources: sources, home: tab.home === true });
     });
     return { at: Number(bag && bag.at) || 0, tabs: tabs };
+  }
+  /* Folders for the joined communities on the Communities Home row. Private
+     to the account: synced like the rest of its settings, never published. */
+  function cleanCommunityFolders(bag) {
+    var list = bag && Array.isArray(bag.folders) ? bag.folders : [];
+    var folders = [];
+    var seen = {};
+    var used = {};
+    list.forEach(function (folder) {
+      if (!folder || typeof folder !== "object" || folders.length >= 20) return;
+      var id = String(folder.id || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
+      var name = String(folder.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40);
+      if (!id || !name || seen[id]) return;
+      seen[id] = true;
+      var items = [];
+      (Array.isArray(folder.items) ? folder.items : []).forEach(function (item) {
+        var key = String(item || "").toLowerCase();
+        if (/^[a-z0-9_]{2,21}$/.test(key) && !used[key] && items.length < 60) { used[key] = true; items.push(key); }
+      });
+      folders.push({ id: id, name: name, items: items });
+    });
+    var order = [];
+    (bag && Array.isArray(bag.order) ? bag.order : []).forEach(function (key) {
+      key = String(key || "");
+      if (order.length < 200 && /^(?:f:[A-Za-z0-9]{1,24}|c:[a-z0-9_]{2,21})$/.test(key) && order.indexOf(key) < 0) order.push(key);
+    });
+    return { at: Number(bag && bag.at) || 0, folders: folders, order: order };
+  }
+  function pickCommunityFolders(local, remote) {
+    var l = cleanCommunityFolders(local);
+    var r = cleanCommunityFolders(remote);
+    return l.at >= r.at ? l : r;
   }
   function pickCommunityTabs(local, remote) {
     var l = cleanCommunityTabs(local);
@@ -2266,6 +2568,7 @@ var numberNote = form.passkey
       savedPosts: unionObjects(local.savedPosts, remote.savedPosts),
       feedTabs: unionById(local.feedTabs, remote.feedTabs),
       communityTabs: pickCommunityTabs(local.communityTabs, remote.communityTabs),
+      communityFolders: pickCommunityFolders(local.communityFolders, remote.communityFolders),
       noteTabs: mergeNoteTabs(local.noteTabs, remote.noteTabs),
       noteTabsSame: local.noteTabsSame === true || local.noteTabsSame === false ? local.noteTabsSame !== false : remote.noteTabsSame !== false,
       lastNoteTab: local.lastNoteTab || remote.lastNoteTab || "all",
@@ -2547,6 +2850,63 @@ function signupPayload() {
   function offlineMessage() {
     return tr("Can't reach the server. Check your connection and try again.");
   }
+  /* Sign-up, sent so a lost answer never ends in an error. Each sign-up
+     carries a random key that stays until it succeeds or its handle
+     changes. When the answer does not come back (the server stalled or the
+     line dropped), the app gets a new check and sends it once more, then
+     usually to the next server in the pool. The server hands back the
+     account the first try made instead of making a second one
+     (worker/src/signup-replay.js). */
+  var signupKeys = {};
+  var signupSlow = false;
+  var SIGNUP_TRY_MS = [20000, 45000];
+  function newSignupKey() {
+    var bytes = new Uint8Array(18);
+    try { crypto.getRandomValues(bytes); } catch (err) { for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256); }
+    return Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+  }
+  function signupRetryable(res) {
+    if (!res) return true;
+    var code = res.error || "";
+    if (code === "timeout" || code === "all_endpoints_failed" || code === "unavailable") return true;
+    return Number(res.status) >= 500 && code !== "not_configured";
+  }
+  function onlineNow() {
+    try { return navigator.onLine !== false; } catch (err) { return true; }
+  }
+  function postSignup(body, viewName) {
+    var mark = body.temporary ? "temp" : "full:" + String(body.handle || "").toLowerCase() + ":" + (body.profileLess ? 1 : 0);
+    if (!signupKeys[mark]) signupKeys[mark] = newSignupKey();
+    body.signupKey = signupKeys[mark];
+    var tries = 0;
+    var plan = Array.isArray(config().signupTryMs) && config().signupTryMs.length ? config().signupTryMs : SIGNUP_TRY_MS;
+    signupSlow = false;
+    function again() {
+      signupSlow = true;
+      if (view === viewName) paint();
+      return once();
+    }
+    function once() {
+      var limit = plan[Math.min(tries, plan.length - 1)];
+      tries += 1;
+      return ensureGuard().then(function (pow) {
+        body.pow = pow;
+        body.fax = faxValue();
+        if (tries > 1 && Object.prototype.hasOwnProperty.call(body, "turnstileToken")) body.turnstileToken = turnstileToken() || body.turnstileToken;
+        return api("/v1/signup", { method: "POST", body: body, timeoutMs: limit });
+      }).then(function (res) {
+        if (tries < plan.length && signupRetryable(res) && onlineNow()) return again();
+        signupSlow = false;
+        if (res && res.status === 201) delete signupKeys[mark];
+        return res;
+      }, function (err) {
+        if (tries < plan.length && onlineNow()) return again();
+        signupSlow = false;
+        throw err;
+      });
+    }
+    return once();
+  }
   function finishPending() {
     if (authBusy || !form.saved) return;
     var pending = readPending();
@@ -2577,11 +2937,7 @@ function signupPayload() {
     if (!body) return;
     authBusy = true;
     paint();
-    ensureGuard().then(function (pow) {
-      body.pow = pow;
-      body.fax = faxValue();
-      return api("/v1/signup", { method: "POST", body: body });
-    }).then(function (res) {
+    postSignup(body, "signup").then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.accountNumber) {
         /* The server already follows the owner's accounts for a new account.
@@ -2604,8 +2960,7 @@ function signupPayload() {
       }
       if (view !== "signup") return;
       if (res.error === "claim_required") form.claimOpen = true;
-      if (res.status === 429) errorText = tr("Too many attempts. Try again later.");
-      else errorText = errorMessage(res.error);
+      errorText = signupError(res, false);
       paint();
     }).catch(function () {
       authBusy = false;
@@ -3003,22 +3358,33 @@ function signupPayload() {
     if (token && hasApi()) api("/v1/logout", { method: "POST", token: token }).catch(function () {});
     paint();
   }
-  function logout(all) {
+  function logout(all, wipeAll) {
     var session = readSession();
     var token = session && session.token;
     var prep = window.ViktorychNotes && window.ViktorychNotes.beforeSignOut ? window.ViktorychNotes.beforeSignOut(!!all, token) : null;
     Promise.resolve(prep).then(function () {
       removeStored("account-v1");
+      if (window.ViktorychDisplayNames && window.ViktorychDisplayNames.reset) window.ViktorychDisplayNames.reset();
       tellSW(false, "signout");
       // Signing out erases what this device saved for the account (app-lock.js).
       var lock = window.ViktorychAppLock;
       var wiping = lock && lock.wipeData ? lock.wipeData(true).catch(function () {}) : null;
-      var done = function () { Promise.resolve(wiping).then(function () { location.replace(location.pathname + location.search); location.reload(); }); };
+      // The device key goes too, so encrypted leftovers can't be read (device-seal.js).
+      var seal = window.ViktorychSeal;
+      var keyGone = seal && seal.destroyKey ? seal.destroyKey().catch(function () {}) : null;
+      var done = function () {
+        Promise.all([wiping, keyGone]).then(function () {
+          if (wipeAll && seal && seal.wipeAll) { seal.wipeAll({ reason: "wiped" }); return; }
+          location.replace(location.pathname + location.search);
+          location.reload();
+        });
+      };
       if (!token || !hasApi()) { done(); return; }
       api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
     }, function () {
       removeStored("account-v1");
       tellSW(false, "signout");
+      if (wipeAll && window.ViktorychSeal) { window.ViktorychSeal.wipeAll({ reason: "wiped" }); return; }
       location.replace(location.pathname + location.search);
       location.reload();
     });
@@ -3187,8 +3553,13 @@ function signupPayload() {
     body.bannerEmpty = form.bannerEmpty === "none" ? "none" : "default";
     if (form.avatarTouched) body.avatar = form.avatar || "";
     if (form.bannerTouched) body.banner = form.banner || "";
+    if (form.saving) return;
+    form.saving = true;
+    errorText = "";
+    paint();
     api("/v1/profile", { method: "PATCH", token: session.token, body: body }).then(function (res) {
         if (res.status !== 200 || !res.account) {
+          form.saving = false;
           errorText = errorMessage(res.error);
           paint();
           return;
@@ -3197,10 +3568,27 @@ function signupPayload() {
         writeSession(session);
         remember(res.account);
         dirtyLists();
-        view = "";
-        paint();
+        if (window.ViktorychDisplayNames && window.ViktorychDisplayNames.names && window.ViktorychDisplayNames.names()) window.ViktorychDisplayNames.load();
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        return saveBirthday(session.token).then(function (bdayOk) {
+          form.saving = false;
+          if (!bdayOk) {
+            /* The profile itself is saved; only the birthday needs another try. */
+            form.avatarTouched = false;
+            form.bannerTouched = false;
+            var keepBday = { bdayText: form.initial && form.initial.bdayText, bdayAudience: form.initial && form.initial.bdayAudience, bdayShowYear: form.initial && form.initial.bdayShowYear };
+            form.initial = epSnapshot();
+            Object.keys(keepBday).forEach(function (key) { form.initial[key] = keepBday[key]; });
+            errorText = tr("Couldn’t save that detail.");
+            paint();
+            return;
+          }
+          if (window.ProfileAbout && window.ProfileAbout.forget) window.ProfileAbout.forget();
+          requestEditClose(true);
+          if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        });
     }).catch(function () {
+      form.saving = false;
       errorText = tr("Something went wrong. Try again.");
       paint();
     });
@@ -3408,12 +3796,21 @@ function signupPayload() {
     if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
     if (account.viewerFriendStatus != null && !(graphCounts[id].friendAt && Date.now() - graphCounts[id].friendAt < 60000)) graphCounts[id].friendStatus = account.viewerFriendStatus;
     if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
+    if (account.friendsCount != null) graphCounts[id].friendsOff = account.friendsOff === true;
+    if (typeof account.canRequest === "boolean") graphCounts[id].canRequest = account.canRequest;
     graphCounts[id].pending = !!account.viewerPending;
     graphCounts[id].viewerBlocks = !!account.viewerBlocks;
     graphCounts[id].blockedBy = !!account.blockedBy;
     graphCounts[id].muted = !!account.viewerMutes;
     graphCounts[id].locked = !!account.locked;
     if (account.followingCount != null || account.followersCount != null || account.friendsCount != null) countsChanged(id);
+  }
+  function friendsOffNow() { return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff()); }
+  function friendsHiddenFor(account) {
+    var ref = accountRef(account);
+    if (account && account.friendsOff) return true;
+    if (ref && graphCounts[ref] && graphCounts[ref].friendsOff) return true;
+    return !!(account && profileMine(account) && friendsOffNow());
   }
   function countLink(account, tab, n, label) {
     var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
@@ -3422,7 +3819,7 @@ function signupPayload() {
   function accountCountsHtml(account) {
     var ref = accountRef(account);
     if (ref && (accountStat(account, "following") == null || accountStat(account, "followers") == null)) ensureCounts(ref);
-    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + "</div>";
+    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + (friendsHiddenFor(account) ? "" : countLink(account, "friends", accountStat(account, "friends"), tr("Friends"))) + "</div>";
   }
   function followersOf(id) {
     var known = graphCounts[id];
@@ -3530,6 +3927,11 @@ function signupPayload() {
   function followErrorText(res) {
     if (!res) return tr("Couldn’t update that follow. Try again.");
     if (res.status === 429 || res.error === "rate_limited") return tr("Too many follows. Wait a few minutes and try again.");
+    if (res.error === "owner_only") {
+      if (res.request && window.FeedRequests && window.FeedRequests.noteRequested) window.FeedRequests.noteRequested(res.request);
+      return tr("Only the owner adds new sources. Your request was sent.");
+    }
+    if (res.error === "banned") return tr("This source isn’t available.");
     if (res.status === 403 || res.error === "blocked") return tr("You can’t follow this account.");
     if (res.status === 404) return tr("That account isn’t here.");
     return tr("Couldn’t update that follow. Try again.");
@@ -3730,6 +4132,13 @@ function signupPayload() {
     var session = readSession();
     var ref = accountRef(account);
     if (!session || !account || !ref || profileMine(account)) return "";
+    // Friends off for me: no friend buttons anywhere.
+    if (friendsOffNow()) return "";
+    var known = graphCounts[ref] || {};
+    var curStatus = known.friendStatus || account.viewerFriendStatus || "none";
+    if (account.friendsOff || known.friendsOff || ((account.canRequest === false || known.canRequest === false) && curStatus === "none")) {
+      return '<span class="friend-off-note" role="note">' + esc(tr("Not accepting friend requests")) + "</span>";
+    }
     if (!friendRequestsLoaded && Date.now() - friendReqTriedAt > 60000) { friendReqTriedAt = Date.now(); ensureFriendRequests(); }
     var status = (graphCounts[ref] && graphCounts[ref].friendStatus) || account.viewerFriendStatus || "none";
     var recent = graphCounts[ref] && graphCounts[ref].friendAt && Date.now() - graphCounts[ref].friendAt < 60000;
@@ -3768,6 +4177,8 @@ function signupPayload() {
       if (res.friendsCount != null) graphCounts[id].friends = res.friendsCount;
       if (friendWord(res)) graphCounts[id].friendStatus = friendWord(res);
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
+      graphCounts[id].friendsOff = res.friendsOff === true;
+      if (typeof res.canRequest === "boolean") graphCounts[id].canRequest = res.canRequest;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { friendsLoads[key] = false; friendsFailedAt[key] = Date.now(); });
   }
@@ -3866,6 +4277,14 @@ function signupPayload() {
 
     var ep = "/v1/friends/" + action;
     api(ep, { method: "POST", token: session.token, body: { targetId: tId } }).then(function (res) {
+      if (res && res.status === 403 && (res.error === "friends_off" || res.error === "not_accepting")) {
+        if (res.error === "friends_off") graphCounts[idKey].friendsOff = true;
+        graphCounts[idKey].canRequest = false;
+        if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(tr("This account isn’t accepting friend requests."));
+      }
+      if (res && res.status === 403 && res.error === "friends_off_self" && window.ViktorychAccounts && window.ViktorychAccounts.toast) {
+        window.ViktorychAccounts.toast(tr("Turn Friends on in Settings to do this."));
+      }
       if (!res || res.status !== 200) {
         graphCounts[idKey].friendStatus = prevStatus;
         graphCounts[idKey].friendAt = 0;
@@ -4300,7 +4719,7 @@ function signupPayload() {
       (items.length > 1 ? '<button class="photo-gallery-nav next" type="button" data-acct="gallery-next" aria-label="' + esc(tr("Next")) + '">›</button>' : "") +
       "</div>";
   }
-  var PROFILE_TAB_IDS = ["posts", "replies", "media", "highlights", "friends", "about", "gifts"];
+  var PROFILE_TAB_IDS = ["posts", "replies", "media", "games", "highlights", "friends", "about", "gifts"];
   function profileTabLabel(id) {
     if (id === "posts") return tr("Posts");
     if (id === "replies") return tr("Replies");
@@ -4309,6 +4728,7 @@ function signupPayload() {
     if (id === "friends") return tr("Friends");
     if (id === "about") return tr("About");
     if (id === "gifts") return tr("Gifts");
+    if (id === "games") return tr("Games");
     return id;
   }
   function cleanProfileTabs(raw) {
@@ -4373,6 +4793,8 @@ function signupPayload() {
       if (id === "about") return !!showAbout;
       if (id === "gifts") return !!showGifts;
       if (id === "highlights") return !!(mine || highlightHtml);
+      if (id === "friends") return !friendsHiddenFor(account);
+      if (id === "games") return !!(window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabAvailable && window.ViktorychGameSocial.profileTabAvailable(account, mine));
       return true;
     }
     var editing = !!(mine && profileTabEdit);
@@ -4545,14 +4967,14 @@ function signupPayload() {
     var aboutBody = activeTab === "about" && window.ProfileAbout ? window.ProfileAbout.html(account) : "";
     var giftsBody = activeTab === "gifts" && window.ProfileGifts ? window.ProfileGifts.giftsHtml(account.gifts, mine) : "";
     var highlightsBody = bar.highlightHtml || '<div class="empty"><h2>' + esc(tr("Highlights")) + "</h2></div>";
-    var body = activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
+    var gamesBody = activeTab === "games" && window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabHtml ? window.ViktorychGameSocial.profileTabHtml(account, mine) : "";
+    var body = activeTab === "games" ? gamesBody : activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
 
     var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
     var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tn("mutualFriends", mutualCount, { count: mutualCount })) + '</div>' : '';
 
     var tabs = bar.html;
 
-    var gameInviteBtn = !mine && !account.viewerBlocks && account.publicId && window.ViktorychGameSocial ? window.ViktorychGameSocial.inviteButtonHtml(account.publicId, account.name || account.handle, false) : "";
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
     var top = window.ViktorychProfile && window.ViktorychProfile.top ? window.ViktorychProfile.top({
       name: account.displayName || account.handle || "",
@@ -4564,7 +4986,7 @@ function signupPayload() {
       count: count === "" ? "" : tn("posts", Number(count), { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
-    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + gameInviteBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + (window.ViktorychGameSocial ? window.ViktorychGameSocial.profileHtml(account, mine) : "") + "</div>" + tabs + body + galleryHtml(account);
+    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -4585,7 +5007,7 @@ function signupPayload() {
     if (!account.repostsLoaded) loadProfile(route.handle);
     if (account.handle && skel(account.handle) !== key) {
       var nextHash = "#/@" + encodeURIComponent(account.handle);
-      var tab = route.query && route.query.get && route.query.get("tab");
+      var tab = (route.query && route.query.get && route.query.get("tab")) || route.tab || "";
       if (tab) nextHash += "?tab=" + encodeURIComponent(tab);
       if ((location.hash || "") !== nextHash) location.replace(nextHash);
     }
@@ -4673,20 +5095,37 @@ function signupPayload() {
     }).catch(function () {});
   }
   /* Owner panel: usage against the free limits, read at most every five
-     minutes while settings are open. */
+     minutes while settings are open. The read never hangs the panel: after
+     USAGE_WAIT ms, or on any answer that is not a usable report, the panel
+     shows a calm error with Retry and each server as unknown. */
   var usageDoc = null;
   var usageAt = 0;
-  function loadUsage() {
+  var usageState = "idle"; // idle, loading, ok, failed
+  var usageTry = 0;
+  var USAGE_WAIT = 8000;
+  function usageSettle(state, body, tryId) {
+    if (tryId !== usageTry) return;
+    if (state === "ok") { usageDoc = body; usageState = "ok"; }
+    else if (usageState === "loading") usageState = "failed";
+    else return;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function loadUsage(force) {
     var session = readSession();
     if (!session || !session.token || !session.account || !session.account.owner) return;
-    if (Date.now() - usageAt < 5 * 60 * 1000) return;
+    if (usageState === "loading") return;
+    if (!force && usageState !== "failed" && Date.now() - usageAt < 5 * 60 * 1000) return;
+    // A failed read waits a little before the panel tries again on its own.
+    if (!force && usageState === "failed" && Date.now() - usageAt < 2 * 60 * 1000) return;
     usageAt = Date.now();
+    usageState = "loading";
+    var tryId = ++usageTry;
     loadBackupStatus();
+    later(function () { usageSettle("failed", null, tryId); }, Number(config().usageWaitMs) || USAGE_WAIT);
     api("/v1/owner/usage", { token: session.token }).then(function (body) {
-      if (!body || body.status !== 200) return;
-      usageDoc = body;
-      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-    }).catch(function () {});
+      if (!body || body.status !== 200 || !body.limits) return usageSettle("failed", null, tryId);
+      usageSettle("ok", body, tryId);
+    }).catch(function () { usageSettle("failed", null, tryId); });
   }
   /* Server pool: every origin that answers /v1 reads, with its own free
      daily capacity. The headline is total used over total capacity; each
@@ -4723,7 +5162,9 @@ function signupPayload() {
       var hours = backup && backup.hours ? backup.hours : backupHours();
       var resting = !!(hours && (hours.paused || Number(hours.pct) >= HOURS_PAUSE_PCT));
       var down = !resting && (!backup || backup.ok === false || (backup.egress && backup.egress.saver));
-      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down, resting: resting, restUntil: hours && (hours.resetAt || hours.reset) || "" });
+      // Usage did not load and the backup has not reported yet: unknown, not down.
+      var notYet = !!(u && u.failed && !backup && !resting);
+      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down && !notYet, unknown: notYet, resting: resting, restUntil: hours && (hours.resetAt || hours.reset) || "" });
     }
     var used = 0, cap = 0;
     var unknown = origins.some(function (o) { return o.unknown; });
@@ -4757,7 +5198,7 @@ function signupPayload() {
         '<div class="usage-top"><span>' + esc(o.name) + '</span><b>' + esc(shown) + "</b></div>" +
         '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(o.pct) + '" aria-label="' + esc(o.name) + '"><i style="width:' + pctOf(o.pct) + '%"></i></div>' +
         '<div class="pool-meta"><span>' + esc(o.unknown ? tr("— of {limit}", { limit: formatNum(o.cap) }) : tr("{used} of {limit}", { used: formatNum(o.used), limit: formatNum(o.cap) })) + "</span><span>" + esc(tr("Resets {time}", { time: when })) + "</span></div>" +
-        (note ? '<p class="pool-note' + (o.resting ? " calm" : "") + '">' + esc(note) + "</p>" : "") + "</div>";
+        (note ? '<p class="pool-note' + (o.resting || o.unknown ? " calm" : "") + '">' + esc(note) + "</p>" : "") + "</div>";
     }).join("");
     return '<section class="pool-cap' + lvl(pool.pct) + '" data-pool-cap>' +
       '<div class="pool-head"><span>' + esc(tr("Server pool today")) + '</span><b class="pool-pct">' + esc(pool.pct + "%") + "</b></div>" +
@@ -4773,8 +5214,13 @@ function signupPayload() {
   }
   function usageHtml() {
     var u = usageDoc;
-    var head = '<div class="set-block usage-panel"><h2>' + esc(tr("Free tier usage")) + "</h2>";
-    if (!u) return head + '<p class="phandle">' + esc(tr("Loading…")) + "</p></div>";
+    var head = '<div class="set-block usage-panel" data-usage-state="' + esc(u ? "ok" : usageState === "failed" ? "failed" : "loading") + '"><h2>' + esc(tr("Free tier usage")) + "</h2>";
+    if (!u && usageState === "failed") {
+      return head + '<div class="usage-error" role="status"><b>' + esc(tr("Usage didn't load")) + '</b><p class="set-sub">' + esc(tr("The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.")) + '</p>' +
+        '<button class="outline usage-retry" type="button" data-acct="usage-retry">' + esc(tr("Retry")) + "</button></div>" +
+        poolCapacityHtml(serverPool({ failed: true, limits: {} }, backupStatus)) + "</div>";
+    }
+    if (!u) return head + '<p class="phandle" aria-busy="true">' + esc(tr("Loading…")) + "</p></div>";
     var L = u.limits || {};
     var rows = "";
     if (!u.configured) {
@@ -5062,11 +5508,7 @@ function signupPayload() {
     var wantSaver = dataSaverOn();
     authBusy = true;
     paint();
-    ensureGuard().then(function (pow) {
-      body.pow = pow;
-      body.fax = faxValue();
-      return api("/v1/signup", { method: "POST", body: body });
-    }).then(function (res) {
+    postSignup(body, "temp").then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.account) {
         var id = res.account.publicId || "";
@@ -5084,7 +5526,7 @@ function signupPayload() {
         return;
       }
       if (view !== "temp") return;
-      errorText = res.status === 429 && res.error !== "rate_limited" ? tr("Too many temporary accounts today. Try again tomorrow.") : errorMessage(res.error);
+      errorText = signupError(res, true);
       paint();
     }).catch(function () {
       authBusy = false;
@@ -5566,7 +6008,7 @@ function signupPayload() {
     var aboutPrivacy = window.ProfileAbout && window.ProfileAbout.privacyOpen() ? window.ProfileAbout.privacyHtml(account.about || { sections: [] }) : "";
     return '<div class="set-block acct-settings">' + tempSettingsHtml(account) + '<h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
       '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? ownerTempHtml() + '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + (tempExpiresAt(account) ? "" : inactivityHtml(account) + deleteEntryHtml(account)) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? ownerTempHtml() + '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + (tempExpiresAt(account) ? "" : inactivityHtml(account) + deleteEntryHtml(account)) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + '</button><button class="outline acct-danger" type="button" data-acct="logout-wipe">' + esc(tr("Sign out and delete data on this device")) + "</button></div>" + health;  }
   function onClick(event) {
     var reqKind = event.target && event.target.closest ? event.target.closest("[data-req-kind]") : null;
     if (reqKind) {
@@ -5820,6 +6262,35 @@ function signupPayload() {
     else if (act === "appearance") { applyWallTheme(acct.dataset.mode || "lightsout"); paint(); }
     else if (act === "abandon") abandon();
     else if (act === "edit") openAuth("edit");
+    else if (act === "edit-usernames") openEdit("usernames", "settings");
+    else if (act === "edit-sub") {
+      var wanted = acct.getAttribute("data-sub");
+      form.sub = wanted === "usernames" || wanted === "displaynames" ? wanted : "";
+      form.subFrom = "";
+      form.anim = "sub";
+      paint();
+      var subHead = document.querySelector('#account-layer [data-acct="edit-back"]');
+      if (subHead) subHead.focus();
+    }
+    else if (act === "edit-back") {
+      if (form.subFrom === "settings") { form.sub = ""; requestEditClose(true); }
+      else { var was = form.sub; form.sub = ""; form.anim = "back"; paint(); var row = document.querySelector('#account-layer [data-acct="edit-sub"][data-sub="' + was + '"]') || document.querySelector('#account-layer [data-acct="edit-sub"]'); if (row) row.focus(); }
+    }
+    else if (act === "discard-yes") { form.confirmDiscard = false; requestEditClose(true); }
+    else if (act === "discard-no") { form.confirmDiscard = false; paint(); }
+    else if (act === "bday-edit") {
+      if (form.bdayOpen) {
+        var start = form.initial || {};
+        form.bdayText = start.bdayText || "";
+        form.bdayAudience = start.bdayAudience || "only";
+        form.bdayShowYear = !!start.bdayShowYear;
+      }
+      form.bdayOpen = !form.bdayOpen;
+      paint();
+      if (form.bdayOpen) { var dateEl = document.getElementById("acct-bdayText"); if (dateEl) dateEl.focus(); }
+    }
+    else if (act === "bday-clear") { form.bdayText = ""; paint(); }
+    else if (act === "toggle-bday-year") { form.bdayShowYear = !form.bdayShowYear; paint(); }
     else if (act === "save-profile") saveProfile();
     else if (act === "media-menu") {
       var kind = acct.dataset.kind === "banner" ? "banner" : "avatar";
@@ -5863,6 +6334,10 @@ function signupPayload() {
     else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
     else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
+    else if (act === "logout-wipe") {
+      var dd = window.ViktorychDeviceData;
+      Promise.resolve(dd && dd.confirmWipe ? dd.confirmWipe(true) : window.confirm(tr("Sign out and delete data on this device?"))).then(function (yes) { if (yes) logout(false, true); });
+    }
     else if (act === "open-delete") {
       deleteState = { phase: "", error: "", step: -1, accountNumber: "", handle: "", busy: false };
       location.hash = "#/settings/delete-account";
@@ -5877,7 +6352,8 @@ function signupPayload() {
     else if (act === "add-channel") addBackupChannel();
     else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
-else if (act === "copy-id") copyAccountId();
+else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender(); }
+    else if (act === "copy-id") copyAccountId();
     else if (act === "open-gallery") openGallery(acct.dataset.kind || "photo");
     else if (act === "gallery-close") { gallery.open = false; redraw(); }
     else if (act === "gallery-prev" || act === "gallery-next") stepGallery(act === "gallery-next" ? 1 : -1);
@@ -6111,6 +6587,50 @@ else if (act === "copy-id") copyAccountId();
     loadPhoto(url).then(function (objectUrl) { if (objectUrl) img.src = objectUrl; });
   }, true);
   document.addEventListener("click", onClick, true);
+  /* Edit profile: a click on the dim backdrop closes on desktop (asking
+     first when something changed), Enter in "New username" adds it, and
+     the sheet follows the on-screen keyboard so the focused field stays
+     in view on phones. */
+  document.addEventListener("click", function (event) {
+    if (view !== "edit" || !event.target || !event.target.hasAttribute || !event.target.hasAttribute("data-ep-back")) return;
+    if (window.innerWidth <= 700) return;
+    event.preventDefault();
+    closeAuth();
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || view !== "edit") return;
+    var el = event.target;
+    if (!el || !el.closest || !el.closest("#account-layer") || !el.hasAttribute("data-un-new")) return;
+    event.preventDefault();
+    var add = document.querySelector('#account-layer [data-un="add"]');
+    if (add) add.click();
+  }, true);
+  function fitEditViewport() {
+    var layer = document.getElementById("account-layer");
+    if (!layer) return;
+    var vv = window.visualViewport;
+    if (view === "edit" && vv && window.innerWidth <= 700) {
+      layer.style.setProperty("--ep-vh", Math.round(vv.height) + "px");
+      layer.style.setProperty("--ep-top", Math.round(vv.offsetTop) + "px");
+    } else {
+      layer.style.removeProperty("--ep-vh");
+      layer.style.removeProperty("--ep-top");
+    }
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", fitEditViewport);
+    window.visualViewport.addEventListener("scroll", fitEditViewport);
+  }
+  document.addEventListener("focusin", function (event) {
+    var el = event.target;
+    if (view !== "edit" || !el || !el.closest || !el.closest("#account-layer .ep")) return;
+    if (!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || window.innerWidth > 700) return;
+    fitEditViewport();
+    setTimeout(function () {
+      fitEditViewport();
+      try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (err) { el.scrollIntoView(); }
+    }, 300);
+  });
   document.addEventListener("change", function (event) {
     var node = event.target;
     if (!node || !node.getAttribute || node.getAttribute("data-acct") !== "identity-audience") return;
@@ -6221,6 +6741,7 @@ else if (act === "copy-id") copyAccountId();
       if (file) startCrop(file, el.name);
       return;
     }
+    if (el.name === "bdayText" || el.name === "bdayAudience") form[el.name] = el.value;
     if (el.name === "identityPlatform") linkIdentityForm.platform = el.value;
     if (el.name === "saved") {
       form.saved = !!el.checked;
@@ -6368,6 +6889,10 @@ else if (act === "copy-id") copyAccountId();
 
   window.ViktorychAccounts = {
     signOut: function () { logout(false); },
+    signOutAndWipe: function () {
+      if (readSession()) logout(false, true);
+      else if (window.ViktorychSeal) window.ViktorychSeal.wipeAll({ reason: "wiped" });
+    },
     uiSyncOn: function () { return uiSyncOn(); },
     deviceOwnUi: deviceOwnUi,
     setDeviceOwnUi: function (on) { setDeviceOwnUi(on); if (!on) pullSoon(); },
@@ -6393,11 +6918,13 @@ else if (act === "copy-id") copyAccountId();
     profileTabPlan: profileTabPlan,
     onHistoryReady: onHistoryReady,
     requestRender: null,
+    friendsOffFor: function (id) { var k = graphCounts[id]; return !!(k && k.friendsOff); },
     profilePostsHtml: null,
     call: api,
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
     originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted, weights: function () { return poolWeights(apiOrder()); }, pick: weightedPick, warm: poolWarm, originWarm: originWarm, warmNote: warmNote, sealedText: sealedText, dataDenied: dataDenied, paused: backupPaused, hoursFactor: hoursFactor, wake: wakeBackup },
     serverPool: function () { loadUsage(); return usageDoc ? serverPool(usageDoc, backupStatus) : null; },
+    usagePanel: { load: loadUsage, html: usageHtml, state: function () { return usageState; } },
     serverPoolFrom: serverPool,
     poolCapacityHtml: poolCapacityHtml,
     saveOwnAccount: applyOwnAccount,
@@ -6411,6 +6938,8 @@ else if (act === "copy-id") copyAccountId();
     },
     openQuickSignup: function () { openQuick(); },
     openLogin: function () { openAuth("login"); },
+    openEdit: openEdit,
+    editOpen: function () { return view === "edit" ? (form.sub || "main") : ""; },
     commitTvSession: function (token, account) {
       if (!token || readSession()) return;
       view = "";

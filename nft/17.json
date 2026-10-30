@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Crystal ball",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/crystal_ball.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "crystal_ball"
+    },
+    {
+      "trait_type": "Index",
+      "value": 17
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreif2ozrrm6vd2tpusqp3fy6otdrtoxjpgous2ow7confm2fsg3n5pi",
+  "image_sha256": "ba7663167aa3d4df4941fb2e3ce98e3375d2f33a92d3adf139a5668b236dbd7a"
+}

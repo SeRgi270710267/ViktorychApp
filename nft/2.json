@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Bat",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/bat.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "bat"
+    },
+    {
+      "trait_type": "Index",
+      "value": 2
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreihzfjvgpo5ioo2y6b5np5qvrtsdwj67z5kn6e752p3xdx5hwf4rgy",
+  "image_sha256": "f92a6a67bba873b58f07ad7f6158ce43b27dfcf54df13fdd3f771dfa7b179136"
+}

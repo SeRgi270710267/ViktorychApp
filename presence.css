@@ -418,3 +418,93 @@
   width: 100%;
   margin-top: 8px;
 }
+
+/* Collapsed Friends panel: stacked faces of who is online, with a count. */
+.friends-rail-title {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.friends-rail-peek { display: none; }
+.friends-rail.is-collapsed .friends-rail-peek {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 16px 12px;
+}
+.friends-rail-faces { display: flex; align-items: center; min-width: 0; padding-left: 6px; }
+.friends-rail-face {
+  position: relative;
+  flex: none;
+  margin-left: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.friends-rail-face:hover, .friends-rail-face:focus-visible { transform: translateY(-2px); z-index: 2; }
+.friends-rail-face .ava, .friends-rail-face .online-ava, .friends-rail-face img {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px var(--card);
+  object-fit: cover;
+}
+.friends-rail-face { --presence-ring: var(--card); }
+.friends-rail-more {
+  flex: none;
+  margin-left: -6px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--line);
+  box-shadow: 0 0 0 2px var(--card);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.friends-rail-count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.friends-rail-count:hover { background: var(--hover-soft); color: var(--text); }
+.friends-rail-live { width: 8px; height: 8px; border-radius: 9999px; background: var(--green); }
+.friends-rail-peek-note { color: var(--muted); font-size: 13px; line-height: 18px; }
+/* Earlier faces sit on top so every presence dot stays visible. */
+.friends-rail-face:nth-child(1) { z-index: 7; }
+.friends-rail-face:nth-child(2) { z-index: 6; }
+.friends-rail-face:nth-child(3) { z-index: 5; }
+.friends-rail-face:nth-child(4) { z-index: 4; }
+.friends-rail-face:nth-child(5) { z-index: 3; }
+.friends-rail-face:nth-child(6) { z-index: 2; }
+.friends-rail-face:nth-child(7) { z-index: 1; }
+.friends-rail-face:hover, .friends-rail-face:focus-visible { z-index: 8; }
+.friends-rail-face .presence-dot { width: 12px; height: 12px; right: -1px; bottom: -1px; }
+.friends-rail-face .ava-presence { position: relative; display: block; }

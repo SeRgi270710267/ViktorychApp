@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Magic wand",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/magic_wand.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "magic_wand"
+    },
+    {
+      "trait_type": "Index",
+      "value": 39
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreihzem55gpt7rankr5grx2cl7wlbapgnrpfcrox2of2sry6htgqise",
+  "image_sha256": "f9233bd33e7f881aa8f4d1be84bfd96103ccd8bca28bafa717528e3c799a0891"
+}

@@ -1,6 +1,8 @@
-/* Settings > Privacy and safety > Usernames: several usernames, who sees
-   which one, "Preview as", the name friends see, private nicknames and who
-   can mention you. Everything is enforced by the server; this only edits. */
+/* Usernames: several usernames, who sees which one, "Preview as" and who
+   can mention you live in Edit profile > Usernames (profileHtml). The name
+   friends see is now one of the display names (display-names-ui.js). Settings > Usernames keeps a shortcut to that subpage plus
+   your private nicknames for others (settingsHtml). Everything is enforced
+   by the server; this only edits. */
 (function (root) {
   "use strict";
 
@@ -8,7 +10,6 @@
   var data = null;
   var lists = [];
   var mentions = null;
-  var friendName = "";
   var nicknames = [];
   var openHandle = "";
   var preview = null;
@@ -31,7 +32,11 @@
     return deps.api(path, next);
   }
 
-  function redraw() { if (deps.render) deps.render(); }
+  var watchers = [];
+  function redraw() {
+    if (deps.render) deps.render();
+    watchers.forEach(function (fn) { try { fn(); } catch (err) { /* one painter failing never blocks the rest */ } });
+  }
 
   /* The app may re-render the page at any time (a profile or session load
      finishing); typed text and ticked boxes are kept here and put back. */
@@ -51,13 +56,13 @@
   }
   function restore() {
     if (typeof document === "undefined") return;
-    var box = document.querySelector(".un-settings");
-    if (!box) return;
-    box.querySelectorAll("input, select").forEach(function (el) {
-      var d = drafts[draftKey(el)];
-      if (!d) return;
-      if ("checked" in d) el.checked = d.checked;
-      else el.value = d.value;
+    document.querySelectorAll(".un-settings").forEach(function (box) {
+      box.querySelectorAll("input, select").forEach(function (el) {
+        var d = drafts[draftKey(el)];
+        if (!d) return;
+        if ("checked" in d) el.checked = d.checked;
+        else el.value = d.value;
+      });
     });
   }
   function settle() { drafts = {}; }
@@ -87,14 +92,12 @@
       call("/v1/usernames"),
       call("/v1/audience-lists"),
       call("/v1/usernames/mentions"),
-      call("/v1/usernames/friend-name"),
       call("/v1/nicknames")
     ]).then(function (got) {
       if (got[0] && got[0].status === 200) data = got[0];
       if (got[1] && got[1].status === 200) lists = got[1].lists || [];
       if (got[2] && got[2].status === 200) mentions = got[2];
-      if (got[3] && got[3].status === 200) friendName = got[3].name || "";
-      if (got[4] && got[4].status === 200) nicknames = got[4].nicknames || [];
+      if (got[3] && got[3].status === 200) nicknames = got[3].nicknames || [];
       redraw();
     }).catch(function () {});
   }
@@ -179,10 +182,16 @@
       '<button type="button" class="un-btn outline" data-un="preview-person">' + esc(tr("Preview")) + "</button></div>" + result;
   }
 
-  function settingsHtml() {
+  function ready() {
     if (!asked) { asked = true; load(); }
     if (typeof Promise !== "undefined") Promise.resolve().then(restore);
-    if (!data) return '<div class="un-settings"><h2>' + esc(tr("Usernames")) + '</h2><p class="phandle">' + esc(tr("Loading")) + "</p></div>";
+  }
+
+  /* Edit profile > Usernames: your names, who sees each, list priority,
+     Preview as and who can mention you. */
+  function profileHtml() {
+    ready();
+    if (!data) return '<div class="un-settings un-in-edit"><p class="phandle">' + esc(tr("Loading")) + "</p></div>";
     var cards = (data.names || []).map(function (name) {
       var open = openHandle === name.handle;
       return '<section class="un-card"><button type="button" class="un-name" data-un="toggle" data-handle="' + esc(name.handle) + '" aria-expanded="' + (open ? "true" : "false") + '">' +
@@ -194,22 +203,29 @@
       orderedLists().map(function (list, i) {
         return '<div class="un-row"><span>' + esc(listName(list.id)) + '</span><button type="button" class="un-btn outline" data-un="up" data-id="' + esc(list.id) + '"' + (i ? "" : " disabled") + ' aria-label="' + esc(tr("Move up")) + '">↑</button></div>';
       }).join("") : "";
-    var nicks = nicknames.map(function (n) {
-      return '<div class="un-row"><span>@' + esc(n.handle) + " · " + esc(n.name) + '</span><button type="button" class="un-btn outline" data-un="nick-clear" data-handle="' + esc(n.handle) + '">' + esc(tr("Remove")) + "</button></div>";
-    }).join("");
-    return '<div class="un-settings"><h2>' + esc(tr("Usernames")) + "</h2>" +
+    return '<div class="un-settings un-in-edit">' +
       '<p class="phandle">' + esc(tr("Each person sees exactly one of your usernames. The most specific audience wins: a person, then a list, then friends, then followers, then public.")) + "</p>" +
       (note ? '<p class="un-note" role="alert">' + esc(note) + "</p>" : "") + cards +
       ((data.names || []).length < (data.cap || 5) ? '<div class="un-row"><input class="un-input" data-un-new aria-label="' + esc(tr("New username")) + '" placeholder="' + esc(tr("New username")) + '" maxlength="15"><button type="button" class="un-btn" data-un="add">' + esc(tr("Add")) + "</button></div>" : "") +
       '<p class="phandle">' + esc(tr("Removed usernames stay reserved for you for {days} days.", { days: data.releaseDays || 30 })) + "</p>" +
       order + previewHtml() +
-      "<h2>" + esc(tr("Name for friends")) + "</h2>" +
-      '<p class="phandle">' + esc(tr("Friends see this instead of your display name.")) + "</p>" +
-      '<div class="un-row"><input class="un-input" data-un-friend-name maxlength="50" aria-label="' + esc(tr("Name for friends")) + '" value="' + esc(friendName) + '"><button type="button" class="un-btn" data-un="friend-name">' + esc(tr("Save")) + "</button></div>" +
+      mentionsHtml() + "</div>";
+  }
+
+  /* Settings > Usernames: a shortcut into Edit profile > Usernames, then
+     the private nicknames you give other people. */
+  function settingsHtml() {
+    ready();
+    var shortcut = '<a class="set-row un-shortcut" href="#/settings/usernames" data-acct="edit-usernames"><span class="set-copy"><b>' + esc(tr("Your usernames")) + '</b><span class="set-sub">' + esc(tr("Edit them in Edit profile: who sees which one, Preview as and who can mention you.")) + '</span></span><span class="set-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14.586 12 7.543 4.96l1.414-1.42L17.414 12l-8.457 8.46-1.414-1.42z"/></svg></span></a>';
+    var nicks = nicknames.map(function (n) {
+      return '<div class="un-row"><span>@' + esc(n.handle) + " · " + esc(n.name) + '</span><button type="button" class="un-btn outline" data-un="nick-clear" data-handle="' + esc(n.handle) + '">' + esc(tr("Remove")) + "</button></div>";
+    }).join("");
+    return '<div class="un-settings"><h2>' + esc(tr("Usernames")) + "</h2>" + shortcut +
+      (note && !document.querySelector(".un-in-edit") ? '<p class="un-note" role="alert">' + esc(note) + "</p>" : "") +
       "<h2>" + esc(tr("Your nicknames for others")) + "</h2>" +
       '<p class="phandle">' + esc(tr("Only you see these.")) + "</p>" + nicks +
       '<div class="un-row"><input class="un-input" data-un-nick-handle aria-label="' + esc(tr("Account")) + '" placeholder="@name"><input class="un-input" data-un-nick-name maxlength="50" aria-label="' + esc(tr("Nickname")) + '" placeholder="' + esc(tr("Nickname")) + '"><button type="button" class="un-btn" data-un="nick-set">' + esc(tr("Save")) + "</button></div>" +
-      mentionsHtml() + "</div>";
+      "</div>";
   }
 
   function orderedLists() {
@@ -282,10 +298,6 @@
       });
       return;
     }
-    if (act === "friend-name") {
-      call("/v1/usernames/friend-name", { method: "PUT", body: { name: value("[data-un-friend-name]") } }).then(function (res) { if (said(res)) { settle(); friendName = res.name || ""; redraw(); } });
-      return;
-    }
     if (act === "nick-set" || act === "nick-clear") {
       var who = act === "nick-set" ? value("[data-un-nick-handle]").replace(/^@/, "") : handle;
       var name = act === "nick-set" ? value("[data-un-nick-name]") : "";
@@ -315,6 +327,9 @@
   root.ViktorychUsernames = {
     bind: function (next) { deps = next || {}; },
     settingsHtml: settingsHtml,
+    profileHtml: profileHtml,
+    names: function () { return data ? (data.names || []) : null; },
+    watch: function (fn) { if (typeof fn === "function" && watchers.indexOf(fn) < 0) watchers.push(fn); },
     load: load
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -11,16 +11,18 @@
   var root = typeof window === "undefined" ? null : window;
   if (!root || root.ViktorychServers) return;
 
-  var P = { VIEW: 1, SEND: 2, MANAGE_MESSAGES: 4, MANAGE_CHANNELS: 8, KICK: 16, BAN: 32, MENTION_EVERYONE: 64, MANAGE_ROLES: 128, MANAGE_SERVER: 256, CREATE_INVITE: 512, REACT: 1024, ATTACH: 2048, MODERATE: 4096, ADMIN: 1 << 20 };
+  var P = { VIEW: 1, SEND: 2, MANAGE_MESSAGES: 4, MANAGE_CHANNELS: 8, KICK: 16, BAN: 32, MENTION_EVERYONE: 64, MANAGE_ROLES: 128, MANAGE_SERVER: 256, CREATE_INVITE: 512, REACT: 1024, ATTACH: 2048, MODERATE: 4096, MANAGE_EVENTS: 8192, CREATE_THREADS: 16384, MANAGE_THREADS: 32768, CONNECT: 65536, SPEAK: 131072, VIDEO: 262144, MUTE_MEMBERS: 524288, ADMIN: 1 << 20 };
   function PERM_ROWS() {
     return [
     ["VIEW", tr("View channels")], ["SEND", tr("Send messages")], ["REACT", tr("Add reactions")], ["ATTACH", tr("Attach files")],
-    ["MENTION_EVERYONE", tr("Mention @everyone and all roles")], ["CREATE_INVITE", tr("Create invites")],
+    ["MENTION_EVERYONE", tr("Mention @everyone and all roles")], ["CREATE_INVITE", tr("Create invites")], ["CREATE_THREADS", tr("Create threads and posts")],
+    ["MANAGE_THREADS", tr("Manage threads and posts")], ["MANAGE_EVENTS", tr("Manage events")],
+    ["CONNECT", tr("Connect to voice")], ["SPEAK", tr("Speak in voice")], ["VIDEO", tr("Camera and screen share")], ["MUTE_MEMBERS", tr("Mute and disconnect members in voice")],
     ["MANAGE_MESSAGES", tr("Manage messages")], ["MANAGE_CHANNELS", tr("Manage channels")], ["MANAGE_ROLES", tr("Manage roles")],
     ["KICK", tr("Kick members")], ["BAN", tr("Ban members")], ["MODERATE", tr("Time out members")], ["MANAGE_SERVER", tr("Manage server")], ["ADMIN", tr("Administrator")]
     ];
   }
-  var CHANNEL_PERMS = ["VIEW", "SEND", "REACT", "ATTACH", "MENTION_EVERYONE", "MANAGE_MESSAGES"];
+  var CHANNEL_PERMS = ["VIEW", "SEND", "REACT", "ATTACH", "CREATE_THREADS", "MENTION_EVERYONE", "MANAGE_MESSAGES", "MANAGE_THREADS", "CONNECT", "SPEAK", "VIDEO", "MUTE_MEMBERS"];
   var QUICK = ["\uD83D\uDC4D", "\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\uDE22", "\uD83D\uDD25"];
   var EMOJI = ("\uD83D\uDE00 \uD83D\uDE03 \uD83D\uDE04 \uD83D\uDE01 \uD83D\uDE06 \uD83D\uDE05 \uD83E\uDD23 \uD83D\uDE02 \uD83D\uDE42 \uD83D\uDE09 \uD83D\uDE0A \uD83D\uDE07 \uD83E\uDD70 \uD83D\uDE0D \uD83E\uDD29 \uD83D\uDE18 \uD83D\uDE0B \uD83D\uDE1B \uD83E\uDD14 \uD83E\uDD28 \uD83D\uDE10 \uD83D\uDE44 \uD83D\uDE0F \uD83D\uDE2C \uD83D\uDE34 \uD83D\uDE37 \uD83E\uDD12 \uD83E\uDD2F \uD83E\uDD73 \uD83D\uDE0E \uD83E\uDD13 \uD83D\uDE15 \uD83D\uDE1F \uD83D\uDE2E \uD83D\uDE33 \uD83E\uDD7A \uD83D\uDE22 \uD83D\uDE2D \uD83D\uDE31 \uD83D\uDE24 \uD83D\uDE21 \uD83D\uDC80 \uD83D\uDCA9 \uD83E\uDD21 \uD83D\uDC7B \uD83D\uDC7D \uD83E\uDD16 \uD83D\uDE48 " +
     "\uD83D\uDC4B \uD83D\uDC4C \u270C\uFE0F \uD83E\uDD1E \uD83E\uDD19 \uD83D\uDC4D \uD83D\uDC4E \uD83D\uDC4F \uD83D\uDE4C \uD83E\uDD1D \uD83D\uDE4F \uD83D\uDCAA \uD83D\uDC40 \uD83E\uDDE0 " +
@@ -38,7 +40,8 @@
     sid: "", cid: "", mode: "", invite: "", inviteInfo: null,
     drafts: {}, reply: null, edit: "", files: [], sheet: null, membersOpen: true,
     socket: null, socketSid: "", socketWant: false, retry: 0, retryTimer: 0,
-    unread: {}, flash: "", lastTyping: 0, mentionMap: {}, previews: {}, expanded: {}, collapsed: {}
+    unread: {}, flash: "", lastTyping: 0, mentionMap: {}, previews: {}, expanded: {}, collapsed: {},
+    threads: {}, active: {}, forum: {}, acts: {}, events: {}, forumTag: {}, voice: {}, vfocus: ""
   };
 
   function tr(key, vars) {
@@ -53,7 +56,12 @@
     srvChannels: ["srvChannels"],
     srvUses: ["srvUses"],
     srvWorks: ["srvWorks"],
-    srvResults: ["srvResults"]
+    srvResults: ["srvResults"],
+    srvMessagesN: ["srvMessagesN"],
+    srvVotes: ["srvVotes"],
+    srvGoing: ["srvGoing"],
+    srvInterested: ["srvInterested"],
+    srvEventsN: ["srvEventsN"]
   };
   function trn(n, key, vars) {
     var fn = root.tn;
@@ -254,7 +262,10 @@
   }
   function wipeCache() {
     try {
-      Object.keys(localStorage).forEach(function (k) { if (k.indexOf(LS) === 0) localStorage.removeItem(k); });
+      // key()/length also list the encrypted copies (device-seal.js).
+      var names = [];
+      for (var i = 0; i < localStorage.length; i++) names.push(localStorage.key(i));
+      names.forEach(function (k) { if (k && k.indexOf(LS) === 0) localStorage.removeItem(k); });
     } catch (err) { /* private mode */ }
     db().then(function (d) { if (d) { try { d.transaction("ch", "readwrite").objectStore("ch").clear(); } catch (err) { /* closed */ } } });
   }
@@ -309,7 +320,8 @@
     var entry = listEntry(sid);
     return entry ? entry.channels || [] : [];
   }
-  function channel(cid, sid) { return channelsOf(sid).find(function (c) { return c.id === cid; }) || null; }
+  function channel(cid, sid) { return channelsOf(sid).find(function (c) { return c.id === cid; }) || threadChannel(cid, sid); }
+  function realChannel(cid, sid) { return channelsOf(sid).find(function (c) { return c.id === cid; }) || null; }
   function me(sid) { var st = srv(sid); return st && st.me ? st.me : { mid: "", perms: 0, roles: [], owner: false }; }
   function basePerms(sid) { return me(sid).perms || 0; }
   function chanPerms(cid, sid) { var c = channel(cid, sid); return c ? Number(c.perms) || 0 : 0; }
@@ -375,7 +387,7 @@
       var keys = Object.keys(bag);
       if (keys.length > 600) keys.sort(function (a, b) { return (bag[a].at || 0) - (bag[b].at || 0); }).slice(0, keys.length - 600).forEach(function (k) { delete bag[k]; });
       lsSet("cards:" + sid, bag);
-      if (sid === S.sid) { paintLog(true); paintMembers(); }
+      if (sid === S.sid) { paintLog(true); paintMembers(); if (voiceAsked[sid]) paintVoice(); }
     });
   }
 
@@ -477,7 +489,16 @@
       byId[m.id] = cur.length;
       cur.push(m);
     });
-    if (replace) (S.msgs[cid] || []).forEach(function (m) { if (m.pending) cur.push(m); });
+    if (replace) {
+      /* A slow newest-page load must not wipe what was sent or delivered after it was asked for. */
+      var top = "", recent = Date.now() - 60000;
+      cur.forEach(function (m) { if (m.id > top) top = m.id; });
+      (S.msgs[cid] || []).forEach(function (m) {
+        if (m.pending) { cur.push(m); return; }
+        if (replace !== "latest" || byId[m.id] != null) return;
+        if (top ? m.id > top : (m.t || msgTime(m.id)) > recent) { byId[m.id] = cur.length; cur.push(m); }
+      });
+    }
     var sent = cur.filter(function (m) { return !m.pending; }).sort(cmpId);
     var pend = cur.filter(function (m) { return m.pending; });
     var seenNonce = {};
@@ -507,7 +528,7 @@
       else if (!opts.after) {
         var have = S.msgs[cid] || [];
         var overlap = list.length && have.some(function (m) { return m.id === list[0].id; });
-        if (!overlap || opts.around) { S.more[cid] = !!res.body.more || opts.around; mergeMessages(cid, list, true); list = null; }
+        if (!overlap || opts.around) { S.more[cid] = !!res.body.more || opts.around; mergeMessages(cid, list, opts.around ? true : "latest"); list = null; }
         else S.more[cid] = S.more[cid] == null ? !!res.body.more : S.more[cid];
       } else if (res.body.more) {
         // A long gap since the last visit: drop the stale tail and keep the newest page.
@@ -534,6 +555,9 @@
   }
   function catchUp() {
     if (!S.sid || !S.cid) return;
+    var cc = channel(S.cid);
+    if (cc && cc.kind === "forum") { loadForum(S.sid, S.cid); return; }
+    if (!cc || cc.kind === "voice") return;
     openChannelData(S.sid, S.cid);
   }
 
@@ -747,6 +771,17 @@
 
   /* ---------- icons ---------- */
   var I = {
+    voice: "M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z",
+    volOff: "M16.5 12A4.5 4.5 0 0 0 14 8v2.2l2.45 2.45c.03-.2.05-.42.05-.65zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12a9 9 0 0 0-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9zM12 4 9.91 6.09 12 8.18z",
+    mic: "M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5.3-3a5.3 5.3 0 0 1-10.6 0H5a7 7 0 0 0 6 6.9V21h2v-3.1a7 7 0 0 0 6-6.9z",
+    micOff: "M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23A6.9 6.9 0 0 0 19 11zm-4.02.17V5a3 3 0 0 0-5.9-.7zM4.27 3 3 4.27l6.01 6.01V11a3 3 0 0 0 3 3c.22 0 .44-.03.65-.08l1.66 1.66A5.5 5.5 0 0 1 6.7 11H5a7 7 0 0 0 6 6.72V21h2v-3.28a6.9 6.9 0 0 0 2.54-.9L19.73 21 21 19.73z",
+    headphones: "M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h3v-8H5v-1a7 7 0 0 1 14 0v1h-3v8h3a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9z",
+    headOff: "M12 3a9 9 0 0 0-6.36 2.64l1.42 1.42A7 7 0 0 1 19 12v1h-3v.17l5 5V12a9 9 0 0 0-9-9zM3.27 2 2 3.27l2.07 2.07A8.9 8.9 0 0 0 3 12v7a2 2 0 0 0 2 2h3v-8H5v-1c0-1.1.25-2.13.7-3.06L16 19.27V21h1.73l3 3L22 22.73z",
+    video: "M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11z",
+    videoOff: "M21 6.5l-4 4V7a1 1 0 0 0-1-1H9.82L21 17.18zM3.27 2 2 3.27 4.73 6H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73z",
+    screen: "M20 18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2H0v2h24v-2zM4 6h16v10H4z",
+    hangup: "M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a1 1 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67a1 1 0 0 1 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.3 11.3 0 0 0-2.67-1.85.99.99 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z",
+    signal: "M2 22h3v-5H2zm5 0h3v-9H7zm5 0h3V8h-3zm5 0h3V2h-3z",
     hash: "M10.59 4l-.6 4H6v2h3.7l-.6 4H5v2h3.8l-.6 4h2l.6-4h3.9l-.6 4h2l.6-4H21v-2h-3.4l.6-4H22V8h-3.5l.6-4h-2l-.6 4h-3.9l.6-4h-2zm1.1 6h3.9l-.6 4h-3.9l.6-4z",
     news: "M3 10v4c0 .55.45 1 1 1h1l3 4h2v-4l8 4V5l-8 4H4c-.55 0-1 .45-1 1zm17-1v6c1.1-.4 2-1.6 2-3s-.9-2.6-2-3z",
     plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z",
@@ -773,7 +808,19 @@
     compass: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm2.2 12.2L7 17l2.8-7.2L17 7z",
     file: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 2.5L17.5 8H14z",
     copy: "M16 1H4a2 2 0 0 0-2 2v14h2V3h12zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11z",
-    clock: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm.5-13H11v6l5.2 3.2.8-1.2-4.5-2.7z"
+    clock: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm.5-13H11v6l5.2 3.2.8-1.2-4.5-2.7z",
+    thread: "M5.4 3h11.1L15.9 6H21v2h-5.5l-.9 5H20v2h-5.8l-.6 3H11.6l.6-3H7.8l-.6 3H5.2l.6-3H3v-2h3.2l.9-5H4V6h3.5l.6-3h2l-.6 3h4.4l.6-3h-.4zM9.5 8l-.9 5h4.4l.9-5zM16 17h6v2h-6zm-2 3h8v2h-8z",
+    forum: "M4 3h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm16 5h.5A1.5 1.5 0 0 1 22 9.5V16a2 2 0 0 1-2 2h-1v3l-3-3h-5a2 2 0 0 1-1.7-1H16a4 4 0 0 0 4-4z",
+    calendar: "M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2zM5 10v10h14V10zm2 2h4v4H7z",
+    poll: "M4 4h2v16H4zm5 6h2v10H9zm5-4h2v14h-2zm5 8h2v6h-2z",
+    sticker: "M5 3h10l6 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm9 1.5V8a2 2 0 0 0 2 2h3.5zM8.5 11A1.5 1.5 0 1 0 10 12.5 1.5 1.5 0 0 0 8.5 11zm7 0a1.5 1.5 0 1 0 1.5 1.5 1.5 1.5 0 0 0-1.5-1.5zM7 15.5c1.2 1.6 3 2.5 5 2.5s3.8-.9 5-2.5z",
+    star: "M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z",
+    check: "M9 16.2l-3.5-3.5L4 14.1 9 19 20 8l-1.4-1.4z",
+    archive: "M3 3h18v4H3zm1 5h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zm5 3v2h6v-2z",
+    apps: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-4H7v-2h4V7h2v4h4v2h-4z",
+    game: "M7 6h10a5 5 0 0 1 4.9 6l-.9 4.5a2.5 2.5 0 0 1-4.3 1.1L14.5 15h-5l-2.2 2.6A2.5 2.5 0 0 1 3 16.5L2.1 12A5 5 0 0 1 7 6zm0 3v2H5v2h2v2h2v-2h2v-2H9V9zm9 0a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 16 9zm2 2.6a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4z",
+    music: "M12 3v10.6A4 4 0 1 0 14 17V7h4V3z",
+    tv: "M3 5h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v9h16V7z"
   };
   function icon(name, cls) {
     return '<svg class="vsrv-ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="' + I[name] + '"/></svg>';
@@ -887,11 +934,17 @@
     return groups;
   }
   function firstChannel(sid) {
-    var out = "";
+    /* Land on a chat channel first, like Discord; a forum only when nothing else is visible. */
+    var out = "", any = "";
     orderedChannels(sid).some(function (g) {
-      return g.items.some(function (c) { if (has(Number(c.perms) || 0, P.VIEW) && c.kind !== "category") { out = c.id; return true; } return false; });
+      return g.items.some(function (c) {
+        if (!has(Number(c.perms) || 0, P.VIEW) || c.kind === "category") return false;
+        if (!any) any = c.id;
+        if (c.kind === "forum" || c.kind === "voice") return false;
+        out = c.id; return true;
+      });
     });
-    return out;
+    return out || any;
   }
 
   function sideInner() {
@@ -915,7 +968,9 @@
         "</div>" + rows + "</div>";
     }).join("");
     var invite = has(basePerms(), P.CREATE_INVITE) && !me().timeoutUntil ? '<button type="button" class="vsrv-side-invite" data-vs="invite-sheet">' + icon("users") + "<span>" + esc(tr("Invite people")) + "</span></button>" : "";
-    return head + '<div class="vsrv-chlist" role="list">' + invite + groups + (canChan ? '<button type="button" class="vsrv-side-add" data-vs="new-channel">' + icon("plus") + "<span>" + esc(tr("Create channel")) + "</span></button>" : "") + "</div>" + meBar();
+    var evN = (srv() && srv().events) || 0;
+    var events = '<button type="button" class="vsrv-side-invite" data-vs="events">' + icon("calendar") + "<span>" + esc(evN ? trn(evN, "srvEventsN") : tr("Events")) + "</span></button>";
+    return head + '<div class="vsrv-chlist" role="list">' + invite + events + groups + (canChan ? '<button type="button" class="vsrv-side-add" data-vs="new-channel">' + icon("plus") + "<span>" + esc(tr("Create channel")) + "</span></button>" : "") + "</div>" + voicePanel() + meBar();
   }
   function channelRow(c) {
     var on = c.id === S.cid;
@@ -923,11 +978,26 @@
     var level = effectiveLevel(c.id, S.sid);
     var priv = !has(everyonePermsFor(c), P.VIEW);
     return '<a role="listitem" class="vsrv-ch' + (on ? " on" : "") + (unread ? " unread" : "") + (level === "none" ? " muted" : "") + '" href="#/messages/s/' + S.sid + "/" + c.id + '"' + (on ? ' aria-current="page"' : "") + ">" +
-      icon(c.kind === "announcement" ? "news" : "hash", "vsrv-ch-ic") + (priv ? icon("lock", "vsrv-ch-lock") : "") +
+      icon(chanIcon(c), "vsrv-ch-ic") + (priv ? icon("lock", "vsrv-ch-lock") : "") +
       '<span class="vsrv-ch-name">' + esc(c.name) + "</span>" +
+      (c.kind === "voice" && voiceIn(S.sid, c.id).length ? '<span class="vsrv-vcount">' + voiceIn(S.sid, c.id).length + "/" + VOICE_CAP + "</span>" : "") +
       (c.mentions ? '<span class="vsrv-badge">' + (c.mentions > 99 ? "99+" : c.mentions) + "</span>" : "") +
       (has(basePerms(), P.MANAGE_CHANNELS) ? '<button type="button" class="vsrv-ch-gear" data-vs="channel-settings" data-id="' + c.id + '" aria-label="' + esc(tr("Edit channel")) + '">' + icon("gear") + "</button>" : "") +
-      "</a>";
+      "</a>" + (c.kind === "voice" ? voiceRows(c) : threadRows(c));
+  }
+  function chanIcon(c) { return c.kind === "voice" ? "voice" : c.kind === "announcement" ? "news" : c.kind === "forum" ? "forum" : c.kind === "thread" ? "thread" : "hash"; }
+  function threadRows(c) {
+    if (c.kind !== "text" && c.kind !== "announcement") return "";
+    var cur = S.threads[S.cid];
+    var list = (S.active[S.sid] || []).filter(function (t) { return t.parentId === c.id && !t.archived; });
+    if (cur && cur.parentId === c.id && !list.some(function (t) { return t.id === cur.id; })) list.push(cur);
+    list.sort(function (a, b) { return (b.lastId || b.id) > (a.lastId || a.id) ? 1 : -1; });
+    var shown = list.slice(0, 3);
+    if (cur && cur.parentId === c.id && shown.indexOf(cur) < 0) shown.push(cur);
+    return shown.map(function (t) {
+      var on = t.id === S.cid;
+      return '<a role="listitem" class="vsrv-ch vsrv-throw' + (on ? " on" : "") + '" href="#/messages/s/' + S.sid + "/" + t.id + '"' + (on ? ' aria-current="page"' : "") + '><span class="vsrv-thline"></span><span class="vsrv-ch-name">' + esc(t.name) + "</span></a>";
+    }).join("") + (list.length > 3 ? '<button type="button" class="vsrv-ch vsrv-throw more" data-vs="threads" data-id="' + c.id + '"><span class="vsrv-thline"></span><span class="vsrv-ch-name">' + esc(tr("See all threads")) + "</span></button>" : "");
   }
   function everyonePermsFor(c) {
     var st = srv();
@@ -948,10 +1018,219 @@
     var level = notifyLevel(S.sid, S.sid) || "mentions";
     return '<div class="vsrv-mebar"><button type="button" class="vsrv-mebar-who" data-vs="member" data-m="' + m.mid + '">' + avatar(m.mid, S.sid, "vsrv-ava sm") +
       '<span class="vsrv-mebar-txt"><span class="vsrv-mebar-name">' + esc(m.nick || (c && (c.name || c.handle)) || tr("You")) + "</span>" +
-      (m.timeoutUntil && m.timeoutUntil > Date.now() ? '<span class="vsrv-mebar-sub warn">' + esc(tr("Timed out until {time}", { time: fullTime(m.timeoutUntil) })) + "</span>" : c && c.handle ? '<span class="vsrv-mebar-sub">@' + esc(c.handle) + "</span>" : "") + "</span></button>" +
+      (m.timeoutUntil && m.timeoutUntil > Date.now() ? '<span class="vsrv-mebar-sub warn">' + esc(tr("Timed out until {time}", { time: fullTime(m.timeoutUntil) })) + "</span>" : actOf(m.mid) ? '<span class="vsrv-mebar-sub">' + esc(actText(actOf(m.mid))) + "</span>" : c && c.handle ? '<span class="vsrv-mebar-sub">@' + esc(c.handle) + "</span>" : "") + "</span></button>" +
+      voiceMeButtons() +
       '<button type="button" class="vsrv-iconbtn" data-vs="notify-sheet" data-scope="' + S.sid + '" aria-label="' + esc(tr("Notification settings")) + '" title="' + esc(tr("Notification settings")) + '">' + icon(level === "none" ? "bellOff" : "bell") + "</button>" +
       (canManage() ? '<button type="button" class="vsrv-iconbtn" data-vs="settings" aria-label="' + esc(tr("Server settings")) + '" title="' + esc(tr("Server settings")) + '">' + icon("gear") + "</button>" : "") +
       "</div>";
+  }
+
+  /* ---------- voice (calls run in servers-voice.js) ---------- */
+  var VOICE_CAP = 8;
+  var voiceReady = false;
+  function vv() {
+    var v = root.ViktorychVoice || null;
+    if (v && !voiceReady) {
+      voiceReady = true;
+      v.init({ call: call, api: api, notice: voiceNotice });
+      v.on(function (st, kind) { if (kind === "speaking") paintSpeaking(); else paintVoice(); });
+    }
+    return v;
+  }
+  function voiceNotice(why) {
+    var text = {
+      full: tr("This voice channel is full ({n} people).", { n: VOICE_CAP }),
+      perm: tr("You can't join this voice channel."),
+      moved: tr("You joined voice on another device or tab."),
+      kicked: tr("A moderator disconnected you from voice."),
+      nomic: tr("No microphone. You joined muted."),
+      nocam: tr("Couldn't turn on the camera."),
+      noscreen: tr("Screen sharing isn't available on this device."),
+      unsupported: tr("Voice isn't supported in this browser.")
+    }[why] || tr("Voice disconnected.");
+    toast(text);
+  }
+  function vstate() { var v = vv(); return v ? v.state() : null; }
+  function inVoice(sid, cid) { var V = vstate(); return !!(V && V.status !== "idle" && V.sid === sid && (!cid || V.cid === cid)); }
+  function voiceBag(sid) {
+    var V = vstate();
+    var bag = S.voice[sid] || {};
+    if (V && V.sid === sid && V.status === "connected") {
+      var out = {};
+      Object.keys(bag).forEach(function (k) { if (bag[k].c !== V.cid) out[k] = bag[k]; });
+      Object.keys(V.roster).forEach(function (k) { out[k] = V.roster[k]; });
+      return out;
+    }
+    return bag;
+  }
+  var voiceAsked = {};
+  function voiceIn(sid, cid) {
+    var bag = voiceBag(sid);
+    var list = Object.keys(bag).filter(function (k) { return bag[k] && bag[k].c === cid; }).sort(function (a, b) { return (bag[a].j || 0) - (bag[b].j || 0); });
+    /* People in voice may not be in the loaded member list; fetch their cards once. */
+    var asked = voiceAsked[sid] || (voiceAsked[sid] = {});
+    var fresh = list.filter(function (m) { return !asked[m]; });
+    if (fresh.length) { fresh.forEach(function (m) { asked[m] = 1; }); needCards(fresh, sid); }
+    return list;
+  }
+  function voiceSt(sid, mid) { var r = voiceBag(sid)[mid]; return (r && r.st) || {}; }
+  function isSpeaking(mid) {
+    var V = vstate();
+    if (!V || V.status !== "connected") return false;
+    return mid === V.mid ? !!V.speaking.me : !!V.speaking[mid];
+  }
+  function voiceFlags(st) {
+    return (st.sm ? icon("micOff", "vsrv-vflag sm") : st.mu ? icon("micOff", "vsrv-vflag") : "") + (st.df ? icon("headOff", "vsrv-vflag") : "") +
+      (st.cam ? icon("video", "vsrv-vflag") : "") + (st.scr ? '<span class="vsrv-live">' + esc(tr("LIVE")) + "</span>" : "");
+  }
+  function voiceRows(c) {
+    var list = voiceIn(S.sid, c.id);
+    if (!list.length) return "";
+    return '<div class="vsrv-vrows">' + list.map(function (mid) {
+      var st = voiceSt(S.sid, mid);
+      return '<button type="button" class="vsrv-vrow" data-vs="member" data-m="' + mid + '">' +
+        '<span class="vsrv-vring' + (isSpeaking(mid) ? " speaking" : "") + '" data-spk="' + mid + '">' + avatar(mid, S.sid, "vsrv-ava xs") + "</span>" +
+        '<span class="vsrv-vrow-name">' + esc(nameOf(mid)) + "</span>" + voiceFlags(st) + "</button>";
+    }).join("") + "</div>";
+  }
+  function voiceStatusText(V) {
+    return V.status === "connected" ? tr("Voice connected") : V.status === "reconnecting" ? tr("Reconnecting…") : tr("Connecting…");
+  }
+  function voicePanel() {
+    var V = vstate();
+    if (!V || V.status === "idle") return "";
+    var info = serverInfo(V.sid) || {};
+    var c = channel(V.cid, V.sid);
+    var v = vv();
+    return '<div class="vsrv-vpanel ' + esc(V.status) + '"><div class="vsrv-vpanel-top">' +
+      '<button type="button" class="vsrv-vpanel-info" data-vs="voice-open">' + icon("signal", "vsrv-vpanel-sig") + '<span><strong>' + esc(voiceStatusText(V)) + "</strong><small>" + esc((c ? c.name : "") + (info.name ? " / " + info.name : "")) + "</small></span></button>" +
+      '<button type="button" class="vsrv-iconbtn danger" data-vs="voice-leave" aria-label="' + esc(tr("Disconnect")) + '" title="' + esc(tr("Disconnect")) + '">' + icon("hangup") + "</button></div>" +
+      '<div class="vsrv-vpanel-acts">' +
+      '<button type="button" class="vsrv-vbtn' + (V.cam ? " on" : "") + '" data-vs="voice-cam" aria-pressed="' + (V.cam ? "true" : "false") + '">' + icon(V.cam ? "video" : "videoOff") + "<span>" + esc(tr("Camera")) + "</span></button>" +
+      (v.canScreen() ? '<button type="button" class="vsrv-vbtn' + (V.scr ? " on" : "") + '" data-vs="voice-screen" aria-pressed="' + (V.scr ? "true" : "false") + '">' + icon("screen") + "<span>" + esc(tr("Screen")) + "</span></button>" : "") +
+      "</div></div>";
+  }
+  function voiceMeButtons() {
+    var V = vstate();
+    if (!V || V.status === "idle") return "";
+    var mu = V.mu || V.sm;
+    return '<button type="button" class="vsrv-iconbtn' + (mu ? " danger-on" : "") + '" data-vs="voice-mute" aria-pressed="' + (mu ? "true" : "false") + '" aria-label="' + esc(mu ? tr("Unmute") : tr("Mute")) + '" title="' + esc(V.sm ? tr("Server muted") : mu ? tr("Unmute") : tr("Mute")) + '">' + icon(mu ? "micOff" : "mic") + "</button>" +
+      '<button type="button" class="vsrv-iconbtn' + (V.df ? " danger-on" : "") + '" data-vs="voice-deaf" aria-pressed="' + (V.df ? "true" : "false") + '" aria-label="' + esc(V.df ? tr("Undeafen") : tr("Deafen")) + '" title="' + esc(V.df ? tr("Undeafen") : tr("Deafen")) + '">' + icon(V.df ? "headOff" : "headphones") + "</button>";
+  }
+  function voiceHead(c) {
+    var n = voiceIn(S.sid, c.id).length;
+    return '<header class="vsrv-conv-head"><a class="vsrv-back" href="#/messages/s/' + S.sid + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>" +
+      icon("voice", "vsrv-conv-ic") + '<h2 class="vsrv-conv-name">' + esc(c.name) + "</h2>" +
+      '<span class="vsrv-conv-topic">' + (n ? esc(n + "/" + VOICE_CAP) : "") + "</span>" +
+      '<span class="vsrv-conv-acts"><button type="button" class="vsrv-iconbtn vsrv-mem-toggle' + (S.membersOpen ? " on" : "") + '" data-vs="members-toggle" aria-label="' + esc(tr("Members")) + '" title="' + esc(tr("Members")) + '">' + icon("users") + "</button></span></header>";
+  }
+  function stageTile(mid, kind, V) {
+    var self = mid === V.mid;
+    var st = self ? { mu: V.mu || V.sm, df: V.df, cam: V.cam, scr: V.scr, sm: V.sm } : voiceSt(V.sid, mid);
+    var key = mid + ":" + kind;
+    var video = kind === "scr" || st.cam;
+    var conn = self ? "connected" : vv().peerConn(mid);
+    var p = V.peers[mid];
+    var name = nameOf(mid, V.sid) + (kind === "scr" ? " · " + tr("Screen") : "");
+    return '<div class="vsrv-vtile' + (video ? " video" : "") + (kind === "scr" ? " screen" : "") + (S.vfocus === key ? " focus" : "") + (kind === "cam" && isSpeaking(mid) ? " speaking" : "") + '"' + (kind === "cam" ? ' data-spk="' + mid + '"' : "") + ">" +
+      '<button type="button" class="vsrv-vtile-hit" data-vs="voice-tile" data-key="' + esc(key) + '" aria-label="' + esc(name) + '"></button>' +
+      (kind === "cam" ? '<span class="vsrv-vtile-ava">' + avatar(mid, V.sid, "vsrv-ava xl") + "</span>" : "") +
+      (video ? '<div class="vsrv-vmedia" data-vmedia="' + (self ? "me" : mid) + ":" + kind + '"></div>' : "") +
+      '<span class="vsrv-vname">' + (kind === "cam" && (st.mu || st.sm) ? icon("micOff", "vsrv-vflag") : "") + (kind === "cam" && st.df ? icon("headOff", "vsrv-vflag") : "") + "<span>" + esc(name) + "</span></span>" +
+      (conn === "failed" ? '<span class="vsrv-vbad">' + esc(tr("Couldn't connect")) + "</span>" : conn !== "connected" ? '<span class="vsrv-vwait">' + esc(tr("Connecting…")) + "</span>" : "") +
+      (!self && kind === "cam" ? '<button type="button" class="vsrv-vtile-more" data-vs="voice-peer" data-m="' + mid + '" aria-label="' + esc(tr("More")) + '">' + icon(p && p.localMute ? "volOff" : "more") + "</button>" : "") +
+      "</div>";
+  }
+  function stageInner(c) {
+    var V = vstate();
+    var v = vv();
+    var people = voiceIn(S.sid, c.id);
+    if (!v || !inVoice(S.sid, c.id)) {
+      var perms = Number(c.perms) || 0;
+      var can = has(perms, P.CONNECT);
+      var full = people.length >= VOICE_CAP;
+      var ok = v && v.supported();
+      return '<div class="vsrv-stage-pre">' + icon("voice", "vsrv-stage-ic") + "<h2>" + esc(c.name) + "</h2>" +
+        (people.length ? '<div class="vsrv-stage-who">' + people.map(function (m) { return '<span class="vsrv-vring' + (isSpeaking(m) ? " speaking" : "") + '" title="' + esc(nameOf(m)) + '">' + avatar(m, S.sid, "vsrv-ava md") + "</span>"; }).join("") + "</div><p>" + esc(trn(people.length, "srvVoiceIn")) + "</p>" : "<p>" + esc(tr("No one is here yet.")) + "</p>") +
+        '<button type="button" class="vsrv-btn big" data-vs="voice-join" data-id="' + c.id + '"' + (can && !full && ok ? "" : " disabled") + ">" + esc(full ? tr("Channel is full") : tr("Join voice")) + "</button>" +
+        '<p class="vsrv-stage-note">' + esc(!ok ? tr("Voice isn't supported in this browser.") : !can ? tr("You can't join this voice channel.") : tr("Voice and video go straight between devices. Some strict networks block this.")) + "</p></div>";
+    }
+    var tiles = [];
+    people.forEach(function (mid) {
+      tiles.push(stageTile(mid, "cam", V));
+      var st = mid === V.mid ? { scr: V.scr } : voiceSt(V.sid, mid);
+      if (st.scr) tiles.push(stageTile(mid, "scr", V));
+    });
+    var mu = V.mu || V.sm;
+    return '<div class="vsrv-tiles' + (S.vfocus ? " has-focus" : "") + " n" + Math.min(tiles.length, 9) + '">' + tiles.join("") + "</div>" +
+      '<div class="vsrv-vbar">' +
+      '<button type="button" class="vsrv-vround' + (mu ? " off" : "") + '" data-vs="voice-mute" aria-pressed="' + (mu ? "true" : "false") + '" aria-label="' + esc(mu ? tr("Unmute") : tr("Mute")) + '">' + icon(mu ? "micOff" : "mic") + "</button>" +
+      '<button type="button" class="vsrv-vround' + (V.df ? " off" : "") + '" data-vs="voice-deaf" aria-pressed="' + (V.df ? "true" : "false") + '" aria-label="' + esc(V.df ? tr("Undeafen") : tr("Deafen")) + '">' + icon(V.df ? "headOff" : "headphones") + "</button>" +
+      '<button type="button" class="vsrv-vround' + (V.cam ? " on" : "") + '" data-vs="voice-cam" aria-pressed="' + (V.cam ? "true" : "false") + '" aria-label="' + esc(tr("Camera")) + '">' + icon(V.cam ? "video" : "videoOff") + "</button>" +
+      (v.canScreen() ? '<button type="button" class="vsrv-vround' + (V.scr ? " on" : "") + '" data-vs="voice-screen" aria-pressed="' + (V.scr ? "true" : "false") + '" aria-label="' + esc(tr("Share your screen")) + '">' + icon("screen") + "</button>" : "") +
+      '<button type="button" class="vsrv-vround leave" data-vs="voice-leave" aria-label="' + esc(tr("Disconnect")) + '">' + icon("hangup") + "</button></div>";
+  }
+  function mountStage() { var box = el("vsrv-stage"); var v = vv(); if (box && v) v.mount(box); }
+  function paintStage() {
+    var box = el("vsrv-stage");
+    var c = S.cid ? channel(S.cid) : null;
+    if (!box || !c || c.kind !== "voice") return;
+    box.innerHTML = stageInner(c);
+    mountStage();
+  }
+  function paintVoice() {
+    if (S.mode !== "server" || !rootEl()) return;
+    paintSide();
+    paintStage();
+    var c = S.cid ? channel(S.cid) : null;
+    var head = el("vsrv-conv") && el("vsrv-conv").querySelector(".vsrv-conv-head .vsrv-conv-topic");
+    if (c && c.kind === "voice" && head) { var n = voiceIn(S.sid, c.id).length; head.textContent = n ? n + "/" + VOICE_CAP : ""; }
+  }
+  function paintSpeaking() {
+    Array.prototype.forEach.call(document.querySelectorAll("#vsrv-root [data-spk]"), function (n) {
+      n.classList.toggle("speaking", isSpeaking(n.getAttribute("data-spk")));
+    });
+  }
+  function voiceJoin(cid) {
+    var v = vv();
+    if (!v) { toast(tr("Voice isn't supported in this browser.")); return; }
+    if (!v.supported()) { voiceNotice("unsupported"); return; }
+    S.vfocus = "";
+    v.join(S.sid, cid || S.cid);
+  }
+  function voiceToggle(what) {
+    var v = vv();
+    var V = vstate();
+    if (!v || !V || V.status === "idle") return;
+    if (what === "mute") { if (V.sm) { toast(tr("A moderator muted you, or you can't speak here.")); return; } v.setMute(!V.mu); }
+    else if (what === "deaf") v.setDeaf(!V.df);
+    else if (what === "cam") { if (!V.cam && !has(chanPerms(V.cid, V.sid), P.VIDEO)) { toast(tr("You can't use the camera or share your screen here.")); return; } v.setCamera(!V.cam); }
+    else if (what === "screen") { if (!V.scr && !has(chanPerms(V.cid, V.sid), P.VIDEO)) { toast(tr("You can't use the camera or share your screen here.")); return; } v.setScreen(!V.scr); }
+  }
+  function voiceFocus(key) {
+    S.vfocus = S.vfocus === key ? "" : key;
+    paintStage();
+  }
+  function voicePeerMenu(mid) {
+    var V = vstate();
+    if (!V || !mid) return;
+    var p = V.peers[mid] || {};
+    var st = voiceSt(V.sid, mid);
+    var mod = has(chanPerms(V.cid, V.sid), P.MUTE_MEMBERS);
+    var vol = Math.round((p.volume == null ? 1 : p.volume) * 100);
+    var sheet = openSheet(sheetHead(nameOf(mid)) + '<div class="vsrv-menu">' +
+      '<label class="vsrv-vvol"><span>' + esc(tr("User volume")) + '</span><input type="range" min="0" max="200" step="5" value="' + vol + '" data-k="vol"></label>' +
+      '<button type="button" class="vsrv-menu-item" data-vs="voice-peer-mute" data-id="' + mid + '" data-close="1">' + icon(p.localMute ? "voice" : "volOff") + "<span>" + esc(p.localMute ? tr("Unmute for me") : tr("Mute for me")) + "</span></button>" +
+      '<button type="button" class="vsrv-menu-item" data-vs="member" data-m="' + mid + '" data-close="1">' + icon("users") + "<span>" + esc(tr("Profile")) + "</span></button>" +
+      (mod ? '<button type="button" class="vsrv-menu-item" data-vs="voice-mod-mute" data-id="' + mid + '" data-on="' + (st.sm ? "1" : "0") + '" data-close="1">' + icon("micOff") + "<span>" + esc(st.sm ? tr("Remove server mute") : tr("Server mute")) + "</span></button>" +
+        '<button type="button" class="vsrv-menu-item danger" data-vs="voice-mod-kick" data-id="' + mid + '" data-close="1">' + icon("hangup") + "<span>" + esc(tr("Disconnect from voice")) + "</span></button>" : "") +
+      "</div>", "is-menu");
+    var range = sheet.querySelector('[data-k="vol"]');
+    range.addEventListener("input", function () { var v = vv(); if (v) v.setPeerVolume(mid, Number(range.value) / 100); });
+  }
+  function voiceModerate(mid, act) {
+    var v = vv();
+    if (!v || !v.moderate(mid, act)) toast(tr("Couldn't do that. Try again."));
   }
 
   /* ---------- conversation ---------- */
@@ -961,19 +1240,26 @@
       return '<div class="vsrv-empty vsrv-conv-empty"><h2>' + esc(tr("Pick a channel")) + "</h2><p>" + esc(tr("Choose a channel on the left to read and chat.")) + "</p></div>";
     }
     if (!c) {
-      if (!srv() && !S.gone) return '<div class="dmsgs-skel" aria-busy="true"><span></span><span></span><span></span></div>';
+      if (!srv() && !S.gone || srv() && /^[a-f0-9]{16}$/.test(S.cid) && !threadMiss[S.cid]) return '<div class="dmsgs-skel" aria-busy="true"><span></span><span></span><span></span></div>';
       return '<div class="vsrv-empty vsrv-conv-empty"><h2>' + esc(tr("Channel not found")) + "</h2><p>" + esc(tr("It may have been deleted, or you can't see it.")) + "</p></div>";
     }
-    var level = effectiveLevel(c.id);
-    var head = '<header class="vsrv-conv-head"><a class="vsrv-back" href="#/messages/s/' + S.sid + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>" +
-      icon(c.kind === "announcement" ? "news" : "hash", "vsrv-conv-ic") + '<h2 class="vsrv-conv-name">' + esc(c.name) + "</h2>" +
-      (c.topic ? '<button type="button" class="vsrv-conv-topic" data-vs="topic">' + esc(plain(c.topic)) + "</button>" : '<span class="vsrv-conv-topic"></span>') +
+    if (c.kind === "voice") return voiceHead(c) + '<div class="vsrv-stage" id="vsrv-stage">' + stageInner(c) + "</div>";
+    var level = effectiveLevel(c.kind === "thread" ? c.parentId : c.id);
+    var th = c.kind === "thread" ? c.thread : null;
+    var parent = th ? realChannel(th.parentId) : null;
+    var head = '<header class="vsrv-conv-head"><a class="vsrv-back" href="#/messages/s/' + S.sid + (th ? "/" + th.parentId : "") + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>" +
+      (th && parent ? '<a class="vsrv-crumb" href="#/messages/s/' + S.sid + "/" + parent.id + '">' + icon(chanIcon(parent), "vsrv-conv-ic") + "<span>" + esc(parent.name) + "</span></a>" + icon("chev", "vsrv-crumb-sep") : "") +
+      icon(chanIcon(c), "vsrv-conv-ic") + '<h2 class="vsrv-conv-name">' + esc(c.name) + "</h2>" +
+      (th ? '<span class="vsrv-conv-topic">' + (th.locked ? icon("lock", "vsrv-th-flag") : "") + (th.archived ? icon("archive", "vsrv-th-flag") : "") + "</span>" : c.topic ? '<button type="button" class="vsrv-conv-topic" data-vs="topic">' + esc(plain(c.topic)) + "</button>" : '<span class="vsrv-conv-topic"></span>') +
       '<span class="vsrv-conv-acts">' +
-      '<button type="button" class="vsrv-iconbtn" data-vs="notify-sheet" data-scope="' + c.id + '" aria-label="' + esc(tr("Notification settings")) + '" title="' + esc(tr("Notification settings")) + '">' + icon(level === "none" ? "bellOff" : "bell") + "</button>" +
+      (th ? '<button type="button" class="vsrv-iconbtn" data-vs="thread-menu" aria-label="' + esc(tr("Thread settings")) + '" title="' + esc(tr("Thread settings")) + '">' + icon("more") + "</button>" : "") +
+      (c.kind === "text" || c.kind === "announcement" ? '<button type="button" class="vsrv-iconbtn" data-vs="threads" data-id="' + c.id + '" aria-label="' + esc(tr("Threads")) + '" title="' + esc(tr("Threads")) + '">' + icon("thread") + "</button>" : "") +
+      '<button type="button" class="vsrv-iconbtn" data-vs="notify-sheet" data-scope="' + (th ? th.parentId : c.id) + '" aria-label="' + esc(tr("Notification settings")) + '" title="' + esc(tr("Notification settings")) + '">' + icon(level === "none" ? "bellOff" : "bell") + "</button>" +
       '<button type="button" class="vsrv-iconbtn" data-vs="pins" aria-label="' + esc(tr("Pinned messages")) + '" title="' + esc(tr("Pinned messages")) + '">' + icon("pin") + "</button>" +
       '<button type="button" class="vsrv-iconbtn" data-vs="search-sheet" aria-label="' + esc(tr("Search")) + '" title="' + esc(tr("Search")) + '">' + icon("search") + "</button>" +
       '<button type="button" class="vsrv-iconbtn vsrv-mem-toggle' + (S.membersOpen ? " on" : "") + '" data-vs="members-toggle" aria-label="' + esc(tr("Members")) + '" title="' + esc(tr("Members")) + '">' + icon("users") + "</button>" +
       "</span></header>";
+    if (c.kind === "forum") return head + '<div class="vsrv-forum" id="vsrv-forum">' + forumInner(c) + "</div>";
     return head + '<div class="vsrv-log" id="vsrv-log" role="log" aria-live="polite">' + logInner() + "</div>" +
       '<div class="vsrv-typing" id="vsrv-typing" aria-live="polite">' + typingInner() + "</div>" +
       '<div class="vsrv-compose-wrap" id="vsrv-compose">' + composeInner() + "</div>";
@@ -987,6 +1273,7 @@
       return '<div class="dmsgs-skel" aria-busy="true" aria-label="' + esc(tr("Loading messages")) + '"><span></span><span></span><span></span><span></span></div>';
     }
     var intro = S.more[S.cid] ? '<div class="vsrv-older"><button type="button" class="vsrv-linkbtn" data-vs="older">' + esc(tr("Load older messages")) + "</button></div>"
+      : c && c.kind === "thread" ? threadIntro(c)
       : '<div class="vsrv-intro">' + icon(c && c.kind === "announcement" ? "news" : "hash", "vsrv-intro-ic") + "<h2>" + esc(tr("Welcome to #{name}!", { name: c ? c.name : "" })) + "</h2><p>" + esc(tr("This is the start of the #{name} channel.", { name: c ? c.name : "" })) + "</p></div>";
     var readMark = S.readMark || "";
     var prev = null;
@@ -996,7 +1283,7 @@
       var out = "";
       if (!prev || new Date(prev.t || msgTime(prev.id)).toDateString() !== new Date(t).toDateString()) out += '<div class="vsrv-day"><span>' + esc(dayLabel(t)) + "</span></div>";
       if (readMark && !markDone && !m.pending && m.id > readMark && m.a !== me().mid) { markDone = true; out += '<div class="vsrv-new"><span>' + esc(tr("New")) + "</span></div>"; }
-      var fresh = !prev || prev.a !== m.a || m.r || m.f === 1 || prev.f === 1 || t - (prev.t || msgTime(prev.id)) > 7 * 60 * 1000 || out;
+      var fresh = !prev || prev.a !== m.a || m.r || m.f || prev.f || m.st || prev.st || t - (prev.t || msgTime(prev.id)) > 7 * 60 * 1000 || out;
       out += messageHtml(m, fresh);
       prev = m;
       return out;
@@ -1011,6 +1298,13 @@
     if (m.f === 1) {
       return '<article class="vsrv-msg sys" data-id="' + esc(m.id) + '"><span class="vsrv-sys-ic">' + icon("door") + '</span><span class="vsrv-sys-text">' +
         tr("{name} joined the server.", { name: '<button type="button" class="vsrv-name" data-vs="member" data-m="' + esc(m.a) + '">' + esc(nameOf(m.a, sid)) + "</button>" }) +
+        ' <time datetime="' + new Date(t).toISOString() + '">' + esc(clock(t)) + "</time></span></article>";
+    }
+    if (m.f === 2) {
+      var tn = {};
+      try { tn = JSON.parse(m.b || "{}") || {}; } catch (err) { tn = {}; }
+      return '<article class="vsrv-msg sys" data-id="' + esc(m.id) + '"><span class="vsrv-sys-ic">' + icon("thread") + '</span><span class="vsrv-sys-text">' +
+        tr("{name} started a thread: {thread}", { name: '<button type="button" class="vsrv-name" data-vs="member" data-m="' + esc(m.a) + '">' + esc(nameOf(m.a, sid)) + "</button>", thread: '<a class="vsrv-sys-link" href="#/messages/s/' + sid + "/" + esc(tn.t || "") + '">' + esc((S.threads[tn.t] && S.threads[tn.t].name) || tn.n || tr("Thread")) + "</a>" }) +
         ' <time datetime="' + new Date(t).toISOString() + '">' + esc(clock(t)) + "</time></span></article>";
     }
     var mentioned = m.mn && (m.mn.e || (m.mn.u || []).indexOf(me().mid) >= 0 || (m.mn.r || []).some(function (r) { return (me().roles || []).indexOf(r) >= 0; }));
@@ -1035,13 +1329,13 @@
     } else {
       var big = emojiOnly(m.b);
       body = (m.b ? '<div class="vsrv-text' + (big ? " jumbo" : "") + '">' + format(m.b, sid) + (m.e ? ' <span class="vsrv-edited" title="' + esc(fullTime(m.e)) + '">' + esc(tr("(edited)")) + "</span>" : "") + "</div>" : "") +
-        filesHtml(m) + linkCard(m);
+        filesHtml(m) + linkCard(m) + stickerHtml(m) + pollHtml(m);
     }
     var state = m.pending ? (m.failed ? '<div class="vsrv-failed">' + esc(m.failed === "offline" ? tr("Waiting for connection…") : m.failed) + ' <button type="button" class="vsrv-linkbtn" data-vs="retry" data-n="' + esc(m.n) + '">' + esc(tr("Retry")) + '</button> <button type="button" class="vsrv-linkbtn" data-vs="discard" data-n="' + esc(m.n) + '">' + esc(tr("Delete")) + "</button></div>" : "") : "";
     var cls = "vsrv-msg" + (fresh ? " group" : " cont") + (m.pending ? " pending" : "") + (mentioned ? " mentioned" : "") + (m.p ? " pinned" : "") + (S.flash === m.id ? " flash" : "") + (mine ? " mine" : "") + (m.x ? " removed" : "");
     return '<article class="' + cls + '" data-id="' + esc(m.id) + '">' + reply +
       '<div class="vsrv-msg-row"><div class="vsrv-gutter">' + (fresh ? '<button type="button" class="vsrv-ava-btn" data-vs="member" data-m="' + esc(m.a) + '" tabindex="-1" aria-hidden="true">' + avatar(m.a, sid) + "</button>" : '<time class="vsrv-hover-time" datetime="' + new Date(t).toISOString() + '">' + esc(clock(t)) + "</time>") + "</div>" +
-      '<div class="vsrv-body">' + head + body + reactionsHtml(m) + state + "</div>" +
+      '<div class="vsrv-body">' + head + body + reactionsHtml(m) + threadChip(m) + state + "</div>" +
       (m.pending || m.x ? "" : toolsHtml(m)) + "</div></article>";
   }
   function toolsHtml(m) {
@@ -1050,7 +1344,8 @@
     return '<div class="vsrv-tools" role="toolbar">' +
       (canReact ? '<button type="button" data-vs="react-pick" data-id="' + esc(m.id) + '" aria-label="' + esc(tr("Add reaction")) + '" title="' + esc(tr("Add reaction")) + '">' + icon("smile") + "</button>" : "") +
       (has(perms, P.SEND) && !timedOut() ? '<button type="button" data-vs="reply" data-id="' + esc(m.id) + '" aria-label="' + esc(tr("Reply")) + '" title="' + esc(tr("Reply")) + '">' + icon("reply") + "</button>" : "") +
-      (m.a === me().mid ? '<button type="button" data-vs="edit" data-id="' + esc(m.id) + '" aria-label="' + esc(tr("Edit")) + '" title="' + esc(tr("Edit")) + '">' + icon("edit") + "</button>" : "") +
+      (m.a === me().mid && !m.st && !m.pl ? '<button type="button" data-vs="edit" data-id="' + esc(m.id) + '" aria-label="' + esc(tr("Edit")) + '" title="' + esc(tr("Edit")) + '">' + icon("edit") + "</button>" : "") +
+      (canThreadFrom(m) ? '<button type="button" data-vs="thread-from" data-id="' + esc(m.id) + '" aria-label="' + esc(tr("Create thread")) + '" title="' + esc(tr("Create thread")) + '">' + icon("thread") + "</button>" : "") +
       '<button type="button" data-vs="msg-menu" data-id="' + esc(m.id) + '" aria-label="' + esc(tr("More")) + '" title="' + esc(tr("More")) + '">' + icon("more") + "</button></div>";
   }
   function timedOut() { var m = me(); return !!(m.timeoutUntil && m.timeoutUntil > Date.now()); }
@@ -1117,6 +1412,8 @@
     if (!c) return "";
     var perms = Number(c.perms) || 0;
     if (timedOut()) return '<div class="vsrv-compose-off">' + icon("clock") + "<span>" + esc(tr("You're timed out until {time}.", { time: fullTime(me().timeoutUntil) })) + "</span></div>";
+    if (c.kind === "forum") return "";
+    if (c.kind === "thread" && c.thread.locked && !has(perms, P.SEND)) return '<div class="vsrv-compose-off">' + icon("lock") + "<span>" + esc(tr("This thread is locked. Only moderators can reply.")) + "</span></div>";
     if (!has(perms, P.SEND)) return '<div class="vsrv-compose-off">' + icon("lock") + "<span>" + esc(c.kind === "announcement" ? tr("Only some members can post in this announcement channel.") : tr("You don't have permission to send messages in this channel.")) + "</span></div>";
     var reply = "";
     if (S.reply && S.reply.c === S.cid) {
@@ -1130,9 +1427,11 @@
         '<button type="button" class="vsrv-tray-x" data-vs="file-x" data-id="' + esc(f.id) + '" aria-label="' + esc(tr("Remove")) + '">' + icon("close") + "</button></div>";
     }).join("") + "</div>" : "";
     var slow = c.slowmode && !has(perms, P.MANAGE_MESSAGES) && !has(perms, P.MANAGE_CHANNELS) ? '<span class="vsrv-slow" title="' + esc(tr("Slow mode is on")) + '">' + icon("clock") + esc(slowLabel(c.slowmode)) + "</span>" : "";
-    return reply + tray + '<div class="vsrv-compose">' +
+    var arch = c.kind === "thread" && c.thread.archived ? '<div class="vsrv-replybar">' + icon("archive") + "<span>" + esc(tr("This thread is archived. Sending a message reopens it.")) + "</span></div>" : "";
+    return arch + reply + tray + '<div class="vsrv-compose">' +
       (has(perms, P.ATTACH) ? '<label class="vsrv-iconbtn vsrv-attach" aria-label="' + esc(tr("Attach files")) + '" title="' + esc(tr("Attach files")) + '">' + icon("clip") + '<input type="file" multiple data-vs="files" hidden></label>' : "") +
-      '<textarea id="vsrv-input" class="vsrv-input" rows="1" maxlength="4000" placeholder="' + esc(tr("Message #{name}", { name: c.name })) + '" enterkeyhint="send" autocomplete="off">' + esc(S.drafts[S.cid] || "") + "</textarea>" +
+      '<button type="button" class="vsrv-iconbtn" data-vs="compose-apps" aria-label="' + esc(tr("More options")) + '" title="' + esc(tr("More options")) + '">' + icon("apps") + "</button>" +
+      '<textarea id="vsrv-input" class="vsrv-input" rows="1" maxlength="4000" placeholder="' + esc(c.kind === "thread" ? tr("Message {name}", { name: c.name }) : tr("Message #{name}", { name: c.name })) + '" enterkeyhint="send" autocomplete="off">' + esc(S.drafts[S.cid] || "") + "</textarea>" +
       '<button type="button" class="vsrv-iconbtn" data-vs="emoji-pick" aria-label="' + esc(tr("Emoji")) + '" title="' + esc(tr("Emoji")) + '">' + icon("smile") + "</button>" + slow +
       '<button type="button" class="vsrv-send" data-vs="send" aria-label="' + esc(tr("Send")) + '">' + icon("send") + "</button>" +
       '</div><div class="vsrv-pop" id="vsrv-pop" hidden></div>';
@@ -1170,10 +1469,10 @@
         var col = memberColor(m.m);
         var c = cardOf(m.m);
         return '<button type="button" class="vsrv-mrow' + (g.id === "off" ? " off" : "") + '" data-vs="member" data-m="' + m.m + '"><span class="vsrv-mrow-ava">' + avatar(m.m, S.sid, "vsrv-ava sm") + (g.id !== "off" ? '<span class="vsrv-on"></span>' : "") + "</span>" +
-          '<span class="vsrv-mrow-name"' + (col ? ' style="color:' + col + '"' : "") + ">" + esc(nameOf(m.m)) + "</span>" +
+          '<span class="vsrv-mrow-txt"><span class="vsrv-mrow-name"' + (col ? ' style="color:' + col + '"' : "") + ">" + esc(nameOf(m.m)) + "</span>" + (g.id !== "off" && actOf(m.m, m) ? '<span class="vsrv-mrow-act">' + esc(actText(actOf(m.m, m))) + "</span>" : "") + "</span>" +
           (m.owner ? '<span class="vsrv-crown" title="' + esc(tr("Server owner")) + '">' + icon("shield") + "</span>" : "") +
           (m.timeoutUntil && m.timeoutUntil > Date.now() ? '<span class="vsrv-crown warn" title="' + esc(tr("Timed out")) + '">' + icon("clock") + "</span>" : "") +
-          (c && c.handle && !c.nick ? "" : "") + "</button>";
+          "</button>";
       }).join("") + "</div>";
     }).join("") + (S.membersNext ? '<div class="vsrv-older"><button type="button" class="vsrv-linkbtn" data-vs="more-members">' + esc(tr("Show more")) + "</button></div>" : "");
   }
@@ -1225,6 +1524,7 @@
   function atBottom(log) { return !log || log.scrollHeight - log.scrollTop - log.clientHeight < 90; }
   var logScrolling = false;
   function paintLog(stick, mode) {
+    if (el("vsrv-forum")) { paintForum(); return; }
     var log = el("vsrv-log");
     if (!log || S.edit) { if (log && S.edit) paintLater(); return; }
     var wasBottom = atBottom(log);
@@ -1336,7 +1636,7 @@
       var ws;
       try { ws = new WebSocket(url); } catch (err) { retry(); return; }
       S.socket = ws;
-      ws.onopen = function () { S.retry = 0; if (S.cid) ws.send(JSON.stringify({ op: "view", c: S.cid })); };
+      ws.onopen = function () { S.retry = 0; S.sentAct = "-"; if (S.cid) ws.send(JSON.stringify({ op: "view", c: viewId(S.cid) })); pushActivity(); };
       ws.onmessage = function (ev) { onSocket(sid, ev.data); };
       ws.onclose = function (ev) {
         if (S.socket !== ws) return;
@@ -1364,15 +1664,31 @@
       var on = {};
       (msg.online || []).forEach(function (m) { on[m] = 1; });
       S.online[sid] = on;
+      S.acts[sid] = msg.acts || {};
+      S.voice[sid] = msg.voice || {};
       paintMembers();
+      paintVoice();
       catchUp();
       flushOutbox();
+      return;
+    }
+    if (msg.op === "voice") {
+      var vb = S.voice[sid] || (S.voice[sid] = {});
+      if (msg.c) vb[msg.a] = { c: msg.c, st: msg.st || {}, j: msg.j || 0 }; else delete vb[msg.a];
+      paintVoice();
       return;
     }
     if (msg.op === "online") {
       var bag = S.online[sid] || (S.online[sid] = {});
       if (msg.on) bag[msg.a] = 1; else delete bag[msg.a];
       paintMembers();
+      return;
+    }
+    if (msg.op === "activity") {
+      var acts = S.acts[sid] || (S.acts[sid] = {});
+      if (msg.act) acts[msg.a] = msg.act; else delete acts[msg.a];
+      paintMembers();
+      if (msg.a === me(sid).mid) paintSide();
       return;
     }
     if (msg.op === "typing") {
@@ -1394,6 +1710,8 @@
     if (msg.op === "event" && msg.e) applyEvent(sid, msg.c, msg.e);
   }
   function applyEvent(sid, cid, e) {
+    if (e.ch) cid = e.ch;
+    if (applyP2(sid, cid, e)) return;
     var list = S.msgs[cid];
     var c = channel(cid, sid);
     if (e.t === "msg" && e.m) {
@@ -1464,7 +1782,8 @@
     var now = Date.now();
     if (now - S.lastTyping < 3000) return;
     S.lastTyping = now;
-    try { S.socket.send(JSON.stringify({ op: "typing", c: S.cid })); } catch (err) { /* closed */ }
+    var th = S.threads[S.cid];
+    try { S.socket.send(JSON.stringify(th ? { op: "typing", c: S.cid, p: th.parentId } : { op: "typing", c: S.cid })); } catch (err) { /* closed */ }
   }
 
   /* ---------- sheets ---------- */
@@ -1544,7 +1863,7 @@
       var name = sheet.querySelector('[data-k="name"]').value.trim();
       if (!name) { sheet.querySelector('[data-k="name"]').focus(); return; }
       busy(go, true);
-      call("", { method: "POST", body: { name: name, categoryName: tr("Text channels") } }).then(function (res) {
+      call("", { method: "POST", body: { name: name, categoryName: tr("Text channels"), voiceCategoryName: tr("Voice channels"), voiceName: tr("General") } }).then(function (res) {
         if (res.status !== 200) { busy(go, false); toast(errText(res)); return; }
         var sid = res.body.server ? res.body.server.id : res.body.serverId || res.body.id;
         var cid = res.body.channelId || "";
@@ -1663,7 +1982,10 @@
     var items = [];
     var quick = has(perms, P.REACT) && !timedOut() ? '<div class="vsrv-quick">' + QUICK.map(function (q) { return '<button type="button" data-vs="react" data-id="' + esc(id) + '" data-e="' + esc(q) + '" data-close="1">' + esc(q) + "</button>"; }).join("") + '<button type="button" data-vs="react-pick" data-id="' + esc(id) + '" data-close="1" aria-label="' + esc(tr("Add reaction")) + '">' + icon("smile") + "</button></div>" : "";
     if (has(perms, P.SEND) && !timedOut()) items.push(["reply", "reply", tr("Reply")]);
-    if (mine) items.push(["edit", "edit", tr("Edit message")]);
+    if (mine && !m.st && !m.pl) items.push(["edit", "edit", tr("Edit message")]);
+    if (canThreadFrom(m)) items.push(["thread-from", "thread", tr("Create thread")]);
+    if (m.th) items.push(["open-thread", "thread", tr("Open thread")]);
+    if (m.pl && !m.pl.ended && (mine || mod)) items.push(["poll-end", "poll", tr("End poll now")]);
     if (mod) items.push(["pin", "pin", m.p ? tr("Unpin message") : tr("Pin message")]);
     if (m.b) items.push(["copy-text", "copy", tr("Copy text")]);
     items.push(["copy-link", "link", tr("Copy message link")]);
@@ -1711,6 +2033,7 @@
     }).join("") + "</div></details>" : "";
     var acts = [];
     if (S.cid && has(chanPerms(S.cid), P.SEND) && !self) acts.push(["mention", "users", tr("Mention")]);
+    if (self && root.ViktorychPresence && root.ViktorychPresence.open) acts.push(["status", "smile", tr("Set a custom status")]);
     if (self || has(p, P.MANAGE_ROLES) && above) acts.push(["nick", "edit", self ? tr("Edit server profile") : tr("Change nickname")]);
     if (!self && above && has(p, P.MODERATE)) acts.push(["timeout", "clock", c.timeoutUntil && c.timeoutUntil > Date.now() ? tr("Remove timeout") : tr("Time out")]);
     if (!self && above && has(p, P.KICK)) acts.push(["kick", "door", tr("Kick"), "danger"]);
@@ -1719,6 +2042,7 @@
     var sheet = openSheet('<div class="vsrv-profile">' + avatar(mid, S.sid, "vsrv-ava xl") + "<h2>" + esc(nameOf(mid)) + (c.owner ? '<span class="vsrv-crown" title="' + esc(tr("Server owner")) + '">' + icon("shield") + "</span>" : "") + "</h2>" +
       (c.nick && c.name ? '<div class="vsrv-sub">' + esc(c.name) + "</div>" : "") + profile +
       (c.member === false ? '<p class="vsrv-note">' + esc(tr("No longer in this server.")) + "</p>" : "") +
+      (actOf(mid) ? '<div class="vsrv-act">' + icon(actIcon(actOf(mid))) + "<span>" + esc(actText(actOf(mid))) + "</span>" + (actOf(mid).d ? "<small>" + esc(actOf(mid).d) + "</small>" : "") + "</div>" : "") +
       (roleChips ? '<div class="vsrv-chips">' + roleChips + "</div>" : "") + editRoles +
       '</div><div class="vsrv-menu">' + acts.map(function (a) {
         return '<button type="button" class="vsrv-menu-item' + (a[3] ? " " + a[3] : "") + '" data-ma="' + a[0] + '">' + icon(a[1]) + "<span>" + esc(a[2]) + "</span></button>";
@@ -1741,6 +2065,7 @@
       var a = b.getAttribute("data-ma");
       if (a === "mention") { closeSheet(true); insertMention(mid); return; }
       if (a === "nick") { closeSheet(true); nickSheet(mid); return; }
+      if (a === "status") { closeSheet(true); root.ViktorychPresence.open(); return; }
       if (a === "timeout") { closeSheet(true); timeoutSheet(mid); return; }
       if (a === "kick") {
         confirmSheet(tr("Kick {name}", { name: nameOf(mid) }), tr("They can rejoin with a new invite."), tr("Kick"), true, true).then(function (ok) {
@@ -1816,7 +2141,7 @@
     var c = channel(cid || m.c);
     var t = m.t || msgTime(m.id);
     return '<button type="button" class="vsrv-result" data-vs="jump" data-id="' + esc(m.id) + '" data-c="' + esc(m.c || cid) + '" data-close="1">' + avatar(m.a, S.sid, "vsrv-ava sm") +
-      '<span class="vsrv-result-main"><span class="vsrv-head"><span class="vsrv-name">' + esc(nameOf(m.a)) + "</span>" + (c ? '<span class="vsrv-result-ch">#' + esc(c.name) + "</span>" : "") + "<time>" + esc(fullTime(t)) + "</time></span>" +
+      '<span class="vsrv-result-main"><span class="vsrv-head"><span class="vsrv-name">' + esc(nameOf(m.a)) + "</span>" + (c ? '<span class="vsrv-result-ch">' + (c.kind === "thread" ? "" : "#") + esc(c.name) + "</span>" : "") + "<time>" + esc(fullTime(t)) + "</time></span>" +
       '<span class="vsrv-result-text">' + esc(m.x ? tr("Removed by a moderator") : plain(m.b).slice(0, 300) || (m.at && m.at.length ? tr("Attachment") : "")) + "</span></span></button>";
   }
   function searchSheet() {
@@ -1833,10 +2158,12 @@
       var scope = sheet.querySelector('input[name="vsrv-sc"]:checked').value;
       var mine = ++seq;
       box.innerHTML = '<div class="dmsgs-skel"><span></span><span></span></div>';
-      call("/" + S.sid + "/search?q=" + encodeURIComponent(text) + (scope === "c" && S.cid ? "&c=" + S.cid : "")).then(function (res) {
+      call("/" + S.sid + "/search?q=" + encodeURIComponent(text) + (scope === "c" && S.cid ? "&c=" + viewId(S.cid) : "")).then(function (res) {
         if (mine !== seq) return;
         if (res.status !== 200) { box.innerHTML = '<p class="vsrv-note">' + esc(errText(res)) + "</p>"; return; }
         var list = res.body.messages || res.body.results || [];
+        var hits = res.body.threads || {};
+        Object.keys(hits).forEach(function (k) { storeThread(S.sid, hits[k]); });
         needCards(list.map(function (m) { return m.a; }));
         box.innerHTML = list.length ? '<p class="vsrv-note">' + esc(trn(list.length, "srvResults")) + "</p>" + list.map(function (m) { return resultHtml(m, m.c); }).join("") : '<div class="vsrv-empty"><p>' + esc(tr("No results")) + "</p></div>";
       });
@@ -1908,11 +2235,11 @@
       xhr.send(file);
     });
   }
-  function TABS() { return [["overview", tr("Overview")], ["roles", tr("Roles")], ["emoji", tr("Emoji")], ["invites", tr("Invites")], ["bans", tr("Bans")]]; }
+  function TABS() { return [["overview", tr("Overview")], ["roles", tr("Roles")], ["emoji", tr("Emoji")], ["stickers", tr("Stickers")], ["invites", tr("Invites")], ["bans", tr("Bans")]]; }
   function settingsSheet(tab) {
     var p = basePerms();
     var tabs = TABS().filter(function (t) {
-      if (t[0] === "overview" || t[0] === "emoji") return has(p, P.MANAGE_SERVER);
+      if (t[0] === "overview" || t[0] === "emoji" || t[0] === "stickers") return has(p, P.MANAGE_SERVER);
       if (t[0] === "roles") return has(p, P.MANAGE_ROLES);
       if (t[0] === "invites") return has(p, P.MANAGE_SERVER) || has(p, P.CREATE_INVITE);
       if (t[0] === "bans") return has(p, P.BAN);
@@ -1930,6 +2257,7 @@
       if (name === "overview") overviewTab(body);
       if (name === "roles") rolesTab(body);
       if (name === "emoji") emojiTab(body);
+      if (name === "stickers") stickersTab(body);
       if (name === "invites") invitesTab(body);
       if (name === "bans") bansTab(body);
     }
@@ -2129,7 +2457,7 @@
   function newChannelSheet(parentId) {
     var cats = channelsOf().filter(function (c) { return c.kind === "category"; });
     var sheet = openSheet(sheetHead(tr("Create channel")) + '<div class="vsrv-sheet-body vsrv-radios">' +
-      [["text", "hash", tr("Text"), tr("Send messages, images, files and links")], ["announcement", "news", tr("Announcement"), tr("Important updates. Only moderators post by default")], ["category", "chev", tr("Category"), tr("Groups channels together")]].map(function (k, i) {
+      [["text", "hash", tr("Text"), tr("Send messages, images, files and links")], ["announcement", "news", tr("Announcement"), tr("Important updates. Only moderators post by default")], ["forum", "forum", tr("Forum"), tr("Organized posts, each with its own thread")], ["voice", "voice", tr("Voice"), tr("Talk, turn on your camera and share your screen")], ["category", "chev", tr("Category"), tr("Groups channels together")]].map(function (k, i) {
         return '<label class="vsrv-radio big"><input type="radio" name="vsrv-kind" value="' + k[0] + '"' + (i === 0 ? " checked" : "") + ">" + icon(k[1]) + "<span><strong>" + esc(k[2]) + "</strong><small>" + esc(k[3]) + "</small></span></label>";
       }).join("") +
       '<label class="vsrv-field"><span>' + esc(tr("Name")) + '</span><input type="text" maxlength="100" data-k="name" placeholder="new-channel" autofocus></label>' +
@@ -2166,6 +2494,7 @@
         body.innerHTML = '<label class="vsrv-field"><span>' + esc(tr("Name")) + '</span><input type="text" maxlength="100" data-k="name" value="' + esc(c.name) + '"></label>' +
           (c.kind !== "category" ? '<label class="vsrv-field"><span>' + esc(tr("Topic")) + '</span><textarea rows="3" maxlength="1024" data-k="topic">' + esc(c.topic || "") + "</textarea></label>" +
           '<label class="vsrv-field"><span>' + esc(tr("Slow mode")) + '</span><select data-k="slow">' + SLOW.map(function (s) { return '<option value="' + s + '"' + (s === (c.slowmode || 0) ? " selected" : "") + ">" + esc(slowLabel(s)) + "</option>"; }).join("") + '</select><small class="vsrv-note">' + esc(tr("Members wait this long between messages. Moderators are exempt.")) + "</small></label>" : "") +
+          (c.kind === "forum" ? tagsEditor(c) : "") +
           '<div class="vsrv-inline end"><button type="button" class="vsrv-btn danger ghost" data-k="delete">' + esc(c.kind === "category" ? tr("Delete category") : tr("Delete channel")) + '</button><button type="button" class="vsrv-btn" data-k="save">' + esc(tr("Save changes")) + "</button></div>";
       } else {
         var roles = sortedRoles();
@@ -2183,6 +2512,7 @@
         }).join("");
       }
       body.onclick = function (ev) {
+        if (tagsClick(ev, body)) return;
         var tri = ev.target.closest(".vsrv-tri-btns button");
         if (tri) { Array.prototype.forEach.call(tri.parentNode.children, function (x) { x.setAttribute("aria-pressed", x === tri ? "true" : "false"); }); return; }
         var b = ev.target.closest("[data-k]");
@@ -2190,6 +2520,7 @@
         var k = b.getAttribute("data-k");
         if (k === "save") {
           var patch = { name: body.querySelector('[data-k="name"]').value.trim() };
+          if (c.kind === "forum") saveTags(body, cid);
           var t = body.querySelector('[data-k="topic"]');
           if (t) { patch.topic = t.value.trim(); patch.slowmode = Number(body.querySelector('[data-k="slow"]').value); }
           busy(b, true);
@@ -2471,6 +2802,808 @@
     });
   }
 
+  /* ---------- threads, forums, polls, stickers, events, activity (phase 2) ---------- */
+  var tchan = {};
+  var threadLoads = {};
+  var threadMiss = {};
+  var activeAt = {};
+  var forumLoads = {};
+  function storeThread(sid, t) {
+    if (!t || !t.id) return null;
+    var o = S.threads[t.id] || (S.threads[t.id] = {});
+    Object.keys(t).forEach(function (k) { if (k !== "starter" || t.starter) o[k] = t[k]; });
+    o.sid = sid;
+    return o;
+  }
+  function threadChannel(cid, sid) {
+    sid = sid || S.sid;
+    var t = S.threads[cid];
+    if (!t || t.sid !== sid) return null;
+    var p = realChannel(t.parentId, sid);
+    if (!p) return null;
+    var perms = Number(p.perms) || 0;
+    if (t.locked && !has(perms, P.MANAGE_THREADS)) perms &= ~(P.SEND | P.REACT | P.ATTACH);
+    var c = tchan[cid] || (tchan[cid] = { id: cid, kind: "thread", mentions: 0, lastRead: "", lastId: "" });
+    c.name = t.name; c.parentId = t.parentId; c.perms = perms; c.slowmode = p.slowmode || 0; c.topic = ""; c.thread = t;
+    c.lastId = maxId(c.lastId, t.lastId);
+    c.lastRead = maxId(c.lastRead, t.lastRead || "");
+    return c;
+  }
+  function viewId(cid) { var t = S.threads[cid]; return t && t.sid === S.sid ? t.parentId : cid; }
+  function loadThread(sid, tid) {
+    if (threadLoads[tid]) return threadLoads[tid];
+    threadLoads[tid] = call("/" + sid + "/channels/" + tid).then(function (res) {
+      delete threadLoads[tid];
+      if (res.status === 200 && res.body.thread) {
+        var t = storeThread(sid, res.body.thread);
+        needCards([t.ownerMid], sid);
+        return t;
+      }
+      threadMiss[tid] = 1;
+      return null;
+    });
+    return threadLoads[tid];
+  }
+  function loadActive(sid, force) {
+    if (!force && activeAt[sid] && Date.now() - activeAt[sid] < 60000) return;
+    activeAt[sid] = Date.now();
+    call("/" + sid + "/threads").then(function (res) {
+      if (res.status !== 200) return;
+      S.active[sid] = (res.body.threads || []).map(function (t) { return storeThread(sid, t); });
+      if (sid === S.sid) paintSide();
+    });
+  }
+  function shortAgo(ts) {
+    var d = Math.max(0, Date.now() - ts) / 1000;
+    if (d < 60) return tr("now");
+    if (d < 3600) return tr("{n}m", { n: Math.floor(d / 60) });
+    if (d < 86400) return tr("{n}h", { n: Math.floor(d / 3600) });
+    return tr("{n}d", { n: Math.floor(d / 86400) });
+  }
+  function threadIntro(c) {
+    var t = c.thread;
+    var parent = realChannel(t.parentId);
+    var rootMsg = t.rootId ? (S.msgs[t.parentId] || []).find(function (x) { return x.id === t.rootId; }) : null;
+    var jumpRoot = rootMsg ? '<button type="button" class="vsrv-reply" data-vs="jump" data-c="' + esc(t.parentId) + '" data-id="' + esc(rootMsg.id) + '">' + avatar(rootMsg.a, S.sid, "vsrv-ava xs") + '<span class="vsrv-reply-name">' + esc(nameOf(rootMsg.a)) + '</span><span class="vsrv-reply-text">' + esc((plain(rootMsg.b) || (rootMsg.at && rootMsg.at.length ? tr("Attachment") : "")).slice(0, 160)) + "</span></button>"
+      : t.rootId ? '<button type="button" class="vsrv-linkbtn" data-vs="jump" data-c="' + esc(t.parentId) + '" data-id="' + esc(t.rootId) + '">' + esc(tr("Jump to original message")) + "</button>" : "";
+    return '<div class="vsrv-intro">' + icon("thread", "vsrv-intro-ic") + "<h2>" + esc(t.name) + "</h2><p>" +
+      esc(tr("Started by {name}", { name: nameOf(t.ownerMid) })) + (parent ? " · " + esc(tr("in #{name}", { name: parent.name })) : "") + "</p>" + jumpRoot + "</div>";
+  }
+  function canThreadFrom(m) {
+    if (!m || m.pending || m.x || m.f || m.th) return false;
+    var c = channel(S.cid);
+    if (!c || (c.kind !== "text" && c.kind !== "announcement")) return false;
+    var perms = Number(c.perms) || 0;
+    return has(perms, P.CREATE_THREADS) && !timedOut();
+  }
+  function threadChip(m) {
+    if (!m.th || m.x) return "";
+    var t = S.threads[m.th.id] || storeThread(S.sid, m.th);
+    return '<a class="vsrv-thchip" href="#/messages/s/' + S.sid + "/" + esc(t.id) + '">' + icon("thread") + '<span class="vsrv-thchip-name">' + esc(t.name) + "</span>" +
+      '<span class="vsrv-thchip-n">' + esc(trn(Math.max(0, Number(t.count) || 0), "srvMessagesN")) + "</span>" +
+      (t.lastId ? "<time>" + esc(shortAgo(msgTime(t.lastId))) + "</time>" : "") + (t.archived ? icon("archive", "vsrv-th-flag") : "") + (t.locked ? icon("lock", "vsrv-th-flag") : "") + "</a>";
+  }
+  function stickerHtml(m) {
+    if (!m.st) return "";
+    if (m.st.gone || !m.st.url) return '<div class="vsrv-sticker gone">' + icon("sticker") + "<span>" + esc(tr("Sticker removed")) + "</span></div>";
+    return '<img class="vsrv-sticker" src="' + esc(m.st.url) + '" alt="' + esc(m.st.name || "") + '" title="' + esc(m.st.name || "") + '" width="160" height="160" loading="lazy" decoding="async">';
+  }
+  function leftLabel(ms) {
+    if (ms < 3600000) return tr("{n}m left", { n: Math.max(1, Math.ceil(ms / 60000)) });
+    if (ms < 86400000) return tr("{n}h left", { n: Math.ceil(ms / 3600000) });
+    return tr("{n}d left", { n: Math.ceil(ms / 86400000) });
+  }
+  function pollHtml(m) {
+    var pl = m.pl;
+    if (!pl || !pl.o) return "";
+    var ended = !!pl.ended || (pl.end && pl.end <= Date.now());
+    var mine = pl.mine || [];
+    var show = ended || mine.length > 0;
+    var total = pl.o.reduce(function (s, o) { return s + (Number(o.n) || 0); }, 0);
+    var top = pl.o.reduce(function (s, o) { return Math.max(s, Number(o.n) || 0); }, 0);
+    var can = !ended && !m.pending && !timedOut();
+    var mod = m.a === me().mid || has(chanPerms(S.cid), P.MANAGE_MESSAGES);
+    return '<div class="vsrv-poll"><div class="vsrv-poll-q">' + esc(pl.q) + '</div><div class="vsrv-poll-sub">' + esc(pl.multi ? tr("Select one or more answers") : tr("Select one answer")) + "</div>" +
+      pl.o.map(function (o, i) {
+        var n = Number(o.n) || 0;
+        var pct = total ? Math.round(n * 100 / total) : 0;
+        var on = mine.indexOf(i) >= 0;
+        return '<button type="button" class="vsrv-popt' + (on ? " on" : "") + (show ? " res" : "") + (ended && top > 0 && n === top ? " win" : "") + '" data-vs="poll-vote" data-id="' + esc(m.id) + '" data-o="' + i + '"' + (can ? "" : " disabled") + ' aria-pressed="' + (on ? "true" : "false") + '">' +
+          (show ? '<i style="width:' + pct + '%"></i>' : "") + '<span class="vsrv-popt-box' + (pl.multi ? " sq" : "") + '">' + (on ? icon("check") : "") + '</span><span class="vsrv-popt-t">' + esc(o.t) + "</span>" +
+          (show ? '<span class="vsrv-popt-n">' + pct + "%</span>" : "") + "</button>";
+      }).join("") +
+      '<div class="vsrv-poll-foot"><button type="button" class="vsrv-linkbtn" data-vs="poll-voters" data-id="' + esc(m.id) + '">' + esc(trn(Number(pl.voters) || 0, "srvVotes")) + "</button><span>·</span><span>" + esc(ended ? tr("Poll closed") : leftLabel(pl.end - Date.now())) + "</span>" +
+      (can && mine.length ? '<button type="button" class="vsrv-linkbtn" data-vs="poll-clear" data-id="' + esc(m.id) + '">' + esc(tr("Remove vote")) + "</button>" : "") +
+      (!ended && mod && !m.pending ? '<button type="button" class="vsrv-linkbtn" data-vs="poll-end" data-id="' + esc(m.id) + '">' + esc(tr("End poll now")) + "</button>" : "") + "</div></div>";
+  }
+  function pollMsgPath(cid, id) { return "/" + S.sid + "/channels/" + cid + "/messages/" + id + "/poll"; }
+  function votePoll(id, o) {
+    var m = msgById(id);
+    if (!m || !m.pl) return;
+    var cid = S.cid;
+    var pl = m.pl;
+    var before = JSON.stringify(pl);
+    var mine = (pl.mine || []).slice();
+    var next;
+    if (o < 0) next = [];
+    else if (pl.multi) next = mine.indexOf(o) >= 0 ? mine.filter(function (x) { return x !== o; }) : mine.concat([o]);
+    else next = mine.length === 1 && mine[0] === o ? [] : [o];
+    mine.forEach(function (i) { if (pl.o[i]) pl.o[i].n = Math.max(0, (Number(pl.o[i].n) || 0) - 1); });
+    next.forEach(function (i) { if (pl.o[i]) pl.o[i].n = (Number(pl.o[i].n) || 0) + 1; });
+    if (!mine.length && next.length) pl.voters = (Number(pl.voters) || 0) + 1;
+    if (mine.length && !next.length) pl.voters = Math.max(0, (Number(pl.voters) || 0) - 1);
+    pl.mine = next;
+    paintLog();
+    call(pollMsgPath(cid, id), { method: "PUT", body: { o: next } }).then(function (res) {
+      if (res.status === 200 && res.body.poll) m.pl = res.body.poll;
+      else { m.pl = JSON.parse(before); toast(errText(res)); }
+      saveChannel(cid);
+      if (cid === S.cid) paintLog();
+    });
+  }
+  function endPoll(id) {
+    var m = msgById(id);
+    if (!m || !m.pl) return;
+    var cid = S.cid;
+    confirmSheet(tr("End poll now"), tr("Voting closes for everyone and the results are final."), tr("End poll"), true).then(function (ok) {
+      if (!ok) return;
+      call(pollMsgPath(cid, id) + "/end", { method: "POST", body: {} }).then(function (res) {
+        if (res.status !== 200) { toast(errText(res)); return; }
+        m.pl = Object.assign({}, res.body.poll, { mine: (m.pl && m.pl.mine) || [] });
+        saveChannel(cid);
+        if (cid === S.cid) paintLog();
+      });
+    });
+  }
+  function pollVoters(id) {
+    var m = msgById(id);
+    if (!m || !m.pl) return;
+    var cid = S.cid;
+    var sheet = openSheet(sheetHead(tr("Poll votes"), m.pl.q) + '<nav class="vsrv-tabs scroll" role="tablist">' + m.pl.o.map(function (o, i) {
+      return '<button type="button" role="tab" data-tab="' + i + '" aria-selected="' + (i === 0 ? "true" : "false") + '">' + esc(o.t) + " · " + (Number(o.n) || 0) + "</button>";
+    }).join("") + '</nav><div class="vsrv-sheet-body" data-k="body"></div>', "tall");
+    function show(i) {
+      Array.prototype.forEach.call(sheet.querySelectorAll("[data-tab]"), function (b) { b.setAttribute("aria-selected", b.getAttribute("data-tab") === String(i) ? "true" : "false"); });
+      var body = sheet.querySelector('[data-k="body"]');
+      body.innerHTML = '<div class="dmsgs-skel"><span></span><span></span></div>';
+      call(pollMsgPath(cid, id) + "/voters?o=" + i).then(function (res) {
+        if (res.status !== 200) { body.innerHTML = '<p class="vsrv-note">' + esc(errText(res)) + "</p>"; return; }
+        var list = res.body.voters || [];
+        needCards(list);
+        body.innerHTML = list.length ? list.map(function (mid) { return '<button type="button" class="vsrv-mrow" data-vs="member" data-m="' + esc(mid) + '">' + avatar(mid, S.sid, "vsrv-ava sm") + '<span class="vsrv-mrow-name">' + esc(nameOf(mid)) + "</span></button>"; }).join("") : '<p class="vsrv-note">' + esc(tr("No votes yet.")) + "</p>";
+      });
+    }
+    sheet.addEventListener("click", function (ev) { var b = ev.target.closest("[data-tab]"); if (b) show(Number(b.getAttribute("data-tab"))); });
+    show(0);
+  }
+  function sendSpecial(extra) {
+    var cid = S.cid;
+    var sid = S.sid;
+    return call("/" + sid + "/channels/" + cid + "/messages", { method: "POST", body: Object.assign({ body: "", nonce: "n" + rand() }, extra) }).then(function (res) {
+      if (res.status !== 200 || !res.body.message) { toast(errText(res)); return false; }
+      mergeMessages(cid, [res.body.message], false);
+      markReadSoon(sid, cid, res.body.message.id, true);
+      S.forceBottom = true;
+      if (cid === S.cid) paintLog(true);
+      return true;
+    });
+  }
+  function appsMenu() {
+    var c = channel(S.cid);
+    if (!c) return;
+    var st = srv();
+    var n = st && st.stickers ? st.stickers.length : 0;
+    var items = [["poll", "poll", tr("Create poll")], ["sticker", "sticker", n ? tr("Send a sticker") : tr("No stickers in this server yet")]];
+    var sheet = openSheet('<div class="vsrv-menu">' + items.map(function (it) {
+      return '<button type="button" class="vsrv-menu-item" data-k="' + it[0] + '"' + (it[0] === "sticker" && !n ? " disabled" : "") + ">" + icon(it[1]) + "<span>" + esc(it[2]) + "</span></button>";
+    }).join("") + "</div>", "is-menu");
+    sheet.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-k]");
+      if (!b || b.disabled) return;
+      closeSheet(true);
+      if (b.getAttribute("data-k") === "poll") pollSheet();
+      else stickerPicker();
+    });
+  }
+  function POLL_TIMES() { return [[1, tr("1 hour")], [4, tr("4 hours")], [8, tr("8 hours")], [24, tr("24 hours")], [72, tr("3 days")], [168, tr("1 week")]]; }
+  function pollSheet() {
+    function optRow(i) { return '<div class="vsrv-inline"><input type="text" class="vsrv-input-line" maxlength="55" data-k="opt" placeholder="' + esc(tr("Answer {n}", { n: i + 1 })) + '"></div>'; }
+    var sheet = openSheet(sheetHead(tr("Create poll")) + '<div class="vsrv-sheet-body"><label class="vsrv-field"><span>' + esc(tr("Question")) + '</span><input type="text" maxlength="300" data-k="q" placeholder="' + esc(tr("What question do you want to ask?")) + '" autofocus></label>' +
+      '<div class="vsrv-field"><span>' + esc(tr("Answers")) + '</span><div data-k="opts">' + optRow(0) + optRow(1) + '</div><button type="button" class="vsrv-linkbtn" data-k="add">' + icon("plus") + esc(tr("Add another answer")) + "</button></div>" +
+      '<label class="vsrv-field"><span>' + esc(tr("Duration")) + '</span><select data-k="h">' + POLL_TIMES().map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === 24 ? " selected" : "") + ">" + esc(x[1]) + "</option>"; }).join("") + "</select></label>" +
+      '<label class="vsrv-check switch"><input type="checkbox" data-k="multi"><span>' + esc(tr("Allow multiple answers")) + "</span></label></div>" +
+      '<footer class="vsrv-sheet-foot"><button type="button" class="vsrv-btn ghost" data-vs="close-sheet">' + esc(tr("Cancel")) + '</button><button type="button" class="vsrv-btn" data-k="go">' + esc(tr("Post")) + "</button></footer>", "small");
+    sheet.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-k]");
+      if (!b) return;
+      var k = b.getAttribute("data-k");
+      if (k === "add") {
+        var box = sheet.querySelector('[data-k="opts"]');
+        var count = box.querySelectorAll('[data-k="opt"]').length;
+        if (count >= 10) { toast(tr("Up to 10 answers.")); return; }
+        box.insertAdjacentHTML("beforeend", optRow(count));
+        var last = box.querySelectorAll('[data-k="opt"]')[count];
+        if (last) last.focus();
+      }
+      if (k === "go") {
+        var q = sheet.querySelector('[data-k="q"]').value.trim();
+        var opts = Array.prototype.map.call(sheet.querySelectorAll('[data-k="opt"]'), function (x) { return x.value.trim(); }).filter(Boolean);
+        if (!q) { sheet.querySelector('[data-k="q"]').focus(); return; }
+        if (opts.length < 2) { toast(tr("Add at least two answers.")); return; }
+        busy(b, true);
+        sendSpecial({ poll: { q: q, o: opts, multi: sheet.querySelector('[data-k="multi"]').checked, hours: Number(sheet.querySelector('[data-k="h"]').value) } }).then(function (ok) {
+          busy(b, false);
+          if (ok) closeSheet(true);
+        });
+      }
+    });
+  }
+  function stickerPicker() {
+    var st = srv();
+    var list = (st && st.stickers) || [];
+    var sheet = openSheet(sheetHead(tr("Stickers")) + '<div class="vsrv-sheet-body"><div class="vsrv-sgrid">' + list.map(function (s) {
+      return '<button type="button" data-pick="' + esc(s.id) + '" title="' + esc(s.name) + '"><img src="' + esc(s.url) + '" alt="' + esc(s.name) + '" loading="lazy" decoding="async"></button>';
+    }).join("") + "</div></div>", "emoji");
+    sheet.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-pick]");
+      if (!b) return;
+      closeSheet(true);
+      sendSpecial({ sticker: b.getAttribute("data-pick") });
+    });
+  }
+  function stickersTab(body) {
+    var st = srv();
+    var list = (st && st.stickers) || [];
+    body.innerHTML = '<p class="vsrv-note">' + esc(tr("Stickers are big images anyone here can send. PNG, APNG, GIF or WebP up to 512 KB.")) + "</p>" +
+      '<div class="vsrv-inline"><label class="vsrv-field"><span>' + esc(tr("Name")) + '</span><input type="text" maxlength="30" data-k="name" placeholder="wave"></label><label class="vsrv-btn"><input type="file" accept="image/png,image/apng,image/gif,image/webp" data-k="file" hidden>' + esc(tr("Upload sticker")) + "</label></div>" +
+      '<div class="vsrv-sgrid">' + (list.length ? list.map(function (s) {
+        return '<div class="vsrv-scell"><img src="' + esc(s.url) + '" alt=""><span>' + esc(s.name) + '</span><button type="button" class="vsrv-iconbtn sm" data-k="del" data-e="' + esc(s.id) + '" aria-label="' + esc(tr("Delete")) + '">' + icon("trash") + "</button></div>";
+      }).join("") : '<p class="vsrv-note">' + esc(tr("No stickers yet.")) + "</p>") + "</div>";
+    body.querySelector('[data-k="file"]').onchange = function (ev) {
+      var f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      if (f.size > 512 * 1024) { toast(tr("That file is too large.") + " (" + tr("Max {size}", { size: "512 KB" }) + ")"); return; }
+      var name = body.querySelector('[data-k="name"]').value.trim() || String(f.name || "").replace(/\.[^.]+$/, "").slice(0, 30);
+      uploadRaw(S.sid, "sticker", f, "&sticker=" + encodeURIComponent(name)).then(function (res) {
+        if (res.status !== 200) { toast(errText(res)); return; }
+        loadServer(S.sid, true).then(function () { stickersTab(body); });
+      });
+    };
+    body.onclick = function (ev) {
+      var b = ev.target.closest('[data-k="del"]');
+      if (!b) return;
+      call("/" + S.sid + "/stickers/" + b.getAttribute("data-e"), { method: "DELETE" }).then(function (res) {
+        if (res.status !== 200) { toast(errText(res)); return; }
+        loadServer(S.sid, true).then(function () { stickersTab(body); });
+      });
+    };
+  }
+
+  /* threads: lists, creation, settings */
+  function threadRowHtml(t) {
+    return '<a class="vsrv-result" href="#/messages/s/' + S.sid + "/" + esc(t.id) + '" data-close="1">' + icon("thread", "vsrv-result-ic") +
+      '<span class="vsrv-result-main"><span class="vsrv-head"><span class="vsrv-name">' + esc(t.name) + "</span>" + (t.locked ? icon("lock", "vsrv-th-flag") : "") + "<time>" + esc(t.lastId ? shortAgo(msgTime(t.lastId)) : "") + "</time></span>" +
+      '<span class="vsrv-result-text">' + esc(tr("Started by {name}", { name: nameOf(t.ownerMid) })) + " · " + esc(trn(Number(t.count) || 0, "srvMessagesN")) + "</span></span></a>";
+  }
+  function threadsSheet(cid) {
+    var c = realChannel(cid);
+    if (!c) return;
+    var canMake = has(Number(c.perms) || 0, P.CREATE_THREADS) && !timedOut();
+    var sheet = openSheet(sheetHead(tr("Threads"), "#" + c.name) + '<nav class="vsrv-tabs" role="tablist"><button type="button" role="tab" data-tab="0" aria-selected="true">' + esc(tr("Active")) + '</button><button type="button" role="tab" data-tab="1" aria-selected="false">' + esc(tr("Archived")) + "</button></nav>" +
+      '<div class="vsrv-sheet-body vsrv-results" data-k="list"></div>' + (canMake ? '<footer class="vsrv-sheet-foot"><button type="button" class="vsrv-btn" data-k="new">' + icon("plus") + "<span>" + esc(tr("Create thread")) + "</span></button></footer>" : ""), "tall");
+    function show(arch) {
+      Array.prototype.forEach.call(sheet.querySelectorAll("[data-tab]"), function (b) { b.setAttribute("aria-selected", b.getAttribute("data-tab") === (arch ? "1" : "0") ? "true" : "false"); });
+      var box = sheet.querySelector('[data-k="list"]');
+      box.innerHTML = '<div class="dmsgs-skel"><span></span><span></span></div>';
+      call("/" + S.sid + "/channels/" + cid + "/threads" + (arch ? "?archived=1" : "")).then(function (res) {
+        if (res.status !== 200) { box.innerHTML = '<p class="vsrv-note">' + esc(errText(res)) + "</p>"; return; }
+        var list = (res.body.threads || []).map(function (t) { return storeThread(S.sid, t); });
+        needCards(list.map(function (t) { return t.ownerMid; }));
+        box.innerHTML = list.length ? list.map(threadRowHtml).join("") : '<div class="vsrv-empty"><h2>' + esc(arch ? tr("No archived threads") : tr("No active threads")) + "</h2><p>" + esc(tr("Threads keep side conversations out of the main channel.")) + "</p></div>";
+      });
+    }
+    sheet.addEventListener("click", function (ev) {
+      var tb = ev.target.closest("[data-tab]");
+      if (tb) { show(tb.getAttribute("data-tab") === "1"); return; }
+      var b = ev.target.closest('[data-k="new"]');
+      if (!b) return;
+      promptSheet(tr("Create thread"), tr("Thread name"), "", tr("Create"), 100).then(function (name) {
+        if (name == null) return;
+        startThread(cid, { name: name || tr("Thread") });
+      });
+    });
+    show(false);
+  }
+  function startThread(cid, payload, rootMsg) {
+    var sid = S.sid;
+    return call("/" + sid + "/channels/" + cid + "/threads", { method: "POST", body: payload }).then(function (res) {
+      if (res.status === 409 && res.body.id) { closeSheet(true); location.hash = "#/messages/s/" + sid + "/" + res.body.id; return null; }
+      if (res.status !== 200 || !res.body.thread) { toast(errText(res)); return null; }
+      var t = storeThread(sid, res.body.thread);
+      if (rootMsg) { rootMsg.th = Object.assign({}, res.body.thread); saveChannel(cid); }
+      var act = S.active[sid] || (S.active[sid] = []);
+      if (act.indexOf(t) < 0) act.push(t);
+      if (res.body.message) mergeMessages(t.id, [res.body.message], false);
+      var f = S.forum[cid];
+      if (f && f.list.indexOf(t) < 0) f.list.unshift(t);
+      closeSheet(true);
+      location.hash = "#/messages/s/" + sid + "/" + t.id;
+      return t;
+    });
+  }
+  function createThreadFrom(mid) {
+    var m = msgById(mid);
+    if (!m) return;
+    if (m.th) { location.hash = "#/messages/s/" + S.sid + "/" + m.th.id; return; }
+    var cid = S.cid;
+    var guess = (plain(m.b) || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    promptSheet(tr("Create thread"), tr("Thread name"), guess, tr("Create"), 100).then(function (name) {
+      if (name == null) return;
+      startThread(cid, { messageId: mid, name: name || guess || tr("Thread") }, m);
+    });
+  }
+  function patchThread(tid, patch) {
+    var sid = S.sid;
+    return call("/" + sid + "/channels/" + tid, { method: "PATCH", body: patch }).then(function (res) {
+      if (res.status !== 200 || !res.body.thread) { toast(errText(res)); return false; }
+      var t = storeThread(sid, res.body.thread);
+      var act = S.active[sid] || (S.active[sid] = []);
+      var i = act.indexOf(t);
+      if (t.archived && i >= 0) act.splice(i, 1);
+      if (!t.archived && i < 0) act.push(t);
+      paintAll();
+      return true;
+    });
+  }
+  function threadMenu() {
+    var t = S.threads[S.cid];
+    var parent = t && realChannel(t.parentId);
+    if (!t || !parent) return;
+    var pp = Number(parent.perms) || 0;
+    var mgr = has(pp, P.MANAGE_THREADS);
+    var own = t.ownerMid === me().mid;
+    var items = [];
+    if (own || mgr) items.push(["rename", "edit", tr("Rename")]);
+    if ((own || mgr) && parent.kind === "forum" && (parent.tags || []).length) items.push(["tags", "pin", tr("Edit tags")]);
+    if (own || mgr) items.push(["archive", "archive", t.archived ? tr("Unarchive") : tr("Archive")]);
+    if (mgr) items.push(["lock", "lock", t.locked ? tr("Unlock") : tr("Lock")]);
+    items.push(["link", "link", tr("Copy link")]);
+    if (mgr) items.push(["delete", "trash", parent.kind === "forum" ? tr("Delete post") : tr("Delete thread"), "danger"]);
+    var sheet = openSheet(sheetHead(t.name) + '<div class="vsrv-menu">' + items.map(function (it) {
+      return '<button type="button" class="vsrv-menu-item' + (it[3] ? " " + it[3] : "") + '" data-tm="' + it[0] + '">' + icon(it[1]) + "<span>" + esc(it[2]) + "</span></button>";
+    }).join("") + "</div>", "is-menu");
+    sheet.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-tm]");
+      if (!b) return;
+      var a = b.getAttribute("data-tm");
+      closeSheet(true);
+      if (a === "rename") promptSheet(tr("Rename"), tr("Thread name"), t.name, tr("Save"), 100).then(function (v) { if (v) patchThread(t.id, { name: v }); });
+      if (a === "archive") patchThread(t.id, { archived: !t.archived });
+      if (a === "lock") patchThread(t.id, { locked: !t.locked });
+      if (a === "tags") tagPickSheet(parent, t.tags || [], function (ids) { patchThread(t.id, { tags: ids }); });
+      if (a === "link") copy(location.origin + location.pathname + "#/messages/s/" + S.sid + "/" + t.id);
+      if (a === "delete") {
+        confirmSheet(parent.kind === "forum" ? tr("Delete post") : tr("Delete thread"), tr("Its messages are removed for good."), tr("Delete"), true).then(function (ok) {
+          if (!ok) return;
+          call("/" + S.sid + "/channels/" + t.id, { method: "DELETE" }).then(function (res) {
+            if (res.status !== 200) { toast(errText(res)); return; }
+            dropThread(S.sid, t.id);
+            location.hash = "#/messages/s/" + S.sid + "/" + t.parentId;
+          });
+        });
+      }
+    });
+  }
+  function tagChip(tag) { return '<span class="vsrv-tag">' + (tag.emoji ? esc(tag.emoji) + " " : "") + esc(tag.name) + "</span>"; }
+  function tagPickSheet(forum, selected, done) {
+    var tags = forum.tags || [];
+    var sheet = openSheet(sheetHead(tr("Edit tags"), tr("Pick up to 5.")) + '<div class="vsrv-sheet-body"><div class="vsrv-pills wrap">' + tags.map(function (tag) {
+      return '<label class="vsrv-pill"><input type="checkbox" data-tag="' + esc(tag.id) + '"' + (selected.indexOf(tag.id) >= 0 ? " checked" : "") + "><span>" + (tag.emoji ? esc(tag.emoji) + " " : "") + esc(tag.name) + "</span></label>";
+    }).join("") + '</div></div><footer class="vsrv-sheet-foot"><button type="button" class="vsrv-btn ghost" data-vs="close-sheet">' + esc(tr("Cancel")) + '</button><button type="button" class="vsrv-btn" data-k="go">' + esc(tr("Save")) + "</button></footer>", "small");
+    sheet.addEventListener("change", function () { var on = sheet.querySelectorAll("[data-tag]:checked"); if (on.length > 5) { toast(tr("Pick up to 5.")); on[on.length - 1].checked = false; } });
+    sheet.querySelector('[data-k="go"]').addEventListener("click", function () {
+      var ids = Array.prototype.map.call(sheet.querySelectorAll("[data-tag]:checked"), function (x) { return x.getAttribute("data-tag"); });
+      closeSheet();
+      done(ids);
+    });
+  }
+  function dropThread(sid, tid) {
+    var t = S.threads[tid];
+    delete S.threads[tid];
+    delete tchan[tid];
+    threadMiss[tid] = 1;
+    S.active[sid] = (S.active[sid] || []).filter(function (x) { return x.id !== tid; });
+    Object.keys(S.forum).forEach(function (k) { var f = S.forum[k]; f.list = f.list.filter(function (x) { return x.id !== tid; }); if (f.archived) f.archived = f.archived.filter(function (x) { return x.id !== tid; }); });
+    if (t && S.msgs[t.parentId]) S.msgs[t.parentId].forEach(function (m) { if (m.th && m.th.id === tid) delete m.th; });
+  }
+
+  /* forum channels */
+  function loadForum(sid, fid, archived, before) {
+    var key = fid + (archived ? ":a" : "") + (before || "");
+    if (forumLoads[key]) return;
+    forumLoads[key] = 1;
+    var q = [];
+    if (archived) q.push("archived=1");
+    if (before) q.push("before=" + encodeURIComponent(before));
+    call("/" + sid + "/channels/" + fid + "/threads" + (q.length ? "?" + q.join("&") : "")).then(function (res) {
+      delete forumLoads[key];
+      if (res.status !== 200) { if (S.cid === fid) toast(errText(res)); return; }
+      var list = (res.body.threads || []).map(function (t) { return storeThread(sid, t); });
+      var f = S.forum[fid] || (S.forum[fid] = { list: [] });
+      if (archived) { f.archived = before ? (f.archived || []).concat(list) : list; f.archNext = res.body.next || ""; }
+      else { f.list = before ? f.list.concat(list) : list; f.next = res.body.next || ""; }
+      needCards(list.map(function (t) { return t.ownerMid; }).concat(list.map(function (t) { return t.starter ? t.starter.a : ""; }).filter(Boolean)), sid);
+      if (S.cid === fid) paintForum();
+    });
+  }
+  function paintForum() { var box = el("vsrv-forum"); var c = channel(S.cid); if (box && c && c.kind === "forum") box.innerHTML = forumInner(c); }
+  function postCard(t, forum) {
+    var st = t.starter;
+    var img = st && st.at ? st.at.find(function (f) { return /^image\//.test(f.type || "") && f.url; }) : null;
+    var byId = {};
+    (forum.tags || []).forEach(function (x) { byId[x.id] = x; });
+    var chips = (t.tags || []).map(function (id) { return byId[id]; }).filter(Boolean).map(tagChip).join("");
+    var seen = tchan[t.id] ? maxId(tchan[t.id].lastRead, t.lastRead) : t.lastRead;
+    var unread = t.lastId && seen != null && t.lastId > (seen || "");
+    var text = st ? (st.x ? tr("Removed by a moderator") : plain(st.b) || (st.pl ? st.pl.q : "") || (st.at && st.at.length ? tr("Attachment") : "")) : "";
+    return '<a class="vsrv-post' + (unread ? " unread" : "") + '" href="#/messages/s/' + S.sid + "/" + esc(t.id) + '"><span class="vsrv-post-main">' + (chips ? '<span class="vsrv-tags">' + chips + "</span>" : "") +
+      '<span class="vsrv-post-title">' + (t.locked ? icon("lock", "vsrv-th-flag") : "") + esc(t.name) + "</span>" +
+      (st ? '<span class="vsrv-post-text"><strong>' + esc(nameOf(st.a)) + ":</strong> " + esc(String(text).slice(0, 200)) + "</span>" : "") +
+      '<span class="vsrv-post-meta">' + icon("forum") + "<span>" + esc(String(Math.max(0, (Number(t.count) || 0) - (t.starterId ? 1 : 0)))) + "</span><span>·</span><span>" + esc(shortAgo(msgTime(t.lastId || t.id))) + "</span></span></span>" +
+      (img ? '<img class="vsrv-post-img" src="' + esc(img.url) + '" alt="" loading="lazy" decoding="async">' : "") + "</a>";
+  }
+  function forumInner(c) {
+    var f = S.forum[c.id];
+    var perms = Number(c.perms) || 0;
+    var canPost = has(perms, P.SEND) && has(perms, P.CREATE_THREADS) && !timedOut();
+    var tags = c.tags || [];
+    var sel = S.forumTag[c.id] || "";
+    if (sel && !tags.some(function (x) { return x.id === sel; })) sel = "";
+    var top = '<div class="vsrv-forum-top">' + (canPost ? '<button type="button" class="vsrv-btn" data-vs="forum-post">' + icon("plus") + "<span>" + esc(tr("New post")) + "</span></button>" : "") +
+      (c.topic ? '<p class="vsrv-sub">' + esc(plain(c.topic)) + "</p>" : "") + "</div>" +
+      (tags.length ? '<div class="vsrv-pills scroll">' + [{ id: "", name: tr("All") }].concat(tags).map(function (x) {
+        return '<button type="button" class="vsrv-pill' + (sel === x.id ? " on" : "") + '" data-vs="forum-tag" data-id="' + esc(x.id) + '" aria-pressed="' + (sel === x.id ? "true" : "false") + '">' + (x.emoji ? esc(x.emoji) + " " : "") + esc(x.name) + "</button>";
+      }).join("") + "</div>" : "");
+    if (!f) return top + '<div class="dmsgs-skel" aria-busy="true"><span></span><span></span><span></span></div>';
+    function pick(t) { return !sel || (t.tags || []).indexOf(sel) >= 0; }
+    var list = f.list.filter(function (t) { return !t.archived && pick(t); });
+    list.sort(function (a, b) { return (b.lastId || b.id) > (a.lastId || a.id) ? 1 : -1; });
+    var arch = (f.archived || []).filter(pick);
+    return top + '<div class="vsrv-posts">' + (list.length ? list.map(function (t) { return postCard(t, c); }).join("")
+      : '<div class="vsrv-empty">' + icon("forum", "vsrv-intro-ic") + "<h2>" + esc(tr("No posts yet")) + "</h2><p>" + esc(canPost ? tr("Be the first to start a conversation.") : tr("Posts show up here.")) + "</p></div>") + "</div>" +
+      (f.next ? '<div class="vsrv-older"><button type="button" class="vsrv-linkbtn" data-vs="forum-more">' + esc(tr("Show more")) + "</button></div>" : "") +
+      (f.archived ? (arch.length ? '<h3 class="vsrv-forum-h">' + esc(tr("Archived posts")) + '</h3><div class="vsrv-posts">' + arch.map(function (t) { return postCard(t, c); }).join("") + "</div>" : '<p class="vsrv-note center">' + esc(tr("No archived posts.")) + "</p>")
+        : '<div class="vsrv-older"><button type="button" class="vsrv-linkbtn" data-vs="forum-archived">' + esc(tr("Show archived posts")) + "</button></div>");
+  }
+  function forumPostSheet(fid) {
+    var c = channel(fid);
+    if (!c) return;
+    var tags = c.tags || [];
+    var sheet = openSheet(sheetHead(tr("New post"), "#" + c.name) + '<div class="vsrv-sheet-body"><label class="vsrv-field"><span>' + esc(tr("Title")) + '</span><input type="text" maxlength="100" data-k="name" autofocus></label>' +
+      '<label class="vsrv-field"><span>' + esc(tr("Message")) + '</span><textarea rows="5" maxlength="4000" data-k="body"></textarea></label>' +
+      (tags.length ? '<div class="vsrv-field"><span>' + esc(tr("Tags")) + '</span><div class="vsrv-pills wrap">' + tags.map(function (tag) {
+        return '<label class="vsrv-pill"><input type="checkbox" data-tag="' + esc(tag.id) + '"><span>' + (tag.emoji ? esc(tag.emoji) + " " : "") + esc(tag.name) + "</span></label>";
+      }).join("") + "</div></div>" : "") + "</div>" +
+      '<footer class="vsrv-sheet-foot"><button type="button" class="vsrv-btn ghost" data-vs="close-sheet">' + esc(tr("Cancel")) + '</button><button type="button" class="vsrv-btn" data-k="go">' + esc(tr("Post")) + "</button></footer>", "tall");
+    sheet.addEventListener("change", function () { var on = sheet.querySelectorAll("[data-tag]:checked"); if (on.length > 5) { toast(tr("Pick up to 5.")); on[on.length - 1].checked = false; } });
+    sheet.querySelector('[data-k="go"]').addEventListener("click", function () {
+      var btn = this;
+      var name = sheet.querySelector('[data-k="name"]').value.trim();
+      var text = sheet.querySelector('[data-k="body"]').value.trim();
+      if (!name) { sheet.querySelector('[data-k="name"]').focus(); return; }
+      if (!text) { sheet.querySelector('[data-k="body"]').focus(); return; }
+      var ids = Array.prototype.map.call(sheet.querySelectorAll("[data-tag]:checked"), function (x) { return x.getAttribute("data-tag"); });
+      busy(btn, true);
+      startThread(fid, { name: name, body: composeText(text), tags: ids, nonce: "n" + rand() }).then(function () { busy(btn, false); });
+    });
+  }
+  function tagRow(tag) {
+    return '<div class="vsrv-tagrow" data-id="' + esc(tag.id || "") + '"><input type="text" class="emoji" maxlength="16" data-t="emoji" value="' + esc(tag.emoji || "") + '" placeholder="🏷️" aria-label="' + esc(tr("Emoji")) + '"><input type="text" maxlength="20" data-t="name" value="' + esc(tag.name || "") + '" placeholder="' + esc(tr("Tag name")) + '"><button type="button" class="vsrv-iconbtn sm" data-k="tag-x" aria-label="' + esc(tr("Remove")) + '">' + icon("trash") + "</button></div>";
+  }
+  function tagsEditor(c) {
+    return '<div class="vsrv-field"><span>' + esc(tr("Tags")) + '</span><small class="vsrv-note">' + esc(tr("Posts can pick up to 5 tags. Members filter by them.")) + '</small><div data-k="tags">' + (c.tags || []).map(tagRow).join("") + '</div><button type="button" class="vsrv-linkbtn" data-k="tag-add">' + icon("plus") + esc(tr("Add tag")) + "</button></div>";
+  }
+  function tagsClick(ev, body) {
+    var b = ev.target.closest('[data-k="tag-add"], [data-k="tag-x"]');
+    if (!b) return false;
+    if (b.getAttribute("data-k") === "tag-x") { var row = b.closest(".vsrv-tagrow"); if (row) row.remove(); return true; }
+    var box = body.querySelector('[data-k="tags"]');
+    if (box.children.length >= 20) { toast(tr("Up to 20 tags.")); return true; }
+    box.insertAdjacentHTML("beforeend", tagRow({}));
+    var inputs = box.querySelectorAll('[data-t="name"]');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+    return true;
+  }
+  function saveTags(body, cid) {
+    var rows = Array.prototype.map.call(body.querySelectorAll(".vsrv-tagrow"), function (r) {
+      var out = { name: r.querySelector('[data-t="name"]').value.trim(), emoji: r.querySelector('[data-t="emoji"]').value.trim() };
+      if (r.getAttribute("data-id")) out.id = r.getAttribute("data-id");
+      return out;
+    }).filter(function (x) { return x.name; });
+    return call("/" + S.sid + "/channels/" + cid + "/tags", { method: "PUT", body: { tags: rows } }).then(function (res) { if (res.status !== 200) toast(errText(res)); });
+  }
+
+  /* scheduled events */
+  function eventsList() { return S.events[S.sid] || null; }
+  function eventWhen(ev) {
+    var end = ev.endAt ? (new Date(ev.endAt).toDateString() === new Date(ev.startAt).toDateString() ? clock(ev.endAt) : fullTime(ev.endAt)) : "";
+    return fullTime(ev.startAt) + (end ? " – " + end : "");
+  }
+  function eventLive(ev) { var now = Date.now(); return ev.status === "active" || (ev.status === "scheduled" && ev.startAt <= now && (!ev.endAt || ev.endAt > now)); }
+  function eventCard(ev) {
+    var open = ev.status === "scheduled" || ev.status === "active";
+    var live = eventLive(ev);
+    var ch = ev.channelId ? realChannel(ev.channelId) : null;
+    var canEdit = S.eventsManage || ev.creatorMid === me().mid;
+    var when = ev.status === "cancelled" ? tr("Cancelled") : ev.status === "ended" ? tr("Ended") : live ? tr("Happening now") : eventWhen(ev);
+    return '<article class="vsrv-event' + (open ? "" : " over") + '">' + (ev.image ? '<img class="vsrv-event-img" src="' + esc(ev.image) + '" alt="" loading="lazy" decoding="async">' : "") +
+      '<div class="vsrv-event-when' + (live ? " live" : "") + '">' + icon("calendar") + "<span>" + esc(when) + "</span></div>" +
+      "<h3>" + esc(ev.name) + "</h3>" + (ev.description ? '<p class="vsrv-event-desc">' + esc(ev.description) + "</p>" : "") +
+      (ch || ev.location ? '<div class="vsrv-event-where">' + (ch ? '<a href="#/messages/s/' + S.sid + "/" + esc(ch.id) + '" data-close="1">' + icon(chanIcon(ch)) + esc(ch.name) + "</a>" : "") + (ev.location ? "<span>" + esc(ev.location) + "</span>" : "") + "</div>" : "") +
+      '<div class="vsrv-event-foot"><button type="button" class="vsrv-linkbtn" data-ev="who" data-id="' + esc(ev.id) + '">' + esc(trn(ev.going, "srvGoing")) + " · " + esc(trn(ev.interested, "srvInterested")) + "</button>" +
+      '<span class="vsrv-event-btns">' + (open && !timedOut() ? '<button type="button" class="vsrv-btn sm' + (ev.mine === "interested" ? "" : " ghost") + '" data-ev="interested" data-id="' + esc(ev.id) + '" aria-pressed="' + (ev.mine === "interested") + '">' + icon("star") + "<span>" + esc(tr("Interested")) + "</span></button>" +
+        '<button type="button" class="vsrv-btn sm' + (ev.mine === "going" ? "" : " ghost") + '" data-ev="going" data-id="' + esc(ev.id) + '" aria-pressed="' + (ev.mine === "going") + '">' + icon("check") + "<span>" + esc(tr("Going")) + "</span></button>" : "") +
+      (canEdit ? '<button type="button" class="vsrv-iconbtn sm" data-ev="manage" data-id="' + esc(ev.id) + '" aria-label="' + esc(tr("More")) + '">' + icon("more") + "</button>" : "") + "</span></div></article>";
+  }
+  function eventsInner() {
+    var list = eventsList();
+    if (!list) return '<div class="dmsgs-skel"><span></span><span></span></div>';
+    if (!list.length) return '<div class="vsrv-empty">' + icon("calendar", "vsrv-intro-ic") + "<h2>" + esc(tr("No upcoming events")) + "</h2><p>" + esc(tr("Schedule an event so members know when to show up.")) + "</p></div>";
+    return list.slice().sort(function (a, b) { return a.startAt - b.startAt; }).map(eventCard).join("");
+  }
+  function paintEventsSheet() { var box = document.querySelector('.vsrv-sheet [data-k="events"]'); if (box) box.innerHTML = eventsInner(); }
+  function loadEvents(sid) {
+    return call("/" + sid + "/events").then(function (res) {
+      if (res.status !== 200) { toast(errText(res)); return; }
+      S.events[sid] = res.body.events || [];
+      if (sid === S.sid) S.eventsManage = !!res.body.canManage;
+      var st = srv(sid);
+      if (st) st.events = S.events[sid].filter(function (e) { return e.status === "scheduled" || e.status === "active"; }).length;
+      if (sid === S.sid) { paintEventsSheet(); paintSide(); }
+    });
+  }
+  function eventById(id) { return (eventsList() || []).find(function (e) { return e.id === id; }) || null; }
+  function eventsSheet() {
+    var canMake = has(basePerms(), P.MANAGE_EVENTS);
+    var sheet = openSheet(sheetHead(tr("Events"), (serverInfo(S.sid) || {}).name) + '<div class="vsrv-sheet-body vsrv-events" data-k="events">' + eventsInner() + "</div>" +
+      (canMake ? '<footer class="vsrv-sheet-foot"><button type="button" class="vsrv-btn" data-ev="new">' + icon("plus") + "<span>" + esc(tr("Create event")) + "</span></button></footer>" : ""), "tall");
+    loadEvents(S.sid);
+    sheet.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-ev]");
+      if (!b) return;
+      var a = b.getAttribute("data-ev");
+      var e = eventById(b.getAttribute("data-id"));
+      if (a === "new") { eventEditSheet(null); return; }
+      if (!e) return;
+      if (a === "going" || a === "interested") rsvp(e, e.mine === a ? "none" : a);
+      if (a === "manage") eventManage(e);
+      if (a === "who") eventWho(e);
+    });
+  }
+  function rsvp(e, status) {
+    var old = { mine: e.mine, going: e.going, interested: e.interested };
+    if (e.mine === "going") e.going = Math.max(0, e.going - 1);
+    if (e.mine === "interested") e.interested = Math.max(0, e.interested - 1);
+    if (status === "going") e.going++;
+    if (status === "interested") e.interested++;
+    e.mine = status === "none" ? "" : status;
+    paintEventsSheet();
+    call("/" + S.sid + "/events/" + e.id + "/rsvp", { method: "PUT", body: { status: status } }).then(function (res) {
+      if (res.status === 200) { e.going = res.body.going; e.interested = res.body.interested; e.mine = res.body.mine || ""; }
+      else { Object.assign(e, old); toast(errText(res)); }
+      paintEventsSheet();
+    });
+  }
+  function eventPatch(e, patch) {
+    return call("/" + S.sid + "/events/" + e.id, { method: "PATCH", body: patch }).then(function (res) {
+      if (res.status !== 200 || !res.body.event) { toast(errText(res)); return false; }
+      Object.assign(e, res.body.event, { mine: e.mine });
+      loadEvents(S.sid);
+      return true;
+    });
+  }
+  function eventManage(e) {
+    var items = [["edit", "edit", tr("Edit event")]];
+    if (e.status === "scheduled") items.push(["start", "calendar", tr("Start event")]);
+    if (e.status === "active") items.push(["end", "check", tr("End event")]);
+    if (e.status === "scheduled") items.push(["cancel", "close", tr("Cancel event")]);
+    items.push(["delete", "trash", tr("Delete event"), "danger"]);
+    var sheet = openSheet(sheetHead(e.name) + '<div class="vsrv-menu">' + items.map(function (it) {
+      return '<button type="button" class="vsrv-menu-item' + (it[3] ? " " + it[3] : "") + '" data-em="' + it[0] + '">' + icon(it[1]) + "<span>" + esc(it[2]) + "</span></button>";
+    }).join("") + "</div>", "is-menu");
+    sheet.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-em]");
+      if (!b) return;
+      var a = b.getAttribute("data-em");
+      closeSheet();
+      if (a === "edit") eventEditSheet(e);
+      if (a === "start") eventPatch(e, { status: "active" });
+      if (a === "end") eventPatch(e, { status: "ended" });
+      if (a === "cancel") confirmSheet(tr("Cancel event"), tr("Everyone who RSVP'd sees it as cancelled."), tr("Cancel event"), true).then(function (ok) { if (ok) eventPatch(e, { status: "cancelled" }); });
+      if (a === "delete") confirmSheet(tr("Delete event"), tr("This removes the event for everyone."), tr("Delete"), true).then(function (ok) {
+        if (!ok) return;
+        call("/" + S.sid + "/events/" + e.id, { method: "DELETE" }).then(function (res) {
+          if (res.status !== 200) { toast(errText(res)); return; }
+          S.events[S.sid] = (eventsList() || []).filter(function (x) { return x.id !== e.id; });
+          loadEvents(S.sid);
+        });
+      });
+    });
+  }
+  function eventWho(e) {
+    var sheet = openSheet(sheetHead(e.name, tr("Who's coming")) + '<div class="vsrv-sheet-body" data-k="body"><div class="dmsgs-skel"><span></span><span></span></div></div>', "tall");
+    call("/" + S.sid + "/events/" + e.id + "/rsvps").then(function (res) {
+      var body = sheet.querySelector('[data-k="body"]');
+      if (res.status !== 200) { body.innerHTML = '<p class="vsrv-note">' + esc(errText(res)) + "</p>"; return; }
+      var list = res.body.rsvps || [];
+      needCards(list.map(function (r) { return r.m; }));
+      body.innerHTML = list.length ? list.map(function (r) {
+        return '<button type="button" class="vsrv-mrow" data-vs="member" data-m="' + esc(r.m) + '">' + avatar(r.m, S.sid, "vsrv-ava sm") + '<span class="vsrv-mrow-txt"><span class="vsrv-mrow-name">' + esc(nameOf(r.m)) + '</span><span class="vsrv-mrow-act">' + esc(r.status === "going" ? tr("Going") : tr("Interested")) + "</span></span></button>";
+      }).join("") : '<p class="vsrv-note">' + esc(tr("No one yet.")) + "</p>";
+    });
+  }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function toLocalInput(ts) { if (!ts) return ""; var d = new Date(ts); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+  function fromLocalInput(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(v || ""));
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5])).getTime() : 0;
+  }
+  function eventEditSheet(e) {
+    var chans = channelsOf().filter(function (c) { return c.kind !== "category" && has(Number(c.perms) || 0, P.VIEW); });
+    var start = e ? e.startAt : Math.ceil((Date.now() + 3600000) / 1800000) * 1800000;
+    var image = e && e.image ? "keep" : "";
+    var sheet = openSheet(sheetHead(e ? tr("Edit event") : tr("Create event")) + '<div class="vsrv-sheet-body">' +
+      '<label class="vsrv-field"><span>' + esc(tr("Event name")) + '</span><input type="text" maxlength="100" data-k="name" value="' + esc(e ? e.name : "") + '" autofocus></label>' +
+      '<div class="vsrv-row2"><label class="vsrv-field"><span>' + esc(tr("Starts")) + '</span><input type="datetime-local" data-k="start" value="' + esc(toLocalInput(start)) + '"></label>' +
+      '<label class="vsrv-field"><span>' + esc(tr("Ends (optional)")) + '</span><input type="datetime-local" data-k="end" value="' + esc(toLocalInput(e ? e.endAt : 0)) + '"></label></div>' +
+      '<label class="vsrv-field"><span>' + esc(tr("Channel")) + '</span><select data-k="ch"><option value="">' + esc(tr("None")) + "</option>" + chans.map(function (c) { return '<option value="' + c.id + '"' + (e && e.channelId === c.id ? " selected" : "") + ">" + esc(c.name) + "</option>"; }).join("") + "</select></label>" +
+      '<label class="vsrv-field"><span>' + esc(tr("Location (optional)")) + '</span><input type="text" maxlength="100" data-k="loc" value="' + esc(e ? e.location : "") + '"></label>' +
+      '<label class="vsrv-field"><span>' + esc(tr("Description")) + '</span><textarea rows="3" maxlength="1000" data-k="desc">' + esc(e ? e.description : "") + "</textarea></label>" +
+      '<div class="vsrv-field"><span>' + esc(tr("Cover image")) + '</span><div class="vsrv-inline"><label class="vsrv-btn ghost sm"><input type="file" accept="image/*" data-k="img" hidden>' + esc(tr("Upload image")) + '</label><span class="vsrv-sub" data-k="imgname">' + esc(e && e.image ? tr("Image set") : "") + "</span>" +
+      (e && e.image ? '<button type="button" class="vsrv-linkbtn" data-k="imgx">' + esc(tr("Remove")) + "</button>" : "") + "</div></div></div>" +
+      '<footer class="vsrv-sheet-foot"><button type="button" class="vsrv-btn ghost" data-vs="close-sheet">' + esc(tr("Cancel")) + '</button><button type="button" class="vsrv-btn" data-k="go">' + esc(e ? tr("Save") : tr("Create event")) + "</button></footer>", "tall");
+    var go = sheet.querySelector('[data-k="go"]');
+    sheet.querySelector('[data-k="img"]').addEventListener("change", function (ev) {
+      var f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      var label = sheet.querySelector('[data-k="imgname"]');
+      label.textContent = tr("Uploading…");
+      busy(go, true);
+      uploadRaw(S.sid, "event", f).then(function (res) {
+        busy(go, false);
+        if (res.status !== 200 || !res.body.image) { label.textContent = ""; toast(errText(res)); return; }
+        image = res.body.image.k;
+        label.textContent = f.name || tr("Image set");
+      });
+    });
+    sheet.addEventListener("click", function (ev) {
+      if (ev.target.closest('[data-k="imgx"]')) { image = "none"; sheet.querySelector('[data-k="imgname"]').textContent = ""; }
+    });
+    go.addEventListener("click", function () {
+      var name = sheet.querySelector('[data-k="name"]').value.trim();
+      if (!name) { sheet.querySelector('[data-k="name"]').focus(); return; }
+      var s = fromLocalInput(sheet.querySelector('[data-k="start"]').value);
+      var en = fromLocalInput(sheet.querySelector('[data-k="end"]').value);
+      if (!s) { toast(tr("Pick a start time.")); return; }
+      if (en && en <= s) { toast(tr("The end has to be after the start.")); return; }
+      var body = { name: name, startAt: s, endAt: en || 0, channelId: sheet.querySelector('[data-k="ch"]').value, location: sheet.querySelector('[data-k="loc"]').value.trim(), description: sheet.querySelector('[data-k="desc"]').value.trim() };
+      if (image === "none") body.image = "";
+      else if (image && image !== "keep") body.image = image;
+      busy(go, true);
+      call("/" + S.sid + "/events" + (e ? "/" + e.id : ""), { method: e ? "PATCH" : "POST", body: body }).then(function (res) {
+        busy(go, false);
+        if (res.status !== 200) { toast(errText(res)); return; }
+        closeSheet();
+        loadEvents(S.sid);
+      });
+    });
+  }
+
+  /* realtime for the phase 2 kinds; true when handled */
+  function applyP2(sid, cid, e) {
+    if (e.t === "thread" && e.th) {
+      var th = storeThread(sid, e.th);
+      delete threadMiss[th.id];
+      var act = S.active[sid] || (S.active[sid] = []);
+      var i = act.indexOf(th);
+      if (!th.archived && i < 0) act.push(th);
+      if (th.archived && i >= 0) act.splice(i, 1);
+      if (th.rootId && S.msgs[th.parentId]) {
+        var rm = S.msgs[th.parentId].find(function (x) { return x.id === th.rootId; });
+        if (rm) { rm.th = Object.assign({}, e.th); saveChannel(th.parentId); }
+      }
+      var f = S.forum[th.parentId];
+      if (f && f.list.indexOf(th) < 0 && !th.archived) { f.list.unshift(th); if (!th.starter && sid === S.sid && S.cid === th.parentId) loadForum(sid, th.parentId); }
+      if (sid === S.sid) {
+        if (S.cid === th.parentId) { if (f) paintForum(); else paintLog(); }
+        if (S.cid === th.id) { var conv = el("vsrv-conv"); var head = conv && conv.querySelector(".vsrv-conv-head"); if (head) { var tmp = document.createElement("div"); tmp.innerHTML = convInner(); var nh = tmp.querySelector(".vsrv-conv-head"); if (nh) head.replaceWith(nh); } paintCompose(); }
+        paintSide();
+      }
+      return true;
+    }
+    if (e.t === "thread_del") {
+      var gone = S.threads[e.id];
+      dropThread(sid, e.id);
+      if (sid === S.sid) {
+        if (S.cid === e.id) { toast(tr("This thread was deleted.")); location.hash = "#/messages/s/" + sid + (gone ? "/" + gone.parentId : ""); }
+        else { paintForum(); paintLog(); paintSide(); }
+      }
+      return true;
+    }
+    if (e.t === "poll") {
+      var list = S.msgs[cid];
+      var tg = list && list.find(function (x) { return x.id === e.id; });
+      if (tg && e.pl) { tg.pl = Object.assign({}, e.pl, { mine: (tg.pl && tg.pl.mine) || [] }); saveChannel(cid); if (cid === S.cid) paintLog(); }
+      return true;
+    }
+    if (e.t === "event" || e.t === "event_del" || e.t === "rsvp") {
+      var evs = S.events[sid];
+      if (evs) {
+        var at = -1;
+        evs.forEach(function (x, j) { if (x.id === (e.ev ? e.ev.id : e.id)) at = j; });
+        if (e.t === "event" && e.ev) { if (at >= 0) evs[at] = Object.assign({}, e.ev, { mine: evs[at].mine }); else evs.push(e.ev); }
+        if (e.t === "event_del" && at >= 0) evs.splice(at, 1);
+        if (e.t === "rsvp" && at >= 0) { evs[at].going = e.going; evs[at].interested = e.interested; }
+        var st = srv(sid);
+        if (st) st.events = evs.filter(function (x) { return x.status === "scheduled" || x.status === "active"; }).length;
+      } else if (e.t !== "rsvp") loadServer(sid, true);
+      if (sid === S.sid) { paintEventsSheet(); paintSide(); }
+      return true;
+    }
+    return false;
+  }
+
+  /* rich presence */
+  function myActivity() { return S.myAct || null; }
+  function actOf(mid, row) {
+    if (mid === me().mid) return myActivity();
+    var a = (S.acts[S.sid] || {})[mid];
+    if (a) return a;
+    var m = row || (S.members[S.sid] || []).find(function (x) { return x.m === mid; });
+    return m && m.playing && (S.online[S.sid] || {})[mid] ? { k: "playing", n: m.playing } : null;
+  }
+  function actText(a) {
+    if (!a) return "";
+    if (a.k === "playing") return tr("Playing {name}", { name: a.n });
+    if (a.k === "listening") return tr("Listening to {name}", { name: a.n });
+    if (a.k === "watching") return tr("Watching {name}", { name: a.n });
+    return ((a.e ? a.e + " " : "") + (a.n || "")).trim();
+  }
+  function actIcon(a) { return a.k === "playing" ? "game" : a.k === "listening" ? "music" : a.k === "watching" ? "tv" : "smile"; }
+  function computeActivity() {
+    var g = root.ViktorychGames;
+    try { if (g && g.busy && g.busy()) return { k: "playing", n: "ReGone" }; } catch (err) { /* games not loaded */ }
+    var media = Array.prototype.slice.call(document.querySelectorAll("audio, video")).find(function (x) { return !x.paused && !x.ended && !x.muted && x.currentTime > 0; });
+    if (media) {
+      var md = null;
+      try { md = navigator.mediaSession && navigator.mediaSession.metadata; } catch (err) { md = null; }
+      var title = (md && md.title) || media.getAttribute("title") || media.getAttribute("aria-label") || "";
+      if (title) return { k: media.tagName === "VIDEO" ? "watching" : "listening", n: String(title).slice(0, 64), d: String((md && md.artist) || "").slice(0, 96) };
+    }
+    var pres = root.ViktorychPresence;
+    var mine = null;
+    try { mine = pres && pres.myStatus ? pres.myStatus() : null; } catch (err) { mine = null; }
+    if (mine && (mine.text || mine.emoji)) return { k: "custom", n: String(mine.text || "").slice(0, 64), e: String(mine.emoji || "").slice(0, 16) };
+    return null;
+  }
+  function pushActivity() {
+    if (S.mode !== "server") return;
+    var a = computeActivity();
+    var key = a ? [a.k, a.n, a.d || "", a.e || ""].join("|") : "";
+    if (S.myActKey !== key) {
+      S.myActKey = key;
+      if (a) a.s = Date.now();
+      S.myAct = a;
+      paintSide();
+      paintMembers();
+    }
+    if (S.sentAct === key || !S.socket || S.socket.readyState !== 1) return;
+    S.sentAct = key;
+    try { S.socket.send(JSON.stringify({ op: "activity", act: S.myAct })); } catch (err) { /* closed */ }
+  }
+  var actTimer = 0;
+  function activitySoon() { clearTimeout(actTimer); actTimer = setTimeout(pushActivity, 400); }
+
   /* ---------- join page ---------- */
   function joinPage() {
     var info = S.inviteInfo && S.inviteInfo.code === S.invite ? S.inviteInfo : null;
@@ -2514,6 +3647,8 @@
   /* ---------- events ---------- */
   function onClick(ev) {
     var t = ev.target;
+    /* iOS only starts call audio inside a tap; any tap during a call retries it. */
+    if (root.ViktorychVoice && root.ViktorychVoice.state().status !== "idle") root.ViktorychVoice.unlock();
     if (!t || !t.closest) return;
     var pick = t.closest("[data-pop]");
     if (pick) { ev.preventDefault(); choosePop(Number(pick.getAttribute("data-pop"))); return; }
@@ -2531,6 +3666,18 @@
     if (b.getAttribute("data-close")) closeSheet(true);
     switch (a) {
       case "close-sheet": closeSheet(); break;
+      case "voice-join": voiceJoin(id); break;
+      case "voice-leave": if (vv()) vv().leave(); break;
+      case "voice-mute": voiceToggle("mute"); break;
+      case "voice-deaf": voiceToggle("deaf"); break;
+      case "voice-cam": voiceToggle("cam"); break;
+      case "voice-screen": voiceToggle("screen"); break;
+      case "voice-tile": voiceFocus(b.getAttribute("data-key") || ""); break;
+      case "voice-peer": voicePeerMenu(b.getAttribute("data-m") || ""); break;
+      case "voice-peer-mute": if (vv()) vv().setPeerMute(id, !(vv().state().peers[id] || {}).localMute); break;
+      case "voice-mod-mute": voiceModerate(id, b.getAttribute("data-on") === "1" ? "unmute" : "mute"); break;
+      case "voice-mod-kick": voiceModerate(id, "kick"); break;
+      case "voice-open": location.hash = "#/messages/s/" + (vv() ? vv().state().sid + "/" + vv().state().cid : ""); break;
       case "create-sheet": createSheet(); break;
       case "join-sheet": joinSheet(); break;
       case "invite-sheet": closeSheet(true); inviteSheet(); break;
@@ -2601,6 +3748,20 @@
       case "retry": var job = outbox().find(function (j) { return j.nonce === b.getAttribute("data-n"); }); if (job) { flushOne(job); } else toast(tr("This message can't be sent again.")); break;
       case "discard": dropPending(b.getAttribute("data-n")); break;
       case "accept-invite": acceptInvite(b); break;
+      case "events": eventsSheet(); break;
+      case "threads": threadsSheet(id || S.cid); break;
+      case "thread-from": createThreadFrom(id); break;
+      case "open-thread": var om = msgById(id); if (om && om.th) location.hash = "#/messages/s/" + S.sid + "/" + om.th.id; break;
+      case "thread-menu": threadMenu(); break;
+      case "forum-post": forumPostSheet(S.cid); break;
+      case "forum-tag": S.forumTag[S.cid] = id; paintForum(); break;
+      case "forum-archived": loadForum(S.sid, S.cid, true); break;
+      case "forum-more": var fm = S.forum[S.cid]; if (fm && fm.next) loadForum(S.sid, S.cid, false, fm.next); break;
+      case "compose-apps": appsMenu(); break;
+      case "poll-vote": votePoll(id, Number(b.getAttribute("data-o"))); break;
+      case "poll-clear": votePoll(id, -1); break;
+      case "poll-end": endPoll(id); break;
+      case "poll-voters": pollVoters(id); break;
       case "sign-in": if (root.ViktorychAccounts && root.ViktorychAccounts.enter) root.ViktorychAccounts.enter(); break;
       default: break;
     }
@@ -2748,6 +3909,8 @@
       messageMenu(msg.getAttribute("data-id"));
     });
     document.addEventListener("visibilitychange", onVisible);
+    ["play", "pause", "ended"].forEach(function (n) { document.addEventListener(n, activitySoon, true); });
+    setInterval(pushActivity, 15000);
     root.addEventListener("focus", onVisible);
     root.addEventListener("online", function () { connect(); flushOutbox(); catchUp(); loadList(true); });
     root.addEventListener("pageshow", onVisible);
@@ -2792,6 +3955,7 @@
     });
     if (S.cid && srv(sid)) openChannel();
     if (S.membersOpen && !narrow()) loadMembers(sid);
+    loadActive(sid);
     connect();
     var log = el("vsrv-log");
     if (log) { bindLog(log); log.scrollTop = S.keepScroll ? log.scrollHeight - S.keepScroll : log.scrollHeight; S.keepScroll = 0; }
@@ -2802,13 +3966,19 @@
   function openChannel() {
     if (!S.cid) return;
     var c = channel(S.cid);
-    if (!c) return;
+    if (!c) {
+      var want = S.cid;
+      if (srv(S.sid) && /^[a-f0-9]{16}$/.test(want) && !threadMiss[want]) loadThread(S.sid, want).then(function (t) { if (S.cid === want) { paintAll(); if (t) openChannel(); } });
+      return;
+    }
     if (opened !== S.cid) {
       opened = S.cid;
       S.readMark = channelUnread(c, S.sid) ? c.lastRead || "" : "";
       lsSet("last:" + S.sid, S.cid);
-      if (S.socket && S.socket.readyState === 1) { try { S.socket.send(JSON.stringify({ op: "view", c: S.cid })); } catch (err) { /* closed */ } }
+      if (S.socket && S.socket.readyState === 1) { try { S.socket.send(JSON.stringify({ op: "view", c: viewId(S.cid) })); } catch (err) { /* closed */ } }
     }
+    if (c.kind === "forum") { loadForum(S.sid, S.cid); return; }
+    if (c.kind === "voice") { mountStage(); return; }
     if (S.jump) { S.jumpTo = S.jump; S.jump = ""; loadMessages(S.sid, S.cid, { around: S.jumpTo }); return; }
     openChannelData(S.sid, S.cid);
   }

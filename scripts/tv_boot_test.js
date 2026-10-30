@@ -134,4 +134,42 @@ for (const [name, ua] of Object.entries(UAS)) {
   assert.ok(sw.includes("\\.apk$") && sw.includes("/.well-known/"), "the service worker leaves the APK and assetlinks to the network");
 }
 
+{
+  // Optional TV home screen: the site links to the app's defaults screen only for TV app 1.4.0+,
+  // and the home activity ships disabled so nothing changes until the user picks it.
+  const tv = fs.readFileSync(path.join(ROOT, "tv.js"), "utf8");
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  assert.ok(/appVersion\(\) >= 5\)[\s\S]{0,600}intent:\/\/defaults#Intent;scheme=viktorychtv;/.test(tv), "the site opens the TV defaults screen only from a TV app that has it");
+  assert.ok(manifest.includes('android:scheme="viktorychtv"') && manifest.includes('android:host="defaults"'), "the TV app answers viktorychtv://defaults");
+  const home = /<activity[^>]*launcher\.HomeActivity[^>]*>/.exec(manifest);
+  assert.ok(home && home[0].includes('android:enabled="false"'), "the TV home screen ships turned off");
+}
+
+{
+  // Optional player and screensaver (TV app 1.5.0+): both ship turned off, and the
+  // site only offers the screensaver hand-off to an app that has it.
+  const tv = fs.readFileSync(path.join(ROOT, "tv.js"), "utf8");
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  const player = /<activity[^>]*player\.PlayerActivity[^>]*>/.exec(manifest);
+  assert.ok(player && player[0].includes('android:enabled="false"'), "the player ships turned off");
+  const dream = /<service[^>]*player\.FeedDream[^>]*>/.exec(manifest);
+  assert.ok(dream && dream[0].includes('android:enabled="false"') && dream[0].includes("BIND_DREAM_SERVICE"), "the screensaver ships turned off and only the system can bind it");
+  assert.ok(manifest.includes('android:host="dream"'), "the TV app answers viktorychtv://dream");
+  assert.ok(/appVersion\(\) >= 6\)[\s\S]{0,900}dreamLink\(b\)/.test(tv), "the screensaver hand-off is only offered to TV app 1.5.0+");
+  assert.ok(/intent:\/\/dream\?d=" \+ encodeURIComponent\(/.test(tv), "the hand-off is encoded");
+}
+
+{
+  // Optional remote keyboard and feed search (TV app 1.6.0+): all ship turned off, only the
+  // system can bind the keyboard, and the app never asks for the microphone itself.
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  const ime = /<service[^>]*ime\.TvKeyboard[^>]*>/.exec(manifest);
+  assert.ok(ime && ime[0].includes('android:enabled="false"') && ime[0].includes("BIND_INPUT_METHOD"), "the keyboard ships turned off and only the system can bind it");
+  const search = /<activity[^>]*search\.SearchActivity[^>]*>/.exec(manifest);
+  assert.ok(search && search[0].includes('android:enabled="false"'), "feed search ships turned off");
+  const provider = /<provider[^>]*search\.SuggestProvider[^>]*>/.exec(manifest);
+  assert.ok(provider && provider[0].includes('android:enabled="false"'), "search suggestions ship turned off");
+  assert.ok(!manifest.includes("android.permission.RECORD_AUDIO"), "voice typing goes through the system recognizer, not our own microphone access");
+}
+
 console.log("tv boot checks passed");

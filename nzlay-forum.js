@@ -281,7 +281,8 @@
     return '<article class="post nzf-post" data-nzf-open="' + esc(href) + '">' + line +
       '<div class="post-row"><a class="nzf-ava" href="' + esc(profileUrl(s.author && s.author.name)) + '" target="_blank" rel="noopener noreferrer" data-nzf-stop>' + avatar(s.author && s.author.avatar, s.author && s.author.name) + "</a>" +
       '<div class="post-main">' + byline(s.author, s.at || t.lastAt, href, s.moderator) +
-        '<div class="post-text nzf-text"><b class="nzf-title">' + esc(t.title) + "</b>" + (shown ? "<br>" + linkify(shown) : "") + "</div>" +
+        '<div class="post-title nzf-title" dir="auto">' + esc(t.title) + "</div>" +
+        (shown ? '<div class="post-text nzf-text" dir="auto">' + linkify(shown) + "</div>" : "") +
         (long ? '<a class="show-more nzf-more" href="' + esc(href) + '">' + esc(tr("Show more")) + "</a>" : "") +
         mediaHtml(s.media) + roomChip(t.title + "\n" + text) +
         '<div class="actions nzf-actions">' + replyAct +
@@ -400,7 +401,7 @@
       return '<article class="post nzf-post nzf-focus' + (p.pending ? " nzf-pending" : "") + '" data-post="' + esc(p.id) + '">' +
         '<div class="post-row nzf-focus-head">' + ava + '<div class="post-main">' + byline(p.author, "", href, p.moderator) + "</div></div>" +
         '<div class="nzf-focus-body">' +
-          '<h2 class="nzf-focus-title">' + esc(t.title || "") + "</h2>" +
+          '<h2 class="post-title nzf-focus-title" dir="auto">' + esc(t.title || "") + "</h2>" +
           (text ? '<div class="post-text nzf-text">' + linkify(text) + "</div>" : "") +
           mediaHtml(p.media) + roomChip((t.title || "") + "\n" + text) +
           '<div class="nzf-focus-meta"><time datetime="' + esc(p.at || "") + '">' + esc(fullWhen(p.at)) + "</time>" + (p.edited ? '<span class="dot">·</span><span>' + esc(tr("Edited")) + "</span>" : "") +
