@@ -37,7 +37,9 @@ export const FEATURES = {
   // Off until the owner turns it on and sets NFT_CONTRACT: optional gift NFTs.
   nft: { paths: ["/v1/nft"], defaultOff: true },
   // Nearby chat (Bitchat). No server endpoints; clients stop offering it when off.
-  bitchat: { paths: [] }
+  bitchat: { paths: [] },
+  // Local AI settings page. No server endpoints: models run on the device.
+  local_ai: { paths: [] }
 };
 export const FEATURE_NAMES = Object.keys(FEATURES);
 
