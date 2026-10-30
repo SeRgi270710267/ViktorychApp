@@ -102,6 +102,9 @@
     if (r.online) tags.push(`<span class="oi-tag oi-tag-on">${esc(tr("Online"))}</span>`);
     if (r.hiddenNames) tags.push(`<span class="oi-tag">${esc((String(r.hiddenNames) === "1" ? tr("1 hidden username") : tr("{count} hidden usernames", { count: String(r.hiddenNames) })))}</span>`);
     else if (r.extraNames) tags.push(`<span class="oi-tag">${esc((String(r.extraNames) === "1" ? tr("1 more username") : tr("{count} more usernames", { count: String(r.extraNames) })))}</span>`);
+    if (r.friendsOff) tags.push(`<span class="oi-tag">${esc(tr("Friends off"))}</span>`);
+    if (r.lockedFollows) tags.push(`<span class="oi-tag oi-tag-lock">${icon("lock")}${esc((String(r.lockedFollows) === "1" ? tr("1 locked follow") : tr("{count} locked follows", { count: String(r.lockedFollows) })))}</span>`);
+    if (r.extraDisplayNames) tags.push(`<span class="oi-tag">${esc(tr("Several display names"))}</span>`);
     if (r.protected) tags.push(`<span class="oi-tag">${esc(tr("Protected"))}</span>`);
     if (r.temporary) tags.push(`<span class="oi-tag">${esc(tr("Temporary"))}</span>`);
     if (r.reports) tags.push(`<span class="oi-tag oi-tag-warn">${esc((String(r.reports) === "1" ? tr("1 report") : tr("{count} reports", { count: String(r.reports) })))}</span>`);
@@ -112,7 +115,7 @@
   function listView() {
     loadList(false);
     const sorts = [["created", tr("Newest")], ["active", tr("Last active")], ["handle", tr("Username")], ["followers", tr("Followers")], ["posts", tr("Posts")], ["reports", tr("Reports")]];
-    const filters = [["all", tr("All")], ["online", tr("Online")], ["hidden_names", tr("Hidden usernames")], ["extra_names", tr("Several usernames")], ["protected", tr("Protected")], ["reported", tr("Reported")], ["temporary", tr("Temporary")]];
+    const filters = [["all", tr("All")], ["online", tr("Online")], ["hidden_names", tr("Hidden usernames")], ["extra_names", tr("Several usernames")], ["extra_display", tr("Several display names")], ["friends_off", tr("Friends off")], ["locked_follows", tr("Locked follows")], ["protected", tr("Protected")], ["reported", tr("Reported")], ["temporary", tr("Temporary")]];
     const totals = S.totals ? `<p class="oi-totals">${esc((String(S.totals.accounts) === "1" ? tr("1 account") : tr("{count} accounts", { count: String(S.totals.accounts) })))} · ${esc(tr("{count} online now", { count: String(S.totals.online) }))}</p>` : "";
     const search = `<form class="oi-search" data-oi-form="search"><label class="search"><span class="sr">${icon("search")}</span><input id="oi-q" type="search" name="q" value="${esc(S.q)}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(tr("Search name, any username or account ID"))}" aria-label="${esc(tr("Search accounts"))}"></label></form>`;
     const filterBar = `<div class="oi-chips" role="group" aria-label="${esc(tr("Filter"))}">${filters.map((f) => chip(f[1], S.filter === f[0], `data-oi-act="filter" data-oi-v="${f[0]}"`)).join("")}</div>`;
@@ -184,6 +187,29 @@
 
     const names = section(tr("Usernames"), d.names.map((n) => `<div class="oi-name-row"><span class="oi-name-handle">@${esc(n.handle)}${n.primary ? ` <span class="oi-tag">${esc(tr("Primary"))}</span>` : ""}${n.audience && n.audience.hidden ? ` <span class="oi-tag oi-tag-lock">${icon("lock")}${esc(tr("Hidden"))}</span>` : ""}</span><span class="oi-name-aud">${esc(audienceText(n.audience))}</span></div>`).join(""));
     const dnames = (d.displayNames || []).length > 1 || ((d.displayNames || [])[0] && (d.displayNames[0].audience || {}).hidden) ? section(tr("Display names"), d.displayNames.map((n) => `<div class="oi-name-row"><span class="oi-name-handle">${esc(n.name)}${n.primary ? ` <span class="oi-tag">${esc(tr("Primary"))}</span>` : ""}${n.audience && n.audience.hidden ? ` <span class="oi-tag oi-tag-lock">${icon("lock")}${esc(tr("Hidden"))}</span>` : ""}</span><span class="oi-name-aud">${esc(audienceText(n.audience))}</span></div>`).join("")) : "";
+
+    const pp = d.people || null;
+    const AUD = () => ({ everyone: tr("Everyone"), followers: tr("Followers"), friends: tr("Friends"), mutuals: tr("Mutuals"), nobody: tr("Nobody"), me: tr("Only them"), fof: tr("Friends of friends") });
+    const peopleRow = (key, label, n) => `<button type="button" class="set-row oi-act-row" data-oi-act="open-people" data-oi-id="${esc(d.id)}" data-oi-v="${key}" aria-haspopup="dialog"><span class="set-copy"><b>${esc(label)}</b><span class="set-sub">${esc(num(n))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`;
+    const people = pp ? `<section class="oi-sec oi-sec-rows"><h2>${esc(tr("Friends and follows"))}</h2><p class="oi-sheet-sub oi-sec-sub">${esc(tr("Everything, including friendships, follows and lists the person hid."))}</p>${[
+      peopleRow("friends", tr("Friends"), d.counts.friends),
+      peopleRow("followers", tr("Followers"), d.counts.followers),
+      peopleRow("following", tr("Following"), d.counts.following),
+      (pp.lockedFollows.count || pp.lockedFollows.lockSet) ? peopleRow("lockedFollowing", tr("Locked follows"), pp.lockedFollows.count) : ""
+    ].join("")}<div class="oi-sec-lines">${[
+      line(tr("Friends switch"), esc(pp.friendsSetting.on ? tr("On") : tr("Off"))),
+      line(tr("Who can send requests"), esc(word(AUD(), pp.friendsSetting.whoCanRequest))),
+      line(tr("Who sees the friends list"), esc(word(AUD(), pp.friendsSetting.listAudience))),
+      line(tr("Shares online status"), esc(pp.friendsSetting.shareOnline ? tr("On") : tr("Off"))),
+      line(tr("Friend requests"), esc(tr("{in} received · {out} sent", { in: String(num(pp.requestsIn)), out: String(num(pp.requestsOut)) }))),
+      (pp.lockedFollows.count || pp.lockedFollows.lockSet) ? line(tr("Locked follows"), esc(String(pp.lockedFollows.count) + (pp.lockedFollows.lockSet ? " · " + tr("Lock set") : ""))) : ""
+    ].join("")}</div></section>` : "";
+
+    const extras = d.extras ? Object.keys(d.extras).map((k) => {
+      const v = d.extras[k] || {};
+      const rows = Object.keys(v).filter((x) => v[x] == null || typeof v[x] !== "object" || Array.isArray(v[x])).map((x) => line(x.replace(/_/g, " "), esc(Array.isArray(v[x]) ? String(v[x].length) : typeof v[x] === "boolean" ? (v[x] ? tr("On") : tr("Off")) : String(v[x])))).join("");
+      return section(k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), rows || `<p class="oi-empty-sm">—</p>`);
+    }).join("") : "";
 
     const idRow = `<span class="oi-mono">${esc(grouped(d.id))}</span> <button type="button" class="oi-link" data-oi-act="copy-id" data-oi-id="${esc(d.id)}">${esc(tr("Copy"))}</button>`;
     const emailRow = d.email && d.email.stored && d.email.address
@@ -267,7 +293,7 @@
     ].join("")}</section>`;
 
     const foot = `<p class="oi-note oi-note-foot">${icon("lock")}<span>${esc(d.audited ? tr("This view was logged in the access log.") : tr("Only you see this."))}</span></p>`;
-    return `<div class="oi-page oi-detail">${head}${names}${dnames}${account}${privacy}${linked}${activity}${communities}${requests}${moderation}${devices}${settings}${actions}${foot}</div>`;
+    return `<div class="oi-page oi-detail">${head}${names}${dnames}${people}${account}${privacy}${linked}${activity}${communities}${requests}${moderation}${devices}${settings}${extras}${actions}${foot}</div>`;
   }
 
   /* ---------- audit ---------- */
@@ -302,6 +328,18 @@
       title = tr("Account type");
       body = `<p class="oi-sheet-sub">${esc(tr("Shown on their profile. “Their choice” keeps what they picked."))}</p><div role="radiogroup">${KINDS.map((k) => radioRow("pick-kind", k, kindLabel(k), cur === k, `data-oi-id="${esc(sh.id)}"`)).join("")}</div>`;
       foot = `<button type="button" class="oi-pill oi-pill-outline" data-oi-act="close-sheet">${esc(tr("Cancel"))}</button>`;
+    } else if (sh.type === "people") {
+      const d = S.detail[sh.id];
+      const pp = d && d.people ? d.people : {};
+      const rows = Array.isArray(pp[sh.list]) ? pp[sh.list] : [];
+      const titles = { friends: tr("Friends"), followers: tr("Followers"), following: tr("Following"), lockedFollowing: tr("Locked follows") };
+      title = titles[sh.list] || tr("Friends");
+      body = rows.length ? `<div class="oi-people">${rows.map((p) => {
+        const label = p.handle ? "@" + p.handle : String(p.target || p.id || "—");
+        const inner = `<span class="set-copy"><b>${esc(p.name || label)}</b><span class="set-sub">${esc(label)}${p.at ? " · " + esc(date(p.at)) : ""}</span></span>${p.locked ? `<span class="oi-tag oi-tag-lock">${icon("lock")}${esc(tr("Locked"))}</span>` : ""}`;
+        return p.id && p.handle ? `<a class="set-row oi-person" href="#/settings/accounts-inspector/${encodeURIComponent(p.id)}" data-oi-act="close-sheet-go">${inner}</a>` : `<div class="set-row oi-person">${inner}</div>`;
+      }).join("")}</div>${rows.length >= (pp.max || 500) ? `<p class="oi-sheet-sub">${esc(tr("Showing the first {count}", { count: String(pp.max || 500) }))}</p>` : ""}` : `<p class="oi-sheet-sub">${esc(tr("No one here"))}</p>`;
+      foot = `<button type="button" class="oi-pill oi-pill-outline" data-oi-act="close-sheet">${esc(tr("Close"))}</button>`;
     } else if (sh.type === "confirm") {
       title = tr("Change account type?");
       body = `<p class="oi-sheet-sub">${esc(tr("Change this account’s type to “{kind}”?", { kind: kindLabel(sh.kind) }))}</p>`;
@@ -317,6 +355,7 @@
     const head = hooks.settingsHead ? hooks.settingsHead(title, back) : "";
     if (!ownerOn()) return head + `<p class="oi-empty">${esc(tr("Only the owner can see this."))}</p>`;
     if (id === "audit") { S.sheet = null; return head + auditView(); }
+    if (S.sheet && S.sheet.id && S.sheet.id !== id) S.sheet = null;
     if (id) return head + detailView(id) + sheetHtml();
     if (S.sheet && S.sheet.type !== "sort") S.sheet = null;
     return head + listView() + sheetHtml();
@@ -349,6 +388,8 @@
     if (act === "copy-id") { copy(btn.dataset.oiId || ""); return; }
     if (act === "reveal") { btn.textContent = btn.dataset.oiFull || ""; btn.classList.remove("oi-masked"); return; }
     if (act === "close-sheet") { S.sheet = null; paint(); return; }
+    if (act === "close-sheet-go") { S.sheet = null; location.hash = btn.getAttribute("href"); return; }
+    if (act === "open-people") { S.sheet = { type: "people", id: btn.dataset.oiId, list: btn.dataset.oiV || "friends" }; paint(); return; }
     if (act === "open-sort") { S.sheet = { type: "sort" }; paint(); return; }
     if (act === "pick-sort") { S.sheet = null; if (S.sort !== btn.dataset.oiV) { S.sort = btn.dataset.oiV || "created"; S.list = null; loadList(true); } paint(); return; }
     if (act === "open-kind") { S.sheet = { type: "kind", id: btn.dataset.oiId }; paint(); return; }

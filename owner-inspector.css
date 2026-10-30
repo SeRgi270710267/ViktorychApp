@@ -100,3 +100,7 @@ span.oi-chip { cursor: default; font-weight: 500; }
   .oi-chips { flex-basis: 100%; }
 }
 .oi-tag svg, .oi-note svg { fill: currentColor; }
+.oi-sec-sub { padding: 0 16px; margin-top: -4px; }
+.oi-sec-lines { padding: 4px 16px 8px; }
+.oi-people { display: flex; flex-direction: column; }
+.oi-person { padding-left: 24px; padding-right: 24px; text-decoration: none; color: inherit; }

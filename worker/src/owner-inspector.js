@@ -18,6 +18,7 @@
 
 import { loadNames } from "./usernames.js";
 import { loadDisplayNames } from "./display-names.js";
+import { logOwnerView, ownerViewExtras, scrubSecrets } from "./owner-view.js";
 
 export const INSPECTOR_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS owner_access_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, owner_id TEXT NOT NULL, target_id TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'view')",
@@ -28,7 +29,7 @@ export const INSPECTOR_SCHEMA = [
 const PAGE = 50;
 const ONLINE_MS = 5 * 60 * 1000;
 const SORTS = ["created", "active", "handle", "followers", "posts", "reports"];
-const FILTERS = ["all", "online", "extra_names", "hidden_names", "protected", "reported", "temporary", "owner"];
+const FILTERS = ["all", "online", "extra_names", "hidden_names", "protected", "reported", "temporary", "owner", "friends_off", "locked_follows", "extra_display"];
 const NO_STORE = { "cache-control": "private, no-store" };
 
 let schemaReady = null;
@@ -96,6 +97,9 @@ function listSql(tables, q, sort, filter) {
   cols.push((actParts.length > 1 ? "MAX(" + actParts.join(", ") + ")" : "0") + " AS seen_at");
   if (has("sessions")) actParts.push("COALESCE((SELECT MAX(created_at) FROM sessions s WHERE s.public_id = a.public_id), 0)");
   cols.push((actParts.length > 1 ? "MAX(" + actParts.join(", ") + ")" : "0") + " AS active_at");
+  cols.push(has("account_friend_prefs") ? "COALESCE((SELECT enabled FROM account_friend_prefs fp WHERE fp.public_id = a.public_id), 1) AS friends_on" : "1 AS friends_on");
+  cols.push(has("locked_follows") ? "(SELECT COUNT(*) FROM locked_follows lf WHERE lf.owner_id = a.public_id) AS locked_follows" : "0 AS locked_follows");
+  cols.push(has("display_names") ? "(SELECT COUNT(*) FROM display_names dn WHERE dn.public_id = a.public_id) AS extra_display" : "0 AS extra_display");
   cols.push(has("account_temp") ? "(SELECT expires_at FROM account_temp t WHERE t.public_id = a.public_id) AS temp_until" : "NULL AS temp_until");
   const where = [];
   const binds = [];
@@ -104,6 +108,7 @@ function listSql(tables, q, sort, filter) {
     const parts = ["LOWER(a.handle) LIKE ? ESCAPE '\\'", "LOWER(a.display_name) LIKE ? ESCAPE '\\'", "a.public_id LIKE ? ESCAPE '\\'"];
     binds.push(like, like, like);
     if (has("account_handles")) { parts.push("EXISTS (SELECT 1 FROM account_handles h WHERE h.public_id = a.public_id AND LOWER(h.handle) LIKE ? ESCAPE '\\')"); binds.push(like); }
+    if (has("display_names")) { parts.push("EXISTS (SELECT 1 FROM display_names dn WHERE dn.public_id = a.public_id AND LOWER(dn.name) LIKE ? ESCAPE '\\')"); binds.push(like); }
     where.push("(" + parts.join(" OR ") + ")");
   }
   const inner = "SELECT " + cols.join(", ") + " FROM accounts a" + (where.length ? " WHERE " + where.join(" AND ") : "");
@@ -115,6 +120,9 @@ function listSql(tables, q, sort, filter) {
   if (filter === "reported") outerWhere.push("reports > 0");
   if (filter === "temporary") outerWhere.push("temp_until IS NOT NULL");
   if (filter === "owner") outerWhere.push("owner = 1");
+  if (filter === "friends_off") outerWhere.push("friends_on = 0");
+  if (filter === "locked_follows") outerWhere.push("locked_follows > 0");
+  if (filter === "extra_display") outerWhere.push("extra_display > 0");
   const order = {
     created: "created_at DESC",
     active: "active_at DESC",
@@ -140,6 +148,9 @@ function rowOut(row, now) {
     protected: Number(row.protected_account) === 1,
     extraNames: Number(row.extra_names) || 0,
     hiddenNames: Number(row.hidden_names) || 0,
+    friendsOff: Number(row.friends_on) === 0,
+    lockedFollows: Number(row.locked_follows) || 0,
+    extraDisplayNames: Number(row.extra_display) || 0,
     followers: Number(row.followers) || 0,
     posts: Number(row.posts) || 0,
     reports: Number(row.reports) || 0,
@@ -258,6 +269,7 @@ async function accountDetail(env, id, deps) {
     followers: await count(env, tables, "account_follows", "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", ["app:" + id]),
     following: await count(env, tables, "account_follows", "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", [id]),
     friends: await count(env, tables, "account_friends", "SELECT COUNT(*) AS n FROM account_friends WHERE user_id = ?", [id]),
+    lockedFollowing: await count(env, tables, "locked_follows", "SELECT COUNT(*) AS n FROM locked_follows WHERE owner_id = ?", [id]),
     posts: await count(env, tables, "public_posts", "SELECT COUNT(*) AS n FROM public_posts WHERE author_id = ? AND parent_id = ''", [id]),
     replies: await count(env, tables, "public_posts", "SELECT COUNT(*) AS n FROM public_posts WHERE author_id = ? AND parent_id <> ''", [id]),
     hiddenPosts: await count(env, tables, "public_posts", "SELECT COUNT(*) AS n FROM public_posts WHERE author_id = ? AND hidden = 1", [id]),
@@ -265,6 +277,43 @@ async function accountDetail(env, id, deps) {
     reposts: await count(env, tables, "account_reposts", "SELECT COUNT(*) AS n FROM account_reposts WHERE public_id = ?", [id]),
     messagesSent: await count(env, tables, "account_messages", "SELECT COUNT(*) AS n FROM account_messages WHERE sender_id = ? AND deleted_at = 0", [id]),
     audienceLists: await count(env, tables, "audience_lists", "SELECT COUNT(*) AS n FROM audience_lists WHERE public_id = ?", [id])
+  };
+
+  // People: full lists straight from the tables, so audience rules, per-friendship
+  // privacy, locked follows and Friends off never hide anything here (owner view).
+  const PEOPLE_MAX = 500;
+  const person = (r, extra) => Object.assign({ id: String(r.pid || ""), handle: r.handle || "", name: r.display_name || "", at: Number(r.at) || 0 }, extra || {});
+  const friends = has("account_friends")
+    ? (await all(env, "SELECT f.friend_id AS pid, a.handle, a.display_name, f.created_at AS at FROM account_friends f LEFT JOIN accounts a ON a.public_id = f.friend_id WHERE f.user_id = ? ORDER BY f.created_at DESC LIMIT " + PEOPLE_MAX, [id])).map((r) => person(r))
+    : [];
+  const followers = has("account_follows")
+    ? (await all(env, "SELECT f.follower_id AS pid, a.handle, a.display_name, f.created_at AS at FROM account_follows f LEFT JOIN accounts a ON a.public_id = f.follower_id WHERE f.target_id = ? ORDER BY f.created_at DESC LIMIT " + PEOPLE_MAX, ["app:" + id])).map((r) => person(r))
+    : [];
+  const following = has("account_follows")
+    ? (await all(env, "SELECT f.target_id AS target, a.public_id AS pid, a.handle, a.display_name, f.created_at AS at FROM account_follows f LEFT JOIN accounts a ON ('app:' || a.public_id) = f.target_id WHERE f.follower_id = ? ORDER BY f.created_at DESC LIMIT " + PEOPLE_MAX, [id]))
+        .map((r) => person(r, { target: String(r.target || ""), app: String(r.target || "").indexOf("app:") === 0 }))
+    : [];
+  const locked = has("locked_follows")
+    ? (await all(env, "SELECT l.target_id AS target, a.public_id AS pid, a.handle, a.display_name, l.created_at AS at FROM locked_follows l LEFT JOIN accounts a ON ('app:' || a.public_id) = l.target_id OR a.public_id = l.target_id WHERE l.owner_id = ? ORDER BY l.created_at DESC LIMIT " + PEOPLE_MAX, [id]))
+        .map((r) => person(r, { target: String(r.target || ""), locked: true }))
+    : [];
+  const lockPrefs = has("locked_follow_prefs") ? await first(env, "SELECT CASE WHEN code_hash <> '' THEN 1 ELSE 0 END AS has_lock, hide_entry, relock_secs FROM locked_follow_prefs WHERE public_id = ?", [id]) : null;
+  const friendPrefs = has("account_friend_prefs") ? await first(env, "SELECT enabled, who_can_request, list_audience, share_online FROM account_friend_prefs WHERE public_id = ?", [id]) : null;
+  const people = {
+    friends,
+    followers,
+    following,
+    lockedFollowing: locked,
+    requestsIn: await count(env, tables, "account_friend_requests", "SELECT COUNT(*) AS n FROM account_friend_requests WHERE receiver_id = ?", [id]),
+    requestsOut: await count(env, tables, "account_friend_requests", "SELECT COUNT(*) AS n FROM account_friend_requests WHERE sender_id = ?", [id]),
+    friendsSetting: {
+      on: !friendPrefs || Number(friendPrefs.enabled) !== 0,
+      whoCanRequest: friendPrefs ? String(friendPrefs.who_can_request || "everyone") : "everyone",
+      listAudience: friendPrefs ? String(friendPrefs.list_audience || "everyone") : "everyone",
+      shareOnline: !friendPrefs || Number(friendPrefs.share_online) !== 0
+    },
+    lockedFollows: { count: await count(env, tables, "locked_follows", "SELECT COUNT(*) AS n FROM locked_follows WHERE owner_id = ?", [id]), lockSet: !!(lockPrefs && Number(lockPrefs.has_lock) === 1), hideEntry: !!(lockPrefs && Number(lockPrefs.hide_entry) === 1) },
+    max: PEOPLE_MAX
   };
 
   const communities = has("community_members") ? (await all(env, "SELECT community_id, created_at FROM community_members WHERE public_id = ? ORDER BY created_at DESC LIMIT 100", [id])).map((r) => ({ id: String(r.community_id), joinedAt: Number(r.created_at) || 0 })) : [];
@@ -336,6 +385,7 @@ async function accountDetail(env, id, deps) {
     presence: presence ? { preference: presence.preference, activity: presence.activity, lastSeenPrivacy: presence.seen_privacy } : null,
     names,
     displayNames,
+    people,
     signIn,
     passkeys: passkeys || 0,
     recoveryCodesLeft: recovery || 0,
@@ -377,11 +427,10 @@ export async function handleOwnerInspector(request, env, path, url, deps) {
   if (one) {
     const detail = await accountDetail(env, one[1], deps);
     if (!detail) return deps.json(404, { error: "not_found" });
-    try {
-      await env.DB.prepare("INSERT INTO owner_access_log (at, owner_id, target_id, action) VALUES (?, ?, ?, 'view')").bind(Date.now(), String(gate.row.public_id), detail.id).run();
-      detail.audited = true;
-    } catch (err) { detail.audited = false; }
-    return deps.json(200, detail, NO_STORE);
+    const extras = await ownerViewExtras(env, detail.id);
+    if (Object.keys(extras).length) detail.extras = extras;
+    detail.audited = await logOwnerView(env, String(gate.row.public_id), detail.id, "view");
+    return deps.json(200, scrubSecrets(detail), NO_STORE);
   }
   return deps.json(404, { error: "not_found" });
 }
