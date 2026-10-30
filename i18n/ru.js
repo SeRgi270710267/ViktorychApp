@@ -4967,5 +4967,16 @@ SI18n.addPack("ru", {
   "Confirm in your wallet…": "Подтвердите в кошельке…",
   "Sent to the network. It shows in your wallet once it is confirmed.": "Отправлено в сеть. Появится в кошельке после подтверждения.",
   "Cancelled.": "Отменено.",
-  "Couldn't make this gift an NFT.": "Не удалось сделать NFT из этого подарка."
+  "Couldn't make this gift an NFT.": "Не удалось сделать NFT из этого подарка.",
+  "Birth date": "Дата рождения",
+  "Add your birth date": "Добавьте дату рождения",
+  "This should be the date of your birthday. It is only on your profile if you choose who sees it.": "Укажите дату своего дня рождения. Она появится в профиле, только если вы выберете, кто её видит.",
+  "Others see the day and month only when this is off.": "Когда выключено, другие видят только день и месяц.",
+  "Remove birth date": "Удалить дату рождения",
+  "@{handle} and {count} more": "@{handle} и ещё {count}",
+  "Choose who sees which username and who can mention you.": "Выберите, кто какое имя пользователя видит и кто может вас упоминать.",
+  "Discard changes?": "Отменить изменения?",
+  "This can’t be undone and you’ll lose your changes.": "Это действие нельзя отменить, и ваши изменения пропадут.",
+  "Your usernames": "Ваши имена пользователя",
+  "Edit them in Edit profile: who sees which one, Preview as and who can mention you.": "Они редактируются в «Изменить профиль»: кто какое видит, «Посмотреть как» и кто может вас упоминать."
 });

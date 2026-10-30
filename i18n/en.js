@@ -4965,5 +4965,16 @@ SI18n.addPack("en", {
   "Confirm in your wallet…": "Confirm in your wallet…",
   "Sent to the network. It shows in your wallet once it is confirmed.": "Sent to the network. It shows in your wallet once it is confirmed.",
   "Cancelled.": "Cancelled.",
-  "Couldn't make this gift an NFT.": "Couldn't make this gift an NFT."
+  "Couldn't make this gift an NFT.": "Couldn't make this gift an NFT.",
+  "Birth date": "Birth date",
+  "Add your birth date": "Add your birth date",
+  "This should be the date of your birthday. It is only on your profile if you choose who sees it.": "This should be the date of your birthday. It is only on your profile if you choose who sees it.",
+  "Others see the day and month only when this is off.": "Others see the day and month only when this is off.",
+  "Remove birth date": "Remove birth date",
+  "@{handle} and {count} more": "@{handle} and {count} more",
+  "Choose who sees which username and who can mention you.": "Choose who sees which username and who can mention you.",
+  "Discard changes?": "Discard changes?",
+  "This can’t be undone and you’ll lose your changes.": "This can’t be undone and you’ll lose your changes.",
+  "Your usernames": "Your usernames",
+  "Edit them in Edit profile: who sees which one, Preview as and who can mention you.": "Edit them in Edit profile: who sees which one, Preview as and who can mention you."
 });
