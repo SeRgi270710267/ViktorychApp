@@ -71,3 +71,21 @@ test("status words and code extraction", () => {
   assert.equal(codeFromText("Code 123-456. Valid 10 min"), "123-456");
   assert.equal(codeFromText("No digits here"), "");
 });
+
+test("members read their own SMSPool account with the key from their device", async () => {
+  const { handleMemberSms } = await import("../src/sms-pool.js");
+  const calls = [];
+  const d = (signed) => deps(true, { fetch: fakeApi(calls), sessionAccount: async () => (signed ? { public_id: "000000000003" } : null), readJson: async (r) => JSON.parse(await r.text()) });
+  const post = (body) => new Request("https://accounts.test/v1/inbox/sms", { method: "POST", body: JSON.stringify(body) });
+  assert.equal((await handleMemberSms(post({ key: "member-key" }), {}, d(true))).status, 404);
+  const on = { INBOX_RELAY: "on" };
+  assert.equal((await handleMemberSms(post({ key: "member-key" }), on, d(false))).status, 401);
+  assert.equal((await handleMemberSms(post({}), on, d(true))).status, 400);
+  const res = await handleMemberSms(post({ key: "member-key" }), on, d(true));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("cache-control"), "no-store");
+  const body = await res.json();
+  assert.equal(body.connected, true);
+  assert.ok(body.orders.length >= 2);
+  assert.ok(calls.length && calls.every((c) => c.auth === "Bearer member-key"));
+});
