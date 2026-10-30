@@ -4,15 +4,15 @@ import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
 
 /* Privacy for each friendship: both sides, per-viewer counts, mutuals,
-   precedence, blocks, preview, and the audited app-owner bypass. */
+   precedence, blocks, preview, and the bypass hook the owner inspector uses. */
 
 let mf;
 let ipN = 10;
 
-function workerOptions() {
+function workerOptions(entry) {
   return {
     modules: true,
-    scriptPath: fileURLToPath(new URL("../src/index.js", import.meta.url)),
+    scriptPath: fileURLToPath(new URL(entry || "../src/index.js", import.meta.url)),
     modulesRoot: fileURLToPath(new URL("../..", import.meta.url)),
     modulesRules: [{ type: "ESModule", include: ["**/*.js"], fallthrough: true }],
     compatibilityDate: "2026-01-15",
@@ -209,42 +209,63 @@ test("preview as a person or an audience uses only your own rules", async () => 
   assert.equal((await call("/v1/friends/privacy", { token: "" })).status, 401);
 });
 
-test("app owner sees every friendship, true counts and mutuals; each bypass is audit-logged", async () => {
+test("no bypass by default: even the app owner account follows the rules", async () => {
   await setRule(ana, ["ben_fp"], { mode: "hidden" });
-  await setRule(ben, ["ana_fp"], { mode: "hidden" });
-  const db = await mf.getD1Database("DB");
   const seen = await listOf(own, ana);
-  assert.deepEqual(handlesOf(seen), ["ben_fp", "cy_fp"]);
-  assert.equal(seen.friendsCount, 2);
-  assert.equal(seen.ownerView, true);
-  const benCard = seen.friends.find((card) => String(card.handle).replace(/^@/, "") === "ben_fp");
-  assert.equal(benCard.ownerOnly, true);
-  const cyCard = seen.friends.find((card) => String(card.handle).replace(/^@/, "") === "cy_fp");
-  assert.ok(!cyCard.ownerOnly);
-  // True mutuals: the owner is friends with Ben; Ben counts as a mutual on
-  // Ana's page for the owner, but not for Cy (also Ben's friend).
-  await befriend(own, ben);
-  assert.equal((await listOf(own, ana)).mutualCount, 1);
-  assert.equal((await listOf(cy, ana)).mutualCount, 0);
-  const after = await db.prepare("SELECT COUNT(*) AS n FROM owner_access_log WHERE owner_id = ? AND target_id = ? AND action = 'friendship_bypass'").bind(own.account.publicId, ana.account.publicId).first();
-  assert.ok(Number(after.n) >= 1);
-  // Profile count for the owner is the true count, and also logged.
-  const prof = await call("/v1/profile/ana_fp", { token: own.token });
-  assert.equal(prof.body.account.friendsCount, 2);
-  assert.equal(prof.body.account.ownerView, true);
-  // Nothing secret rides along.
-  assert.ok(!/number_hash|salt|token_hash|password/i.test(JSON.stringify(seen) + JSON.stringify(prof.body)));
-  // A normal viewer of the same list sees no owner markers and no hints.
-  const eveView = await listOf(eve, ana);
-  assert.equal(eveView.ownerView, undefined);
-  assert.ok(eveView.friends.every((card) => card.ownerOnly === undefined));
-  // No bypass needed -> no log row.
+  assert.deepEqual(handlesOf(seen), ["cy_fp"]);
+  assert.equal(seen.friendsCount, 1);
+  assert.equal(seen.ownerView, undefined);
+  assert.ok(seen.friends.every((card) => card.ownerOnly === undefined));
+  noHiddenHints(seen);
   await setRule(ana, ["ben_fp"], { mode: "inherit" });
-  await setRule(ben, ["ana_fp"], { mode: "inherit" });
-  const quiet = await db.prepare("SELECT COUNT(*) AS n FROM owner_access_log WHERE owner_id = ?").bind(own.account.publicId).first();
-  await listOf(own, cy);
-  const quiet2 = await db.prepare("SELECT COUNT(*) AS n FROM owner_access_log WHERE owner_id = ?").bind(own.account.publicId).first();
-  assert.equal(Number(quiet2.n), Number(quiet.n));
+});
+
+test("bypass hook (owner inspector): true lists, counts and mutuals, each reveal recorded", async () => {
+  const main = mf;
+  mf = new Miniflare(workerOptions("./fixtures/friendship-bypass-entry.js"));
+  try {
+    const a = await signup("ana_hk", "Ana");
+    const b = await signup("ben_hk", "Ben");
+    const c = await signup("cy_hk", "Cy");
+    const e = await signup("eve_hk", "Eve");
+    const o = await signup("own_hk", "Owner");
+    const db = await mf.getD1Database("DB");
+    await db.prepare("UPDATE accounts SET owner = 1 WHERE public_id = ?").bind(o.account.publicId).run();
+    await befriend(a, b);
+    await befriend(a, c);
+    await befriend(b, c);
+    await befriend(o, b);
+    await setRule(a, ["ben_hk"], { mode: "hidden" });
+    await setRule(b, ["ana_hk"], { mode: "hidden" });
+    const seen = await listOf(o, a);
+    assert.deepEqual(handlesOf(seen), ["ben_hk", "cy_hk"]);
+    assert.equal(seen.friendsCount, 2);
+    assert.equal(seen.mutualCount, 1);
+    assert.equal(seen.ownerView, true);
+    assert.equal(seen.friends.find((card) => String(card.handle).replace(/^@/, "") === "ben_hk").ownerOnly, true);
+    assert.ok(!seen.friends.find((card) => String(card.handle).replace(/^@/, "") === "cy_hk").ownerOnly);
+    const log = await db.prepare("SELECT COUNT(*) AS n FROM test_bypass_log WHERE viewer_id = ? AND target_id = ? AND action = 'friendship_bypass'").bind(o.account.publicId, a.account.publicId).first();
+    assert.ok(Number(log.n) >= 1);
+    const prof = await call("/v1/profile/ana_hk", { token: o.token });
+    assert.equal(prof.body.account.friendsCount, 2);
+    assert.equal(prof.body.account.ownerView, true);
+    assert.ok(!/number_hash|salt|token_hash|password/i.test(JSON.stringify(seen) + JSON.stringify(prof.body)));
+    // Everyone else still follows the rules, with no owner markers.
+    const other = await listOf(e, a);
+    assert.deepEqual(handlesOf(other), ["cy_hk"]);
+    assert.equal(other.ownerView, undefined);
+    assert.equal((await listOf(c, a)).mutualCount, 0);
+    // Nothing hidden -> nothing recorded.
+    await setRule(a, ["ben_hk"], { mode: "inherit" });
+    await setRule(b, ["ana_hk"], { mode: "inherit" });
+    const before = await db.prepare("SELECT COUNT(*) AS n FROM test_bypass_log").first();
+    await listOf(o, c);
+    const after = await db.prepare("SELECT COUNT(*) AS n FROM test_bypass_log").first();
+    assert.equal(Number(after.n), Number(before.n));
+  } finally {
+    await mf.dispose();
+    mf = main;
+  }
 });
 
 test("removing a friendship drops both sides' rules", async () => {

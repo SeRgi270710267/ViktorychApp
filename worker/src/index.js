@@ -70,7 +70,7 @@ import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { SUGGEST_SCHEMA, handleSuggestRoutes } from "./suggest.js";
 import { friendPrefs, friendsOffAmong, friendOnSql, friendFilterReady, handleFriendPrefs } from "./friends-pref.js";
-import { dropFriendshipRules, filterFriends, flushOwnerAudit, handleFriendPrivacy, hiddenWithoutBypass, resetFriendPrivacyGate, viewerContext, visibleFriendCount, visibleMutualCount } from "./friend-privacy.js";
+import { dropFriendshipRules, filterFriends, flushBypass, handleFriendPrivacy, hiddenWithoutBypass, resetFriendPrivacyGate, viewerContext, visibleFriendCount, visibleMutualCount } from "./friend-privacy.js";
 import { POST_SCHEMA, ensurePostColumns, handlePosts, publishDuePosts } from "./posts.js";
 import { syncVk, vkDue } from "./vk.js";
 import { handlePackagesRoute, pollPackages, packageNotifier } from "./packages.js";
@@ -1147,7 +1147,7 @@ async function liveProfileCounts(env, row, account, viewer) {
   account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
   account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await visibleMutualCount(fctx, row.public_id) : 0;
   if (fctx.bypassed.size) account.ownerView = true;
-  await flushOwnerAudit(fctx, "friendship_bypass");
+  await flushBypass(fctx, "friendship_bypass");
   const prefs = await friendPrefs(env, row.public_id);
   if (!prefs.enabled) {
     account.friendsOff = true;
@@ -5334,7 +5334,7 @@ async function handleFriendsGet(request, env, url) {
       card.friendStatus = "sent";
     }
 
-    await flushOwnerAudit(rctx, "friendship_bypass");
+    await flushBypass(rctx, "friendship_bypass");
     return json(200, redactPublicIds({
       incoming: incomingCards,
       outgoing: outgoingCards,
@@ -5364,7 +5364,7 @@ async function handleFriendsGet(request, env, url) {
   // friendship shows only when both friends' rules allow it
   // (friend-privacy.js). Nothing says how many were left out.
   const fctx = viewerContext(env, viewer);
-  const appOwnerView = !isOwner && fctx.appOwner;
+  const bypassView = !isOwner && fctx.bypass;
   const friendsCount = await visibleFriendCount(fctx, targetId);
   const status = await getFriendStatus(env, viewer.public_id, targetId);
   const mutualCount = await visibleMutualCount(fctx, targetId);
@@ -5373,20 +5373,20 @@ async function handleFriendsGet(request, env, url) {
   else if (!isOwner && prefs.listAudience === "friends" && status === "friends") isPrivate = false;
   const finish = async (body) => {
     if (fctx.bypassed.size) body.ownerView = true;
-    await flushOwnerAudit(fctx, "friendship_bypass");
+    await flushBypass(fctx, "friendship_bypass");
     return json(200, redactPublicIds(body));
   };
 
   if (tab === "friends") {
     const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
-    if (!isOwner && !appOwnerView && targetAccount.protected_account === 1 && status !== "friends") {
+    if (!isOwner && !bypassView && targetAccount.protected_account === 1 && status !== "friends") {
       const state = await pairState(env, viewer.public_id, targetId);
       if (!state.following && !state.friends) {
         return finish({ id: shown, friendsCount, status, mutualCount, locked: true, friends: [] });
       }
     }
     // Private follow lists (an account-wide choice) stay closed to non-friends.
-    if (!isOwner && !appOwnerView && targetAccount.private_follows === 1 && status !== "friends") {
+    if (!isOwner && !bypassView && targetAccount.private_follows === 1 && status !== "friends") {
       return finish({ id: shown, friendsCount, status, mutualCount, canRequest, isPrivate: true, friends: [] });
     }
     const listOn = await friendFilterReady(env);
@@ -5398,14 +5398,14 @@ async function handleFriendsGet(request, env, url) {
     if (!ids.length && isPrivate) {
       return finish({ id: shown, friendsCount, status, mutualCount, canRequest, isPrivate: true, friends: [] });
     }
-    const ownerHidden = appOwnerView ? await hiddenWithoutBypass(viewerContext(env, Object.assign({}, viewer, { owner: 0 })), targetId, ids) : new Set();
+    const ownerHidden = bypassView ? await hiddenWithoutBypass(viewerContext(env, viewer, { noBypass: true }), targetId, ids) : new Set();
     const cards = await followCards(env, request, ids);
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i];
       const fId = await cleanFriendTargetId(env, card.handle || card.id);
       card.mutualFriendsCount = await visibleMutualCount(fctx, fId);
       card.friendStatus = await getFriendStatus(env, viewer.public_id, fId);
-      if (appOwnerView && ownerHidden.has(String(fId))) card.ownerOnly = true;
+      if (bypassView && ownerHidden.has(String(fId))) card.ownerOnly = true;
     }
     return finish({
       id: shown,

@@ -16,9 +16,9 @@
    Both sides: a third person sees the friendship A-F only if A's rule about
    F AND F's rule about A both let them. A always sees it on their own list; on A's list F is judged by A's rule. Blocks on
    either side hide it. Friends off is already applied in SQL
-   (friends-pref.js). The app owner (accounts.owner = 1) sees everything;
-   each time that bypass reveals something the rules would hide, a row goes
-   into owner_access_log (same table as the owner inspector).
+   (friends-pref.js). Nobody bypasses these rules by default. The owner
+   inspector registers a bypass with setFriendshipBypass(); see the hook
+   below.
 
    Enforced in the Worker for: friend lists, friend counts (computed per
    viewer), mutual friend counts and lists, request cards, profile counts.
@@ -30,10 +30,7 @@ import { friendFilterReady, friendOnSql, friendPrefs } from "./friends-pref.js";
 
 export const FRIEND_PRIVACY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS friendship_privacy (public_id TEXT NOT NULL, friend_id TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'inherit', audience TEXT NOT NULL DEFAULT '{}', updated_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (public_id, friend_id))",
-  "CREATE INDEX IF NOT EXISTS friendship_privacy_friend ON friendship_privacy(friend_id)",
-  "CREATE TABLE IF NOT EXISTS owner_access_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, owner_id TEXT NOT NULL, target_id TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'view')",
-  "CREATE INDEX IF NOT EXISTS owner_access_log_at ON owner_access_log (at)",
-  "CREATE INDEX IF NOT EXISTS owner_access_log_target ON owner_access_log (target_id, at)"
+  "CREATE INDEX IF NOT EXISTS friendship_privacy_friend ON friendship_privacy(friend_id)"
 ];
 
 export const MODES = ["inherit", "custom", "hidden"];
@@ -108,18 +105,37 @@ async function anyRules(env) {
   return any;
 }
 
+/* ---------- bypass hook (owner inspector) ----------
+   Off unless something registers it. The hook is
+     { allows(env, viewer) -> boolean,
+       record(env, viewerId, targetIds, action) -> Promise (optional) }
+   When allows() is true the viewer sees every friendship, true counts and
+   true mutuals; responses then carry ownerView / ownerOnly so the client can
+   show the owner view. record() gets the ids of the accounts whose hidden
+   friendships were revealed (at most 50 per request) so the inspector can
+   write its own audit log. Only friendship edges are revealed here: no
+   passwords, codes or messages pass through this module. */
+let bypassHook = null;
+export function setFriendshipBypass(hook) {
+  bypassHook = hook && typeof hook.allows === "function" ? hook : null;
+}
+
 /* ---------- per-request viewer context ---------- */
 
-/* viewer: the session account row (or null). */
-export function viewerContext(env, viewer) {
+/* viewer: the session account row (or null). opts.noBypass: rules only. */
+export function viewerContext(env, viewer, opts) {
+  let bypass = false;
+  if (viewer && bypassHook && !(opts && opts.noBypass)) {
+    try { bypass = bypassHook.allows(env, viewer) === true; } catch (err) { bypass = false; }
+  }
   return {
     env,
     viewerId: viewer ? String(viewer.public_id || "") : "",
-    appOwner: !!(viewer && Number(viewer.owner) === 1),
+    bypass,
     rules: new Map(),     // ownerId -> { listAudience, rows: Map friendId -> rule, full }
     rels: new Map(),      // ownerId -> rel of viewer
     blocks: new Map(),    // id -> blocked either way with viewer
-    bypassed: new Set(),  // target ids the app owner saw past the rules
+    bypassed: new Set(),  // target ids the bypass revealed past the rules
     gate: null
   };
 }
@@ -207,10 +223,10 @@ async function rulesAllow(ctx, a, f) {
 }
 
 /* May the viewer see that a and f are friends? `target` is whose page the
-   viewer is reading (for the owner audit row). */
+   viewer is reading (handed to the bypass hook's record()). */
 export async function friendshipVisible(ctx, a, f, target) {
   if (await rulesAllow(ctx, a, f)) return true;
-  if (ctx.appOwner) {
+  if (ctx.bypass) {
     ctx.bypassed.add(String(target || a));
     return true;
   }
@@ -234,7 +250,7 @@ export async function filterFriends(ctx, ownerId, ids) {
 }
 
 /* Rule-only view for the owner's "only you see this" badge: which of these
-   the rules alone would hide (pass a context without the owner flag). */
+   the rules alone would hide (pass a viewerContext(..., { noBypass: true })). */
 export async function hiddenWithoutBypass(ctx, ownerId, ids) {
   const out = new Set();
   for (let i = 0; i < ids.length; i++) {
@@ -275,16 +291,13 @@ export async function visibleMutualCount(ctx, targetId) {
   return (await visibleMutualIds(ctx, targetId)).length;
 }
 
-/* Write one audit row per target the app owner saw past the rules. */
-export async function flushOwnerAudit(ctx, action) {
-  if (!ctx.appOwner || !ctx.bypassed.size) return;
-  const now = Date.now();
-  try {
-    await ensureFriendPrivacy(ctx.env);
-    const ids = Array.from(ctx.bypassed).slice(0, 50);
-    await ctx.env.DB.batch(ids.map((id) => ctx.env.DB.prepare("INSERT INTO owner_access_log (at, owner_id, target_id, action) VALUES (?, ?, ?, ?)").bind(now, ctx.viewerId, id, action || "friendship_bypass")));
-  } catch (err) { /* the view still answers */ }
+/* Hand what the bypass revealed to the hook's record(), once per request. */
+export async function flushBypass(ctx, action) {
+  if (!ctx.bypass || !ctx.bypassed.size) return;
+  const ids = Array.from(ctx.bypassed).slice(0, 50);
   ctx.bypassed.clear();
+  if (!bypassHook || typeof bypassHook.record !== "function") return;
+  try { await bypassHook.record(ctx.env, ctx.viewerId, ids, action || "friendship_bypass"); } catch (err) { /* the view still answers */ }
 }
 
 /* ---------- client form ---------- */
