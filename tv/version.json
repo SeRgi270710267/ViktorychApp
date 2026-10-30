@@ -1,7 +1,7 @@
 {
-  "versionCode": 5,
-  "versionName": "1.4.0",
+  "versionCode": 6,
+  "versionName": "1.5.0",
   "apk": "tv/ViktorychTV.apk",
   "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
-  "notes": "New, optional: make ViktorychTV your TV's home screen, with big app tiles, folders, and a top bar for search, inputs and settings. The app itself works exactly as before. Also checks this TV's screen, HDR, decoders, sound, memory and network on first open and picks the best settings."
+  "notes": "New, optional: ViktorychTV Player for YouTube, X, Twitch and video or music links, with one look and simple remote controls, and a screensaver with photos from your own feed. Turn them on in Make ViktorychTV your default. The app itself works exactly as before."
 }
