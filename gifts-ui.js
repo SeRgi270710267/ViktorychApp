@@ -1,4 +1,6 @@
-/* Points and the free gift store. Amounts come from the worker. */
+/* Viktorychs (earned, never sold), the gift store and sticker packs.
+   Prices come from shared/store-catalog.js; balances, ownership and payments
+   state come from the worker. Nothing here waits on the network to draw. */
 (function (root) {
   "use strict";
 
@@ -11,6 +13,10 @@
   var errorText = "";
   var started = false;
   var viewedHandle = "";
+  var shop = null;
+  var shopLoading = false;
+  var orders = null;
+  var ownerNote = "";
 
   function tn(key, n, vars) { var f = (typeof window !== "undefined" && window.tn) || (typeof self !== "undefined" && self.tn); return f ? f(key, n, vars) : String(n); }
   function tr(key, vars) {
@@ -77,6 +83,18 @@
     }).catch(function () {});
   }
 
+  function loadShop() {
+    if (shopLoading) return Promise.resolve();
+    shopLoading = true;
+    return call("/v1/store/catalog", { token: token() }).then(function (body) {
+      shopLoading = false;
+      if (!body || !body.tiers) return;
+      shop = body;
+      if (body.balance != null) balance = Number(body.balance) || 0;
+      redraw();
+    }).catch(function () { shopLoading = false; });
+  }
+
   /* Daily visit, reading and game points are awarded at most once per UTC
      day, so a reload, a second tab or another visit the same day has nothing
      to ask for. Each touch is remembered on this device until the day ends,
@@ -135,8 +153,13 @@
   }
 
   function reasonLabel(reason) {
+    if (reason === "quality_post") return tr("A quality post");
+    if (reason === "popular_post") return tr("A popular post");
+    if (reason === "grant") return tr("Granted by the app owner");
+    if (reason === "stickers") return tr("Bought a sticker pack");
+    if (reason === "badge") return tr("Badge reward");
     if (reason === "signup") return tr("Sign-up bonus");
-    if (reason === "login") return tr("Daily visit");
+    if (reason === "login") return tr("Login streak");
     if (reason === "read") return tr("Reading streak");
     if (reason === "post") return tr("Posting");
     if (reason === "comment") return tr("Commenting");
@@ -145,7 +168,7 @@
     if (reason === "reply_in") return tr("A reply to you");
     if (reason === "follow") return tr("Following an account");
     if (reason === "profile") return tr("Finishing your profile");
-    if (reason === "invite") return tr("Inviting someone");
+    if (reason === "invite") return tr("An invite who became active");
     if (reason === "game") return tr("Playing a game");
     if (reason === "gift") return tr("Sent a gift");
     if (reason === "birthday") return tr("Birthday bonus");
@@ -168,6 +191,24 @@
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="' + path + '"/></svg>';
   }
 
+  function coin() {
+    return '<svg class="vk-coin" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2"/><path fill="#fff" d="M7.6 7h2.3l2.1 6.6L14.1 7h2.3l-3.3 10h-2.2z"/></svg>';
+  }
+
+  function vks(n) {
+    return '<span class="vk-amount">' + coin() + "<b>" + esc(String(n)) + '</b><span class="vk-sr">' + esc(tr("Viktorychs")) + "</span></span>";
+  }
+
+  function ruleText(rule) {
+    if (rule.id === "login") {
+      return tr("Streak milestones: {list}", { list: (rule.milestones || []).map(function (m) { return tr("{d} days +{n}", { d: String(m.days), n: String(m.points) }); }).join(", ") });
+    }
+    if (rule.id === "quality_post") return tr("+{n} when 3 different people reply or like · up to {cap} a day", { n: String(rule.points), cap: String(rule.cap) });
+    if (rule.id === "popular_post") return tr("+{n} more at 10 different people · up to {cap} a day", { n: String(rule.points), cap: String(rule.cap) });
+    if (rule.id === "invite") return tr("+{n} once they stay a week, post and keep a streak · up to {cap} a day", { n: String(rule.points), cap: String(rule.cap) });
+    return tr("+{n} once", { n: String(rule.points) });
+  }
+
   function pointsPage() {
     var earn = rules.map(function (rule) {
       var extra = rule.streak ? " · " + tr("streak bonus up to {n}", { n: String(rule.streak) }) : "";
@@ -177,7 +218,7 @@
       var sign = item.delta > 0 ? "+" : "";
       return '<div class="points-row"><span>' + esc(reasonLabel(item.reason)) + '</span><b>' + esc(sign + item.delta) + "</b></div>";
     }).join("");
-    return '<div class="points-page"><div class="topbar"><div class="page-head"><h1>' + esc(tr("Viktorychs")) + '</h1></div></div><div class="points-balance"><b data-points-balance>' + esc(balance == null ? "0" : String(balance)) + '</b><span>' + esc(tr("Viktorychs")) + '</span></div><p class="points-note">' + esc(tr("Points are free. They are added by the app when you take part, and they cannot be bought.")) + '</p><a class="points-store" href="#/store">' + esc(tr("Gifts")) + '</a><h2>' + esc(tr("How to earn")) + "</h2><ul class=\"points-earn\">" + earn + "</ul><h2>" + esc(tr("History")) + "</h2>" + (rows || '<p class="points-note">' + esc(tr("No points yet")) + "</p>") + "</div>";
+    return '<div class="points-page"><div class="topbar"><div class="page-head"><button type="button" class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '">' + icon("back") + '</button><h1 class="grow">' + esc(tr("Viktorychs")) + '</h1></div></div><div class="points-balance">' + coin() + '<b data-points-balance>' + esc(balance == null ? "0" : String(balance)) + '</b><span>' + esc(tr("Viktorychs")) + '</span></div><p class="points-note">' + esc(tr("Viktorychs are earned by real effort and are never sold. They have no cash value and can only be spent on gifts and stickers.")) + '</p><a class="points-store" href="#/store">' + esc(tr("Gifts")) + '</a><h2>' + esc(tr("How to earn")) + '</h2><ul class="points-earn">' + earn + '</ul><p class="points-note">' + esc(tr("Only people other than you count, and their accounts must be at least a week old. New accounts start earning after 3 days. Daily caps apply.")) + "</p><h2>" + esc(tr("History")) + "</h2>" + (rows || '<p class="points-note">' + esc(tr("No points yet")) + "</p>") + "</div>";
   }
 
   /* ---- Gifts page (VK-style shelves). Art comes from shared/gift-catalog.js. ---- */
@@ -209,6 +250,11 @@
     if (id === "spring") return tr("Spring");
     if (id === "summer") return tr("Summer");
     if (id === "history") return tr("Gift history");
+    if (id === "limited") return tr("Limited editions");
+    if (id === "stickers") return tr("Sticker packs");
+    if (id === "orders") return tr("My purchases");
+    if (id === "terms") return tr("Purchase terms");
+    if (id === "owner") return tr("Owner tools");
     return tr("Gifts");
   }
 
@@ -239,7 +285,7 @@
   function artHtml(item, big) {
     var c = lib();
     if (!item) return "";
-    var own = c && c.localArt ? c.localArt(item.giftId || item.id) : "";
+    var own = c && c.localArt ? c.localArt(item.base || item.giftId || item.id) : "";
     if (own) return '<img class="vkg-img is-own" src="' + esc(own) + '"' + (item.cp ? ' data-gift-art="' + esc(item.cp) + '"' : "") + ' alt="" loading="lazy" decoding="async" draggable="false">';
     if (!item.cp || !c) return item.svg ? svg(item.svg) : "";
     var src = big && item.anim ? c.animatedArt(item.cp) : c.staticArt(item.cp);
@@ -261,6 +307,13 @@
     var found = null;
     allGifts().forEach(function (item) { if (item.id === id) found = item; });
     if (!found) catalog.forEach(function (item) { if (item.id === id) found = item; });
+    var sc = storeLib();
+    var limited = !found && sc ? sc.limitedById(id) : null;
+    if (limited) {
+      var base = null;
+      allGifts().forEach(function (item) { if (item.id === limited.base) base = item; });
+      found = { id: limited.id, base: limited.base, name: limited.name, cp: base ? base.cp : "", anim: base ? base.anim : false, limited: true };
+    }
     return found;
   }
 
@@ -281,8 +334,43 @@
     return list.filter(function (item) { return c.inCategory(item, id) && onShelf(item); });
   }
 
+  function storeLib() { return root.StoreCatalog || null; }
+
+  function money(cents) {
+    var value = (Number(cents) || 0) / 100;
+    var cur = shop && shop.payments && shop.payments.currency ? String(shop.payments.currency).toUpperCase() : "EUR";
+    try { return new Intl.NumberFormat(root.SI18n && root.SI18n.locale ? root.SI18n.locale() : undefined, { style: "currency", currency: cur }).format(value); }
+    catch (err) { return "€" + value.toFixed(2); }
+  }
+
+  function priceOf(kind, id) {
+    var sc = storeLib();
+    return sc ? sc.storeItem(kind, id) : null;
+  }
+
+  function priceTags(item) {
+    if (!item) return "";
+    if (item.tier === "free") return '<span class="vkg-price is-free">' + esc(tr("Free")) + "</span>";
+    var parts = [];
+    if (item.viktorychs > 0) parts.push(vks(item.viktorychs));
+    if (item.cents > 0) parts.push('<span class="vk-money">' + esc(money(item.cents)) + "</span>");
+    return '<span class="vkg-price">' + parts.join('<span class="vk-or">·</span>') + "</span>";
+  }
+
+  function paymentsOn() {
+    return !!(shop && shop.payments && shop.payments.enabled);
+  }
+
+  function limitedLeft(id) {
+    var row = null;
+    (shop && shop.limited || []).forEach(function (item) { if (item.id === id) row = item; });
+    return row ? Math.max(0, row.limit - row.sold) : null;
+  }
+
   function priceLabel(item) {
     if (!item) return "";
+    var priced = priceOf("gift", item.id);
+    if (priced) return priceTags(priced);
     if (Number(item.price) === 0) return '<span class="vkg-price is-free">' + esc(tr("Free")) + "</span>";
     return '<span class="vkg-price">' + esc(tn("viktorychs", item.price, { count: String(item.price) })) + "</span>";
   }
@@ -293,18 +381,177 @@
     return ' style="--h:' + Number(c.artHue(item.id)) + '"';
   }
 
-  function tile(item) {
-    return '<button type="button" class="gift-card vkg-item" data-gift="pick" data-gift-id="' + esc(item.id) + '" aria-label="' + esc(giftLabel(item)) + '"><span class="vkg-art"' + hueStyle(item) + '>' + artHtml(item, false) + "</span>" + priceLabel(item) + "</button>";
+  function tierMark(priced) {
+    if (!priced || priced.tier !== "premium") return "";
+    return '<span class="vkg-tier" title="' + esc(tr("Premium")) + '">' + icon("premium") + '<span class="vk-sr">' + esc(tr("Premium")) + "</span></span>";
   }
 
+  function tile(item) {
+    var priced = priceOf("gift", item.id);
+    var left = item.limited ? limitedLeft(item.id) : null;
+    var badge = item.limited ? '<span class="vkg-limited">' + esc(left == null ? tr("Limited") : left > 0 ? tr("{n} left", { n: String(left) }) : tr("Sold out")) + "</span>" : "";
+    return '<button type="button" class="gift-card vkg-item' + (item.limited ? " is-limited" : "") + '" data-gift="pick" data-gift-id="' + esc(item.id) + '" aria-label="' + esc(giftLabel(item)) + '"><span class="vkg-art"' + hueStyle(item.base ? { id: item.base } : item) + '>' + artHtml(item, false) + tierMark(priced) + badge + "</span>" + priceLabel(item) + "</button>";
+  }
+
+  function limitedItems() {
+    var sc = storeLib();
+    if (!sc) return [];
+    return sc.LIMITED.filter(function (item) { return sc.limitedOpen(item); }).map(function (item) { return findGift(item.id); }).filter(Boolean);
+  }
+
+  function limitedShelf() {
+    var items = limitedItems();
+    if (!items.length) return "";
+    return '<section class="vkg-shelf" data-shelf="limited"><a class="vkg-shelf-head" href="#/store/limited"><h2>' + esc(sectionTitle("limited")) + "</h2>" + icon("chevron") + '</a><div class="vkg-row">' + items.map(tile).join("") + "</div></section>";
+  }
+
+  /* ---- Sticker packs ---- */
+  function ownedPacks() {
+    var sc = storeLib();
+    var owned = [];
+    if (shop && shop.stickers) shop.stickers.forEach(function (pack) { if (pack.owned) owned.push(pack.id); });
+    else if (sc) sc.STICKER_PACKS.forEach(function (pack) { if (pack.tier === "free") owned.push(pack.id); });
+    return owned;
+  }
+
+  function stickerArt(itemId) {
+    var c = lib();
+    var src = c && c.localArt ? c.localArt(itemId) : "";
+    if (!src) return "";
+    return '<img class="vks-img" src="' + esc(src) + '" alt="" loading="lazy" decoding="async" draggable="false">';
+  }
+
+  function stickerHtml(pack, itemId) {
+    var sc = storeLib();
+    if (!sc || !sc.validSticker(pack, itemId)) return "";
+    return '<span class="vk-sticker" role="img" aria-label="' + esc(tr("Sticker")) + '">' + stickerArt(itemId) + "</span>";
+  }
+
+  function packCard(pack) {
+    var owned = ownedPacks().indexOf(pack.id) >= 0;
+    var priced = priceOf("stickers", pack.id);
+    var action = pack.tier === "free"
+      ? '<span class="vks-owned">' + esc(tr("Free for everyone")) + "</span>"
+      : (owned ? '<span class="vks-owned">' + esc(tr("Owned")) + "</span>" : priceTags(priced)) + '<button type="button" class="vks-get" data-gift="pack" data-pack-id="' + esc(pack.id) + '">' + esc(owned ? tr("Gift") : tr("Get")) + "</button>";
+    return '<article class="vks-pack' + (owned ? " is-owned" : "") + '"><div class="vks-head"><b>' + esc(tr(pack.name)) + "</b>" + tierMark(priced) + '<span class="vks-count">' + esc(tr("{n} stickers", { n: String(pack.items.length) })) + '</span></div><div class="vks-grid">' + pack.items.map(function (id) { return '<span class="vks-cell">' + stickerArt(id) + "</span>"; }).join("") + '</div><div class="vks-foot">' + action + "</div></article>";
+  }
+
+  function stickersHtml() {
+    var sc = storeLib();
+    if (!sc) return '<p class="points-note vkg-empty">' + esc(tr("Loading…")) + "</p>";
+    return '<p class="points-note">' + esc(tr("Bought stickers work in Messages and in comments.")) + '</p><div class="vks-list">' + sc.STICKER_PACKS.map(packCard).join("") + "</div>";
+  }
+
+  function stickerShelf() {
+    var sc = storeLib();
+    if (!sc) return "";
+    return '<section class="vkg-shelf" data-shelf="stickers"><a class="vkg-shelf-head" href="#/store/stickers"><h2>' + esc(sectionTitle("stickers")) + "</h2>" + icon("chevron") + '</a><div class="vkg-row">' + sc.STICKER_PACKS.map(function (pack) {
+      return '<a class="gift-card vkg-item vks-mini" href="#/store/stickers" aria-label="' + esc(tr(pack.name)) + '"><span class="vkg-art" style="--h:' + Number(lib() && lib().artHue ? lib().artHue(pack.items[0]) : 200) + '">' + stickerArt(pack.items[0]) + tierMark(priceOf("stickers", pack.id)) + "</span>" + priceTags(priceOf("stickers", pack.id)) + "</a>";
+    }).join("") + "</div></section>";
+  }
+
+  /* A compact picker for the composer and Messages: owned packs first. */
+  function stickerPicker(slot) {
+    if (!shop) loadShop();
+    var sc = storeLib();
+    if (!sc) return "";
+    var owned = ownedPacks();
+    var rows = sc.STICKER_PACKS.filter(function (pack) { return owned.indexOf(pack.id) >= 0; }).map(function (pack) {
+      return '<div class="vks-pick-row" aria-label="' + esc(tr(pack.name)) + '">' + pack.items.map(function (id) {
+        return '<button type="button" class="vks-pick" data-act="xc-sticker-add" data-slot="' + esc(slot || "") + '" data-sticker="' + esc(sc.stickerToken(pack.id, id)) + '" aria-label="' + esc(tr("Sticker")) + '">' + stickerArt(id) + "</button>";
+      }).join("") + "</div>";
+    }).join("");
+    return '<div class="vks-picker">' + rows + '<a class="vks-more" href="#/store/stickers">' + esc(tr("More sticker packs")) + "</a></div>";
+  }
+
+  /* Sticker tokens inside already-escaped text become images. */
+  function renderStickers(html) {
+    var sc = storeLib();
+    if (!sc || String(html).indexOf("[[sticker:") < 0) return html;
+    return String(html).replace(/\[\[sticker:([a-z0-9_]{1,24})\/([a-z0-9_]{1,32})\]\]/g, function (whole, pack, id) { return stickerHtml(pack, id) || ""; });
+  }
+
+  /* ---- Purchases, terms and owner tools ---- */
+  function loadOrders() {
+    var auth = token();
+    if (!auth || orders === "loading") return;
+    orders = "loading";
+    call("/v1/store/orders", { token: auth }).then(function (body) {
+      orders = body && body.orders ? body.orders : [];
+      redraw();
+    }).catch(function () { orders = []; redraw(); });
+  }
+
+  function orderRow(order) {
+    var item = order.kind === "stickers" ? null : findGift(order.itemId);
+    var art = order.kind === "stickers" ? stickerArt(order.base) : artHtml(item || { id: order.itemId, base: order.base }, false);
+    var name = order.kind === "stickers" ? tr(order.name) : giftLabel(item || { name: order.name });
+    var paid = order.method === "money" ? money(order.amount) : order.method === "viktorychs" ? tr("{n} Viktorychs", { n: String(order.amount) }) : order.method === "grant" ? tr("Granted by the app owner") : tr("Free");
+    var who = order.toSelf ? tr("For you") : tr("To {name}", { name: order.recipient ? (order.recipient.name || (order.recipient.handle ? "@" + order.recipient.handle : "")) : "" });
+    var state = order.status === "pending" ? tr("Waiting for payment") : order.status === "refunded" ? tr("Refunded") : (order.opened ? tr("Opened") : tr("Delivered"));
+    var when = order.at ? new Date(order.at).toLocaleDateString() : "";
+    var edition = order.edition ? " · " + tr("No. {n}", { n: String(order.edition) }) : "";
+    var refund = order.refundable ? '<button type="button" class="vko-refund" data-gift="refund" data-id="' + esc(order.id) + '">' + esc(tr("Refund")) + "</button><span>" + esc(tr("Refundable until {date} while unopened", { date: new Date(order.refundUntil).toLocaleDateString() })) + "</span>" : "";
+    return '<div class="vkg-hrow vko-row"><span class="vkg-hart">' + art + '</span><div class="vkg-htext"><b>' + esc(name) + "</b><span>" + esc(who + " · " + paid + " · " + state + (when ? " · " + when : "") + edition) + "</span>" + (refund ? '<div class="vko-actions">' + refund + "</div>" : "") + "</div></div>";
+  }
+
+  function ordersHtml(route) {
+    if (!token()) return '<p class="points-note vkg-empty">' + esc(tr("Sign in to see your purchases.")) + "</p>";
+    if (orders == null) loadOrders();
+    var paid = route && route.query && route.query.get ? route.query.get("paid") : "";
+    var thanks = paid ? '<p class="vkg-soon is-ok">' + esc(tr("Thank you! Your item is delivered as soon as the payment is confirmed.")) + "</p>" : "";
+    var body = orders === "loading" || orders == null ? '<p class="points-note vkg-empty">' + esc(tr("Loading…")) + "</p>"
+      : !orders.length ? '<p class="points-note vkg-empty">' + esc(tr("No purchases yet")) + "</p>"
+      : orders.map(orderRow).join("");
+    return thanks + '<div class="vkg-hist">' + body + '</div><p class="points-note"><a href="#/store/terms">' + esc(tr("Purchase terms")) + "</a></p>";
+  }
+
+  function termsHtml() {
+    var days = String(storeLib() ? storeLib().REFUND_DAYS : 14);
+    var lines = [
+      tr("Gifts and sticker packs are digital items for use inside ViktorychApp. They have no cash value."),
+      tr("You can pay for an item with money, through our payment provider, or with Viktorychs. Viktorychs are earned by taking part and are never sold."),
+      tr("Viktorychs have no cash value. They can’t be bought, cashed out or transferred for money, and they can’t be refunded once spent."),
+      tr("Items can’t be resold, traded for money or exchanged for cash."),
+      tr("A gift paid with money stays wrapped until the recipient opens it. You can ask for a refund of an unopened gift within {n} days. Once it is opened, it can’t be refunded.", { n: days }),
+      tr("Sticker packs and items you buy for yourself are delivered right away. By asking for that, you agree that the {n}-day right to cancel ends at delivery.", { n: days }),
+      tr("Card details go straight to the payment provider. ViktorychApp never sees or stores them."),
+      tr("You can’t send gifts to someone who blocked you or who doesn’t accept gifts from you. Gifting is rate-limited to stop spam."),
+      tr("Viktorychs earned through abuse, such as fake accounts or self-engagement, can be removed.")
+    ];
+    return '<div class="vkg-terms"><ul>' + lines.map(function (line) { return "<li>" + esc(line) + "</li>"; }).join("") + "</ul></div>";
+  }
+
+  function ownerHtml() {
+    if (!shop || !shop.owner) return '<p class="points-note vkg-empty">' + esc(tr("Only the app owner can use these tools.")) + "</p>";
+    var sc = storeLib();
+    var options = [];
+    if (sc) {
+      sc.STICKER_PACKS.forEach(function (pack) { options.push('<option value="stickers:' + esc(pack.id) + '">' + esc(tr(pack.name)) + "</option>"); });
+      sc.LIMITED.forEach(function (item) { options.push('<option value="gift:' + esc(item.id) + '">' + esc(tr(item.name)) + "</option>"); });
+      sc.PREMIUM_ART.forEach(function (id) { var g = findGift(id); if (g) options.push('<option value="gift:' + esc(id) + '">' + esc(giftLabel(g)) + "</option>"); });
+    }
+    return '<div class="vkg-owner"><h2>' + esc(tr("Grant Viktorychs")) + '</h2><input data-own="handle" placeholder="' + esc(tr("Recipient")) + '" aria-label="' + esc(tr("Recipient")) + '"><input data-own="amount" type="number" min="1" max="100000" inputmode="numeric" placeholder="' + esc(tr("Amount")) + '" aria-label="' + esc(tr("Amount")) + '"><button type="button" data-gift="own-points">' + esc(tr("Grant")) + "</button><h2>" + esc(tr("Grant a test item")) + '</h2><input data-own="item-handle" placeholder="' + esc(tr("Recipient")) + '" aria-label="' + esc(tr("Recipient")) + '"><select data-own="item" aria-label="' + esc(tr("Item")) + '">' + options.join("") + '</select><button type="button" data-gift="own-item">' + esc(tr("Grant")) + "</button>" + (ownerNote ? '<p class="points-note">' + esc(ownerNote) + "</p>" : "") + "</div>";
+  }
+
+  function storeLinks() {
+    return '<nav class="vkg-links"><a href="#/store/stickers">' + esc(tr("Sticker packs")) + '</a><a href="#/store/orders">' + esc(tr("My purchases")) + '</a><a href="#/store/terms">' + esc(tr("Purchase terms")) + "</a>" + (shop && shop.owner ? '<a href="#/store/owner">' + esc(tr("Owner tools")) + "</a>" : "") + "</nav>";
+  }
+
+  function paymentsNote() {
+    if (!shop || paymentsOn()) return "";
+    return '<p class="vkg-soon">' + esc(tr("Card payments are coming soon. You can already pay with Viktorychs.")) + "</p>";
+  }
+
+  /* The same sticky X page header as Settings and Notifications: back arrow, title, icon buttons. */
   function headerHtml(title, backHref) {
     var back = backHref
-      ? '<a class="vkg-btn" href="' + esc(backHref) + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>"
-      : '<button type="button" class="vkg-btn" data-act="back" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</button>";
+      ? '<a class="icon-btn" href="' + esc(backHref) + '" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</a>"
+      : '<button type="button" class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '">' + icon("back") + "</button>";
     if (store.searching) {
-      return '<div class="topbar vkg-top"><div class="vkg-head">' + back + '<input class="vkg-search" type="search" data-gift-search value="' + esc(store.query) + '" placeholder="' + esc(tr("Search gifts")) + '" aria-label="' + esc(tr("Search gifts")) + '" autocomplete="off" enterkeyhint="search"><button type="button" class="vkg-btn" data-gift="search-close" aria-label="' + esc(tr("Close")) + '">' + icon("close") + "</button></div></div>";
+      return '<div class="topbar vkg-top"><div class="page-head">' + back + '<input class="vkg-search" type="search" data-gift-search value="' + esc(store.query) + '" placeholder="' + esc(tr("Search gifts")) + '" aria-label="' + esc(tr("Search gifts")) + '" autocomplete="off" enterkeyhint="search"><button type="button" class="icon-btn" data-gift="search-close" aria-label="' + esc(tr("Close")) + '">' + icon("close") + "</button></div></div>";
     }
-    return '<div class="topbar vkg-top"><div class="vkg-head">' + back + '<h1 class="vkg-title">' + esc(title) + '</h1><a class="vkg-btn" href="#/store/history" aria-label="' + esc(tr("Gift history")) + '">' + icon("clock") + '</a><button type="button" class="vkg-btn" data-gift="search" aria-label="' + esc(tr("Search gifts")) + '">' + icon("search") + "</button></div></div>";
+    return '<div class="topbar vkg-top"><div class="page-head">' + back + '<h1 class="grow">' + esc(title) + '</h1><a class="icon-btn" href="#/store/history" aria-label="' + esc(tr("Gift history")) + '">' + icon("clock") + '</a><button type="button" class="icon-btn" data-gift="search" aria-label="' + esc(tr("Search gifts")) + '">' + icon("search") + "</button></div></div>";
   }
 
   function chipsHtml() {
@@ -374,7 +621,7 @@
     loadHistory();
     var sent = store.histTab === "sent";
     var list = sent ? store.sent : store.received;
-    var tabs = '<div class="vkg-tabs" role="tablist"><button type="button" role="tab" data-gift="hist" data-tab="received" aria-selected="' + (!sent) + '"' + (!sent ? ' class="is-on"' : "") + ">" + esc(tr("Received")) + '</button><button type="button" role="tab" data-gift="hist" data-tab="sent" aria-selected="' + sent + '"' + (sent ? ' class="is-on"' : "") + ">" + esc(tr("Sent")) + "</button></div>";
+    var tabs = '<div class="tabs-bar"><div class="tabs" role="tablist"><button type="button" role="tab" class="tab' + (!sent ? " on" : "") + '" data-gift="hist" data-tab="received" aria-selected="' + (!sent) + '"><span>' + esc(tr("Received")) + '</span></button><button type="button" role="tab" class="tab' + (sent ? " on" : "") + '" data-gift="hist" data-tab="sent" aria-selected="' + sent + '"><span>' + esc(tr("Sent")) + "</span></button></div></div>";
     var body;
     if (list === "loading" || list == null) body = '<p class="points-note vkg-empty">' + esc(tr("Loading…")) + "</p>";
     else if (!list.length) body = '<p class="points-note vkg-empty">' + esc(sent ? tr("You haven’t sent any gifts yet.") : tr("No gifts yet")) + "</p>";
@@ -384,7 +631,9 @@
 
   function storePage(route) {
     var sub = route && route.sub ? String(route.sub) : "";
+    if (!shop) loadShop();
     if (sub !== store.sub) {
+      if (sub === "orders") orders = null;
       store.sub = sub;
       store.searching = false;
       store.query = "";
@@ -396,30 +645,98 @@
     var backHref = sub ? "#/store" : "";
     if (store.searching) body = '<div data-gift-results>' + searchResults() + "</div>";
     else if (sub === "history") body = historyHtml();
-    else if (sub) {
+    else if (sub === "stickers") body = balanceLine() + paymentsNote() + stickersHtml();
+    else if (sub === "orders") body = ordersHtml(route);
+    else if (sub === "terms") body = termsHtml();
+    else if (sub === "owner") body = ownerHtml();
+    else if (sub === "limited") {
+      var rare = limitedItems();
+      body = rare.length ? '<div class="vkg-grid">' + rare.map(tile).join("") + "</div>" : '<p class="points-note vkg-empty">' + esc(tr("No gifts here right now.")) + "</p>";
+    } else if (sub) {
       var items = giftsFor(sub);
       body = items.length ? '<div class="vkg-grid">' + items.map(tile).join("") + "</div>" : '<p class="points-note vkg-empty">' + esc(tr("No gifts here right now.")) + "</p>";
     } else if (!c || !allGifts().length || !allGifts()[0].cats) {
       body = '<section class="vkg-shelf"><div class="vkg-row">' + allGifts().map(tile).join("") + "</div></section>";
     } else {
       var shelves = c.activeSeasons().concat(["trending"]).concat(c.CATEGORIES.filter(function (id) { return id !== "trending"; }));
-      body = chipsHtml() + balanceLine() + shelves.map(shelfHtml).join("");
+      body = chipsHtml() + balanceLine() + storeLinks() + paymentsNote() + limitedShelf() + stickerShelf() + shelves.map(shelfHtml).join("");
     }
     var credit = '<p class="vkg-credit">' + esc(tr("Gift art: original illustrations made for ViktorychApp, plus Noto Emoji by Google (Apache 2.0, animated CC BY 4.0).")) + "</p>";
     return '<div class="store-page vkg-page">' + headerHtml(title, backHref) + body + credit + "</div>";
   }
 
+  function sheetItem() {
+    if (!sheet) return null;
+    return priceOf(sheet.kind, sheet.giftId);
+  }
+
+  function sheetPayOptions(item) {
+    var out = [];
+    if (!item) return out;
+    if (item.tier === "free") return ["free"];
+    if (item.viktorychs > 0) out.push("viktorychs");
+    if (item.cents > 0 && sheet.mode === "direct") out.push("money");
+    return out;
+  }
+
+  function pickPay() {
+    var options = sheetPayOptions(sheetItem());
+    if (options.indexOf(sheet.pay) < 0) sheet.pay = options[0] || "viktorychs";
+  }
+
+  function pill(act, on, label) {
+    return '<button type="button" class="vkg-pill' + (on ? " is-on" : "") + '" data-gift="' + act + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(label) + "</button>";
+  }
+
   function sheetHtml() {
     if (!sheet) return "";
-    var gift = findGift(sheet.giftId);
-    return '<div class="gift-sheet" role="dialog" aria-modal="true" aria-label="' + esc(tr("Send a gift")) + '"><div class="gift-sheet-bar"><button type="button" data-gift="close" aria-label="' + esc(tr("Close")) + '">×</button><h2>' + esc(tr("Send a gift")) + '</h2><button type="button" data-gift="confirm">' + esc(tr("Send")) + '</button></div><div class="gift-sheet-body">' +
-      (gift ? '<p class="gift-preview"><span class="vkg-art is-big"' + hueStyle(gift) + '>' + artHtml(gift, true) + "</span><b>" + esc(giftLabel(gift)) + "</b>" + priceLabel(gift) + "</p>" : "") +
-      '<input data-gift-field="handle" value="' + esc(sheet.handle || "") + '" placeholder="' + esc(tr("Recipient")) + '" aria-label="' + esc(tr("Recipient")) + '">' +
+    pickPay();
+    var item = sheetItem();
+    var stickers = sheet.kind === "stickers";
+    var gift = stickers ? null : findGift(sheet.giftId);
+    var pack = stickers && storeLib() ? storeLib().stickerPack(sheet.giftId) : null;
+    var owned = stickers && ownedPacks().indexOf(sheet.giftId) >= 0;
+    if (owned) sheet.forMe = false;
+    var left = gift && gift.limited ? limitedLeft(gift.id) : null;
+    var soldOut = left === 0;
+    var title = sheet.forMe ? tr("Buy for me") : (stickers ? tr("Gift stickers") : tr("Send a gift"));
+    var payMoney = sheet.pay === "money";
+    var moneyOff = payMoney && !paymentsOn();
+    var confirmLabel = sheet.busy ? tr("Loading…") : moneyOff ? tr("Coming soon") : payMoney ? tr("Pay {price}", { price: money(item ? item.cents : 0) }) : sheet.forMe ? tr("Buy") : tr("Send");
+    var disabled = sheet.busy || moneyOff || soldOut;
+    var preview = "";
+    if (gift) preview = '<p class="gift-preview"><span class="vkg-art is-big"' + hueStyle(gift.base ? { id: gift.base } : gift) + '>' + artHtml(gift, true) + tierMark(item) + "</span><b>" + esc(giftLabel(gift)) + "</b>" + priceTags(item) + (gift.limited ? '<span class="vkg-limited is-inline">' + esc(left == null ? tr("Limited") : left > 0 ? tr("{n} left", { n: String(left) }) : tr("Sold out")) + "</span>" : "") + "</p>";
+    if (pack) preview = '<div class="gift-preview is-pack"><b>' + esc(tr(pack.name)) + "</b>" + priceTags(item) + '<div class="vks-grid">' + pack.items.map(function (id) { return '<span class="vks-cell">' + stickerArt(id) + "</span>"; }).join("") + "</div></div>";
+    var modes = sheet.mode === "direct" && !(item && item.tier === "free" && !stickers) ? '<div class="vkg-pills" role="group">' + pill("as-gift", !sheet.forMe, tr("Send as gift")) + (owned ? "" : pill("for-me", sheet.forMe, tr("Buy for me"))) + "</div>" : "";
+    var recipient = sheet.forMe ? "" :
+      '<input data-gift-field="handle" value="' + esc(sheet.handle || "") + '" placeholder="' + esc(tr("Recipient")) + '" aria-label="' + esc(tr("Recipient")) + '" autocapitalize="off" autocomplete="off">' +
       '<textarea data-gift-field="message" placeholder="' + esc(tr("Add a message")) + '" aria-label="' + esc(tr("Add a message")) + '">' + esc(sheet.message || "") + "</textarea>" +
       '<label><input type="radio" name="gift-privacy" data-gift-privacy="public"' + (sheet.privacy === "public" ? " checked" : "") + "> " + esc(tr("Public gift")) + "</label>" +
       '<label><input type="radio" name="gift-privacy" data-gift-privacy="private"' + (sheet.privacy === "private" ? " checked" : "") + "> " + esc(tr("Only the recipient sees who sent it")) + "</label>" +
-      '<label><input type="radio" name="gift-privacy" data-gift-privacy="anonymous"' + (sheet.privacy === "anonymous" ? " checked" : "") + "> " + esc(tr("Anonymous gift")) + "</label>" +
-      (errorText ? '<p class="gift-error">' + esc(errorText) + "</p>" : "") +
+      '<label><input type="radio" name="gift-privacy" data-gift-privacy="anonymous"' + (sheet.privacy === "anonymous" ? " checked" : "") + "> " + esc(tr("Anonymous gift")) + "</label>";
+    var options = sheetPayOptions(item);
+    var pay = "";
+    if (options.length && options[0] !== "free") {
+      pay = '<fieldset class="vkg-pay"><legend>' + esc(tr("Pay with")) + "</legend>" + options.map(function (id) {
+        var label = id === "money"
+          ? '<span class="vk-money">' + esc(money(item.cents)) + "</span>" + (paymentsOn() ? '<span class="vk-sub">' + esc(tr("Card, Apple Pay or Google Pay")) + "</span>" : '<span class="vk-sub">' + esc(tr("Coming soon")) + "</span>")
+          : vks(item.viktorychs) + '<span class="vk-sub">' + esc(tr("You have {n} Viktorychs", { n: String(balance == null ? 0 : balance) })) + "</span>";
+        return '<label class="vkg-payopt' + (sheet.pay === id ? " is-on" : "") + '"><input type="radio" name="gift-pay" data-gift-pay="' + id + '"' + (sheet.pay === id ? " checked" : "") + ">" + label + "</label>";
+      }).join("") + "</fieldset>";
+    }
+    var note = "";
+    if (payMoney) {
+      var days = String(storeLib() ? storeLib().REFUND_DAYS : 14);
+      var consent = stickers || sheet.forMe
+        ? tr("I agree to the purchase terms and want it delivered now. I understand the {n}-day right to cancel ends at delivery.", { n: days })
+        : tr("I agree to the purchase terms. An unopened gift can be refunded within {n} days.", { n: days });
+      note = '<label class="vkg-consent"><input type="checkbox" data-gift-accept' + (sheet.accept ? " checked" : "") + "> " + esc(consent) + '</label><a class="vkg-terms-link" href="#/store/terms" data-gift="terms">' + esc(tr("Purchase terms")) + "</a>";
+    } else if (options[0] !== "free") {
+      note = '<p class="vkg-fine">' + esc(tr("Viktorychs have no cash value and can’t be refunded once spent.")) + ' <a href="#/store/terms" data-gift="terms">' + esc(tr("Purchase terms")) + "</a></p>";
+    }
+    return '<div class="gift-sheet" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="gift-sheet-bar"><button type="button" class="icon-btn" data-gift="close" aria-label="' + esc(tr("Close")) + '">' + icon("close") + '</button><h2>' + esc(title) + '</h2><button type="button" data-gift="confirm"' + (disabled ? ' disabled aria-disabled="true"' : "") + ">" + esc(confirmLabel) + '</button></div><div class="gift-sheet-body">' +
+      preview + modes + recipient + pay + note +
+      (errorText ? '<p class="gift-error" role="alert">' + esc(errorText) + "</p>" : "") +
       "</div></div>";
   }
 
@@ -429,7 +746,12 @@
     var grid = (pack.gifts || []).map(function (gift) {
       var who = gift.sender && gift.sender.name ? gift.sender.name : (gift.sender && gift.sender.handle ? gift.sender.handle : tr("Anonymous gift"));
       var hide = mine ? '<button type="button" data-gift="hide" data-id="' + esc(gift.id) + '">' + esc(gift.hidden ? tr("Show gift") : tr("Hide gift")) + "</button>" + (root.GiftNFT ? root.GiftNFT.buttonHtml(gift) : "") : "";
-      return '<article class="gift-tile' + (gift.hidden ? " is-hidden" : "") + '"><span class="gift-art">' + artHtml(gift, false) + '</span><b>' + esc(who) + "</b><p>" + esc(gift.message || "") + "</p>" + hide + "</article>";
+      var edition = gift.edition ? '<span class="vkg-edition">' + esc(tr("No. {n}", { n: String(gift.edition) })) + "</span>" : "";
+      if (gift.wrapped) {
+        var open = mine ? '<button type="button" class="gift-unwrap" data-gift="unwrap" data-id="' + esc(gift.id) + '">' + esc(tr("Open gift")) + "</button>" : "";
+        return '<article class="gift-tile is-wrapped"><span class="gift-art"><span class="gift-box" aria-hidden="true">' + icon("birthday") + '</span></span><b>' + esc(mine ? who : tr("Wrapped gift")) + "</b>" + open + "</article>";
+      }
+      return '<article class="gift-tile' + (gift.hidden ? " is-hidden" : "") + '"><span class="gift-art">' + artHtml(gift, false) + edition + '</span><b>' + esc(who) + "</b><p>" + esc(gift.message || "") + "</p>" + hide + "</article>";
     }).join("");
     var send = mine ? "" : '<button type="button" class="gift-send" data-gift="open" data-handle="' + esc(viewedHandle) + '">' + esc(tr("Send a gift")) + "</button>";
     var prefs = mine ? '<div class="gift-prefs"><label>' + esc(tr("Who can send you gifts")) + '</label><select data-gift-who><option value="everyone">' + esc(tr("Everyone")) + '</option><option value="followers">' + esc(tr("Followers")) + '</option><option value="nobody">' + esc(tr("Nobody")) + '</option><option value="list">' + esc(tr("Custom lists")) + '</option></select>' + (window.AudienceLists && window.AudienceLists.checksHtml ? window.AudienceLists.checksHtml([]) : "") + '<label class="gift-check"><input type="checkbox" data-gift-hide-tab' + (pack.hideTab ? " checked" : "") + "> " + esc(tr("Hide the Gifts tab")) + "</label></div>" : "";
@@ -475,6 +797,11 @@
   function openSheet(handle, extra) {
     extra = extra || {};
     sheet = {
+      kind: extra.kind === "stickers" ? "stickers" : "gift",
+      forMe: false,
+      pay: "viktorychs",
+      accept: false,
+      busy: false,
       giftId: (catalog[0] && catalog[0].id) || "heart",
       handle: handle || "",
       message: "",
@@ -484,38 +811,100 @@
     };
     errorText = "";
     loadCatalog().then(redraw);
+    if (!shop) loadShop();
     redraw();
   }
 
+  function errorFor(code, forMe) {
+    if (code === "birthday") return tr("That gift is only for their birthday.");
+    if (code === "free_limit") return tr("You’ve used today’s free gifts. Try again tomorrow.");
+    if (code === "balance") return tr("Not enough Viktorychs for this gift.");
+    if (code === "blocked") return tr("You can’t send gifts to this account.");
+    if (code === "closed" || code === "followers") return tr("This person isn’t accepting gifts from you.");
+    if (code === "owned") return forMe ? tr("You already have this sticker pack.") : tr("They already have this sticker pack.");
+    if (code === "sold_out") return tr("Sold out");
+    if (code === "ended") return tr("This limited edition has ended.");
+    if (code === "rate_limited") return tr("Too many gifts right now. Try again later.");
+    if (code === "payments_off") return tr("Card payments are coming soon. You can already pay with Viktorychs.");
+    if (code === "terms") return tr("Please accept the purchase terms.");
+    if (code === "money_only") return tr("This item can only be bought with money.");
+    if (code === "recipient") return tr("Couldn’t find that account.");
+    if (code === "provider") return tr("The payment page couldn’t open. Try again later.");
+    return tr("Couldn’t send that gift.");
+  }
+
+  function returnUrl() {
+    try { return root.location.origin + root.location.pathname; } catch (err) { return ""; }
+  }
+
   function confirmSend() {
-    if (!sheet) return;
+    if (!sheet || sheet.busy) return;
     var auth = token();
     if (!auth) { errorText = tr("Sign in"); redraw(); return; }
-    call("/v1/gifts/send", {
-      method: "POST",
-      token: auth,
-      body: { giftId: sheet.giftId, handle: sheet.handle, message: sheet.message, privacy: sheet.privacy, mode: sheet.mode || "direct", parentId: sheet.parentId || "" }
-    }).then(function (body) {
+    pickPay();
+    var current = sheet;
+    var item = sheetItem();
+    var gift = current.kind === "gift" ? findGift(current.giftId) : null;
+    if (!current.forMe && !String(current.handle || "").trim()) { errorText = tr("Couldn’t find that account."); redraw(); return; }
+    if (current.pay === "money" && !current.accept) { errorText = errorFor("terms"); redraw(); return; }
+    var target = current.forMe ? "" : current.handle;
+    var path;
+    var payload;
+    if (current.pay === "money") {
+      path = "/v1/store/checkout";
+      payload = { kind: current.kind, itemId: current.giftId, handle: target, message: current.message, privacy: current.privacy, accept: true, returnUrl: returnUrl() };
+    } else if (current.kind === "gift" && !current.forMe && !(gift && gift.limited)) {
+      path = "/v1/gifts/send";
+      payload = { giftId: current.giftId, handle: current.handle, message: current.message, privacy: current.privacy, mode: current.mode || "direct", parentId: current.parentId || "" };
+    } else {
+      path = "/v1/store/buy";
+      payload = { kind: current.kind, itemId: current.giftId, handle: target, message: current.message, privacy: current.privacy };
+    }
+    current.busy = true;
+    errorText = "";
+    redraw();
+    call(path, { method: "POST", token: auth, body: payload }).then(function (body) {
+      current.busy = false;
       if (!body || (body.status && body.status >= 400)) {
-        var code = body && body.error;
-        errorText = code === "birthday" ? tr("That gift is only for their birthday.")
-          : code === "free_limit" ? tr("You’ve used today’s free gifts. Try again tomorrow.")
-          : code === "balance" ? tr("Not enough Viktorychs for this gift.")
-          : tr("Couldn’t send that gift.");
-        redraw();
+        if (body && body.balance != null) balance = Number(body.balance) || 0;
+        if (sheet === current) { errorText = errorFor(body && body.error, current.forMe); redraw(); }
+        return;
+      }
+      if (current.pay === "money" && body.url) {
+        root.location.assign(body.url);
         return;
       }
       if (body.balance != null) balance = Number(body.balance) || 0;
       store.sent = null;
-      var mode = sheet.mode;
-      var parentId = sheet.parentId;
-      sheet = null;
-      if (mode === "reply" && body.post && root.ProfileGifts && root.ProfileGifts.onReply) root.ProfileGifts.onReply(parentId, body.post);
+      orders = null;
+      if (item && (item.kind === "stickers" || (gift && gift.limited))) loadShop();
+      if (sheet === current) sheet = null;
+      if (current.mode === "reply" && body.post && root.ProfileGifts && root.ProfileGifts.onReply) root.ProfileGifts.onReply(current.parentId, body.post);
+      if (current.forMe && current.kind === "stickers") root.location.hash = "#/store/stickers";
       redraw();
     }).catch(function () {
-      errorText = tr("Couldn’t send that gift.");
-      redraw();
+      current.busy = false;
+      if (sheet === current) { errorText = tr("Couldn’t send that gift."); redraw(); }
     });
+  }
+
+  function ownerAction(act) {
+    var field = function (name) { var el = document.querySelector('[data-own="' + name + '"]'); return el ? String(el.value || "").trim() : ""; };
+    var req;
+    if (act === "own-points") {
+      req = call("/v1/viktorychs/grant", { method: "POST", token: token(), body: { handle: field("handle"), amount: Number(field("amount")) || 0 } });
+    } else {
+      var pick = field("item").split(":");
+      req = call("/v1/store/grant", { method: "POST", token: token(), body: { handle: field("item-handle"), kind: pick[0], itemId: pick[1] || "" } });
+    }
+    ownerNote = tr("Loading…");
+    redraw();
+    req.then(function (body) {
+      ownerNote = body && (!body.status || body.status < 400) ? tr("Done") : tr("Couldn’t do that.");
+      if (body && body.balance != null) balance = Number(body.balance) || 0;
+      loadShop();
+      redraw();
+    }).catch(function () { ownerNote = tr("Couldn’t do that."); redraw(); });
   }
 
   function onClick(event) {
@@ -539,6 +928,34 @@
       return true;
     }
     if (act === "confirm") { confirmSend(); return true; }
+    if (act === "pack") {
+      openSheet("", { mode: "direct", kind: "stickers" });
+      sheet.giftId = el.getAttribute("data-pack-id") || "";
+      sheet.forMe = ownedPacks().indexOf(sheet.giftId) < 0;
+      redraw();
+      return true;
+    }
+    if (act === "as-gift" || act === "for-me") { if (sheet) { sheet.forMe = act === "for-me"; errorText = ""; } redraw(); return true; }
+    if (act === "terms") { sheet = null; errorText = ""; root.location.hash = "#/store/terms"; redraw(); return true; }
+    if (act === "unwrap") {
+      var sendId = el.getAttribute("data-id");
+      el.disabled = true;
+      call("/v1/store/gifts/" + sendId + "/open", { method: "POST", token: token() }).then(function () {
+        var account = currentAccount();
+        if (account) { account.giftsLoaded = false; ensure(account); }
+      }).catch(function () { el.disabled = false; });
+      return true;
+    }
+    if (act === "refund") {
+      el.disabled = true;
+      call("/v1/store/orders/" + el.getAttribute("data-id") + "/refund", { method: "POST", token: token() }).then(function (body) {
+        if (body && body.status >= 400) el.disabled = false;
+        orders = null;
+        redraw();
+      }).catch(function () { el.disabled = false; });
+      return true;
+    }
+    if (act === "own-points" || act === "own-item") { ownerAction(act); return true; }
     if (act === "search") { store.searching = true; store.query = ""; redraw(); focusSearch(); return true; }
     if (act === "search-close") { store.searching = false; store.query = ""; redraw(); return true; }
     if (act === "hist") { store.histTab = el.getAttribute("data-tab") === "sent" ? "sent" : "received"; redraw(); return true; }
@@ -569,6 +986,9 @@
 
   if (typeof document !== "undefined") {
     document.addEventListener("click", onClick, true);
+    document.addEventListener("keydown", function (event) {
+      if (sheet && (event.key === "Escape" || event.key === "Esc") && !sheet.busy) { sheet = null; errorText = ""; redraw(); }
+    });
     /* Art fallback: animated -> static PNG -> the emoji character. */
     document.addEventListener("error", function (event) {
       var img = event.target;
@@ -581,7 +1001,10 @@
       span.textContent = c ? c.emojiChar(cp) : "";
       if (img.parentNode) img.parentNode.replaceChild(span, img);
     }, true);
-    if (typeof window !== "undefined") window.addEventListener("giftcatalog", function () { redraw(); });
+    if (typeof window !== "undefined") {
+      window.addEventListener("giftcatalog", function () { redraw(); });
+      window.addEventListener("storecatalog", function () { redraw(); });
+    }
     document.addEventListener("input", function (event) {
       var el = event.target;
       if (el && el.hasAttribute && el.hasAttribute("data-gift-search")) {
@@ -598,6 +1021,14 @@
       if (!el || !el.getAttribute) return;
       if (el.getAttribute("data-gift-privacy")) {
         if (sheet) sheet.privacy = el.getAttribute("data-gift-privacy");
+        return;
+      }
+      if (el.getAttribute("data-gift-pay")) {
+        if (sheet) { sheet.pay = el.getAttribute("data-gift-pay"); errorText = ""; redraw(); }
+        return;
+      }
+      if (el.hasAttribute("data-gift-accept")) {
+        if (sheet) sheet.accept = !!el.checked;
         return;
       }
       if (el.hasAttribute("data-gift-who") || el.hasAttribute("data-gift-hide-tab")) {
@@ -639,6 +1070,19 @@
     previewStore: function (items, route) { catalog = items || catalog; return storePage(route); },
     artHtml: artHtml,
     findGift: findGift,
+    coin: coin,
+    balance: function () { return balance; },
+    balanceHtml: function () { return balance == null ? "" : '<span class="vk-amount">' + coin() + '<b data-points-balance>' + esc(String(balance)) + "</b></span>"; },
+    stickerHtml: stickerHtml,
+    stickerPicker: stickerPicker,
+    renderStickers: renderStickers,
+    ownedStickerPacks: ownedPacks,
+    openStore: function (kind, id, forMe) {
+      openSheet("", { mode: "direct", kind: kind });
+      sheet.giftId = id;
+      sheet.forMe = !!forMe;
+      redraw();
+    },
     overlay: function () { return sheetHtml(); },
     previewPoints: function (pack) {
       balance = pack.balance;

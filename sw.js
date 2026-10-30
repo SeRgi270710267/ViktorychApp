@@ -4,7 +4,7 @@ const VERSION = "viktorych-a212-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T14:25:57Z-post-actions
+// cache-bust: 2026-10-30T14:38:32Z-post-actions
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -141,6 +141,7 @@ const SHELL_FILES = [
   "./reactions.js",
   "./community-notes.js",
   "./shared/gift-catalog.js",
+  "./shared/store-catalog.js",
   "./badges.js",
   "./badges.css",
   "./shared/local-budget.js",
