@@ -74,6 +74,7 @@ import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawb
 import { GAMES_SCHEMA, handleGames } from "./games.js";
 import { SERVERS_SCHEMA, handleServers } from "./servers.js";
 import { REACTION_SCHEMA, handleReactions } from "./reactions.js";
+import { handleCommunityNotes, runCommunityNotes } from "./community-notes.js";
 import { handleP2p } from "./p2p.js";
 import { APP_STORIES_SCHEMA, handleAppStories, sweepExpiredStories } from "./app-stories.js";
 import { NOTES_SCHEMA, handleNotes, sweepExpiredNotes } from "./notes.js";
@@ -5544,6 +5545,10 @@ async function route(request, env, ctx) {
     const signaled = await handleP2p(request, env, path, url, recoveryDeps());
     if (signaled) return signaled;
   }
+  if (path.startsWith("/v1/cnotes")) {
+    const noted = await handleCommunityNotes(request, env, path, url, Object.assign(recoveryDeps(), { emit: emitNotification }), ctx);
+    if (noted) return noted;
+  }
   if (path.startsWith("/v1/reactions")) {
     const reacted = await handleReactions(request, env, path, url, recoveryDeps());
     if (reacted) return reacted;
@@ -5799,6 +5804,9 @@ export default {
     jobs.push(warmRender(env, at).catch(() => null));
     jobs.push(maybeBackupSettings(env, at));
     if (minute === 0) run("birthdayPoints", () => awardBirthdayBonuses(env, at));
+    // Community Notes: score and publish three times an hour, and only when
+    // a rating, a note or the X mirror changed since the last run.
+    if (minute % 20 === 3 && !off.communityNotes) run("communityNotes", () => runCommunityNotes(env, at, emitNotification));
     const all = Promise.allSettled(jobs).then((results) => {
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") logError("cron", results[i].reason);
