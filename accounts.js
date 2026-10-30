@@ -1060,7 +1060,25 @@
     if (code === "bad_expiry") return tr("Pick a time between 15 minutes and 90 days from now.");
     if (code === "temporary_account") return tr("Temporary accounts can't do this. Save the account first.");
     if (code === "temporary_dm_limit") return tr("Temporary accounts can only send a few messages a day to people they don't know.");
+    if (code === "timeout") return tr("The server took too long to answer. Try again in a minute.");
+    if (code === "turnstile") return tr("The security check didn't pass. Reload the page and try again.");
     return tr("Something went wrong. Try again.");
+  }
+  /* Sign-up answers in words that say what happened: a stalled or failing
+     server, a limit, or the plain code when nothing else fits. */
+  function signupError(res, temporary) {
+    res = res || {};
+    var code = res.error || "";
+    var status = Number(res.status) || 0;
+    if (status === 429) {
+      if (temporary && code !== "rate_limited") return tr("Too many temporary accounts today. Try again tomorrow.");
+      return tr("Too many attempts. Try again later.");
+    }
+    if (code === "timeout" || code === "all_endpoints_failed" || code === "unavailable") return tr("Sign-up is temporarily unavailable. Try again in a few minutes.");
+    if (code === "not_configured") return tr("Sign-up is temporarily unavailable. Try again in a few minutes.");
+    var text = errorMessage(code);
+    if (text === tr("Something went wrong. Try again.")) return tr("Something went wrong (error {code}). Try again.", { code: code || status || "?" });
+    return text;
   }
   function layer() {
     return document.getElementById("account-layer");
@@ -1319,6 +1337,7 @@
     return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + quiet + invalid + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
   }
   function errorHtml() {
+    if (!errorText && authBusy && signupSlow) return '<p class="acct-wait" id="acct-error" role="status">' + esc(tr("The server is slow. Still trying…")) + "</p>";
     return '<p class="acct-error" id="acct-error"' + (errorText ? ' role="alert"' : "") + ">" + esc(errorText) + "</p>";
   }
   function nextButton(act, label, extraDisabled) {
@@ -2551,6 +2570,63 @@ function signupPayload() {
   function offlineMessage() {
     return tr("Can't reach the server. Check your connection and try again.");
   }
+  /* Sign-up, sent so a lost answer never ends in an error. Each sign-up
+     carries a random key that stays until it succeeds or its handle
+     changes. When the answer does not come back (the server stalled or the
+     line dropped), the app gets a new check and sends it once more, then
+     usually to the next server in the pool. The server hands back the
+     account the first try made instead of making a second one
+     (worker/src/signup-replay.js). */
+  var signupKeys = {};
+  var signupSlow = false;
+  var SIGNUP_TRY_MS = [20000, 45000];
+  function newSignupKey() {
+    var bytes = new Uint8Array(18);
+    try { crypto.getRandomValues(bytes); } catch (err) { for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256); }
+    return Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+  }
+  function signupRetryable(res) {
+    if (!res) return true;
+    var code = res.error || "";
+    if (code === "timeout" || code === "all_endpoints_failed" || code === "unavailable") return true;
+    return Number(res.status) >= 500 && code !== "not_configured";
+  }
+  function onlineNow() {
+    try { return navigator.onLine !== false; } catch (err) { return true; }
+  }
+  function postSignup(body, viewName) {
+    var mark = body.temporary ? "temp" : "full:" + String(body.handle || "").toLowerCase() + ":" + (body.profileLess ? 1 : 0);
+    if (!signupKeys[mark]) signupKeys[mark] = newSignupKey();
+    body.signupKey = signupKeys[mark];
+    var tries = 0;
+    var plan = Array.isArray(config().signupTryMs) && config().signupTryMs.length ? config().signupTryMs : SIGNUP_TRY_MS;
+    signupSlow = false;
+    function again() {
+      signupSlow = true;
+      if (view === viewName) paint();
+      return once();
+    }
+    function once() {
+      var limit = plan[Math.min(tries, plan.length - 1)];
+      tries += 1;
+      return ensureGuard().then(function (pow) {
+        body.pow = pow;
+        body.fax = faxValue();
+        if (tries > 1 && Object.prototype.hasOwnProperty.call(body, "turnstileToken")) body.turnstileToken = turnstileToken() || body.turnstileToken;
+        return api("/v1/signup", { method: "POST", body: body, timeoutMs: limit });
+      }).then(function (res) {
+        if (tries < plan.length && signupRetryable(res) && onlineNow()) return again();
+        signupSlow = false;
+        if (res && res.status === 201) delete signupKeys[mark];
+        return res;
+      }, function (err) {
+        if (tries < plan.length && onlineNow()) return again();
+        signupSlow = false;
+        throw err;
+      });
+    }
+    return once();
+  }
   function finishPending() {
     if (authBusy || !form.saved) return;
     var pending = readPending();
@@ -2581,11 +2657,7 @@ function signupPayload() {
     if (!body) return;
     authBusy = true;
     paint();
-    ensureGuard().then(function (pow) {
-      body.pow = pow;
-      body.fax = faxValue();
-      return api("/v1/signup", { method: "POST", body: body });
-    }).then(function (res) {
+    postSignup(body, "signup").then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.accountNumber) {
         /* The server already follows the owner's accounts for a new account.
@@ -2608,8 +2680,7 @@ function signupPayload() {
       }
       if (view !== "signup") return;
       if (res.error === "claim_required") form.claimOpen = true;
-      if (res.status === 429) errorText = tr("Too many attempts. Try again later.");
-      else errorText = errorMessage(res.error);
+      errorText = signupError(res, false);
       paint();
     }).catch(function () {
       authBusy = false;
@@ -5102,11 +5173,7 @@ function signupPayload() {
     var wantSaver = dataSaverOn();
     authBusy = true;
     paint();
-    ensureGuard().then(function (pow) {
-      body.pow = pow;
-      body.fax = faxValue();
-      return api("/v1/signup", { method: "POST", body: body });
-    }).then(function (res) {
+    postSignup(body, "temp").then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.account) {
         var id = res.account.publicId || "";
@@ -5124,7 +5191,7 @@ function signupPayload() {
         return;
       }
       if (view !== "temp") return;
-      errorText = res.status === 429 && res.error !== "rate_limited" ? tr("Too many temporary accounts today. Try again tomorrow.") : errorMessage(res.error);
+      errorText = signupError(res, true);
       paint();
     }).catch(function () {
       authBusy = false;
