@@ -278,6 +278,11 @@
     summary: summary,
     pageHtml: pageHtml,
     setupHtml: setupHtml,
+    // For first-time setup: is the switch offered, and turn it on or off.
+    available: function () { return switchOn() && !!owner(); },
+    setEnabled: function (on) {
+      return put({ enabled: !!on }).then(function () { return mine().enabled === !!on; }, function () { return false; });
+    },
     _normalize: normalize
   };
 })(typeof window !== "undefined" ? window : this);

@@ -128,6 +128,7 @@
       privateLists: "Keep follow lists private",
       discover: "Suggest me to others",
       online: "Show when I'm online",
+      friendsSwitch: "Friends and friend requests",
       saveFail: "Couldn't save. Try again.",
       lookTitle: "Make it yours",
       lookSub: "Pick a color and text size.",
@@ -248,6 +249,7 @@
       privateLists: "Listas de seguidos privadas",
       discover: "Sugerirme a otras personas",
       online: "Mostrar cuándo estoy en línea",
+      friendsSwitch: "Amigos y solicitudes de amistad",
       saveFail: "No se pudo guardar. Inténtalo de nuevo.",
       lookTitle: "Hazlo tuyo",
       lookSub: "Elige un color y el tamaño del texto.",
@@ -368,6 +370,7 @@
       privateLists: "फ़ॉलो सूचियाँ निजी रखें",
       discover: "दूसरों को मेरा सुझाव दें",
       online: "दिखाएँ कि मैं कब ऑनलाइन हूँ",
+      friendsSwitch: "दोस्त और फ़्रेंड रिक्वेस्ट",
       saveFail: "सहेजा नहीं जा सका। फिर से कोशिश करें।",
       lookTitle: "इसे अपना बनाएँ",
       lookSub: "रंग और टेक्स्ट का आकार चुनें।",
@@ -488,6 +491,7 @@
       privateLists: "Скрыть списки подписок",
       discover: "Предлагать меня другим",
       online: "Показывать, когда я в сети",
+      friendsSwitch: "Друзья и запросы в друзья",
       saveFail: "Не удалось сохранить. Попробуйте ещё раз.",
       lookTitle: "Под себя",
       lookSub: "Выберите цвет и размер текста.",
@@ -1077,6 +1081,10 @@
       var pr = window.ViktorychPresence;
       return !(pr && pr.seenPrivacy && pr.seenPrivacy() === "nobody");
     }
+    if (key === "friends") {
+      var F = window.ViktorychFriendsPref;
+      return !(F && F.isOff && F.isOff());
+    }
     if (key === "translateAuto") return setting("translateAuto", true) !== false;
     if (key === "haptics") return setting("haptics", true) !== false;
     if (key === "names" || key === "preview") {
@@ -1093,6 +1101,10 @@
   function noteHtml() {
     return state.note ? '<p class="oobe-note" role="status">' + esc(state.note) + "</p>" : "";
   }
+  function friendsRow() {
+    var F = window.ViktorychFriendsPref;
+    return F && F.available && F.available() && F.setEnabled ? toggleRow("friends", t("friendsSwitch")) : "";
+  }
   function privacyHtml() {
     return shell({
       step: "privacy",
@@ -1101,7 +1113,7 @@
       right: skipBtn(),
       title: t("privacyTitle"),
       sub: t("privacySub"),
-      body: '<div class="oobe-toggles">' + toggleRow("protected", t("protect")) + toggleRow("privateFollows", t("privateLists")) + toggleRow("discoverable", t("discover")) + toggleRow("online", t("online")) + "</div>" + noteHtml(),
+      body: '<div class="oobe-toggles">' + toggleRow("protected", t("protect")) + toggleRow("privateFollows", t("privateLists")) + toggleRow("discoverable", t("discover")) + toggleRow("online", t("online")) + friendsRow() + "</div>" + noteHtml(),
       foot: primary(t("next"), "next") + quiet(t("skipAll"), "skip-all")
     });
   }
@@ -1187,6 +1199,10 @@
       var value = on ? "everyone" : "nobody";
       if (pr && pr.setSeenPrivacy) pr.setSeenPrivacy(value).then(function (ok) { if (!ok) failed(); });
       else if (acc && acc.call && token) acc.call("/v1/presence", { method: "PATCH", token: token, body: { seenPrivacy: value } }).then(function (res) { if (!res || res.status !== 200) failed(); }, failed);
+      else failed();
+    } else if (key === "friends") {
+      var F = window.ViktorychFriendsPref;
+      if (F && F.setEnabled) F.setEnabled(on).then(function (ok) { if (!ok) failed(); });
       else failed();
     } else if (key === "translateAuto" || key === "haptics") {
       var patch = {};
