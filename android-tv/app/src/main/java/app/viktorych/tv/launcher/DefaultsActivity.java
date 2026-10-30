@@ -13,6 +13,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import app.viktorych.tv.R;
+import app.viktorych.tv.ime.KeyboardDefaults;
+import app.viktorych.tv.player.MediaDefaults;
+import app.viktorych.tv.search.SearchDefaults;
 
 /** "Make ViktorychTV your default": one row per TV job, each with a Set
  *  button that opens Android's own picker. Nothing changes until the user
@@ -35,7 +38,10 @@ public class DefaultsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Coming back from the TV's settings: stay on the row that sent us there.
+        int keep = list == null || list.getFocusedChild() == null ? -1 : list.indexOfChild(list.getFocusedChild()) - 2;
         render();
+        if (keep > 0) focusRow(keep);
     }
 
     @Override
@@ -86,9 +92,167 @@ public class DefaultsActivity extends Activity {
         home.setOnFocusChangeListener((v, f) -> { if (f) showHomeDetails(Defaults.isDefaultHome(this)); });
         list.addView(home);
 
+        // Video and music links (player/PlayerActivity).
+        boolean playerOn = MediaDefaults.enabled(this, MediaDefaults.player(this));
+        // The row says On or Off; how to finish picking it is in the side panel.
+        View player = row(R.drawable.mp_play_circle, getString(R.string.def_player),
+            getString(playerOn ? R.string.def_on : R.string.def_off), playerOn);
+        player.setOnClickListener(v -> {
+            MediaDefaults.enable(this, MediaDefaults.player(this), true);
+            guideFor = false;
+            render();
+            focusRow(1);
+        });
+        player.setOnFocusChangeListener((v, f) -> { if (f) showPlayerDetails(); });
+        list.addView(player, gap());
+
+        // Screensaver (player/FeedDream).
+        boolean dreamOn = MediaDefaults.enabled(this, MediaDefaults.dream(this));
+        View dream = row(R.drawable.mp_slideshow, getString(R.string.def_dream),
+            getString(dreamOn ? R.string.def_on : R.string.def_off), dreamOn);
+        dream.setOnClickListener(v -> {
+            MediaDefaults.enable(this, MediaDefaults.dream(this), true);
+            if (!MediaDefaults.openDreamSettings(this)) { render(); focusRow(2); }
+        });
+        dream.setOnFocusChangeListener((v, f) -> { if (f) showDreamDetails(); });
+        list.addView(dream, gap());
+
+        // Remote keyboard (ime/TvKeyboard).
+        boolean kbOn = KeyboardDefaults.enabled(this);
+        View keyboard = row(R.drawable.kb_keyboard, getString(R.string.def_keyboard),
+            getString(kbOn ? R.string.def_on : R.string.def_off), kbOn);
+        keyboard.setOnClickListener(v -> {
+            KeyboardDefaults.enable(this, true);
+            KeyboardDefaults.nextStep(this);
+            render();
+            focusRow(3);
+        });
+        keyboard.setOnFocusChangeListener((v, f) -> { if (f) showKeyboardDetails(); });
+        list.addView(keyboard, gap());
+
+        // Feed search (search/).
+        boolean searchOn = SearchDefaults.enabled(this);
+        View search = row(R.drawable.kb_find, getString(R.string.def_search),
+            getString(searchOn ? R.string.def_on : R.string.def_off), searchOn);
+        search.setOnClickListener(v -> {
+            boolean was = SearchDefaults.enabled(this);
+            SearchDefaults.enable(this, true);
+            if (was) SearchDefaults.open(this);
+            else { render(); focusRow(4); }
+        });
+        search.setOnFocusChangeListener((v, f) -> { if (f) showSearchDetails(); });
+        list.addView(search, gap());
+
         setContentView(root);
         if (guideFor) showGuide(); else showHomeDetails(on);
-        home.requestFocus();
+        String want = getIntent() == null ? null : getIntent().getStringExtra("focus");
+        if ("dream".equals(want)) { dream.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("player".equals(want)) { player.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("keyboard".equals(want)) { keyboard.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("search".equals(want)) { search.requestFocus(); getIntent().removeExtra("focus"); }
+        else home.requestFocus();
+    }
+
+    private LinearLayout.LayoutParams gap() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, d(72));
+        lp.topMargin = d(8);
+        return lp;
+    }
+
+    /** Rows sit after the title and the subtitle. */
+    private void focusRow(int i) {
+        View v = list.getChildAt(2 + i);
+        if (v != null) v.requestFocus();
+    }
+
+    private void showPlayerDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.mp_play_circle, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_player), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_player_desc), 13, Ui.TEXT_DIM, 10);
+        if (MediaDefaults.enabled(this, MediaDefaults.player(this))) {
+            if (!MediaDefaults.isDefaultPlayer(this)) addSideText(col, getString(R.string.def_player_pending), 13, 0xFF8AB4F8, 14);
+            sideButton(col, getString(R.string.def_player_off), () -> {
+                MediaDefaults.enable(this, MediaDefaults.player(this), false);
+                render();
+                focusRow(1);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showDreamDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.mp_slideshow, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_dream), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_dream_desc), 13, Ui.TEXT_DIM, 10);
+        int n = MediaDefaults.savedCount(this);
+        if (n > 0) addSideText(col, getResources().getQuantityString(R.plurals.def_dream_items, n, n), 13, 0xFF81C995, 10);
+        if (MediaDefaults.enabled(this, MediaDefaults.dream(this))) {
+            if (!MediaDefaults.isDefaultDream(this)) {
+                addSideText(col, getString(R.string.def_dream_pending), 13, 0xFF8AB4F8, 14);
+                addSideText(col, getString(R.string.def_dream_guide), 12, Ui.TEXT_DIM, 8);
+            }
+            sideButton(col, getString(R.string.def_dream_open), () -> MediaDefaults.openDreamSettings(this));
+            sideButton(col, getString(R.string.def_dream_off), () -> {
+                MediaDefaults.enable(this, MediaDefaults.dream(this), false);
+                render();
+                focusRow(2);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showKeyboardDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.kb_keyboard, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_keyboard), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_keyboard_desc), 13, Ui.TEXT_DIM, 10);
+        if (KeyboardDefaults.enabled(this)) {
+            if (!KeyboardDefaults.allowedBySystem(this)) {
+                addSideText(col, getString(R.string.def_keyboard_allow), 13, 0xFF8AB4F8, 14);
+            } else if (!KeyboardDefaults.isDefault(this)) {
+                addSideText(col, getString(R.string.def_keyboard_pick), 13, 0xFF8AB4F8, 14);
+            }
+            if (!KeyboardDefaults.isDefault(this)) sideButton(col, getString(R.string.def_keyboard_next), () -> KeyboardDefaults.nextStep(this));
+            sideButton(col, getString(R.string.def_keyboard_settings), () -> KeyboardDefaults.openKeyboardSettings(this));
+            sideButton(col, getString(R.string.def_keyboard_off), () -> {
+                if (KeyboardDefaults.isDefault(this)) KeyboardDefaults.showPicker(this);
+                KeyboardDefaults.enable(this, false);
+                render();
+                focusRow(3);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showSearchDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.kb_find, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_search), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_search_desc), 13, Ui.TEXT_DIM, 10);
+        if (SearchDefaults.enabled(this)) {
+            sideButton(col, getString(R.string.def_search_try), () -> SearchDefaults.open(this));
+            sideButton(col, getString(R.string.def_search_off), () -> {
+                SearchDefaults.enable(this, false);
+                render();
+                focusRow(4);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void sideButton(LinearLayout col, String label, Runnable r) {
+        TextView b = Ui.pill(this, label, false);
+        b.setBackground(Ui.focusBg(Ui.round(Ui.FOCUS, d(20)), Ui.round(0xFF3C4043, d(20))));
+        b.setOnClickListener(v -> r.run());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, d(40));
+        lp.topMargin = d(16);
+        col.addView(b, lp);
     }
 
     private View row(int icon, String label, String status, boolean on) {
