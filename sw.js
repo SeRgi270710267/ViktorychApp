@@ -4,7 +4,7 @@ const VERSION = "viktorych-a230-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T16:13:09Z-locked-follows
+// cache-bust: 2026-10-30T16:46:51Z-locked-follows
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -193,6 +193,11 @@ const SHELL_FILES = [
   "./shorts.css",
   "./drive.js",
   "./drive.css",
+  "./settings-registry.js",
+  "./local-ai.js",
+  "./local-ai-ui.js",
+  "./local-ai.css",
+  "./local-ai-worker.js",
   "./games.js",
   "./game-social.js",
   "./game-social.css",
