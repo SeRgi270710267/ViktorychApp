@@ -177,6 +177,10 @@ async function check(browser, port, size, lang) {
   await page.locator('.ep .xs-checkrow:has([data-dn-aud="inc:followers"])').click();
   await page.fill('.ep [data-xs-chip-input="inc"]', "bir");
   await page.waitForSelector('.ep [data-xs-suggest="inc"]:not([hidden]) [data-xs-pick="inc"][data-value="birchway"]', { timeout: 3000 }).catch(() => fail(label + ": no people search"));
+  /* The Followers autosave repaints the screen; the search and its suggestions stay. */
+  await page.waitForFunction(() => window.__dnPatches >= 1, null, { timeout: 4000 }).catch(() => fail(label + ": no autosave"));
+  await page.waitForTimeout(150);
+  await page.waitForSelector('.ep [data-xs-suggest="inc"]:not([hidden]) [data-xs-pick="inc"][data-value="birchway"]', { timeout: 3000 }).catch(() => fail(label + ": suggestions lost on autosave"));
   await page.click('.ep [data-xs-pick="inc"][data-value="birchway"]');
   await page.waitForSelector('.ep [data-xs-chips="inc"] .xs-chip', { timeout: 3000 }).catch(() => fail(label + ": no chip"));
   await page.click('.ep [data-dn="toggle-hide"]');
