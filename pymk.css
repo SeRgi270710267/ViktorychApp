@@ -42,3 +42,33 @@
 .pymk-types { padding-left: 12px; border-left: 2px solid var(--line); margin: 4px 0 12px; }
 .pymk-kind { background: transparent; color: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-size: 15px; max-width: 100%; }
 .pymk-kind option { background: #000; }
+
+/* Desktop right column: the permanent "Who to follow" panel (People you may
+   know + outside sources in one list), styled like X's right column card. */
+.pymk-side-row { position: relative; align-items: flex-start; padding: 12px 16px; min-height: 0; cursor: pointer; transition: background-color 0.2s; }
+.pymk-side-row:hover { background: var(--hover-soft); }
+.pymk-side-row .who-main { align-items: flex-start; }
+.pymk-side-row .who-copy { display: flex; flex-direction: column; min-width: 0; }
+.pymk-side-row .who-copy .name { display: flex; align-items: center; gap: 2px; line-height: 20px; }
+.pymk-side-row .who-copy .handle { display: flex; align-items: center; gap: 4px; font-size: 15px; line-height: 20px; }
+.pymk-side-row .who-copy .handle .src svg { width: 14px; height: 14px; fill: currentColor; }
+.pymk-bio { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14px; line-height: 18px; margin-top: 2px; color: var(--text, inherit); overflow-wrap: anywhere; }
+.pymk-side-row .pymk-why { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.pymk-side-row .pymk-why > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pymk-why-ico { flex: none; display: inline-flex; }
+.pymk-why-ico svg { width: 14px; height: 14px; fill: currentColor; }
+.pymk-side-act { position: absolute; top: 12px; right: 16px; display: flex; flex-direction: row-reverse; align-items: center; gap: 2px; }
+.pymk-side-act .follow { flex: none; }
+.pymk-side-row .who-copy .name, .pymk-side-row .who-copy .handle { padding-right: 92px; }
+.pymk-side-row .pymk-x { opacity: 0; margin-left: 0; background: var(--card); }
+.pymk-page .pymk-side-row .pymk-x { background: var(--bg); }
+.pymk-side-row .pymk-x:hover { background: var(--hover-soft); }
+.pymk-side-row:hover .pymk-x, .pymk-side-row .pymk-x:focus-visible { opacity: 1; }
+@media (hover: none) { .pymk-side-row .pymk-x { opacity: 1; } .pymk-side-row .who-copy .name, .pymk-side-row .who-copy .handle { padding-right: 124px; } }
+.pymk-side-empty { margin: 0; padding: 4px 16px 12px; color: var(--muted); font-size: 15px; line-height: 20px; }
+
+/* With the right column on screen the in-feed "People you may know" card
+   repeats the panel, so it steps aside on desktop (phones keep it). */
+@media (min-width: 1000px) and (min-height: 521px) {
+  html:not([data-nav-layout="bar"]) .app:has(.side .pymk-side) .center .pymk[data-pymk="people"] { display: none; }
+}

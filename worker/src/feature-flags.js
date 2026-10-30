@@ -24,6 +24,8 @@ export const FEATURES = {
   nzlay_forum_regone: { paths: ["/v1/games/regone/forum-badges"] },
   // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
   nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true },
+  // Off until the owner turns it on and sets NFT_CONTRACT: optional gift NFTs.
+  nft: { paths: ["/v1/nft"], defaultOff: true },
   // Nearby chat (Bitchat). No server endpoints; clients stop offering it when off.
   bitchat: { paths: [] }
 };

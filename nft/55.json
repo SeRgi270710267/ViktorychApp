@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Seal",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/seal.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "seal"
+    },
+    {
+      "trait_type": "Index",
+      "value": 55
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreifsawj7xuej7pg7xaw7waihbbyiurld3xqgpuxw2znk3yptxvaama",
+  "image_sha256": "b20593fbd089fbcdfb82dfb010708708a4563dde067d2f6d65aade1f3bd40060"
+}

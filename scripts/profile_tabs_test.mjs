@@ -132,6 +132,10 @@ async function main() {
       await context.close();
     }
     console.log("profile tabs ok");
+    // The profile Games tab rides along, since the workflow files stay as they are.
+    const { spawnSync } = await import("node:child_process");
+    const games = spawnSync(process.execPath, [path.join(root, "scripts", "profile_games_tab_test.mjs")], { stdio: "inherit", env: process.env });
+    if (games.status !== 0) fail("profile games tab check failed");
   } finally {
     await browser.close();
     server.close();
