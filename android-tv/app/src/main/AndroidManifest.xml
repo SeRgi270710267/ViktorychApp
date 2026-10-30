@@ -23,6 +23,31 @@
         <intent>
             <action android:name="android.support.customtabs.action.CustomTabsService" />
         </intent>
+        <!-- Optional home screen (launcher/HomeActivity): the TV apps it lists and
+             the system screens its top bar opens. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <intent>
+            <action android:name="android.search.action.GLOBAL_SEARCH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.ASSIST" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.WEB_SEARCH" />
+        </intent>
+        <intent>
+            <action android:name="com.android.tv.action.VIEW_INPUTS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.TV_INPUT_SETTINGS" />
+        </intent>
     </queries>
 
     <application
@@ -220,6 +245,45 @@
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
             android:exported="false"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- Optional home screen ("Make ViktorychTV your default"). Off in the
+             manifest, so the TV never offers it and nothing changes until the user
+             turns it on from DefaultsActivity and confirms Android's own picker.
+             It never replaces TvLauncherActivity, which stays the app's entry. -->
+        <activity
+            android:name=".launcher.HomeActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="${launcherName}"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:clearTaskOnLaunch="true"
+            android:excludeFromRecents="true"
+            android:resumeWhilePausing="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize|locale|layoutDirection|uiMode"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- viktorychtv://defaults: one row per TV job with a Set button. -->
+        <activity
+            android:name=".launcher.DefaultsActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="viktorychtv" android:host="defaults" />
+            </intent-filter>
+        </activity>
 
     </application>
 </manifest>

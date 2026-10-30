@@ -5081,5 +5081,8 @@ SI18n.addPack("ru", {
   "Move communities here with Move to folder.": "Перенесите сюда сообщества через «Переместить в папку».",
   "Join a community to see it here.": "Вступите в сообщество, чтобы увидеть его здесь.",
   "Pinned communities show first on Explore for everyone.": "Закреплённые сообщества показываются первыми в «Обзоре» для всех.",
-  "Couldn't save the pins.": "Не удалось сохранить закрепления."
+  "Couldn't save the pins.": "Не удалось сохранить закрепления.",
+  "TV home screen": "Главный экран ТВ",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "По желанию. Сделайте это приложение главным экраном ТВ: большие плитки приложений, папки, поиск, входы и настройки. Само приложение остаётся точно таким же.",
+  "Home screen and defaults": "Главный экран и приложения по умолчанию"
 });

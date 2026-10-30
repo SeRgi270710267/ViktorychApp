@@ -5068,5 +5068,8 @@ SI18n.addPack("hi", {
   "Move communities here with Move to folder.": "फ़ोल्डर में ले जाएँ से कम्युनिटी यहाँ लाएँ।",
   "Join a community to see it here.": "यहाँ देखने के लिए किसी कम्युनिटी से जुड़ें।",
   "Pinned communities show first on Explore for everyone.": "पिन की गई कम्युनिटी सभी के लिए एक्सप्लोर में सबसे पहले दिखती हैं।",
-  "Couldn't save the pins.": "पिन सेव नहीं हो सके।"
+  "Couldn't save the pins.": "पिन सेव नहीं हो सके।",
+  "TV home screen": "टीवी होम स्क्रीन",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "वैकल्पिक। इस ऐप को अपने टीवी का होम बनाएं: बड़ी ऐप टाइलें, फ़ोल्डर, खोज, इनपुट और सेटिंग्स। ऐप खुद बिल्कुल वैसा ही रहता है।",
+  "Home screen and defaults": "होम स्क्रीन और डिफ़ॉल्ट"
 });
