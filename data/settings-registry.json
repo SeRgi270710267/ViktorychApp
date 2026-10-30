@@ -1571,6 +1571,18 @@
    "ai": false
   },
   {
+   "id": "friendsSwitch",
+   "label": "Friends",
+   "desc": "Friends master switch: turn Friends off entirely (no requests, lists, counts or online status), or choose who can send requests and see your friends.",
+   "type": "action",
+   "store": "module",
+   "page": "#/settings/friends",
+   "cat": "friends",
+   "risk": "privacy",
+   "ai": false,
+   "signedIn": true
+  },
+  {
    "id": "appLock",
    "label": "App lock",
    "desc": "Lock the app with a passkey, PIN or fingerprint.",

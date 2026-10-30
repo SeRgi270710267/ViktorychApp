@@ -299,7 +299,8 @@
         return;
       }
       // A danger page beats a weak setting match ("log me out" must not toggle anything).
-      var dangerHit = rank(clause, { all: true }).filter(function (r) { return r.row.risk === "danger"; })[0];
+      // So does a page-only setting (like the Friends master switch) that fits better.
+      var dangerHit = rank(clause, { all: true }).filter(function (r) { return r.row.risk === "danger" || (r.row.type === "action" && r.score > top.score); })[0];
       if (dangerHit && dangerHit.score >= top.score) { calls.push({ fn: "open", id: dangerHit.row.id }); return; }
       var v = valueFor(top.row, clause, current[top.row.id]);
       if (v === undefined) calls.push({ fn: "open", id: top.row.id });

@@ -143,4 +143,9 @@ assert.ok(worker.indexOf("@huggingface/transformers@" + A.TJS_VERSION) >= 0, "wo
 const flags = fs.readFileSync(path.join(root, "worker", "src", "feature-flags.js"), "utf8");
 assert.ok(/local_ai:\s*\{/.test(flags), "Local AI has its own switch");
 
+// A page-only setting that fits better wins over a weak toggle match.
+for (const q of ["who can send me friend requests", "stop friend requests"]) {
+  const got = A.parse(q, {}).calls;
+  assert.deepStrictEqual(got.map((c) => c.fn + ":" + c.id), ["open:friendsSwitch"], q);
+}
 console.log("local ai tests ok (" + want.size + " strings in 4 packs)");
