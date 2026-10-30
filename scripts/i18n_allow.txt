@@ -264,6 +264,10 @@ servers-ui.js|MANAGE_MESSAGES
 servers-ui.js|MANAGE_CHANNELS
 servers-ui.js|MANAGE_ROLES
 servers-ui.js|MANAGE_SERVER
+servers-ui.js|CREATE_THREADS
+servers-ui.js|MANAGE_THREADS
+servers-ui.js|MANAGE_EVENTS
+servers-ui.js|MUTE_MEMBERS
 servers-ui.js|Files
 people.js|Fediverse
 # onboarding.js carries its own en/es/hi/ru string tables

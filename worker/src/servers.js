@@ -20,6 +20,7 @@ import {
   parseMentions, emojiTokens, cleanReaction, topPosition, messageId
 } from "../../shared/server-perms.js";
 import { roomPost, roomOnline, roomStub } from "./servers-room.js";
+import { playingNow } from "./games.js";
 
 export const SERVERS_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS srv_servers (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', icon_key TEXT NOT NULL DEFAULT '', banner_key TEXT NOT NULL DEFAULT '', member_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
@@ -48,20 +49,46 @@ export const SERVERS_SCHEMA = [
   "CREATE INDEX IF NOT EXISTS srv_reads_server ON srv_reads(account_id, server_id)",
   "CREATE TABLE IF NOT EXISTS srv_notify (account_id TEXT NOT NULL, scope_id TEXT NOT NULL, level TEXT NOT NULL, PRIMARY KEY (account_id, scope_id))",
   "CREATE TABLE IF NOT EXISTS srv_modlog (id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL, actor_mid TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL)",
-  "CREATE INDEX IF NOT EXISTS srv_modlog_server ON srv_modlog(server_id, id)"
+  "CREATE INDEX IF NOT EXISTS srv_modlog_server ON srv_modlog(server_id, id)",
+  /* Phase 2: threads and forums, events, polls, stickers. */
+  "CREATE TABLE IF NOT EXISTS srv_threads (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, parent_id TEXT NOT NULL, root_id TEXT NOT NULL DEFAULT '', starter_id TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, owner_id TEXT NOT NULL, owner_mid TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, locked INTEGER NOT NULL DEFAULT 0, tags TEXT NOT NULL DEFAULT '', message_count INTEGER NOT NULL DEFAULT 0, last_message_id TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS srv_threads_parent ON srv_threads(parent_id, archived, last_message_id)",
+  "CREATE INDEX IF NOT EXISTS srv_threads_root ON srv_threads(root_id)",
+  "CREATE INDEX IF NOT EXISTS srv_threads_server ON srv_threads(server_id)",
+  "CREATE TABLE IF NOT EXISTS srv_forum_tags (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, channel_id TEXT NOT NULL, name TEXT NOT NULL, emoji TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0)",
+  "CREATE INDEX IF NOT EXISTS srv_forum_tags_server ON srv_forum_tags(server_id, channel_id)",
+  "CREATE TABLE IF NOT EXISTS srv_events (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, channel_id TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', start_at INTEGER NOT NULL, end_at INTEGER NOT NULL DEFAULT 0, image_key TEXT NOT NULL DEFAULT '', creator_id TEXT NOT NULL, creator_mid TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled', going INTEGER NOT NULL DEFAULT 0, interested INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS srv_events_server ON srv_events(server_id, start_at)",
+  "CREATE TABLE IF NOT EXISTS srv_event_rsvps (event_id TEXT NOT NULL, server_id TEXT NOT NULL, account_id TEXT NOT NULL, mid TEXT NOT NULL, status TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (event_id, account_id))",
+  "CREATE INDEX IF NOT EXISTS srv_event_rsvps_account ON srv_event_rsvps(account_id)",
+  "CREATE TABLE IF NOT EXISTS srv_polls (message_id TEXT PRIMARY KEY, server_id TEXT NOT NULL, channel_id TEXT NOT NULL, question TEXT NOT NULL, options TEXT NOT NULL, multi INTEGER NOT NULL DEFAULT 0, ends_at INTEGER NOT NULL, ended INTEGER NOT NULL DEFAULT 0)",
+  "CREATE INDEX IF NOT EXISTS srv_polls_server ON srv_polls(server_id)",
+  "CREATE TABLE IF NOT EXISTS srv_poll_votes (message_id TEXT NOT NULL, account_id TEXT NOT NULL, mid TEXT NOT NULL, option INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (message_id, account_id, option))",
+  "CREATE INDEX IF NOT EXISTS srv_poll_votes_account ON srv_poll_votes(account_id)",
+  "CREATE TABLE IF NOT EXISTS srv_stickers (id TEXT PRIMARY KEY, server_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, type TEXT NOT NULL DEFAULT '', by_mid TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS srv_stickers_server ON srv_stickers(server_id)",
+  "CREATE TABLE IF NOT EXISTS srv_msg_stickers (message_id TEXT PRIMARY KEY, server_id TEXT NOT NULL, sticker_id TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS srv_msg_stickers_server ON srv_msg_stickers(server_id)"
 ];
 
 const HEX16 = /^[a-f0-9]{16}$/;
 const MSG_ID = /^[0-9a-z]{16}$/;
 const ACCOUNT = /^\d{12}$/;
 const INVITE = /^[A-Za-z0-9]{6,16}$/;
-const KINDS = ["category", "text", "announcement"];
+const KINDS = ["category", "text", "announcement", "forum", "voice"];
+const THREAD_PARENTS = ["text", "announcement", "forum"];
+const TAGS_MAX = 20;
+const STICKERS_MAX = 60;
+const STICKER_TYPES = ["image/png", "image/apng", "image/gif", "image/webp"];
+const POLL_HOURS = [1, 4, 8, 24, 72, 168];
+const EVENTS_MAX = 100;
 const LEVELS = ["all", "mentions", "none"];
 const BODY_MAX = 4000;
 const ATTACH_MAX = 10;
 const FILE_MAX = 50 * 1024 * 1024;
 const IMAGE_MAX = 8 * 1024 * 1024;
 const EMOJI_MAX = 512 * 1024;
+const STICKER_MAX = 512 * 1024;
 const PINS_MAX = 50;
 const ROLES_MAX = 100;
 const CHANNELS_MAX = 200;
@@ -205,6 +232,13 @@ function permsFor(ctx, channelId, other) {
   if (!channelId) return base;
   const channel = ctx.byId.get(channelId);
   if (!channel) return 0;
+  if (channel.kind === "thread") {
+    /* A thread has the parent's permissions. Locked threads take new
+       messages and reactions only from thread managers. */
+    let p = permsFor(ctx, channel.parent_id, other);
+    if (channel.thread && Number(channel.thread.locked) === 1 && !has(p, PERM.MANAGE_THREADS)) p &= ~(PERM.SEND | PERM.REACT | PERM.ATTACH);
+    return p;
+  }
   if (who.owner || has(base, PERM.ADMIN)) return ALL_PERMS;
   return channelPerms(base, {
     layers: layersFor(ctx, channel),
@@ -298,11 +332,18 @@ async function presentMessages(env, deps, request, list, viewerMid, ctx) {
       "SELECT id, author_mid, body, attachments, removed_at, flags FROM srv_messages WHERE id IN (" + uniq.map(() => "?").join(",") + ")"
     ).bind(...uniq).all()).forEach((m) => replies.set(m.id, m));
   }
+  const extras = await messageExtras(env, request, ids, viewerMid, ctx);
   const out = [];
   for (const m of list) {
     /* Removed text is only shown to people who could have removed it. */
     const seeRemoved = !!ctx && Number(m.removed_at) > 0 && has(ctx.perms(m.channel_id), PERM.MANAGE_MESSAGES);
-    out.push(await presentMessage(env, deps, request, m, byMsg.get(m.id) || [], replies, seeRemoved));
+    const msg = await presentMessage(env, deps, request, m, byMsg.get(m.id) || [], replies, seeRemoved);
+    if (Number(m.removed_at) === 0) {
+      if (extras.threads.has(m.id)) msg.th = extras.threads.get(m.id);
+      if (extras.polls.has(m.id)) msg.pl = extras.polls.get(m.id);
+      if (extras.stickers.has(m.id)) msg.st = extras.stickers.get(m.id);
+    }
+    out.push(msg);
   }
   return out;
 }
@@ -370,6 +411,35 @@ function later(deps, job) {
 
 function emit(env, deps, serverId, channelId, event) {
   return later(deps, roomPost(env, serverId, "/event", { c: channelId || "", e: event }));
+}
+
+/* Events for a thread travel on the parent channel's room filter; ch names
+   the real channel so clients file them under the thread. */
+function roomChannel(channel) {
+  return channel && channel.kind === "thread" ? channel.parent_id : (channel ? channel.id : "");
+}
+function emitIn(env, deps, ctx, channel, event) {
+  event.ch = channel.id;
+  return emit(env, deps, ctx.server.id, roomChannel(channel), event);
+}
+
+function threadChannel(ctx, t) {
+  const parent = ctx.byId.get(t.parent_id);
+  return {
+    id: t.id, server_id: t.server_id, kind: "thread", name: t.name, topic: "", parent_id: t.parent_id,
+    position: 0, slowmode: parent ? Number(parent.slowmode) || 0 : 0, last_message_id: t.last_message_id || "",
+    created_at: t.created_at, thread: t
+  };
+}
+
+/* Threads are not in loadContext (forums can hold many); load one on demand. */
+async function attachThread(env, ctx, tid) {
+  if (!HEX16.test(String(tid || "")) || ctx.byId.has(tid)) return ctx.byId.get(tid) || null;
+  const t = await env.DB.prepare("SELECT * FROM srv_threads WHERE id = ? AND server_id = ?").bind(tid, ctx.server.id).first();
+  if (!t || !ctx.byId.has(t.parent_id)) return null;
+  const c = threadChannel(ctx, t);
+  ctx.byId.set(t.id, c);
+  return c;
 }
 
 function resync(env, deps, serverId, accountId) {
@@ -450,6 +520,16 @@ export async function handleServers(request, env, path, url, deps) {
   if (a === "modlog" && method === "GET") return modlogList(env, url, deps, ctx);
   if (a === "leave" && method === "POST") return leave(env, deps, ctx);
   if (a === "emojis" && rest[1] && method === "DELETE") return deleteEmoji(env, deps, ctx, rest[1]);
+  if (a === "stickers" && rest[1] && method === "DELETE") return deleteSticker(env, deps, ctx, rest[1]);
+  if (a === "threads" && !rest[1] && method === "GET") return activeThreads(request, env, deps, ctx);
+  if (a === "events") {
+    if (!rest[1] && method === "GET") return listEvents(request, env, deps, ctx);
+    if (!rest[1] && method === "POST") return createEvent(request, env, deps, ctx);
+    if (rest[1] && !rest[2] && method === "PATCH") return patchEvent(request, env, deps, ctx, rest[1]);
+    if (rest[1] && !rest[2] && method === "DELETE") return deleteEvent(env, deps, ctx, rest[1]);
+    if (rest[1] && rest[2] === "rsvp" && method === "PUT") return rsvpEvent(request, env, deps, ctx, rest[1]);
+    if (rest[1] && rest[2] === "rsvps" && method === "GET") return eventRsvps(env, deps, ctx, rest[1]);
+  }
   if (a === "invites") {
     if (!rest[1] && method === "GET") return listInvites(env, deps, ctx);
     if (!rest[1] && method === "POST") return createInvite(request, env, deps, ctx);
@@ -476,13 +556,25 @@ export async function handleServers(request, env, path, url, deps) {
     if (rest[1] === "order" && method === "PUT") return orderChannels(request, env, deps, ctx);
     if (!rest[1] && method === "POST") return createChannel(request, env, deps, ctx);
     const cid = rest[1] || "";
+    if (HEX16.test(cid) && !ctx.byId.has(cid)) await attachThread(env, ctx, cid);
     if (!HEX16.test(cid) || !ctx.byId.has(cid)) return err(deps, 404, "channel");
     const channel = ctx.byId.get(cid);
     const perms = ctx.perms(cid);
     if (!has(perms, PERM.VIEW)) return err(deps, 404, "channel");
     const b = rest[2] || "";
+    if (channel.kind === "thread") {
+      if (!b && method === "GET") return deps.json(200, { thread: await presentThreadFull(env, deps, request, ctx, channel.thread) });
+      if (!b && method === "PATCH") return patchThread(request, env, deps, ctx, channel);
+      if (!b && method === "DELETE") return deleteThread(env, deps, ctx, channel);
+      if (b === "threads" || b === "tags" || b === "overrides") return err(deps, 400, "thread");
+    }
     if (!b && method === "PATCH") return patchChannel(request, env, deps, ctx, channel);
     if (!b && method === "DELETE") return deleteChannel(env, deps, ctx, channel);
+    if (b === "threads") {
+      if (method === "GET") return listThreads(request, env, url, deps, ctx, channel);
+      if (method === "POST") return createThread(request, env, deps, ctx, channel);
+    }
+    if (b === "tags" && method === "PUT") return putTags(request, env, deps, ctx, channel);
     if (b === "overrides" && rest[3] && rest[4]) {
       if (method === "PUT") return putOverride(request, env, deps, ctx, channel, rest[3], rest[4]);
       if (method === "DELETE") return deleteOverride(env, deps, ctx, channel, rest[3], rest[4]);
@@ -500,6 +592,11 @@ export async function handleServers(request, env, path, url, deps) {
       if (!MSG_ID.test(mid)) return err(deps, 404, "message");
       if (!rest[4] && method === "PATCH") return editMessage(request, env, deps, ctx, channel, mid);
       if (!rest[4] && method === "DELETE") return deleteMessage(request, env, url, deps, ctx, channel, mid);
+      if (rest[4] === "poll") {
+        if (!rest[5] && method === "PUT") return votePoll(request, env, deps, ctx, channel, mid);
+        if (rest[5] === "end" && method === "POST") return endPoll(env, deps, ctx, channel, mid);
+        if (rest[5] === "voters" && method === "GET") return pollVoters(url, env, deps, ctx, channel, mid);
+      }
       if (rest[4] === "reactions" && rest[5]) {
         if (method === "PUT") return react(env, deps, ctx, channel, mid, rest[5], true);
         if (method === "DELETE") return react(env, deps, ctx, channel, mid, rest[5], false);
@@ -554,6 +651,8 @@ async function createServer(request, env, deps, viewer) {
   const cat = randomHex(8);
   const general = randomHex(8);
   const news = randomHex(8);
+  const vcat = randomHex(8);
+  const lounge = randomHex(8);
   const mid = await memberIdFor(deps, env, sid, viewer.public_id);
   const st = [
     env.DB.prepare("INSERT INTO srv_servers (id, owner_id, name, description, member_count, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)").bind(sid, viewer.public_id, name, clip(b.description, 500), now, now),
@@ -562,7 +661,9 @@ async function createServer(request, env, deps, viewer) {
     env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, position, created_at) VALUES (?, ?, 'category', ?, 0, ?)").bind(cat, sid, clip(b.categoryName, 100) || "Text channels", now),
     env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, parent_id, position, created_at) VALUES (?, ?, 'announcement', ?, ?, 1, ?)").bind(news, sid, cleanName(b.announcementName || "announcements", "text"), cat, now),
     env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, parent_id, position, created_at) VALUES (?, ?, 'text', ?, ?, 0, ?)").bind(general, sid, cleanName(b.generalName || "general", "text"), cat, now),
-    env.DB.prepare("INSERT INTO srv_overrides (channel_id, server_id, target_type, target_id, allow, deny) VALUES (?, ?, 'role', ?, 0, ?)").bind(news, sid, sid, PERM.SEND)
+    env.DB.prepare("INSERT INTO srv_overrides (channel_id, server_id, target_type, target_id, allow, deny) VALUES (?, ?, 'role', ?, 0, ?)").bind(news, sid, sid, PERM.SEND),
+    env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, position, created_at) VALUES (?, ?, 'category', ?, 1, ?)").bind(vcat, sid, clip(b.voiceCategoryName, 100) || "Voice channels", now),
+    env.DB.prepare("INSERT INTO srv_channels (id, server_id, kind, name, parent_id, position, created_at) VALUES (?, ?, 'voice', ?, ?, 0, ?)").bind(lounge, sid, cleanName(b.voiceName || "General", "voice"), vcat, now)
   ];
   await env.DB.batch(st);
   const ctx = await loadContext(env, sid, viewer.public_id);
@@ -572,16 +673,25 @@ async function createServer(request, env, deps, viewer) {
 
 async function serverState(request, env, deps, ctx) {
   const sid = ctx.server.id;
-  const [reads, emojis, notify] = await Promise.all([
+  const [reads, emojis, notify, stickers, tags, events] = await Promise.all([
     env.DB.prepare("SELECT channel_id, last_read, mentions FROM srv_reads WHERE account_id = ? AND server_id = ?").bind(ctx.accountId, sid).all(),
     env.DB.prepare("SELECT id, name, key FROM srv_emojis WHERE server_id = ? ORDER BY created_at").bind(sid).all(),
-    notifyMap(env, ctx.accountId, [sid].concat(ctx.channels.map((c) => c.id)))
+    notifyMap(env, ctx.accountId, [sid].concat(ctx.channels.map((c) => c.id))),
+    env.DB.prepare("SELECT id, name, key FROM srv_stickers WHERE server_id = ? ORDER BY created_at").bind(sid).all(),
+    env.DB.prepare("SELECT id, channel_id, name, emoji FROM srv_forum_tags WHERE server_id = ? ORDER BY position, id").bind(sid).all(),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM srv_events WHERE server_id = ? AND status != 'cancelled' AND (end_at > ? OR start_at > ?)").bind(sid, Date.now(), Date.now() - 3 * 3600000).first()
   ]);
+  const tagMap = new Map();
+  rows(tags).forEach((t) => {
+    if (!tagMap.has(t.channel_id)) tagMap.set(t.channel_id, []);
+    tagMap.get(t.channel_id).push({ id: t.id, name: t.name, emoji: t.emoji || "" });
+  });
   const readMap = new Map(rows(reads).map((r) => [r.channel_id, r]));
   const manage = has(ctx.base, PERM.MANAGE_CHANNELS) || has(ctx.base, PERM.MANAGE_ROLES);
   const channels = visibleChannels(ctx).map((c) => {
     const out = presentChannel(c, ctx.perms(c.id), readMap.get(c.id));
     if (manage) out.overrides = (ctx.overrides.get(c.id) || []).map(presentOverride);
+    if (c.kind === "forum") out.tags = tagMap.get(c.id) || [];
     return out;
   });
   return deps.json(200, {
@@ -589,6 +699,8 @@ async function serverState(request, env, deps, ctx) {
     channels: channels,
     roles: Array.from(ctx.roles.values()).map(presentRole).sort((x, y) => y.position - x.position),
     emojis: rows(emojis).map((e) => ({ id: e.id, name: e.name, url: publicFile(request, e.key) })),
+    stickers: rows(stickers).map((e) => ({ id: e.id, name: e.name, url: publicFile(request, e.key) })),
+    events: Number(events && events.n) || 0,
     notify: notify,
     me: {
       mid: ctx.mid,
@@ -633,7 +745,17 @@ async function deleteServer(request, env, deps, ctx) {
   const keys = rows(await env.DB.prepare("SELECT attachments FROM srv_messages WHERE server_id = ? AND attachments != ''").bind(sid).all())
     .reduce((all, m) => all.concat(parseJson(m.attachments, []).map((a) => a && a.k).filter(Boolean)), []);
   const msgIds = "SELECT id FROM srv_messages WHERE server_id = ?";
+  const more = rows(await env.DB.prepare("SELECT key FROM srv_stickers WHERE server_id = ? UNION ALL SELECT image_key AS key FROM srv_events WHERE server_id = ? AND image_key != ''").bind(sid, sid).all()).map((r) => r.key);
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM srv_poll_votes WHERE message_id IN (SELECT message_id FROM srv_polls WHERE server_id = ?)").bind(sid),
+    env.DB.prepare("DELETE FROM srv_polls WHERE server_id = ?").bind(sid),
+    env.DB.prepare("DELETE FROM srv_msg_stickers WHERE server_id = ?").bind(sid),
+    env.DB.prepare("DELETE FROM srv_stickers WHERE server_id = ?").bind(sid),
+    env.DB.prepare("DELETE FROM srv_event_rsvps WHERE server_id = ?").bind(sid),
+    env.DB.prepare("DELETE FROM srv_events WHERE server_id = ?").bind(sid),
+    env.DB.prepare("DELETE FROM srv_forum_tags WHERE server_id = ?").bind(sid),
+    env.DB.prepare("DELETE FROM srv_reads WHERE server_id = ? AND channel_id IN (SELECT id FROM srv_threads WHERE server_id = ?)").bind(sid, sid),
+    env.DB.prepare("DELETE FROM srv_threads WHERE server_id = ?").bind(sid),
     env.DB.prepare("DELETE FROM srv_reactions WHERE message_id IN (" + msgIds + ")").bind(sid),
     env.DB.prepare("DELETE FROM srv_messages WHERE server_id = ?").bind(sid),
     env.DB.prepare("DELETE FROM srv_reads WHERE server_id = ?").bind(sid),
@@ -649,7 +771,7 @@ async function deleteServer(request, env, deps, ctx) {
     env.DB.prepare("DELETE FROM srv_modlog WHERE server_id = ?").bind(sid),
     env.DB.prepare("DELETE FROM srv_servers WHERE id = ?").bind(sid)
   ]);
-  const extra = [ctx.server.icon_key, ctx.server.banner_key].filter(Boolean);
+  const extra = [ctx.server.icon_key, ctx.server.banner_key].concat(more).filter(Boolean);
   later(deps, deleteKeys(env, keys.concat(extra)));
   later(deps, roomPost(env, sid, "/drop", {}));
   return deps.json(200, { ok: true });
@@ -681,7 +803,7 @@ async function upload(request, env, url, deps, ctx) {
   const type = cleanType(request.headers.get("content-type"));
   const len = Number(request.headers.get("content-length") || 0);
   const name = safeName(url.searchParams.get("name"));
-  const max = kind === "a" ? FILE_MAX : kind === "emoji" ? EMOJI_MAX : IMAGE_MAX;
+  const max = kind === "a" ? FILE_MAX : kind === "emoji" ? EMOJI_MAX : kind === "sticker" ? STICKER_MAX : IMAGE_MAX;
   if (len > max) return err(deps, 413, "too_large", { max });
   if (!floodOk("srvup:" + ctx.accountId, 20, 60000)) return err(deps, 429, "rate_limited");
   if (kind === "a") {
@@ -689,6 +811,12 @@ async function upload(request, env, url, deps, ctx) {
     if (!any) return err(deps, 403, "perm");
   } else if (kind === "icon" || kind === "banner" || kind === "emoji") {
     if (!has(ctx.base, PERM.MANAGE_SERVER)) return err(deps, 403, "perm");
+    if (IMAGE_TYPES.indexOf(type) < 0) return err(deps, 415, "image_only");
+  } else if (kind === "sticker") {
+    if (!has(ctx.base, PERM.MANAGE_SERVER)) return err(deps, 403, "perm");
+    if (STICKER_TYPES.indexOf(type) < 0) return err(deps, 415, "image_only");
+  } else if (kind === "event") {
+    if (!has(ctx.base, PERM.MANAGE_EVENTS)) return err(deps, 403, "perm");
     if (IMAGE_TYPES.indexOf(type) < 0) return err(deps, 415, "image_only");
   } else return err(deps, 400, "kind");
   const bytes = await request.arrayBuffer();
@@ -698,7 +826,7 @@ async function upload(request, env, url, deps, ctx) {
   const id = randomHex(8);
   let key;
   if (kind === "a") key = "srv/" + sid + "/a/" + ctx.mid + "/" + id + "/" + name;
-  else key = "srv/" + sid + "/" + kind[0] + "/" + id;
+  else key = "srv/" + sid + "/" + ({ icon: "i", banner: "b", emoji: "e", sticker: "k", event: "v" })[kind] + "/" + id;
   await env.DATA.put(key, bytes, {
     httpMetadata: { contentType: type, cacheControl: "private, max-age=31536000, immutable" },
     customMetadata: { name: name, by: ctx.mid }
@@ -732,7 +860,35 @@ async function upload(request, env, url, deps, ctx) {
     resync(env, deps, sid);
     return deps.json(200, { ok: true, emoji: { id, name: ename, url: publicFile(request, key) } });
   }
+  if (kind === "sticker") {
+    const sname = clip(url.searchParams.get("sticker") || name.replace(/\.[^.]+$/, ""), 30);
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM srv_stickers WHERE server_id = ?").bind(sid).first();
+    if (sname.length < 2 || Number(count && count.n) >= STICKERS_MAX) {
+      await env.DATA.delete(key);
+      return err(deps, 400, sname.length < 2 ? "sticker_name" : "too_many");
+    }
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO srv_stickers (id, server_id, name, key, type, by_mid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(id, sid, sname, key, type, ctx.mid, Date.now()),
+      modlog(env, ctx, "sticker_add", id, { name: sname })
+    ]);
+    resync(env, deps, sid);
+    return deps.json(200, { ok: true, sticker: { id, name: sname, url: publicFile(request, key) } });
+  }
+  if (kind === "event") return deps.json(200, { ok: true, image: { k: key, url: publicFile(request, key) } });
   return deps.json(200, { ok: true, file: { k: key, n: name, t: type, s: bytes.byteLength } });
+}
+
+async function deleteSticker(env, deps, ctx, kid) {
+  if (!has(ctx.base, PERM.MANAGE_SERVER)) return err(deps, 403, "perm");
+  const row = await env.DB.prepare("SELECT * FROM srv_stickers WHERE id = ? AND server_id = ?").bind(kid, ctx.server.id).first();
+  if (!row) return err(deps, 404, "sticker");
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM srv_stickers WHERE id = ?").bind(kid),
+    modlog(env, ctx, "sticker_remove", kid, { name: row.name })
+  ]);
+  later(deps, deleteKeys(env, [row.key]));
+  resync(env, deps, ctx.server.id);
+  return deps.json(200, { ok: true });
 }
 
 async function deleteEmoji(env, deps, ctx, eid) {
@@ -813,7 +969,7 @@ async function serveTelegramCopy(env, key, publicMode, deps) {
 
 async function servePublic(request, env, url, deps) {
   const key = String(url.searchParams.get("k") || "");
-  if (!/^srv\/[a-f0-9]{16}\/[ibe]\/[a-f0-9]{16}$/.test(key)) return new Response("not found", { status: 404 });
+  if (!/^srv\/[a-f0-9]{16}\/[ibekv]\/[a-f0-9]{16}$/.test(key)) return new Response("not found", { status: 404 });
   return serveObject(request, env, key, true, deps);
 }
 
@@ -1029,6 +1185,9 @@ async function listMembers(request, env, url, deps, ctx) {
   });
   const online = new Set(await roomOnline(env, ctx.server.id));
   const out = [];
+  /* Rich presence: games online members are playing right now. */
+  const live = list.filter((m) => online.has(m.mid));
+  const games = live.length ? await playingNow(env, live.map((m) => m.account_id)) : new Map();
   for (const m of list) {
     out.push({
       m: m.mid,
@@ -1038,6 +1197,7 @@ async function listMembers(request, env, url, deps, ctx) {
       timeoutUntil: Number(m.timeout_until) || 0,
       owner: m.account_id === ctx.server.owner_id,
       online: online.has(m.mid),
+      playing: games.get(String(m.account_id)) || "",
       card: await cardFor(env, deps, request, ctx.viewer, m.account_id)
     });
   }
@@ -1280,12 +1440,21 @@ async function deleteChannel(env, deps, ctx, channel) {
   if (channel.kind === "category") {
     st.push(env.DB.prepare("UPDATE srv_channels SET parent_id = '' WHERE parent_id = ?").bind(cid));
   } else {
-    const keys = rows(await env.DB.prepare("SELECT attachments FROM srv_messages WHERE channel_id = ? AND attachments != ''").bind(cid).all())
+    /* The channel and every thread under it. */
+    const scope = "SELECT ? UNION ALL SELECT id FROM srv_threads WHERE parent_id = ?";
+    const keys = rows(await env.DB.prepare("SELECT attachments FROM srv_messages WHERE channel_id IN (" + scope + ") AND attachments != ''").bind(cid, cid).all())
       .reduce((all, m) => all.concat(parseJson(m.attachments, []).map((a) => a && a.k).filter(Boolean)), []);
     later(deps, deleteKeys(env, keys));
-    st.push(env.DB.prepare("DELETE FROM srv_reactions WHERE message_id IN (SELECT id FROM srv_messages WHERE channel_id = ?)").bind(cid));
-    st.push(env.DB.prepare("DELETE FROM srv_messages WHERE channel_id = ?").bind(cid));
-    st.push(env.DB.prepare("DELETE FROM srv_reads WHERE channel_id = ?").bind(cid));
+    const msgs = "SELECT id FROM srv_messages WHERE channel_id IN (" + scope + ")";
+    st.push(env.DB.prepare("DELETE FROM srv_reactions WHERE message_id IN (" + msgs + ")").bind(cid, cid));
+    st.push(env.DB.prepare("DELETE FROM srv_poll_votes WHERE message_id IN (" + msgs + ")").bind(cid, cid));
+    st.push(env.DB.prepare("DELETE FROM srv_polls WHERE message_id IN (" + msgs + ")").bind(cid, cid));
+    st.push(env.DB.prepare("DELETE FROM srv_msg_stickers WHERE message_id IN (" + msgs + ")").bind(cid, cid));
+    st.push(env.DB.prepare("DELETE FROM srv_messages WHERE channel_id IN (" + scope + ")").bind(cid, cid));
+    st.push(env.DB.prepare("DELETE FROM srv_reads WHERE channel_id IN (" + scope + ")").bind(cid, cid));
+    st.push(env.DB.prepare("DELETE FROM srv_threads WHERE parent_id = ?").bind(cid));
+    st.push(env.DB.prepare("DELETE FROM srv_forum_tags WHERE channel_id = ?").bind(cid));
+    st.push(env.DB.prepare("UPDATE srv_events SET channel_id = '' WHERE channel_id = ?").bind(cid));
   }
   st.push(env.DB.prepare("DELETE FROM srv_overrides WHERE channel_id = ?").bind(cid));
   st.push(env.DB.prepare("DELETE FROM srv_notify WHERE scope_id = ?").bind(cid));
@@ -1352,6 +1521,9 @@ async function deleteOverride(env, deps, ctx, channel, type, tid) {
 
 async function listMessages(request, env, url, deps, ctx, channel) {
   if (channel.kind === "category") return err(deps, 400, "category");
+  if (channel.kind === "forum") return err(deps, 400, "forum");
+  /* Voice channels have no text chat yet. */
+  if (channel.kind === "voice") return err(deps, 400, "voice");
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") || 50)));
   const before = String(url.searchParams.get("before") || "");
   const after = String(url.searchParams.get("after") || "");
@@ -1402,18 +1574,28 @@ async function attachmentMeta(env, ctx, list) {
   return meta;
 }
 
-async function sendMessage(request, env, deps, ctx, channel) {
+async function sendMessage(request, env, deps, ctx, channel, pre) {
   if (channel.kind === "category") return err(deps, 400, "category");
+  /* Forum posts are threads; see createThread. */
+  if (channel.kind === "forum") return err(deps, 400, "forum");
+  if (channel.kind === "voice") return err(deps, 400, "voice");
   const perms = ctx.perms(channel.id);
   if (ctx.timedOut) return err(deps, 403, "timed_out", { until: Number(ctx.member.timeout_until) });
   if (!has(perms, PERM.SEND)) return err(deps, 403, "perm");
-  const b = await body(deps, request, 24000);
+  const b = pre || await body(deps, request, 24000);
   if (b.error) return err(deps, 400, b.error);
   const text = String(b.body == null ? "" : b.body).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").replace(/^\n+|\s+$/g, "");
   if (text.length > BODY_MAX) return err(deps, 400, "too_long", { max: BODY_MAX });
   const wantFiles = Array.isArray(b.attachments) && b.attachments.length > 0;
   if (wantFiles && !has(perms, PERM.ATTACH)) return err(deps, 403, "perm_attach");
-  if (!floodOk("srvmsg:" + ctx.accountId, 8, 5000)) return err(deps, 429, "rate_limited", { retry: 5 });
+  if (!pre && !floodOk("srvmsg:" + ctx.accountId, 8, 5000)) return err(deps, 429, "rate_limited", { retry: 5 });
+  const poll = b.poll ? cleanPoll(b.poll) : null;
+  if (b.poll && !poll) return err(deps, 400, "poll");
+  let sticker = null;
+  if (b.sticker) {
+    sticker = HEX16.test(String(b.sticker)) ? await env.DB.prepare("SELECT id FROM srv_stickers WHERE id = ? AND server_id = ?").bind(b.sticker, ctx.server.id).first() : null;
+    if (!sticker) return err(deps, 404, "sticker");
+  }
   const bypass = has(perms, PERM.MANAGE_MESSAGES) || has(perms, PERM.MANAGE_CHANNELS);
   const slow = Number(channel.slowmode) || 0;
   if (slow && !bypass) {
@@ -1423,7 +1605,7 @@ async function sendMessage(request, env, deps, ctx, channel) {
   }
   const meta = wantFiles ? await attachmentMeta(env, ctx, b.attachments) : null;
   const files = wantFiles ? cleanAttachments(ctx, b.attachments, meta) : [];
-  if (!text && !files.length) return err(deps, 400, "empty");
+  if (!text && !files.length && !poll && !sticker) return err(deps, 400, "empty");
   let replyTo = "";
   let replyAuthor = null;
   if (b.replyTo && MSG_ID.test(String(b.replyTo))) {
@@ -1449,9 +1631,14 @@ async function sendMessage(request, env, deps, ctx, channel) {
   const st = [
     env.DB.prepare("INSERT INTO srv_messages (id, server_id, channel_id, author_id, author_mid, body, reply_to, attachments, mentions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(id, row.server_id, row.channel_id, row.author_id, row.author_mid, row.body, row.reply_to, row.attachments, row.mentions, now),
-    env.DB.prepare("UPDATE srv_channels SET last_message_id = ? WHERE id = ?").bind(id, channel.id),
+    channel.kind === "thread"
+      ? env.DB.prepare("UPDATE srv_threads SET last_message_id = ?, message_count = message_count + 1, archived = 0 WHERE id = ?").bind(id, channel.id)
+      : env.DB.prepare("UPDATE srv_channels SET last_message_id = ? WHERE id = ?").bind(id, channel.id),
     env.DB.prepare("INSERT INTO srv_reads (account_id, channel_id, server_id, last_read, mentions) VALUES (?, ?, ?, ?, 0) ON CONFLICT(account_id, channel_id) DO UPDATE SET last_read = excluded.last_read, mentions = 0").bind(ctx.accountId, channel.id, ctx.server.id, id)
   ];
+  if (poll) st.push(env.DB.prepare("INSERT INTO srv_polls (message_id, server_id, channel_id, question, options, multi, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(id, ctx.server.id, channel.id, poll.q, JSON.stringify(poll.o), poll.multi ? 1 : 0, now + poll.hours * 3600000));
+  if (sticker) st.push(env.DB.prepare("INSERT INTO srv_msg_stickers (message_id, server_id, sticker_id) VALUES (?, ?, ?)").bind(id, ctx.server.id, sticker.id));
+  if (pre && pre.starter) st.push(env.DB.prepare("UPDATE srv_threads SET starter_id = ? WHERE id = ?").bind(id, channel.id));
   /* Who is mentioned: users by member id, role holders, or everyone. */
   let targets = [];
   if (everyone) {
@@ -1467,10 +1654,18 @@ async function sendMessage(request, env, deps, ctx, channel) {
     targets.forEach((m) => st.push(env.DB.prepare("INSERT INTO srv_reads (account_id, channel_id, server_id, last_read, mentions) VALUES (?, ?, ?, '', 1) ON CONFLICT(account_id, channel_id) DO UPDATE SET mentions = mentions + 1").bind(m.account_id, channel.id, ctx.server.id)));
   }
   await env.DB.batch(st);
-  const msg = await presentMessage(env, deps, request, row, [], replyAuthor ? new Map([[replyTo, await env.DB.prepare("SELECT id, author_mid, body, attachments, removed_at, flags FROM srv_messages WHERE id = ?").bind(replyTo).first()]]) : null);
+  if (channel.kind === "thread" && channel.thread) {
+    channel.thread.last_message_id = id;
+    channel.thread.message_count = (Number(channel.thread.message_count) || 0) + 1;
+    channel.thread.archived = 0;
+    if (pre && pre.starter) channel.thread.starter_id = id;
+  }
+  const msg = (await presentMessages(env, deps, request, [row], ctx.mid, ctx))[0];
   if (b.nonce) msg.n = clip(b.nonce, 40);
-  emit(env, deps, ctx.server.id, channel.id, { t: "msg", m: msg });
+  emitIn(env, deps, ctx, channel, { t: "msg", m: msg });
+  if (channel.kind === "thread") threadTouched(env, deps, ctx, channel);
   later(deps, fanOut(env, deps, ctx, channel, row, targets, everyone, emojis));
+  if (pre) return { message: msg };
   return deps.json(200, { ok: true, message: msg });
 }
 
@@ -1576,7 +1771,7 @@ async function editMessage(request, env, deps, ctx, channel, mid) {
   row.edited_at = now;
   row.mentions = JSON.stringify(mentions);
   const [msg] = await presentMessages(env, deps, request, [row], ctx.mid, ctx);
-  emit(env, deps, ctx.server.id, channel.id, { t: "msg", m: msg });
+  emitIn(env, deps, ctx, channel, { t: "msg", m: msg });
   return deps.json(200, { ok: true, message: msg });
 }
 
@@ -1591,7 +1786,7 @@ async function deleteMessage(request, env, url, deps, ctx, channel, mid) {
       env.DB.prepare("DELETE FROM srv_messages WHERE id = ?").bind(mid)
     ]);
     later(deps, deleteKeys(env, files));
-    emit(env, deps, ctx.server.id, channel.id, { t: "del", id: mid });
+    emitIn(env, deps, ctx, channel, { t: "del", id: mid });
     return deps.json(200, { ok: true, removed: "deleted" });
   }
   if (!has(ctx.perms(channel.id), PERM.MANAGE_MESSAGES)) return err(deps, 403, "perm");
@@ -1614,7 +1809,7 @@ async function deleteMessage(request, env, url, deps, ctx, channel, mid) {
   row.attachments = "";
   row.pinned_at = 0;
   const msg = await presentMessage(env, deps, request, row, [], null, false);
-  emit(env, deps, ctx.server.id, channel.id, { t: "msg", m: msg });
+  emitIn(env, deps, ctx, channel, { t: "msg", m: msg });
   return deps.json(200, { ok: true, removed: "stub", message: await presentMessage(env, deps, request, row, [], null, true) });
 }
 
@@ -1642,7 +1837,7 @@ async function react(env, deps, ctx, channel, mid, raw, on) {
   }
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM srv_reactions WHERE message_id = ? AND emoji = ?").bind(mid, emoji).first();
   const n = Number(count && count.n) || 0;
-  emit(env, deps, ctx.server.id, channel.id, { t: "rx", id: mid, e: emoji, n: n, m: ctx.mid, on: !!on });
+  emitIn(env, deps, ctx, channel, { t: "rx", id: mid, e: emoji, n: n, m: ctx.mid, on: !!on });
   return deps.json(200, { ok: true, n: n });
 }
 
@@ -1659,7 +1854,7 @@ async function pin(env, deps, ctx, channel, mid, on) {
     env.DB.prepare("UPDATE srv_messages SET pinned_at = ? WHERE id = ?").bind(at, mid),
     modlog(env, ctx, on ? "message_pin" : "message_unpin", mid, { channel: channel.id })
   ]);
-  emit(env, deps, ctx.server.id, channel.id, { t: "pin", id: mid, p: at });
+  emitIn(env, deps, ctx, channel, { t: "pin", id: mid, p: at });
   return deps.json(200, { ok: true, pinnedAt: at });
 }
 
@@ -1701,8 +1896,9 @@ async function search(request, env, url, deps, ctx) {
   let visible = visibleChannels(ctx).filter((c) => c.kind !== "category").map((c) => c.id);
   if (cid) visible = visible.filter((id) => id === cid);
   if (!visible.length) return deps.json(200, { messages: [] });
-  const where = ["server_id = ?", "removed_at = 0", "flags = 0", "channel_id IN (" + visible.map(() => "?").join(",") + ")"];
-  const vals = [ctx.server.id, ...visible];
+  const marks = visible.map(() => "?").join(",");
+  const where = ["server_id = ?", "removed_at = 0", "flags = 0", "(channel_id IN (" + marks + ") OR channel_id IN (SELECT id FROM srv_threads WHERE parent_id IN (" + marks + ")))"];
+  const vals = [ctx.server.id, ...visible, ...visible];
   if (q.length >= 2) {
     where.push("body LIKE ? ESCAPE '\\'");
     vals.push("%" + q.replace(/[\\%_]/g, (m) => "\\" + m) + "%");
@@ -1710,7 +1906,14 @@ async function search(request, env, url, deps, ctx) {
   if (HEX16.test(author)) { where.push("author_mid = ?"); vals.push(author); }
   if (MSG_ID.test(before)) { where.push("id < ?"); vals.push(before); }
   const list = rows(await env.DB.prepare("SELECT * FROM srv_messages WHERE " + where.join(" AND ") + " ORDER BY id DESC LIMIT 25").bind(...vals).all());
-  return deps.json(200, { messages: await presentMessages(env, deps, request, list, ctx.mid, ctx), more: list.length === 25 });
+  /* Hits inside threads name their thread so the client can open it. */
+  const tids = Array.from(new Set(list.map((m) => m.channel_id).filter((id) => !ctx.byId.has(id))));
+  const threads = {};
+  if (tids.length) {
+    rows(await env.DB.prepare("SELECT * FROM srv_threads WHERE server_id = ? AND id IN (" + tids.map(() => "?").join(",") + ")").bind(ctx.server.id, ...tids).all())
+      .forEach((t) => { ctx.byId.set(t.id, threadChannel(ctx, t)); threads[t.id] = presentThread(t); });
+  }
+  return deps.json(200, { messages: await presentMessages(env, deps, request, list, ctx.mid, ctx), threads: threads, more: list.length === 25 });
 }
 
 async function modlogList(env, url, deps, ctx) {
@@ -1758,6 +1961,548 @@ async function socket(request, env, url, deps) {
   const headers = new Headers(request.headers);
   headers.set("x-account-id", row.public_id);
   headers.set("x-member-id", ctx.mid);
-  headers.set("x-srv-visible", visibleChannels(ctx).map((c) => c.id).join(","));
+  const seen = visibleChannels(ctx);
+  headers.set("x-srv-visible", seen.map((c) => c.id).join(","));
+  if (url.searchParams.get("k") === "v") {
+    headers.set("x-srv-kind", "v");
+    headers.set("x-srv-voice", seen.filter((c) => c.kind === "voice" && has(ctx.perms(c.id), PERM.CONNECT)).map((c) => {
+      const p = ctx.perms(c.id);
+      return c.id + ":" + ((has(p, PERM.SPEAK) ? 1 : 0) | (has(p, PERM.VIDEO) ? 2 : 0) | (has(p, PERM.MUTE_MEMBERS) ? 4 : 0));
+    }).join(","));
+  } else {
+    headers.delete("x-srv-kind");
+    headers.delete("x-srv-voice");
+  }
   return s.fetch(new Request(request.url, { method: "GET", headers }));
+}
+
+/* ---------- phase 2: threads and forums ---------- */
+
+function threadTags(raw) {
+  return String(raw || "").split(",").filter((id) => HEX16.test(id));
+}
+
+function presentThread(t) {
+  return {
+    id: t.id,
+    parentId: t.parent_id,
+    rootId: t.root_id || "",
+    starterId: t.starter_id || "",
+    name: t.name,
+    ownerMid: t.owner_mid,
+    archived: Number(t.archived) === 1,
+    locked: Number(t.locked) === 1,
+    tags: threadTags(t.tags),
+    count: Number(t.message_count) || 0,
+    lastId: t.last_message_id || "",
+    createdAt: Number(t.created_at) || 0
+  };
+}
+
+/* A thread plus its starter message, which forum lists show as the post. */
+async function presentThreadFull(env, deps, request, ctx, t) {
+  const out = presentThread(t);
+  if (t.starter_id) {
+    const m = await env.DB.prepare("SELECT * FROM srv_messages WHERE id = ?").bind(t.starter_id).first();
+    if (m) out.starter = (await presentMessages(env, deps, request, [m], ctx.mid, ctx))[0];
+  }
+  const read = await env.DB.prepare("SELECT last_read FROM srv_reads WHERE account_id = ? AND channel_id = ?").bind(ctx.accountId, t.id).first();
+  out.lastRead = (read && read.last_read) || "";
+  return out;
+}
+
+function threadTouched(env, deps, ctx, channel) {
+  if (!channel.thread) return;
+  emit(env, deps, ctx.server.id, channel.parent_id, { t: "thread", ch: channel.parent_id, th: presentThread(channel.thread) });
+}
+
+async function listThreads(request, env, url, deps, ctx, channel) {
+  if (THREAD_PARENTS.indexOf(channel.kind) < 0) return err(deps, 400, "kind");
+  if (!has(ctx.perms(channel.id), PERM.VIEW)) return err(deps, 403, "perm");
+  const archived = url.searchParams.get("archived") === "1" ? 1 : 0;
+  const before = String(url.searchParams.get("before") || "");
+  const tag = String(url.searchParams.get("tag") || "");
+  const limit = 25;
+  const where = ["parent_id = ?", "archived = ?"];
+  const vals = [channel.id, archived];
+  if (HEX16.test(tag)) { where.push("(',' || tags || ',') LIKE ?"); vals.push("%," + tag + ",%"); }
+  if (before) { where.push("(CASE WHEN last_message_id = '' THEN id ELSE last_message_id END) < ?"); vals.push(before); }
+  const list = rows(await env.DB.prepare(
+    "SELECT * FROM srv_threads WHERE " + where.join(" AND ") + " ORDER BY (CASE WHEN last_message_id = '' THEN id ELSE last_message_id END) DESC LIMIT ?"
+  ).bind(...vals, limit).all());
+  const starters = list.map((t) => t.starter_id).filter(Boolean);
+  const byId = new Map();
+  if (starters.length) {
+    const ms = rows(await env.DB.prepare("SELECT * FROM srv_messages WHERE id IN (" + starters.map(() => "?").join(",") + ")").bind(...starters).all());
+    (await presentMessages(env, deps, request, ms, ctx.mid, ctx)).forEach((m) => byId.set(m.id, m));
+  }
+  const reads = list.length ? rows(await env.DB.prepare(
+    "SELECT channel_id, last_read FROM srv_reads WHERE account_id = ? AND channel_id IN (" + list.map(() => "?").join(",") + ")"
+  ).bind(ctx.accountId, ...list.map((t) => t.id)).all()) : [];
+  const readMap = new Map(reads.map((r) => [r.channel_id, r.last_read]));
+  const threads = list.map((t) => {
+    const out = presentThread(t);
+    if (byId.has(t.starter_id)) out.starter = byId.get(t.starter_id);
+    out.lastRead = readMap.get(t.id) || "";
+    return out;
+  });
+  const last = list[list.length - 1];
+  return deps.json(200, { threads, next: list.length === limit ? (last.last_message_id || last.id) : "" });
+}
+
+/* Active threads across the channels the viewer can see. */
+async function activeThreads(request, env, deps, ctx) {
+  const visible = visibleChannels(ctx).filter((c) => THREAD_PARENTS.indexOf(c.kind) >= 0).map((c) => c.id);
+  if (!visible.length) return deps.json(200, { threads: [] });
+  const list = rows(await env.DB.prepare(
+    "SELECT * FROM srv_threads WHERE server_id = ? AND archived = 0 AND parent_id IN (" + visible.map(() => "?").join(",") + ") ORDER BY last_message_id DESC LIMIT 50"
+  ).bind(ctx.server.id, ...visible).all());
+  return deps.json(200, { threads: list.map(presentThread) });
+}
+
+async function createThread(request, env, deps, ctx, channel) {
+  if (THREAD_PARENTS.indexOf(channel.kind) < 0) return err(deps, 400, "kind");
+  const perms = ctx.perms(channel.id);
+  if (ctx.timedOut) return err(deps, 403, "timed_out", { until: Number(ctx.member.timeout_until) });
+  if (!has(perms, PERM.VIEW) || !has(perms, PERM.CREATE_THREADS)) return err(deps, 403, "perm");
+  const b = await body(deps, request, 24000);
+  if (b.error) return err(deps, 400, b.error);
+  if (!floodOk("srvthread:" + ctx.accountId, 5, 60000)) return err(deps, 429, "rate_limited", { retry: 60 });
+  const forum = channel.kind === "forum";
+  let root = null;
+  if (!forum && b.messageId) {
+    if (!MSG_ID.test(String(b.messageId))) return err(deps, 404, "message");
+    root = await env.DB.prepare("SELECT * FROM srv_messages WHERE id = ? AND channel_id = ?").bind(b.messageId, channel.id).first();
+    if (!root || Number(root.removed_at) > 0 || Number(root.flags) !== 0) return err(deps, 404, "message");
+    const dup = await env.DB.prepare("SELECT id FROM srv_threads WHERE root_id = ?").bind(root.id).first();
+    if (dup) return err(deps, 409, "thread_exists", { id: dup.id });
+  }
+  let name = clip(b.name, 100);
+  if (!name && root) name = clip(String(root.body || "").replace(/<[@#&!:a-z0-9_]+>/gi, "").replace(/\s+/g, " ").trim(), 40);
+  if (!name && forum) return err(deps, 400, "name");
+  if (!name) name = "Thread";
+  const hasStarter = !!(String(b.body || "").trim() || (Array.isArray(b.attachments) && b.attachments.length) || b.poll || b.sticker);
+  if (forum && !hasStarter) return err(deps, 400, "empty");
+  if (forum && !has(perms, PERM.SEND)) return err(deps, 403, "perm");
+  let tags = [];
+  if (forum && Array.isArray(b.tags) && b.tags.length) {
+    const known = new Set(rows(await env.DB.prepare("SELECT id FROM srv_forum_tags WHERE channel_id = ?").bind(channel.id).all()).map((r) => r.id));
+    tags = Array.from(new Set(b.tags.map(String))).filter((id) => known.has(id)).slice(0, 5);
+  }
+  const now = Date.now();
+  const tid = randomHex(8);
+  const t = {
+    id: tid, server_id: ctx.server.id, parent_id: channel.id, root_id: root ? root.id : "", starter_id: "",
+    name, owner_id: ctx.accountId, owner_mid: ctx.mid, archived: 0, locked: 0, tags: tags.join(","),
+    message_count: 0, last_message_id: "", created_at: now
+  };
+  const st = [env.DB.prepare(
+    "INSERT INTO srv_threads (id, server_id, parent_id, root_id, starter_id, name, owner_id, owner_mid, tags, created_at) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?)"
+  ).bind(tid, t.server_id, t.parent_id, t.root_id, name, ctx.accountId, ctx.mid, t.tags, now)];
+  /* A thread without a root message leaves a line in the parent channel. */
+  let notice = null;
+  if (!forum && !root) {
+    const nid = messageId(now, randomBase36(6));
+    notice = {
+      id: nid, server_id: ctx.server.id, channel_id: channel.id, author_id: ctx.accountId, author_mid: ctx.mid,
+      body: JSON.stringify({ t: tid, n: name }), reply_to: "", attachments: "", mentions: "", flags: 2,
+      edited_at: 0, removed_by: "", removed_at: 0, removed_reason: "", pinned_at: 0, created_at: now
+    };
+    st.push(env.DB.prepare("INSERT INTO srv_messages (id, server_id, channel_id, author_id, author_mid, body, flags, created_at) VALUES (?, ?, ?, ?, ?, ?, 2, ?)")
+      .bind(nid, ctx.server.id, channel.id, ctx.accountId, ctx.mid, notice.body, now));
+    st.push(env.DB.prepare("UPDATE srv_channels SET last_message_id = ? WHERE id = ?").bind(nid, channel.id));
+  }
+  await env.DB.batch(st);
+  const tc = threadChannel(ctx, t);
+  ctx.byId.set(tid, tc);
+  let message = null;
+  if (hasStarter) {
+    const sent = await sendMessage(request, env, deps, ctx, tc, {
+      body: b.body, attachments: b.attachments, poll: b.poll, sticker: b.sticker, nonce: b.nonce, starter: forum
+    });
+    if (sent instanceof Response) {
+      /* Roll back an empty thread so a bad starter leaves nothing behind. */
+      await env.DB.batch([env.DB.prepare("DELETE FROM srv_threads WHERE id = ?").bind(tid)]);
+      return sent;
+    }
+    message = sent.message;
+  }
+  if (notice) {
+    const nm = (await presentMessages(env, deps, request, [notice], ctx.mid, ctx))[0];
+    emitIn(env, deps, ctx, channel, { t: "msg", m: nm });
+  }
+  threadTouched(env, deps, ctx, tc);
+  const out = presentThread(t);
+  if (forum && message) out.starter = message;
+  return deps.json(200, { ok: true, thread: out, message });
+}
+
+async function patchThread(request, env, deps, ctx, channel) {
+  const t = channel.thread;
+  const perms = ctx.perms(channel.parent_id);
+  const manage = has(perms, PERM.MANAGE_THREADS);
+  const mine = t.owner_id === ctx.accountId;
+  const b = await body(deps, request);
+  if (b.error) return err(deps, 400, b.error);
+  const sets = [];
+  const vals = [];
+  if (b.name != null) {
+    if (!manage && !mine) return err(deps, 403, "perm");
+    const name = clip(b.name, 100);
+    if (!name) return err(deps, 400, "name");
+    sets.push("name = ?"); vals.push(name); t.name = name;
+  }
+  if (b.archived != null) {
+    if (!manage && !mine) return err(deps, 403, "perm");
+    if (!b.archived && Number(t.locked) === 1 && !manage) return err(deps, 403, "locked");
+    sets.push("archived = ?"); vals.push(b.archived ? 1 : 0); t.archived = b.archived ? 1 : 0;
+  }
+  if (b.locked != null) {
+    if (!manage) return err(deps, 403, "perm");
+    sets.push("locked = ?"); vals.push(b.locked ? 1 : 0); t.locked = b.locked ? 1 : 0;
+  }
+  if (b.tags != null) {
+    if (!manage && !mine) return err(deps, 403, "perm");
+    const known = new Set(rows(await env.DB.prepare("SELECT id FROM srv_forum_tags WHERE channel_id = ?").bind(channel.parent_id).all()).map((r) => r.id));
+    const tags = Array.from(new Set((Array.isArray(b.tags) ? b.tags : []).map(String))).filter((id) => known.has(id)).slice(0, 5);
+    sets.push("tags = ?"); vals.push(tags.join(",")); t.tags = tags.join(",");
+  }
+  if (!sets.length) return err(deps, 400, "empty");
+  const st = [env.DB.prepare("UPDATE srv_threads SET " + sets.join(", ") + " WHERE id = ?").bind(...vals, t.id)];
+  if (manage && !mine) st.push(modlog(env, ctx, "thread_update", t.id, { name: t.name, locked: Number(t.locked) === 1, archived: Number(t.archived) === 1 }));
+  await env.DB.batch(st);
+  threadTouched(env, deps, ctx, channel);
+  return deps.json(200, { ok: true, thread: presentThread(t) });
+}
+
+async function deleteThread(env, deps, ctx, channel) {
+  const t = channel.thread;
+  if (!has(ctx.perms(channel.parent_id), PERM.MANAGE_THREADS)) return err(deps, 403, "perm");
+  const keys = rows(await env.DB.prepare("SELECT attachments FROM srv_messages WHERE channel_id = ? AND attachments != ''").bind(t.id).all())
+    .reduce((all, m) => all.concat(parseJson(m.attachments, []).map((a) => a && a.k).filter(Boolean)), []);
+  const msgs = "SELECT id FROM srv_messages WHERE channel_id = ?";
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM srv_reactions WHERE message_id IN (" + msgs + ")").bind(t.id),
+    env.DB.prepare("DELETE FROM srv_poll_votes WHERE message_id IN (" + msgs + ")").bind(t.id),
+    env.DB.prepare("DELETE FROM srv_polls WHERE channel_id = ?").bind(t.id),
+    env.DB.prepare("DELETE FROM srv_msg_stickers WHERE message_id IN (" + msgs + ")").bind(t.id),
+    env.DB.prepare("DELETE FROM srv_messages WHERE channel_id = ?").bind(t.id),
+    env.DB.prepare("DELETE FROM srv_reads WHERE channel_id = ?").bind(t.id),
+    env.DB.prepare("DELETE FROM srv_threads WHERE id = ?").bind(t.id),
+    modlog(env, ctx, "thread_delete", t.id, { name: t.name })
+  ]);
+  later(deps, deleteKeys(env, keys));
+  emit(env, deps, ctx.server.id, channel.parent_id, { t: "thread_del", ch: channel.parent_id, id: t.id });
+  return deps.json(200, { ok: true });
+}
+
+async function putTags(request, env, deps, ctx, channel) {
+  if (channel.kind !== "forum") return err(deps, 400, "kind");
+  if (!has(ctx.perms(channel.id), PERM.MANAGE_CHANNELS)) return err(deps, 403, "perm");
+  const b = await body(deps, request);
+  if (b.error) return err(deps, 400, b.error);
+  const old = new Set(rows(await env.DB.prepare("SELECT id FROM srv_forum_tags WHERE channel_id = ?").bind(channel.id).all()).map((r) => r.id));
+  const list = (Array.isArray(b.tags) ? b.tags : []).slice(0, TAGS_MAX);
+  const st = [env.DB.prepare("DELETE FROM srv_forum_tags WHERE channel_id = ?").bind(channel.id)];
+  const out = [];
+  list.forEach((tag, i) => {
+    const name = clip(tag && tag.name, 20);
+    if (!name) return;
+    const id = tag.id && old.has(String(tag.id)) ? String(tag.id) : randomHex(8);
+    const emoji = clip(tag.emoji, 16);
+    st.push(env.DB.prepare("INSERT INTO srv_forum_tags (id, server_id, channel_id, name, emoji, position) VALUES (?, ?, ?, ?, ?, ?)").bind(id, ctx.server.id, channel.id, name, emoji, i));
+    out.push({ id, name, emoji });
+  });
+  st.push(modlog(env, ctx, "forum_tags", channel.id, { n: out.length }));
+  await env.DB.batch(st);
+  resync(env, deps, ctx.server.id);
+  return deps.json(200, { ok: true, tags: out });
+}
+
+/* ---------- phase 2: polls and stickers ---------- */
+
+function cleanPoll(p) {
+  if (!p || typeof p !== "object") return null;
+  const q = clip(p.q, 300);
+  const o = (Array.isArray(p.o) ? p.o : []).map((x) => clip(x, 55)).filter(Boolean);
+  const hours = Number(p.hours) || 24;
+  if (!q || o.length < 2 || o.length > 10 || POLL_HOURS.indexOf(hours) < 0) return null;
+  return { q, o, multi: !!p.multi, hours };
+}
+
+/* Thread chips, polls and stickers for a page of messages. */
+async function messageExtras(env, request, ids, viewerMid, ctx) {
+  const out = { threads: new Map(), polls: new Map(), stickers: new Map() };
+  if (!ids.length) return out;
+  const marks = ids.map(() => "?").join(",");
+  const [threads, polls, counts, mine, stickers] = await Promise.all([
+    env.DB.prepare("SELECT * FROM srv_threads WHERE root_id IN (" + marks + ")").bind(...ids).all(),
+    env.DB.prepare("SELECT * FROM srv_polls WHERE message_id IN (" + marks + ")").bind(...ids).all(),
+    env.DB.prepare("SELECT message_id, option, COUNT(*) AS n FROM srv_poll_votes WHERE message_id IN (" + marks + ") GROUP BY message_id, option").bind(...ids).all(),
+    env.DB.prepare("SELECT message_id, option FROM srv_poll_votes WHERE mid = ? AND message_id IN (" + marks + ")").bind(viewerMid || "", ...ids).all(),
+    env.DB.prepare("SELECT ms.message_id, s.id, s.name, s.key FROM srv_msg_stickers ms LEFT JOIN srv_stickers s ON s.id = ms.sticker_id WHERE ms.message_id IN (" + marks + ")").bind(...ids).all()
+  ]);
+  rows(threads).forEach((t) => out.threads.set(t.root_id, presentThread(t)));
+  const pollRows = rows(polls);
+  if (pollRows.length) {
+    const voters = rows(await env.DB.prepare(
+      "SELECT message_id, COUNT(DISTINCT mid) AS n FROM srv_poll_votes WHERE message_id IN (" + pollRows.map(() => "?").join(",") + ") GROUP BY message_id"
+    ).bind(...pollRows.map((p) => p.message_id)).all());
+    const vmap = new Map(voters.map((v) => [v.message_id, Number(v.n) || 0]));
+    const cmap = new Map();
+    rows(counts).forEach((c) => cmap.set(c.message_id + ":" + c.option, Number(c.n) || 0));
+    const mmap = new Map();
+    rows(mine).forEach((v) => {
+      if (!mmap.has(v.message_id)) mmap.set(v.message_id, []);
+      mmap.get(v.message_id).push(Number(v.option));
+    });
+    pollRows.forEach((p) => out.polls.set(p.message_id, presentPoll(p, cmap, vmap.get(p.message_id) || 0, mmap.get(p.message_id) || [])));
+  }
+  rows(stickers).forEach((s) => out.stickers.set(s.message_id, s.id ? { id: s.id, name: s.name, url: publicFile(request, s.key) } : { gone: true }));
+  return out;
+}
+
+function presentPoll(p, counts, voters, mine) {
+  const options = parseJson(p.options, []);
+  return {
+    q: p.question,
+    o: options.map((t, i) => ({ t, n: counts.get(p.message_id + ":" + i) || 0 })),
+    multi: Number(p.multi) === 1,
+    end: Number(p.ends_at) || 0,
+    ended: Number(p.ended) === 1 || Number(p.ends_at) <= Date.now(),
+    voters,
+    mine
+  };
+}
+
+async function pollRow(env, ctx, channel, mid) {
+  if (!MSG_ID.test(String(mid))) return null;
+  const p = await env.DB.prepare("SELECT * FROM srv_polls WHERE message_id = ? AND channel_id = ?").bind(mid, channel.id).first();
+  if (!p) return null;
+  const m = await env.DB.prepare("SELECT author_id, removed_at FROM srv_messages WHERE id = ?").bind(mid).first();
+  if (!m || Number(m.removed_at) > 0) return null;
+  p.author_id = m.author_id;
+  return p;
+}
+
+async function pollTotals(env, p) {
+  const counts = new Map();
+  rows(await env.DB.prepare("SELECT option, COUNT(*) AS n FROM srv_poll_votes WHERE message_id = ? GROUP BY option").bind(p.message_id).all())
+    .forEach((c) => counts.set(p.message_id + ":" + c.option, Number(c.n) || 0));
+  const v = await env.DB.prepare("SELECT COUNT(DISTINCT mid) AS n FROM srv_poll_votes WHERE message_id = ?").bind(p.message_id).first();
+  return presentPoll(p, counts, Number(v && v.n) || 0, []);
+}
+
+async function votePoll(request, env, deps, ctx, channel, mid) {
+  if (!has(ctx.perms(channel.id), PERM.VIEW)) return err(deps, 403, "perm");
+  if (ctx.timedOut) return err(deps, 403, "timed_out", { until: Number(ctx.member.timeout_until) });
+  const p = await pollRow(env, ctx, channel, mid);
+  if (!p) return err(deps, 404, "poll");
+  if (Number(p.ended) === 1 || Number(p.ends_at) <= Date.now()) return err(deps, 409, "poll_ended");
+  const b = await body(deps, request);
+  if (b.error) return err(deps, 400, b.error);
+  if (!floodOk("srvvote:" + ctx.accountId, 20, 10000)) return err(deps, 429, "rate_limited");
+  const n = parseJson(p.options, []).length;
+  let picks = Array.from(new Set((Array.isArray(b.o) ? b.o : []).map((x) => Math.floor(Number(x))))).filter((x) => x >= 0 && x < n);
+  if (Number(p.multi) !== 1) picks = picks.slice(0, 1);
+  const now = Date.now();
+  const st = [env.DB.prepare("DELETE FROM srv_poll_votes WHERE message_id = ? AND account_id = ?").bind(mid, ctx.accountId)];
+  picks.forEach((o) => st.push(env.DB.prepare("INSERT INTO srv_poll_votes (message_id, account_id, mid, option, at) VALUES (?, ?, ?, ?, ?)").bind(mid, ctx.accountId, ctx.mid, o, now)));
+  await env.DB.batch(st);
+  const pl = await pollTotals(env, p);
+  emitIn(env, deps, ctx, channel, { t: "poll", id: mid, pl: Object.assign({}, pl, { mine: undefined }) });
+  pl.mine = picks;
+  return deps.json(200, { ok: true, poll: pl });
+}
+
+async function endPoll(env, deps, ctx, channel, mid) {
+  const p = await pollRow(env, ctx, channel, mid);
+  if (!p) return err(deps, 404, "poll");
+  if (p.author_id !== ctx.accountId && !has(ctx.perms(channel.id), PERM.MANAGE_MESSAGES)) return err(deps, 403, "perm");
+  await env.DB.batch([env.DB.prepare("UPDATE srv_polls SET ended = 1 WHERE message_id = ?").bind(mid)]);
+  p.ended = 1;
+  const pl = await pollTotals(env, p);
+  emitIn(env, deps, ctx, channel, { t: "poll", id: mid, pl: Object.assign({}, pl, { mine: undefined }) });
+  return deps.json(200, { ok: true, poll: pl });
+}
+
+async function pollVoters(url, env, deps, ctx, channel, mid) {
+  if (!has(ctx.perms(channel.id), PERM.VIEW)) return err(deps, 403, "perm");
+  const p = await pollRow(env, ctx, channel, mid);
+  if (!p) return err(deps, 404, "poll");
+  const o = Math.floor(Number(url.searchParams.get("o") || 0));
+  const list = rows(await env.DB.prepare("SELECT mid FROM srv_poll_votes WHERE message_id = ? AND option = ? ORDER BY at LIMIT 100").bind(mid, o).all());
+  return deps.json(200, { voters: list.map((r) => r.mid) });
+}
+
+/* ---------- phase 2: events ---------- */
+
+function presentEvent(request, ev, mine) {
+  return {
+    id: ev.id,
+    channelId: ev.channel_id || "",
+    name: ev.name,
+    description: ev.description || "",
+    location: ev.location || "",
+    startAt: Number(ev.start_at) || 0,
+    endAt: Number(ev.end_at) || 0,
+    image: ev.image_key ? publicFile(request, ev.image_key) : "",
+    creatorMid: ev.creator_mid,
+    status: ev.status,
+    going: Number(ev.going) || 0,
+    interested: Number(ev.interested) || 0,
+    mine: mine || ""
+  };
+}
+
+function eventVisible(ctx, ev) {
+  return !ev.channel_id || has(ctx.perms(ev.channel_id), PERM.VIEW);
+}
+
+function canManageEvent(ctx, ev) {
+  return has(ctx.base, PERM.MANAGE_EVENTS) || ev.creator_id === ctx.accountId;
+}
+
+async function eventRow(env, ctx, eid) {
+  if (!HEX16.test(String(eid || ""))) return null;
+  const ev = await env.DB.prepare("SELECT * FROM srv_events WHERE id = ? AND server_id = ?").bind(eid, ctx.server.id).first();
+  return ev && eventVisible(ctx, ev) ? ev : null;
+}
+
+function eventFields(ctx, b, ev) {
+  const out = {};
+  if (b.name != null || !ev) {
+    out.name = clip(b.name, 100);
+    if (!out.name) return { error: "name" };
+  }
+  if (b.description != null) out.description = clip(b.description, 1000);
+  if (b.location != null) out.location = clip(b.location, 100);
+  if (b.channelId != null) {
+    const c = b.channelId ? ctx.byId.get(String(b.channelId)) : null;
+    if (b.channelId && (!c || c.kind === "category" || !has(ctx.perms(c.id), PERM.VIEW))) return { error: "channel" };
+    out.channel_id = c ? c.id : "";
+  }
+  const now = Date.now();
+  if (b.startAt != null || !ev) {
+    const at = Math.floor(Number(b.startAt) || 0);
+    if (at < now - 5 * 60000 || at > now + 366 * 86400000) return { error: "start" };
+    out.start_at = at;
+  }
+  if (b.endAt != null) {
+    const end = Math.floor(Number(b.endAt) || 0);
+    const start = out.start_at || (ev ? Number(ev.start_at) : 0);
+    if (end && (end <= start || end > start + 31 * 86400000)) return { error: "end" };
+    out.end_at = end;
+  }
+  if (b.image != null) {
+    const prefix = "srv/" + ctx.server.id + "/v/";
+    if (b.image && (typeof b.image !== "string" || b.image.indexOf(prefix) !== 0 || !/^[a-z0-9/]+$/.test(b.image))) return { error: "image" };
+    out.image_key = b.image || "";
+  }
+  if (b.status != null && ev) {
+    const status = String(b.status);
+    if (["scheduled", "active", "ended", "cancelled"].indexOf(status) < 0) return { error: "status" };
+    out.status = status;
+  }
+  return { fields: out };
+}
+
+async function listEvents(request, env, deps, ctx) {
+  const now = Date.now();
+  const list = rows(await env.DB.prepare(
+    "SELECT * FROM srv_events WHERE server_id = ? AND status != 'cancelled' AND (end_at > ? OR start_at > ?) ORDER BY start_at LIMIT ?"
+  ).bind(ctx.server.id, now, now - 3 * 3600000, EVENTS_MAX).all()).filter((ev) => eventVisible(ctx, ev));
+  const mine = list.length ? rows(await env.DB.prepare(
+    "SELECT event_id, status FROM srv_event_rsvps WHERE account_id = ? AND event_id IN (" + list.map(() => "?").join(",") + ")"
+  ).bind(ctx.accountId, ...list.map((e) => e.id)).all()) : [];
+  const mmap = new Map(mine.map((r) => [r.event_id, r.status]));
+  return deps.json(200, { events: list.map((ev) => presentEvent(request, ev, mmap.get(ev.id))), canManage: has(ctx.base, PERM.MANAGE_EVENTS) });
+}
+
+async function createEvent(request, env, deps, ctx) {
+  if (!has(ctx.base, PERM.MANAGE_EVENTS)) return err(deps, 403, "perm");
+  const b = await body(deps, request);
+  if (b.error) return err(deps, 400, b.error);
+  if (!floodOk("srvevent:" + ctx.accountId, 5, 60000)) return err(deps, 429, "rate_limited");
+  const f = eventFields(ctx, b, null);
+  if (f.error) return err(deps, 400, f.error);
+  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM srv_events WHERE server_id = ? AND status IN ('scheduled', 'active')").bind(ctx.server.id).first();
+  if (Number(n && n.n) >= EVENTS_MAX) return err(deps, 400, "too_many");
+  const ev = Object.assign({
+    id: randomHex(8), server_id: ctx.server.id, channel_id: "", description: "", location: "", end_at: 0, image_key: "",
+    creator_id: ctx.accountId, creator_mid: ctx.mid, status: "scheduled", going: 1, interested: 0, created_at: Date.now()
+  }, f.fields);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO srv_events (id, server_id, channel_id, name, description, location, start_at, end_at, image_key, creator_id, creator_mid, status, going, interested, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, 0, ?)")
+      .bind(ev.id, ev.server_id, ev.channel_id, ev.name, ev.description, ev.location, ev.start_at, ev.end_at, ev.image_key, ev.creator_id, ev.creator_mid, ev.created_at),
+    /* The creator is going by default. */
+    env.DB.prepare("INSERT INTO srv_event_rsvps (event_id, server_id, account_id, mid, status, at) VALUES (?, ?, ?, ?, 'going', ?)").bind(ev.id, ctx.server.id, ctx.accountId, ctx.mid, ev.created_at),
+    modlog(env, ctx, "event_create", ev.id, { name: ev.name })
+  ]);
+  emit(env, deps, ctx.server.id, ev.channel_id, { t: "event", ev: presentEvent(request, ev, "") });
+  return deps.json(200, { ok: true, event: presentEvent(request, ev, "going") });
+}
+
+async function patchEvent(request, env, deps, ctx, eid) {
+  const ev = await eventRow(env, ctx, eid);
+  if (!ev) return err(deps, 404, "event");
+  if (!canManageEvent(ctx, ev)) return err(deps, 403, "perm");
+  const b = await body(deps, request);
+  if (b.error) return err(deps, 400, b.error);
+  if (b.startAt != null && Number(b.startAt) === Number(ev.start_at)) delete b.startAt;
+  const f = eventFields(ctx, b, ev);
+  if (f.error) return err(deps, 400, f.error);
+  const keys = Object.keys(f.fields);
+  if (!keys.length) return err(deps, 400, "empty");
+  const oldImage = ev.image_key;
+  Object.assign(ev, f.fields);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE srv_events SET " + keys.map((k) => k + " = ?").join(", ") + " WHERE id = ?").bind(...keys.map((k) => f.fields[k]), ev.id),
+    modlog(env, ctx, "event_update", ev.id, { name: ev.name, status: ev.status })
+  ]);
+  if (oldImage && oldImage !== ev.image_key) later(deps, deleteKeys(env, [oldImage]));
+  emit(env, deps, ctx.server.id, ev.channel_id, { t: "event", ev: presentEvent(request, ev, "") });
+  return deps.json(200, { ok: true, event: presentEvent(request, ev, "") });
+}
+
+async function deleteEvent(env, deps, ctx, eid) {
+  const ev = await eventRow(env, ctx, eid);
+  if (!ev) return err(deps, 404, "event");
+  if (!canManageEvent(ctx, ev)) return err(deps, 403, "perm");
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM srv_event_rsvps WHERE event_id = ?").bind(ev.id),
+    env.DB.prepare("DELETE FROM srv_events WHERE id = ?").bind(ev.id),
+    modlog(env, ctx, "event_delete", ev.id, { name: ev.name })
+  ]);
+  if (ev.image_key) later(deps, deleteKeys(env, [ev.image_key]));
+  emit(env, deps, ctx.server.id, "", { t: "event_del", id: ev.id });
+  return deps.json(200, { ok: true });
+}
+
+async function rsvpEvent(request, env, deps, ctx, eid) {
+  const ev = await eventRow(env, ctx, eid);
+  if (!ev) return err(deps, 404, "event");
+  const b = await body(deps, request);
+  if (b.error) return err(deps, 400, b.error);
+  const status = String(b.status || "");
+  if (["going", "interested", "none"].indexOf(status) < 0) return err(deps, 400, "status");
+  if (!floodOk("srvrsvp:" + ctx.accountId, 20, 10000)) return err(deps, 429, "rate_limited");
+  const st = [status === "none"
+    ? env.DB.prepare("DELETE FROM srv_event_rsvps WHERE event_id = ? AND account_id = ?").bind(ev.id, ctx.accountId)
+    : env.DB.prepare("INSERT INTO srv_event_rsvps (event_id, server_id, account_id, mid, status, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(event_id, account_id) DO UPDATE SET status = excluded.status, at = excluded.at")
+      .bind(ev.id, ctx.server.id, ctx.accountId, ctx.mid, status, Date.now()),
+  env.DB.prepare("UPDATE srv_events SET going = (SELECT COUNT(*) FROM srv_event_rsvps WHERE event_id = ?1 AND status = 'going'), interested = (SELECT COUNT(*) FROM srv_event_rsvps WHERE event_id = ?1 AND status = 'interested') WHERE id = ?1").bind(ev.id)];
+  await env.DB.batch(st);
+  const fresh = await env.DB.prepare("SELECT going, interested FROM srv_events WHERE id = ?").bind(ev.id).first();
+  const going = Number(fresh && fresh.going) || 0;
+  const interested = Number(fresh && fresh.interested) || 0;
+  emit(env, deps, ctx.server.id, ev.channel_id, { t: "rsvp", id: ev.id, going, interested });
+  return deps.json(200, { ok: true, going, interested, mine: status === "none" ? "" : status });
+}
+
+async function eventRsvps(env, deps, ctx, eid) {
+  const ev = await eventRow(env, ctx, eid);
+  if (!ev) return err(deps, 404, "event");
+  const list = rows(await env.DB.prepare("SELECT mid, status FROM srv_event_rsvps WHERE event_id = ? ORDER BY at LIMIT 200").bind(ev.id).all());
+  return deps.json(200, { rsvps: list.map((r) => ({ m: r.mid, status: r.status })) });
 }

@@ -139,7 +139,8 @@ test("native servers: owner-only create, invites, roles, messages, moderation, f
   assert.equal(state.status, 200, state.text);
   const news = state.body.channels.find((c) => c.kind === "announcement");
   assert.ok(news);
-  assert.equal(state.body.channels.filter((c) => c.kind === "category").length, 1);
+  assert.equal(state.body.channels.filter((c) => c.kind === "category").length, 2);
+  assert.equal(state.body.channels.filter((c) => c.kind === "voice").length, 1);
   const ownerMid = state.body.me.mid;
   assert.match(ownerMid, /^[a-f0-9]{16}$/);
 
