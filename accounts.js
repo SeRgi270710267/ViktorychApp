@@ -851,7 +851,8 @@
     // a backup answering them would report only itself.
     // A Discord join and its captcha answer must reach the same Worker: the
     // challenge, its one retry and the owner's key all live there.
-    if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path))) {
+    // YouTube subscriptions need the Data API key, which only the Worker has.
+    if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path)) || /^\/v1\/ext-graph\/youtube\?/.test(String(path))) {
       var mainRoot = String(config().api || "").replace(/\/$/, "");
       if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
     }

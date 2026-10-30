@@ -2,6 +2,7 @@
    with the privacy screen off and on. The cover is an overlay only while
    the window is in the background. Placeholders only. */
 import http from "node:http";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -345,6 +346,9 @@ async function main() {
   }
   if (process.exitCode) fail("privacy list checks failed");
   console.log("privacy lists ok");
+  // External Following / Followers pages ride along here (same browser setup).
+  const ext = spawnSync(process.execPath, [path.join(root, "scripts", "external_following_test.mjs")], { stdio: "inherit", env: process.env });
+  if (ext.status !== 0) fail("external following checks failed");
 }
 
 main().catch((err) => {
