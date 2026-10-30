@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remote keyboard (ime/) and feed search (search/). -->
+<resources>
+    <string name="kb_label">Клавиатура ViktorychTV</string>
+    <string name="kb_search">Найти</string>
+    <string name="kb_go">Перейти</string>
+    <string name="kb_send">Отправить</string>
+    <string name="kb_next">Далее</string>
+    <string name="kb_done">Готово</string>
+    <string name="srch_label">ViktorychApp</string>
+    <string name="srch_title">Поиск в ViktorychApp</string>
+    <string name="srch_hint">Ищите посты, людей и темы</string>
+    <string name="srch_voice">Голосовой поиск</string>
+    <string name="srch_recent">Недавние запросы</string>
+    <string name="srch_clear">Очистить</string>
+    <string name="srch_for">Найти «%1$s» в ViktorychApp</string>
+    <string name="srch_where">Открывает «Обзор» в ViktorychApp</string>
+    <string name="srch_note">Результаты открываются в «Обзоре». Недавние запросы остаются на этом телевизоре.</string>
+    <string name="def_keyboard">Клавиатура</string>
+    <string name="def_keyboard_desc">Клавиатура для пульта: стрелки перемещают, OK печатает, удержание OK — заглавная буква. Английские, испанские, русские буквы и хинди, символы, эмодзи и голосовой ввод через распознавание речи самого телевизора. Набранное остаётся на этом телевизоре.</string>
+    <string name="def_keyboard_allow">Далее: включите «Клавиатура ViktorychTV» в списке клавиатур телевизора. Телевизор покажет обычное предупреждение, как для любой клавиатуры.</string>
+    <string name="def_keyboard_pick">Далее: выберите «Клавиатура ViktorychTV» основной</string>
+    <string name="def_keyboard_next">Следующий шаг</string>
+    <string name="def_keyboard_settings">Открыть настройки клавиатуры</string>
+    <string name="def_keyboard_off">Не использовать клавиатуру</string>
+    <string name="def_search">Поиск</string>
+    <string name="def_search_desc">Ищите по лентам на экране поиска с голосовым вводом и через поиск самого телевизора, если он показывает результаты приложений. Результаты открываются в «Обзоре».</string>
+    <string name="def_search_try">Попробовать поиск</string>
+    <string name="def_search_off">Не использовать поиск</string>
+</resources>

@@ -42,6 +42,10 @@
         <intent>
             <action android:name="android.speech.action.WEB_SEARCH" />
         </intent>
+        <!-- Voice typing (ime/) and voice search (search/) use the TV's own recognizer. -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
         <intent>
             <action android:name="com.android.tv.action.VIEW_INPUTS" />
         </intent>
@@ -386,6 +390,49 @@
                 <data android:scheme="viktorychtv" android:host="dream" />
             </intent-filter>
         </activity>
+
+        <!-- Optional remote keyboard (ime/). Off until chosen on the defaults screen,
+             and then the TV still asks before it is used. -->
+        <service
+            android:name=".ime.TvKeyboard"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/kb_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/kb_method" />
+        </service>
+
+        <activity
+            android:name=".ime.VoiceActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Optional feed search (search/). Off until chosen on the defaults screen. -->
+        <activity
+            android:name=".search.SearchActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/srch_label"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:windowSoftInputMode="stateVisible|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="android.app.searchable" android:resource="@xml/kb_searchable" />
+        </activity>
+
+        <provider
+            android:name=".search.SuggestProvider"
+            android:authorities="app.viktorych.tv.search"
+            android:enabled="false"
+            android:exported="true" />
 
     </application>
 </manifest>
