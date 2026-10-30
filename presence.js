@@ -1135,7 +1135,14 @@ const api = {
     const person = friends.find(function (row) { return row.publicId === id; });
     return person ? person.state || "" : "";
   },
-  myState: function () { return (mine && mine.preference) || "online"; }
+  myState: function () { return (mine && mine.preference) || "online"; },
+  /* The custom status for rich presence elsewhere; nothing while invisible or expired. */
+  myStatus: function () {
+    if (!mine || mine.preference === "invisible") return null;
+    if (mine.clearAt && mine.clearAt <= Date.now()) return null;
+    if (!mine.emoji && !mine.text) return null;
+    return { emoji: mine.emoji || "", text: mine.text || "" };
+  }
 };
 window.ViktorychPresence = api;
 
