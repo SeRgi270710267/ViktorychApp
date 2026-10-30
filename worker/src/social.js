@@ -4,6 +4,7 @@
    tables are not ready, so a transient error cannot drop mail. */
 
 import { tempDmGate } from "./temp-accounts.js";
+import { viewerDisplay } from "./name-rules.js";
 
 export const SOCIAL_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS account_blocks (
@@ -517,10 +518,16 @@ async function peopleSearch(env, request, url, viewer, deps) {
   const term = likeTerm(url.searchParams.get("q") || "");
   if (!term) return deps.json(200, { accounts: [] });
   const listed = await env.DB.prepare(
-    "SELECT public_id FROM accounts WHERE profile_less = 0 AND public_id != ? AND (lower(handle) LIKE ? OR lower(display_name) LIKE ?) ORDER BY handle ASC LIMIT 20"
-  ).bind(viewer.public_id, term, term).all();
+    "SELECT public_id, handle, display_name FROM accounts WHERE profile_less = 0 AND public_id != ? AND (lower(handle) LIKE ? OR lower(display_name) LIKE ? OR public_id IN (SELECT public_id FROM display_names WHERE lower(name) LIKE ?)) ORDER BY handle ASC LIMIT 20"
+  ).bind(viewer.public_id, term, term, term).all();
+  const core = term.slice(1, -1);
   const ids = [];
   for (const row of (listed && listed.results) || []) {
+    // A name match counts only for the one display name this viewer sees.
+    if (String(row.handle || "").toLowerCase().indexOf(core) < 0) {
+      const shown = await viewerDisplay(env, request, row.public_id, viewer.public_id, row.display_name || "");
+      if (shown.hidden || String(shown.name || "").toLowerCase().indexOf(core) < 0) continue;
+    }
     if (await blocksEither(env, viewer.public_id, row.public_id)) continue;
     ids.push(row.public_id);
   }
