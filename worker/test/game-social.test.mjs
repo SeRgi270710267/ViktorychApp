@@ -234,7 +234,12 @@ test("live invite: send with room and note, Join, expiry, decline, blocks and mu
 
 test("achievements unlock from simulated sessions", async () => {
   const zed = await signup("ach_zed");
-  const first = await zed.as("/v1/games/play", { method: "POST", body: { gameId: "regone", ms: 60000, tz: 0 } });
+  // The first play sits at local noon so it cannot already earn night_owl
+  // (with tz 0 it would between 00:00 and 03:59 UTC).
+  let noon = (12 - new Date().getUTCHours()) * 60;
+  if (noon < -720) noon += 1440;
+  if (noon > 840) noon -= 1440;
+  const first = await zed.as("/v1/games/play", { method: "POST", body: { gameId: "regone", ms: 60000, tz: noon } });
   assert.equal(first.status, 200, first.text);
   assert.ok(first.body.achievements.includes("first_play"));
   await sql("UPDATE game_stats SET total_ms = ?, best_streak = 7 WHERE public_id = ?", 11 * 3600000, zed.id);
