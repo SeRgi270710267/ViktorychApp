@@ -1148,13 +1148,20 @@
     const add = (root.DiscordPicks && root.DiscordPicks.addButtonHtml) ? root.DiscordPicks.addButtonHtml() : "";
     const warn = (root.DiscordPicks && root.DiscordPicks.keyBannerHtml) ? root.DiscordPicks.keyBannerHtml() : "";
     const chips = root.ViktorychInbox && root.ViktorychInbox.tabsHtml ? root.ViktorychInbox.tabsHtml() : "";
-    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Inbox") + "<" + "/h1>" + add + "</header>") + chips + warn;
+    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + esc(root.ViktorychInbox && root.ViktorychInbox.title ? root.ViktorychInbox.title() : tr("Inbox")) + "<" + "/h1>" + add + "</header>") + chips + warn;
     const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
     if (state.filter === "servers") {
       const own = nativeServersHtml();
       return head + (own || ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No servers yet") + "<" + "/h2><p" + ">" + tr("Servers you create or join show up here.") + "<" + "/p></div>"));
     }
-    const native = state.filter === "discord" ? "" : nativeServersHtml();
+    // Sections split into their own page, or hidden, stay out of All.
+    const inbox = root.ViktorychInbox;
+    const away = function (id) { return !state.filter && !!inbox && !!inbox.isSplit && (inbox.isSplit(id) || inbox.isHidden(id)); };
+    const native = state.filter === "discord" || away("servers") ? "" : nativeServersHtml();
+    if (away("discord")) {
+      if (native) return head + native;
+      return head + ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No conversations yet") + "<" + "/h2><p" + ">" + tr("Sections with their own page are not shown here.") + "<" + "/p></div>");
+    }
     if (!text.length) {
       if (native) return head + native;
       return head + ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No conversations yet") + "<" + "/h2><p" + ">" + tr("Channels set to messages show up here. None are configured yet.") + "<" + "/p></div>");

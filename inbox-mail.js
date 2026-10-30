@@ -539,6 +539,7 @@
   }
 
   /* ---------- page ---------- */
+  function pageTitle() { return inbox() && inbox().title ? inbox().title(hash()) : tr("Inbox"); }
   function sub() {
     var m = hash().match(/^#\/(?:messages|inbox)\/(?:mail|connect|aliases)\/?([^?]*)/);
     return m ? m[1] : "";
@@ -555,12 +556,12 @@
   }
   function page() {
     var sec = section();
-    if (!token() && sec !== "aliases") return '<div class="inbox-mail" data-inbox-mail>' + head(tr("Inbox")) + notice(tr("Sign in to use Mail."), "") + "</div>";
+    if (!token() && sec !== "aliases") return '<div class="inbox-mail" data-inbox-mail>' + head(pageTitle()) + notice(tr("Sign in to use Mail."), "") + "</div>";
     loadAll().then(function () { repaint(); if (sec === "mail") start(); if (sec === "aliases" && state.sl.key && !state.sl.aliases) slLoadAliases(); });
     if (sec === "connect") return connectPage();
     var s = sub();
     var back = /^m\/\d+$/.test(s) || s === "settings" ? "#/messages/mail" : "";
-    return '<div class="inbox-mail" data-inbox-mail>' + head(back ? tr("Mail") : tr("Inbox"), back) + '<div data-mail-root>' + bodyHtml() + "</div></div>";
+    return '<div class="inbox-mail" data-inbox-mail>' + head(back ? tr("Mail") : pageTitle(), back) + '<div data-mail-root>' + bodyHtml() + "</div></div>";
   }
   function repaint() {
     if (!root.document) return;

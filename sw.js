@@ -4,7 +4,7 @@ const VERSION = "viktorych-a152-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T04:57:25Z-inbox-mail
+// cache-bust: 2026-10-30T05:15:29Z-inbox-split
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
