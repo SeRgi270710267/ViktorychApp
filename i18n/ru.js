@@ -5089,5 +5089,8 @@ SI18n.addPack("ru", {
   "Push off": "Push выключен",
   "Sound off": "Звук выключен",
   "Show {name} in Notifications": "Показывать «{name}» в уведомлениях",
-  "New game alert": "Новое игровое оповещение"
+  "New game alert": "Новое игровое оповещение",
+  "TV home screen": "Главный экран ТВ",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "По желанию. Сделайте это приложение главным экраном ТВ: большие плитки приложений, папки, поиск, входы и настройки. Само приложение остаётся точно таким же.",
+  "Home screen and defaults": "Главный экран и приложения по умолчанию"
 });

@@ -5087,5 +5087,8 @@ SI18n.addPack("en", {
   "Push off": "Push off",
   "Sound off": "Sound off",
   "Show {name} in Notifications": "Show {name} in Notifications",
-  "New game alert": "New game alert"
+  "New game alert": "New game alert",
+  "TV home screen": "TV home screen",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.",
+  "Home screen and defaults": "Home screen and defaults"
 });

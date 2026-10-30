@@ -5076,5 +5076,8 @@ SI18n.addPack("hi", {
   "Push off": "पुश बंद",
   "Sound off": "आवाज़ बंद",
   "Show {name} in Notifications": "नोटिफ़िकेशन में {name} दिखाएँ",
-  "New game alert": "नया गेम अलर्ट"
+  "New game alert": "नया गेम अलर्ट",
+  "TV home screen": "टीवी होम स्क्रीन",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "वैकल्पिक। इस ऐप को अपने टीवी का होम बनाएं: बड़ी ऐप टाइलें, फ़ोल्डर, खोज, इनपुट और सेटिंग्स। ऐप खुद बिल्कुल वैसा ही रहता है।",
+  "Home screen and defaults": "होम स्क्रीन और डिफ़ॉल्ट"
 });
