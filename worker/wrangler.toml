@@ -41,7 +41,9 @@ workers_dev = true
 # which of those stay visible while Shorts is locked. Both are secrets.
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
-PBKDF2_ITERATIONS = "8000"
+PBKDF2_ITERATIONS = "30000"
+# Hashes made before rounds were recorded used 8000; they upgrade on sign-in.
+PBKDF2_LEGACY_ITERATIONS = "8000"
 # Free sign-up check: proof of work, honeypot, and a short wait.
 # Keep this "on". Tests that post straight to /v1/signup leave it unset.
 SIGNUP_GUARD = "on"

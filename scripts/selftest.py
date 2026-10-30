@@ -466,7 +466,7 @@ def main() -> None:
     repost = next(p for p in posts if p["kind"] == "repost")
     check(repost["repostedBy"]["handle"] == "copperlane", "repost credits elon")
     check(not repost["text"].startswith("RT @"), "repost text has no RT prefix")
-    check("Sawyer" in repost["author"] or repost["handle"] == "riverquill", "repost shows original author")
+    check("River" in repost["author"] or repost["handle"] == "riverquill", "repost shows original author")
     quote = next(p for p in posts if p["id"] == "2112603906723487744")
     check(quote["kind"] == "quote" and quote["quoted"], "electricity post is a quote")
     check("t.co" not in quote["text"], "quote t.co stripped from elon text")
@@ -559,20 +559,20 @@ def main() -> None:
     check(nit["profiles"][0]["avatar"].endswith("elon.jpg"), "nitter channel image")
 
     hub = parse_rsshub_x(
-        """<?xml version="1.0"?><rss><channel><title>Twitter @NASA</title>
+        """<?xml version="1.0"?><rss><channel><title>Twitter @SampleAgency</title>
         <item><title>kept</title><description>kept</description>
-        <link>https://x.com/NASA/status/123</link><pubDate>Wed, 21 Oct 2026 06:10:00 GMT</pubDate></item>
+        <link>https://x.com/SampleAgency/status/123</link><pubDate>Wed, 21 Oct 2026 06:10:00 GMT</pubDate></item>
         <item><title>no id</title><description>no id</description>
-        <link>https://x.com/NASA</link></item>
+        <link>https://x.com/SampleAgency</link></item>
         </channel></rss>""",
-        {"id": "x:NASA", "platform": "x", "handle": "NASA"},
+        {"id": "x:SampleAgency", "platform": "x", "handle": "SampleAgency"},
     )
     check(len(hub["posts"]) == 1 and hub["posts"][0]["statusId"] == "123", "the rsshub x lane keeps only a post with a status id")
-    check(hub["profiles"][0]["handle"] == "NASA" and hub["profiles"][0]["url"] == "https://x.com/NASA", "the rsshub x lane keeps the configured handle")
+    check(hub["profiles"][0]["handle"] == "SampleAgency" and hub["profiles"][0]["url"] == "https://x.com/SampleAgency", "the rsshub x lane keeps the configured handle")
 
     mirrors = {"rsshub": ["{rsshubBase}/twitter/user/{handle}"]}
     lanes = ensure_x_lanes(
-        {"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA"},
+        {"id": "x:SampleAgency", "platform": "x", "adapter": "fxtwitter", "handle": "SampleAgency"},
         {"xMirrors": mirrors},
     )["fallbacks"]
     check([row["adapter"] for row in lanes] == ["nitter_rss", "rsshub_x"], "an x feed gets the nitter and rsshub lanes")
@@ -580,12 +580,12 @@ def main() -> None:
         lanes[0]["source_urls"] == ["https://nitter.meowing.monster/{handle}/rss", "https://nitter.kareem.one/{handle}/rss", "https://nitter.jaydenha.uk/{handle}/rss"],
         "the nitter lane keeps the built-in hosts",
     )
-    again = ensure_x_lanes({"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA", "fallbacks": lanes}, {"xMirrors": mirrors})
+    again = ensure_x_lanes({"id": "x:SampleAgency", "platform": "x", "adapter": "fxtwitter", "handle": "SampleAgency", "fallbacks": lanes}, {"xMirrors": mirrors})
     check([row["adapter"] for row in again["fallbacks"]] == [row["adapter"] for row in lanes], "the lanes are not added twice")
     retired = x_fallback_rows({"xMirrors": {"nitter": ["https://nitter.one/"], "rsshub": []}})
     check([row["adapter"] for row in retired] == ["nitter_rss"] and retired[0]["source_urls"] == ["https://nitter.one/{handle}/rss"], "xMirrors is the list the lanes follow")
 
-    feed = {"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA", "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"]}
+    feed = {"id": "x:SampleAgency", "platform": "x", "adapter": "fxtwitter", "handle": "SampleAgency", "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"]}
     mirrored = x_source_urls(feed, {"xProxyBase": "https://mirror.test/v1/x"})
     check(
         mirrored[0] == "https://mirror.test/v1/x/2/profile/{handle}/statuses" and mirrored[1] == "{fxtwitterBase}/2/profile/{handle}/statuses",
@@ -595,9 +595,9 @@ def main() -> None:
     direct = x_source_urls(feed, {})
     check(len(direct) == 2 and direct[0].endswith("/v1/x/2/profile/{handle}/statuses"), "a worker mirror is added by default")
 
-    slow = urllib.error.HTTPError("https://nitter.one/NASA/rss", 429, "slow down", {"Retry-After": "7"}, None)
+    slow = urllib.error.HTTPError("https://nitter.one/SampleAgency/rss", 429, "slow down", {"Retry-After": "7"}, None)
     check(is_retryable(slow) and retry_delay(0, slow.headers) == 7, "a rate limit waits as long as the mirror asks")
-    check(not is_retryable(urllib.error.HTTPError("https://nitter.one/NASA/rss", 404, "no", {}, None)), "a missing profile is not retried")
+    check(not is_retryable(urllib.error.HTTPError("https://nitter.one/SampleAgency/rss", 404, "no", {}, None)), "a missing profile is not retried")
     check(is_retryable(urllib.error.URLError("reset")) and retry_delay(1, None) >= 2, "a dropped connection retries with backoff")
     check(not is_retryable(ValueError("refusing api.x.com: the paid X API is not used")), "the paid api refusal is not retried")
     check(status_of(slow) == 429 and status_of(ValueError("x")) == 0, "the retry status reader is safe")
@@ -696,7 +696,7 @@ def main() -> None:
     <link>http://localhost:8080/?action=display&amp;bridge=ThreadsBridge&amp;context=Username&amp;u=birchlane&amp;format=Atom</link>
     <guid>urn:sha1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</guid></item></channel></rss>"""
     check(raises_bridge(parse_threads, guid_only, {"id": "threads:birchlane", "handle": "birchlane"}), "threads drops an error-like bridge guid")
-    mixed = """<?xml version="1.0"?><rss><channel><title>Mark Zuckerberg (@birchlane) - Instagram</title><description>I build stuff</description>
+    mixed = """<?xml version="1.0"?><rss><channel><title>Moss Point (@birchlane) - Instagram</title><description>I build stuff</description>
     <item><title>Bridge returned error 302!</title><description>Type: HttpException File: lib/http.php</description>
     <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=birchlane&amp;format=Atom</link>
     <guid>urn:sha1:cccccccccccccccccccccccccccccccccccccccc</guid><pubDate>Tue, 21 Oct 2026 16:48:30 GMT</pubDate></item>
@@ -717,7 +717,7 @@ def main() -> None:
         error_xml = root / "error.xml"
         good_xml = root / "good.xml"
         error_xml.write_text(atom_error, encoding="utf-8")
-        good_xml.write_text("""<?xml version="1.0"?><rss><channel><title>Canadian Prepper</title>
+        good_xml.write_text("""<?xml version="1.0"?><rss><channel><title>North Lamp</title>
         <item><title>Ready</title><description>Water storage</description>
         <link>https://www.instagram.com/p/GoodNew1/</link><guid>GoodNew1</guid>
         <pubDate>Mon, 20 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>""", encoding="utf-8")
@@ -761,7 +761,7 @@ def main() -> None:
         same["posts"] = [dict(seed["posts"][0], id="GoodNew1", statusId="GoodNew1", text="Earlier real post")]
         out.write_text(bridge_json.dumps(same), encoding="utf-8")
         same_xml = root / "same.xml"
-        same_xml.write_text("""<?xml version="1.0"?><rss><channel><title>Canadian Prepper</title>
+        same_xml.write_text("""<?xml version="1.0"?><rss><channel><title>North Lamp</title>
         <item><title>Bridge returned error 302!</title><description>Type: HttpException File: lib/http.php</description>
         <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=orbitfox&amp;format=Atom</link>
         <guid>GoodNew1</guid><pubDate>Tue, 21 Oct 2026 16:48:30 GMT</pubDate></item></channel></rss>""", encoding="utf-8")
@@ -789,7 +789,7 @@ def main() -> None:
     check(len(conv) >= 10, "conversation has replies")
     check(conversation_reply_count(conv_raw) == 3283 and len(conv) != 3283, "source reply count stays separate from the cap")
     check(scores == sorted(scores, reverse=True), "relevant order is engagement")
-    check(conv[0]["handle"] == "yesknow", "highest engagement leads")
+    check(conv[0]["handle"] == "replyuser01", "highest engagement leads")
     check(conv[0]["kind"] == "reply" and conv[0]["replyingTo"]["handle"] == "copperlane", "conversation reply target")
     check(conv[0]["replyingTo"]["id"] == "2112600761762717997", "conversation reply parent id")
     check(conv[0]["date"].startswith("2026-10-20T"), "conversation date is ISO")
@@ -891,7 +891,7 @@ def main() -> None:
 
     nit = parse_nitter_replies((FIX / "replies" / "nitter_sample.html").read_text(encoding="utf-8"), "2112600761762717997")
     check(len(nit) == 2, "nitter replies")
-    check(nit[0]["handle"] == "yesknow" and "Bach" in nit[0]["text"], "nitter first reply")
+    check(nit[0]["handle"] == "replyuser01" and "Bach" in nit[0]["text"], "nitter first reply")
     check(nit[0]["stats"]["likes"] == 40 and nit[0]["kind"] == "reply", "nitter reply stats")
 
     ig_replies = parse_ig_comments((FIX / "replies" / "ig_comments.json").read_text(encoding="utf-8"), {"handle": "birchlane", "author": "birchlane", "statusId": "1"})
@@ -903,7 +903,7 @@ def main() -> None:
     check(len(th_replies) == 2 and th_replies[0]["stats"]["likes"] == 9, "threads replies sorted by likes")
     check(th_replies[0]["text"] == "Wow" and th_replies[0]["kind"] == "reply", "threads reply text")
 
-    parent = {"handle": "birchlane", "author": "Mark Zuckerberg", "statusId": "4006377606181159966", "url": "https://www.instagram.com/p/DeZgzTEggQe/"}
+    parent = {"handle": "birchlane", "author": "Moss Point", "statusId": "4006377606181159966", "url": "https://www.instagram.com/p/DeZgzTEggQe/"}
     gql_rows, gql_count = parse_ig_document((FIX / "replies" / "ig_graphql.json").read_text(encoding="utf-8"), parent)
     check(gql_count == 42 and len(gql_rows) == 2 and gql_rows[0]["text"] == "Nice melon", "graphql parent comments")
     check(gql_rows[0]["verifiedType"] == "blue" and gql_rows[0]["stats"]["likes"] == 5, "graphql comment likes")
@@ -1036,12 +1036,12 @@ def main() -> None:
     os.environ["X_PROXY_TOKEN"] = "mirror-secret"
     try:
         check(
-            proxy_token_header("https://viktorych-accounts.viktorych-accounts.workers.dev/v1/x/2/profile/NASA/statuses").get("X-Viktorych-Token") == "mirror-secret",
+            proxy_token_header("https://viktorych-accounts.viktorych-accounts.workers.dev/v1/x/2/profile/SampleAgency/statuses").get("X-Viktorych-Token") == "mirror-secret",
             "the cached mirror gets the optional token",
         )
-        check(proxy_token_header("https://api.fxtwitter.com/2/profile/NASA/statuses") == {}, "fxtwitter never gets the mirror token")
-        check(proxy_token_header("https://evil.example/v1/x/2/profile/NASA/statuses") == {}, "the mirror token stays off an unknown host")
-        check(proxy_token_header("http://127.0.0.1:8787/v1/x/2/profile/NASA/statuses").get("X-Viktorych-Token") == "mirror-secret", "a local worker still gets the token")
+        check(proxy_token_header("https://api.fxtwitter.com/2/profile/SampleAgency/statuses") == {}, "fxtwitter never gets the mirror token")
+        check(proxy_token_header("https://evil.example/v1/x/2/profile/SampleAgency/statuses") == {}, "the mirror token stays off an unknown host")
+        check(proxy_token_header("http://127.0.0.1:8787/v1/x/2/profile/SampleAgency/statuses").get("X-Viktorych-Token") == "mirror-secret", "a local worker still gets the token")
     finally:
         os.environ.pop("X_PROXY_TOKEN", None)
 
@@ -1084,11 +1084,11 @@ def main() -> None:
     from adapters.youtube_community import parse as parse_community
     from adapters.youtube_community import owner_from_oembed, parse_invidious_posts, parse_rss_posts
 
-    community_feed = {"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "channelId": "UCsyntheticmaple00001000", "profile": {"name": "Canadian Prepper"}}
+    community_feed = {"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "channelId": "UCsyntheticmaple00001000", "profile": {"name": "North Lamp"}}
     community = parse_community((FIX / "youtube_community_invidious.json").read_text(encoding="utf-8"), community_feed)
     by_id = {post["id"]: post for post in community["posts"]}
     image_post = by_id["UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah"]
-    check(image_post["kind"] == "community" and image_post["author"] == "Canadian Prepper" and image_post["stats"]["likes"] == 690 and image_post["stats"]["replies"] == 70, "community image post keeps likes and comments")
+    check(image_post["kind"] == "community" and image_post["author"] == "North Lamp" and image_post["stats"]["likes"] == 690 and image_post["stats"]["replies"] == 70, "community image post keeps likes and comments")
     check(image_post["media"][0]["url"].startswith("https://yt3.ggpht.com/") and "s2000" in image_post["media"][0]["url"] and image_post["avatar"].startswith("https://yt3.googleusercontent.com/"), "community images hotlink the largest thumbnail")
     check(image_post["url"] == "https://www.youtube.com/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah" and image_post["date"] == "", "community post links to the post page and does not keep a relative time")
     multi = by_id["UgzdP2CVxI1IMXtXT9B4AaABCQ"]
@@ -1101,7 +1101,7 @@ def main() -> None:
         {
             "comments": [{
                 "commentId": "Ugforeignshare0001",
-                "author": "Canadian Prepper",
+                "author": "North Lamp",
                 "content": "Watch this https://youtu.be/abcdefghijk",
                 "attachment": {
                     "type": "video",
@@ -1229,11 +1229,11 @@ def main() -> None:
             "kind": "repost",
             "text": "WATCH: University professors",
             "date": "2026-10-21T12:00:00Z",
-            "repostedBy": {"handle": "cedarhill", "name": "Canadian Prepper"},
+            "repostedBy": {"handle": "cedarhill", "name": "North Lamp"},
             "repostComment": "look at this",
         }
         share_stub = stub_from_post(share)
-        check(share_stub["h"] == "nightheron" and share_stub["a"] == "DD Geopolitics" and share_stub["av"].startswith("https://") and share_stub["rb"] == "cedarhill" and share_stub["rn"] == "Canadian Prepper" and share_stub["rc"] == "look at this" and share_stub["k"] == "repost", "a repost stub keeps the original creator and who reposted it")
+        check(share_stub["h"] == "nightheron" and share_stub["a"] == "DD Geopolitics" and share_stub["av"].startswith("https://") and share_stub["rb"] == "cedarhill" and share_stub["rn"] == "North Lamp" and share_stub["rc"] == "look at this" and share_stub["k"] == "repost", "a repost stub keeps the original creator and who reposted it")
         thin = dict(share)
         thin.pop("avatar")
         thin.pop("repostComment")
@@ -1645,14 +1645,14 @@ def main() -> None:
     import follow_request as follow_req
 
     check(not follow_req.allowed("stranger", "riverquoll") and follow_req.allowed("riverquoll", "riverquoll") and not follow_req.allowed("", "riverquoll"), "only the repository owner can change follows")
-    parsed_follow = follow_req.parse_issue("Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n")
-    check(parsed_follow == {"kind": "follow", "account": "nasa", "platform": "x"}, "a follow issue form is read")
-    x_spec = follow_req.normalize("https://x.com/nasa", "x")
-    check(x_spec["platform"] == "x" and x_spec["handle"] == "nasa" and x_spec["url"] == "https://x.com/nasa", "an x profile URL becomes a handle")
-    bare_spec = follow_req.normalize("@nasa", "")
-    check(bare_spec["platform"] == "x" and bare_spec["handle"] == "nasa", "a bare @handle is an X account")
-    yt_spec = follow_req.normalize("https://www.youtube.com/@LinusTechTips", "youtube")
-    check(yt_spec["handle"] == "LinusTechTips" and yt_spec["channelId"] == "", "a youtube @handle is kept")
+    parsed_follow = follow_req.parse_issue("Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n")
+    check(parsed_follow == {"kind": "follow", "account": "sampleagency", "platform": "x"}, "a follow issue form is read")
+    x_spec = follow_req.normalize("https://x.com/sampleagency", "x")
+    check(x_spec["platform"] == "x" and x_spec["handle"] == "sampleagency" and x_spec["url"] == "https://x.com/sampleagency", "an x profile URL becomes a handle")
+    bare_spec = follow_req.normalize("@sampleagency", "")
+    check(bare_spec["platform"] == "x" and bare_spec["handle"] == "sampleagency", "a bare @handle is an X account")
+    yt_spec = follow_req.normalize("https://www.youtube.com/@SampleTechChannel", "youtube")
+    check(yt_spec["handle"] == "SampleTechChannel" and yt_spec["channelId"] == "", "a youtube @handle is kept")
     yt_channel_spec = follow_req.normalize("https://www.youtube.com/channel/UCsyntheticmaple00005000", "youtube")
     check(yt_channel_spec["channelId"] == "UCsyntheticmaple00005000", "a youtube channel id is kept")
     check(follow_req.normalize("https://vk.com/vk", "vk")["handle"] == "vk", "a vk profile URL is a handle")
@@ -1680,8 +1680,8 @@ def main() -> None:
     check(public_ok and not loopback and not private_net and not link_local, "only public addresses can be fetched")
 
     def fake_follow_fetch(url):
-        if "fxtwitter.com/nasa" in url:
-            return 200, '{"user":"nasa"}'
+        if "fxtwitter.com/sampleagency" in url:
+            return 200, '{"user":"sampleagency"}'
         if "youtube.com/@" in url:
             return 200, 'href="https://www.youtube.com/channel/UCsyntheticmaple00005000"'
         if "videos.xml" in url:
@@ -1694,21 +1694,21 @@ def main() -> None:
     confirmed_yt = follow_req.confirm_source(dict(yt_spec), fake_follow_fetch, public_resolve)
     check(confirmed_yt["channelId"] == "UCsyntheticmaple00005000", "a youtube page supplies the channel id")
     follow_config = {"feeds": []}
-    added, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    added, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     added_row = follow_config["feeds"][0]
-    check(added.startswith("Added x:nasa") and added_row["adapter"] == "fxtwitter" and added_row["fallbacks"][0]["adapter"] == "nitter_rss", "a follow adds the fxtwitter source and nitter fallbacks")
+    check(added.startswith("Added x:sampleagency") and added_row["adapter"] == "fxtwitter" and added_row["fallbacks"][0]["adapter"] == "nitter_rss", "a follow adds the fxtwitter source and nitter fallbacks")
     duplicate_rejected = False
     try:
-        follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+        follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     except follow_req.Reject:
         duplicate_rejected = True
     check(duplicate_rejected, "a duplicate follow is rejected")
-    removed, follow_config = follow_req.run("riverquoll", "riverquoll", "Unfollow request: x nasa", "### Account\n\nx:nasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
-    check(removed.startswith("Removed x:nasa") and follow_config["feeds"] == [] and "x:nasa" in follow_config.get("removed", []), "an unfollow removes the account and blocks auto-add")
-    brought, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
-    check(brought.startswith("Added x:nasa") and follow_config["feeds"][0]["id"] == "x:nasa" and follow_config.get("removed") == [], "an explicit follow clears the auto-add block")
+    removed, follow_config = follow_req.run("riverquoll", "riverquoll", "Unfollow request: x sampleagency", "### Account\n\nx:sampleagency\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    check(removed.startswith("Removed x:sampleagency") and follow_config["feeds"] == [] and "x:sampleagency" in follow_config.get("removed", []), "an unfollow removes the account and blocks auto-add")
+    brought, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    check(brought.startswith("Added x:sampleagency") and follow_config["feeds"][0]["id"] == "x:sampleagency" and follow_config.get("removed") == [], "an explicit follow clears the auto-add block")
     untouched = {"feeds": [{"id": "x:keep"}]}
-    ignored, same_config = follow_req.run("someone", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
+    ignored, same_config = follow_req.run("someone", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
     check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
     group_body = "### Groups\n\n" + json.dumps([{"id": "grp_news", "name": "News", "icon": "https://example.com/a.png", "members": ["youtube:Someone"]}])
     saved, grouped = follow_req.run("riverquoll", "riverquoll", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
@@ -1749,7 +1749,7 @@ def main() -> None:
     check(sync_health.plan(stale, [])["action"] == "open", "the first problem opens one issue")
     check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": same_body}])["action"] == "none", "the same problem does not edit the issue")
     check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": "The sync is not healthy.\n\n- something else\n"}])["action"] == "edit", "a changed problem edits the same issue")
-    check(sync_health.plan(stale, [{"number": 3, "title": "Follow request: x nasa", "body": ""}])["action"] == "open", "a follow request is not the sync problem issue")
+    check(sync_health.plan(stale, [{"number": 3, "title": "Follow request: x sampleagency", "body": ""}])["action"] == "open", "a follow request is not the sync problem issue")
     import discord_alert
 
     stopped = discord_alert.SENTENCES["unauthorized"]
@@ -1828,9 +1828,9 @@ def main() -> None:
     stored = [
         {"id": "-10000041_1", "statusId": "-10000041_1", "platform": "vk", "feedId": "vk:vk", "kind": "post", "author": "ВКонтакте", "handle": "vk", "text": "own"},
         {"id": "-220923985_58381", "statusId": "-220923985_58381", "platform": "vk", "feedId": "vk:vk", "kind": "post", "author": "Фандом Фест", "handle": "vkfandomfest", "text": "kept"},
-        {"id": "19", "platform": "telegram", "feedId": "telegram:laneharbor", "kind": "post", "author": "Telegram News", "handle": "laneharbor", "text": "The original note.", "forwardedFrom": {"name": "Pavel Durov", "handle": "durov"}},
+        {"id": "19", "platform": "telegram", "feedId": "telegram:laneharbor", "kind": "post", "author": "Telegram News", "handle": "laneharbor", "text": "The original note.", "forwardedFrom": {"name": "Pavel foxglen", "handle": "foxglen"}},
     ]
-    check(credit_carried(stored, [{"id": "vk:vk", "platform": "vk", "handle": "vk", "name": "ВКонтакте"}, {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor", "name": "Telegram News"}]) == 2 and stored[1]["kind"] == "repost" and stored[1]["author"] == "Фандом Фест" and stored[1]["repostedBy"]["name"] == "ВКонтакте" and stored[0]["kind"] == "post" and stored[2]["kind"] == "repost" and stored[2]["author"] == "Pavel Durov" and stored[2]["handle"] == "durov" and stored[2]["repostedBy"]["handle"] == "laneharbor", "stored wall posts and forwards grow a repost line without taking the original author's name")
+    check(credit_carried(stored, [{"id": "vk:vk", "platform": "vk", "handle": "vk", "name": "ВКонтакте"}, {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor", "name": "Telegram News"}]) == 2 and stored[1]["kind"] == "repost" and stored[1]["author"] == "Фандом Фест" and stored[1]["repostedBy"]["name"] == "ВКонтакте" and stored[0]["kind"] == "post" and stored[2]["kind"] == "repost" and stored[2]["author"] == "Pavel foxglen" and stored[2]["handle"] == "foxglen" and stored[2]["repostedBy"]["handle"] == "laneharbor", "stored wall posts and forwards grow a repost line without taking the original author's name")
     vk_comments = parse_vk_comments(
         {"response": {"count": 1, "items": [{"id": 9, "from_id": 5, "owner_id": -10000041, "post_id": 1730797, "date": 1792307000, "text": "Привет", "likes": {"count": 3}, "thread": {"count": 0, "items": []}}], "profiles": [{"id": 5, "first_name": "Аня", "last_name": "Иванова", "screen_name": "anya"}]}},
         {"statusId": "-10000041_1730797", "handle": "vk"},
@@ -1860,7 +1860,7 @@ def main() -> None:
     check(tg_by["15"]["media"][0]["type"] == "audio" and tg_by["16"]["media"][0]["type"] == "file" and tg_by["16"]["media"][0]["title"] == "notes.pdf", "telegram voice and documents become attachment cards")
     check(tg_by["17"]["link"]["title"] == "Hello from the blog" and tg_by["17"]["link"]["image"].endswith("card.jpg") and not tg_by["17"]["media"], "a telegram link preview is a card, not another photo")
     check(tg_by["18"]["poll"]["question"] == "Which build?" and tg_by["18"]["poll"]["choices"][1]["percent"] == 38, "a telegram poll keeps the question and the percents")
-    check(tg_by["19"]["forwardedFrom"]["name"] == "Pavel Durov" and tg_by["19"]["forwardedFrom"]["handle"] == "durov" and tg_by["19"]["kind"] == "repost" and tg_by["19"]["author"] == "Pavel Durov" and tg_by["19"]["handle"] == "durov" and tg_by["19"]["repostedBy"]["name"] == "Telegram News" and tg_by["19"]["repostedBy"]["handle"] == "laneharbor" and tg_by["19"]["repostedBy"]["platform"] == "telegram", "a telegram forward keeps the original author and names the channel that reposted it")
+    check(tg_by["19"]["forwardedFrom"]["name"] == "Pavel foxglen" and tg_by["19"]["forwardedFrom"]["handle"] == "foxglen" and tg_by["19"]["kind"] == "repost" and tg_by["19"]["author"] == "Pavel foxglen" and tg_by["19"]["handle"] == "foxglen" and tg_by["19"]["repostedBy"]["name"] == "Telegram News" and tg_by["19"]["repostedBy"]["handle"] == "laneharbor" and tg_by["19"]["repostedBy"]["platform"] == "telegram", "a telegram forward keeps the original author and names the channel that reposted it")
     check(tg_by["20"]["replyParent"]["author"] == "Telegram News" and tg_by["20"]["replyingTo"]["id"] == "10" and tg_by["20"].get("discussion") is True and tg_by["20"]["kind"] == "post", "a telegram reply shows its parent and can open comments")
     quiet = parse_telegram(tg_html + '\n<div id="feeds-discussion" data-on="0"></div>', tg_feed)
     check(all(not post.get("discussion") for post in quiet["posts"]), "a channel without a discussion hides comments")
@@ -2119,7 +2119,7 @@ def main() -> None:
     check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z" and uploaded == "2026-10-11T21:31:32.000Z" and grocery_day == "2026-10-03T00:00:00.000Z", "watch and community pages yield the real publish date")
     drifted = """<?xml version="1.0"?>
     <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
-    <title>Canadian Prepper</title><yt:channelId>UCsyntheticmaple00001000</yt:channelId>
+    <title>North Lamp</title><yt:channelId>UCsyntheticmaple00001000</yt:channelId>
     <entry><id>yt:video:Iuvm-HKIMg8</id><yt:videoId>Iuvm-HKIMg8</yt:videoId>
     <title>AI Expert Just Ruined My Day With This WARNING</title>
     <published>2026-10-11T21:31:32+00:00</published><updated>2026-10-21T20:24:18+00:00</updated>
@@ -2195,7 +2195,7 @@ def main() -> None:
     check(added_articles == 1 and published_articles["posts"][0]["article"]["blocks"][0]["text"] == "body" and published_articles["posts"][1]["id"] == "2" and published_articles["feeds"][0]["configured"] is False, "a seed article survives the published snapshot and keeps its body")
     prepper = next(person for person in site_config["people"] if person["id"] == "canadian-prepper")
     prepper_accounts = {(account["platform"], account["handle"]) for account in prepper["accounts"]}
-    check(("youtube", "northlamp") in prepper_accounts and ("x", "cedarhill") in prepper_accounts and ("instagram", "orbitfox") in prepper_accounts, "Canadian Prepper links the verified YouTube, X, and Instagram accounts")
+    check(("youtube", "northlamp") in prepper_accounts and ("x", "cedarhill") in prepper_accounts and ("instagram", "orbitfox") in prepper_accounts, "North Lamp links the verified YouTube, X, and Instagram accounts")
     check(any(account.get("channelId") == "UCsyntheticmaple00001000" for account in prepper["accounts"]), "the YouTube account keeps the channel id")
     x_source = next(account["source"] for account in prepper["accounts"] if account["platform"] == "x")
     ig_source = next(account["source"] for account in prepper["accounts"] if account["platform"] == "instagram")
@@ -2204,7 +2204,7 @@ def main() -> None:
     check(not any(account["platform"] in ("threads", "telegram") for account in prepper["accounts"]), "Threads and Telegram are omitted when no source lists them")
     bad_id = empty_accounts = duplicate_account = False
     try:
-        people.validate_person({"id": "Bad", "name": "Nope", "accounts": [{"platform": "x", "handle": "nasa"}]})
+        people.validate_person({"id": "Bad", "name": "Nope", "accounts": [{"platform": "x", "handle": "sampleagency"}]})
     except people.SchemaError:
         bad_id = True
     try:
@@ -2213,8 +2213,8 @@ def main() -> None:
         empty_accounts = True
     try:
         people.validate_config({"people": [
-            {"id": "one", "name": "One", "accounts": [{"platform": "x", "handle": "nasa"}]},
-            {"id": "two", "name": "Two", "accounts": [{"platform": "x", "handle": "NASA"}]},
+            {"id": "one", "name": "One", "accounts": [{"platform": "x", "handle": "sampleagency"}]},
+            {"id": "two", "name": "Two", "accounts": [{"platform": "x", "handle": "SampleAgency"}]},
         ]})
     except people.SchemaError:
         duplicate_account = True
@@ -2280,10 +2280,10 @@ def main() -> None:
         {"id": "youtube:righty", "platform": "youtube", "handle": "righty", "name": "Left Side"},
         {"id": "vk:lonely", "platform": "vk", "handle": "lonely", "name": "Lonely", "bio": "https://x.com/someoneelse"},
         {"id": "x:someoneelse", "platform": "x", "handle": "someoneelse", "name": "Other Name"},
-        {"id": "telegram:northlamp", "platform": "telegram", "handle": "northlamp", "name": "Canadian Prepper", "bio": "https://www.youtube.com/@northlamp"},
+        {"id": "telegram:northlamp", "platform": "telegram", "handle": "northlamp", "name": "North Lamp", "bio": "https://www.youtube.com/@northlamp"},
     ]
-    owner_people = [{"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "northlamp"}]}]
-    auto_profiles.append({"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "name": "Canadian Prepper"})
+    owner_people = [{"id": "canadian-prepper", "name": "North Lamp", "accounts": [{"platform": "youtube", "handle": "northlamp"}]}]
+    auto_profiles.append({"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "name": "North Lamp"})
     merged, weak_rows, merge_counts = people.auto_people(auto_profiles, owner_people)
     auto_ids = [person for person in merged if person.get("auto")]
     pair_sets = [{(a["platform"], a["handle"]) for a in person["accounts"]} for person in auto_ids]
@@ -2315,20 +2315,20 @@ def main() -> None:
     mirrors = people.update_mirrors({}, {"threads:quillfern": 1.0}, {"threads:quillfern"}, now_ts)
     check(not people.mirror_due(mirrors, "threads:quillfern", now_ts + 60) and people.mirror_due(mirrors, "threads:quillfern", now_ts + 3 * 3600) and people.mirror_due(mirrors, "x:new", now_ts), "a mirror source is read every three hours and others every run")
 
-    link_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\nx:nasa\n"
+    link_body = "### Person\n\nNorth Lamp\n\n### Accounts\n\nx:sampleagency\n"
     link_config = {"feeds": [{"id": "x:keep"}], "people": json.loads(json.dumps(site_config["people"]))}
-    linked_msg, linked_config = follow_req.run("riverquoll", "riverquoll", "Link accounts: Canadian Prepper", link_body, link_config, fake_follow_fetch, public_resolve)
+    linked_msg, linked_config = follow_req.run("riverquoll", "riverquoll", "Link accounts: North Lamp", link_body, link_config, fake_follow_fetch, public_resolve)
     linked_person = next(person for person in linked_config["people"] if person["id"] == "canadian-prepper")
-    check(linked_msg.startswith("Linked x:nasa") and any(account["platform"] == "x" and account["handle"] == "nasa" for account in linked_person["accounts"]) and linked_config["feeds"] == [{"id": "x:keep"}], "the owner can link a confirmed account without adding a feed")
-    stranger_link, stranger_people = follow_req.run("someone", "riverquoll", "Link accounts: Canadian Prepper", link_body, {"feeds": [{"id": "x:keep"}], "people": []}, fake_follow_fetch, public_resolve)
+    check(linked_msg.startswith("Linked x:sampleagency") and any(account["platform"] == "x" and account["handle"] == "sampleagency" for account in linked_person["accounts"]) and linked_config["feeds"] == [{"id": "x:keep"}], "the owner can link a confirmed account without adding a feed")
+    stranger_link, stranger_people = follow_req.run("someone", "riverquoll", "Link accounts: North Lamp", link_body, {"feeds": [{"id": "x:keep"}], "people": []}, fake_follow_fetch, public_resolve)
     check(stranger_link == "" and stranger_people == {"feeds": [{"id": "x:keep"}], "people": []}, "a link issue from anyone else is ignored")
     owned_config = {"people": [
-        {"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "northlamp"}]},
-        {"id": "other", "name": "Other", "accounts": [{"platform": "x", "handle": "nasa"}]},
+        {"id": "canadian-prepper", "name": "North Lamp", "accounts": [{"platform": "youtube", "handle": "northlamp"}]},
+        {"id": "other", "name": "Other", "accounts": [{"platform": "x", "handle": "sampleagency"}]},
     ]}
     owned_rejected = False
     try:
-        follow_req.run("riverquoll", "riverquoll", "Link accounts: Canadian Prepper", link_body, owned_config, fake_follow_fetch, public_resolve)
+        follow_req.run("riverquoll", "riverquoll", "Link accounts: North Lamp", link_body, owned_config, fake_follow_fetch, public_resolve)
     except follow_req.Reject:
         owned_rejected = True
     check(owned_rejected, "an account already linked to another person is rejected")
@@ -2338,9 +2338,9 @@ def main() -> None:
             return 200, '<div class="tgme_page_title">Prepper</div>'
         return fake_follow_fetch(url)
 
-    telegram_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\ntelegram:prepperchannel\n"
-    telegram_config = {"people": [{"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "northlamp"}]}]}
-    telegram_msg, telegram_updated = follow_req.run("riverquoll", "riverquoll", "Link accounts: Canadian Prepper", telegram_body, telegram_config, telegram_fetch, public_resolve)
+    telegram_body = "### Person\n\nNorth Lamp\n\n### Accounts\n\ntelegram:prepperchannel\n"
+    telegram_config = {"people": [{"id": "canadian-prepper", "name": "North Lamp", "accounts": [{"platform": "youtube", "handle": "northlamp"}]}]}
+    telegram_msg, telegram_updated = follow_req.run("riverquoll", "riverquoll", "Link accounts: North Lamp", telegram_body, telegram_config, telegram_fetch, public_resolve)
     check("telegram:prepperchannel" in telegram_msg and any(account["platform"] == "telegram" and account["handle"] == "prepperchannel" for account in telegram_updated["people"][0]["accounts"]), "a confirmed Telegram page can be linked")
 
     node_check = subprocess.run(
@@ -2391,7 +2391,7 @@ if (P.hashFor("x", "cedarhill") !== hash) throw new Error("x");
 if (P.hashFor("youtube", "northlamp") !== hash) throw new Error("yt");
 if (P.hashFor("youtube", "UCsyntheticmaple00001000") !== hash) throw new Error("channel");
 if (P.hashFor("instagram", "orbitfox") !== hash) throw new Error("ig");
-if (P.hashFor("x", "nasa") !== "") throw new Error("other");
+if (P.hashFor("x", "sampleagency") !== "") throw new Error("other");
 const posts = [
   { id: "1", platform: "x", handle: "cedarhill", kind: "post", date: "2026-10-20T00:00:00Z", media: [{ type: "video", url: "https://example.test/a.mp4" }] },
   { id: "2", platform: "youtube", handle: "northlamp", kind: "post", date: "2026-10-21T00:00:00Z", url: "https://www.youtube.com/shorts/abc" },
@@ -2399,7 +2399,7 @@ const posts = [
   { id: "4", platform: "x", handle: "cedarhill", kind: "reply", date: "2026-10-18T00:00:00Z" },
   { id: "5", platform: "x", handle: "someoneelse", kind: "post", date: "2026-10-22T00:00:00Z" },
   { id: "6", platform: "instagram", handle: "orbitfox", kind: "post", date: "2026-10-17T00:00:00Z", media: [{ type: "photo", url: "https://example.test/p.jpg" }] },
-  { id: "7", platform: "x", handle: "nightheron", feedId: "x:cedarhill", kind: "repost", date: "2026-10-23T00:00:00Z", media: [{ type: "video", url: "https://example.test/r.mp4" }], author: "DD Geopolitics", repostedBy: { handle: "cedarhill", name: "Canadian Prepper" } }
+  { id: "7", platform: "x", handle: "nightheron", feedId: "x:cedarhill", kind: "repost", date: "2026-10-23T00:00:00Z", media: [{ type: "video", url: "https://example.test/r.mp4" }], author: "DD Geopolitics", repostedBy: { handle: "cedarhill", name: "North Lamp" } }
 ];
 const person = P.byId("canadian-prepper");
 const rows = P.postsFor(person, posts);
@@ -2428,18 +2428,18 @@ if (!profileHtml || profileHtml.indexOf("4 posts") < 0) throw new Error("count "
 if (profileHtml.indexOf("CARD7:show") < 0) throw new Error("repost line hidden");
 if (profileHtml.indexOf("CARD1:author") < 0) throw new Error("own post " + profileHtml);
 const collapsed = P.collapse([
-  { id: "youtube:northlamp", platform: "youtube", handle: "northlamp", name: "Canadian Prepper" },
-  { id: "x:cedarhill", platform: "x", handle: "cedarhill", name: "Canadian Prepper" },
-  { id: "x:nasa", platform: "x", handle: "nasa", name: "NASA" }
+  { id: "youtube:northlamp", platform: "youtube", handle: "northlamp", name: "North Lamp" },
+  { id: "x:cedarhill", platform: "x", handle: "cedarhill", name: "North Lamp" },
+  { id: "x:sampleagency", platform: "x", handle: "sampleagency", name: "SampleAgency" }
 ]);
-if (collapsed.length !== 2 || collapsed[0].personId !== "canadian-prepper" || collapsed[0].name !== "Canadian Prepper") throw new Error("collapse");
+if (collapsed.length !== 2 || collapsed[0].personId !== "canadian-prepper" || collapsed[0].name !== "North Lamp") throw new Error("collapse");
 const suggested = P.suggestions([
   { id: "youtube:northlamp", platform: "youtube", handle: "northlamp", configured: true },
   { id: "x:cedarhill", platform: "x", handle: "cedarhill", configured: true },
-  { id: "x:nasa", platform: "x", handle: "nasa", configured: true }
+  { id: "x:sampleagency", platform: "x", handle: "sampleagency", configured: true }
 ], (id) => id === "youtube:northlamp");
 if (suggested.some((feed) => feed.personId === "canadian-prepper" || feed.handle === "cedarhill")) throw new Error("followed person still suggested");
-if (!suggested.some((feed) => feed.handle === "nasa")) throw new Error("nasa missing");
+if (!suggested.some((feed) => feed.handle === "sampleagency")) throw new Error("sampleagency missing");
 """],
         cwd=ROOT,
         capture_output=True,
@@ -4288,23 +4288,23 @@ def vk_web_checks(now) -> None:
     payload = json.loads((FIX / "vk_web_stories.json").read_text(encoding="utf-8"))
     parsed = parse_vk_web_stories(payload, now, viewer_id=100)
     from_page = parse_vk_web_stories(feed_html, now)
-    check([row["id"] for row in parsed] == ["vk:vk", "vk:durov"], "the VK web fixture keeps followed accounts and drops the spare account")
-    check([row["id"] for row in from_page] == ["vk:vk", "vk:durov"], "the feed page fixture parses the same accounts")
+    check([row["id"] for row in parsed] == ["vk:vk", "vk:foxglen"], "the VK web fixture keeps followed accounts and drops the spare account")
+    check([row["id"] for row in from_page] == ["vk:vk", "vk:foxglen"], "the feed page fixture parses the same accounts")
     check([item["id"] for item in parsed[0]["items"]] == ["6", "5"], "VK web stories are oldest first")
     check(parsed[0]["items"][0]["type"] == "video" and parsed[0]["items"][0]["url"] == "https://cdn.example/v.mp4" and parsed[0]["items"][0]["poster"] == "https://cdn.example/poster.jpg", "a VK web video uses the https mp4 and its poster")
     check(parsed[0]["name"] == "ВКонтакте" and parsed[0]["avatar"] == "https://cdn.example/vk-face.jpg" and parsed[0]["items"][1]["caption"] == "Hello", "the VK group supplies the name, avatar, and caption")
-    check(parsed[1]["name"] == "Pavel Durov" and parsed[1]["items"][0]["open"] == "https://vk.com/story1_9", "a followed profile keeps its name and story link")
+    check(parsed[1]["name"] == "Pavel foxglen" and parsed[1]["items"][0]["open"] == "https://vk.com/story1_9", "a followed profile keeps its name and story link")
     dumped = json.dumps(parsed)
     check("old.jpg" not in dumped and "mine.jpg" not in dumped and "nope.mp4" not in dumped and "plain" not in dumped, "expired, own, and http VK web media are dropped")
     cards = """
-    <div data-owner-id="1" data-handle="durov" data-name="Pavel" data-avatar="https://cdn.example/durov-face.jpg">
+    <div data-owner-id="1" data-handle="foxglen" data-name="Pavel" data-avatar="https://cdn.example/foxglen-face.jpg">
       <a data-story-id="9" data-type="photo" data-date="1792607400" data-expires="1792693800">
-        <img src="https://cdn.example/durov.jpg">
+        <img src="https://cdn.example/foxglen.jpg">
       </a>
     </div>
     """
     card_accounts = parse_vk_web_stories(cards, now, viewer_id=100)
-    check(card_accounts[0]["items"][0]["url"] == "https://cdn.example/durov.jpg", "a feed card with an image URL becomes a story")
+    check(card_accounts[0]["items"][0]["url"] == "https://cdn.example/foxglen.jpg", "a feed card with an image URL becomes a story")
     code = totp_code("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", datetime.fromtimestamp(59, timezone.utc))
     check(code == "287082", "the authenticator code matches the RFC 6238 vector")
     exported = load_cookie_export(json.dumps([
@@ -4355,7 +4355,7 @@ def vk_web_checks(now) -> None:
         (200, "", feed_html, []),
     ])
     accounts = fetch_vk_web(now, session_export="remixsid=OLD", session_key="cache-key", transport=restore, sleep=lambda delay: sleeps.append(delay), sign_in=lambda *args: (_ for _ in ()).throw(AssertionError("cookie session signed in")))
-    check([row["id"] for row in accounts] == ["vk:vk", "vk:durov"], "login.vk.com restore redirects return the feed stories")
+    check([row["id"] for row in accounts] == ["vk:vk", "vk:foxglen"], "login.vk.com restore redirects return the feed stories")
     check(len(restore.calls) == 3 and sleeps == [VK_WEB_PACE, VK_WEB_PACE], "restore hops are paced and the feed is fetched once")
     check(all(call[1].get("User-Agent") == BROWSER and "web_token" not in call[0] and "access_token" not in call[0] for call in restore.calls), "the feed uses a desktop browser and does not mint a web token")
     check("remixsid=NEW" in restore.calls[2][1].get("Cookie", ""), "the fresh remixsid is sent on the feed request")
@@ -4449,7 +4449,7 @@ def vk_web_checks(now) -> None:
             sleep=lambda delay: None,
             sign_in=signer,
         )
-        check(len(calls) == 1 and [row["id"] for row in found] == ["vk:vk", "vk:durov"], "a dead session signs in once")
+        check(len(calls) == 1 and [row["id"] for row in found] == ["vk:vk", "vk:foxglen"], "a dead session signs in once")
         if shutil.which("openssl"):
             saved = Path(cache).read_bytes()
             check(b"from-login" not in saved and b"secret-password" not in saved and b"SAVED" not in saved, "refreshed cookies are stored only as ciphertext")
@@ -4534,7 +4534,7 @@ def story_checks() -> None:
     check(len(account["items"]) == 2, "the instagram fixture keeps the two stories that have not expired")
     check(account["items"][0]["id"] == "1002" and account["items"][0]["type"] == "video", "the older video is first")
     check(account["items"][1]["id"] == "1001" and account["items"][1]["caption"] == "Morning" and account["items"][1]["url"].endswith("story.jpg"), "the photo keeps the larger image and its caption")
-    check(account["name"] == "Mark Zuckerberg" and account["avatar"] == "https://cdn.example/birchlane.jpg", "the reel supplies the name and avatar")
+    check(account["name"] == "Moss Point" and account["avatar"] == "https://cdn.example/birchlane.jpg", "the reel supplies the name and avatar")
     check("1003" not in json.dumps(account), "an expired story is dropped")
     leaked = "sessionid=SECRETVALUE; ds_user_id=42"
     check(redact("Cookie: " + leaked) == "Cookie: sessionid=redacted; ds_user_id=redacted", "a story error cannot carry the session")
@@ -4589,7 +4589,7 @@ def story_checks() -> None:
 
     feeds = [
         {"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"},
-        {"id": "instagram:nasa", "platform": "instagram", "handle": "nasa"},
+        {"id": "instagram:sampleagency", "platform": "instagram", "handle": "sampleagency"},
         {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor"},
         {"id": "vk:vk", "platform": "vk", "handle": "vk"},
     ]
@@ -4927,12 +4927,12 @@ def story_checks() -> None:
     def auto_fetch(url):
         if "fxtwitter.com/riverquill" in url:
             return 200, '{"screen_name":"riverquill","id":"1"}'
-        if "fxtwitter.com/BrianRoemmele" in url:
-            return 200, '{"screen_name":"BrianRoemmele"}'
-        if "fxtwitter.com/freshname" in url or "fxtwitter.com/nasa" in url:
+        if "fxtwitter.com/flintmoor" in url:
+            return 200, '{"screen_name":"flintmoor"}'
+        if "fxtwitter.com/freshname" in url or "fxtwitter.com/sampleagency" in url:
             return 200, '{"screen_name":"freshname"}'
-        if "t.me/s/durov" in url:
-            return 200, '<div class="tgme_widget_message_wrap" data-post="durov/1">durov</div>'
+        if "t.me/s/foxglen" in url:
+            return 200, '<div class="tgme_widget_message_wrap" data-post="foxglen/1">foxglen</div>'
         if "vk.com/team" in url:
             return 200, "<html>team community</html>"
         if "videos.xml" in url:
@@ -4944,7 +4944,7 @@ def story_checks() -> None:
         return 404, ""
 
     carriers = [
-        {"id": "x:copperlane", "platform": "x", "handle": "copperlane", "profile": {"name": "Elon Musk"}},
+        {"id": "x:copperlane", "platform": "x", "handle": "copperlane", "profile": {"name": "Copper Lane"}},
         {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor", "profile": {"name": "Telegram News"}},
         {"id": "vk:vk", "platform": "vk", "handle": "vk", "profile": {"name": "VK"}},
         {"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"},
@@ -4953,10 +4953,10 @@ def story_checks() -> None:
         {"id": "x:X", "platform": "x", "handle": "X", "defaultFollow": False, "adapter": "fxtwitter"},
     ]
     discovered = [
-        {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "riverquill", "author": "Sawyer Merritt", "avatar": "https://pbs.twimg.com/a.jpg", "sortDate": "2026-10-20T17:22:54.000Z", "repostedBy": {"handle": "copperlane", "name": "Elon Musk", "platform": "x", "feedId": "x:copperlane"}},
+        {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "riverquill", "author": "River Quill", "avatar": "https://pbs.twimg.com/a.jpg", "sortDate": "2026-10-20T17:22:54.000Z", "repostedBy": {"handle": "copperlane", "name": "Copper Lane", "platform": "x", "feedId": "x:copperlane"}},
         {"platform": "x", "feedId": "x:copperlane", "kind": "quote", "handle": "copperlane", "quoted": {"handle": "SomeoneElse"}},
-        {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "BrianRoemmele", "author": "Brian", "repostedBy": {"handle": "copperlane", "feedId": "x:copperlane"}},
-        {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "repost", "handle": "durov", "author": "Pavel Durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor", "platform": "telegram"}},
+        {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "flintmoor", "author": "Brian", "repostedBy": {"handle": "copperlane", "feedId": "x:copperlane"}},
+        {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "repost", "handle": "foxglen", "author": "Pavel foxglen", "forwardedFrom": {"handle": "foxglen", "name": "Pavel foxglen"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor", "platform": "telegram"}},
         {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "post", "handle": "laneharbor", "forwardedFrom": {"name": "Hidden person"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor"}},
         {"platform": "vk", "feedId": "vk:vk", "kind": "repost", "handle": "team", "author": "Team", "repostedBy": {"handle": "vk", "feedId": "vk:vk", "platform": "vk"}},
         {"platform": "vk", "feedId": "vk:vk", "kind": "repost", "handle": "12345", "repostedBy": {"handle": "vk", "feedId": "vk:vk"}},
@@ -4964,10 +4964,10 @@ def story_checks() -> None:
         {"platform": "youtube", "feedId": "youtube:northlamp", "kind": "repost", "handle": "OtherCreator", "channelId": "UCsyntheticmaple00006000", "author": "Other Creator", "repostedBy": {"handle": "northlamp", "feedId": "youtube:northlamp"}},
         {"platform": "x", "feedId": "x:already", "kind": "repost", "handle": "freshname", "author": "Fresh", "repostedBy": {"handle": "already", "feedId": "x:already"}},
     ]
-    auto_config = {"feeds": [dict(row) for row in carriers], "removed": ["x:brianroemmele"], "autoAdd": {"perRun": 5, "total": 12, "paceSeconds": 2}, "people": []}
+    auto_config = {"feeds": [dict(row) for row in carriers], "removed": ["x:flintmoor"], "autoAdd": {"perRun": 5, "total": 12, "paceSeconds": 2}, "people": []}
     added_ids = auto_add.apply_auto_adds(auto_config, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
     added_set = set(added_ids)
-    check(added_set == {"x:riverquill", "telegram:durov", "vk:team", "youtube:OtherCreator"}, "reposts add the original public account and skip quotes, private, removed, and a second hop")
+    check(added_set == {"x:riverquill", "telegram:foxglen", "vk:team", "youtube:OtherCreator"}, "reposts add the original public account and skip quotes, private, removed, and a second hop")
     sawyer = next(feed for feed in auto_config["feeds"] if feed.get("id") == "x:riverquill")
     check(sawyer.get("origin") == "repost" and sawyer.get("defaultFollow") is False and sawyer.get("limit") == 4 and sawyer["addedFrom"]["handle"] == "copperlane" and sawyer["addedFrom"]["feedId"] == "x:copperlane" and sawyer["addedFrom"]["at"].startswith("2026-10-20T17:22:54") and sawyer["adapter"] == "fxtwitter", "an auto-added account records who reposted it and is not a default follow")
     youtube_added = next(feed for feed in auto_config["feeds"] if feed.get("id") == "youtube:OtherCreator")
@@ -4981,11 +4981,11 @@ def story_checks() -> None:
     check(auto_add.apply_auto_adds(full, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"]) == [], "the total cap counts accounts already added from reposts")
     denied_posts = [
         {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "DeniedUser", "author": "Denied", "repostedBy": {"handle": "copperlane", "feedId": "x:copperlane"}},
-        {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "repost", "handle": "durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor"}},
+        {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "repost", "handle": "foxglen", "forwardedFrom": {"handle": "foxglen", "name": "Pavel foxglen"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor"}},
     ]
     denied_config = {"feeds": [dict(row) for row in carriers if row["id"] in ("x:copperlane", "telegram:laneharbor")], "autoAdd": {"perRun": 5, "total": 12}, "people": []}
     denied_ids = auto_add.apply_auto_adds(denied_config, denied_posts, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
-    check(denied_ids == ["telegram:durov"], "a 403 stops more checks on that platform and still adds other platforms")
+    check(denied_ids == ["telegram:foxglen"], "a 403 stops more checks on that platform and still adds other platforms")
     profiles = [
         {"id": "x:riverquill", "handle": "riverquill", "configured": True},
         {"id": "x:copperlane", "handle": "copperlane", "configured": False},
@@ -5000,7 +5000,7 @@ def story_checks() -> None:
         folder = Path(tmp)
         base = folder / "feeds.config.json"
         incoming = folder / "incoming.json"
-        base.write_text('{\n  "cap": 300,\n  "autoAdd": {"perRun": 3, "total": 12},\n  "removed": ["x:brianroemmele"],\n  "feeds": [\n    {"id": "x:copperlane", "platform": "x", "handle": "copperlane"}\n  ]\n}\n', encoding="utf-8")
+        base.write_text('{\n  "cap": 300,\n  "autoAdd": {"perRun": 3, "total": 12},\n  "removed": ["x:flintmoor"],\n  "feeds": [\n    {"id": "x:copperlane", "platform": "x", "handle": "copperlane"}\n  ]\n}\n', encoding="utf-8")
         evil = json.loads(json.dumps(sawyer))
         evil["source_urls"] = ["http://127.0.0.1/secret"]
         incoming.write_text(json.dumps({"feeds": [sawyer, evil]}), encoding="utf-8")
@@ -5008,11 +5008,11 @@ def story_checks() -> None:
         merged = json.loads(base.read_text(encoding="utf-8"))
         check(merged_ids == ["x:riverquill"] and merged["feeds"][0]["id"] == "x:copperlane" and merged["feeds"][1]["id"] == "x:riverquill" and merged["cap"] == 300, "the config commit appends the repost source and drops a rewritten URL")
         blocked = dict(sawyer)
-        blocked["id"] = "x:brianroemmele"
-        blocked["handle"] = "BrianRoemmele"
-        blocked["profile"] = {"name": "Brian", "url": "https://x.com/BrianRoemmele"}
+        blocked["id"] = "x:flintmoor"
+        blocked["handle"] = "flintmoor"
+        blocked["profile"] = {"name": "Brian", "url": "https://x.com/flintmoor"}
         from follow_request import entry_for as entry_for_feed
-        blocked = entry_for_feed({"platform": "x", "handle": "BrianRoemmele", "url": "https://x.com/BrianRoemmele", "channelId": ""})
+        blocked = entry_for_feed({"platform": "x", "handle": "flintmoor", "url": "https://x.com/flintmoor", "channelId": ""})
         blocked["origin"] = "repost"
         blocked["defaultFollow"] = False
         incoming.write_text(json.dumps({"feeds": [blocked]}), encoding="utf-8")
