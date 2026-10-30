@@ -189,4 +189,14 @@ for (const [name, ua] of Object.entries(UAS)) {
   }
 }
 
+{
+  // Optional alerts panel (TV app 1.8.0+): ships turned off, opens only from our own
+  // screens, and has no background part (no service, receiver, job or boot hook).
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  const a = /<activity[^>]*alerts\.AlertsActivity[^>]*>/.exec(manifest);
+  assert.ok(a && a[0].includes('android:enabled="false"') && a[0].includes('android:exported="false"'), "the alerts panel ships off and private");
+  assert.ok(!/<(service|receiver)[^>]*\.alerts\./.test(manifest), "alerts never run in the background");
+  assert.ok(!/RECEIVE_BOOT_COMPLETED|FOREGROUND_SERVICE|WAKE_LOCK/.test(manifest), "no keep-alive permissions");
+}
+
 console.log("tv boot checks passed");

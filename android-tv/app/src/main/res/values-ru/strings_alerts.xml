@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alerts panel (alerts/). -->
+<resources>
+    <string name="alerts_label">Оповещения ViktorychTV</string>
+    <string name="al_title">Оповещения</string>
+    <string name="al_link_title">Оповещения на этом телевизоре</string>
+    <string name="al_link_steps">На телефоне или компьютере откройте этот адрес, войдите и подтвердите этот телевизор:</string>
+    <string name="al_link_code">Код %1$s</string>
+    <string name="al_link_or">Или в ViktorychApp: Настройки › Мои устройства › Подключить телевизор, затем введите код.</string>
+    <string name="al_link_wait">Получаем код…</string>
+    <string name="al_link_note">Вход выполняется только для панели оповещений. Она проверяет новые оповещения, пока открыта, и останавливается, когда вы уходите. Чтобы выйти, отключите её в «Сделать ViktorychTV основным».</string>
+    <string name="al_new_code">Новый код</string>
+    <string name="al_denied">Этот аккаунт отклонил телевизор. Попробуйте ещё раз с новым кодом.</string>
+    <string name="al_offline">Сейчас нет связи с ViktorychApp. Скоро попробуем снова.</string>
+    <string name="al_busy">Слишком много попыток. Немного подождём.</string>
+    <string name="al_mark_read">Отметить всё прочитанным</string>
+    <string name="al_refresh">Обновить</string>
+    <string name="al_loading">Проверяем…</string>
+    <string name="al_empty">Оповещений пока нет.</string>
+    <string name="al_empty_tab">Здесь пока ничего нет.</string>
+    <string name="al_tab_all">Все</string>
+    <string name="al_tab_messages">Сообщения</string>
+    <string name="al_tab_mentions">Упоминания</string>
+    <string name="al_tab_live">Эфиры</string>
+    <string name="al_someone">Кто-то</string>
+    <string name="al_k_like">%1$s: нравится ваш пост</string>
+    <string name="al_k_like_many">%1$s и ещё %2$d: нравится ваш пост</string>
+    <string name="al_k_repost">%1$s сделал(а) репост</string>
+    <string name="al_k_repost_many">%1$s и ещё %2$d сделали репост</string>
+    <string name="al_k_quote">%1$s процитировал(а) ваш пост</string>
+    <string name="al_k_reply">%1$s ответил(а) вам</string>
+    <string name="al_k_mention">%1$s упомянул(а) вас</string>
+    <string name="al_k_dm">%1$s прислал(а) сообщение</string>
+    <string name="al_k_discord">Оповещение Discord</string>
+    <string name="al_k_follow">%1$s подписался(-ась) на вас</string>
+    <string name="al_k_follow_request">%1$s хочет подписаться на вас</string>
+    <string name="al_k_follow_accept">%1$s принял(а) ваш запрос на подписку</string>
+    <string name="al_k_friend_request">%1$s хочет дружить</string>
+    <string name="al_k_friend_accept">%1$s принял(а) заявку в друзья</string>
+    <string name="al_k_live">%1$s в эфире</string>
+    <string name="al_k_birthday">Сегодня день рождения: %1$s</string>
+    <string name="al_k_post">%1$s: новый пост</string>
+    <string name="al_k_other">Новое от %1$s</string>
+    <string name="al_now">сейчас</string>
+    <string name="al_min">%1$d мин</string>
+    <string name="al_hour">%1$d ч</string>
+    <string name="al_day">%1$d д</string>
+    <string name="al_week">%1$d нед</string>
+    <string name="def_alerts">Оповещения</string>
+    <string name="def_alerts_desc">Сообщения, упоминания и эфиры вашего аккаунта в одной панели, которая открывается с главного экрана. Привяжите её один раз кодом; она проверяет только пока открыта.</string>
+    <string name="def_alerts_linked">Привязано: %1$s</string>
+    <string name="def_alerts_link">Дальше: откройте Оповещения и привяжите телевизор</string>
+    <string name="def_alerts_open">Открыть Оповещения</string>
+    <string name="def_alerts_unlink">Выйти из Оповещений на этом телевизоре</string>
+    <string name="def_alerts_off">Не использовать Оповещения</string>
+</resources>

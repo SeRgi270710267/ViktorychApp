@@ -489,5 +489,20 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
+        <!-- Optional alerts panel (alerts/). Off until chosen on the defaults screen; it
+             only talks to the server while it is on screen. -->
+        <activity
+            android:name=".alerts.AlertsActivity"
+            android:enabled="false"
+            android:exported="false"
+            android:label="@string/alerts_label"
+            android:icon="@drawable/al_bell"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="app.viktorych.tv.category.TOOL" />
+            </intent-filter>
+        </activity>
+
     </application>
 </manifest>

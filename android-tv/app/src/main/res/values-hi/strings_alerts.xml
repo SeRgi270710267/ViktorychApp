@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alerts panel (alerts/). -->
+<resources>
+    <string name="alerts_label">ViktorychTV अलर्ट</string>
+    <string name="al_title">अलर्ट</string>
+    <string name="al_link_title">इस टीवी पर अपने अलर्ट देखें</string>
+    <string name="al_link_steps">अपने फ़ोन या कंप्यूटर पर यह पता खोलें, साइन इन करें और इस टीवी को मंज़ूरी दें:</string>
+    <string name="al_link_code">कोड %1$s</string>
+    <string name="al_link_or">या ViktorychApp में: सेटिंग्स › मेरे डिवाइस › टीवी लिंक करें, फिर कोड डालें।</string>
+    <string name="al_link_wait">कोड लिया जा रहा है…</string>
+    <string name="al_link_note">इससे सिर्फ़ अलर्ट पैनल में साइन इन होता है। यह स्क्रीन पर रहते हुए ही नए अलर्ट देखता है और बाहर जाते ही रुक जाता है। साइन आउट के लिए इसे ViktorychTV को डिफ़ॉल्ट बनाएं में बंद करें।</string>
+    <string name="al_new_code">नया कोड</string>
+    <string name="al_denied">उस खाते ने यह टीवी मना कर दिया। नए कोड के साथ फिर कोशिश करें।</string>
+    <string name="al_offline">अभी ViktorychApp से जुड़ नहीं पा रहे। जल्द फिर कोशिश करेंगे।</string>
+    <string name="al_busy">बहुत ज़्यादा कोशिशें। थोड़ा रुक रहे हैं।</string>
+    <string name="al_mark_read">सब पढ़ा हुआ करें</string>
+    <string name="al_refresh">रीफ़्रेश</string>
+    <string name="al_loading">जांच रहे हैं…</string>
+    <string name="al_empty">अभी कोई अलर्ट नहीं।</string>
+    <string name="al_empty_tab">यहां अभी कुछ नहीं।</string>
+    <string name="al_tab_all">सभी</string>
+    <string name="al_tab_messages">मैसेज</string>
+    <string name="al_tab_mentions">मेंशन</string>
+    <string name="al_tab_live">लाइव</string>
+    <string name="al_someone">कोई</string>
+    <string name="al_k_like">%1$s को आपकी पोस्ट पसंद आई</string>
+    <string name="al_k_like_many">%1$s और %2$d अन्य को आपकी पोस्ट पसंद आई</string>
+    <string name="al_k_repost">%1$s ने आपकी पोस्ट रीपोस्ट की</string>
+    <string name="al_k_repost_many">%1$s और %2$d अन्य ने आपकी पोस्ट रीपोस्ट की</string>
+    <string name="al_k_quote">%1$s ने आपकी पोस्ट कोट की</string>
+    <string name="al_k_reply">%1$s ने आपको जवाब दिया</string>
+    <string name="al_k_mention">%1$s ने आपको मेंशन किया</string>
+    <string name="al_k_dm">%1$s ने आपको मैसेज भेजा</string>
+    <string name="al_k_discord">Discord अलर्ट</string>
+    <string name="al_k_follow">%1$s ने आपको फ़ॉलो किया</string>
+    <string name="al_k_follow_request">%1$s आपको फ़ॉलो करना चाहते हैं</string>
+    <string name="al_k_follow_accept">%1$s ने आपका फ़ॉलो अनुरोध मान लिया</string>
+    <string name="al_k_friend_request">%1$s ने आपको फ़्रेंड रिक्वेस्ट भेजी</string>
+    <string name="al_k_friend_accept">%1$s ने आपकी फ़्रेंड रिक्वेस्ट मान ली</string>
+    <string name="al_k_live">%1$s लाइव हैं</string>
+    <string name="al_k_birthday">आज %1$s का जन्मदिन है</string>
+    <string name="al_k_post">%1$s ने पोस्ट किया</string>
+    <string name="al_k_other">%1$s की ओर से नया</string>
+    <string name="al_now">अभी</string>
+    <string name="al_min">%1$d मिनट</string>
+    <string name="al_hour">%1$d घं</string>
+    <string name="al_day">%1$d दिन</string>
+    <string name="al_week">%1$d सप्ताह</string>
+    <string name="def_alerts">अलर्ट</string>
+    <string name="def_alerts_desc">आपके खाते के मैसेज, मेंशन और लाइव अलर्ट एक पैनल में, जो होम स्क्रीन से खुलता है। एक बार कोड से जोड़ें; यह सिर्फ़ स्क्रीन पर रहते हुए जांचता है।</string>
+    <string name="def_alerts_linked">%1$s से जुड़ा</string>
+    <string name="def_alerts_link">आगे: अलर्ट खोलें और इस टीवी को जोड़ें</string>
+    <string name="def_alerts_open">अलर्ट खोलें</string>
+    <string name="def_alerts_unlink">इस टीवी को अलर्ट से साइन आउट करें</string>
+    <string name="def_alerts_off">अलर्ट का इस्तेमाल बंद करें</string>
+</resources>

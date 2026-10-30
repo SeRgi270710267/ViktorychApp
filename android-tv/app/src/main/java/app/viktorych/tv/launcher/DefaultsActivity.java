@@ -13,6 +13,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import app.viktorych.tv.R;
+import app.viktorych.tv.alerts.AlertsDefaults;
 import app.viktorych.tv.files.FilesDefaults;
 import app.viktorych.tv.ime.KeyboardDefaults;
 import app.viktorych.tv.player.MediaDefaults;
@@ -170,6 +171,19 @@ public class DefaultsActivity extends Activity {
         files.setOnFocusChangeListener((v, f) -> { if (f) showFilesDetails(); });
         list.addView(files, gap());
 
+        // Alerts (alerts/AlertsActivity).
+        boolean alertsOn = AlertsDefaults.enabled(this);
+        View alerts = row(R.drawable.al_bell, getString(R.string.def_alerts),
+            getString(alertsOn ? R.string.def_on : R.string.def_off), alertsOn);
+        alerts.setOnClickListener(v -> {
+            boolean was = AlertsDefaults.enabled(this);
+            AlertsDefaults.enable(this, true);
+            if (was) AlertsDefaults.open(this);
+            else { render(); focusRow(7); }
+        });
+        alerts.setOnFocusChangeListener((v, f) -> { if (f) showAlertsDetails(); });
+        list.addView(alerts, gap());
+
         setContentView(root);
         if (guideFor) showGuide(); else showHomeDetails(on);
         String want = getIntent() == null ? null : getIntent().getStringExtra("focus");
@@ -179,6 +193,7 @@ public class DefaultsActivity extends Activity {
         else if ("search".equals(want)) { search.requestFocus(); getIntent().removeExtra("focus"); }
         else if ("photos".equals(want)) { photos.requestFocus(); getIntent().removeExtra("focus"); }
         else if ("files".equals(want)) { files.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("alerts".equals(want)) { alerts.requestFocus(); getIntent().removeExtra("focus"); }
         else home.requestFocus();
     }
 
@@ -305,6 +320,31 @@ public class DefaultsActivity extends Activity {
                 FilesDefaults.enableFiles(this, false);
                 render();
                 focusRow(6);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showAlertsDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.al_bell, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_alerts), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_alerts_desc), 13, Ui.TEXT_DIM, 10);
+        if (AlertsDefaults.enabled(this)) {
+            boolean linked = AlertsDefaults.linked(this);
+            String who = AlertsDefaults.accountName(this);
+            addSideText(col, linked ? getString(R.string.def_alerts_linked, who) : getString(R.string.def_alerts_link), 13, 0xFF8AB4F8, 14);
+            sideButton(col, getString(R.string.def_alerts_open), () -> AlertsDefaults.open(this));
+            if (linked) sideButton(col, getString(R.string.def_alerts_unlink), () -> {
+                AlertsDefaults.unlink(this);
+                render();
+                focusRow(7);
+            });
+            sideButton(col, getString(R.string.def_alerts_off), () -> {
+                AlertsDefaults.enable(this, false);
+                render();
+                focusRow(7);
             });
         }
         side.addView(col);

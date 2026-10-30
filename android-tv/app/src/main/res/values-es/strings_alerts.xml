@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alerts panel (alerts/). -->
+<resources>
+    <string name="alerts_label">Alertas ViktorychTV</string>
+    <string name="al_title">Alertas</string>
+    <string name="al_link_title">Ve tus alertas en esta TV</string>
+    <string name="al_link_steps">En tu teléfono u ordenador, abre esta dirección, inicia sesión y aprueba esta TV:</string>
+    <string name="al_link_code">Código %1$s</string>
+    <string name="al_link_or">O en ViktorychApp: Configuración › Mis dispositivos › Vincular una TV, e introduce el código.</string>
+    <string name="al_link_wait">Obteniendo un código…</string>
+    <string name="al_link_note">Esto solo inicia sesión en el panel de alertas. Busca alertas nuevas mientras está en pantalla y se detiene al salir. Desactívalo en Haz de ViktorychTV tu predeterminado para cerrar la sesión.</string>
+    <string name="al_new_code">Código nuevo</string>
+    <string name="al_denied">Esa cuenta rechazó esta TV. Inténtalo de nuevo con un código nuevo.</string>
+    <string name="al_offline">No se puede conectar con ViktorychApp ahora. Se volverá a intentar pronto.</string>
+    <string name="al_busy">Demasiados intentos. Esperando un momento.</string>
+    <string name="al_mark_read">Marcar todo como leído</string>
+    <string name="al_refresh">Actualizar</string>
+    <string name="al_loading">Comprobando…</string>
+    <string name="al_empty">Aún no hay alertas.</string>
+    <string name="al_empty_tab">Aún no hay nada aquí.</string>
+    <string name="al_tab_all">Todas</string>
+    <string name="al_tab_messages">Mensajes</string>
+    <string name="al_tab_mentions">Menciones</string>
+    <string name="al_tab_live">En directo</string>
+    <string name="al_someone">Alguien</string>
+    <string name="al_k_like">A %1$s le gustó tu publicación</string>
+    <string name="al_k_like_many">A %1$s y %2$d más les gustó tu publicación</string>
+    <string name="al_k_repost">%1$s compartió tu publicación</string>
+    <string name="al_k_repost_many">%1$s y %2$d más compartieron tu publicación</string>
+    <string name="al_k_quote">%1$s citó tu publicación</string>
+    <string name="al_k_reply">%1$s te respondió</string>
+    <string name="al_k_mention">%1$s te mencionó</string>
+    <string name="al_k_dm">%1$s te envió un mensaje</string>
+    <string name="al_k_discord">Alerta de Discord</string>
+    <string name="al_k_follow">%1$s te siguió</string>
+    <string name="al_k_follow_request">%1$s quiere seguirte</string>
+    <string name="al_k_follow_accept">%1$s aceptó tu solicitud para seguirle</string>
+    <string name="al_k_friend_request">%1$s te envió una solicitud de amistad</string>
+    <string name="al_k_friend_accept">%1$s aceptó tu solicitud de amistad</string>
+    <string name="al_k_live">%1$s está en directo</string>
+    <string name="al_k_birthday">Hoy es el cumpleaños de %1$s</string>
+    <string name="al_k_post">%1$s publicó</string>
+    <string name="al_k_other">Novedad de %1$s</string>
+    <string name="al_now">ahora</string>
+    <string name="al_min">%1$d min</string>
+    <string name="al_hour">%1$d h</string>
+    <string name="al_day">%1$d d</string>
+    <string name="al_week">%1$d sem</string>
+    <string name="def_alerts">Alertas</string>
+    <string name="def_alerts_desc">Mensajes, menciones y alertas en directo de tu cuenta en un panel que se abre desde la pantalla de inicio. Vincúlalo una vez con un código; solo comprueba mientras está en pantalla.</string>
+    <string name="def_alerts_linked">Vinculado a %1$s</string>
+    <string name="def_alerts_link">Siguiente: abre Alertas y vincula esta TV</string>
+    <string name="def_alerts_open">Abrir Alertas</string>
+    <string name="def_alerts_unlink">Cerrar la sesión de Alertas en esta TV</string>
+    <string name="def_alerts_off">Dejar de usar Alertas</string>
+</resources>
