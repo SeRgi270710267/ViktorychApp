@@ -937,3 +937,31 @@ body:has(.dmsgs) .fab { display: none; }
 .inbox-set-btn[disabled] { opacity: .4; cursor: default; }
 .inbox-set-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; }
 .inbox-set-own { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+
+/* Customize Discord: order, hide, mute, private. X black. */
+.dmsgs-tools { display: flex; justify-content: flex-end; padding: 4px 16px 0; }
+.dmsgs-cz-open, .dmsgs-cz-done, .dmsgs-cz-btn {
+  font: inherit; font-size: 13px; font-weight: 700; color: #e7e9ea; background: transparent;
+  border: 1px solid #536471; border-radius: 9999px; padding: 4px 12px; min-height: 30px; cursor: pointer;
+}
+.dmsgs-cz-open:hover, .dmsgs-cz-btn:hover, .dmsgs-cz-done:hover { background: rgba(231, 233, 234, 0.1); }
+.dmsgs-cz-done { background: #eff3f4; color: #0f1419; border-color: #eff3f4; }
+.dmsgs-cz-done:hover { background: #d7dbdc; }
+.dmsgs-cz-btn.on { background: #eff3f4; color: #0f1419; border-color: #eff3f4; }
+.dmsgs-cz-btn[disabled] { opacity: 0.4; cursor: default; }
+.dmsgs-cz { padding: 8px 0 24px; }
+.dmsgs-cz-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; }
+.dmsgs-cz-top h2 { margin: 0; font-size: 20px; font-weight: 800; color: #e7e9ea; }
+.dmsgs-cz-note { margin: 0; padding: 0 16px 12px; color: #71767b; font-size: 14px; line-height: 1.35; }
+.dmsgs-cz-list, .dmsgs-cz-chs { list-style: none; margin: 0; padding: 0; }
+.dmsgs-cz-srv { border-top: 1px solid #2f3336; padding: 12px 16px; }
+.dmsgs-cz-head, .dmsgs-cz-ch { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dmsgs-cz-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e7e9ea; font-size: 15px; }
+.dmsgs-cz-ch { padding: 8px 0 0 8px; }
+.dmsgs-cz-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e7e9ea; font-size: 14px; }
+.dmsgs-cz-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex: none; }
+.dmsgs-cz-srv.off > .dmsgs-cz-head b, .dmsgs-cz-ch.off .dmsgs-cz-name { color: #71767b; text-decoration: line-through; }
+@media (max-width: 499px) {
+  .dmsgs-cz-ch { flex-wrap: wrap; }
+  .dmsgs-cz-ch .dmsgs-cz-acts { width: 100%; justify-content: flex-start; padding-left: 18px; }
+}

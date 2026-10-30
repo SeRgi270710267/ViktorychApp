@@ -264,7 +264,8 @@
         });
       });
     });
-    return { messages: messages, mutedChannels: mutedChannels.slice(0, 200), mutedServers: mutedServers };
+    const privateChannels = (stored.privateChannels || []).slice(0, 200);
+    return { messages: messages, mutedChannels: mutedChannels.slice(0, 200), mutedServers: mutedServers, privateChannels: privateChannels };
   }
 
   function noteAlerts() {
@@ -807,7 +808,7 @@
   }
 
   function emptyPrefs() {
-    return { expanded: {}, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: [], mutes: {} };
+    return { expanded: {}, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: [], mutes: {}, hiddenServers: [], hiddenChannels: [], serverRank: [], privateChannels: [] };
   }
 
   function cleanIds(list) {
@@ -848,7 +849,11 @@
         pinnedChannels: cleanIds(raw.pinnedChannels),
         mutedServers: cleanIds(raw.mutedServers),
         mutedChannels: cleanIds(raw.mutedChannels),
-        mutes: mutes
+        mutes: mutes,
+        hiddenServers: cleanIds(raw.hiddenServers),
+        hiddenChannels: cleanIds(raw.hiddenChannels),
+        serverRank: cleanIds(raw.serverRank),
+        privateChannels: cleanIds(raw.privateChannels)
       };
     } catch (err) {
       return empty;
@@ -883,6 +888,34 @@
   }
 
   function serverMuted(id) { return hasId(prefs().mutedServers, id); }
+
+  /* Local-only layout: hidden servers and channels, a hand-picked server
+     order, and channels whose text never shows in previews or alerts. */
+  function serverHidden(id) { return hasId(prefs().hiddenServers, id); }
+  function channelHidden(id) { return hasId(prefs().hiddenChannels, id); }
+  function channelPrivate(id) { return hasId(prefs().privateChannels, id); }
+  function listFor(key) {
+    const stored = prefs();
+    if (!Array.isArray(stored[key])) stored[key] = [];
+    return stored[key];
+  }
+  function rankedServers() {
+    const rank = prefs().serverRank || [];
+    const at = function (id) { const i = rank.indexOf(id); return i < 0 ? rank.length : i; };
+    return state.servers.map(function (server, i) { return { server: server, i: i }; })
+      .sort(function (a, b) { return (at(a.server.id) - at(b.server.id)) || (a.i - b.i); })
+      .map(function (item) { return item.server; });
+  }
+  function moveServer(id, dir) {
+    const list = rankedServers().map(function (server) { return server.id; });
+    const from = list.indexOf(id);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= list.length) return false;
+    list.splice(from, 1);
+    list.splice(to, 0, id);
+    prefs().serverRank = list.slice(0, 200);
+    return true;
+  }
 
   function muteUntil(id) {
     const stored = prefs();
@@ -940,8 +973,8 @@
     return groups;
   }
 
-  function messageChannels(server) {
-    return (server.channels || []).filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
+  function messageChannels(server, all) {
+    return (server.channels || []).filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible && (all || !channelHidden(ch.id)); });
   }
 
   function latestMessage(server) {
@@ -954,7 +987,8 @@
     return best;
   }
 
-  function previewText(row) {
+  function previewText(row, ch) {
+    if (ch && channelPrivate(ch.id)) return tr("New message");
     return String(row && row.body || "").replace(/[*_`~|>]/g, "").replace(/\s+/g, " ").trim().slice(0, 90);
   }
 
@@ -987,10 +1021,11 @@
     return count;
   }
 
-  function serverOrder() {
+  function serverOrder(all) {
     const pinned = [];
     const rest = [];
-    state.servers.forEach(function (server) {
+    rankedServers().forEach(function (server) {
+      if (!all && serverHidden(server.id)) return;
       (hasId(prefs().pinnedServers, server.id) ? pinned : rest).push(server);
     });
     pinned.sort(function (a, b) { return prefs().pinnedServers.indexOf(a.id) - prefs().pinnedServers.indexOf(b.id); });
@@ -1108,7 +1143,7 @@
     const count = unreadCount(server, route);
     const muted = serverMuted(server.id);
     const pinned = hasId(prefs().pinnedServers, server.id);
-    const preview = state.paused ? tr("Discord paused") : (latest ? (latest.row.name + ": " + previewText(latest.row)) : tr("No messages yet"));
+    const preview = state.paused ? tr("Discord paused") : (latest ? (channelPrivate(latest.channel.id) ? previewText(latest.row, latest.channel) : (latest.row.name + ": " + previewText(latest.row))) : tr("No messages yet"));
     const time = !state.paused && latest ? formatShort(msgTime(latest.row)) : "";
     const badge = !muted && count ? '<span class="dmsgs-badge" aria-label="' + esc(trn("unread", count)) + '">' + (count > 99 ? "99+" : String(count)) + "</span>" : "";
     const icon = server.icon
@@ -1166,13 +1201,46 @@
       if (native) return head + native;
       return head + ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No conversations yet") + "<" + "/h2><p" + ">" + tr("Channels set to messages show up here. None are configured yet.") + "<" + "/p></div>");
     }
+    if (state.customize) return head + customizeHtml();
     const rows = serverOrder().map(function (server) { return serverBlock(server, route); }).join("");
     const filtering = state.query ? " is-filtering" : "";
-    return head + switcherHtml() +
+    const tools = '<div class="dmsgs-tools"><button type="button" class="dmsgs-cz-open" data-discord="customize">' + esc(tr("Customize")) + "</button></div>";
+    return head + switcherHtml() + tools +
       '<label class="search dmsgs-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20.3 16.7 16a7.5 7.5 0 1 0-.7.7L20.3 21 21 20.3zM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z"/></svg>' +
       ("<input id=\"dmsgs-q\" class=\"dmsgs-q\" type=\"search\" " + "placeholder=\"" + tr("Search Direct Messages") + "\"" + " " + "aria-label=\"" + tr("Search Direct Messages") + "\"" + " value=\"") + esc(state.query) + '"></label>' +
       native +
       '<div class="dmsgs-channels' + filtering + '">' + rows + "</div>";
+  }
+
+  /* Customize: order, hide, mute and keep private, all on this device.
+     Nothing here talks to Discord; the list only reads what it already has. */
+  function customizeHtml() {
+    const toggle = function (kind, id, on, onLabel, offLabel) {
+      return '<button type="button" class="dmsgs-cz-btn' + (on ? " on" : "") + '" data-discord="' + kind + '" data-id="' + esc(id) + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(on ? onLabel : offLabel) + "</button>";
+    };
+    const servers = serverOrder(true);
+    const rows = servers.map(function (server, i) {
+      const hidden = serverHidden(server.id);
+      const channels = messageChannels(server, true).map(function (ch) {
+        const chHidden = channelHidden(ch.id);
+        return '<li class="dmsgs-cz-ch' + (chHidden ? " off" : "") + '"><span class="dmsgs-hash" aria-hidden="true">#</span><span class="dmsgs-cz-name" title="' + esc(ch.name) + '">' + esc(ch.name) + "</span>" +
+          '<span class="dmsgs-cz-acts">' +
+          toggle("ch-hide", ch.id, chHidden, tr("Show"), tr("Hide")) +
+          toggle("ch-mute", ch.id, muteUntil(ch.id) != null, tr("Unmute"), tr("Mute")) +
+          toggle("ch-private", ch.id, channelPrivate(ch.id), tr("Private"), tr("Previews on")) +
+          "</span></li>";
+      }).join("");
+      return '<li class="dmsgs-cz-srv' + (hidden ? " off" : "") + '" data-server="' + esc(server.id) + '"><div class="dmsgs-cz-head"><b title="' + esc(server.name) + '">' + esc(server.name) + "</b>" +
+        '<span class="dmsgs-cz-acts">' +
+        '<button type="button" class="dmsgs-cz-btn" data-discord="srv-up" data-id="' + esc(server.id) + '" aria-label="' + esc(tr("Move up")) + '"' + (i === 0 ? " disabled" : "") + ">↑</button>" +
+        '<button type="button" class="dmsgs-cz-btn" data-discord="srv-down" data-id="' + esc(server.id) + '" aria-label="' + esc(tr("Move down")) + '"' + (i === servers.length - 1 ? " disabled" : "") + ">↓</button>" +
+        toggle("srv-hide", server.id, hidden, tr("Show"), tr("Hide")) +
+        toggle("mute-server", server.id, serverMuted(server.id), tr("Unmute"), tr("Mute")) +
+        "</span></div>" + (channels ? '<ul class="dmsgs-cz-chs">' + channels + "</ul>" : "") + "</li>";
+    }).join("");
+    return '<section class="dmsgs-cz" aria-label="' + esc(tr("Customize Discord")) + '"><div class="dmsgs-cz-top"><h2>' + esc(tr("Customize Discord")) + '</h2><button type="button" class="dmsgs-cz-done" data-discord="customize-done">' + esc(tr("Done")) + "</button></div>" +
+      '<p class="dmsgs-cz-note">' + esc(tr("Saved on this device only. Private channels show “New message” in previews and alerts instead of the text. Nothing is sent to Discord.")) + "</p>" +
+      '<ul class="dmsgs-cz-list">' + rows + "</ul></section>";
   }
 
   // App-native servers (servers-ui.js) sit above the mirrored Discord list.
@@ -1259,7 +1327,9 @@
       items = '<button type="button" role="menuitem" data-discord="pin-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("pin") + "</span>" + (pinned ? tr("Unpin channel") : tr("Pin channel")) + "</button>" +
         (muted
           ? '<button type="button" role="menuitem" data-discord="unmute-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + ("</span" + ">" + tr("Unmute channel") + "<" + "/button>")
-          : '<button type="button" role="menuitem" data-discord="mute-menu" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + ("</span" + ">" + tr("Mute channel") + "<" + "/button>"));
+          : '<button type="button" role="menuitem" data-discord="mute-menu" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + ("</span" + ">" + tr("Mute channel") + "<" + "/button>")) +
+        '<button type="button" role="menuitem" data-discord="ch-private" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + "</span>" + esc(channelPrivate(ch.id) ? tr("Show message previews") : tr("Hide message previews")) + "</button>" +
+        '<button type="button" role="menuitem" data-discord="ch-hide" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("more") + "</span>" + esc(tr("Hide channel")) + "</button>";
     }
     const x = Math.round(Number(menu.x) || 16);
     const y = Math.round(Number(menu.y) || 16);
@@ -1390,7 +1460,7 @@
       const latest = latestMessage(server);
       const preview = srv.querySelector(".dmsgs-srv-preview");
       if (preview) {
-        preview.textContent = state.paused ? tr("Discord paused") : (latest ? (latest.row.name + ": " + previewText(latest.row)) : tr("No messages yet"));
+        preview.textContent = state.paused ? tr("Discord paused") : (latest ? (channelPrivate(latest.channel.id) ? previewText(latest.row, latest.channel) : (latest.row.name + ": " + previewText(latest.row))) : tr("No messages yet"));
       }
     });
     paintNavBadge();
@@ -2487,10 +2557,36 @@
         restoreList();
         return;
       }
+      if (kind === "customize" || kind === "customize-done") {
+        event.preventDefault();
+        state.customize = kind === "customize";
+        state.menu = null;
+        if (hooks().render) hooks().render();
+        return;
+      }
       const id = snowflake(btn.getAttribute("data-id") || btn.getAttribute("data-server"));
       if (!id) return;
       event.preventDefault();
       const stored = prefs();
+      if (kind === "srv-up" || kind === "srv-down" || kind === "srv-hide" || kind === "ch-hide" || kind === "ch-private" || kind === "ch-mute" || (kind === "mute-server" && state.customize)) {
+        if (kind === "srv-up" || kind === "srv-down") moveServer(id, kind === "srv-up" ? -1 : 1);
+        else if (kind === "srv-hide") toggleId(listFor("hiddenServers"), id);
+        else if (kind === "ch-hide") toggleId(listFor("hiddenChannels"), id);
+        else if (kind === "ch-private") toggleId(listFor("privateChannels"), id);
+        else if (kind === "mute-server") toggleId(stored.mutedServers, id);
+        else if (muteUntil(id) != null) clearChannelMute(id);
+        else setChannelMute(id, 0);
+        savePrefs();
+        state.menu = null;
+        paintNavBadge();
+        if (state.customize) {
+          if (hooks().render) hooks().render();
+          return;
+        }
+        repaintMenu();
+        if (!repaintChannels() && hooks().render) hooks().render();
+        return;
+      }
       if (kind === "switch") {
         Object.keys(stored.expanded).forEach(function (key) { delete stored.expanded[key]; });
         stored.expanded[id] = true;
@@ -2610,8 +2706,8 @@
         id: ch.id,
         name: ch.name || "",
         category: ch.category || "",
-        preview: last ? String(last.body || "") : "",
-        author: last ? String(last.name || "") : ""
+        preview: last ? (channelPrivate(ch.id) ? tr("New message") : String(last.body || "")) : "",
+        author: last && !channelPrivate(ch.id) ? String(last.name || "") : ""
       };
     });
     return { ready: !!(state.catalogReady || channels.length), channels: channels };
@@ -2658,6 +2754,10 @@
     },
     _setServers: function (servers) { state.holdServers = true; adoptServers(servers); },
     _setPrefs: function (next) { state.prefs = next || emptyPrefs(); },
+    _prefs: function () { return prefs(); },
+    _serverOrder: function (all) { return serverOrder(all).map(function (server) { return server.id; }); },
+    _moveServer: moveServer,
+    _customize: function (on) { state.customize = !!on; },
     _applyIndex: applyIndex,
     _openMenu: function (id, durations) { state.menu = { id: String(id || ""), durations: !!durations, x: 24, y: 72 }; },
     _openPins: function (id) { state.pinsOpen = String(id || ""); state.menu = null; },
