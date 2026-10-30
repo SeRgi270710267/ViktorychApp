@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remote keyboard (ime/) and feed search (search/). -->
+<resources>
+    <string name="kb_label">ViktorychTV keyboard</string>
+    <string name="kb_search">Search</string>
+    <string name="kb_go">Go</string>
+    <string name="kb_send">Send</string>
+    <string name="kb_next">Next</string>
+    <string name="kb_done">Done</string>
+    <string name="srch_label">ViktorychApp</string>
+    <string name="srch_title">Search ViktorychApp</string>
+    <string name="srch_hint">Search posts, people and topics</string>
+    <string name="srch_voice">Search by voice</string>
+    <string name="srch_recent">Recent searches</string>
+    <string name="srch_clear">Clear</string>
+    <string name="srch_for">Search ViktorychApp for “%1$s”</string>
+    <string name="srch_where">Opens Explore in ViktorychApp</string>
+    <string name="srch_note">Results open in Explore. Recent searches stay on this TV.</string>
+    <string name="def_keyboard">Keyboard</string>
+    <string name="def_keyboard_desc">A keyboard made for the remote: arrows move, OK types, hold OK for a capital. English, Spanish, Russian and Hindi letters, symbols, emoji and voice typing with the TV\'s own speech recognizer. What you type stays on this TV.</string>
+    <string name="def_keyboard_allow">Next: turn on ViktorychTV keyboard in the TV\'s keyboard list. The TV shows its usual warning for any keyboard.</string>
+    <string name="def_keyboard_pick">Next: pick ViktorychTV keyboard as the one to use</string>
+    <string name="def_keyboard_next">Next step</string>
+    <string name="def_keyboard_settings">Open keyboard settings</string>
+    <string name="def_keyboard_off">Stop using the keyboard</string>
+    <string name="def_search">Search</string>
+    <string name="def_search_desc">Search your feeds from a search screen with voice, and from the TV\'s own search on TVs that show app results. Results open in Explore.</string>
+    <string name="def_search_try">Try a search</string>
+    <string name="def_search_off">Stop using search</string>
+</resources>

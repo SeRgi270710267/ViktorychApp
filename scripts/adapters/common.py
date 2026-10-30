@@ -1222,6 +1222,50 @@ def _prefer_meta(kept: dict, incoming: dict) -> None:
         kept["date"] = merged
 
 
+def reply_info(post) -> dict | None:
+    """The reply target a copy of a post carries, or None when it has none."""
+    if not isinstance(post, dict):
+        return None
+    to = post.get("replyingTo")
+    if isinstance(to, dict) and (to.get("handle") or to.get("id") or to.get("statusId")):
+        return to
+    return None
+
+
+def carry_reply_info(kept: dict, other: dict) -> bool:
+    """Give `kept` the reply context another copy of the same post has.
+
+    Mirrors disagree: the replies page and fxtwitter know a post is a reply,
+    the plain timeline page, an RSS lane, or an older stored copy may not.
+    Whichever copy wins the merge keeps the reply line and the parent id.
+    Reposts are left alone: their wrapper is a different item.
+    """
+    if not isinstance(kept, dict) or not isinstance(other, dict) or kept is other:
+        return False
+    if kept.get("kind") == "repost" or other.get("kind") == "repost":
+        return False
+    changed = False
+    conv = str(other.get("conversationId") or "")
+    if conv and not kept.get("conversationId"):
+        kept["conversationId"] = conv
+        changed = True
+    theirs = reply_info(other)
+    if not theirs:
+        return changed
+    mine = reply_info(kept) or {}
+    merged = dict(theirs)
+    for key, value in mine.items():
+        if value:
+            merged[key] = value
+    if merged != (kept.get("replyingTo") or {}):
+        kept["replyingTo"] = merged
+        changed = True
+    if (kept.get("kind") or "post") == "post":
+        kept["kind"] = "reply"
+        changed = True
+    return changed
+
+
 def dedupe_posts(posts, cap: int = 300):
     """One row per canonical id. The earliest trusted publish time stays."""
     ranked = sorted(posts, key=feed_sort_key)
@@ -1238,6 +1282,7 @@ def dedupe_posts(posts, cap: int = 300):
             seen[key] = post
             order.append(post)
             continue
+        carry_reply_info(kept, post)
         if (post.get("platform") or "") in ("instagram", "threads"):
             _prefer_meta(kept, post)
             continue

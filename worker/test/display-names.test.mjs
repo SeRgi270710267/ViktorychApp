@@ -244,3 +244,52 @@ test("the old name for friends moves into the set", async () => {
   assert.equal((await send("/v1/usernames/friend-name", "PUT", own.token, { name: "" })).status, 200);
   assert.equal((await get("/v1/profile/dn_birch", fri.token)).body.account.displayName, "Birch Lane");
 });
+
+test("the site owner sees every display name, whatever its audience, and it is audit-logged", async () => {
+  const boss = await call("/v1/signup", { method: "POST", ip: "203.0.113.91", body: { displayName: "Site Owner", handle: "mirathorn", claimCode: "claim-test" } });
+  assert.equal(boss.status, 201, boss.text);
+  const own = await signup(92, "Oak Ridge", "dn_oak");
+  const str = await signup(93, "St Two", "dn_str2");
+  // Main name for followers only, a second name for friends that hides from the site owner.
+  assert.equal((await send("/v1/display-names", "PATCH", own.token, { id: "main", audience: { include: { followers: true } } })).status, 200);
+  const added = await send("/v1/display-names", "POST", own.token, { name: "Oak Close", audience: { include: { friends: true }, exclude: { people: ["mirathorn"] } } });
+  assert.equal(added.status, 201, added.text);
+  const look = async (token) => (await get("/v1/profile/dn_oak", token)).body.account;
+
+  // A stranger sees no name; the site owner sees the main name and every name.
+  const stranger = await look(str.token);
+  assert.equal(stranger.displayNameHidden, true);
+  assert.equal(stranger.allDisplayNames, undefined, "only the site owner gets every name");
+  const seen = await look(boss.body.token);
+  assert.equal(seen.displayName, "Oak Ridge");
+  assert.equal(seen.displayNameHidden, undefined);
+  assert.deepEqual(seen.allDisplayNames.map((n) => n.name), ["Oak Ridge", "Oak Close"]);
+  assert.equal(JSON.stringify(seen.allDisplayNames).indexOf(boss.body.account.publicId), -1, "no ids leak");
+
+  // Lists and search go through the same rule.
+  const found = ((await get("/v1/people?q=" + encodeURIComponent("oak ridge"), boss.body.token)).body.accounts || []).map((a) => a.handle + ":" + (a.displayName || a.name));
+  assert.deepEqual(found, ["dn_oak:Oak Ridge"]);
+  assert.deepEqual(((await get("/v1/people?q=" + encodeURIComponent("oak ridge"), str.token)).body.accounts || []).map((a) => a.handle), []);
+
+  // Every name with its audience, owner only.
+  const of = await get("/v1/display-names/of?handle=dn_oak", boss.body.token);
+  assert.equal(of.status, 200, of.text);
+  assert.deepEqual(of.body.names.map((n) => n.name), ["Oak Ridge", "Oak Close"]);
+  assert.deepEqual(of.body.names[1].audience.exclude.people, ["mirathorn"]);
+  assert.equal(of.text.indexOf(own.account.publicId), -1, "no ids leak");
+  assert.equal((await get("/v1/display-names/of?handle=dn_oak", str.token)).status, 403);
+  assert.equal((await get("/v1/display-names/of?handle=dn_oak", own.token)).status, 403);
+  assert.equal((await get("/v1/display-names/of?handle=nobody_here_zz", boss.body.token)).status, 404);
+
+  // The audit log: one row per account per request, owner only.
+  const log = await get("/v1/display-names/audit", boss.body.token);
+  assert.equal(log.status, 200, log.text);
+  const actions = log.body.entries.filter((e) => e.target === "dn_oak").map((e) => e.action);
+  assert.ok(actions.includes("view") && actions.includes("list"), log.text);
+  const views = log.body.entries.filter((e) => e.target === "dn_oak" && e.action === "view");
+  assert.ok(views.some((e) => e.detail.path === "/v1/profile/dn_oak"), log.text);
+  assert.equal(views.filter((e) => e.detail.path === "/v1/profile/dn_oak").length, 1, "one row per request");
+  assert.equal((await get("/v1/display-names/audit", str.token)).status, 403);
+  // Strangers leave no audit rows.
+  assert.equal(log.body.entries.length, (await get("/v1/display-names/audit", boss.body.token)).body.entries.length);
+});

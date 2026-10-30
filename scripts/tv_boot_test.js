@@ -159,4 +159,17 @@ for (const [name, ua] of Object.entries(UAS)) {
   assert.ok(/intent:\/\/dream\?d=" \+ encodeURIComponent\(/.test(tv), "the hand-off is encoded");
 }
 
+{
+  // Optional remote keyboard and feed search (TV app 1.6.0+): all ship turned off, only the
+  // system can bind the keyboard, and the app never asks for the microphone itself.
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  const ime = /<service[^>]*ime\.TvKeyboard[^>]*>/.exec(manifest);
+  assert.ok(ime && ime[0].includes('android:enabled="false"') && ime[0].includes("BIND_INPUT_METHOD"), "the keyboard ships turned off and only the system can bind it");
+  const search = /<activity[^>]*search\.SearchActivity[^>]*>/.exec(manifest);
+  assert.ok(search && search[0].includes('android:enabled="false"'), "feed search ships turned off");
+  const provider = /<provider[^>]*search\.SuggestProvider[^>]*>/.exec(manifest);
+  assert.ok(provider && provider[0].includes('android:enabled="false"'), "search suggestions ship turned off");
+  assert.ok(!manifest.includes("android.permission.RECORD_AUDIO"), "voice typing goes through the system recognizer, not our own microphone access");
+}
+
 console.log("tv boot checks passed");
