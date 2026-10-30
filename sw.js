@@ -153,6 +153,7 @@ const SHELL_FILES = [
   "./community-notes.css",
   "./settings-sync.js",
   "./notif-privacy.js",
+  "./shared/birth-date.js",
   "./accounts.js",
   "./passkeys.js",
   "./app-lock.js",
