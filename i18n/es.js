@@ -4272,5 +4272,16 @@ SI18n.addPack("es", {
   "Paste the key you copied. It is checked straight from this device and kept here only.": "Pega la clave que copiaste. Se comprueba desde este dispositivo y se guarda solo aquí.",
   "Your spare account": "Tu cuenta de reserva",
   "Check key": "Comprobar clave",
-  "Couldn’t check the key. Try again.": "No se pudo comprobar la clave. Inténtalo de nuevo."
+  "Couldn’t check the key. Try again.": "No se pudo comprobar la clave. Inténtalo de nuevo.",
+  "Full screen isn’t available here.": "La pantalla completa no está disponible aquí.",
+  "Some of what you were writing can’t be saved on this device, like attached photos or video. Close anyway?": "Parte de lo que escribías no se puede guardar en este dispositivo, como fotos o videos adjuntos. ¿Cerrar de todos modos?",
+  "Your browser kept this window open. Press {keys} to close it.": "Tu navegador mantuvo esta ventana abierta. Pulsa {keys} para cerrarla.",
+  "Close app": "Cerrar app",
+  "Title bar": "Barra de título",
+  "Desktop app": "App de escritorio",
+  "Show scrollbar": "Mostrar barra de desplazamiento",
+  "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "La app instalada oculta la barra de desplazamiento de la página. Puedes seguir desplazándote con la rueda, el trackpad, el teclado o el tacto. Las pestañas del navegador siempre la muestran.",
+  "Full screen shortcut": "Atajo de pantalla completa",
+  "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (⌘+Shift+F en Mac) activa y desactiva la pantalla completa. Esc o F11 también la cierran.",
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Los botones propios de tu computadora para minimizar, maximizar y cerrar siempre se quedan en la esquina. La app dibuja su barra de título junto a ellos."
 });
