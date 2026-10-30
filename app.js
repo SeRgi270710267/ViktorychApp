@@ -62,6 +62,8 @@
   const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", nostr: "Nostr" };
 
   const PATH = {
+    atSign: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z",
+    sms: "M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z",
     image: "M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3-3 3 3 5-5 3 3V5.5c0-.276-.224-.5-.5-.5h-13zM19 15.414l-3-3-5 5-3-3-3 3V18.5c0 .276.224.5.5.5h13c.276 0 .5-.224.5-.5v-3.086zM9.75 7C8.784 7 8 7.784 8 8.75s.784 1.75 1.75 1.75 1.75-.784 1.75-1.75S10.716 7 9.75 7z",
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
     homeOn: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14a.93.93 0 0 0 .929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h5.653c.51 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.408-.758z",
@@ -1206,8 +1208,15 @@
     hidden: []
   };
 
+  const INBOX_NAV_IDS = ["inbox-servers", "inbox-discord", "inbox-mail", "inbox-sms"];
+  const INBOX_NAV_FALLBACK = {
+    "inbox-servers": { id: "servers", href: "#/messages?f=servers", icon: "communities", label: "Servers" },
+    "inbox-discord": { id: "discord", href: "#/messages?f=discord", icon: "discord", label: "Discord" },
+    "inbox-mail": { id: "mail", href: "#/messages/mail", icon: "atSign", label: "Mail" },
+    "inbox-sms": { id: "sms", href: "#/messages/sms", icon: "sms", label: "SMS codes" }
+  };
   const ALL_NAV_IDS = [
-    "home", "explore", "notifications", "messages", "online", "feeds", "lists",
+    "home", "explore", "notifications", "messages", "inbox-servers", "inbox-discord", "inbox-mail", "inbox-sms", "online", "feeds", "lists",
     "history", "music", "shorts", "games", "tv", "communities",
     "subscriptions", "vault", "packages", "settings"
   ];
@@ -1243,6 +1252,13 @@
 
     ALL_NAV_IDS.forEach((id) => {
       if (!accounted.has(id) && !hidden.includes(id)) {
+        // Inbox sections that get their own page sit right under Inbox.
+        if (INBOX_NAV_IDS.includes(id) && order.includes("messages")) {
+          let at = order.indexOf("messages") + 1;
+          while (at < order.length && INBOX_NAV_IDS.includes(order[at])) at += 1;
+          order.splice(at, 0, id);
+          return;
+        }
         order.push(id);
       }
     });
@@ -9702,7 +9718,18 @@ const here = parseRoute();
       case "notifications":
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
-        return { id: "messages", href: "#/messages", icon: "mail", label: tr("Inbox"), active: (r) => r.name === "messages" };
+        return { id: "messages", href: "#/messages", icon: "mail", label: tr("Inbox"), active: (r) => r.name === "messages" && !(window.ViktorychInbox && window.ViktorychInbox.splitHere && window.ViktorychInbox.splitHere(location.hash)) };
+      case "inbox-servers":
+      case "inbox-discord":
+      case "inbox-mail":
+      case "inbox-sms": {
+        /* inbox.js owns these; the fallback keeps the nav editors whole
+           before it loads. A split icon shows only once inbox.js says so. */
+        const inbox = window.ViktorychInbox;
+        const sec = (inbox && inbox.sectionByNav && inbox.sectionByNav(id)) || INBOX_NAV_FALLBACK[id];
+        const label = inbox && inbox.sectionLabel ? inbox.sectionLabel(sec.id) : tr(sec.label);
+        return { id, href: sec.href, icon: sec.icon, label, active: (r) => r.name === "messages" && !!(inbox && inbox.navActive && inbox.navActive(id, location.hash)), visible: () => !!(inbox && inbox.navVisible && inbox.navVisible(id)) };
+      }
       case "online":
         return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
@@ -10075,7 +10102,8 @@ const here = parseRoute();
   const BOTTOM_NAV_MIN = 2;
   const BOTTOM_NAV_MAX = 6;
   const BOTTOM_NAV_IDS = [
-    "home", "explore", "tv", "communities", "notifications", "messages", "online",
+    "home", "explore", "tv", "communities", "notifications", "messages",
+    "inbox-servers", "inbox-discord", "inbox-mail", "inbox-sms", "online",
     "feeds", "lists", "history", "music", "shorts", "games",
     "subscriptions", "vault", "packages", "storage", "settings"
   ];
@@ -16310,6 +16338,7 @@ const here = parseRoute();
       return settingsHead(tr("Keyboard shortcuts"), "#/settings/accessibility") + (window.ViktorychKeysUi ? window.ViktorychKeysUi.settingsHtml() : "");
     }
     if (section === "display" && sub === "navigation") return bottomNavSettings();
+    if (section === "display" && sub === "inbox") return settingsHead(tr("Inbox sections"), "#/settings/display") + (window.ViktorychInbox && window.ViktorychInbox.settingsHtml ? window.ViktorychInbox.settingsHtml() : "");
     if (section === "device") {
       if (!window.ViktorychDevice) {
         loadDeviceCore().then(() => {
@@ -16324,6 +16353,7 @@ const here = parseRoute();
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
         ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
+        ${settingsRow("#/settings/display/inbox", tr("Inbox sections"), tr("Keep sections inside Inbox or give them their own page."))}
         ${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
@@ -18795,14 +18825,72 @@ if (STATE.histClear) {
     if (window.ViktorychInboxSms && window.ViktorychInboxSms.page) return window.ViktorychInboxSms.page(route);
     ensureLazy("inboxsms");
     const chips = window.ViktorychInbox && window.ViktorychInbox.tabsHtml ? window.ViktorychInbox.tabsHtml() : "";
-    return `<div class="inbox-sms"><header class="dmsgs-head"><h1>${esc(tr("Inbox"))}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
+    return `<div class="inbox-sms"><header class="dmsgs-head"><h1>${esc(inboxTitle())}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
   }
   /* Members' Mail, Add and Aliases inside Inbox. The module loads on demand. */
+  function inboxTitle() {
+    return window.ViktorychInbox && window.ViktorychInbox.title ? window.ViktorychInbox.title(location.hash) : tr("Inbox");
+  }
+  /* Inbox sections live in settings.inboxLayout (inbox.js reads and cleans
+     it). A section split into its own page gets a bottom-bar icon next to
+     Inbox (the last ordinary icon makes room when the bar is full) and a
+     sidebar row; merging or hiding it takes the icon back. */
+  function bindInboxLayout() {
+    const inbox = window.ViktorychInbox;
+    if (!inbox || !inbox.bindLayout) return;
+    inbox.bindLayout({
+      get: () => STATE.settings && STATE.settings.inboxLayout,
+      save: (next, prev) => {
+        if (!STATE.settings) return;
+        STATE.settings.inboxLayout = next;
+        const bar = getBottomNav();
+        let barChanged = false;
+        inbox.SECTIONS.forEach((sec) => {
+          const was = prev.split.includes(sec.id);
+          const now = next.split.includes(sec.id);
+          const pinNow = now && next.pinned.includes(sec.id);
+          const pinWas = was && prev.pinned.includes(sec.id);
+          const hidden = new Set(bar.hidden);
+          if (now && (!was || (pinNow && !pinWas))) {
+            if (!was) {
+              bar.order = bar.order.filter((x) => x !== sec.nav);
+              let at = bar.order.indexOf("messages") + 1;
+              while (at > 0 && at < bar.order.length && INBOX_NAV_IDS.includes(bar.order[at])) at += 1;
+              bar.order.splice(at > 0 ? at : bar.order.length, 0, sec.nav);
+            }
+            const shown = bar.order.filter((x) => !hidden.has(x) && x !== sec.nav && (x === "home" || bottomNavAvailable(x)));
+            if (shown.length + 1 > BOTTOM_NAV_MAX) {
+              const bump = shown.slice().reverse().find((x) => x !== "home" && x !== "messages" && !INBOX_NAV_IDS.includes(x));
+              if (!bump) return;
+              hidden.add(bump);
+              next.gave[sec.id] = bump;
+            }
+            hidden.delete(sec.nav);
+            bar.hidden = bar.order.filter((x) => hidden.has(x));
+            barChanged = true;
+          } else if (was && !now && !hidden.has(sec.nav)) {
+            hidden.add(sec.nav);
+            const back = prev.gave && prev.gave[sec.id];
+            if (back && hidden.has(back) && bottomNavAvailable(back)) hidden.delete(back);
+            bar.hidden = bar.order.filter((x) => hidden.has(x));
+            barChanged = true;
+          }
+        });
+        if (barChanged) {
+          STATE.settings.bottomNav = cleanBottomNav(bar);
+          STATE.settings.bottomNavCustom = true;
+        }
+        saveSettings();
+      }
+    });
+  }
+  bindInboxLayout();
+  window.addEventListener("vk-inbox-layout", () => render());
   function inboxMailView(route) {
     if (window.ViktorychInboxMail && window.ViktorychInboxMail.page) return window.ViktorychInboxMail.page(route);
     ensureLazy("inboxmail");
     const chips = window.ViktorychInbox && window.ViktorychInbox.tabsHtml ? window.ViktorychInbox.tabsHtml() : "";
-    return `<div class="inbox-mail"><header class="dmsgs-head"><h1>${esc(tr("Inbox"))}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
+    return `<div class="inbox-mail"><header class="dmsgs-head"><h1>${esc(inboxTitle())}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
   }
   /* Which Inbox view a hash shows: a change between them repaints the page. */
   function inboxViewKey(hash) {
@@ -19037,6 +19125,11 @@ if (STATE.histClear) {
     if (route && route.name === "games" && route.game) return false;
     const here = navSection(route && route.name);
     const there = hrefSection(href);
+    if (here === "messages" && there === "messages" && window.ViktorychInbox && window.ViktorychInbox.splitHere) {
+      /* Inbox and its split pages share a route; they are one section only
+         when both sides land on the same page. */
+      return window.ViktorychInbox.splitHere(location.hash || "") === window.ViktorychInbox.splitHere(href);
+    }
     return !!here && here === there;
   }
 
@@ -28585,7 +28678,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "reactionsData", "communityNotesData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "busyPrefs", "avatarShape", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "communityNotesData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "inboxLayout", "busyPrefs", "avatarShape", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
