@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live channels (channels/). -->
+<resources>
+    <string name="channels_label">Каналы ViktorychTV</string>
+    <string name="ch_station">ViktorychMusic</string>
+    <string name="ch_station_desc">Собственная музыкальная станция ViktorychApp, круглосуточно.</string>
+    <string name="ch_program">ViktorychMusic круглосуточно</string>
+    <string name="ch_program_desc">Эфир станции — тот же момент, что сейчас играет в ViktorychApp.</string>
+    <string name="ch_live_chip">ЭФИР</string>
+    <string name="ch_tuning">Настраиваемся…</string>
+    <string name="ch_playing">В эфире</string>
+    <string name="ch_offline">Сейчас не удаётся подключиться к станции. Переключите канал и вернитесь, чтобы попробовать снова.</string>
+    <string name="ch_setup_title">Добавьте ViktorychMusic в каналы</string>
+    <string name="ch_setup_body">Он появится в списке каналов и телегиде как канал 1, рядом с другими каналами. Играет, только пока вы его смотрите.</string>
+    <string name="ch_setup_adding">Добавляем канал и телегид…</string>
+    <string name="ch_setup_done">Готово. Канал есть в Live Channels и на вкладке «Прямой эфир» — или включите его сейчас.</string>
+    <string name="ch_setup_failed">Телевизор не дал добавить канал. Попробуйте снова или проверьте, есть ли на нём приложение Live Channels.</string>
+    <string name="ch_try_again">Повторить</string>
+    <string name="ch_watch">Смотреть</string>
+    <string name="ch_done">Готово</string>
+    <string name="ch_no_live_app">На этом телевизоре нет приложения Live Channels. Найдите канал на вкладке «Прямой эфир» или в телегиде.</string>
+    <string name="def_channels">Каналы</string>
+    <string name="def_channels_desc">Добавляет ViktorychMusic как канал в список каналов и телегид телевизора. Играет, только пока вы смотрите, ничего не работает в фоне.</string>
+    <string name="def_channels_added">Канал 1 есть в телегиде</string>
+    <string name="def_channels_pending">Дальше: добавьте канал</string>
+    <string name="def_channels_add">Добавить или обновить канал</string>
+    <string name="def_channels_watch">Смотреть ViktorychMusic</string>
+    <string name="def_channels_off">Не использовать каналы</string>
+</resources>

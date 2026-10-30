@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live channels (channels/). -->
+<resources>
+    <string name="channels_label">ViktorychTV Channels</string>
+    <string name="ch_station">ViktorychMusic</string>
+    <string name="ch_station_desc">ViktorychApp\'s own music station, playing around the clock.</string>
+    <string name="ch_program">ViktorychMusic, around the clock</string>
+    <string name="ch_program_desc">The station loop, at the same moment it plays in ViktorychApp.</string>
+    <string name="ch_live_chip">LIVE</string>
+    <string name="ch_tuning">Tuning in…</string>
+    <string name="ch_playing">On air</string>
+    <string name="ch_offline">Can\'t reach the station right now. Change channel and come back to try again.</string>
+    <string name="ch_setup_title">Add ViktorychMusic to your channels</string>
+    <string name="ch_setup_body">It joins the TV\'s own channel list and guide as channel 1, next to your other channels. It plays only while you watch it.</string>
+    <string name="ch_setup_adding">Adding the channel and its guide…</string>
+    <string name="ch_setup_done">Added. Find it in Live Channels or the Live tab, or watch it now.</string>
+    <string name="ch_setup_failed">This TV didn\'t let us add the channel. Try again, or check that it has a Live Channels app.</string>
+    <string name="ch_try_again">Try again</string>
+    <string name="ch_watch">Watch now</string>
+    <string name="ch_done">Done</string>
+    <string name="ch_no_live_app">This TV has no Live Channels app to open. Find the channel in its Live tab or guide.</string>
+    <string name="def_channels">Live channels</string>
+    <string name="def_channels_desc">Adds ViktorychMusic as a channel in the TV\'s own channel list and guide. It plays only while you watch it, with nothing running in the background.</string>
+    <string name="def_channels_added">Channel 1 is in the guide</string>
+    <string name="def_channels_pending">Next: add the channel</string>
+    <string name="def_channels_add">Add or refresh the channel</string>
+    <string name="def_channels_watch">Watch ViktorychMusic</string>
+    <string name="def_channels_off">Stop using Live channels</string>
+</resources>

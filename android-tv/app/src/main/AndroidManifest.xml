@@ -23,6 +23,9 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Optional Live channels (channels/): writes only its own channel and guide. -->
+    <uses-feature android:name="android.software.live_tv" android:required="false" />
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
     <queries>
         <intent>
@@ -503,6 +506,28 @@
                 <category android:name="app.viktorych.tv.category.TOOL" />
             </intent-filter>
         </activity>
+
+        <!-- Optional Live channels (channels/). Off until chosen on the defaults screen.
+             Only the system can bind the input, and it plays only while the channel is watched. -->
+        <service
+            android:name=".channels.LoopInputService"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/channels_label"
+            android:permission="android.permission.BIND_TV_INPUT">
+            <intent-filter>
+                <action android:name="android.media.tv.TvInputService" />
+            </intent-filter>
+            <meta-data android:name="android.media.tv.input" android:resource="@xml/ch_input" />
+        </service>
+
+        <activity
+            android:name=".channels.ChannelsSetupActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/channels_label"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
 
     </application>
 </manifest>

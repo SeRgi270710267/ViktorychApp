@@ -14,6 +14,8 @@ import android.widget.TextView;
 
 import app.viktorych.tv.R;
 import app.viktorych.tv.alerts.AlertsDefaults;
+import app.viktorych.tv.channels.ChannelSync;
+import app.viktorych.tv.channels.ChannelsDefaults;
 import app.viktorych.tv.files.FilesDefaults;
 import app.viktorych.tv.ime.KeyboardDefaults;
 import app.viktorych.tv.player.MediaDefaults;
@@ -184,6 +186,19 @@ public class DefaultsActivity extends Activity {
         alerts.setOnFocusChangeListener((v, f) -> { if (f) showAlertsDetails(); });
         list.addView(alerts, gap());
 
+        // Live channels (channels/LoopInputService in the TV's own channel list and guide).
+        boolean channelsOn = ChannelsDefaults.enabled(this);
+        View channels = row(R.drawable.ch_live_tv, getString(R.string.def_channels),
+            getString(channelsOn ? R.string.def_on : R.string.def_off), channelsOn);
+        channels.setOnClickListener(v -> {
+            boolean was = ChannelsDefaults.enabled(this);
+            ChannelsDefaults.enable(this, true);
+            if (!was) { render(); focusRow(8); }
+            ChannelsDefaults.setup(this);
+        });
+        channels.setOnFocusChangeListener((v, f) -> { if (f) showChannelsDetails(); });
+        list.addView(channels, gap());
+
         setContentView(root);
         if (guideFor) showGuide(); else showHomeDetails(on);
         String want = getIntent() == null ? null : getIntent().getStringExtra("focus");
@@ -194,6 +209,7 @@ public class DefaultsActivity extends Activity {
         else if ("photos".equals(want)) { photos.requestFocus(); getIntent().removeExtra("focus"); }
         else if ("files".equals(want)) { files.requestFocus(); getIntent().removeExtra("focus"); }
         else if ("alerts".equals(want)) { alerts.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("channels".equals(want)) { channels.requestFocus(); getIntent().removeExtra("focus"); }
         else home.requestFocus();
     }
 
@@ -345,6 +361,28 @@ public class DefaultsActivity extends Activity {
                 AlertsDefaults.enable(this, false);
                 render();
                 focusRow(7);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showChannelsDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.ch_live_tv, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_channels), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_channels_desc), 13, Ui.TEXT_DIM, 10);
+        if (ChannelsDefaults.enabled(this)) {
+            long id = ChannelSync.channelId(this);
+            addSideText(col, getString(id >= 0 ? R.string.def_channels_added : R.string.def_channels_pending), 13, 0xFF8AB4F8, 14);
+            if (id >= 0) sideButton(col, getString(R.string.def_channels_watch), () -> {
+                if (!ChannelsDefaults.watch(this, id)) ChannelsDefaults.setup(this);
+            });
+            sideButton(col, getString(R.string.def_channels_add), () -> ChannelsDefaults.setup(this));
+            sideButton(col, getString(R.string.def_channels_off), () -> {
+                ChannelsDefaults.enable(this, false);
+                render();
+                focusRow(8);
             });
         }
         side.addView(col);

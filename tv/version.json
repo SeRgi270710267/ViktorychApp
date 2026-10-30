@@ -1,7 +1,7 @@
 {
-  "versionCode": 9,
-  "versionName": "1.8.0",
+  "versionCode": 10,
+  "versionName": "1.9.0",
   "apk": "tv/ViktorychTV.apk",
   "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
-  "notes": "New, optional: Alerts, your messages, mentions and Live alerts in one panel on the TV. Link it once with a code from your phone; it only checks while it is on screen. Turn it on in Make ViktorychTV your default. Everything else works as before."
+  "notes": "New, optional: Live channels. ViktorychMusic joins the TV's own channel list and guide as channel 1, and plays only while you watch it. Turn it on in Make ViktorychTV your default. Everything else works as before."
 }
