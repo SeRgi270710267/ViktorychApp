@@ -54,6 +54,6 @@
 .lt-settings .lt-row { flex-wrap: wrap; }
 .lt-settings .lt-row .outline { height: 32px; min-height: 32px; padding: 0 14px; }
 .lt-settings .lt-range { display: flex; align-items: center; gap: 12px; }
-.lt-settings .lt-range input { flex: 1; accent-color: rgb(29, 155, 240); }
+.lt-settings .lt-range input { flex: 1; }
 .lt-settings .lt-range span { min-width: 40px; text-align: right; }
 .lt-settings select + .outline { margin-top: 8px; }

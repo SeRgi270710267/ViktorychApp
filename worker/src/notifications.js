@@ -18,9 +18,9 @@ import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 import { actorHidden, canMention } from "./social.js";
 
 const encoder = new TextEncoder();
-const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1, package: 1, game_invite: 1 };
-const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms"];
-const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
+const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1, package: 1, game_invite: 1, tv_signin: 1 };
+const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms", "games"];
+const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", games: "push", mentionsFrom: "all" };
 const BACKOFF_MS = [2000, 10000, 60000, 300000, 1800000];
 const DEAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -331,6 +331,7 @@ function itemFromRow(row, readUntil) {
     others: Math.max(0, Number(extra.others) || 0),
     ids: Array.isArray(extra.ids) ? extra.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
     handles: Array.isArray(extra.handles) ? extra.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : [],
+    expiresAt: Math.max(0, Number(extra.expiresAt) || 0),
     actorId: clip(row.actor_id, 16)
   };
 }
@@ -503,7 +504,8 @@ function payloadOf(input) {
       handle: clip(actor && actor.handle, 80).replace(/^@/, "")
     })) : [],
     ids: Array.isArray(input.ids) ? input.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
-    handles: Array.isArray(input.handles) ? input.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : []
+    handles: Array.isArray(input.handles) ? input.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : [],
+    expiresAt: Math.max(0, Number(input.expiresAt) || 0)
   });
 }
 
@@ -756,6 +758,7 @@ function titleKeyFor(item) {
   if (kind === "gift" && !(item && item.actorId)) return "You received a gift";
   if (kind === "gift") return "{name} sent you a gift";
   if (kind === "game_invite") return "{name} invited you to play";
+  if (kind === "tv_signin") return "Approve sign-in on TV?";
   return "New post notifications for @{handle}";
 }
 
@@ -772,6 +775,7 @@ function prefKind(kind) {
   if (kind === "repost") return "reposts";
   if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "follows";
   if (kind === "dm") return "dms";
+  if (kind === "game_invite") return "games";
   return "";
 }
 
@@ -892,7 +896,11 @@ async function planPlain(env, input) {
   }, state.readUntil);
   const deliveryId = "d:" + key;
   const deliveries = [];
-  if (!readAt && mode === "push" && quietUntil > now) {
+  // An invite that expires in minutes is worth nothing after quiet hours,
+  // so the caller can keep it in the app only.
+  if (!readAt && mode === "push" && input.noPush === true) {
+    deliveries.push({ mode: "inapp", publicId, item, deliveryId: "", readUntil: state.readUntil });
+  } else if (!readAt && mode === "push" && quietUntil > now) {
     statements.push(outboxStatement(env, publicId, key, deliveryId, quietUntil));
     deliveries.push({ mode: "inapp", publicId, item, deliveryId: "", readUntil: state.readUntil });
   } else if (!readAt && mode === "push") {

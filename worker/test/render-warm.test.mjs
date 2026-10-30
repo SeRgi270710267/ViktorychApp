@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { warmDue, warmRender, RENDER_BACKUP } from "../src/render-warm.js";
+import { warmDue, warmRender, renderHours, renderHoursReport, RENDER_BACKUP } from "../src/render-warm.js";
 
 const at = (iso) => Date.parse(iso);
 
@@ -37,4 +37,33 @@ test("hits the cheap health path and never throws", async () => {
   assert.equal(down.ok, false);
   const quiet = await warmRender({}, at("2026-10-29T22:05:00Z"), { fetch: async () => { throw new Error("must not run"); } });
   assert.equal(quiet.skipped, true);
+});
+
+function hoursBucket(ms) {
+  return { async get() { return ms == null ? null : { async json() { return { ms, at: 1 }; } }; } };
+}
+
+test("render hours report counts against the free 750 and resets on the 1st", () => {
+  const at = Date.UTC(2026, 9, 29, 22);
+  const h = renderHoursReport(at, 100 * 36e5, {});
+  assert.equal(h.used, 100);
+  assert.equal(h.left, 650);
+  assert.equal(h.pct, 13);
+  assert.equal(h.paused, false);
+  assert.equal(h.resetAt, "2026-11-01T00:00:00.000Z");
+  assert.equal(renderHoursReport(Date.UTC(2026, 11, 31), 0, {}).resetAt, "2027-01-01T00:00:00.000Z");
+  assert.equal(renderHoursReport(at, 676 * 36e5, {}).paused, true);
+});
+
+test("the warm ping stops once the month's free hours are nearly gone", async () => {
+  const at = Date.UTC(2026, 9, 29, 12, 5);
+  let calls = 0;
+  const deps = { fetch: async () => { calls += 1; return new Response("{}", { status: 200 }); } };
+  const rested = await warmRender({ DATA: hoursBucket(700 * 36e5) }, at, deps);
+  assert.equal(rested.paused, true);
+  assert.equal(calls, 0);
+  const warm = await warmRender({ DATA: hoursBucket(100 * 36e5) }, at, deps);
+  assert.equal(warm.ok, true);
+  assert.equal(calls, 1);
+  assert.equal(await renderHours({ DATA: hoursBucket(null) }, at), null);
 });

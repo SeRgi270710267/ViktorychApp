@@ -32,6 +32,15 @@ const EGRESS_BUDGET = (Number(process.env.RENDER_EGRESS_BUDGET_MB) || 3500) * 10
 // Heavy jobs pause when the instance gets close to its 512 MB limit.
 const JOB_RSS_LIMIT = (Number(process.env.JOB_RSS_LIMIT_MB) || 360) * 1024 * 1024;
 const EGRESS_KEY_PREFIX = "ops/render-egress/";
+// Render's free workspace gets 750 instance hours a month, reset on the 1st
+// (UTC). Going over suspends free services until then. The backup counts its
+// own awake time here, so the Worker cron, the Usage panel and the app's
+// server pool can stop waking it before the allowance runs out.
+const HOURS_KEY_PREFIX = "ops/render-hours/";
+const FREE_HOURS = Number(process.env.RENDER_FREE_HOURS) || 750;
+// From this share of the allowance on, nothing should wake the backup on
+// purpose: no warm pings, no pool reads. It still answers if called.
+const HOURS_PAUSE_PCT = Number(process.env.RENDER_HOURS_PAUSE_PCT) || 90;
 
 const stats = {
   mode: "local",
@@ -43,7 +52,8 @@ const stats = {
   errors: 0,
   timeouts: 0,
   refused: 0,
-  egress: { month: "", bytes: 0, saved: 0, over: false }
+  egress: { month: "", bytes: 0, saved: 0, over: false },
+  hours: { month: "", ms: 0, saved: 0, last: Date.now() }
 };
 
 function monthKey(at) {
@@ -76,6 +86,61 @@ async function saveEgress(env) {
     stats.egress.saved = bytes;
   } catch (err) {
     console.error("[backup-server] egress meter save failed:", String(err && err.message || err));
+  }
+}
+
+/* Awake time. A sleeping free instance runs no code, so time between ticks
+   is time awake; a gap longer than 20 minutes is never counted. */
+function noteAwake(at) {
+  const now = Number(at) || Date.now();
+  const month = monthKey(now);
+  const h = stats.hours;
+  if (h.month !== month) { h.month = month; h.ms = 0; h.saved = 0; h.last = Math.max(h.last, Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1)); }
+  const gap = now - h.last;
+  if (gap > 0 && gap <= 20 * 60 * 1000) h.ms += gap;
+  h.last = now;
+}
+function hoursReport(at, ms, free, pausePct) {
+  const now = Number(at) || Date.now();
+  const d = new Date(now);
+  const cap = Number(free) || FREE_HOURS;
+  const used = Math.round((Math.max(0, Number(ms) || 0) / 36e5) * 10) / 10;
+  const pct = Math.min(100, Math.round(used * 100 / cap));
+  return {
+    month: monthKey(now),
+    used,
+    free: cap,
+    left: Math.max(0, Math.round((cap - used) * 10) / 10),
+    pct,
+    paused: pct >= (Number(pausePct) || HOURS_PAUSE_PCT),
+    resetAt: new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString()
+  };
+}
+function hoursNow() {
+  noteAwake();
+  return hoursReport(Date.now(), stats.hours.ms);
+}
+async function loadHours(env) {
+  noteAwake();
+  if (!env || !env.DATA) return;
+  try {
+    const object = await env.DATA.get(HOURS_KEY_PREFIX + stats.hours.month + ".json");
+    const row = object ? await object.json() : null;
+    if (row && Number(row.ms) > 0) stats.hours.ms += Number(row.ms);
+    stats.hours.saved = stats.hours.ms;
+  } catch (err) {
+    console.error("[backup-server] hours meter load failed:", String(err && err.message || err));
+  }
+}
+async function saveHours(env) {
+  noteAwake();
+  if (!env || !env.DATA || stats.hours.ms === stats.hours.saved) return;
+  const ms = stats.hours.ms;
+  try {
+    await env.DATA.put(HOURS_KEY_PREFIX + stats.hours.month + ".json", JSON.stringify(Object.assign({ ms, at: Date.now() }, hoursReport(Date.now(), ms))), { httpMetadata: { contentType: "application/json" } });
+    stats.hours.saved = ms;
+  } catch (err) {
+    console.error("[backup-server] hours meter save failed:", String(err && err.message || err));
   }
 }
 
@@ -133,6 +198,9 @@ function workerEnv(overrides) {
     FEDERATION_HOST: process.env.FEDERATION_HOST || "",
     TG_USER_LIMIT: process.env.TG_USER_LIMIT || "",
     TIKTOK_AUDIENCE: process.env.TIKTOK_AUDIENCE || "owner",
+    // Read-only analytics for the owner Usage panel when this backup answers.
+    CF_ANALYTICS_TOKEN: process.env.CF_ANALYTICS_TOKEN || "",
+    CF_ACCOUNT_ID: process.env.CF_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "",
     ...(overrides || {})
   };
 }
@@ -226,7 +294,10 @@ async function main() {
     dispatch = (request) => worker.default.fetch(request, remote, ctx);
     await loadEgress(remote);
     setInterval(() => { saveEgress(remote); }, 10 * 60 * 1000).unref();
-    persistEgress = () => saveEgress(remote);
+    await loadHours(remote);
+    setInterval(() => { noteAwake(); }, 60 * 1000).unref();
+    setInterval(() => { saveHours(remote); }, 10 * 60 * 1000).unref();
+    persistEgress = () => Promise.all([saveEgress(remote), saveHours(remote)]);
     if (String(process.env.RENDER_JOBS || "1") !== "0" && typeof worker.runBackgroundJobs === "function") {
       startJobLoop(worker, remote);
     }
@@ -259,13 +330,18 @@ async function main() {
 
   const server = http.createServer(async (req, res) => {
     stats.requests += 1;
+    // Requests per UTC day, so the app can show this origin's share of the
+    // server pool. Counted in memory: a restart starts it again.
+    const day = new Date().toISOString().slice(0, 10);
+    if (!stats.today || stats.today.date !== day) stats.today = { date: day, requests: 0, since: Date.now() };
+    stats.today.requests += 1;
     try {
       const hostHeader = req.headers.host || `localhost:${PORT}`;
       const url = new URL(req.url, `http://${hostHeader}`);
 
       // Render's health check and the keep-warm ping: no D1 or R2 call.
       if (url.pathname === "/backup/health") {
-        sendJson(req, res, 200, { ok: true, mode: stats.mode, uptimeSeconds: Math.round((Date.now() - stats.startedAt) / 1000) });
+        sendJson(req, res, 200, { ok: true, mode: stats.mode, uptimeSeconds: Math.round((Date.now() - stats.startedAt) / 1000), hours: hoursNow() });
         return;
       }
 
@@ -289,6 +365,8 @@ async function main() {
           d1: stats.d1DatabaseId || null,
           r2: stats.r2Bucket || null,
           requests: stats.requests,
+          today: stats.today || null,
+          dayCapacity: Number(process.env.BACKUP_DAY_REQUESTS) || 100000,
           jobs: stats.jobs || null,
           errors: stats.errors,
           timeouts: stats.timeouts,
@@ -296,6 +374,7 @@ async function main() {
           memoryMB: { rss: Math.round(mem.rss / 1048576), heap: Math.round(mem.heapUsed / 1048576) },
           cache: stats.cache ? { entries: stats.cache.entries, mb: Math.round(stats.cache.bytes / 104857.6) / 10, hits: stats.cache.hits, evicted: stats.cache.evicted } : null,
           egress: { month: stats.egress.month, mb: Math.round(stats.egress.bytes / 1048576), budgetMB: Math.round(EGRESS_BUDGET / 1048576), saver: stats.egress.over },
+          hours: hoursNow(),
           uptimeSeconds: Math.round((Date.now() - stats.startedAt) / 1000)
         }));
         return;

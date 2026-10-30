@@ -122,6 +122,8 @@ body {
 }
 @view-transition { navigation: auto; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; animation-timing-function: ease; }
+/* A route that takes a moment to render dims the old view; it never blocks input. */
+.center.route-wait > * { opacity: .55; transition: opacity .12s ease .06s; }
 .nav, .topbar, .bottom-nav, .drawer, .fab, .tab, button, .mhead {
   -webkit-user-select: none;
   user-select: none;
@@ -1074,9 +1076,21 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .vbadge.government { color: #8b98a5; }
 .src { display: inline-flex; color: var(--muted); width: 16px; height: 16px; }
 .src svg { width: 14px; height: 14px; fill: currentColor; }
-.replying { color: var(--muted); font-size: 15px; line-height: 20px; margin: 0 0 2px; }
+.replying { color: var(--muted); font-size: 15px; line-height: 20px; margin: 0; overflow-wrap: anywhere; }
 .replying a { color: var(--link, var(--blue)); }
 .replying a:hover { text-decoration: underline; }
+/* X's reply context: "@a @b and N others" opens the list; tight under the name row. */
+.replying .reply-others { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; line-height: inherit; color: var(--link, var(--blue)); cursor: pointer; }
+.replying .reply-others:hover { text-decoration: underline; }
+.replying + .post-text { margin-top: 0; }
+.status-replying { margin-top: 12px; }
+.status-replying + .status-text, .status-replying + * .status-text { margin-top: 4px; }
+.reply-list-modal { max-width: 400px; }
+.reply-list-modal .acct-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: inherit; text-decoration: none; }
+.reply-list-modal .acct-row:hover { background: var(--hover-soft, rgba(255, 255, 255, 0.03)); }
+.reply-list-modal .rl-copy { display: flex; flex-direction: column; min-width: 0; }
+.reply-list-modal .rl-name { font-weight: 700; color: var(--text); }
+.reply-list-modal .handle { color: var(--muted); }
 .post-text, .bio, .quote-text {
   font-size: 15px;
   line-height: 20px;
@@ -1389,6 +1403,21 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 }
 .media.m1 .tile.broken { min-height: 240px; }
 .tile.broken img, .tile.broken video, .media.broken img, .media.broken video { display: none; }
+/* A picture that could not load: the X picture outline on the banner colour,
+   never a broken-image glyph or an empty black frame. */
+.tile.broken { position: relative; }
+.media-gone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+.media-gone svg { width: 40px; height: 40px; fill: currentColor; display: block; }
+.tile.broken .open-original { position: relative; z-index: 1; }
+img[data-ia-wait] { visibility: hidden; }
 .unavailable {
   margin-top: 12px;
   border: 1px solid var(--line);
@@ -4016,6 +4045,17 @@ html.tv-on #new-posts { display: none; }
 .note-copy { min-width: 0; flex: 1; margin: 2px 0 0; color: var(--text); font-size: 15px; line-height: 20px; }
 .note-copy b { font-size: 15px; }
 .note-copy p { margin: 4px 0 0; font-size: 15px; line-height: 20px; }
+/* "Approve sign-in on TV?" (tv_signin): the TV's code, Approve and Deny. */
+.tvn .note-main { min-width: 0; flex: 1; }
+.tvn-code { font: 800 26px/1.2 ui-monospace, Menlo, Consolas, monospace !important; letter-spacing: 0.14em; color: var(--text); margin: 8px 0 !important; }
+.tvn-warn { color: var(--muted, #71767b); font-size: 13px !important; line-height: 16px !important; }
+.tvn-actions { display: flex; gap: 10px; margin: 12px 0 2px; }
+.tvn-btn { min-height: 36px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line, #536471); background: transparent; color: var(--text); font-family: inherit; font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer; }
+.tvn-btn.primary { background: var(--text, #eff3f4); color: var(--bg, #000); border-color: var(--text, #eff3f4); }
+.tvn-btn:focus-visible { outline: 2px solid #1d9bf0; outline-offset: 2px; }
+.tvn-state { margin: 10px 0 2px; color: var(--muted, #71767b); font-size: 15px; }
+.tvn-state.ok { color: #00ba7c; }
+.tvn-state.bad { color: #f4212e; }
 .note-img { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px; margin-top: 8px; }
 .notes-bar {
   display: grid;
@@ -6420,6 +6460,25 @@ img, video { max-width: 100%; }
 .usage-panel .usage-week { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .usage-panel .usage-day { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line, rgba(127,127,127,.25)); }
 .usage-panel .usage-day.hot { border-color: #f4212e; color: #f4212e; }
+/* Server pool: one headline for every origin, then a bar per origin. */
+.pool-cap { margin: 12px 0 16px; padding: 14px 16px; border: 1px solid var(--line, rgba(127,127,127,.25)); border-radius: 16px; }
+.pool-cap .pool-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 15px; font-weight: 700; }
+.pool-cap .pool-pct { font-size: 28px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.pool-cap .usage-bar { height: 6px; border-radius: 999px; background: var(--line, rgba(127,127,127,.25)); overflow: hidden; margin-top: 6px; }
+.pool-cap .usage-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent, #1d9bf0); transition: width .3s ease; }
+.pool-cap .pool-bar { height: 8px; }
+.pool-cap .pool-sub { margin: 6px 0 4px; font-size: 13px; color: var(--muted, #71767b); font-variant-numeric: tabular-nums; }
+.pool-cap .pool-origin { padding: 10px 0 0; margin-top: 10px; border-top: 1px solid var(--line, rgba(127,127,127,.18)); }
+.pool-cap .pool-origin .usage-top { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.pool-cap .pool-origin .usage-top b { font-variant-numeric: tabular-nums; }
+.pool-cap .pool-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 13px; color: var(--muted, #71767b); font-variant-numeric: tabular-nums; }
+.pool-cap .pool-note { margin: 4px 0 0; font-size: 13px; color: #f4212e; }
+.pool-cap .warm .usage-bar i, .pool-cap.warm > .usage-bar i { background: #ffd400; }
+.pool-cap .hot .usage-bar i, .pool-cap.hot > .usage-bar i { background: #ff7a00; }
+.pool-cap .full .usage-bar i, .pool-cap.full > .usage-bar i { background: #f4212e; }
+.pool-cap .pool-origin.out { opacity: .72; }
+.pool-cap .pool-origin.resting { opacity: .8; }
+.pool-cap .pool-note.calm { color: var(--muted, #71767b); }
 
 /* Personal sidebar logo text, set in the wordmark's own lockup: Inter Black
    for the first letter at 1.1x, Inter Regular for the rest, currentColor so
@@ -6565,3 +6624,98 @@ html[data-flag] a.entity { text-decoration: underline; text-decoration-color: va
 
 /* Notification privacy: locked switches while names are off. */
 .notif-privacy .tab-switch[disabled] { opacity: .5; cursor: default; }
+
+/* X-style range sliders (Display font size, video volume): a 4px track,
+   blue up to the thumb and border grey after it, a 16px solid blue thumb,
+   a soft halo on hover and press and a ring on keyboard focus. The input
+   is 24px tall (44px on touch screens) so it is easy to grab, and the
+   fill comes from --x-fill, kept current by shared/x-range.js. */
+input[type="range"] {
+  --x-range-fill: var(--blue, #1d9bf0);
+  --x-range-rest: var(--line, #2f3336);
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  box-sizing: border-box;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  accent-color: var(--x-range-fill);
+  cursor: pointer;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+input[type="range"]:focus { outline: none; }
+input[type="range"]:disabled { cursor: default; opacity: .5; }
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--x-range-fill) 0 var(--x-fill, 0%), var(--x-range-rest) var(--x-fill, 0%) 100%);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--x-range-fill);
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow .15s ease;
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--x-range-rest);
+}
+input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--x-range-fill);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--x-range-fill);
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow .15s ease;
+}
+input[type="range"]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 8px color-mix(in srgb, var(--x-range-fill) 10%, transparent); }
+input[type="range"]:hover::-moz-range-thumb { box-shadow: 0 0 0 8px color-mix(in srgb, var(--x-range-fill) 10%, transparent); }
+input[type="range"]:active::-webkit-slider-thumb { box-shadow: 0 0 0 10px color-mix(in srgb, var(--x-range-fill) 20%, transparent); }
+input[type="range"]:active::-moz-range-thumb { box-shadow: 0 0 0 10px color-mix(in srgb, var(--x-range-fill) 20%, transparent); }
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--bg, #000), 0 0 0 4px color-mix(in srgb, var(--x-range-fill) 60%, transparent); }
+input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--bg, #000), 0 0 0 4px color-mix(in srgb, var(--x-range-fill) 60%, transparent); }
+@media (pointer: coarse) {
+  input[type="range"] { height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  input[type="range"]::-webkit-slider-thumb, input[type="range"]::-moz-range-thumb { transition: none; }
+}
+
+/* A labelled slider row: title left, live value right, track, optional
+   step dots and the two ends of the scale underneath. */
+.x-range-row { position: relative; margin: 12px 0 8px; padding: 4px 0; border-radius: 12px; }
+.x-range-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.x-range-head h2 { margin: 0; }
+.x-range-value { flex: none; color: var(--blue, #1d9bf0); font-size: 15px; line-height: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.x-range-wrap { position: relative; margin: 2px 0 0; }
+.x-range-wrap input[type="range"] { width: 100%; position: relative; z-index: 1; }
+.x-range-ticks { position: absolute; left: 8px; right: 8px; top: 50%; height: 0; pointer-events: none; z-index: 2; }
+.x-range-ticks i { position: absolute; top: -2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--muted, #71767b); }
+.x-range-ticks i.on { background: #fff; opacity: .9; }
+.x-range-scale { display: flex; justify-content: space-between; color: var(--muted, #71767b); font-size: 13px; line-height: 16px; margin-top: -2px; }
+@media (pointer: coarse) { .x-range-scale { margin-top: -8px; } }
+
+/* Owner site-health pill: bottom centre like X's toasts, above the bottom
+   bar on phones, so it never sits on top of a page header or alert banner. */
+#owner-health-banner { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
+@media (max-width: 699px) {
+  #owner-health-banner { bottom: calc(env(safe-area-inset-bottom, 0px) + 76px); }
+}

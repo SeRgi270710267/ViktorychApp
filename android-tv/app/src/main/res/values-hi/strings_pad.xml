@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Controller play (GameActivity). -->
+<resources>
+    <string name="pad_no_pad">खेलने के लिए कंट्रोलर जोड़ें। मेनू में रिमोट काम करता है।</string>
+    <string name="pad_title">कंट्रोलर</string>
+    <string name="pad_resume">जारी रखें</string>
+    <string name="pad_game_menu">गेम मेनू</string>
+    <string name="pad_mode">मोड: %1$s</string>
+    <string name="pad_mode_play">खेलें</string>
+    <string name="pad_mode_cursor">मेनू कर्सर</string>
+    <string name="pad_mode_watch">दर्शक</string>
+    <string name="pad_controls">कंट्रोल</string>
+    <string name="pad_sensitivity">देखने की संवेदनशीलता: %1$d</string>
+    <string name="pad_invert_on">उल्टा देखना: चालू</string>
+    <string name="pad_invert_off">उल्टा देखना: बंद</string>
+    <string name="pad_move_keys">चलना: W A S D कीज़ से</string>
+    <string name="pad_move_stick">चलना: स्क्रीन जॉयस्टिक से</string>
+    <string name="pad_glyphs">बटन आइकन: %1$s</string>
+    <string name="pad_glyphs_xbox">Xbox</string>
+    <string name="pad_glyphs_ps">PlayStation</string>
+    <string name="pad_show_hints">कंट्रोल दिखाएँ</string>
+    <string name="pad_exit">गेम से बाहर निकलें</string>
+    <string name="pad_reset">डिफ़ॉल्ट पर रीसेट करें</string>
+    <string name="pad_back">वापस</string>
+    <string name="pad_press">%1$s के लिए कोई बटन दबाएँ (मेनू से रद्द)</string>
+    <string name="act_jump">कूदें</string>
+    <string name="act_crouch">झुकें</string>
+    <string name="act_reload">रीलोड</string>
+    <string name="act_use">इस्तेमाल करें</string>
+    <string name="act_sprint">दौड़ें</string>
+    <string name="act_prone">लेटें</string>
+    <string name="act_binoculars">दूरबीन</string>
+    <string name="act_buy">खरीदें</string>
+    <string name="act_inspect">जाँचें</string>
+    <string name="act_melee">हाथापाई</string>
+    <string name="act_scoreboard">स्कोरबोर्ड</string>
+    <string name="act_fire">फ़ायर</string>
+    <string name="act_aim">निशाना</string>
+    <string name="act_weapon_next">अगला हथियार</string>
+    <string name="act_weapon_prev">पिछला हथियार</string>
+    <string name="act_none">कुछ नहीं</string>
+    <string name="hint_move">चलें</string>
+    <string name="hint_look">देखें</string>
+    <string name="hint_menu">मेनू</string>
+    <string name="hint_tap">टैप</string>
+    <string name="hint_cursor">कर्सर</string>
+    <string name="hint_back">वापस</string>
+    <string name="hint_switch">+ मेनू: मोड बदलें</string>
+    <string name="hint_next">अगला</string>
+    <string name="hint_prev">पिछला</string>
+    <string name="hint_view">व्यू</string>
+</resources>

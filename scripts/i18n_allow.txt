@@ -269,5 +269,13 @@ data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
 # The sharing pool public signing key (a technical token, not text).
 shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM
+shared/regone.js|NZlay Mini 01 - EU
+shared/regone.js|NZlay Medium 01 - EU
+shared/regone.js|NZlay Large 01 - EU
+shared/regone.js|NZlay Mega 05 - EU
+shared/regone.js|NZlay Mini 01 - USA
+shared/regone.js|NZlay Medium 03 - USA
+shared/regone.js|NZlay Large 01 - USA
+shared/regone.js|NZlay Large 02 - USA
 # The OS close shortcut shown in the desktop close hint.
 desktop-app.js|Alt+F4
