@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Crown gift",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/crown.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "crown"
+    },
+    {
+      "trait_type": "Index",
+      "value": 16
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreie3iyeng55by6k55pi6itjjy364yjv4zxaectutg2okx3ummhro3u",
+  "image_sha256": "9b4608d377a1c795debd1e44d29c6fdcc26bccdc0414e93369cabee8c61e2edd"
+}

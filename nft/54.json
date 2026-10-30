@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Rose",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/rose.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "rose"
+    },
+    {
+      "trait_type": "Index",
+      "value": 54
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreictd7galynlwouy23z47mmzb6lbzhs37bvteqgelpou432engonsq",
+  "image_sha256": "531fcc05e1abb3a98d6f3cfb1990f961c9e5bf86b3240c45bdd4e6f44699cd94"
+}

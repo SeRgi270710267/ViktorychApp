@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Little monster",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/alien_monster.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "alien_monster"
+    },
+    {
+      "trait_type": "Index",
+      "value": 0
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreigkocynqbvd7bhomvvfrcwwdrdigc5bvrh2rg2vqsc3wh4lou5pyi",
+  "image_sha256": "ca70b0d806a3f84ee656a588ad61c46830ba1ac4fa89b558485bb1f8b753afc2"
+}

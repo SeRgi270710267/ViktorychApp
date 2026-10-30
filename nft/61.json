@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Spider",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/spider.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "spider"
+    },
+    {
+      "trait_type": "Index",
+      "value": 61
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreiaka55hx3l4gxyisj34t6wtqroig2vrcslvizf6ilgtklnt5646h4",
+  "image_sha256": "0a077a7bed7c35f089277c9fad3845c836ab114975464be42cd352db3efb9e3f"
+}

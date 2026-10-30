@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Balloon",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/balloon.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "balloon"
+    },
+    {
+      "trait_type": "Index",
+      "value": 1
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreieabummvunx77dacsrohw2pbhyiw4pmeumico7lnlrewwyiyelhte",
+  "image_sha256": "800d18cad1b7ffc6014a2e3db4f09f08b71ec2518813beb6ae24b5b08c116799"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Cat in love",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/cat_love.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "cat_love"
+    },
+    {
+      "trait_type": "Index",
+      "value": 11
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreibuxshsvp6gavriziwgyvkfmcazoviczkqftuimuo4capt4qezr2e",
+  "image_sha256": "34bc8f2abfc605628ca2c6c55456081975502caa059d10ca3b8203e7c81331d1"
+}

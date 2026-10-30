@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Frog",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/frog.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "frog"
+    },
+    {
+      "trait_type": "Index",
+      "value": 22
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreib6h5zge7wi2fbjg6slylg7mtkrujjphc6awxtw23xcfm7jj26z4e",
+  "image_sha256": "3e3f72627ec8d142937a4bc2cdf64d51a252f38bc0b5e76d6ee22b3e94ebd9e1"
+}

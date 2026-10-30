@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Bear",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/bear.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "bear"
+    },
+    {
+      "trait_type": "Index",
+      "value": 3
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreictyiuf67haypda3dfhrlyavthqsuqsiwnusmatbwtn7utewyedwa",
+  "image_sha256": "53c2285f7ce0c3c60d8ca78af00accf095212459b4930130da6dfd264b6083b0"
+}

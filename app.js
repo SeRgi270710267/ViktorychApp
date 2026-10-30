@@ -1783,13 +1783,20 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
       return Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
     } catch (err) { return []; }
   }
+  /* True only once the server list has been fetched and the feature is not
+     in it, so default-off features stay hidden until the owner turns them on. */
+  window.ViktorychServerFeature = function (name) {
+    let at = 0;
+    try { at = Number(localStorage.getItem(SERVER_OFF_KEY + "-at")) || 0; } catch (err) { at = 0; }
+    return at > 0 && SERVER_FEATURES.includes(name) && !serverOffList().includes(name);
+  };
   function storeServerOff(list) {
     try {
       localStorage.setItem(SERVER_OFF_KEY, JSON.stringify(list || []));
@@ -1854,7 +1861,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       regone_profile_stats: [tr("ReGone profile stats"), tr("Stats and achievements from the NZlay profile someone linked to their own account.")],
       nzlay_forum: [tr("NZlay forum community"), tr("The NZlay Forums community: topics and replies read live from nzlay.com.")],
       nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
-      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")]
+      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
+      nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
