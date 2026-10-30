@@ -5084,5 +5084,9 @@ SI18n.addPack("ru", {
   "Couldn't save the pins.": "Не удалось сохранить закрепления.",
   "TV home screen": "Главный экран ТВ",
   "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "По желанию. Сделайте это приложение главным экраном ТВ: большие плитки приложений, папки, поиск, входы и настройки. Само приложение остаётся точно таким же.",
-  "Home screen and defaults": "Главный экран и приложения по умолчанию"
+  "Home screen and defaults": "Главный экран и приложения по умолчанию",
+  "TV screensaver": "Заставка ТВ",
+  "Photos and short clips from posts you have seen on this TV, with their text. They stay on the TV.": "Фото и короткие ролики из постов, которые вы видели на этом телевизоре, с их текстом. Они остаются на телевизоре.",
+  "Use my feed for the screensaver": "Моя лента для заставки",
+  "Scroll your feed on this TV first, then come back here.": "Сначала полистайте ленту на этом телевизоре, потом вернитесь сюда."
 });

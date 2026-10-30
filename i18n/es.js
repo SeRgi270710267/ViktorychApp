@@ -5085,5 +5085,9 @@ SI18n.addPack("es", {
   "Couldn't save the pins.": "No se pudieron guardar las fijadas.",
   "TV home screen": "Pantalla de inicio de la TV",
   "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "Opcional. Usa esta app como inicio de tu TV: mosaicos grandes de apps, carpetas, búsqueda, entradas y ajustes. La app en sí queda exactamente igual.",
-  "Home screen and defaults": "Pantalla de inicio y predeterminados"
+  "Home screen and defaults": "Pantalla de inicio y predeterminados",
+  "TV screensaver": "Salvapantallas de la TV",
+  "Photos and short clips from posts you have seen on this TV, with their text. They stay on the TV.": "Fotos y clips cortos de publicaciones que has visto en esta TV, con su texto. Se quedan en la TV.",
+  "Use my feed for the screensaver": "Usar mi feed para el salvapantallas",
+  "Scroll your feed on this TV first, then come back here.": "Primero desplázate por tu feed en esta TV y luego vuelve aquí."
 });

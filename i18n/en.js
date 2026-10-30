@@ -5082,5 +5082,9 @@ SI18n.addPack("en", {
   "Couldn't save the pins.": "Couldn't save the pins.",
   "TV home screen": "TV home screen",
   "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.",
-  "Home screen and defaults": "Home screen and defaults"
+  "Home screen and defaults": "Home screen and defaults",
+  "TV screensaver": "TV screensaver",
+  "Photos and short clips from posts you have seen on this TV, with their text. They stay on the TV.": "Photos and short clips from posts you have seen on this TV, with their text. They stay on the TV.",
+  "Use my feed for the screensaver": "Use my feed for the screensaver",
+  "Scroll your feed on this TV first, then come back here.": "Scroll your feed on this TV first, then come back here."
 });

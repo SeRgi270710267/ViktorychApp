@@ -5071,5 +5071,9 @@ SI18n.addPack("hi", {
   "Couldn't save the pins.": "पिन सेव नहीं हो सके।",
   "TV home screen": "टीवी होम स्क्रीन",
   "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "वैकल्पिक। इस ऐप को अपने टीवी का होम बनाएं: बड़ी ऐप टाइलें, फ़ोल्डर, खोज, इनपुट और सेटिंग्स। ऐप खुद बिल्कुल वैसा ही रहता है।",
-  "Home screen and defaults": "होम स्क्रीन और डिफ़ॉल्ट"
+  "Home screen and defaults": "होम स्क्रीन और डिफ़ॉल्ट",
+  "TV screensaver": "TV स्क्रीनसेवर",
+  "Photos and short clips from posts you have seen on this TV, with their text. They stay on the TV.": "इस TV पर देखी गई पोस्ट की तस्वीरें और छोटी क्लिप, उनके टेक्स्ट के साथ। ये TV पर ही रहती हैं।",
+  "Use my feed for the screensaver": "स्क्रीनसेवर के लिए मेरी फ़ीड",
+  "Scroll your feed on this TV first, then come back here.": "पहले इस TV पर अपनी फ़ीड स्क्रॉल करें, फिर यहां वापस आएं।"
 });

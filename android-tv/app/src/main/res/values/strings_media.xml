@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViktorychTV Player and screensaver (player/). -->
+<resources>
+    <string name="player_label">ViktorychTV Player</string>
+    <string name="dream_label">ViktorychTV feed</string>
+    <string name="mp_play">Play</string>
+    <string name="mp_pause">Pause</string>
+    <string name="mp_rewind">Back 10 seconds</string>
+    <string name="mp_forward">Forward 10 seconds</string>
+    <string name="mp_mute">Mute</string>
+    <string name="mp_unmute">Unmute</string>
+    <string name="mp_seek">Progress</string>
+    <string name="mp_live">LIVE</string>
+    <string name="mp_video">Video</string>
+    <string name="mp_music">Music</string>
+    <string name="mp_error">Can\'t play this link here, so it opens in the browser.</string>
+    <string name="mp_x_failed">Couldn\'t load this post.</string>
+    <string name="dream_empty">Open ViktorychTV, go to Settings &gt; TV and press \"Use my feed for the screensaver\" to see photos from your feed here.</string>
+    <string name="dream_cleared">Screensaver photos removed</string>
+    <string name="def_player">Video and music links</string>
+    <string name="def_player_desc">YouTube, X, Twitch and video or music links open in ViktorychTV Player: red progress bar, round buttons and the post\'s text on top. OK plays or pauses, left and right jump 10 seconds. Other apps keep working as before.</string>
+    <string name="def_player_pending">Pick ViktorychTV Player and choose Always when a link opens</string>
+    <string name="def_player_off">Stop using the player</string>
+    <string name="def_dream">Screensaver</string>
+    <string name="def_dream_desc">Photos and short muted clips from your feed with the post text and a clock. Send them from the site: Settings &gt; TV &gt; Use my feed for the screensaver. They stay on this TV.</string>
+    <string name="def_dream_pending">Pick ViktorychTV feed in the TV\'s screensaver settings</string>
+    <string name="def_dream_open">Open screensaver settings</string>
+    <string name="def_dream_off">Stop using the screensaver</string>
+    <string name="def_dream_guide">On Google TV: Settings &gt; System &gt; Ambient mode &gt; Screensaver. On other TVs: Settings &gt; Device Preferences &gt; Screen saver. Pick ViktorychTV feed.</string>
+    <plurals name="dream_saved">
+        <item quantity="one">%d photo saved for the screensaver</item>
+        <item quantity="other">%d photos saved for the screensaver</item>
+    </plurals>
+    <plurals name="def_dream_items">
+        <item quantity="one">%d photo ready</item>
+        <item quantity="other">%d photos ready</item>
+    </plurals>
+</resources>
