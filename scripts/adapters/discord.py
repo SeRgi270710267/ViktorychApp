@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -47,6 +48,8 @@ USER_AGENT = "DiscordBot (" + github_web() + ", 1.0)"
 BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 SITE_AGENT = user_agent()
 USER_INTERVAL = 1.5
+USER_JITTER = 0.75
+USER_MAX_REQUESTS = 6000
 USER_PAGE_SIZE = 25
 # VIEW_CHANNEL (1 << 10) and READ_MESSAGE_HISTORY (1 << 16). Nothing else.
 INVITE_PERMISSIONS = (1 << 10) | (1 << 16)
@@ -866,6 +869,13 @@ class Client:
         self._skip_pace = False
         self.last_status = 0
         self._opener = urllib.request.build_opener(_NoRedirect)
+        # Gentle reads for a user key: a random extra pause on top of the
+        # spacing (no bursts) and a cap on calls per run.
+        self.jitter = USER_JITTER if (auth == "user" and sleep is None and transport is None) else 0.0
+        self.max_requests = USER_MAX_REQUESTS if auth == "user" else 0
+        self.requests = 0
+        self.capped = False
+        self._key_check = False
         if self.auth_mode == "user":
             self.min_interval = USER_INTERVAL if min_interval is None else float(min_interval)
             self.incremental = True if incremental is None else bool(incremental)
@@ -876,6 +886,14 @@ class Client:
             self.incremental = False if incremental is None else bool(incremental)
             self.page_size = max(1, min(int(page_size or 100), 100))
             self.max_attempts = MAX_ATTEMPTS
+
+    def key_check(self):
+        """The once-a-day key health read: GET /users/@me, nothing else."""
+        self._key_check = True
+        try:
+            return self.get_json("/users/@me")
+        finally:
+            self._key_check = False
 
     def channel_messages(self, channel_id: str, limit: int, after: str | None = None, before: str | None = None):
         params = {"limit": str(max(1, min(int(limit), 100)))}
@@ -896,10 +914,16 @@ class Client:
         if host != "discord.com":
             print("[discord] refused a non-discord host")
             return None
-        if self.auth_mode == "user" and auth and not user_get_allowed(url):
+        if self.auth_mode == "user" and auth and not user_get_allowed(url) and not (self._key_check and url == API + "/users/@me"):
             print("[discord] refused a request outside the read-only user list")
             return None
         for attempt in range(self.max_attempts):
+            if self.max_requests and self.requests >= self.max_requests:
+                if not self.capped:
+                    print("[discord] request cap for this run reached; pausing reads")
+                self.capped = True
+                return None
+            self.requests += 1
             try:
                 status, headers, body = self._once(url, auth)
             except DiscordStop:
@@ -977,7 +1001,7 @@ class Client:
             return
         now = self.clock()
         if self._last_request is not None:
-            wait = self.min_interval - (now - self._last_request)
+            wait = self.min_interval - (now - self._last_request) + (random.uniform(0, self.jitter) if self.jitter > 0 else 0)
             if wait > 0:
                 self.sleep(wait)
                 now = self.clock()

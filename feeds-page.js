@@ -257,6 +257,15 @@
     }
     const spec = lib.detectInput(raw);
     if (!spec.ok) {
+      // Discord servers are added through Messages › Add Discord. Open that
+      // sheet with the invite filled in instead of a dead-end toast.
+      const picks = window.DiscordPicks;
+      if (spec.error === "unsupported_discord" && picks && picks.openInvite && picks.openInvite(raw)) {
+        form.reset();
+        const hint = document.getElementById("feeds-add-hint");
+        if (hint) hint.textContent = "";
+        return true;
+      }
       hooks.toast(tr(spec.message));
       return true;
     }
@@ -565,7 +574,7 @@
       if (!hint) return;
       if (!raw || !lib) { hint.textContent = ""; return; }
       const spec = lib.detectInput(raw);
-      hint.textContent = spec.ok ? tr("Detected: {platform}", { platform: platformLabel(spec.platform) + (spec.handle ? " · @" + spec.handle : "") }) : "";
+      hint.textContent = spec.ok ? tr("Detected: {platform}", { platform: platformLabel(spec.platform) + (spec.handle ? " · @" + spec.handle : "") }) : (spec.error === "unsupported_discord" ? tr("Discord server. Add opens Add Discord.") : "");
       return;
     }
     if (!el || el.id !== "feeds-q") return;

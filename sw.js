@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a137-__SW_VERSION__";
+const VERSION = "viktorych-a150-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T20:05:00Z-a137-setting-alerts-feedback
+// cache-bust: 2026-10-30T02:01:50Z-community-notes-ui
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -50,6 +50,7 @@ const SHELL_FILES = [
   "./",
   "./index.html",
   "./styles.css",
+  "./customize.css",
   "./dock.css",
   "./dock.js",
   "./i18n.js",
@@ -87,12 +88,19 @@ const SHELL_FILES = [
   "./friend-p2p.js",
   "./people.js",
   "./people.css",
+  "./pymk.js",
+  "./pymk.css",
   "./tv.js",
   "./tv.css",
   "./shared/tv-boot.js",
+  "./shared/short-link.js",
+  "./shared/x-range.js",
   "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",
+  "./tv-pair.js",
+  "./tv-pair.css",
+  "./vendor/qrcode-1.4.4.js",
   "./split.js",
   "./discord-ui.js",
   "./discord-picks.js",
@@ -107,6 +115,7 @@ const SHELL_FILES = [
   "./live.css",
   "./marks.js",
   "./logo-text.js",
+  "./ytm.js",
   "./music.js",
   "./music.css",
   "./presence.js",
@@ -120,6 +129,7 @@ const SHELL_FILES = [
   "./shared/gift-catalog.js",
   "./badges.js",
   "./badges.css",
+  "./shared/local-budget.js",
   "./setting-alerts.js",
   "./setting-alerts.css",
   "./audience-ui.js",
@@ -136,6 +146,10 @@ const SHELL_FILES = [
   "./shared/app-lock-crypto.js",
   "./shared/ios.js",
   "./owner-keys.js",
+  "./discord-local.js",
+  "./discord-local.css",
+  "./discord-key-helper.js",
+  "./discord-key-helper.css",
   "./accounts.css",
   "./landing.css",
   "./landing/og.jpg",
@@ -159,6 +173,8 @@ const SHELL_FILES = [
   "./drive.js",
   "./drive.css",
   "./games.js",
+  "./game-social.js",
+  "./game-social.css",
   "./games.css",
   "./communities.js",
   "./communities.css",
@@ -226,7 +242,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a137-";
+  const prefix = "viktorych-a150-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -325,6 +341,7 @@ self.addEventListener("activate", (event) => {
     if (activateBeat) { clearInterval(activateBeat); activateBeat = null; }
     // Move what older versions saved into the stable caches in the background.
     adoptOldCaches().catch(() => {});
+    purgeOpaquePictures().catch(() => {});
     try { await self.clients.claim(); } catch (err) { /* the page reloads once the worker is active */ }
     try {
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
@@ -929,10 +946,11 @@ async function fetchMediaOrigin(request, headers, authed) {
     if (isRuVisitor && !authed) {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 2000);
-      try { return await fetch(request, { signal: ctrl.signal }); }
+      try { return corsPictureHost(request) ? await fetchPicture(request, ctrl.signal) : await fetch(request, { signal: ctrl.signal }); }
       finally { clearTimeout(tid); }
     }
-    if (authed) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    if (authed) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow", referrerPolicy: "no-referrer" });
+    if (corsPictureHost(request)) return fetchPicture(request);
     return fetch(request);
   };
   let attempt = 0;
@@ -969,13 +987,62 @@ function teachOrigin(request, response) {
   }).catch(() => {});
 }
 
+/* X's picture host answers 403 to any request that carries a referrer from
+   another site, and an opaque (no-cors) answer hides that status, so a 403
+   used to be stored as if it were the picture. Pictures from that host are
+   asked for in CORS mode without a referrer: the status is visible and only
+   real pictures are stored. Original bytes, never re-encoded. */
+function corsPictureHost(request) {
+  try {
+    const url = new URL(request.url);
+    return url.hostname === "pbs.twimg.com" && request.method === "GET" && !request.headers.get("Range");
+  } catch (err) {
+    return false;
+  }
+}
+
+async function fetchPicture(request, signal) {
+  const init = { method: "GET", mode: "cors", credentials: "omit", referrerPolicy: "no-referrer", redirect: "follow" };
+  if (signal) init.signal = signal;
+  try {
+    return await fetch(request.url, init);
+  } catch (err) {
+    if (signal && signal.aborted) throw err;
+    return fetch(request);
+  }
+}
+
+async function dropMediaCopy(url) {
+  const cache = await caches.open(MEDIA);
+  await cache.delete(new Request(url, { method: "GET" }));
+  const opfs = self.ViktorychOpfs;
+  if (opfs && opfs.supported && opfs.supported() && opfs.remove) {
+    try { await opfs.remove(url); } catch (err) { /* Cache Storage was the usual home */ }
+  }
+}
+
+/* Opaque copies from X's picture host may be stored 403s from older
+   versions. They are dropped once on activate; real pictures come back on
+   the next view. */
+async function purgeOpaquePictures() {
+  const cache = await caches.open(MEDIA);
+  const keys = await cache.keys();
+  for (const req of keys) {
+    let host = "";
+    try { host = new URL(req.url).hostname; } catch (err) { continue; }
+    if (host !== "pbs.twimg.com") continue;
+    const res = await cache.match(req);
+    if (!res || res.type === "opaque" || !res.ok) await cache.delete(req);
+  }
+}
+
 async function serveMedia(request, extraHeaders) {
   const parsed = new URL(request.url);
   const headers = new Headers(extraHeaders || undefined);
   const rangeHeader = request.headers.get("Range");
   if (!self.ViktorychStorage.shouldCacheMedia(parsed)) {
     if (rangeHeader) headers.set("Range", rangeHeader);
-    if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow", referrerPolicy: "no-referrer" });
     return fetch(request);
   }
   const opfs = self.ViktorychOpfs;
@@ -1048,7 +1115,7 @@ async function serveMedia(request, extraHeaders) {
     const authed = headers.has("Authorization");
     if (authed && rangeHeader) headers.set("Range", rangeHeader);
     const res = await fetchMediaOrigin(request, headers, authed);
-    const store = res && (res.type === "opaque" || self.ViktorychStorage.revalidateAction(res.status) === "store");
+    const store = res && ((res.type === "opaque" && !corsPictureHost(request)) || self.ViktorychStorage.revalidateAction(res.status) === "store");
     if (store && !rangeHeader) {
       let inOpfs = false;
       const length = self.ViktorychStorage.byteLengthOf(res);
@@ -1143,7 +1210,7 @@ async function cacheBookmark(urls) {
     try {
       // A readable copy can also go to friends' devices; opaque is the fallback.
       const readable = url.startsWith(self.location.origin + "/") || /^https:\/\/(?:[a-z0-9-]+\.)*(?:twimg\.com|r2\.dev|workers\.dev)\//i.test(url);
-      const res = readable ? await fetch(url, { mode: "cors", credentials: "omit" }).catch(() => fetch(url, { mode: "no-cors" })) : await fetch(url, { mode: "no-cors" });
+      const res = readable ? await fetch(url, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => fetch(url, { mode: "no-cors", referrerPolicy: "no-referrer" })) : await fetch(url, { mode: "no-cors", referrerPolicy: "no-referrer" });
       if (res && (res.ok || res.type === "opaque")) {
         await cache.put(url, res.clone());
         await rememberMedia(url, Number(res.headers.get("content-length")) || 200 * 1024);
@@ -1643,6 +1710,13 @@ self.addEventListener("message", (event) => {
     gameBusyUntil = data.on ? Date.now() + 3 * 60 * 1000 : 0;
     return;
   }
+  if (data.type === "media-drop" && typeof data.url === "string" && /^https:\/\//i.test(data.url)) {
+    // A picture that did not load on the page: forget any stored copy so a
+    // cached failure (an opaque error is indistinguishable from a picture)
+    // never sticks to this device.
+    event.waitUntil(dropMediaCopy(data.url).catch(() => {}));
+    return;
+  }
   if (data.type === "drop-profile-media") {
     event.waitUntil((async () => {
       const names = await caches.keys();
@@ -1939,6 +2013,14 @@ self.addEventListener("fetch", (event) => {
     })().catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
     return;
   }
+  // Sealed catalogs are encrypted copies whose age the app checks itself:
+  // network (or a mirror when Pages is blocked), never this worker's cache.
+  if (url.origin === self.location.origin && /\/sealed\/[^/]+\.json$/.test(url.pathname)) {
+    event.respondWith(mirrorFetch(request).catch(() => new Response("", { status: 504 })));
+    return;
+  }
+  // A local Discord key: these requests go straight to Discord, never cached here.
+  if (url.hostname === "discord.com" || /(^|\.)hcaptcha\.com$/.test(url.hostname)) return;
   if (isGameHost(url)) return;
   if (isTikTokCdn(url)) return;
   if (isArchiveStore(url)) return;
@@ -2113,7 +2195,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|community-notes\.js|community-notes\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|tv-pair\.js|tv-pair\.css|qrcode-1\.4\.4\.js|split\.js|discord-ui\.js|discord-ui\.css|discord-key-helper\.js|discord-key-helper\.css|community-notes\.js|community-notes\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|game-social\.js|game-social\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -2678,8 +2760,36 @@ async function showCompactPush(c) {
     icon: shown.icon,
     image: shown.image,
     tag: "n-" + (c.sid || c.kind),
-    data: { hash: shown.hash, id: (note && note.id) || "" }
+    data: { hash: shown.hash, id: (note && note.id) || "", invite: gameInviteId(c.kind, shown.hash) },
+    ...gameInviteActions(c.kind, shown.hash)
   });
+}
+
+// Game invites get Join and Not now buttons. Join opens the game; Not now
+// answers from here without opening a window.
+function gameInviteId(kind, hash) {
+  if (kind !== "game_invite") return "";
+  const m = /[?&]invite=([a-f0-9]{24})(?:&|$)/.exec(String(hash || ""));
+  return m ? m[1] : "";
+}
+function gameInviteActions(kind, hash) {
+  if (!gameInviteId(kind, hash)) return {};
+  return {
+    requireInteraction: true,
+    actions: [{ action: "join", title: tr("Join") }, { action: "decline", title: tr("Not now") }]
+  };
+}
+async function declineGameInvite(id) {
+  const db = await idb();
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  if (!auth || !auth.token || !api || !id) return;
+  await fetch(String(api).replace(/\/$/, "") + "/v1/games/invite/answer", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + auth.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: id, answer: "decline" }),
+    cache: "no-store"
+  }).catch(() => null);
 }
 
 self.addEventListener("push", (event) => {
@@ -2726,7 +2836,8 @@ self.addEventListener("push", (event) => {
       body: shownL ? shownL.body : ((data && data.body) || ""),
       icon: shownL ? shownL.icon : ((data && data.icon) || "icons/icon-192.png"),
       tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
-      data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "" }
+      data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "", invite: gameInviteId(data && data.kind, data && data.hash) },
+      ...gameInviteActions(data && data.kind, data && data.hash)
     });
   })());
 });
@@ -2735,7 +2846,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
     const payload = event.notification.data || {};
-    const hash = payload.hash || "#/";
+    if (payload.invite && event.action === "decline") {
+      await declineGameInvite(payload.invite);
+      const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      open.forEach((client) => {
+        try { client.postMessage({ type: "game-invite-answer", id: payload.invite, act: "decline", done: true }); }
+        catch (err) { /* the page refreshes invites on its own */ }
+      });
+      return;
+    }
+    const hash = payload.invite && event.action === "join" ? "#/games/regone?invite=" + payload.invite + "&act=join" : (payload.hash || "#/");
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     if (clients[0]) {
       try { clients[0].postMessage({ type: "note-open", id: payload.id || "", hash: hash }); }

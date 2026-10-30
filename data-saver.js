@@ -66,6 +66,7 @@
     ["storage", "prefetch", false, true, "media and feed prefetch"],
     ["storage", "maxBytes", 1 * GB, 0, "cache size limit"],
     ["storage", "unlimited", false, false, "unlimited cache"],
+    ["storage", "picked", false, false, "cache size set by hand on the slider"],
     ["storage", "keep", "3d", "week", "how long media stays cached"],
     ["friendP2P", "on", false, true, "direct connections and media from friends"],
     ["pool", "mode", "off", "auto", "sharing pool: feed files and app updates with nearby devices"],
