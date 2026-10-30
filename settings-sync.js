@@ -36,7 +36,7 @@
   var LWW = ["appearance", "showPictures", "showBanners", "autoplay", "followingSort", "forYouReposts", "forYouReplies",
     "storyNotes", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "notifPrivacy",
     "accent", "fontSize", "density", "reduceMotion",
-    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "peopleLinks", "avatarShape", "haptics", "keyboard", "busyPrefs", "inboxLayout", "musicPrefs", "brandLogo", "aiFab"];
+    "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "peopleLinks", "avatarShape", "haptics", "keyboard", "busyPrefs", "inboxLayout", "aiFab", "musicPrefs", "brandLogo"];
   var CAT_OF = {};
   CATS.forEach(function (cat) { cat.keys.forEach(function (row) { CAT_OF[row[0]] = cat.id; }); });
   // Companion keys travel with their setting.
