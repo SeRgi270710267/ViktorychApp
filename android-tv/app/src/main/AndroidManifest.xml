@@ -285,5 +285,107 @@
             </intent-filter>
         </activity>
 
+        <!-- Optional player and screensaver (player/). Both are off in the manifest:
+             no link opens differently and the TV lists no new screensaver until
+             the user turns them on in DefaultsActivity, and Android still asks. -->
+        <activity
+            android:name=".player.PlayerActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/player_label"
+            android:excludeFromRecents="true"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|smallestScreenSize|uiMode"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="youtube.com" />
+                <data android:host="www.youtube.com" />
+                <data android:host="m.youtube.com" />
+                <data android:host="music.youtube.com" />
+                <data android:path="/watch" />
+                <data android:pathPrefix="/shorts/" />
+                <data android:pathPrefix="/live/" />
+                <data android:pathPrefix="/embed/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="youtu.be" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="x.com" />
+                <data android:host="www.x.com" />
+                <data android:host="mobile.x.com" />
+                <data android:host="twitter.com" />
+                <data android:host="www.twitter.com" />
+                <data android:host="mobile.twitter.com" />
+                <data android:pathPattern="/.*/status/.*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="twitch.tv" />
+                <data android:host="www.twitch.tv" />
+                <data android:host="m.twitch.tv" />
+                <data android:pathPattern="/..*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/vnd.apple.mpegurl" />
+                <data android:mimeType="application/x-mpegURL" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".player.FeedDream"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/dream_label"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <!-- viktorychtv://dream?d=...: photos from the user's own feed for the screensaver. -->
+        <activity
+            android:name=".player.DreamFeedActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="viktorychtv" android:host="dream" />
+            </intent-filter>
+        </activity>
+
     </application>
 </manifest>
