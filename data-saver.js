@@ -26,6 +26,7 @@
     ["settings", "autoplay", "never", "all", "video autoplay in the timeline"],
     ["settings", "livePreview", "off", "auto", "live stream previews"],
     ["settings", "reactionsData", "lite", "auto", "reaction counts only, no pictures in the who-reacted list"],
+    ["settings", "communityNotesData", "lite", "auto", "Community Notes only for posts on screen, refreshed less often"],
     ["settings", "videoHd", false, true, "HD video variants"],
     ["settings", "imageLoad", "wifi", "always", "photos download on Wi-Fi or on tap"],
     ["settings", "imageSize", "small", "auto", "smaller previews the source already serves"],
