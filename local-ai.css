@@ -376,6 +376,8 @@ html[data-theme="default"] .lai-su-card { box-shadow: 0 0 15px rgba(101, 119, 13
 .lai-su-spin { width: 32px; height: 32px; margin: 24px auto; border-radius: 50%; border: 3px solid var(--lai-bar-line); border-top-color: var(--lai-accent); animation: lai-su-spin .8s linear infinite; }
 @keyframes lai-su-spin { to { transform: rotate(360deg); } }
 .lai-su-chips { justify-content: flex-start; margin-top: 16px; }
+.lai-su-chips .lai-chip { flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lai-su-head, .lai-su-steps, .lai-su-foot { flex-shrink: 0; }
 .lai-su-foot { position: sticky; bottom: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px 32px 24px; background: var(--bg); }
 .lai-su-btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 52px; padding: 0 32px; border-radius: 9999px; border: 1px solid transparent; background: var(--lai-accent); color: #fff; font-size: 17px; font-weight: 700; cursor: pointer; transition: filter .15s; }
 .lai-su-btn:hover { filter: brightness(0.92); }
@@ -387,6 +389,7 @@ html[data-theme="default"] .lai-su-card { box-shadow: 0 0 15px rgba(101, 119, 13
 .lai-menu-again { border-top: 1px solid var(--lai-bar-line); }
 .lai-side-foot button.lai-side-link { border: 0; background: none; text-align: left; cursor: pointer; width: 100%; }
 @media (max-width: 699px) {
+  .lai-su-chips { order: 0; flex-wrap: wrap; overflow: visible; margin: 16px 0 0; padding: 0; }
   .lai-su { place-items: end stretch; padding: 0; }
   .lai-su-bg { display: grid; place-items: center; position: absolute; left: 0; right: 0; top: 0; height: 22dvh; color: var(--text); }
   .lai-su-bg-mark svg { width: 56px; height: 56px; }

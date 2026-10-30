@@ -95,6 +95,7 @@
     if (!mb) return tr("No download");
     return mb >= 1000 ? tr("{n} GB", { n: (mb / 1000).toFixed(1) }) : tr("{n} MB", { n: Math.round(mb) });
   }
+  function partText(mb) { return mb >= 1000 ? tr("{n} GB", { n: (mb / 1000).toFixed(1) }) : tr("{n} MB", { n: Math.round(mb || 0) }); }
   function modelBlurb(m) {
     if (m.engine === "instant") return tr("Built-in rules. Instant, works on every device, no download.");
     if (m.engine === "nano") return tr("Chrome's built-in model. Chrome keeps it; nothing to download here.");
@@ -1007,7 +1008,7 @@
       var persist = st.persisted === true ? tr("Storage is kept for good on this device.") : (st.persisted === false && st.dl !== "idle" ? tr("The browser may clear the model if space runs low. You can download it again.") : tr("We'll ask the browser to keep the model for good."));
       body = "<h1>" + esc(tr("Download {name}", { name: modelName(m) })) + '</h1><p class="lai-su-lead">' + esc(m.engine === "nano" ? tr("Chrome's built-in model. Chrome keeps it; nothing to download here.") : tr("{size}. Downloads once from Hugging Face and stays on this device.", { size: sizeText(mb2) })) + "</p>" +
         '<div class="lai-su-prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><div class="lai-su-prog-top"><span class="lai-su-status">' + esc(status) + '</span><b class="lai-su-pct">' + pct + '%</b></div><div class="lai-prog-track"><i style="width:' + pct + '%"></i></div>' +
-        (mb2 ? '<p class="lai-su-mb">' + esc(tr("{done} of {size}", { done: sizeText(mb2 * pct / 100), size: sizeText(mb2) })) + "</p>" : "") + "</div>" +
+        (mb2 ? '<p class="lai-su-mb">' + esc(tr("{done} of {size}", { done: partText(mb2 * pct / 100), size: sizeText(mb2) })) + "</p>" : "") + "</div>" +
         (warn.length ? '<p class="lai-su-warn">' + warn.map(esc).join("<br>") + "</p>" : "") +
         '<p class="lai-su-note">' + esc(persist) + "</p>";
       if (st.dl === "idle") foot = pill("su-dl", tr("Download")) + (st.steps.indexOf("device") >= 0 ? ghost("su-back", tr("Pick another model")) : ghost("su-instant", tr("Use Instant")));
@@ -1081,7 +1082,7 @@
     var b = bar.querySelector(".lai-su-pct"); if (b) b.textContent = pct + "%";
     var i = bar.querySelector(".lai-prog-track i"); if (i) i.style.width = pct + "%";
     var mb = core().downloadMB(m);
-    var t = bar.querySelector(".lai-su-mb"); if (t && mb) t.textContent = tr("{done} of {size}", { done: sizeText(mb * pct / 100), size: sizeText(mb) });
+    var t = bar.querySelector(".lai-su-mb"); if (t && mb) t.textContent = tr("{done} of {size}", { done: partText(mb * pct / 100), size: sizeText(mb) });
   }
   function onSetupClick(act, el) {
     var st = S.setup;
