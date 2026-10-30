@@ -5177,6 +5177,20 @@ def gdrive_checks() -> None:
     check(cf_pages_deploy.selftest() == 0, "a Pages permission failure skips without printing a token")
     check(cf_kv_bind.selftest() == 0, "a KV permission failure removes only the cache binding")
     check(cf_web_analytics.selftest() == 0, "the analytics beacon is added only with a public token")
+    import pages_guard
+    pages_sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    pages_publish = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
+    check(
+        pages_guard.selftest() == 0
+        and pages_sync.count("group: pages-deploy") == 2
+        and "pages_guard.py pick-head" in pages_sync
+        and "pages_guard.py superseded" in pages_sync
+        and "app-shell-version-${{ github.run_id }}-${{ github.run_attempt }}" in pages_sync
+        and "github-pages-${{ github.run_id }}-${{ github.run_attempt }}" in pages_sync
+        and "wait_until_free" in pages_publish
+        and "_keep_live_version" in pages_publish,
+        "Pages deploys share one lock, build from main's head, never roll version.json back, and rerun without artifact clashes",
+    )
     sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     smoke = (ROOT / ".github" / "workflows" / "smoke.yml").read_text(encoding="utf-8")
     check("wrangler pages deploy" in sync and "viktorychapp" in sync and "cf_pages_deploy.py" in sync and "cf_pages_prepare.py" in sync and "shared/mirror.js" in deployed_paths() and "smoke_page.mjs --site _mirror" in sync and "smoke_page.mjs --site _site" in smoke and "smoke_page.mjs --site _mirror" in smoke, "the Pages upload is the generated bundle and the smoke check loads that output")
