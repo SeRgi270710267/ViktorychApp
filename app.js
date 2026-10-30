@@ -1757,7 +1757,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1825,7 +1825,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       regone_leaderboard: [tr("ReGone Top Players"), tr("The NZlay Top 100 tab on the Games page, rank cards and rank achievements.")],
       regone_online: [tr("ReGone players online"), tr("The players-online count on the Games tile and in invites.")],
       regone_rooms: [tr("ReGone room list"), tr("NZlay's live room list in the invite and party room picker.")],
-      regone_profile_stats: [tr("ReGone profile stats"), tr("Stats and achievements from the NZlay profile someone linked to their own account.")]
+      regone_profile_stats: [tr("ReGone profile stats"), tr("Stats and achievements from the NZlay profile someone linked to their own account.")],
+      nzlay_forum: [tr("NZlay forum community"), tr("The NZlay Forums community: topics and replies read live from nzlay.com.")],
+      nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
+      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -16520,6 +16523,9 @@ const here = parseRoute();
     if (section === "devices") return myDevicesView();
     /* Settings > Connected keys > one service: its own page, like X's
        Connected apps > app. */
+    if (section === "keys" && sub === "nzlay" && window.NzlayKeys && window.NzlayKeys.enabled() && window.NzlayKeys.detailHtml) {
+      return settingsHead(window.NzlayKeys.titleFor(), "#/settings/keys") + window.NzlayKeys.detailHtml();
+    }
     if (section === "keys" && sub && window.OwnerKeys && window.OwnerKeys.detailHtml) {
       return settingsHead(window.OwnerKeys.titleFor(sub), "#/settings/keys") + window.OwnerKeys.detailHtml(sub);
     }
@@ -16527,12 +16533,13 @@ const here = parseRoute();
       const ownerKeys = window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible();
       /* Every user can keep their own spare Discord key on this device. */
       const localKeys = window.DiscordLocal && window.DiscordLocal.sectionHtml ? window.DiscordLocal.sectionHtml() : "";
+      const nzlayKeys = window.NzlayKeys && window.NzlayKeys.enabled() && window.NzlayKeys.sectionHtml ? window.NzlayKeys.sectionHtml() : "";
       const keys = ownerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
-        : (localKeys ? "" : `<div class="set-block"><p class="phandle">${esc(tr("Keys are available only to the owner."))}</p></div>`);
-      return settingsHead(tr("Connected keys"), "#/settings") + localKeys + keys;
+        : (localKeys || nzlayKeys ? "" : `<div class="set-block"><p class="phandle">${esc(tr("Keys are available only to the owner."))}</p></div>`);
+      return settingsHead(tr("Connected keys"), "#/settings") + localKeys + nzlayKeys + keys;
     }
-    const keysRow = (window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()) || window.DiscordLocal
+    const keysRow = (window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()) || window.DiscordLocal || (window.NzlayKeys && window.NzlayKeys.enabled())
       ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
       : "";
     return settingsHead(tr("Settings"), "") + settingsSearchHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
