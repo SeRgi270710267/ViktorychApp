@@ -3,6 +3,9 @@ main = "src/index.js"
 compatibility_date = "2026-01-15"
 workers_dev = true
 
+# SMSPOOL_API_KEY (optional) lets the owner read SMS codes in Inbox › SMS codes
+# (GET /v1/owner/sms, owner only, read-only). It is a Worker secret, not a var.
+# See docs/sms-codes.md. npx wrangler secret put SMSPOOL_API_KEY
 # TELEGRAM_BOT_TOKEN is a Worker secret, not a var:
 # npx wrangler secret put TELEGRAM_BOT_TOKEN
 # KEYS_ENC_KEY encrypts owner-pasted keys at rest. It is a Worker secret, not a var.

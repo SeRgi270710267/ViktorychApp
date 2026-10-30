@@ -14,7 +14,8 @@
     packages: { classic: false, scripts: ["packages.js", "packages.css"] },
     drive: { classic: false, scripts: ["drive.js", "drive.css"] },
     communities: { classic: true, scripts: ["communities.js", "communities.css"] },
-    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] }
+    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] },
+    inboxsms: { classic: true, scripts: ["inbox-sms.js", "inbox-sms.css"] }
   };
   var loads = {};
   var preloadStarted = false;

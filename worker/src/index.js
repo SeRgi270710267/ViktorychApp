@@ -56,6 +56,7 @@ import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
 import { handleOwnerSourceLists, handleMySourceLists, refreshWanted } from "./source-lists.js";
+import { handleOwnerSms } from "./sms-pool.js";
 import { claimedJobs } from "./job-runner.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingRequest, importAllowed, readFollowRows, outgoingRequestIds, requestCount, followsYouSet, handleSocialRoutes, blockedProfile, stripBlockedView, blocksEither, pairState } from "./social.js";
@@ -5485,6 +5486,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/feeds" || path.startsWith("/v1/owner/feeds/")) {
     return handleOwnerFeeds(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
   }
+  if (path === "/v1/owner/sms") return handleOwnerSms(request, env, { json, rateHit, limited, requireOwnerHidden });
   if (path === "/v1/owner/usage" && request.method === "GET") {
     const gate = await requireOwner(request, env);
     if (gate.error) return gate.error;
