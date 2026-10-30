@@ -5061,5 +5061,8 @@ SI18n.addPack("ru", {
   "You’re the owner. Add it directly.": "Вы владелец. Добавьте напрямую.",
   "{count} requests": "Запросов: {count}",
   "{count} updated": "Обновлено: {count}",
-  "{count} waiting": "Ожидают: {count}"
+  "{count} waiting": "Ожидают: {count}",
+  "TV home screen": "Главный экран ТВ",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "По желанию. Сделайте это приложение главным экраном ТВ: большие плитки приложений, папки, поиск, входы и настройки. Само приложение остаётся точно таким же.",
+  "Home screen and defaults": "Главный экран и приложения по умолчанию"
 });

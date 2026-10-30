@@ -378,6 +378,12 @@
     }
     if (!TV.on) html += '<div class="theme-row"><a class="outline" href="#/send-to-tv">' + esc(tr("Send to my TV")) + "</a></div>";
     html += nameHtml();
+    if (b && b.appVersion() >= 5) {
+      // TV app 1.4.0+: opens its own defaults screen (optional home screen).
+      html += "<h2>" + esc(tr("TV home screen")) + "</h2>" +
+        '<p class="tv-set-note">' + esc(tr("Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.")) + "</p>" +
+        '<div class="theme-row"><a class="outline" data-tv-defaults="1" href="intent://defaults#Intent;scheme=viktorychtv;package=' + esc(b.APP_PACKAGE || "app.viktorych.tv") + ';end">' + esc(tr("Home screen and defaults")) + "</a></div>";
+    }
     html += appCardHtml("settings");
     return html;
   }

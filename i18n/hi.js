@@ -5048,5 +5048,8 @@ SI18n.addPack("hi", {
   "You’re the owner. Add it directly.": "आप मालिक हैं। इसे सीधे जोड़ें।",
   "{count} requests": "{count} अनुरोध",
   "{count} updated": "{count} अपडेट किए गए",
-  "{count} waiting": "{count} प्रतीक्षा में"
+  "{count} waiting": "{count} प्रतीक्षा में",
+  "TV home screen": "टीवी होम स्क्रीन",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "वैकल्पिक। इस ऐप को अपने टीवी का होम बनाएं: बड़ी ऐप टाइलें, फ़ोल्डर, खोज, इनपुट और सेटिंग्स। ऐप खुद बिल्कुल वैसा ही रहता है।",
+  "Home screen and defaults": "होम स्क्रीन और डिफ़ॉल्ट"
 });

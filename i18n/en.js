@@ -5059,5 +5059,8 @@ SI18n.addPack("en", {
   "You’re the owner. Add it directly.": "You’re the owner. Add it directly.",
   "{count} requests": "{count} requests",
   "{count} updated": "{count} updated",
-  "{count} waiting": "{count} waiting"
+  "{count} waiting": "{count} waiting",
+  "TV home screen": "TV home screen",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.",
+  "Home screen and defaults": "Home screen and defaults"
 });
