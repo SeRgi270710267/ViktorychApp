@@ -111,7 +111,7 @@ const ytFeed = {
   platform: "youtube",
   handle: "northlamp",
   channelId: "UCsyntheticmaple00001000",
-  name: "Canadian Prepper",
+  name: "North Lamp",
   avatar: "https://example.com/canadian.jpg",
   configured: true
 };
@@ -120,7 +120,7 @@ const xFeed = {
   id: "x:copperlane",
   platform: "x",
   handle: "copperlane",
-  name: "Elon Musk",
+  name: "Copper Lane",
   avatar: "https://example.com/elon.jpg",
   configured: true
 };
@@ -144,7 +144,7 @@ T.STATE.data = {
       feedId: "youtube:northlamp",
       handle: "northlamp",
       channelId: "UCsyntheticmaple00001000",
-      author: "Canadian Prepper",
+      author: "North Lamp",
       title: "Prepping for the Unknown",
       date: new Date().toISOString(),
       media: [{ type: "video", videoId: "vid12345678" }]
@@ -156,7 +156,7 @@ T.STATE.data = {
       feedId: "youtube:northlamp",
       handle: "northlamp",
       channelId: "UCsyntheticmaple00001000",
-      author: "Canadian Prepper",
+      author: "North Lamp",
       title: "Quick Survival Tip #Shorts",
       short: true,
       date: new Date().toISOString(),
@@ -168,7 +168,7 @@ T.STATE.data = {
       platform: "x",
       feedId: "x:copperlane",
       handle: "copperlane",
-      author: "Elon Musk",
+      author: "Copper Lane",
       text: "Starship Flight Test",
       date: new Date().toISOString(),
       media: [{ type: "video", url: "https://example.com/starship.mp4" }]
@@ -190,7 +190,7 @@ T.STATE.data = {
       platform: "x",
       feedId: "x:copperlane",
       handle: "copperlane",
-      author: "Elon Musk",
+      author: "Copper Lane",
       text: "Just text here",
       date: new Date().toISOString(),
       media: []
@@ -254,7 +254,7 @@ assert.strictEqual(T.onChannel(ytPost, "x:copperlane"), false, "onChannel reject
 console.log("  Testing subsView rendering...");
 const allHtml = T.subsView({ name: "subscriptions", channel: "", query: new URLSearchParams() });
 assert.ok(allHtml.includes('class="yt-strip"'), "Channel strip rendered");
-assert.ok(allHtml.includes("Canadian Prepper"), "Canadian Prepper in channel strip");
+assert.ok(allHtml.includes("North Lamp"), "North Lamp in channel strip");
 assert.ok(allHtml.includes("Prepping for the Unknown"), "YouTube video rendered in feed");
 assert.ok(allHtml.includes("Quick Survival Tip"), "YouTube shorts rendered in feed");
 assert.ok(allHtml.includes("Starship Flight Test"), "X video rendered in feed");

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Controller play (GameActivity). -->
+<resources>
+    <string name="pad_no_pad">Подключите геймпад, чтобы играть. Пульт работает в меню.</string>
+    <string name="pad_title">Геймпад</string>
+    <string name="pad_resume">Продолжить</string>
+    <string name="pad_game_menu">Меню игры</string>
+    <string name="pad_mode">Режим: %1$s</string>
+    <string name="pad_mode_play">Игра</string>
+    <string name="pad_mode_cursor">Курсор меню</string>
+    <string name="pad_mode_watch">Наблюдение</string>
+    <string name="pad_controls">Управление</string>
+    <string name="pad_sensitivity">Чувствительность обзора: %1$d</string>
+    <string name="pad_invert_on">Инверсия обзора: вкл.</string>
+    <string name="pad_invert_off">Инверсия обзора: выкл.</string>
+    <string name="pad_move_keys">Движение: клавиши W A S D</string>
+    <string name="pad_move_stick">Движение: экранный джойстик</string>
+    <string name="pad_glyphs">Значки кнопок: %1$s</string>
+    <string name="pad_glyphs_xbox">Xbox</string>
+    <string name="pad_glyphs_ps">PlayStation</string>
+    <string name="pad_show_hints">Показать управление</string>
+    <string name="pad_exit">Выйти из игры</string>
+    <string name="pad_reset">Сбросить</string>
+    <string name="pad_back">Назад</string>
+    <string name="pad_press">Нажмите кнопку для «%1$s» (Меню — отмена)</string>
+    <string name="act_jump">Прыжок</string>
+    <string name="act_crouch">Присесть</string>
+    <string name="act_reload">Перезарядка</string>
+    <string name="act_use">Использовать</string>
+    <string name="act_sprint">Бег</string>
+    <string name="act_prone">Лечь</string>
+    <string name="act_binoculars">Бинокль</string>
+    <string name="act_buy">Купить</string>
+    <string name="act_inspect">Осмотреть</string>
+    <string name="act_melee">Ближний бой</string>
+    <string name="act_scoreboard">Счёт</string>
+    <string name="act_fire">Огонь</string>
+    <string name="act_aim">Прицел</string>
+    <string name="act_weapon_next">Следующее оружие</string>
+    <string name="act_weapon_prev">Предыдущее оружие</string>
+    <string name="act_none">Ничего</string>
+    <string name="hint_move">Движение</string>
+    <string name="hint_look">Обзор</string>
+    <string name="hint_menu">Меню</string>
+    <string name="hint_tap">Нажать</string>
+    <string name="hint_cursor">Курсор</string>
+    <string name="hint_back">Назад</string>
+    <string name="hint_switch">+ Меню: сменить режим</string>
+    <string name="hint_next">Далее</string>
+    <string name="hint_prev">Назад</string>
+    <string name="hint_view">Вид</string>
+</resources>

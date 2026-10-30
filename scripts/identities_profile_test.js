@@ -7,7 +7,7 @@ const STATE = {
       {
         id: "x:1001",
         platform: "x",
-        handle: "NASA",
+        handle: "SampleAgency",
         date: "2026-10-24T12:00:00Z",
         sortDate: "2026-10-24T12:00:00Z",
         text: "James Webb Space Telescope new findings"
@@ -115,13 +115,13 @@ const resBare = profilePostsHtml(accountBare);
 assert.equal(resBare.count, 1);
 assert.equal(resBare.posts[0].id, "x:9999");
 
-// 2. Account with linked X profile @NASA and Telegram @alice_channel and YouTube @alice_vids
+// 2. Account with linked X profile @SampleAgency and Telegram @alice_channel and YouTube @alice_vids
 const accountLinked = {
   publicId: "123456789012",
   handle: "alice",
   reposts: accountBare.reposts,
   identities: [
-    { platform: "x", handle: "NASA", verified: true },
+    { platform: "x", handle: "SampleAgency", verified: true },
     { platform: "telegram", handle: "alice_channel", verified: true },
     { platform: "youtube", handle: "alice_vids", verified: true }
   ]
