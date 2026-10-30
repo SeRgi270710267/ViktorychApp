@@ -40,6 +40,25 @@
     return a.call(path, next);
   }
   function redraw() { var a = accounts(); if (a && a.requestRender) a.requestRender(); }
+  /* Called while the app builds the page: a chip search box being typed in
+     keeps its text, focus and caret across any re-render (a save or a
+     friends refresh answering mid-typing must not steal them). */
+  function keepChipFocus() {
+    var doc = root.document;
+    var act = doc && doc.activeElement;
+    var kind = act && act.getAttribute ? act.getAttribute("data-fpv-chip") : "";
+    if (!kind) return;
+    var pos = 0;
+    try { pos = act.selectionStart || 0; } catch (err) { pos = 0; }
+    ui.chipFor = kind;
+    ui.chipQuery = act.value;
+    Promise.resolve().then(function () {
+      var again = doc.querySelector('[data-fpv-chip="' + kind + '"]');
+      if (!again || again === doc.activeElement) return;
+      again.focus();
+      try { again.setSelectionRange(pos, pos); } catch (err) { /* not a text box */ }
+    });
+  }
   function clean(handle) { return String(handle || "").replace(/^@/, "").toLowerCase(); }
 
   function load(force) {
@@ -414,6 +433,7 @@
   }
 
   function detailHtml(handle) {
+    keepChipFocus();
     var gate = stateHtml();
     if (gate) return '<div class="fpv">' + gate + "</div>";
     if (!ui.bulk) {
@@ -490,6 +510,8 @@
     if (!add && at >= 0) arr.splice(at, 1);
     if (add) { var o = other.indexOf(h); if (o >= 0) other.splice(o, 1); }
     ui.chipQuery = "";
+    var box = root.document && root.document.querySelector('[data-fpv-chip="' + kind + '"]');
+    if (box) box.value = "";
     if (presetOf(rule) === "me" && ui.pending) { redraw(); return; }
     ui.pending = "";
     change(rule);
@@ -572,6 +594,10 @@
     var kind = el && el.getAttribute && el.getAttribute("data-fpv-chip");
     if (!kind || event.key !== "Enter") return;
     event.preventDefault();
+    ui.chipFor = kind;
+    ui.chipQuery = el.value;
+    var hits = root.document.querySelector('[data-fpv-suggest="' + kind + '"]');
+    if (hits) hits.innerHTML = suggestHtml(kind);
     var first = root.document.querySelector('[data-fpv-suggest="' + kind + '"] [data-fpv="chip-add"]');
     if (first) editChip(kind, first.getAttribute("data-handle"), true);
   }

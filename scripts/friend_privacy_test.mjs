@@ -90,7 +90,7 @@ function mock(page, log) {
 
 const WORDS = {
   en: { entry: "Who can see each friendship", anna: "Visible to: Ben only", cy: "Visible to: Only you", ben: "Visible to: Everyone (same as your friends list)", undone: "Change undone", sees: "would see that you’re friends with" },
-  es: { entry: "Quién puede ver cada amistad", anna: "Visible para: Solo Ben", cy: "Visible para: Only you", ben: "Visible para: Todos (igual que tu lista de amigos)", undone: "Cambio deshecho", sees: "vería que eres amigo de" }
+  es: { entry: "Quién puede ver cada amistad", anna: "Visible para: Solo Ben", cy: "Visible para: Solo tú", ben: "Visible para: Todos (igual que tu lista de amigos)", undone: "Cambio deshecho", sees: "vería que eres amigo de" }
 };
 
 async function shot(page, lang, name) {
@@ -118,7 +118,7 @@ async function check(browser, port, lang) {
   await page.waitForSelector(".fpv-row", { timeout: 15000 }).catch(() => fail(label + ": no friend rows"));
   const rows = await page.$$eval(".fpv-row", (els) => els.map((el) => el.querySelector(".fpv-sum").textContent));
   if (rows.length !== 4) fail(label + ": rows " + rows.length);
-  if (lang === "en" && (rows[0] !== w.anna || rows[2] !== w.cy || rows[1] !== w.ben)) fail(label + ": summaries " + rows.join(" | "));
+  if ((rows[0] !== w.anna || rows[2] !== w.cy || rows[1] !== w.ben)) fail(label + ": summaries " + rows.join(" | "));
   if (lang === "es" && (rows[0] !== w.anna || rows[1] !== w.ben)) fail(label + ": summaries " + rows.join(" | "));
   const wide = await page.evaluate(() => document.scrollingElement.scrollWidth > window.innerWidth + 1);
   if (wide) fail(label + ": rows overflow");
@@ -134,8 +134,7 @@ async function check(browser, port, lang) {
   await page.waitForSelector('[data-fpv-suggest="show"] [data-handle="eve_demo"]', { timeout: 5000 }).catch(() => fail(label + ": chip search found nobody"));
   await page.click('[data-fpv-suggest="show"] [data-handle="eve_demo"]');
   await page.waitForFunction(() => document.querySelectorAll(".fpv-chips[data-kind=show] .fpv-chip").length === 1, null, { timeout: 5000 }).catch(() => fail(label + ": chip not added"));
-  await page.waitForTimeout(150);
-  const put1 = log.find((l) => l.startsWith("PUT /v1/friends/privacy "));
+  const put1 = (await waitPuts(log, 1, label, "chip"))[0];
   if (!put1) fail(label + ": no autosave");
   const sent = JSON.parse(put1.slice(put1.indexOf("{")));
   if (sent.handles.join() !== "ben_demo" || sent.rule.mode !== "custom" || sent.rule.audience.include.people.join() !== "eve_demo") fail(label + ": saved " + put1);
@@ -147,19 +146,17 @@ async function check(browser, port, lang) {
   await page.waitForSelector('[data-fpv-chip="hide"]', { timeout: 5000 }).catch(() => fail(label + ": no hide-from chips"));
   await page.fill('[data-fpv-chip="hide"]', "fay");
   await page.keyboard.press("Enter");
-  await page.waitForTimeout(200);
-  const put2 = log.filter((l) => l.startsWith("PUT /v1/friends/privacy "))[2];
+  const put2 = (await waitPuts(log, 3, label, "hide-from"))[2];
   const r2 = put2 ? JSON.parse(put2.slice(put2.indexOf("{"))).rule.audience : null;
   if (!r2 || !r2.include.friends || r2.include.people.join() !== "eve_demo" || r2.exclude.people.join() !== "fay_demo") fail(label + ": hide-from " + put2);
   await page.evaluate(() => document.querySelector(".fpv-chips[data-kind=hide]").scrollIntoView({ block: "end" }));
   await shot(page, lang, "detail-editor");
   /* Undo puts the previous rule back. */
   await page.click("#toast [data-fpv-undo]");
-  await page.waitForTimeout(200);
-  const puts = log.filter((l) => l.startsWith("PUT /v1/friends/privacy "));
+  const puts = await waitPuts(log, 4, label, "undo");
   const undo = JSON.parse(puts[puts.length - 1].slice(puts[puts.length - 1].indexOf("{")));
   if (undo.rule.audience.exclude.people.length || !undo.rule.audience.include.friends || undo.rule.audience.include.people.join() !== "eve_demo") fail(label + ": undo sent " + JSON.stringify(undo));
-  if (!(await page.textContent("#toast")).includes(w.undone)) fail(label + ": no undone toast");
+  await page.waitForFunction((t) => (document.querySelector("#toast") || {}).textContent.includes(t), w.undone, { timeout: 5000 }).catch(() => fail(label + ": no undone toast"));
 
   /* Preview as a friend: your side only, and a clear yes/no. */
   await page.selectOption("[data-fpv-preview]", "friends");
@@ -180,14 +177,23 @@ async function check(browser, port, lang) {
   await page.click('[data-fpv="bulk"]');
   await page.waitForSelector('[data-fpv="bulk-save"]', { timeout: 5000 }).catch(() => fail(label + ": bulk editor"));
   await page.click('.fpv-choice[data-value="me"]');
+  const before = putsOf(log).length;
   await page.click('[data-fpv="bulk-save"]');
-  await page.waitForTimeout(200);
-  const bulk = log.filter((l) => l.startsWith("PUT /v1/friends/privacy ")).pop();
+  const bulk = (await waitPuts(log, before + 1, label, "bulk")).pop();
   const b = JSON.parse(bulk.slice(bulk.indexOf("{")));
   if (b.handles.sort().join() !== "anna_demo,dee_demo" || b.rule.mode !== "hidden") fail(label + ": bulk sent " + bulk);
   if (errors.length) fail(label + ": page errors " + errors.slice(0, 2));
   await context.close();
   console.log("friend privacy ok " + label);
+}
+
+function putsOf(log) { return log.filter((l) => l.startsWith("PUT /v1/friends/privacy ")); }
+
+/* Wait until at least n PUTs reached the mock server. */
+async function waitPuts(log, n, label, what) {
+  for (let i = 0; i < 100 && putsOf(log).length < n; i++) await new Promise((r) => setTimeout(r, 50));
+  if (putsOf(log).length < n) fail(label + ": " + what + " was not saved");
+  return putsOf(log);
 }
 
 async function main() {
