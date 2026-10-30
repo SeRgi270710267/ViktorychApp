@@ -27,6 +27,7 @@
 import { blocksEither } from "./social.js";
 import { audienceIn, audienceOut, canSeeName, cleanRel, idForHandle, normalizeNameAudience, ownerLists, previewRel, relationTo } from "./usernames.js";
 import { friendFilterReady, friendOnSql, friendPrefs } from "./friends-pref.js";
+import { notLockedFriend } from "./locked-sql.js";
 
 export const FRIEND_PRIVACY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS friendship_privacy (public_id TEXT NOT NULL, friend_id TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'inherit', audience TEXT NOT NULL DEFAULT '{}', updated_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (public_id, friend_id))",
@@ -261,7 +262,7 @@ export async function hiddenWithoutBypass(ctx, ownerId, ids) {
 
 async function friendIdsOf(env, id, limit) {
   const on = await friendFilterReady(env);
-  const got = await env.DB.prepare("SELECT f.friend_id FROM account_friends f WHERE f.user_id = ?" + (on ? friendOnSql("f.friend_id") : "") + " ORDER BY f.created_at DESC LIMIT " + Number(limit || 5000)).bind(id).all();
+  const got = await env.DB.prepare("SELECT f.friend_id FROM account_friends f WHERE f.user_id = ?" + (on ? friendOnSql("f.friend_id") : "") + notLockedFriend("f.user_id", "f.friend_id") + " ORDER BY f.created_at DESC LIMIT " + Number(limit || 5000)).bind(id).all();
   return rowsOf(got).map((row) => String(row.friend_id));
 }
 
@@ -281,7 +282,7 @@ export async function visibleMutualIds(ctx, targetId) {
   if (!v || !targetId || v === targetId) return [];
   try {
     const on = await friendFilterReady(ctx.env);
-    const got = await ctx.env.DB.prepare("SELECT f1.friend_id FROM account_friends f1 JOIN account_friends f2 ON f1.friend_id = f2.friend_id WHERE f1.user_id = ? AND f2.user_id = ?" + (on ? friendOnSql("f1.friend_id") : "") + " LIMIT 2000").bind(v, targetId).all();
+    const got = await ctx.env.DB.prepare("SELECT f1.friend_id FROM account_friends f1 JOIN account_friends f2 ON f1.friend_id = f2.friend_id WHERE f1.user_id = ? AND f2.user_id = ?" + (on ? friendOnSql("f1.friend_id") : "") + notLockedFriend("f2.user_id", "f1.friend_id") + " LIMIT 2000").bind(v, targetId).all();
     const ids = rowsOf(got).map((row) => String(row.friend_id));
     return filterFriends(ctx, targetId, ids);
   } catch (err) { return []; }

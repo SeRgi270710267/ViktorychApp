@@ -4,7 +4,7 @@ const VERSION = "viktorych-a253-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T16:46:40Z-friendship-privacy
+// cache-bust: 2026-10-30T17:18:07Z-friendship-privacy
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -157,6 +157,7 @@ const SHELL_FILES = [
   "./notif-privacy.js",
   "./shared/birth-date.js",
   "./accounts.js",
+  "./locked-follows.js",
   "./passkeys.js",
   "./app-lock.js",
   "./privacy-screen.js",
@@ -172,6 +173,7 @@ const SHELL_FILES = [
   "./discord-key-helper.js",
   "./discord-key-helper.css",
   "./accounts.css",
+  "./locked-follows.css",
   "./landing.css",
   "./landing/og.jpg",
   "./landing/timeline.webp",
