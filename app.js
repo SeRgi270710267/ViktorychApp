@@ -17438,7 +17438,7 @@ const here = parseRoute();
       ${window.FeedRequests ? window.FeedRequests.settingsRowHtml() : ""}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
       ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
-      ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Theme, data usage, notifications, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
+      ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Privacy, look, alerts, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
     </div>${settingsSearchOut()}` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
@@ -29841,6 +29841,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       Object.assign(STATE.settings, patch);
       saveSettings();
       applyTheme();
+      render();
+    },
+    notifPrivacy: () => {
+      const NP = window.ViktorychNotifPrivacy;
+      return NP ? NP.normalize(STATE.settings && STATE.settings.notifPrivacy) : null;
+    },
+    /* Same effect as the switches in Settings > Notifications. */
+    setNotifPrivacy: (patch) => {
+      const NP = window.ViktorychNotifPrivacy;
+      if (!NP || !STATE.settings || !patch) return;
+      const next = Object.assign({}, NP.normalize(STATE.settings.notifPrivacy));
+      ["names", "preview"].forEach((key) => { if (typeof patch[key] === "boolean") next[key] = patch[key]; });
+      STATE.settings.notifPrivacy = NP.normalize(next);
+      if (!STATE.settings.notifPrivacy.names) NP.wipe();
+      saveSettings();
+      updateBadge(bellUnread());
       render();
     },
     skipWelcome: () => writeWelcome({ step: 2, done: true }),

@@ -134,4 +134,15 @@ for (const [name, ua] of Object.entries(UAS)) {
   assert.ok(sw.includes("\\.apk$") && sw.includes("/.well-known/"), "the service worker leaves the APK and assetlinks to the network");
 }
 
+{
+  // Optional TV home screen: the site links to the app's defaults screen only for TV app 1.4.0+,
+  // and the home activity ships disabled so nothing changes until the user picks it.
+  const tv = fs.readFileSync(path.join(ROOT, "tv.js"), "utf8");
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  assert.ok(/appVersion\(\) >= 5\)[\s\S]{0,600}intent:\/\/defaults#Intent;scheme=viktorychtv;/.test(tv), "the site opens the TV defaults screen only from a TV app that has it");
+  assert.ok(manifest.includes('android:scheme="viktorychtv"') && manifest.includes('android:host="defaults"'), "the TV app answers viktorychtv://defaults");
+  const home = /<activity[^>]*launcher\.HomeActivity[^>]*>/.exec(manifest);
+  assert.ok(home && home[0].includes('android:enabled="false"'), "the TV home screen ships turned off");
+}
+
 console.log("tv boot checks passed");

@@ -605,6 +605,19 @@
     accountTypeHtml: accountTypeHtml,
     privacyHtml: privacyHtml,
     act: act,
+    discoverable: function () { return mem.serverPrefs ? mem.serverPrefs.discoverable !== false : true; },
+    /* First-time setup sets the switch directly; resolves true once saved. */
+    setDiscoverable: function (on) {
+      var a = api();
+      if (!a || !a.call || !token()) return Promise.resolve(false);
+      var prev = mem.serverPrefs;
+      mem.serverPrefs = Object.assign({}, prev || { discoverable: true, tempOptIn: false, kind: "person" }, { discoverable: !!on });
+      return a.call("/v1/suggestions/prefs", { method: "PUT", token: token(), body: { discoverable: !!on } }).then(function (res) {
+        if (res && res.status === 200) return true;
+        mem.serverPrefs = prev;
+        return false;
+      }, function () { mem.serverPrefs = prev; return false; });
+    },
     refresh: refresh,
     prefs: prefs,
     _reset: function () { mem = { prefs: null, cache: null, loading: false, lastTry: 0, menu: "", followedNow: {}, rot: -1, serverPrefs: null, prefsLoading: false }; }

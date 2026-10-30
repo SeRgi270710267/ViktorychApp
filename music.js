@@ -465,6 +465,26 @@
 
   function live() { return active || docked; }
 
+  /* The small square in the corner row is the one music square on wide
+     screens: away from the music pages for every song, and on the music
+     pages too while a YouTube song plays, so YouTube never gets a second,
+     different box of its own floating over the side column. Phones keep
+     the bar with the card above it. */
+  function wideScreen() { return !!(root.matchMedia && root.matchMedia("(min-width: 500px)").matches); }
+  function squared() { return docked || (active && !!ytSong() && wideScreen()); }
+  var squaredOn = false;
+  function syncSquare() {
+    if (typeof document === "undefined") return;
+    var on = squared();
+    if (on === squaredOn && document.documentElement.classList.contains("music-mini") === on) return;
+    squaredOn = on;
+    document.documentElement.classList.toggle("music-mini", on);
+    var dock = document.getElementById("mu-dock");
+    if (dock && on) dock.setAttribute("data-corner", readCorner());
+    placeDock();
+    root.setTimeout(fitMarquee, 0);
+  }
+
   function hasQueue() { return play.queue.length > 0 && play.index >= 0; }
 
   function saveNow(force) {
@@ -494,14 +514,10 @@
   function setDocked(on) {
     docked = !!on;
     if (typeof document === "undefined") return;
-    document.documentElement.classList.toggle("music-mini", docked);
     var dock = document.getElementById("mu-dock");
     if (dock) dock.hidden = !live();
-    if (dock && docked) {
-      dock.setAttribute("data-corner", readCorner());
-      root.setTimeout(fitMarquee, 0);
-    }
-    placeDock();
+    squaredOn = !squared();
+    syncSquare();
     placeYt();
   }
 
@@ -514,8 +530,7 @@
     var dock = document.getElementById("mu-dock");
     if (!dock) return;
     var row = document.getElementById("dock-root");
-    var wide = !!(root.matchMedia && root.matchMedia("(min-width: 500px)").matches);
-    if (docked && row && wide) {
+    if (squared() && row && wideScreen()) {
       if (dock.parentNode !== row) row.appendChild(dock);
       dock.classList.add("in-row");
     } else {
@@ -536,7 +551,7 @@
       new root.MutationObserver(function () {
         var dock = document.getElementById("mu-dock");
         var row = document.getElementById("dock-root");
-        if (docked && dock && row && dock.parentNode !== row && !dock.classList.contains("in-row")) again();
+        if (squared() && dock && row && dock.parentNode !== row && !dock.classList.contains("in-row")) again();
       }).observe(document.body, { childList: true });
     }
   }
@@ -555,7 +570,7 @@
       if (!el || !el.parentNode) return;
       el.classList.remove("mu-marq");
       el.style.removeProperty("--mq");
-      if (!docked) return;
+      if (!squared()) return;
       var room = el.parentNode.clientWidth;
       var over = el.scrollWidth - room;
       if (room > 0 && over > 2) {
@@ -573,7 +588,7 @@
     var swallow = false;
     var fine = function () { return !!(root.matchMedia && root.matchMedia("(pointer: fine)").matches); };
     dock.addEventListener("pointerdown", function (event) {
-      if (!docked || dock.classList.contains("in-row") || !fine() || event.button !== 0) return;
+      if (!squared() || dock.classList.contains("in-row") || !fine() || event.button !== 0) return;
       var hit = event.target && event.target.closest ? event.target.closest("button, input") : null;
       if (hit && !hit.classList.contains("mu-id")) return;
       var box = dock.getBoundingClientRect();
@@ -1829,8 +1844,8 @@
      YouTube's terms want the player visible at 200x200 or larger with
      nothing on top. The iframe never moves in the page (moving it reloads
      it); one fixed box is laid over a target instead: the cover in Now
-     Playing, the 200x200 slot of the mini player, or a 200x200 card above
-     the bar on the music pages. */
+     Playing, the 200x200 slot of the music square (wide screens, every
+     page), or on phones a 200x200 card above the bar on the music pages. */
   function ytSong() {
     var song = live() ? currentSong() : null;
     return song && (song.kind === "youtube" || classifySource(song.source).kind === "youtube") ? song : null;
@@ -1838,16 +1853,17 @@
   function ytWhere() {
     if (!ytSong()) return "";
     if (ui.now) return "full";
-    return docked ? "mini" : "card";
+    return squared() ? "mini" : "card";
   }
   function placeYt() {
     if (typeof document === "undefined") return;
     var host = document.getElementById("mu-yt-host");
     if (!host) return;
+    syncSquare();
     var where = ytWhere();
     var dock = document.getElementById("mu-dock");
     var html = document.documentElement;
-    var mini = !!(where && docked);
+    var mini = !!(where && squared());
     if (dock && dock.classList.contains("is-yt") !== mini) {
       dock.classList.toggle("is-yt", mini);
       root.setTimeout(fitMarquee, 0);
