@@ -1,4 +1,5 @@
-/* Settings > Usernames on phone and desktop in every language: names list,
+/* Usernames on phone and desktop in every language, reached from the
+   Settings > Usernames shortcut into Edit profile's subpage: names list,
    audience editor, Preview as, name for friends, nicknames and mention
    rules talk to the API; pills stay thin, nothing overflows; the composer
    shows a neutral hint for someone you can't mention. Placeholders only. */
@@ -104,19 +105,24 @@ async function check(browser, port, size, lang) {
   await page.goto("http://127.0.0.1:" + port + "/index.html#/settings/privacy", { waitUntil: "domcontentloaded" });
   await page.waitForSelector('a[href="#/settings/usernames"]', { timeout: 20000 }).catch(() => fail(label + ": no Usernames row in Privacy"));
   await page.click('a[href="#/settings/usernames"]');
-  await page.waitForSelector(".un-card", { timeout: 15000 }).catch(() => fail(label + ": names did not load"));
+  /* Settings > Usernames is a shortcut: the names live in Edit profile. */
+  await page.waitForSelector('.un-settings [data-acct="edit-usernames"]', { timeout: 15000 }).catch(() => fail(label + ": no shortcut to Edit profile"));
+  const settingsHeading = await page.textContent(".un-settings:not(.un-in-edit) h2");
+  if (await page.$(".un-settings:not(.un-in-edit) .un-card")) fail(label + ": names listed twice in Settings");
+  await page.click('[data-acct="edit-usernames"]');
+  await page.waitForSelector(".ep .un-in-edit .un-card", { timeout: 15000 }).catch(() => fail(label + ": names did not load in Edit profile"));
   const layout = await page.evaluate(() => {
     const scroller = document.scrollingElement;
     const pills = Array.from(document.querySelectorAll(".un-btn, .un-badge")).filter((el) => el.offsetParent).map((el) => el.getBoundingClientRect().height);
     const over = Array.from(document.querySelectorAll(".un-settings *")).filter((el) => { const r = el.getBoundingClientRect(); return r.width && r.right > window.innerWidth + 1; }).map((el) => el.className);
-    const heading = document.querySelector(".un-settings h2");
+    const heading = document.querySelector(".ep .acct-edit-head h1");
     return { names: Array.from(document.querySelectorAll(".un-at")).map((el) => el.textContent), pills, over, wide: scroller.scrollWidth > window.innerWidth + 1, heading: heading ? heading.textContent : "" };
   });
   if (layout.names.join(",") !== "@user_a,@user_a_close_friends_long") fail(label + ": names " + layout.names);
   if (layout.wide || layout.over.length) fail(label + ": overflow " + layout.over.slice(0, 3));
   if (layout.pills.some((h) => h > 36)) fail(label + ": pill grew " + layout.pills);
   const want = { en: "Usernames", es: "Nombres de usuario", ru: "Имена пользователя" }[lang];
-  if (layout.heading !== want) fail(label + ": heading " + layout.heading);
+  if (layout.heading !== want || settingsHeading !== want) fail(label + ": heading " + layout.heading + " / " + settingsHeading);
 
   await page.fill("[data-un-new]", "taken_one");
   await page.click('[data-un="add"]');
@@ -144,6 +150,10 @@ async function check(browser, port, size, lang) {
   await page.waitForTimeout(150);
   const put = log.find((line) => line.indexOf("PUT /v1/usernames/mentions") === 0);
   if (!put || put.indexOf('"followers":"replies"') < 0 || put.indexOf('"block":["user_z"]') < 0) fail(label + ": mention rules " + put);
+
+  /* Back from a subpage opened by the Settings shortcut closes Edit profile. */
+  await page.click('.ep [data-acct="edit-back"]');
+  await page.waitForFunction(() => !document.querySelector(".ep"), null, { timeout: 5000 }).catch(() => fail(label + ": back did not close Edit profile"));
 
   // Composer: someone you can't mention gets a neutral hint, not a row.
   await page.goto("http://127.0.0.1:" + port + "/index.html#/compose/post", { waitUntil: "domcontentloaded" });
