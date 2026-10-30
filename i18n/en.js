@@ -4723,7 +4723,7 @@ SI18n.addPack("en", {
   "reply.others.many": "{n} others",
   "reply.others.other": "{n} others",
   "Run setup again": "Run setup again",
-  "Theme, data usage, notifications, install and follows.": "Theme, data usage, notifications, install and follows.",
+  "Privacy, look, alerts, install and follows.": "Privacy, look, alerts, install and follows.",
   "Theme, save data and notifications keep their defaults. Change them in Settings.": "Theme, save data and notifications keep their defaults. Change them in Settings.",
   "Settings, drafts and sign-in": "Settings, drafts and sign-in",
   "Saved screens": "Saved screens",
