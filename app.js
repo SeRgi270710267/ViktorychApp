@@ -1311,7 +1311,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", saveData: false, videoHd: true, imageLoad: "always", imageSize: "auto", linkPreviews: "full", preload: "idle", syncEvery: "normal", backgroundLive: true, updateDownload: "always", brandLogo: { mode: "default", text: "" }, busyPrefs: { at: 0, modes: {}, mutes: {}, server: true }, avatarShape: "round" });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", saveData: false, videoHd: true, imageLoad: "always", imageSize: "auto", linkPreviews: "full", preload: "idle", syncEvery: "normal", backgroundLive: true, updateDownload: "always", brandLogo: { mode: "default", text: "" }, busyPrefs: { at: 0, modes: {}, mutes: {}, server: true }, avatarShape: "round", blocks: { at: 0, accounts: [], posts: [], sources: [], types: {}, showHidden: false } });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1343,6 +1343,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
       parsed.mutedAccounts = Array.isArray(parsed.mutedAccounts) ? parsed.mutedAccounts : [];
       parsed.repostOff = Array.isArray(parsed.repostOff) ? parsed.repostOff : [];
+      parsed.blocks = cleanBlocks(parsed.blocks);
       parsed.groups = Array.isArray(parsed.groups) ? cleanGroups(parsed.groups) : [];
       parsed.groupsOwn = parsed.groupsOwn === true;
       parsed.subsGroup = typeof parsed.subsGroup === "string" ? parsed.subsGroup : "";
@@ -1429,6 +1430,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       STATE.settings.devicePerf = window.ViktorychDevice.persist(STATE.settings.devicePerf);
     }
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
+    blocksChanged();
     syncFeatureFlags();
     syncWorkerState();
     applyPrivacyProtections();
@@ -5981,6 +5983,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(handle || "").replace(/^@/, "");
   }
 
+  /* A quote the server dropped for this device's blocks: a stub, no fetch. */
+  function quoteBlockedStub(post) {
+    return post && !post.quoted && post.quoteBlocked ? `<div class="quote quote-gone">${esc(tr("This post is from an account you blocked."))}</div>` : "";
+  }
   /* A referenced (quoted) item normally arrives embedded and fully normalized
      (docs/POST-SCHEMA.md). When the sync could only record its ref
      (embedded === false), fetch it once on demand and re-render. */
@@ -6002,6 +6008,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function quoteCard(quoted) {
     if (!quoted) return "";
+    if (quoteHidden(quoted) && !(STATE.revealedHidden && STATE.revealedHidden["q:" + String(quoted.statusId || quoted.id || "")])) {
+      return `<div class="quote quote-gone">${esc(tr("This post is from an account you blocked."))} <button type="button" class="linkish" data-act="reveal-hidden" data-id="${esc("q:" + String(quoted.statusId || quoted.id || ""))}">${esc(tr("Show"))}</button></div>`;
+    }
     fillReferenced(quoted);
     const platform = quoted.platform || "x";
     const asQuoted = asPost(quoted, platform);
@@ -6132,11 +6141,145 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  /* Muted & blocked. Rules sit in STATE.settings (mutedWords, mutedAccounts,
+     repostOff, and blocks for single posts and comments, whole sources, and
+     content types per account). They are hashed into one small set by
+     shared/blocklist.js. The same hashes go to the Worker in X-Block so feed
+     pages and comment lists arrive without blocked items; nothing raw leaves
+     the device. Each post's answer is cached until the rules change, so the
+     check is cheap enough to run before any card, avatar or media exists. */
+  function cleanBlocks(raw) {
+    const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const list = (value, max) => (Array.isArray(value) ? value : []).map((item) => String(item || "").trim()).filter((item) => item && item.length <= 200).filter((item, i, all) => all.indexOf(item) === i).slice(-max);
+    const types = {};
+    const rawTypes = src.types && typeof src.types === "object" && !Array.isArray(src.types) ? src.types : {};
+    Object.keys(rawTypes).slice(0, 300).forEach((key) => {
+      const kinds = (Array.isArray(rawTypes[key]) ? rawTypes[key] : []).filter((kind) => kind === "replies" || kind === "videos" || kind === "reposts");
+      if (key && key.length <= 200 && kinds.length) types[key] = kinds.filter((kind, i, all) => all.indexOf(kind) === i);
+    });
+    return { at: Number(src.at) || 0, accounts: list(src.accounts, 500), posts: list(src.posts, 2000), sources: list(src.sources, 300), types: types, showHidden: src.showHidden === true };
+  }
+
+  let blockVersion = 1;
+  let blockHashes = null;
+  let blockHashSet = null;
+  let blockReasons = new WeakMap();
+  const BLOCK_HEADER_KEY = "viktorychapp-block-h";
+  function blocksApi() { return window.ViktorychBlocks || null; }
+  function blockSettings() {
+    if (!STATE.settings) return null;
+    if (!STATE.settings.blocks) STATE.settings.blocks = cleanBlocks(null);
+    return STATE.settings.blocks;
+  }
+  function showHiddenOn() {
+    const b = STATE.settings && STATE.settings.blocks;
+    // Save data keeps hidden posts out entirely, even with Show hidden on.
+    if (STATE.settings && STATE.settings.saveData === true) return false;
+    return !!(b && b.showHidden);
+  }
+  let blockFor = null;
+  function blockSig(src) {
+    const v = src || {};
+    return JSON.stringify([v.mutedWords || [], v.mutedAccounts || [], v.repostOff || [], v.blocks || null]);
+  }
+  // A settings object loaded again (sign-in sync, import) brings its own rules.
+  function blockFresh() {
+    if (blockFor === STATE.settings) return;
+    blockFor = STATE.settings;
+    blockHashSet = null;
+    blockHashes = null;
+    blockReasons = new WeakMap();
+  }
+  function currentBlockSet() {
+    blockFresh();
+    if (blockHashSet) return blockHashSet;
+    const api = blocksApi();
+    if (!api || !STATE.settings) return null;
+    blockHashes = api.rulesFromSettings(STATE.settings);
+    blockHashSet = new Set(blockHashes);
+    // Keep the stored header in step, so the next boot's first request carries it.
+    const value = showHiddenOn() ? "" : api.headerValue(blockHashes);
+    if (window.__viktorychBlockHeader !== value) {
+      window.__viktorychBlockHeader = value;
+      try {
+        if (value) localStorage.setItem(BLOCK_HEADER_KEY, value);
+        else localStorage.removeItem(BLOCK_HEADER_KEY);
+      } catch (err) { /* storage blocked: the device still filters */ }
+    }
+    return blockHashSet;
+  }
+  /* The header the boot script and every API read send. With Show hidden on,
+     the server keeps everything so the hidden rows can show as placeholders. */
+  function blockHeader() {
+    const api = blocksApi();
+    if (!api || showHiddenOn()) return "";
+    currentBlockSet();
+    return api.headerValue(blockHashes || []);
+  }
+  function publishBlockHeader() {
+    const value = blockHeader();
+    try {
+      if (value) localStorage.setItem(BLOCK_HEADER_KEY, value);
+      else localStorage.removeItem(BLOCK_HEADER_KEY);
+    } catch (err) { /* storage blocked: the device still filters */ }
+    window.__viktorychBlockHeader = value;
+  }
+  function blocksChanged() {
+    blockVersion += 1;
+    blockHashSet = null;
+    blockHashes = null;
+    blockReasons = new WeakMap();
+    publishBlockHeader();
+  }
+  if (typeof window.addEventListener === "function") window.addEventListener("viktorych-blocks", () => { blocksChanged(); if (STATE.settings) render({ y: window.scrollY }); });
+
+  /* Why this device hides a post or comment: "account", "post", "source",
+     "type", "word", or "". */
+  function blockReason(post) {
+    if (!post || typeof post !== "object") return "";
+    blockFresh();
+    const cached = blockReasons.get(post);
+    if (cached !== undefined) return cached;
+    let why = "";
+    if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) why = "account";
+    if (!why) {
+      const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
+      if (blocks && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) why = "account";
+    }
+    if (!why) {
+      const set = currentBlockSet();
+      const api = blocksApi();
+      if (set && set.size && api) why = api.reason(set, post);
+    }
+    if (!why && wordMuted([post.text, post.title].filter(Boolean).join("\n"))) why = "word";
+    if (!why && repostsOff(post)) why = "type";
+    blockReasons.set(post, why);
+    return why;
+  }
+
+  function quoteHidden(quoted) {
+    if (!quoted) return false;
+    const set = currentBlockSet();
+    const api = blocksApi();
+    if (set && set.size && api && api.quoteBlocked(set, quoted)) return true;
+    if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], quoted.handle, quoted.platform || "x", quoted.feedId)) return true;
+    return wordMuted(quoted.text);
+  }
+
+  /* The comments hook (window.ViktorychBlocklist.hides): true when this
+     device's blocks hide a post or reply, so the comments client drops it
+     before its card, avatar or media is built. Show hidden keeps it. */
+  window.ViktorychBlocklist = {
+    hides(post) {
+      if (!post || !STATE.settings) return false;
+      return !!blockReason(post) && !showHiddenOn();
+    },
+    reason(post) { return post && STATE.settings ? blockReason(post) || "" : ""; }
+  };
   function hiddenPost(post) {
     if (!post) return false;
     if (catalogRowHidden(post)) return true;
     if (window.FeedsPeople && window.FeedsPeople.hidden && window.FeedsPeople.hidden(post)) return true;
-    if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
     const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
     if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
     // Hook for the shared blocklist (mute/block data): checked before a reply
@@ -6145,9 +6288,111 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (list && typeof list.hides === "function") {
       try { if (list.hides(post)) return true; } catch (err) { /* a broken list must not hide the thread */ }
     }
-    if (wordMuted(post.text)) return true;
-    return repostsOff(post);
+    if (!blockReason(post)) return false;
+    // Show hidden keeps the row as a placeholder that loads nothing.
+    return !showHiddenOn();
   }
+
+  /* A row in place of a hidden post or comment. No avatar, media, preview or
+     reaction request is made until the reader taps Show. */
+  function hiddenRow(post, mode) {
+    const id = String(post.id || post.statusId || "");
+    const label = mode === "reply" ? tr("Hidden comment") : tr("Hidden post");
+    return `<article class="post post-hidden" data-post="${esc(id)}"><div class="post-row"><div class="post-main"><p class="phandle">${esc(label)} · ${esc(blockReasonLabel(blockReason(post)))}</p><button type="button" class="outline" data-act="reveal-hidden" data-id="${esc(id)}">${esc(tr("Show"))}</button></div></div></article>`;
+  }
+  function blockReasonLabel(why) {
+    if (why === "post") return tr("You hid this");
+    if (why === "source") return tr("From a source you blocked");
+    if (why === "type") return tr("A content type you turned off");
+    if (why === "word") return tr("Contains a muted word");
+    return tr("From an account you blocked");
+  }
+
+  /* The keys a menu writes. Accounts are stored as platform:handle, or the
+     feed id when there is one; never sent anywhere raw. */
+  function blockAccountKey(post) {
+    if (!post) return "";
+    if (post.authorId && post.appPost) return "app:" + String(post.authorId);
+    const handle = String(post.handle || "").replace(/^@/, "").toLowerCase();
+    if (handle) return (post.platform || "x") + ":" + handle;
+    return post.feedId ? String(post.feedId) : "";
+  }
+  function blockPostKey(post) {
+    if (!post) return "";
+    const status = String(post.statusId || post.id || "");
+    return status ? (post.platform || "x").toLowerCase() + ":" + status.toLowerCase() : "";
+  }
+  function blockSourceKey(post) {
+    const api = blocksApi();
+    if (!api || !post) return "";
+    const keys = api.sourceKeys(post);
+    // The most specific source: a community, subreddit or channel before the feed.
+    return keys.find((key) => key.indexOf("feed:") !== 0) || keys[0] || "";
+  }
+  function blockSourceLabel(key) {
+    const text = String(key || "");
+    const at = text.indexOf(":");
+    const kind = text.slice(0, at);
+    const name = text.slice(at + 1);
+    if (kind === "feed") {
+      const feed = feedById(name) || feeds().find((item) => String(item.id || "").toLowerCase() === name);
+      return feed ? (feed.name || feed.handle || name) : name;
+    }
+    if (kind === "reddit") return "r/" + name;
+    if (kind === "community") return communityName(name);
+    return name;
+  }
+  function addBlock(kind, value) {
+    const b = blockSettings();
+    if (!b || !value) return false;
+    const list = b[kind] || (b[kind] = []);
+    if (list.indexOf(value) >= 0) return false;
+    list.push(value);
+    b.at = Date.now();
+    return true;
+  }
+  function removeBlock(kind, value) {
+    const b = blockSettings();
+    if (!b) return;
+    b[kind] = (b[kind] || []).filter((item) => item !== value);
+    b.at = Date.now();
+  }
+  function toggleBlockType(account, kind) {
+    const b = blockSettings();
+    if (!b || !account) return false;
+    const now = (b.types[account] || []).slice();
+    const at = now.indexOf(kind);
+    if (at >= 0) now.splice(at, 1); else now.push(kind);
+    if (now.length) b.types[account] = now; else delete b.types[account];
+    b.at = Date.now();
+    return at < 0;
+  }
+  function blockTypeOn(account, kind) {
+    const b = STATE.settings && STATE.settings.blocks;
+    return !!(b && b.types && (b.types[account] || []).indexOf(kind) >= 0);
+  }
+
+  /* Another tab changed the rules: apply them here at once. */
+  if (typeof window.addEventListener === "function") window.addEventListener("storage", (event) => {
+    if (!event || !STATE.settings) return;
+    if (event.key !== BLOCK_HEADER_KEY && event.key !== storeName("settings-v1")) return;
+    if (event.key === BLOCK_HEADER_KEY && event.newValue === (window.__viktorychBlockHeader || null)) return;
+    let next = null;
+    try { next = JSON.parse(readStored(localStorage, "settings-v1") || "null"); } catch (err) { next = null; }
+    if (!next) return;
+    next.blocks = cleanBlocks(next.blocks);
+    if (blockSig(next) === blockSig(STATE.settings)) return;
+    STATE.settings.mutedWords = Array.isArray(next.mutedWords) ? next.mutedWords : [];
+    STATE.settings.mutedAccounts = Array.isArray(next.mutedAccounts) ? next.mutedAccounts : [];
+    STATE.settings.repostOff = Array.isArray(next.repostOff) ? next.repostOff : [];
+    STATE.settings.blocks = next.blocks;
+    blockVersion += 1;
+    blockHashSet = null;
+    blockHashes = null;
+    blockReasons = new WeakMap();
+    window.__viktorychBlockHeader = blockHeader();
+    render({ y: window.scrollY });
+  });
 
   function sameThread(parent, child) {
     if (!parent || !child) return false;
@@ -8800,6 +9045,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       + `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`
       + `<button type="button" class="odai-btn" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button>`
       + (post.appPost ? appMenuItems(post) : (post.url ? `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""))
+      + blockMenuItems(post, "status")
       + (fresh ? `<div class="menu-note reply-fresh">${esc(fresh)}</div>` : "");
     return `<span class="status-menu-wrap">${btn}<div class="menu status-menu" data-act="stop" role="menu">${items}</div></span>`;
   }
@@ -9005,6 +9251,106 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return quote + `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>` + muteCommunity;
   }
 
+  /* "..." on any post or comment: hide it, block its account, or open the
+     sheet with the source and per-account content types. */
+  function blockMenuItems(post, mode) {
+    const mine = signedAccount();
+    if (post.appPost && mine && mine.publicId && mine.publicId === post.authorId) return "";
+    const acct = blockAccountKey(post);
+    const id = esc(post.id || "");
+    const handle = String(post.handle || "").replace(/^@/, "");
+    const one = mode === "reply" ? tr("Hide this comment") : tr("Hide this post");
+    let out = `<button type="button" data-act="block-post" data-id="${id}">${esc(one)}</button>`;
+    if (acct) out += `<button type="button" data-act="block-account" data-id="${id}">${esc(handle ? tr("Block @{handle}", { handle: handle }) : tr("Block this account"))}</button>`;
+    out += `<button type="button" data-act="block-more" data-id="${id}">${esc(tr("More block options…"))}</button>`;
+    return out;
+  }
+
+  function blockKeyLabel(key) {
+    const text = String(key || "");
+    if (text.indexOf("app:") === 0) {
+      const found = (publicPosts || []).find((item) => item && item.authorId === text.slice(4));
+      return found && found.handle ? "@" + found.handle : tr("Account on this app");
+    }
+    const at = text.indexOf(":");
+    if (at < 0) {
+      const feed = feedById(text);
+      return feed ? (feed.name || feed.handle || text) : text;
+    }
+    return "@" + text.slice(at + 1) + " · " + (PLATFORM[text.slice(0, at)] || text.slice(0, at));
+  }
+
+  // Settings > Muted & blocked: everything lives on this device and syncs privately to the account.
+  function mutedSettingsHtml() {
+    const b = cleanBlocks(STATE.settings.blocks);
+    const row = (label, kind, value) => `<div class="mute-row"><span>${esc(label)}</span><button type="button" data-act="unblock" data-kind="${esc(kind)}" data-value="${esc(value)}">${esc(tr("Remove"))}</button></div>`;
+    const kindName = { replies: tr("Replies"), videos: tr("Videos"), reposts: tr("Reposts") };
+    const none = `<p class="phandle">${esc(tr("Nothing here yet."))}</p>`;
+    const accounts = b.accounts.map((key) => row(blockKeyLabel(key), "accounts", key)).join("");
+    const postsHtml = b.posts.slice().reverse().map((key) => {
+      const at = key.indexOf(":");
+      const plat = at > 0 ? (PLATFORM[key.slice(0, at)] || key.slice(0, at)) : "";
+      return row(tr("Post or comment") + (plat ? " · " + plat : ""), "posts", key);
+    }).join("");
+    const sources = b.sources.map((key) => row(blockSourceLabel(key), "sources", key)).join("");
+    const types = Object.keys(b.types).map((key) => row(blockKeyLabel(key) + " — " + b.types[key].map((kind) => kindName[kind] || kind).join(", "), "types", key)).join("");
+    const show = b.showHidden;
+    return `<p class="phandle">${esc(signedAccount() ? tr("Your rules are stored on this device and synced privately to your account. They are never shared.") : tr("Your rules stay on this device."))}</p>
+      <p class="phandle">${esc(tr("Blocked items are dropped before anything loads: no avatars, images, previews or reactions, and blocked sources aren't fetched at all."))}</p>
+      <button class="tab-switch${show ? " on" : ""}" type="button" role="switch" aria-checked="${show ? "true" : "false"}" data-act="show-hidden-toggle"><span>${esc(tr("Show hidden"))}</span><i></i></button>
+      <p class="phandle set-desc">${esc(tr("Show a small placeholder where something was hidden. Off saves the most data."))}</p>
+      <h2>${esc(tr("Muted words"))}</h2>
+      <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
+      <h2>${esc(tr("Muted accounts"))}</h2>
+      <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">${esc(tr("Remove"))}</button></div>`).join("")}
+      <h2>${esc(tr("Blocked accounts"))}</h2>
+      ${accounts || none}
+      <h2>${esc(tr("Hidden posts and comments"))}</h2>
+      ${postsHtml || none}
+      <h2>${esc(tr("Blocked sources and communities"))}</h2>
+      <form class="mute-form" data-mute="source"><label class="search"><input id="block-source" placeholder="${esc(tr("r/name or community"))}" aria-label="${esc(tr("Block a source"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      ${sources || none}
+      <h2>${esc(tr("Content types"))}</h2>
+      ${types || none}`;
+  }
+
+  function blockTarget(id) {
+    const key = String(id || "");
+    if (!key) return null;
+    const found = findAnyPost(key);
+    if (found) return found;
+    const pub = (publicPosts || []).find((item) => item && (item.id === key || postKey(item) === key));
+    return pub || null;
+  }
+
+  function blockSheet() {
+    const post = STATE.blockSheetPost;
+    if (!post) return "";
+    const acct = blockAccountKey(post);
+    const handle = String(post.handle || "").replace(/^@/, "");
+    const who = handle ? "@" + handle : tr("this account");
+    const source = blockSourceKey(post);
+    const rows = [];
+    if (STATE.blockSheetFull) {
+      rows.push(profileSheetRow("block-post", post.commentRow ? tr("Hide this comment") : tr("Hide this post"), `data-sheet="1"`));
+      if (acct) rows.push(profileSheetRow("block-account", handle ? tr("Block @{handle}", { handle: handle }) : tr("Block this account"), `data-sheet="1"`));
+    }
+    const sw = (act, label, on, extra) => `<button class="bell-choice" type="button" role="menuitemcheckbox" aria-checked="${on ? "true" : "false"}" data-act="${act}" ${extra || ""}><span class="bell-choice-label">${esc(label)}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
+    if (source) {
+      const on = ((STATE.settings.blocks || {}).sources || []).indexOf(source) >= 0;
+      rows.push(sw("block-source", tr("Block everything from {source}", { source: blockSourceLabel(source) }), on, `data-key="${esc(source)}"`));
+    }
+    if (acct) {
+      rows.push(sw("block-type", tr("Hide replies from {who}", { who: who }), blockTypeOn(acct, "replies"), `data-kind="replies"`));
+      rows.push(sw("block-type", tr("Hide videos from {who}", { who: who }), blockTypeOn(acct, "videos"), `data-kind="videos"`));
+      rows.push(sw("block-type", tr("Hide reposts from {who}", { who: who }), blockTypeOn(acct, "reposts"), `data-kind="reposts"`));
+    }
+    rows.push(`<a class="bell-choice" href="#/settings/muted" data-act="close-block-sheet"><span class="bell-choice-label">${esc(tr("Muted & blocked"))}</span></a>`);
+    return `<div class="bell-sheet" data-act="close-block-sheet"><div class="menu bell-menu profile-menu" data-act="stop" role="menu" aria-label="${esc(tr("Block options"))}"><div class="bell-grab" aria-hidden="true"></div>${rows.join("")}</div></div>`;
+  }
+
   function card(post, mode, opts) {
     if (post && post.appPost && post.spamHidden) {
       return `<article class="post" data-post="${esc(post.id)}"><div class="post-row"><div class="post-main"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></div></div></article>`;
@@ -9013,6 +9359,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
+    if (post && !(STATE.revealedHidden && STATE.revealedHidden[String(post.id || post.statusId || "")]) && blockReason(post)) {
+      // Nothing of a blocked item is drawn, so its avatar and media never load.
+      if (showHiddenOn() || mode === "status" || mode === "author") return hiddenRow(post, mode);
+      return "";
+    }
     if (!opts.inThread && mode !== "reply" && mode !== "status") {
       const parent = threadParent(post);
       if (parent) return threadPair(parent, post, mode, opts);
@@ -9039,7 +9390,8 @@ const here = parseRoute();
     const busyKey = post.appPost ? "" : busyKeyOf(post);
     const busyItem = busyKey ? `<button data-act="busy-menu" data-key="${esc(busyKey)}" data-name="${esc(post.author || post.name || "")}" data-handle="${esc(post.handle || "")}" data-platform="${esc(post.platform || "x")}">${tr("Posting volume")}</button>` : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
+    const blockItems = STATE.menu === post.id ? blockMenuItems(post, mode) : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -9088,7 +9440,7 @@ const here = parseRoute();
           ${mediaHtml(post.media, eager, post)}
           ${post.appPost ? (post.appExtra || "") : ""}
           ${postCards(post)}
-          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
+          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
           ${giftChip(post)}
           ${threadLink}
           ${cnSlot(post)}
@@ -9683,7 +10035,7 @@ const here = parseRoute();
   }
 
   function followSuggestions() {
-    const list = feeds().filter((f) => f.id);
+    const list = feeds().filter((f) => f.id && !feedBlocked(f));
     if (window.FeedsPeople && window.FeedsPeople.suggestions) return window.FeedsPeople.suggestions(list, isFollowed);
     return list.filter((f) => !isFollowed(f.id)).sort((a, b) => (b.configured ? 1 : 0) - (a.configured ? 1 : 0));
   }
@@ -13283,7 +13635,7 @@ const here = parseRoute();
         ${mediaHtml(post.media, false, post)}
         ${post.appPost ? (post.appExtra || "") : ""}
         ${postCards(post)}
-        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
         ${statusMeta(post)}
         ${actionBar(post, true)}`;
     const face = authorFace(post);
@@ -15570,6 +15922,7 @@ const here = parseRoute();
       else if (section === "data") key = tr("Data usage");
       else if (section === "notifications") key = tr("Notifications");
       else if (section === "privacy") key = tr("Privacy and safety");
+      else if (section === "muted") key = tr("Muted & blocked");
       else if (section === "usernames") key = tr("Usernames");
       else if (section === "nostr") key = tr("Nostr");
       else if (section === "live-translate") key = tr("Live Translate");
@@ -16086,6 +16439,7 @@ const here = parseRoute();
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
       return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
     }
+    if (section === "muted") return settingsHead(tr("Muted & blocked"), "#/settings/privacy") + `<div class="set-block">${mutedSettingsHtml()}</div>`;
     if (section === "privacy") {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       const privSection = acct ? `<h2>${esc(tr("Private followers and following"))}</h2>
@@ -16122,11 +16476,7 @@ const here = parseRoute();
         ${optToggle("privacyAntiFingerprint", tr("Fingerprint resistance"), tr("Reduces browser fingerprinting by disabling battery status and sensor enumeration APIs."), true)}
 
         <h2>${esc(tr("Mute and block"))}</h2>
-        <p class="phandle">${esc(signedAccount() ? tr("Muted words, muted accounts, and reposts you turn off follow your account and are stored encrypted.") : tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
-        <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
-        ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
-        <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
-        ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">${esc(tr("Remove"))}</button></div>`).join("")}
+        <div class="set-list">${settingsRow("#/settings/muted", tr("Muted & blocked"), tr("Muted words, blocked accounts, posts, comments and sources."))}</div>
 
         <h2>${esc(tr("Local data shredder"))}</h2>
         <p class="phandle">${esc(tr("Immediately purges all stored accounts, history, bookmarks, and cached files from this device."))}</p>
@@ -16214,6 +16564,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
+      ${settingsRow("#/settings/muted", tr("Muted & blocked"))}
       ${accountToken() ? settingsRow("#/communitynotes", tr("Community Notes"), tr("Rate and write notes that add context to posts.")) : ""}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
@@ -16913,7 +17264,7 @@ if (STATE.histClear) {
     const giftsWide = route.name === "store";
     const mode = (wide || giftsWide ? " wide" : "") + (giftsWide ? " gifts-mode" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${busySheet()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${busySheet()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}${blockSheet()}`;
   }
 
   function toggleReaction(act, id) {
@@ -18304,7 +18655,7 @@ if (STATE.histClear) {
         ${reply}
         ${textBlock(shown, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
-        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
       </div>
     </article>`;
   }
@@ -19652,6 +20003,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     toast._t = setTimeout(() => { el.hidden = true; }, 1800);
   }
 
+  function toastUndo(message, kind, value) {
+    const el = document.getElementById("toast");
+    if (!el) return;
+    el.hidden = false;
+    el.innerHTML = `${esc(message)} <button type="button" class="toast-link" data-act="block-undo" data-kind="${esc(kind)}" data-value="${esc(value)}">${esc(tr("Undo"))}</button>`;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, 4000);
+  }
   /* A toast with one action (Undo, Add, Merge) and an optional Not now. */
   function toastAction(message, label, run, later) {
     const el = document.getElementById("toast");
@@ -20683,6 +21042,83 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       const route = parseRoute();
       if (route.name === "home" && route.tab === "list:" + el.dataset.id) goHash(homeHash("following"));
       else render();
+      return;
+    }
+    if (act === "block-post" || act === "block-account" || act === "block-more") {
+      const post = el.dataset.sheet ? STATE.blockSheetPost : blockTarget(el.dataset.id);
+      STATE.menu = null;
+      if (!post) { render(); return; }
+      if (act === "block-more") {
+        STATE.blockSheetPost = post;
+        STATE.blockSheetFull = false;
+        render();
+        return;
+      }
+      STATE.blockSheetPost = null;
+      const key = act === "block-post" ? blockPostKey(post) : blockAccountKey(post);
+      if (!key) { render(); return; }
+      addBlock(act === "block-post" ? "posts" : "accounts", key);
+      saveSettings();
+      if (act === "block-account" && post.appPost && post.authorId && signedAccount()) {
+        // A ViktorychApp account is also muted on the server, so it is gone on every device.
+        accountCall("/v1/mutes", { method: "POST", body: { accountId: post.authorId } }).then(() => { publicStamp = 0; schedulePublicPosts(); }).catch(() => {});
+      }
+      if (window.ViktorychCommunities && window.ViktorychCommunities.requestRender) { /* communities redraw with the app */ }
+      toastUndo(act === "block-post" ? tr("Hidden. It won't show in any feed.") : tr("Blocked. Their posts and comments won't load."), act === "block-post" ? "posts" : "accounts", key);
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "block-source") {
+      const key = el.dataset.key || "";
+      const b = blockSettings();
+      if (key && b) {
+        if ((b.sources || []).indexOf(key) >= 0) removeBlock("sources", key);
+        else addBlock("sources", key);
+        saveSettings();
+      }
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "block-type") {
+      const post = STATE.blockSheetPost;
+      const acct = blockAccountKey(post);
+      if (acct) { toggleBlockType(acct, el.dataset.kind || ""); saveSettings(); }
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "close-block-sheet") {
+      STATE.blockSheetPost = null;
+      STATE.blockSheetFull = false;
+      if (el.tagName !== "A") { render(); return; }
+      return;
+    }
+    if (act === "reveal-hidden") {
+      STATE.revealedHidden = STATE.revealedHidden || {};
+      STATE.revealedHidden[String(el.dataset.id || "")] = true;
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "unblock") {
+      const kind = el.dataset.kind || "";
+      const value = el.dataset.value || "";
+      if (kind === "types") {
+        const b = blockSettings();
+        if (b) { delete b.types[value]; b.at = Date.now(); }
+      } else if (kind === "posts" || kind === "accounts" || kind === "sources") removeBlock(kind, value);
+      saveSettings();
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "block-undo") {
+      removeBlock(el.dataset.kind || "", el.dataset.value || "");
+      saveSettings();
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "show-hidden-toggle") {
+      const b = blockSettings();
+      if (b) { b.showHidden = !b.showHidden; b.at = Date.now(); saveSettings(); }
+      render({ y: window.scrollY });
       return;
     }
     if (act === "repost-off") {
@@ -22402,6 +22838,18 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       render();
       return;
     }
+    if (muteForm && muteForm.dataset.mute === "source") {
+      event.preventDefault();
+      const input = muteForm.querySelector("input");
+      const raw = input ? input.value.trim().toLowerCase().slice(0, 80) : "";
+      if (!raw) return;
+      const sub = raw.replace(/^https?:\/\/(?:www\.|old\.)?reddit\.com\//, "").match(/^\/?r\/([a-z0-9_]+)/);
+      const feed = feeds().find((item) => String(item.id || "").toLowerCase() === raw);
+      const key = sub ? "reddit:" + sub[1] : (feed ? "feed:" + String(feed.id).toLowerCase() : "community:" + raw.replace(/^#\/communities\//, "").replace(/[^a-z0-9_.-]/g, ""));
+      if (addBlock("sources", key)) saveSettings();
+      render({ y: window.scrollY });
+      return;
+    }
     if (muteForm) {
       event.preventDefault();
       const input = muteForm.querySelector("input");
@@ -24099,6 +24547,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return timelineFeeds();
   }
 
+  /* A feed whose account or whole source is blocked is never fetched. */
+  function feedBlocked(feed) {
+    if (!feed || showHiddenOn()) return false;
+    const set = currentBlockSet();
+    const api = blocksApi();
+    if (!set || !set.size || !api) return false;
+    const who = feed.platform === "reddit" && feed.redditKind === "r"
+      ? { feedId: feed.id, subreddit: feed.handle, platform: "reddit" }
+      : { feedId: feed.id, handle: feed.handle, platform: feed.platform || "x" };
+    const why = api.reason(set, who);
+    return why === "account" || why === "source";
+  }
+
   function feedsForTabs(tabs) {
     const out = [];
     const seen = {};
@@ -24106,6 +24567,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       feedsForTab(tab).forEach((feed) => {
         const id = String(feed && feed.id || "").toLowerCase();
         if (!id || seen[id]) return;
+        if (feedBlocked(feed)) { seen[id] = true; skippedBlockedFeeds += 1; return; }
         seen[id] = true;
         out.push(feed);
       });
@@ -24218,6 +24680,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return job;
   }
 
+  let skippedBlockedFeeds = 0;
+  window.ViktorychBlockStats = () => ({ skippedFeeds: skippedBlockedFeeds });
   let liveRefreshFlight = null;
   const homeTabJobs = {};
   function refreshHomeTabs(tabs) {
@@ -24353,6 +24817,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const saved = JSON.parse(readStored(localStorage, "account-v1") || "null");
         if (saved && saved.token) headers.Authorization = "Bearer " + saved.token;
       } catch (err) { /* a missing session still settles empty */ }
+      const blockList = blockHeader();
+      if (blockList) headers["X-Block"] = blockList;
     }
     return { cache: "no-store", credentials: "omit", headers: headers };
   }
@@ -27419,12 +27885,31 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     bindShellModules(false);
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) renderSoon();
   });
+  function communityItem(handle, text, platform, extra) {
+    const more = extra || {};
+    const plat = platform || "app";
+    const clean = String(handle || "").replace(/^\/?u\//i, "").replace(/^@/, "");
+    const item = { handle: clean, text: text, platform: plat, feedId: "", id: more.id ? String(more.id) : "", statusId: more.id ? String(more.id) : "" };
+    if (more.community) {
+      item.community = { name: String(more.community) };
+      if (plat === "reddit") item.subreddit = String(more.community);
+    }
+    if (more.authorId) { item.authorId = String(more.authorId); item.appPost = true; }
+    return item;
+  }
   function bindCommunitiesModule() {
     if (!window.ViktorychCommunities) return;
     window.ViktorychCommunities.requestRender = function () { render(); };
     window.ViktorychCommunities.toast = toast;
-    window.ViktorychCommunities.hidden = function (handle, text, platform) {
-      return hiddenPost({ handle: handle, text: text, platform: platform || "app", feedId: "" });
+    window.ViktorychCommunities.hidden = function (handle, text, platform, extra) {
+      return hiddenPost(communityItem(handle, text, platform, extra));
+    };
+    window.ViktorychCommunities.blockMenu = function (item) {
+      const post = communityItem(item.handle, "", item.platform, item);
+      post.commentRow = !!item.comment;
+      STATE.blockSheetPost = post;
+      STATE.blockSheetFull = true;
+      render();
     };
     window.ViktorychCommunities.note = function (item) { commitBellNotes(item ? [item] : []); };
     window.ViktorychCommunities.readTabs = function () { return STATE.settings ? STATE.settings.communityTabs : null; };

@@ -86,7 +86,7 @@
       "feedTabs", "lastNoteTab", "networkMode", "navCustom", "bottomNav", "bottomNavCustom", "navLayout", "navLayoutLand", "navLayoutSync",
       "noteTabs", "noteTabsSame", "noteClearedAt", "noteDismissed", "drawerMenu", "devicePerf", "communitiesHome", "notePrefs", "profileTabs",
       "prefsAt", "syncUi", "syncUiAt", "historyCut", "accountFollows", "bellsAt", "builtinNoteRead", "redditVotes", "navCustomAt",
-      "brandLogo", "avatarShape", "communityTabs", "peopleLinks"],
+      "brandLogo", "avatarShape", "communityTabs", "peopleLinks", "blocks"],
     device: ["profile", "webllmAccepted"],
     storage: [],
     friendP2P: [],

@@ -140,9 +140,15 @@
   function toast(text) {
     if (window.ViktorychCommunities && window.ViktorychCommunities.toast) window.ViktorychCommunities.toast(text);
   }
-  function hidden(handle, text, platform) {
-    if (window.ViktorychCommunities && window.ViktorychCommunities.hidden) return window.ViktorychCommunities.hidden(handle, text, platform);
+  /* extra carries the item id and its community, so a single hidden comment
+     or a blocked subreddit is dropped before its card, avatar or media. */
+  function hidden(handle, text, platform, extra) {
+    if (window.ViktorychCommunities && window.ViktorychCommunities.hidden) return window.ViktorychCommunities.hidden(handle, text, platform, extra);
     return false;
+  }
+  function blockBtn(name, id, author, platform) {
+    if (!window.ViktorychCommunities || !window.ViktorychCommunities.blockMenu) return "";
+    return '<button class="cm-reddit-action-btn cm-block-btn" type="button" data-cm="block-menu" data-sub="' + esc(name) + '" data-id="' + esc(id) + '" data-author="' + esc(author || "") + '" data-platform="' + esc(platform) + '" aria-label="' + esc(tr("More")) + '" aria-haspopup="menu">' + svgMore + '</button>';
   }
   function note(item) {
     if (window.ViktorychCommunities && window.ViktorychCommunities.note) window.ViktorychCommunities.note(item);
@@ -468,9 +474,9 @@
       '</div></div>';
   }
 
-  function redditPosts(doc) {
+  function redditPosts(doc, name) {
     return (doc && doc.posts || []).filter(function (post) {
-      return post && !hidden(post.author, (post.title || "") + " " + (post.text || ""), "reddit");
+      return post && !hidden(post.author, (post.title || "") + " " + (post.text || ""), "reddit", { id: post.id, community: name || (doc && doc.name) || "" });
     });
   }
   function internalPosts(name) {
@@ -478,7 +484,7 @@
     if (!bag || !signedIn()) return [];
     return (bag.posts || []).filter(function (post) {
       var author = post.author || {};
-      return !hidden(author.handle, post.body, "app");
+      return !hidden(author.handle, post.body, "app", { id: post.id, community: name, authorId: author.publicId || author.id || "" });
     });
   }
   function scoreOf(item) {
@@ -487,7 +493,7 @@
     return Number((bag.likes || {})[item.id]) || 0;
   }
   function feedItems(name, doc) {
-    var reddit = redditPosts(doc).map(function (post) {
+    var reddit = redditPosts(doc, name).map(function (post) {
       return { source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, score: post.score, post: post };
     });
     var internal = internalPosts(name).filter(function (post) { return !post.parentId; }).map(function (post) {
@@ -517,7 +523,7 @@
     var cached = state.comments[commentKey(name, parentId)];
     var list = cached && !cached.missing ? (cached.replies || []) : inlineReplies(doc, parentId);
     var reddit = list.filter(function (reply) {
-      return !hidden(reply.author, reply.text, "reddit");
+      return !hidden(reply.author, reply.text, "reddit", { id: reply.id, community: name });
     }).map(function (reply) {
       return { source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply };
     });
@@ -683,6 +689,7 @@
           '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(count(post.comments)) + " " + esc(tr("Comments")) + '</span></a>' +
           '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
           (sourceHref ? '<a class="cm-reddit-action-btn reddit-link" href="' + esc(sourceHref) + '" target="_blank" rel="noopener noreferrer">' + (forum ? svgCommunities : svgSnoo) + '<span>' + esc(sourceLabel) + '</span> ' + svgExternal + '</a>' : "") +
+          blockBtn(name, post.id, post.author, "reddit") +
         '</div>' +
       '</div>' +
     '</article>';
@@ -713,7 +720,7 @@
           votePill(name, post.id, total, v, false) +
           '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></a>' +
           '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
-          (post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '<span>' + esc(tr("Delete")) + '</span></button>' : "") +
+          (post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '<span>' + esc(tr("Delete")) + '</span></button>' : blockBtn(name, post.id, authorHandle, "app")) +
         '</div>' +
       '</div>' +
     '</article>';
@@ -888,7 +895,7 @@
       if (doc.missing) return;
       var bag = state.internal[name];
       if (bag && bag.locked) return;
-      redditPosts(doc).forEach(function (post) {
+      redditPosts(doc, name).forEach(function (post) {
         items.push({ source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, post: post });
       });
       internalPosts(name).filter(function (post) { return !post.parentId; }).forEach(function (post) {
@@ -1197,6 +1204,7 @@
             '<div class="cm-comment-actions">' +
               votePill(name, item.reply.id, rTotal, rV, true) +
               '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
+              blockBtn(name, item.reply.id, item.reply.author, "reddit") +
             '</div>' +
           '</div>' +
         '</article>';
@@ -1224,7 +1232,7 @@
             votePill(name, item.post.id, aTotal, aV, true) +
             '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
             '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="#/communities/' + encodeURIComponent(name) + '/' + encodeURIComponent(id) + '">' + svgShare + '</button>' +
-            (item.post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(item.post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '</button>' : "") +
+            (item.post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(item.post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '</button>' : blockBtn(name, item.post.id, aAuthorHandle, "app")) +
           '</div>' +
         '</div>' +
       '</article>';
@@ -1424,7 +1432,7 @@
       if (doc.missing) return;
       var bag = state.internal[name];
       if (bag && bag.locked) return;
-      redditPosts(doc).forEach(function (post) {
+      redditPosts(doc, name).forEach(function (post) {
         var item = { source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, post: post };
         items.push({ created: item.created, item: item });
       });
@@ -1840,6 +1848,14 @@
       }
       setDownvotes(state.downvotes);
       render();
+      return;
+    }
+    if (act === "block-menu") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (window.ViktorychCommunities && window.ViktorychCommunities.blockMenu) {
+        window.ViktorychCommunities.blockMenu({ id: el.dataset.id || "", handle: el.dataset.author || "", platform: el.dataset.platform || "reddit", community: el.dataset.sub || "", comment: !!el.closest(".cm-reddit-comment") });
+      }
       return;
     }
     if (act === "focus-reply") {
