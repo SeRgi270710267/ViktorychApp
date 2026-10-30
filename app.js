@@ -9195,6 +9195,7 @@ const here = parseRoute();
     if (parts[0] === "communitynotes") return { name: "communitynotes", tab: parts[1] || "", query };
     if (parts[0] === "customize") return { name: "customize", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
+    if (parts[0] === "feeds" && parts[1] === "lists") return { name: "sourcelists", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -9350,7 +9351,7 @@ const here = parseRoute();
       case "online":
         return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
-        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" };
+        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" };
       case "lists":
         return { id: "lists", href: "#/lists", icon: "lists", label: tr("Lists"), active: (r) => r.name === "lists" || r.name === "list" };
       case "history":
@@ -16892,7 +16893,7 @@ if (STATE.histClear) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
@@ -18465,8 +18466,8 @@ if (STATE.histClear) {
      placeholder and this device has the last screen of that page, paint that
      screen now; the live render replaces it in place when data arrives. Each
      finished screen is saved (bounded, least recently used first out, wiped on
-     sign-out). Pages that hold secrets or live media are never saved. */
-  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1 };
+     sign-out). Pages that hold secrets, private lists or live media are never saved. */
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1 };
   function routeLoading(html) {
     if (!html) return true;
     if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
@@ -18591,6 +18592,7 @@ if (STATE.histClear) {
     if (route.name === "status") return statusView(route);
     if (route.name === "explore") return exploreView(route);
     if (route.name === "feeds") return feedsView();
+    if (route.name === "sourcelists") return window.SourceLists ? window.SourceLists.view() : feedsView();
     if (route.name === "lists") return listsView();
     if (route.name === "list") return listView(route);
     if (route.name === "history" || route.name === "bookmarks") return historyView(route.name === "history" ? route : { name: "history", tab: "bookmarks", query: route.query });
@@ -24335,7 +24337,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return missingCatalog();
   }
 
+  /* Lists the owner assigned to this account join the timeline here; other
+     accounts never fetch them. */
   async function fetchFeeds(fresh) {
+    const doc = await fetchFeedsRaw(fresh);
+    const lists = window.SourceLists;
+    if (!lists || !doc || !Array.isArray(doc.posts)) return doc;
+    await Promise.race([lists.ready(), new Promise((done) => setTimeout(done, 400))]);
+    return lists.merge(doc);
+  }
+
+  async function fetchFeedsRaw(fresh) {
     const boot = fresh && window.__homeFreshBoot && window.__homeFreshBoot.feeds;
     if (boot) window.__homeFreshBoot.feeds = null;
     try {
@@ -28068,6 +28080,33 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       accountHash: accountHash,
       platformIcon: platformIcon,
       STATE: STATE
+    });
+  }
+  if (window.SourceLists) {
+    window.SourceLists.attach({
+      tr: tr,
+      esc: esc,
+      avatar: avatar,
+      pageHead: pageHead,
+      signedOwner: signedOwner,
+      accountsApi: accountsApi,
+      accountToken: accountToken,
+      toast: toast,
+      render: render,
+      readStored: readStored,
+      writeStored: writeStored,
+      removeStored: removeStored,
+      STATE: STATE,
+      onChange: () => {
+        if (!STATE.data || !Array.isArray(STATE.data.posts)) return;
+        const next = window.SourceLists.merge(STATE.data);
+        if (next === STATE.data) return;
+        const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(next);
+        STATE.data = withMemory(next);
+        if (feedsChanged) adoptFeeds(next);
+        render({ y: window.scrollY });
+        saveHomeSnapshot();
+      }
     });
   }
   initTooltipController();
