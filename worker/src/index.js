@@ -85,6 +85,8 @@ import { DISPLAY_NAME_SCHEMA, handleDisplayNames, withDisplayNames, ownerSeesAll
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { STORE_SCHEMA, handleStore } from "./store.js";
+import { LOCKED_SCHEMA, handleLockedFollows, handleLockedReset, handleOwnerLocked, ownerSees, auditOwnerView } from "./locked-follows.js";
+import { FOLLOWING_COUNT_SQL, notLocked, notLockedFriend, isLockedFollow, lockedTargetSet } from "./locked-sql.js";
 import { GAMES_SCHEMA, handleGames } from "./games.js";
 import { SERVERS_SCHEMA, handleServers } from "./servers.js";
 import { REACTION_SCHEMA, handleReactions } from "./reactions.js";
@@ -242,7 +244,7 @@ function withCors(request, env, response) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
-  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent, X-Block");
+  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent, X-Block, X-Locked-Grant");
   headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag, Retry-After, X-Limit-Scope, X-Quota-Pct, X-Block-Removed");
   const quota = quotaPct(Date.now());
   if (quota >= 0) headers.set("x-quota-pct", String(quota));
@@ -347,7 +349,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.concat(STORE_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA, DISPLAY_NAME_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA, SUGGEST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.concat(TEMP_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(LIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(ABOUT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AFFILIATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(POINTS_SCHEMA.concat(STORE_SCHEMA, LOCKED_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GAMES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SERVERS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(REACTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(BADGE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(APP_STORIES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTES_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(STORY_BAR_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(HIGHLIGHT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(AUDIENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(USERNAME_SCHEMA.concat(NAME_RULES_SCHEMA, DISPLAY_NAME_SCHEMA).map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA, SUGGEST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => ensurePresenceColumns(env)).then(() => ensurePostColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -1137,9 +1139,16 @@ async function trimReposts(env, publicId) {
 }
 
 async function liveProfileCounts(env, row, account, viewer) {
-  account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
+  if (ownerSees(viewer, row.public_id)) {
+    account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
+    const visible = await followCount(env, FOLLOWING_COUNT_SQL, row.public_id);
+    if (visible !== account.followingCount) {
+      account.lockedFollowsCount = account.followingCount - visible;
+      await auditOwnerView(env, viewer.public_id, row.public_id, "profile");
+    }
+  } else account.followingCount = await followCount(env, FOLLOWING_COUNT_SQL, row.public_id);
   account.followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", "app:" + row.public_id);
-  account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id));
+  account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id) && !(await isLockedFollow(env, viewer.public_id, "app:" + row.public_id)));
   account.friendsCount = await friendCount(env, row.public_id);
   account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
   account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
@@ -1221,7 +1230,8 @@ async function handleProfileGet(request, env, handle) {
   account.protected = row.protected_account === 1;
   if (viewer && viewer.public_id !== row.public_id) {
     const state = await pairState(env, viewer.public_id, row.public_id);
-    account.viewerFollows = state.following;
+    // A locked follow reads as not followed everywhere until it is unlocked.
+    account.viewerFollows = state.following && !(await isLockedFollow(env, viewer.public_id, "app:" + row.public_id));
     account.viewerPending = state.pending;
     account.followsYou = state.followsYou;
     account.viewerBlocks = state.viewerBlocks;
@@ -5020,7 +5030,7 @@ async function followCards(env, request, publicIds) {
 }
 
 async function followWriteResult(env, viewerId, storedId, shownId, on) {
-  const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", viewerId);
+  const followingCount = await followCount(env, FOLLOWING_COUNT_SQL, viewerId);
   const followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", storedId);
   return json(200, { ok: true, id: shownId || storedId, viewerFollows: on, followingCount, followersCount });
 }
@@ -5056,6 +5066,11 @@ async function handleFollowPut(request, env) {
   if (target.error) return target.error;
   const id = target.id;
   if (id === "app:" + gate.row.public_id) return json(400, { error: "bad_follow", message: "That account can’t be followed." });
+  if (await isLockedFollow(env, gate.row.public_id, id)) {
+    // Already followed and locked: nothing changes until the Locked area
+    // is opened on this device.
+    return json(200, redactPublicIds({ ok: true, id: target.shown || id, viewerFollows: false, lockedFollow: true, followingCount: await followCount(env, FOLLOWING_COUNT_SQL, gate.row.public_id), followersCount: await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", id) }));
+  }
   const sourceGate = await followGate(env, gate.row, id, { json, rateHit, limited });
   if (sourceGate) return sourceGate;
   const decision = await prepareFollowPut(env, gate.row.public_id, id);
@@ -5072,7 +5087,7 @@ async function handleFollowPut(request, env) {
         await notes.notifyFollowRequest(env, gate.row, id.slice(4));
       } catch (err) { /* the request is saved */ }
     }
-    const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", gate.row.public_id);
+    const followingCount = await followCount(env, FOLLOWING_COUNT_SQL, gate.row.public_id);
     const followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", id);
     return json(200, redactPublicIds({ ok: true, id: target.shown || id, pending: true, viewerFollows: false, followingCount, followersCount }));
   }
@@ -5109,6 +5124,8 @@ async function handleFollowDelete(request, env) {
     await deleteOutgoingRequest(env, gate.row.public_id, account.public_id);
   }
   await env.DB.prepare("DELETE FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).run();
+  try { await env.DB.prepare("DELETE FROM locked_follows WHERE owner_id = ? AND target_id = ?").bind(gate.row.public_id, id).run(); }
+  catch (err) { /* no lock table yet */ }
   if (id.indexOf("app:") === 0 && /^\d{12}$/.test(id.slice(4))) {
     try { await clawback(env, gate.row.public_id, "follow", id.slice(4)); }
     catch (err) { /* the unfollow is saved */ }
@@ -5148,7 +5165,7 @@ async function handleFollowImport(request, env) {
     const part = ids.slice(i, i + 40);
     await env.DB.batch(part.map((id) => env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?) ON CONFLICT(follower_id, target_id) DO NOTHING").bind(gate.row.public_id, id, now)));
   }
-  const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", gate.row.public_id);
+  const followingCount = await followCount(env, FOLLOWING_COUNT_SQL, gate.row.public_id);
   return json(200, { ok: true, followingCount });
 }
 
@@ -5157,7 +5174,7 @@ async function listFollowIds(env, followerId) {
   const page = 500;
   const cap = 5000;
   for (let offset = 0; ids.length < cap; offset += page) {
-    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC, target_id ASC LIMIT ? OFFSET ?").bind(followerId, page, offset).all();
+    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ?" + notLocked("account_follows") + " ORDER BY created_at DESC, target_id ASC LIMIT ? OFFSET ?").bind(followerId, page, offset).all();
     const rows = (listed && listed.results) || [];
     for (let i = 0; i < rows.length && ids.length < cap; i++) {
       if (rows[i] && rows[i].target_id) ids.push(rows[i].target_id);
@@ -5194,10 +5211,17 @@ async function handleFollowGet(request, env, url) {
     id: account ? shownFollowId(account, stored) : subject,
     kind: account ? "account" : "feed",
     followersCount: await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", stored),
-    viewerFollows: stored !== "app:" + gate.row.public_id && await followExists(env, gate.row.public_id, stored)
+    viewerFollows: stored !== "app:" + gate.row.public_id && await followExists(env, gate.row.public_id, stored) && !(await isLockedFollow(env, gate.row.public_id, stored))
   };
+  const ownerView = !!(account && ownerSees(gate.row, account.public_id));
+  let ownerLocked = null;
+  if (ownerView) {
+    ownerLocked = await lockedTargetSet(env, account.public_id);
+    if (ownerLocked.size) await auditOwnerView(env, gate.row.public_id, account.public_id, tab ? "list:" + tab : "counts");
+  }
   if (account) {
-    body.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", account.public_id);
+    body.followingCount = await followCount(env, ownerView ? "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?" : FOLLOWING_COUNT_SQL, account.public_id);
+    if (ownerLocked && ownerLocked.size) body.lockedFollowsCount = ownerLocked.size;
     // The profile setting stays privateFollows. isPrivate here means this viewer is denied.
     body.isPrivate = !!(isPrivate && !isOwner);
   }
@@ -5242,8 +5266,13 @@ async function handleFollowGet(request, env, url) {
       if (!cards[0]) continue;
       cards[0].followsYou = followsYou.has(publicId);
       if (isOwner && tab === "followers") cards[0].removable = true;
+      if (ownerLocked && tab !== "followers" && ownerLocked.has("app:" + publicId)) cards[0].locked = true;
       accounts.push(cards[0]);
-    } else accounts.push(followFeedCard(id, row.snapshot));
+    } else {
+      const card = followFeedCard(id, row.snapshot);
+      if (ownerLocked && tab !== "followers" && ownerLocked.has(id)) card.locked = true;
+      accounts.push(card);
+    }
   }
   body.accounts = accounts;
   body.cursor = listed.cursor || "";
@@ -5255,7 +5284,7 @@ async function handleFollowGet(request, env, url) {
 async function friendCount(env, publicId) {
   try {
     const on = await friendFilterReady(env);
-    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f WHERE f.user_id = ?" + (on ? friendOnSql("f.friend_id") : "")).bind(publicId).first();
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f WHERE f.user_id = ?" + (on ? friendOnSql("f.friend_id") : "") + notLockedFriend("f.user_id", "f.friend_id")).bind(publicId).first();
     return (row && Number(row.n)) || 0;
   } catch (err) {
     return 0;
@@ -5381,7 +5410,7 @@ async function handleFriendsGet(request, env, url) {
       }));
     }
     const listOn = await friendFilterReady(env);
-    const friendRows = await env.DB.prepare("SELECT f.friend_id, f.created_at FROM account_friends f WHERE f.user_id = ?" + (listOn ? friendOnSql("f.friend_id") : "") + " ORDER BY f.created_at DESC LIMIT 300").bind(targetId).all();
+    const friendRows = await env.DB.prepare("SELECT f.friend_id, f.created_at FROM account_friends f WHERE f.user_id = ?" + (listOn ? friendOnSql("f.friend_id") : "") + notLockedFriend("f.user_id", "f.friend_id") + " ORDER BY f.created_at DESC LIMIT 300").bind(targetId).all();
     const ids = ((friendRows && friendRows.results) || []).map((r) => r.friend_id);
     const cards = await followCards(env, request, ids);
     for (let i = 0; i < cards.length; i++) {
@@ -5761,6 +5790,15 @@ async function route(request, env, ctx) {
     const viewer = await sessionAccount(env, request);
     if (!viewer) return json(401, { error: "unauthorized" });
     return mentionSuggest(env, request, url, viewer, { json, rateHit, mediaUrl: mediaPublicUrl });
+  }
+  if (path.startsWith("/v1/locked-follows") || path.startsWith("/v1/owner/locked-follows")) {
+    const lockedDeps = { json, readJson, rateHit, limited, sessionAccount, verifyAccountNumber, cleanFollowId, accountByFollowRef, cards: followCards, feedCard: followFeedCard, originAllowed: (origin) => originAllowed(env, origin), heldNotes: async (e, req, id, actors) => { const notes = await import("./notifications.js"); return notes.heldNotes(e, req, id, actors); } };
+    const inspected = await handleOwnerLocked(request, env, path, url, lockedDeps);
+    if (inspected) return inspected;
+    const reset = await handleLockedReset(request, env, path, lockedDeps);
+    if (reset) return reset;
+    const lockedRes = await handleLockedFollows(request, env, path, url, lockedDeps);
+    if (lockedRes) return lockedRes;
   }
   const suggested = await handleSuggestRoutes(request, env, path, url, { json, readJson, rateHit, sessionAccount, mediaUrl: mediaPublicUrl });
   if (suggested) return suggested;
