@@ -4914,5 +4914,19 @@ SI18n.addPack("hi", {
   "This signs you out here and deletes saved posts, media, drafts, messages, settings and offline copies from this browser. It can't be undone. Your account stays.": "इससे आप यहाँ से साइन आउट हो जाएँगे और इस ब्राउज़र से सहेजी गई पोस्ट, मीडिया, ड्राफ़्ट, संदेश, सेटिंग्स और ऑफ़लाइन कॉपियाँ मिट जाएँगी। इसे पूर्ववत नहीं किया जा सकता। आपका खाता बना रहेगा।",
   "The app wasn't opened for a while, so private data on this device was deleted.": "ऐप काफ़ी समय से नहीं खोला गया, इसलिए इस डिवाइस का निजी डेटा मिटा दिया गया।",
   "All data on this device was deleted.": "इस डिवाइस का सारा डेटा मिटा दिया गया।",
-  "Sign out and delete data on this device": "साइन आउट करें और इस डिवाइस का डेटा मिटाएँ"
+  "Sign out and delete data on this device": "साइन आउट करें और इस डिवाइस का डेटा मिटाएँ",
+  "Play time": "खेलने का समय",
+  "Best streak": "सबसे लंबी लय",
+  "Not on the Top 100": "टॉप 100 में नहीं",
+  "No games yet": "अभी कोई गेम नहीं",
+  "When @{handle} links a game, it shows up here.": "जब @{handle} कोई गेम जोड़ेंगे, वह यहाँ दिखेगा।",
+  "When they link a game, it shows up here.": "जब वे कोई गेम जोड़ेंगे, वह यहाँ दिखेगा।",
+  "Link your ReGone name to show your NZlay rank and stats here.": "यहाँ अपनी NZlay रैंक और आँकड़े दिखाने के लिए अपना ReGone नाम जोड़ें।",
+  "Link ReGone": "ReGone जोड़ें",
+  "Shown as claimed, not verified.": "दावा किया गया दिखता है, सत्यापित नहीं।",
+  "Unlink ReGone": "ReGone हटाएँ",
+  "Removes your ReGone name, rank and stats from your profile.": "आपकी प्रोफ़ाइल से ReGone नाम, रैंक और आँकड़े हटाता है।",
+  "Who can see my games": "मेरे गेम कौन देख सकता है",
+  "Privacy > Games": "गोपनीयता > गेम",
+  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "ReGone हटाएँ? आपका ReGone नाम, रैंक और आँकड़े प्रोफ़ाइल से हट जाएँगे।"
 });

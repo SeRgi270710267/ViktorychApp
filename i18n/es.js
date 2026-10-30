@@ -4928,5 +4928,19 @@ SI18n.addPack("es", {
   "This signs you out here and deletes saved posts, media, drafts, messages, settings and offline copies from this browser. It can't be undone. Your account stays.": "Se cerrará tu sesión aquí y se borrarán de este navegador las publicaciones guardadas, archivos, borradores, mensajes, ajustes y copias sin conexión. No se puede deshacer. Tu cuenta se mantiene.",
   "The app wasn't opened for a while, so private data on this device was deleted.": "La app no se abrió durante un tiempo, así que se eliminaron los datos privados de este dispositivo.",
   "All data on this device was deleted.": "Se eliminaron todos los datos de este dispositivo.",
-  "Sign out and delete data on this device": "Cerrar sesión y eliminar los datos de este dispositivo"
+  "Sign out and delete data on this device": "Cerrar sesión y eliminar los datos de este dispositivo",
+  "Play time": "Tiempo de juego",
+  "Best streak": "Mejor racha",
+  "Not on the Top 100": "Fuera del Top 100",
+  "No games yet": "Aún no hay juegos",
+  "When @{handle} links a game, it shows up here.": "Cuando @{handle} vincule un juego, aparecerá aquí.",
+  "When they link a game, it shows up here.": "Cuando vincule un juego, aparecerá aquí.",
+  "Link your ReGone name to show your NZlay rank and stats here.": "Vincula tu nombre de ReGone para mostrar aquí tu rango y estadísticas de NZlay.",
+  "Link ReGone": "Vincular ReGone",
+  "Shown as claimed, not verified.": "Se muestra como declarado, no verificado.",
+  "Unlink ReGone": "Desvincular ReGone",
+  "Removes your ReGone name, rank and stats from your profile.": "Quita de tu perfil tu nombre, rango y estadísticas de ReGone.",
+  "Who can see my games": "Quién puede ver mis juegos",
+  "Privacy > Games": "Privacidad > Juegos",
+  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "¿Desvincular ReGone? Tu nombre, rango y estadísticas de ReGone saldrán de tu perfil."
 });

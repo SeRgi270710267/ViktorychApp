@@ -713,30 +713,6 @@
     var body = got ? got.body : null;
     return '<section class="games-rail gs-section" data-gs-ach><h2>' + esc(tr("ReGone achievements")) + "</h2>" + (body ? achGridHtml(body, true) : '<p class="games-empty">' + esc(tr("Loading")) + "</p>") + "</section>";
   }
-  function rankCardHtml(body, pstats, mine) {
-    if (serverOff("regone_leaderboard") && serverOff("regone_profile_stats")) return "";
-    if (!body || !body.claimed) return "";
-    var r = body.rank;
-    var name = body.linkedName || "";
-    var html = '<div class="gs-rank"><div class="gs-rank-head">' + badgeSvg(r && r.rank === 1 ? "crown" : "trophy", 32) + '<span><b>' + esc(name) + '</b><small>' + esc(tr("Claimed, not verified")) + "</small></span>" +
-      (r && !serverOff("regone_leaderboard") ? '<span class="gs-rank-no">#' + esc(r.rank) + "</span>" : "") + "</div>";
-    if (r && !serverOff("regone_leaderboard")) {
-      html += '<dl class="gs-stats"><div><dt>' + esc(tr("Kills")) + "</dt><dd>" + esc(r.kills) + "</dd></div><div><dt>KDR</dt><dd>" + esc(r.kdr) + "</dd></div><div><dt>" + esc(tr("Deaths")) + "</dt><dd>" + esc(r.deaths) + "</dd></div></dl>";
-    } else if (!serverOff("regone_leaderboard")) {
-      html += '<p class="gs-muted gs-small">' + esc(tr("Not on the NZlay Top 100 right now.")) + "</p>";
-    }
-    var s = pstats && pstats.ok ? pstats.stats : null;
-    if (s) {
-      html += '<dl class="gs-stats">' +
-        '<div><dt>' + esc(tr("Favourite weapon")) + "</dt><dd>" + esc(s.favouriteWeapon || "—") + "</dd></div>" +
-        '<div><dt>' + esc(tr("Headshots")) + "</dt><dd>" + esc(s.headshotRate) + "%</dd></div>" +
-        '<div><dt>' + esc(tr("Multi-kills")) + "</dt><dd>" + esc(s.multiKills) + "</dd></div>" +
-        '<div><dt>' + esc(tr("Match wins")) + "</dt><dd>" + esc(s.matchesWon) + "</dd></div></dl>";
-    }
-    html += '<p class="gs-source">' + esc(tr("Source: NZlay")) + "</p>";
-    if (mine) html += '<button type="button" class="gs-btn" data-gs-link-name>' + esc(tr("Change ReGone name")) + "</button>";
-    return html + "</div>";
-  }
   function loadPstats(id) {
     if (serverOff("regone_profile_stats") || !ID.test(id) || state.pstatsLoading[id]) return;
     if (state.pstats[id] && Date.now() - state.pstats[id].at < 10 * 60 * 1000) return;
@@ -777,6 +753,7 @@
       delete state.presenceLoading[id];
       state.presence[id] = { at: Date.now(), body: res && res.status === 200 ? res : { playing: false } };
       paintPresence(id);
+      paintProfile(id);
     });
   }
   function joinChipHtml(id, room) {
@@ -806,42 +783,107 @@
     return presenceSlotHtml(id) + inviteButtonHtml(id, name, true);
   }
 
-  /* ---------- profile ---------- */
-  function profileHtml(account, mine) {
+  /* ---------- profile: the Games tab ----------
+     Everything game-related on a profile lives in its own Games tab, laid
+     out like X: one section per game (ReGone today), a card with the linked
+     name, rank and stats, Playing now, achievements and who they play with.
+     The Worker decides what a viewer may see (canSeeGame); a hidden answer
+     reads the same as "no games yet". */
+  var GAMES_FLAGS = ["regone_leaderboard", "regone_profile_stats", "regone_online", "regone_rooms"];
+  function profileTabAvailable(account, mine) {
     var id = account && account.publicId ? String(account.publicId) : "";
-    if (!ID.test(id) || !token()) return "";
+    if (!ID.test(id) || !token()) return false;
+    if (!mine && account.viewerBlocks) return false;
+    return GAMES_FLAGS.some(function (name) { return !serverOff(name); });
+  }
+  function profileTabHtml(account, mine) {
+    if (!profileTabAvailable(account, mine)) return "";
+    var id = String(account.publicId);
     loadAch(id);
     loadTogether(id);
-    if (account && (mine || !account.viewerBlocks)) loadPstats(id);
-    return '<div class="gs-profile" data-gs-profile="' + esc(id) + '"' + (mine ? ' data-gs-mine="1"' : "") + ">" + profileInner(id, !!mine) + "</div>";
+    loadPstats(id);
+    return '<div class="gs-ptab" data-gs-profile="' + esc(id) + '"' + (mine ? ' data-gs-mine="1"' : "") + ' data-gs-handle="' + esc(account.handle || "") + '" data-gs-name="' + esc(account.displayName || account.handle || "") + '">' + profileInner(id, !!mine, account.handle || "", account.displayName || account.handle || "") + "</div>";
   }
-  function profileInner(id, mine) {
+  /* Kept for older callers: the header no longer shows games. */
+  function profileHtml() { return ""; }
+  function fmtNum(n) {
+    var v = Number(n);
+    if (!isFinite(v)) return String(n == null ? "" : n);
+    try { return v.toLocaleString(); } catch (err) { return String(v); }
+  }
+  function fmtHours(ms) {
+    var h = (Number(ms) || 0) / 3600000;
+    if (h < 1) return tr("{n} min", { n: Math.round(h * 60) });
+    return tr("{n} h", { n: h >= 10 ? Math.round(h) : Math.round(h * 10) / 10 });
+  }
+  function statCell(label, value) {
+    return '<div class="gs-cell"><dt>' + esc(label) + "</dt><dd>" + esc(value) + "</dd></div>";
+  }
+  function regoneCardHtml(body, pstats) {
+    var r = body.rank;
+    var board = !serverOff("regone_leaderboard");
+    var cells = "";
+    if (r && board) cells += statCell(tr("Kills"), fmtNum(r.kills)) + statCell("KDR", r.kdr) + statCell(tr("Deaths"), fmtNum(r.deaths));
+    var s = !serverOff("regone_profile_stats") && pstats && pstats.ok ? pstats.stats : null;
+    if (s) {
+      cells += statCell(tr("Favourite weapon"), s.favouriteWeapon || "—") + statCell(tr("Headshots"), (Number(s.headshotRate) || 0) + "%") +
+        statCell(tr("Multi-kills"), fmtNum(s.multiKills)) + statCell(tr("Match wins"), fmtNum(s.matchesWon));
+    }
+    if (Number(body.totalMs) > 0) cells += statCell(tr("Play time"), fmtHours(body.totalMs));
+    if (Number(body.bestStreak) > 0) cells += statCell(tr("Best streak"), tr("{n} days", { n: body.bestStreak }));
+    var rankBox = "";
+    if (board) {
+      rankBox = r
+        ? '<div class="gs-card-rank">' + badgeSvg(r.rank === 1 ? "crown" : "trophy", 22) + "<b>#" + esc(r.rank) + "</b><small>" + esc(tr("Top 100")) + "</small></div>"
+        : '<div class="gs-card-rank is-off"><small>' + esc(tr("Not on the Top 100")) + "</small></div>";
+    }
+    return '<div class="gs-card"><div class="gs-card-top"><div class="gs-card-id"><span class="gs-card-name">' + esc(body.linkedName || "") + '</span><span class="gs-card-sub">' + esc(tr("Claimed, not verified")) + "</span></div>" + rankBox + "</div>" +
+      (cells ? '<dl class="gs-grid">' + cells + "</dl>" : "") +
+      '<p class="gs-source">' + esc(tr("Source: NZlay")) + "</p></div>";
+  }
+  function rowHtml(attr, title, sub, danger) {
+    return '<button type="button" class="set-row gs-setrow' + (danger ? " is-danger" : "") + '" ' + attr + '><span class="set-copy"><b>' + esc(title) + "</b>" + (sub ? '<span class="set-sub">' + esc(sub) + "</span>" : "") + '</span><span class="set-chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.6 5.4 14.2 11 8.6 16.6l1.4 1.4 7-7-7-7z"/></svg></span></button>';
+  }
+  function profileInner(id, mine, handle, name) {
     var got = state.ach[id];
     var body = got && got.body;
-    var parts = "";
-    if (!mine) parts += presenceSlotHtml(id);
-    if (body && !body.hidden) {
-      var pst = state.pstats[id] && state.pstats[id].body;
-      parts += rankCardHtml(body, pst, mine);
-      if (mine && !body.claimed && !serverOff("regone_leaderboard")) parts += '<button type="button" class="gs-btn gs-link" data-gs-link-name>' + ui("link") + esc(tr("Link ReGone name")) + "</button>";
-      var earned = (body.achievements || []).length;
-      if (earned || mine) {
-        parts += '<details class="gs-prof-ach"><summary>' + badgeSvg("trophy", 20) + "<span>" + esc(tr("ReGone achievements")) + "</span><small>" + esc(String(earned)) + "</small></summary>" + achGridHtml(body, mine) + "</details>";
-      }
+    if (!body) return '<div class="gs-ptab-loading" role="status" aria-label="' + esc(tr("Loading")) + '"><span class="gs-spin" aria-hidden="true"></span></div>';
+    var visible = !body.hidden;
+    var claimed = visible && body.claimed && !(serverOff("regone_leaderboard") && serverOff("regone_profile_stats"));
+    var earned = visible ? (body.achievements || []).length : 0;
+    var together = togetherHtml(id);
+    var live = mine ? "" : presenceSlotHtml(id);
+    var playing = !mine && state.presence[id] && state.presence[id].body && state.presence[id].body.playing;
+    if (!mine && !claimed && !earned && !together && !playing) {
+      return '<div class="empty gs-ptab-empty"><h2>' + esc(tr("No games yet")) + "</h2><p>" + esc(handle ? tr("When @{handle} links a game, it shows up here.", { handle: handle }) : tr("When they link a game, it shows up here.")) + "</p></div>";
     }
-    parts += togetherHtml(id);
-    return parts;
+    var pst = state.pstats[id] && state.pstats[id].body;
+    var html = '<section class="gs-game" data-gs-game="regone" aria-label="ReGone"><header class="gs-game-head"><span class="gs-game-ico">' + ui("pad") + '</span><span class="gs-game-title"><b>ReGone</b><small>NZlay</small></span>' +
+      (mine ? "" : inviteButtonHtml(id, name, false)) + "</header>";
+    if (live) html += '<div class="gs-game-live">' + live + "</div>";
+    if (claimed) html += regoneCardHtml(body, pst);
+    else if (mine) html += '<p class="gs-game-note">' + esc(tr("Link your ReGone name to show your NZlay rank and stats here.")) + "</p>";
+    if (earned || (mine && visible)) {
+      html += '<details class="gs-prof-ach"><summary>' + badgeSvg("trophy", 20) + "<span>" + esc(tr("ReGone achievements")) + "</span><small>" + esc(String(earned)) + "</small></summary>" + achGridHtml(body, mine) + "</details>";
+    }
+    html += together;
+    if (mine) {
+      var board = !serverOff("regone_leaderboard") || !serverOff("regone_profile_stats");
+      html += '<div class="gs-own-rows">';
+      if (board && !body.claimed) html += rowHtml("data-gs-link-name", tr("Link ReGone"), tr("Shown as claimed, not verified."));
+      if (board && body.claimed) html += rowHtml("data-gs-link-name", tr("Change ReGone name"), body.linkedName || "") + rowHtml("data-gs-unlink", tr("Unlink ReGone"), tr("Removes your ReGone name, rank and stats from your profile."), true);
+      html += '<a class="set-row gs-setrow" href="#/settings/privacy"><span class="set-copy"><b>' + esc(tr("Who can see my games")) + '</b><span class="set-sub">' + esc(tr("Privacy > Games")) + '</span></span><span class="set-chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.6 5.4 14.2 11 8.6 16.6l1.4 1.4 7-7-7-7z"/></svg></span></a>';
+      html += "</div>";
+    }
+    return html + "</section>";
   }
   function paintProfile(id) {
     document.querySelectorAll('[data-gs-profile="' + id + '"]').forEach(function (el) {
-      el.innerHTML = profileInner(id, el.getAttribute("data-gs-mine") === "1");
+      el.innerHTML = profileInner(id, el.getAttribute("data-gs-mine") === "1", el.getAttribute("data-gs-handle") || "", el.getAttribute("data-gs-name") || "");
     });
   }
-  function linkName() {
-    var current = state.ach[me()] && state.ach[me()].body && state.ach[me()].body.linkedName || "";
-    var name = window.prompt(tr("Your ReGone name, as it shows on NZlay. Shown as claimed, not verified. Leave empty to remove."), current);
-    if (name == null) return;
-    call("/v1/games/link-name", { method: "POST", body: { name: name } }).then(function (res) {
+  function saveLinkName(name) {
+    return call("/v1/games/link-name", { method: "POST", body: { name: name } }).then(function (res) {
       if (!res || res.status !== 200) { toast(tr("Try again")); return; }
       if (res.achievements && res.achievements.length) celebrate(res.achievements);
       var id = me();
@@ -851,6 +893,16 @@
       loadAch(id, true);
       loadPstats(id);
     });
+  }
+  function linkName() {
+    var current = state.ach[me()] && state.ach[me()].body && state.ach[me()].body.linkedName || "";
+    var name = window.prompt(tr("Your ReGone name, as it shows on NZlay. Shown as claimed, not verified. Leave empty to remove."), current);
+    if (name == null) return;
+    saveLinkName(name);
+  }
+  function unlinkName() {
+    if (!window.confirm(tr("Unlink ReGone? Your ReGone name, rank and stats leave your profile."))) return;
+    saveLinkName("");
   }
 
   /* ---------- Top Players ---------- */
@@ -1116,6 +1168,7 @@
       return;
     }
     if ((el = t.closest("[data-gs-link-name]"))) { event.preventDefault(); linkName(); return; }
+    if ((el = t.closest("[data-gs-unlink]"))) { event.preventDefault(); unlinkName(); return; }
     if ((el = t.closest("[data-gs-aud]"))) {
       event.preventDefault();
       var aud = {};
@@ -1250,6 +1303,8 @@
     onlineChipHtml: onlineChipHtml,
     roomChipHtml: roomChipHtml,
     profileHtml: profileHtml,
+    profileTabAvailable: profileTabAvailable,
+    profileTabHtml: profileTabHtml,
     inviteButtonHtml: inviteButtonHtml,
     dmHeadHtml: dmHeadHtml,
     joinChipHtml: joinChipHtml,

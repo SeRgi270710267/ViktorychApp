@@ -4927,5 +4927,19 @@ SI18n.addPack("ru", {
   "This signs you out here and deletes saved posts, media, drafts, messages, settings and offline copies from this browser. It can't be undone. Your account stays.": "Вы выйдете здесь, а сохранённые посты, медиа, черновики, сообщения, настройки и офлайн-копии будут удалены из этого браузера. Это нельзя отменить. Аккаунт останется.",
   "The app wasn't opened for a while, so private data on this device was deleted.": "Приложение давно не открывали, поэтому личные данные на этом устройстве удалены.",
   "All data on this device was deleted.": "Все данные на этом устройстве удалены.",
-  "Sign out and delete data on this device": "Выйти и удалить данные на этом устройстве"
+  "Sign out and delete data on this device": "Выйти и удалить данные на этом устройстве",
+  "Play time": "Время в игре",
+  "Best streak": "Лучшая серия",
+  "Not on the Top 100": "Нет в топ-100",
+  "No games yet": "Игр пока нет",
+  "When @{handle} links a game, it shows up here.": "Когда @{handle} привяжет игру, она появится здесь.",
+  "When they link a game, it shows up here.": "Когда здесь привяжут игру, она появится тут.",
+  "Link your ReGone name to show your NZlay rank and stats here.": "Привяжите имя в ReGone, чтобы показать здесь ранг и статистику NZlay.",
+  "Link ReGone": "Привязать ReGone",
+  "Shown as claimed, not verified.": "Показывается как заявленное, не проверенное.",
+  "Unlink ReGone": "Отвязать ReGone",
+  "Removes your ReGone name, rank and stats from your profile.": "Убирает из профиля ваше имя, ранг и статистику ReGone.",
+  "Who can see my games": "Кто видит мои игры",
+  "Privacy > Games": "Конфиденциальность > Игры",
+  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "Отвязать ReGone? Имя, ранг и статистика ReGone исчезнут из профиля."
 });
