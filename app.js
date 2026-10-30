@@ -112,6 +112,8 @@
     clock: "M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm1 11h-4V7h2v4h2v2z",
     plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z",
     play: "M8 5v14l11-7z",
+    pause: "M6 5h4v14H6zM14 5h4v14h-4z",
+    exitFull: "M4 14h6v6H8v-4H4v-2zm16 0v2h-4v4h-2v-6h6zM8 4h2v6H4V8h4V4zm6 0h2v4h4v2h-6V4z",
     expand: "M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z",
     vol: "M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z",
     volOff: "M16.5 12a4.5 4.5 0 0 0-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4 9.91 6.09 12 8.18V4z",
@@ -5876,7 +5878,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       goHash(watchHash(post));
       return;
     }
-    openVideoViewer(post, media, src, time);
+    openVideoViewer(post, media, src, time, tile);
   }
 
   function followButton(id, large) {
@@ -20383,7 +20385,9 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "htab" || act === "like" || act === "bookmark" || act === "follow" || act === "back" || act === "view" || act === "story") tapHaptic();
+    if (el.closest && el.closest("#viewer .xv-pills")) setTimeout(xvRepaintPills, 0);
     if (act === "close-viewer") { closeViewer(); return; }
+    if (act === "xv-play" || act === "xv-mute" || act === "xv-speed" || act === "xv-more" || act === "xv-menu") { xvAct(act, el); return; }
     if (act === "back") {
       if (STATE.viewer) { closeViewer(); return; }
       if (history.length > 1) history.back();
@@ -25306,41 +25310,35 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const box = document.getElementById("viewer");
     if (!box) return;
     const view = STATE.viewer;
-    if (!view) { box.hidden = true; box.innerHTML = ""; return; }
+    if (!view) { box.hidden = true; box.innerHTML = ""; box.classList.remove("xv"); return; }
     if (view.video) {
       const post = findAnyPost(view.id);
       const media = view.media || ((post && post.media) || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || {};
       box.hidden = false;
-      if (box._ytPlayer && box._ytPlayer.destroy) {
-        try { box._ytPlayer.destroy(); } catch (err) {}
-        box._ytPlayer = null;
-      }
-      box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>`;
+      xvTeardown(box);
+      const stage = xvFrame(box, view, post, media);
+      const live = () => STATE.viewer === view && !!view.video;
       const known = post || { platform: view.platform || "", statusId: view.statusId || "", id: view.statusId || view.id || "", url: view.url || "" };
       const xplan = xPlaybackPlan(known, media);
       if (xplan) {
-        box._gen = (box._gen || 0) + 1;
-        startXPlayback(box, known, media, xplan, {
+        stage._gen = (stage._gen || 0) + 1;
+        startXPlayback(stage, known, media, xplan, {
           preview: false,
           muted: !!(media && media.type === "animated_gif"),
           loop: !!(media && media.type === "animated_gif"),
           resume: view.time || 0,
-          active: () => !!(STATE.viewer && STATE.viewer.video)
+          active: live
         });
         return;
       }
       let video;
       const viewerPoster = (media && (media.poster || media.url)) || (post && post.poster) || "";
-      if (typeof window.YtPlayer === "function") {
-        box._ytPlayer = new window.YtPlayer(box, { post: post, media: media, poster: viewerPoster });
-        video = box._ytPlayer.video;
-        video.id = "viewer-video";
-      } else {
-        video = document.createElement("video");
-        video.id = "viewer-video";
-        video.controls = true;
-        box.appendChild(video);
-      }
+      video = document.createElement("video");
+      video.id = "viewer-video";
+      video.controls = false;
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      stage.appendChild(video);
       if (!video) return;
       if (viewerPoster && !video.poster && typeof viewerPoster === "string" && viewerPoster.indexOf(".mp4") < 0) {
         video.poster = viewerPoster;
@@ -25352,7 +25350,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       let viewerFramed = false;
       if (typeof video.requestVideoFrameCallback === "function") {
         const onVFrame = () => {
-          if (!STATE.viewer || !STATE.viewer.video) return;
+          if (!live()) return;
           if (video.videoWidth > 0 && video.videoHeight > 0) {
             viewerFramed = true;
           } else if (!viewerFramed) {
@@ -25366,7 +25364,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       };
       const startFile = (url, kind) => {
         const go = () => {
-          if (!STATE.viewer || !STATE.viewer.video) {
+          if (!live()) {
             try { video.pause(); video.removeAttribute("src"); video.load(); } catch (err) {}
             return;
           }
@@ -25375,14 +25373,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         };
         if (kind === "hls" && !video.canPlayType("application/vnd.apple.mpegurl")) {
           loadHls().then((Hls) => {
-            if (!STATE.viewer || !STATE.viewer.video || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
+            if (!live() || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
             const hls = new Hls(hlsAhead());
-            box._hls = hls;
-            armPeer(box, hls, url);
+            stage._hls = hls;
+            armPeer(stage, hls, url);
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              if (!STATE.viewer || !STATE.viewer.video) {
+              if (!live()) {
                 try { video.pause(); hls.destroy(); } catch (err) {}
                 return;
               }
@@ -25394,7 +25392,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
         try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.src = url;
-        armPeer(box, null, url);
+        armPeer(stage, null, url);
         if (video.readyState >= 1) go();
         else video.addEventListener("loadedmetadata", go, { once: true });
       };
@@ -25407,10 +25405,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       const showCover = () => {
-        if (!STATE.viewer || !STATE.viewer.video) return;
-        if (box._ytPlayer && box._ytPlayer.destroy) {
-          try { box._ytPlayer.destroy(); } catch (err) {}
-          box._ytPlayer = null;
+        if (!live()) return;
+        if (stage._ytPlayer && stage._ytPlayer.destroy) {
+          try { stage._ytPlayer.destroy(); } catch (err) {}
+          stage._ytPlayer = null;
         }
         const poster = (media && (media.poster || media.url)) || "";
         const stills = stillCandidates(post || {}, media);
@@ -25420,11 +25418,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const img = poster || posterKey
           ? `<img decoding="async" alt="" referrerpolicy="no-referrer"${lead ? tgLead(posterKey, stills.slice(1), poster) : ` src="${esc(poster)}"`}>`
           : "";
-        box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>${img}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
-        primeTelegramImages(box);
+        stage.innerHTML = `${img}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
+        primeTelegramImages(stage);
       };
       const playAt = (list, index) => {
-        if (!STATE.viewer || !STATE.viewer.video) return;
+        if (!live()) return;
         const files = (list || []).filter((row) => row && row.kind !== "iframe" && row.url);
         const file = files[index];
         if (!file) {
@@ -25441,7 +25439,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const fail = () => playAt(list, index + 1);
         if (file.telegram && file.kind === "hls") {
           loadTelegramHls().then((Hls) => {
-            if (!STATE.viewer || !STATE.viewer.video || !accountToken() || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
+            if (!live() || !accountToken() || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
             video.crossOrigin = "anonymous";
             const hls = new Hls(hlsAhead({
               xhrSetup: (xhr, url) => {
@@ -25454,8 +25452,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             }));
             hls.on(Hls.Events.ERROR, (_event, data) => { if (data && data.fatal) fail(); });
             hls.on(Hls.Events.MANIFEST_PARSED, () => { lockHlsTop(hls); seek(); video.play().catch(() => {}); });
-            box._hls = hls;
-            armPeer(box, hls, file.url);
+            stage._hls = hls;
+            armPeer(stage, hls, file.url);
             hls.loadSource(file.url);
             hls.attachMedia(video);
           }).catch(fail);
@@ -25468,7 +25466,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             ? window.ViktorychAccounts.syncPlaybackAuth()
             : Promise.resolve();
           ready.then(() => {
-            if (!STATE.viewer || !STATE.viewer.video) return;
+            if (!live()) return;
             video.crossOrigin = "anonymous";
             video.src = file.url;
             video.addEventListener("error", fail, { once: true });
@@ -25480,7 +25478,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.addEventListener("error", fail, { once: true });
         const onBlackScreen = () => {
-          if (!STATE.viewer || !STATE.viewer.video) return;
+          if (!live()) return;
           if (!viewerFramed && video.currentTime > 1.0 && !hasDecodedFrames(video)) {
             video.removeEventListener("timeupdate", onBlackScreen);
             fail();
@@ -25492,6 +25490,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       sourcesFor(post || {}, media, 0).then((list) => playAt(list, 0)).catch(() => showCover());
       return;
     }
+    box.classList.remove("xv");
     const post = findAnyPost(view.id);
     const photos = photoList(post);
     const item = photos[view.index] || photos[0];
@@ -25509,12 +25508,391 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     primeTelegramImages(box);
   }
 
-  function openVideoViewer(post, media, src, time) {
+  /* Full-screen video viewer, laid out like X's mobile app: black stage with
+     the clip centred, round back and ⋮ buttons on top, the author, the post
+     text (tap to expand, the clip dims), the action pills, a thin progress
+     line and a control bar (play, time left, speed, sound, exit). A vertical
+     swipe (scroll-snap) or j/k and the arrow keys move to the next or
+     previous video post of the feed it was opened from; the next clip only
+     preloads its metadata. Media is hotlinked as is, never re-encoded. */
+  const XV_SPEEDS = [1, 1.25, 1.5, 2, 0.5];
+
+  function xvStageClean(el) {
+    if (!el) return;
+    if (el._xEmbedStop) {
+      try { el._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
+      el._xEmbedStop = null;
+    }
+    releasePeer(el);
+    if (el._hls && el._hls.destroy) {
+      try { el._hls.destroy(); } catch (err) { /* already gone */ }
+      el._hls = null;
+    }
+    if (el._ytPlayer && el._ytPlayer.destroy) {
+      try { el._ytPlayer.destroy(); } catch (err) { /* already gone */ }
+      el._ytPlayer = null;
+    }
+    el._gen = (el._gen || 0) + 1;
+    el.querySelectorAll("video, audio").forEach((m) => {
+      try { m.pause(); m.removeAttribute("src"); m.load(); } catch (err) { /* closing */ }
+    });
+    el.querySelectorAll("iframe").forEach((f) => {
+      try { f.src = "about:blank"; } catch (err) { /* closing */ }
+    });
+  }
+
+  function xvTeardown(box) {
+    if (!box) return;
+    if (box._xvStop) { try { box._xvStop(); } catch (err) { /* already unbound */ } box._xvStop = null; }
+    box.querySelectorAll(".xv-media").forEach(xvStageClean);
+    xvStageClean(box);
+  }
+
+  function xvQueue(tile) {
+    const out = [];
+    let at = -1;
+    document.querySelectorAll('.vplay[data-preview="feed"]').forEach((el) => {
+      if (el.closest("#viewer")) return;
+      const post = playPost(el);
+      if (!post) return;
+      const media = playMedia(el, post) || {};
+      if (youtubeId(post, media) || post.watch || (post.platform === "youtube" && post.kind !== "community")) return;
+      if (out.some((row) => row.pid === post.id && row.mi === (el.dataset.mi || "0"))) return;
+      if (el === tile) at = out.length;
+      out.push({ pid: post.id, mi: el.dataset.mi || "0" });
+    });
+    return { list: out, at: at };
+  }
+
+  function xvItem(row) {
+    if (!row) return null;
+    const post = findAnyPost(row.pid);
+    if (!post) return null;
+    const videos = (post.media || []).filter((item) => item && (item.type === "video" || item.type === "animated_gif"));
+    const media = (post.media || [])[Number(row.mi) || 0];
+    const pick = media && (media.type === "video" || media.type === "animated_gif") ? media : videos[0];
+    return pick ? { post: post, media: pick } : null;
+  }
+
+  function xvClock(sec) {
+    const n = Math.max(0, Math.floor(Number(sec) || 0));
+    const h = Math.floor(n / 3600);
+    const m = Math.floor((n % 3600) / 60);
+    const ss = String(n % 60).padStart(2, "0");
+    return h ? h + ":" + String(m).padStart(2, "0") + ":" + ss : m + ":" + ss;
+  }
+
+  function xvInfo(post) {
+    const shown = displayPost(post);
+    const face = authorFace(post);
+    const creator = isRepost(post) ? creatorOf(post) : null;
+    const name = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
+    const handle = internalPostHandle(creator ? (post.handle || creator.handle || "") : (post.handle || ""), post, creator);
+    const text = String(shown.text || "").trim();
+    const body = text ? linkify(text, shown.links || [], post.platform, post.handle) : "";
+    return `<div class="xv-info">
+      <div class="xv-who">${avatar(face.avatar, name)}<div class="xv-names"><span class="xv-name">${esc(name || "")}${badge(face.verified)}</span>${handle ? `<span class="xv-handle">@${esc(handle)}</span>` : ""}</div></div>
+      ${body ? `<div class="xv-text" role="button" tabindex="0" data-act="xv-more" aria-expanded="false" aria-label="${esc(tr("Show more"))}"><div class="xv-body" dir="auto">${body}</div></div>` : ""}
+      ${post.date ? `<div class="xv-when">${esc(relTime(post.date))}</div>` : ""}
+      <div class="xv-pills">${actionBar(post, true)}</div>
+    </div>`;
+  }
+
+  function xvPosterOf(post, media) {
+    const poster = (media && (media.poster || (media.type !== "video" ? media.url : ""))) || (post && post.poster) || "";
+    return typeof poster === "string" && poster.indexOf(".mp4") < 0 ? poster : "";
+  }
+
+  function xvSlide(item, cls, qi) {
+    const poster = xvPosterOf(item.post, item.media);
+    return `<section class="xv-slide ${cls}" data-qi="${qi}"><div class="xv-media">${poster ? `<img class="xv-poster" alt="" decoding="async" referrerpolicy="no-referrer" src="${esc(poster)}">` : ""}</div>${xvInfo(item.post)}</section>`;
+  }
+
+  function xvFrame(box, view, post, media) {
+    const known = post || { platform: view.platform || "", statusId: view.statusId || "", id: view.statusId || view.id || "", url: view.url || "", media: [media] };
+    const queue = view.queue || [];
+    const prev = view.qi > 0 ? xvItem(queue[view.qi - 1]) : null;
+    const next = view.qi >= 0 && view.qi < queue.length - 1 ? xvItem(queue[view.qi + 1]) : null;
+    const href = originalOf(known, media);
+    const link = sharePostUrl(known, "post") || known.url || sitePermalink(statusHash(known));
+    const gif = media && media.type === "animated_gif";
+    box.classList.add("xv");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-label", tr("Video"));
+    box.innerHTML = `<div class="xv-top">
+        <button class="xv-round" type="button" data-act="close-viewer" aria-label="${tr("Back")}">${icon("back")}</button>
+        <span class="xv-menu-wrap"><button class="xv-round" type="button" data-act="xv-menu" aria-label="${tr("More")}" aria-haspopup="menu" aria-expanded="false">${icon("more")}</button>
+        <div class="menu xv-menu" role="menu" hidden><button type="button" role="menuitem" data-act="copy" data-url="${esc(link || "")}">${tr("Copy link")}</button>${href ? `<a role="menuitem" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href)}">${esc(watchOn(known.platform || ""))}</a>` : ""}</div></span>
+      </div>
+      <div class="xv-track" role="region" aria-label="${esc(tr("Video posts"))}">
+        ${prev ? xvSlide(prev, "xv-prev", view.qi - 1) : ""}
+        ${xvSlide({ post: known, media: media }, "xv-cur", view.qi)}
+        ${next ? xvSlide(next, "xv-next", view.qi + 1) : ""}
+      </div>
+      <div class="xv-bar">
+        <div class="xv-prog" role="slider" tabindex="0" aria-label="${tr("Seek")}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="xv-fill"></span></div>
+        <div class="xv-ctl">
+          <button type="button" data-act="xv-play" aria-label="${tr("Pause")}">${icon("pause")}</button>
+          <span class="xv-left" aria-live="off">${gif ? "" : "-0:00"}</span>
+          <span class="xv-gap"></span>
+          <button type="button" class="xv-speed" data-act="xv-speed" aria-label="${tr("Playback speed")}">1x</button>
+          <button type="button" data-act="xv-mute" aria-label="${tr("Mute")}">${icon("vol")}</button>
+          <button type="button" data-act="close-viewer" aria-label="${tr("Exit full screen")}">${icon("exitFull")}</button>
+        </div>
+      </div>`;
+    const track = box.querySelector(".xv-track");
+    const cur = box.querySelector(".xv-cur");
+    if (track && cur) track.scrollTop = cur.offsetTop;
+    xvBind(box, view, next);
+    return cur.querySelector(".xv-media");
+  }
+
+  function xvVideo(box) {
+    const stage = box && box.querySelector(".xv-cur .xv-media");
+    return stage ? stage.querySelector("video") : null;
+  }
+
+  function xvPaintState(box) {
+    const video = xvVideo(box);
+    if (!video) return;
+    const play = box.querySelector('[data-act="xv-play"]');
+    if (play) {
+      const paused = video.paused;
+      play.innerHTML = icon(paused ? "play" : "pause");
+      play.setAttribute("aria-label", paused ? tr("Play") : tr("Pause"));
+    }
+    const mute = box.querySelector('[data-act="xv-mute"]');
+    if (mute) {
+      mute.innerHTML = icon(video.muted ? "volOff" : "vol");
+      mute.setAttribute("aria-label", video.muted ? tr("Unmute") : tr("Mute"));
+    }
+    const dur = video.duration;
+    const t = video.currentTime || 0;
+    const fill = box.querySelector(".xv-fill");
+    const prog = box.querySelector(".xv-prog");
+    const pct = isFinite(dur) && dur > 0 ? Math.min(100, (t / dur) * 100) : 0;
+    if (fill) fill.style.width = pct.toFixed(2) + "%";
+    if (prog) prog.setAttribute("aria-valuenow", String(Math.round(pct)));
+    const left = box.querySelector(".xv-left");
+    if (left && isFinite(dur) && dur > 0) left.textContent = "-" + xvClock(dur - t);
+    const speed = box.querySelector(".xv-speed");
+    if (speed) speed.textContent = String(video.playbackRate || 1).replace(/^0\./, ".") + "x";
+  }
+
+  function xvBind(box, view, next) {
+    const stage = box.querySelector(".xv-cur .xv-media");
+    const track = box.querySelector(".xv-track");
+    let bound = null;
+    const paint = () => xvPaintState(box);
+    const events = ["play", "pause", "timeupdate", "durationchange", "volumechange", "ratechange", "loadedmetadata"];
+    const attach = () => {
+      const video = stage && stage.querySelector("video");
+      if (!video || video === bound) return;
+      if (bound) events.forEach((name) => bound.removeEventListener(name, paint));
+      bound = video;
+      video.controls = false;
+      video.setAttribute("playsinline", "");
+      if (view.rate) video.playbackRate = view.rate;
+      events.forEach((name) => video.addEventListener(name, paint));
+      video.addEventListener("playing", () => { if (next) xvPreload(box, next); }, { once: true });
+      paint();
+    };
+    const watch = typeof MutationObserver === "function" && stage ? new MutationObserver(attach) : null;
+    if (watch) watch.observe(stage, { childList: true, subtree: true });
+    // Tap on the clip: collapse the expanded text, else play or pause.
+    // Capture phase: the chrome owns taps on the clip, so the player's own
+    // tap handlers below do not toggle it a second time.
+    const onTap = (event) => {
+      if (event.target.closest("button, a, .xv-info, .xv-bar, .xv-top, .menu")) return;
+      if (!event.target.closest(".xv-cur")) return;
+      event.stopPropagation();
+      const menu = box.querySelector(".xv-menu");
+      if (menu && !menu.hidden) { menu.hidden = true; return; }
+      if (box.classList.contains("xv-open")) { xvMore(box, false); return; }
+      const video = xvVideo(box);
+      if (!video) return;
+      if (video.paused) video.play().catch(() => {}); else video.pause();
+    };
+    box.addEventListener("click", onTap, true);
+    // Seek on the progress line: tap or drag.
+    const prog = box.querySelector(".xv-prog");
+    let dragging = false;
+    const seekAt = (event) => {
+      const video = xvVideo(box);
+      if (!video || !prog || !isFinite(video.duration) || video.duration <= 0) return;
+      const r = prog.getBoundingClientRect();
+      const at = Math.max(0, Math.min(1, (event.clientX - r.left) / Math.max(1, r.width)));
+      try { video.currentTime = at * video.duration; } catch (err) { /* not seekable yet */ }
+      paint();
+    };
+    const down = (event) => { dragging = true; seekAt(event); try { prog.setPointerCapture(event.pointerId); } catch (err) { /* old browser */ } };
+    const move = (event) => { if (dragging) seekAt(event); };
+    const up = () => { dragging = false; };
+    const key = (event) => {
+      const video = xvVideo(box);
+      if (!video || !isFinite(video.duration)) return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        event.stopPropagation();
+        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (event.key === "ArrowLeft" ? -5 : 5)));
+      }
+    };
+    if (prog) {
+      prog.addEventListener("pointerdown", down);
+      prog.addEventListener("pointermove", move);
+      prog.addEventListener("pointerup", up);
+      prog.addEventListener("pointercancel", up);
+      prog.addEventListener("keydown", key);
+    }
+    // Vertical swipe: the track snaps a slide at a time; once it settles on a
+    // neighbour, that post becomes the current one.
+    let settle = 0;
+    const onScroll = () => {
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        const cur = box.querySelector(".xv-cur");
+        if (!track || !cur || STATE.viewer !== view) return;
+        const h = track.clientHeight || 1;
+        const delta = Math.round((track.scrollTop - cur.offsetTop) / h);
+        if (delta) xvStep(delta > 0 ? 1 : -1);
+      }, "onscrollend" in window ? 0 : 140);
+    };
+    if (track) track.addEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll, { passive: true });
+    attach();
+    box._xvStop = () => {
+      clearTimeout(settle);
+      if (watch) watch.disconnect();
+      if (bound) events.forEach((name) => bound.removeEventListener(name, paint));
+      box.removeEventListener("click", onTap, true);
+      if (track) track.removeEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll);
+    };
+  }
+
+  /* Only the next clip warms up, and only its metadata: the service worker
+     cache answers first, the peer swarm joins once it plays, then the
+     original host. HLS gets its playlist fetched, nothing more. */
+  function xvPreload(box, next) {
+    if (!next || !box.isConnected || !dataAllow("prefetch")) return;
+    const slide = box.querySelector(".xv-next .xv-media");
+    if (!slide || slide.querySelector("video")) return;
+    sourcesFor(next.post, next.media, 0).then((list) => {
+      const file = (list || []).find((row) => row && row.url && row.kind !== "iframe" && !row.telegram && row.kind !== "tg");
+      if (!file || !slide.isConnected) return;
+      if (file.kind === "hls") {
+        fetch(file.url, { mode: "cors", credentials: "omit" }).catch(() => {});
+        return;
+      }
+      const warm = document.createElement("video");
+      warm.className = "xv-warm";
+      warm.muted = true;
+      warm.preload = "metadata";
+      warm.setAttribute("playsinline", "");
+      warm.src = file.url;
+      slide.appendChild(warm);
+    }).catch(() => {});
+  }
+
+  function xvMore(box, open) {
+    const want = open == null ? !box.classList.contains("xv-open") : !!open;
+    box.classList.toggle("xv-open", want);
+    box.querySelectorAll(".xv-cur .xv-text").forEach((el) => {
+      el.setAttribute("aria-expanded", want ? "true" : "false");
+      el.setAttribute("aria-label", want ? tr("Show less") : tr("Show more"));
+    });
+  }
+
+  function xvStep(delta) {
+    const view = STATE.viewer;
+    if (!view || !view.video || !view.queue) return false;
+    const qi = view.qi + delta;
+    const item = qi >= 0 && qi < view.queue.length ? xvItem(view.queue[qi]) : null;
+    const box = document.getElementById("viewer");
+    if (!item) {
+      const cur = box && box.querySelector(".xv-cur");
+      const track = box && box.querySelector(".xv-track");
+      if (track && cur) track.scrollTo({ top: cur.offsetTop, behavior: "smooth" });
+      return false;
+    }
+    const old = xvVideo(box);
+    if (old && STATE.viewer.id && isFinite(old.currentTime)) {
+      const post = findAnyPost(view.id);
+      if (post) noteVideo(post, { position: old.currentTime, touch: true });
+    }
+    STATE.viewer = {
+      id: item.post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: 0, src: "",
+      media: item.media, platform: item.post.platform || "", statusId: item.post.statusId || item.post.id || "", url: item.post.url || "",
+      queue: view.queue, qi: qi, rate: old ? old.playbackRate : view.rate, pushed: view.pushed
+    };
+    paintViewer();
+    return true;
+  }
+
+  function xvAct(act, el) {
+    const box = document.getElementById("viewer");
+    if (!box || !STATE.viewer || !STATE.viewer.video) return;
+    const video = xvVideo(box);
+    if (act === "xv-play") {
+      if (!video) return;
+      if (video.paused) video.play().catch(() => {}); else video.pause();
+    } else if (act === "xv-mute") {
+      if (!video) return;
+      video.muted = !video.muted;
+      if (!video.muted && video.volume === 0) video.volume = 1;
+    } else if (act === "xv-speed") {
+      if (!video) return;
+      const at = XV_SPEEDS.indexOf(video.playbackRate);
+      video.playbackRate = XV_SPEEDS[(at + 1) % XV_SPEEDS.length];
+      STATE.viewer.rate = video.playbackRate;
+    } else if (act === "xv-more") {
+      xvMore(box);
+    } else if (act === "xv-menu") {
+      const menu = box.querySelector(".xv-menu");
+      if (!menu) return;
+      menu.hidden = !menu.hidden;
+      if (el) el.setAttribute("aria-expanded", menu.hidden ? "false" : "true");
+      return;
+    }
+    xvPaintState(box);
+  }
+
+  /* After a like, repost or bookmark the pills repaint in place; the viewer
+     sits outside the app root, so a full render does not reach it. */
+  function xvRepaintPills() {
+    const box = document.getElementById("viewer");
+    const view = STATE.viewer;
+    if (!box || !view || !view.video || !box.classList.contains("xv")) return;
+    box.querySelectorAll(".xv-slide").forEach((slide) => {
+      const row = view.queue && view.queue[Number(slide.dataset.qi)];
+      const post = findAnyPost(row ? row.pid : (slide.classList.contains("xv-cur") ? view.id : ""));
+      const pills = slide.querySelector(".xv-pills");
+      if (post && pills) pills.innerHTML = actionBar(post, true);
+    });
+  }
+
+  function xvKeys() {
+    const keys = window.ViktorychKeys;
+    if (!keys || typeof keys.register !== "function" || xvKeys.done) return !!xvKeys.done;
+    const inViewer = () => !!(STATE.viewer && STATE.viewer.video);
+    keys.register({ id: "video.next", keys: ["j", "down"], scope: "media", label: "Next video", when: inViewer, run: () => xvStep(1) });
+    keys.register({ id: "video.prev", keys: ["up"], scope: "media", label: "Previous video", when: inViewer, run: () => xvStep(-1) });
+    xvKeys.done = true;
+    return true;
+  }
+
+  function openVideoViewer(post, media, src, time, tile) {
     if (STATE.autoEl) pausePreview(STATE.autoEl);
     STATE.autoEl = null;
     document.querySelectorAll(".vplay.is-playing").forEach((el) => pausePreview(el));
     const clean = src && src.indexOf("about:blank") < 0 ? src : "";
-    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null, platform: post.platform || "", statusId: post.statusId || post.id || "", url: post.url || "" };
+    const queue = tile ? xvQueue(tile) : { list: [], at: -1 };
+    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null, platform: post.platform || "", statusId: post.statusId || post.id || "", url: post.url || "", queue: queue.at >= 0 ? queue.list : null, qi: queue.at };
+    xvKeys();
+    // Back closes the viewer: it gets its own history entry.
+    try {
+      history.pushState(Object.assign({}, history.state || {}, { xv: 1 }), "", location.href);
+      STATE.viewer.pushed = true;
+    } catch (err) { /* history is locked down; Esc and the back button still close */ }
     paintViewer();
   }
 
@@ -25527,9 +25905,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     paintViewer();
   }
 
-  function closeViewer() {
+  function closeViewer(fromHistory) {
+    const pushed = !!(STATE.viewer && STATE.viewer.pushed);
     const box = document.getElementById("viewer");
     if (box) {
+      xvTeardown(box);
+      box.classList.remove("xv", "xv-open");
+      box.removeAttribute("role");
+      box.removeAttribute("aria-modal");
+      box.removeAttribute("aria-label");
       box._gen = (box._gen || 0) + 1;
       if (box._xEmbedStop) {
         try { box._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
@@ -25570,7 +25954,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     STATE.viewer = null;
     paintViewer();
+    if (pushed && fromHistory !== true) {
+      try { if (history.state && history.state.xv) history.back(); } catch (err) { /* nothing to pop */ }
+    }
   }
+
+  window.addEventListener("popstate", () => {
+    if (STATE.viewer && STATE.viewer.video && STATE.viewer.pushed) closeViewer(true);
+  });
 
   function shiftViewer(delta) {
     const view = STATE.viewer;
@@ -27234,6 +27625,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       swipe = null;
       if (fromViewer && view) {
         if (view.video) {
+          // In the X-style viewer a vertical swipe moves between posts; a
+          // pull down only closes it from the first one.
+          const xvBox = document.getElementById("viewer");
+          if (xvBox && xvBox.classList.contains("xv") && xvBox.querySelector(".xv-prev")) return;
           if (dy > 90 && Math.abs(dy) > Math.abs(dx)) closeViewer();
           return;
         }
