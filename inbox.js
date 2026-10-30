@@ -3,7 +3,12 @@
    under the title and only show the kinds of conversation the app really has:
    the app's own servers and the read-only Discord mirror. The owner also gets
    "SMS codes" (inbox-sms.js, loaded on demand) for the rented SMSPool numbers.
-   Other kinds of conversation register with ViktorychInbox.register(). */
+   Other kinds of conversation register with ViktorychInbox.register().
+   Members can also link their own Mail folder and SMSPool account
+   (inbox-mail.js / inbox-sms.js). Their secrets live only in the device
+   vault below: AES-GCM with a non-extractable key in IndexedDB
+   "viktorych-messages-vault". Which sections are linked is a plain flag
+   (no secrets) so the chips can show without opening the vault. */
 (function (root) {
   "use strict";
 
@@ -18,6 +23,98 @@
   }
 
   var extra = [];
+  var VAULT_DB = "viktorych-messages-vault";
+  var LINKED = "vk-inbox-linked";
+  var relay = { known: false, on: false, asked: false };
+
+  /* ---------- device vault (secrets and cached mail, encrypted) ---------- */
+  function vaultDb() {
+    return new Promise(function (resolve, reject) {
+      if (!root.indexedDB) { reject(new Error("no_idb")); return; }
+      var open = root.indexedDB.open(VAULT_DB, 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore("kv"); };
+      open.onsuccess = function () { resolve(open.result); };
+      open.onerror = function () { reject(open.error); };
+    });
+  }
+  function vaultDo(mode, fn) {
+    return vaultDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction("kv", mode);
+        var out = fn(tx.objectStore("kv"));
+        tx.oncomplete = function () { db.close(); resolve(out && "result" in out ? out.result : undefined); };
+        tx.onerror = function () { db.close(); reject(tx.error); };
+      });
+    });
+  }
+  function subtle() { return root.crypto && root.crypto.subtle ? root.crypto.subtle : null; }
+  function vaultKey() {
+    return vaultDo("readonly", function (s) { return s.get("key"); }).then(function (key) {
+      if (key) return key;
+      if (!subtle()) throw new Error("no_crypto");
+      return subtle().generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]).then(function (made) {
+        return vaultDo("readwrite", function (s) { s.put(made, "key"); }).then(function () { return made; });
+      });
+    });
+  }
+  var vault = {
+    put: function (name, value) {
+      return vaultKey().then(function (key) {
+        var iv = root.crypto.getRandomValues(new Uint8Array(12));
+        var plain = new TextEncoder().encode(JSON.stringify(value));
+        return subtle().encrypt({ name: "AES-GCM", iv: iv }, key, plain).then(function (ct) {
+          return vaultDo("readwrite", function (s) { s.put({ iv: iv, ct: ct }, "v:" + name); });
+        });
+      });
+    },
+    get: function (name) {
+      if (!subtle()) return Promise.resolve(null);
+      return Promise.all([
+        vaultDo("readonly", function (s) { return s.get("key"); }),
+        vaultDo("readonly", function (s) { return s.get("v:" + name); })
+      ]).then(function (got) {
+        if (!got[0] || !got[1]) return null;
+        return subtle().decrypt({ name: "AES-GCM", iv: got[1].iv }, got[0], got[1].ct).then(function (plain) {
+          return JSON.parse(new TextDecoder().decode(plain));
+        });
+      }).catch(function () { return null; });
+    },
+    drop: function (names) {
+      return vaultDo("readwrite", function (s) { [].concat(names).forEach(function (n) { s.delete("v:" + n); }); }).catch(function () { return null; });
+    },
+    wipe: function () {
+      try { root.localStorage.removeItem(LINKED); } catch (err) { /* nothing kept */ }
+      try { if (root.indexedDB) root.indexedDB.deleteDatabase(VAULT_DB); } catch (err) { /* nothing kept */ }
+    }
+  };
+  function linkedMap() {
+    try { return JSON.parse(root.localStorage.getItem(LINKED) || "{}") || {}; } catch (err) { return {}; }
+  }
+  function linked(name) { return !!linkedMap()[name]; }
+  function setLinked(name, on) {
+    var map = linkedMap();
+    if (on) map[name] = 1; else delete map[name];
+    try { root.localStorage.setItem(LINKED, JSON.stringify(map)); } catch (err) { /* private mode */ }
+  }
+
+  /* The member relays are behind the Worker flag INBOX_RELAY. Ask once. */
+  function relayOn() {
+    if (!relay.asked) {
+      relay.asked = true;
+      try {
+        var acc = root.ViktorychAccounts;
+        var tok = acc && acc.token ? acc.token() : "";
+        if (acc && acc.call && tok) {
+          acc.call("/v1/inbox/mail", { token: tok }).then(function (body) {
+            relay.known = true;
+            relay.on = !!(body && body.status === 200 && body.enabled);
+            if (relay.on) { try { root.dispatchEvent(new Event("vklazy")); } catch (err) { /* old browser */ } }
+          }, function () { relay.known = true; });
+        }
+      } catch (err) { relay.known = true; }
+    }
+    return relay.on;
+  }
 
   function isOwner() {
     try {
@@ -45,10 +142,15 @@
   function isSmsHash(hash) {
     return /^#\/(?:messages|inbox)\/sms(?:$|[/?])/.test(String(hash || ""));
   }
+  function sectionOf(hash) {
+    var m = String(hash || "").match(/^#\/(?:messages|inbox)\/(sms|mail|connect|aliases)(?:$|[/?])/);
+    return m ? m[1] : "";
+  }
 
   /* "all", "servers", "discord", "sms" or a registered id. */
   function filterOf(hash) {
-    if (isSmsHash(hash)) return "sms";
+    var sec = sectionOf(hash);
+    if (sec) return sec;
     var q = hashQuery(hash);
     var f = q ? String(q.get("f") || "") : "";
     if (f === "servers" || f === "discord") return f;
@@ -71,7 +173,10 @@
       try { if (item.visible && !item.visible()) return; } catch (err) { return; }
       list.push({ id: item.id, label: item.label, href: item.href || ("#/messages?f=" + encodeURIComponent(item.id)) });
     });
-    if (isOwner()) list.push({ id: "sms", label: tr("SMS codes"), href: "#/messages/sms", owner: true });
+    var on = relayOn();
+    if (linked("mail")) list.push({ id: "mail", label: tr("Mail"), href: "#/messages/mail" });
+    if (isOwner() || linked("sms")) list.push({ id: "sms", label: tr("SMS codes"), href: "#/messages/sms", owner: isOwner() && !linked("sms") });
+    if (on || linked("mail") || linked("sms")) list.push({ id: "connect", label: "+ " + tr("Add"), href: "#/messages/connect" });
     return list;
   }
 
@@ -85,13 +190,13 @@
   }
 
   function register(item) {
-    if (!item || !item.id || !/^[a-z][a-z0-9-]{1,23}$/.test(item.id) || ["all", "servers", "discord", "sms"].indexOf(item.id) >= 0) return false;
+    if (!item || !item.id || !/^[a-z][a-z0-9-]{1,23}$/.test(item.id) || ["all", "servers", "discord", "sms", "mail", "connect", "aliases"].indexOf(item.id) >= 0) return false;
     extra = extra.filter(function (x) { return x.id !== item.id; });
     extra.push(item);
     return true;
   }
 
-  var api = { isOwner: isOwner, aliasHash: aliasHash, isSmsHash: isSmsHash, filterOf: filterOf, viewKey: viewKey, tabsHtml: tabsHtml, register: register };
+  var api = { vault: vault, linked: linked, setLinked: setLinked, relayOn: relayOn, sectionOf: sectionOf, isOwner: isOwner, aliasHash: aliasHash, isSmsHash: isSmsHash, filterOf: filterOf, viewKey: viewKey, tabsHtml: tabsHtml, register: register };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.ViktorychInbox = api;
 })(typeof window !== "undefined" ? window : null);

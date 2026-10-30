@@ -203,3 +203,24 @@ function withHeaders(res, extra) {
     return res;
   }
 }
+
+/* POST /v1/inbox/sms: any signed-in member reads their own SMSPool account.
+   The member's API key comes from their device (stored there encrypted) with
+   each request, is used for this one read and is never stored or logged.
+   No memo: one member's answer can never reach another. Off unless the Worker
+   var INBOX_RELAY is "on". */
+export async function handleMemberSms(request, env, deps) {
+  const headers = { "cache-control": "no-store" };
+  if (String(env && env.INBOX_RELAY || "") !== "on") return withHeaders(deps.json(404, { error: "off" }), headers);
+  if (request.method !== "POST") return withHeaders(deps.json(405, { error: "method_not_allowed" }), headers);
+  const account = await deps.sessionAccount(env, request);
+  if (!account) return withHeaders(deps.json(401, { error: "sign_in" }), headers);
+  const hit = await deps.rateHit(env, "member-sms:" + account.public_id, 90, 10 * 60 * 1000);
+  if (!hit.ok) return deps.limited(hit);
+  let body;
+  try { body = await deps.readJson(request, 2048); } catch (err) { body = null; }
+  const key = body && typeof body.key === "string" ? body.key.trim() : "";
+  if (!key || key.length > 200 || /[\s\0]/.test(key)) return withHeaders(deps.json(400, { error: "bad_input" }), headers);
+  const out = await readSms({ SMSPOOL_API_KEY: key }, { history: body.history === true, fetch: deps.fetch, now: Date.now() });
+  return withHeaders(deps.json(200, out), headers);
+}

@@ -294,6 +294,12 @@ keys.js|Page Up
 keys.js|Shift
 keys.js|Super
 keys.js|Win
+inbox-mail.js|Yandex Mail
+inbox-mail.js|Gmail
+inbox-mail.js|Outlook
+inbox-mail.js|Mail.ru
+inbox-mail.js|ViktorychApp codes
+inbox-mail.js|from:(simplelogin.co OR simplelogin.io) OR to:(@{alias-domain})
 # The sharing pool public signing key (a technical token, not text).
 shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM
 shared/regone.js|NZlay Mini 01 - EU

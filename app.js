@@ -9504,6 +9504,7 @@ const here = parseRoute();
       return { name: "person", id: parts[1], query };
     }
     if (parts[0] === "messages" && parts[1] === "sms") return { name: "messages", sms: true, channel: "", server: "", query };
+    if (parts[0] === "messages" && (parts[1] === "mail" || parts[1] === "connect" || parts[1] === "aliases")) return { name: "messages", mail: true, channel: "", server: "", query };
     if (parts[0] === "messages") {
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
       const server = (parts[1] === "s" || parts[1] === "join") && parts[2] ? parts[2] : "";
@@ -18796,10 +18797,18 @@ if (STATE.histClear) {
     const chips = window.ViktorychInbox && window.ViktorychInbox.tabsHtml ? window.ViktorychInbox.tabsHtml() : "";
     return `<div class="inbox-sms"><header class="dmsgs-head"><h1>${esc(tr("Inbox"))}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
   }
+  /* Members' Mail, Add and Aliases inside Inbox. The module loads on demand. */
+  function inboxMailView(route) {
+    if (window.ViktorychInboxMail && window.ViktorychInboxMail.page) return window.ViktorychInboxMail.page(route);
+    ensureLazy("inboxmail");
+    const chips = window.ViktorychInbox && window.ViktorychInbox.tabsHtml ? window.ViktorychInbox.tabsHtml() : "";
+    return `<div class="inbox-mail"><header class="dmsgs-head"><h1>${esc(tr("Inbox"))}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
+  }
   /* Which Inbox view a hash shows: a change between them repaints the page. */
   function inboxViewKey(hash) {
     const h = String(hash || "");
-    if (/^#\/(?:messages|inbox)\/sms(?:$|[/?])/.test(h)) return "sms";
+    const sec = h.match(/^#\/(?:messages|inbox)\/(sms|mail|connect|aliases)(?:$|[/?])(.*)$/);
+    if (sec) return sec[1] + ":" + sec[2];
     const m = h.match(/[?&]f=([a-z-]+)/);
     return m ? m[1] : "";
   }
@@ -18965,6 +18974,7 @@ if (STATE.histClear) {
       return `<div class="dmsgs"><div class="dmsgs-skel" style="flex:1"><span></span><span></span><span></span><span></span></div></div>`;
     }
     if (route.name === "messages" && route.sms) return inboxSmsView(route);
+    if (route.name === "messages" && route.mail) return inboxMailView(route);
     if (route.name === "messages" && window.FeedsDiscord) return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + window.FeedsDiscord.page(route);
     if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Inbox"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
