@@ -145,4 +145,18 @@ for (const [name, ua] of Object.entries(UAS)) {
   assert.ok(home && home[0].includes('android:enabled="false"'), "the TV home screen ships turned off");
 }
 
+{
+  // Optional player and screensaver (TV app 1.5.0+): both ship turned off, and the
+  // site only offers the screensaver hand-off to an app that has it.
+  const tv = fs.readFileSync(path.join(ROOT, "tv.js"), "utf8");
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  const player = /<activity[^>]*player\.PlayerActivity[^>]*>/.exec(manifest);
+  assert.ok(player && player[0].includes('android:enabled="false"'), "the player ships turned off");
+  const dream = /<service[^>]*player\.FeedDream[^>]*>/.exec(manifest);
+  assert.ok(dream && dream[0].includes('android:enabled="false"') && dream[0].includes("BIND_DREAM_SERVICE"), "the screensaver ships turned off and only the system can bind it");
+  assert.ok(manifest.includes('android:host="dream"'), "the TV app answers viktorychtv://dream");
+  assert.ok(/appVersion\(\) >= 6\)[\s\S]{0,900}dreamLink\(b\)/.test(tv), "the screensaver hand-off is only offered to TV app 1.5.0+");
+  assert.ok(/intent:\/\/dream\?d=" \+ encodeURIComponent\(/.test(tv), "the hand-off is encoded");
+}
+
 console.log("tv boot checks passed");
