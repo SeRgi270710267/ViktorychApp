@@ -2,6 +2,8 @@
 
 A takeover guide for the next assistant or coding agent. Written from the state of the project on 2026-10-28. Anything marked "unverified" was not re-checked, so check it before you rely on it.
 
+> **Keep usage low:** read [LOW-USAGE.md](LOW-USAGE.md) before doing any work.
+
 ## 0. Running with nobody
 
 If no assistant is working on the project, read `docs/RUNNING-WITHOUT-BOT.md`. The Worker watchdog (`worker/src/watchdog.js`) keeps workflows on, re-runs a stuck deploy and reports health.
@@ -75,6 +77,21 @@ Rules:
 8. If main's own smoke check fails, every PR fails it too. Fix main first in a tiny PR at the top of the queue.
 9. Never edit `.github/workflows/`, never force-push main, never merge old main back into a branch, never use `git stash`. No account handles or IDs in commits, PR text or logs.
 
+## TV sign-in
+
+Short address for people: `viktorychapp.pages.dev` (`SHORT_ORIGIN` in `shared/short-link.js`; `/tv`, `/p/CODE`, `/join`, `/go` via `_redirects`, and `404.html` on GitHub Pages).
+A signed-out TV opens "Sign in with your phone" by itself: a QR code for `/p/CODE` plus a 6-character code, ten minutes, one use, renewed by itself, through `/v1/tv-pair/*`.
+A signed-in phone confirms with one tap; a signed-out phone signs in or up and the TV finishes right after.
+The TV can also ask an account by username: the Worker sends an "Approve sign-in on TV?" notification (Approve / Deny) to that account's devices; the TV never learns whether the name exists; limited per TV, per name and per IP (`tv_pair_asks`, migration 0085). On a computer, the code box takes paste and sends itself at 6 characters. See [TV-SIGN-IN.md](TV-SIGN-IN.md).
+
+## TV controller play
+
+The TV app 1.2.0 (versionCode 3) plays ReGone with a controller in its own WebView screen (`GameActivity`, `viktorychtv://game/regone`); controller input becomes real key presses and touches. Design, layout, limits and the device test checklist: [TV-CONTROLLER.md](TV-CONTROLLER.md). Still needs a real-TV test: whether ReGone reads keys while its touch controls are on (fallback: Menu > Move with > On-screen joystick). After the PR merges, upload `tv/ViktorychTV.apk` to the latest GitHub release as `ViktorychTV.apk`.
+
+## NZlay Forums community
+
+The NZlay forum (`nzlay.com`, SocialEngine) is in the Communities tab as an X-style Community: live reads through the Worker, and post/reply after the user signs in on their own device (session stored encrypted on-device only, like the Discord local keys; a no-storage/no-logging Worker relay carries the cookie). ReGone links (online + Play header, author rank/stats badges, room-join chips, Games link-back) each sit behind their own switch. Flags `nzlay_forum`, `nzlay_forum_post`, `nzlay_forum_regone` (all default on). Live posting is **not yet verified against a real NZlay account** (signing up / posting was not authorized). Details: [NZLAY-FORUM.md](NZLAY-FORUM.md).
+
 ## 6. Gotchas
 
 - `scripts/handle_guard.py` rejects any token from the private owner catalog, including product and assistant names used as handles. Keep docs neutral.
@@ -85,3 +102,23 @@ Rules:
 ## Post schema
 
 Every source is normalized to one canonical post shape before it ships. See [POST-SCHEMA.md](POST-SCHEMA.md) and `docs/post.schema.json`; tests: `python3 scripts/normalize_test.py` (also run by `handle_guard.py --selftest` in CI).
+
+## Short TV address (owner step, free)
+
+To give TVs a short address, create the org Pages site once. It is free and stays on GitHub Pages:
+
+1. On GitHub, create a new public repository in the ViktorychGroup organization named exactly `viktorychgroup.github.io`.
+2. Add one file `index.html` with:
+   ```html
+   <!doctype html><meta charset="utf-8"><title>Viktorych</title>
+   <meta name="description" content="Viktorych: open the app.">
+   <link rel="canonical" href="https://viktorychgroup.github.io/ViktorychApp/">
+   <meta http-equiv="refresh" content="0; url=/ViktorychApp/">
+   <script>location.replace("/ViktorychApp/" + location.search + location.hash);</script>
+   <a href="/ViktorychApp/">Open Viktorych</a>
+   ```
+3. Settings > Pages: Source "Deploy from a branch", branch `main`, folder `/ (root)`. Save.
+4. After a minute, `https://viktorychgroup.github.io/` opens the app. TV mode still turns on by itself on TV browsers.
+5. Then ask the assistant to switch `DEFAULT_HOST` in `send-tv.js` to `viktorychgroup.github.io` so Send to my TV shows the new address.
+
+Send to my TV (`#/send-to-tv`) and what really works per TV brand: [SEND-TO-TV.md](SEND-TO-TV.md).

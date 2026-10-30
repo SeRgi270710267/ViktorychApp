@@ -196,7 +196,7 @@ async function run(browser, vp, origin) {
   await page.goto(origin + "/#/@user_a?tab=replies", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => { const el = document.querySelector('article.post[data-post="va_00000000000000a2"]'); const wrap = el && (el.closest(".thread") || el); return !!(wrap && wrap.querySelector(".community-line")); }, null, { timeout: 15000 })
     .catch(() => fail(vp.name + " the profile Replies tab is missing the community reply"));
-  // Replies show their parent above them with the thread line and a "Replying to" line, like X.
+  // Replies show their parent above them with the thread line and, like X, no "Replying to" line.
   const thread = await page.evaluate(() => {
     const child = document.querySelector('article.post[data-post="va_00000000000000a2"]');
     const wrap = child && child.closest(".thread");
@@ -206,7 +206,7 @@ async function run(browser, vp, origin) {
     return { parent: !!parent, connector: !!(parent && parent.querySelector(".thread-line")), replying: line ? line.textContent : "", label: label ? label.textContent : "" };
   });
   if (!thread.parent || !thread.connector) fail(vp.name + " the reply does not show its parent with the thread line: " + JSON.stringify(thread));
-  if (thread.replying.indexOf("@user_b") < 0) fail(vp.name + " the reply has no Replying to line: " + JSON.stringify(thread));
+  if (thread.replying) fail(vp.name + " a reply right under its parent must not repeat Replying to: " + JSON.stringify(thread));
   if (thread.label.indexOf("r/placeholder_group") < 0) fail(vp.name + " the community line does not read r/name: " + JSON.stringify(thread));
   // The post page shows the whole ancestor chain above the reply.
   await page.goto(origin + "/#/app/user_a/status/va_00000000000000a2", { waitUntil: "domcontentloaded" });

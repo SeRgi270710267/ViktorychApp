@@ -212,7 +212,7 @@ html.tv-on .ach-orb { width: 78px; height: 78px; }
 .ach-sub { font-size: 15px; font-weight: 700; margin: 16px 0 8px; }
 .ach-demo { margin: 8px 0 12px; }
 .ach-volume { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 15px; }
-.ach-volume input { flex: 1; accent-color: var(--blue, #1d9bf0); }
+.ach-volume input { flex: 1; }
 .ach-chimes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .ach-chime { display: flex; gap: 6px; }
 .ach-chime .outline { flex: 1; }
@@ -267,3 +267,14 @@ html.tv-on .ach-alert.open .ach-card { height: auto; max-width: 620px; }
 .ach-alert .ach-ico { display: grid; place-items: center; color: var(--ach-accent); }
 .ach-alert .ach-ico svg { display: block; width: 26px; height: 26px; fill: currentColor; }
 html.tv-on .ach-alert .ach-ico svg { width: 32px; height: 32px; }
+/* Game invites (blue, with the inviter's photo and a countdown) and game
+   achievements (gold outline badge). */
+.ach.v-invite { --ach-accent: #1d9bf0; --ach-glow: rgba(29, 155, 240, 0.4); }
+.ach.v-game { --ach-accent: #ffd400; --ach-glow: rgba(255, 212, 0, 0.35); }
+.ach.v-invite .ach-card { border-color: rgba(29, 155, 240, 0.65); }
+.ach-alert .ach-ava { display: block; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+.ach-alert .ach-ava-text { display: grid; place-items: center; background: #333639; color: #e7e9ea; font-weight: 800; font-size: 18px; }
+.ach.v-invite .ach-btn-main { background: #1d9bf0; color: #fff; }
+.ach.v-invite .ach-btn-main:hover { background: #1a8cd8; }
+.ach-alert .ach-ico svg.gs-badge { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 499px) { .ach.v-invite .ach-btn { min-height: 56px; padding: 0 20px; } }

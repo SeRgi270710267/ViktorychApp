@@ -31,9 +31,13 @@ function randomCode() {
   return out.join("");
 }
 
+function codeRounds(env, deps) {
+  return deps.codeIterationsOf ? deps.codeIterationsOf(env) : deps.iterationsOf(env);
+}
+
 export async function issueRecoveryCodes(env, publicId, deps) {
   await env.DB.prepare("DELETE FROM recovery_codes WHERE public_id = ?").bind(publicId).run();
-  const rounds = deps.iterationsOf(env);
+  const rounds = codeRounds(env, deps);
   const now = Date.now();
   const codes = [];
   for (let i = 0; i < CODE_COUNT; i++) {
@@ -54,7 +58,8 @@ export async function rotateAccountNumber(env, publicId, deps) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const rounds = deps.iterationsOf(env);
   const lookup = await deps.hmacHex(env.ACCOUNT_PEPPER, number);
-  const hash = await deps.slowHash(number, salt, rounds);
+  const raw = await deps.slowHash(number, salt, rounds);
+  const hash = deps.encodeNumberHash ? deps.encodeNumberHash(rounds, raw) : raw;
   await env.DB.prepare("UPDATE accounts SET number_lookup = ?, number_hash = ?, salt = ? WHERE public_id = ?").bind(
     lookup, hash, deps.bytesToB64(salt), publicId
   ).run();
@@ -69,7 +74,7 @@ export async function handleRecoveryRestore(request, env, deps) {
   const body = await deps.readJson(request, 2000);
   if (body.error) return deps.json(400, { error: body.error });
   const code = normalizeCode(body.code);
-  const rounds = deps.iterationsOf(env);
+  const rounds = codeRounds(env, deps);
   const dummySalt = new Uint8Array(16);
   if (code.length !== 12) {
     await deps.slowHash("AAAAAAAAAAAA", dummySalt, rounds);

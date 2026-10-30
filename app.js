@@ -62,6 +62,8 @@
   const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Fediverse", nostr: "Nostr" };
 
   const PATH = {
+    atSign: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z",
+    sms: "M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z",
     image: "M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3-3 3 3 5-5 3 3V5.5c0-.276-.224-.5-.5-.5h-13zM19 15.414l-3-3-5 5-3-3-3 3V18.5c0 .276.224.5.5.5h13c.276 0 .5-.224.5-.5v-3.086zM9.75 7C8.784 7 8 7.784 8 8.75s.784 1.75 1.75 1.75 1.75-.784 1.75-1.75S10.716 7 9.75 7z",
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
     homeOn: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14a.93.93 0 0 0 .929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h5.653c.51 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.408-.758z",
@@ -88,6 +90,7 @@
     thumb: "M2 9.5C2 8.12 3.12 7 4.5 7H8l1.2-1.6c.3-.4.8-.6 1.3-.6h3c.5 0 1 .2 1.3.6L16 7h3.5C20.88 7 22 8.12 22 9.5v7c0 1.38-1.12 2.5-2.5 2.5h-15C3.12 19 2 17.88 2 16.5v-7zm8.2 1.1 4.3 2.5-4.3 2.5v-5z",
     thumbDown: "M22 14.5c0 1.38-1.12 2.5-2.5 2.5H16l-1.2 1.6c-.3.4-.8.6-1.3.6h-3c-.5 0-1-.2-1.3-.6L8 17H4.5C3.12 17 2 15.88 2 14.5v-7C2 6.12 3.12 5 4.5 5h15C20.88 5 22 6.12 22 7.5v7zM13.8 13.4 9.5 10.9v5l4.3-2.5z",
     bookmarkOn: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5z",
+    aiExplain: "M12 4.5a7.5 7.5 0 1 0 6.5 3.75l1.45-1.45A9.5 9.5 0 1 1 17.2 4.05L15.75 5.5A7.46 7.46 0 0 0 12 4.5zm8.3-1.9 1.1 1.1L4.7 20.4l-1.1-1.1L20.3 2.6z",
     more: "M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z",
     reply: "M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z",
     repost: "M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z",
@@ -109,6 +112,8 @@
     clock: "M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm1 11h-4V7h2v4h2v2z",
     plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z",
     play: "M8 5v14l11-7z",
+    pause: "M6 5h4v14H6zM14 5h4v14h-4z",
+    exitFull: "M4 14h6v6H8v-4H4v-2zm16 0v2h-4v4h-2v-6h6zM8 4h2v6H4V8h4V4zm6 0h2v4h4v2h-6V4z",
     expand: "M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z",
     vol: "M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z",
     volOff: "M16.5 12a4.5 4.5 0 0 0-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4 9.91 6.09 12 8.18V4z",
@@ -1016,7 +1021,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -1036,7 +1041,8 @@
         feedId: String(item.feedId || "").slice(0, 120),
         platform: String(item.platform || "").slice(0, 24),
         ids: Array.isArray(item.ids) ? item.ids.map((id) => String(id || "").slice(0, 120)).filter(Boolean).slice(0, 12) : [],
-        handles: Array.isArray(item.handles) ? item.handles.map((id) => String(id || "").toLowerCase().slice(0, 120)).filter(Boolean).slice(0, 24) : []
+        handles: Array.isArray(item.handles) ? item.handles.map((id) => String(id || "").toLowerCase().slice(0, 120)).filter(Boolean).slice(0, 24) : [],
+        expiresAt: Math.max(0, Number(item.expiresAt) || 0)
       });
     });
     return out;
@@ -1204,8 +1210,15 @@
     hidden: []
   };
 
+  const INBOX_NAV_IDS = ["inbox-servers", "inbox-discord", "inbox-mail", "inbox-sms"];
+  const INBOX_NAV_FALLBACK = {
+    "inbox-servers": { id: "servers", href: "#/messages?f=servers", icon: "communities", label: "Servers" },
+    "inbox-discord": { id: "discord", href: "#/messages?f=discord", icon: "discord", label: "Discord" },
+    "inbox-mail": { id: "mail", href: "#/messages/mail", icon: "atSign", label: "Mail" },
+    "inbox-sms": { id: "sms", href: "#/messages/sms", icon: "sms", label: "SMS codes" }
+  };
   const ALL_NAV_IDS = [
-    "home", "explore", "notifications", "messages", "online", "feeds", "lists",
+    "home", "explore", "notifications", "messages", "inbox-servers", "inbox-discord", "inbox-mail", "inbox-sms", "online", "feeds", "lists",
     "history", "music", "shorts", "games", "tv", "communities",
     "subscriptions", "vault", "packages", "settings"
   ];
@@ -1241,6 +1254,13 @@
 
     ALL_NAV_IDS.forEach((id) => {
       if (!accounted.has(id) && !hidden.includes(id)) {
+        // Inbox sections that get their own page sit right under Inbox.
+        if (INBOX_NAV_IDS.includes(id) && order.includes("messages")) {
+          let at = order.indexOf("messages") + 1;
+          while (at < order.length && INBOX_NAV_IDS.includes(order[at])) at += 1;
+          order.splice(at, 0, id);
+          return;
+        }
         order.push(id);
       }
     });
@@ -1309,7 +1329,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", saveData: false, videoHd: true, imageLoad: "always", imageSize: "auto", linkPreviews: "full", preload: "idle", syncEvery: "normal", backgroundLive: true, updateDownload: "always", brandLogo: { mode: "default", text: "" } });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed", saveData: false, videoHd: true, imageLoad: "always", imageSize: "auto", linkPreviews: "full", preload: "idle", syncEvery: "normal", backgroundLive: true, updateDownload: "always", brandLogo: { mode: "default", text: "" }, busyPrefs: { at: 0, modes: {}, mutes: {}, server: true }, avatarShape: "round", blocks: { at: 0, accounts: [], posts: [], sources: [], types: {}, showHidden: false } });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1341,6 +1361,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
       parsed.mutedAccounts = Array.isArray(parsed.mutedAccounts) ? parsed.mutedAccounts : [];
       parsed.repostOff = Array.isArray(parsed.repostOff) ? parsed.repostOff : [];
+      parsed.blocks = cleanBlocks(parsed.blocks);
       parsed.groups = Array.isArray(parsed.groups) ? cleanGroups(parsed.groups) : [];
       parsed.groupsOwn = parsed.groupsOwn === true;
       parsed.subsGroup = typeof parsed.subsGroup === "string" ? parsed.subsGroup : "";
@@ -1348,6 +1369,8 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.forYouReposts = parsed.forYouReposts !== false;
       parsed.forYouReplies = parsed.forYouReplies !== false;
       parsed.brandLogo = cleanBrandLogo(parsed.brandLogo);
+      parsed.avatarShape = parsed.avatarShape === "square" ? "square" : "round";
+      parsed.busyPrefs = cleanBusyPrefs(parsed.busyPrefs);
       parsed.tabViews = cleanTabViews(parsed.tabViews);
       parsed.translateTo = window.FeedsTranslate && window.FeedsTranslate.normalizeTarget ? window.FeedsTranslate.normalizeTarget(parsed.translateTo) : (parsed.translateTo || "ui");
       parsed.translateAuto = parsed.translateAuto !== false;
@@ -1425,6 +1448,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       STATE.settings.devicePerf = window.ViktorychDevice.persist(STATE.settings.devicePerf);
     }
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
+    blocksChanged();
     syncFeatureFlags();
     syncWorkerState();
     applyPrivacyProtections();
@@ -1753,7 +1777,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1817,7 +1841,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
       telegram: [tr("Telegram ingest"), tr("The Telegram bot webhook and media relay.")],
       pills: [tr("Pills data"), tr("Weather and scores data for every visitor.")],
-      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")]
+      nostr: [tr("Nostr"), tr("Nostr names, posting to relays and Nostr replies. Off until you turn it on; then each person still opts in.")],
+      regone_leaderboard: [tr("ReGone Top Players"), tr("The NZlay Top 100 tab on the Games page, rank cards and rank achievements.")],
+      regone_online: [tr("ReGone players online"), tr("The players-online count on the Games tile and in invites.")],
+      regone_rooms: [tr("ReGone room list"), tr("NZlay's live room list in the invite and party room picker.")],
+      regone_profile_stats: [tr("ReGone profile stats"), tr("Stats and achievements from the NZlay profile someone linked to their own account.")],
+      nzlay_forum: [tr("NZlay forum community"), tr("The NZlay Forums community: topics and replies read live from nzlay.com.")],
+      nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
+      nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -2016,6 +2047,23 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (feed && feed.handle) return profileHash(feed.platform, feed.handle);
     return userHash(platform, handle);
   }
+  /* Community Notes: the post ref the Worker and the X mirror use. */
+  function cnRef(post) {
+    if (!post) return "";
+    const platform = String(post.platform || "").toLowerCase();
+    const id = String(post.statusId || post.id || "").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 100);
+    return /^[a-z]{1,12}$/.test(platform) && id ? platform + ":" + id : "";
+  }
+  function cnSlot(post) {
+    const ref = cnRef(post);
+    if (!ref) return "";
+    const app = post.platform === "app" && /^[a-f0-9]{32}$/.test(String(post.id || "")) ? String(post.id) : "";
+    return `<div class="cn-slot" data-cn-ref="${esc(ref)}" data-cn-href="${esc(statusHash(post))}"${app ? ` data-cn-app="${app}"` : ""}></div>`;
+  }
+  function cnMenu(post) {
+    return window.ViktorychCommunityNotes && window.ViktorychCommunityNotes.menuItems ? window.ViktorychCommunityNotes.menuItems(cnRef(post)) : "";
+  }
+
   function statusHash(post) {
     const platform = post.platform || "x";
     const handle = post.handle || "";
@@ -2104,13 +2152,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return feed && feed.id ? feed.id : "";
   }
 
-  function sitePermalink(hash) {
-    const clean = hash.startsWith("#") ? hash : "#" + hash;
-    return location.origin + pagesDirectory() + clean;
+  // Links people copy or share use the short address (shared/short-link.js).
+  function shareRoot() {
+    const short = window.ViktorychShort;
+    return short ? short.shareBase(location) : location.origin + pagesDirectory();
   }
 
-  function shareRoot() {
-    return location.origin + pagesDirectory();
+  function sitePermalink(hash) {
+    const clean = hash.startsWith("#") ? hash : "#" + hash;
+    return shareRoot() + clean;
   }
 
   function shareFileToken(post) {
@@ -2245,9 +2295,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }).filter(Boolean);
     const copy = { updated: doc.updated || "", savedAt: doc.savedAt || Date.now(), feeds: doc.feeds || [], posts: posts };
     try {
+      /* localStorage is for small things: the first screen of posts is
+         enough to paint before the feed loads. */
       let text = JSON.stringify(copy);
-      if (text.length > 400000) {
+      if (text.length > 80000) {
         copy.posts = copy.posts.slice(0, 20);
+        text = JSON.stringify(copy);
+      }
+      if (text.length > 80000) {
+        copy.posts = copy.posts.slice(0, 10);
         text = JSON.stringify(copy);
       }
       writeStored(localStorage, "timeline-v1", text);
@@ -3009,6 +3065,69 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return Object.assign({}, post, { text: text, html: html });
   }
 
+  /* X's reply context, for every source (X, Threads, Instagram, RSS). The
+     @mentions prefixed to a reply are its targets: X shows them once, in
+     "Replying to @a" under the name row, and hides them from the body. A
+     mention later in the text stays. Formats follow x.com: "@a", "@a and @b",
+     "@a @b and @c", "@a @b and N others" (the others open a list). */
+  function leadMentionRun(text) {
+    const handles = [];
+    let rest = String(text || "");
+    for (let guard = 0; guard < 50; guard++) {
+      const m = rest.match(/^\s*@([A-Za-z0-9_](?:[A-Za-z0-9_.]{0,28}[A-Za-z0-9_])?)(?=\s|$)/);
+      if (!m) break;
+      handles.push(m[1]);
+      rest = rest.slice(m[0].length);
+    }
+    return { handles: handles, rest: rest.replace(/^\s+/, "") };
+  }
+
+  function replyTargets(post) {
+    const to = post && post.replyingTo;
+    const first = to ? internalPostHandle(to.handle) : "";
+    if (!first) return { handles: [], strip: false, rest: "" };
+    const run = leadMentionRun(post.text || "");
+    const low = (h) => String(h || "").toLowerCase();
+    const strip = run.handles.some((h) => low(h) === low(first));
+    const handles = [first];
+    if (strip) run.handles.forEach((h) => { if (!handles.some((x) => low(x) === low(h))) handles.push(h); });
+    return { handles: handles, strip: strip, rest: run.rest };
+  }
+
+  function replyBody(post) {
+    const t = replyTargets(post);
+    if (!t.strip) return post;
+    const html = post.html ? stripLeadMentionHtml(post.html) : (post.html || "");
+    return Object.assign({}, post, { text: t.rest, html: html });
+  }
+
+  function replyContextHtml(post) {
+    const t = replyTargets(post);
+    const hs = t.handles;
+    if (!hs.length) return "";
+    const platform = post.platform || "x";
+    const link = (h) => `<a data-act="stop" data-card="${esc(platform + ":" + h)}" href="${esc(accountHash(platform, h))}">@${esc(h)}</a>`;
+    let who = link(hs[0]);
+    if (hs.length === 2) who = tr("{a} and {b}", { a: link(hs[0]), b: link(hs[1]) });
+    else if (hs.length === 3) who = tr("{a} {b} and {c}", { a: link(hs[0]), b: link(hs[1]), c: link(hs[2]) });
+    else if (hs.length > 3) {
+      const others = `<button type="button" class="reply-others" data-act="reply-others" data-platform="${esc(platform)}" data-handles="${esc(JSON.stringify(hs))}">${esc(trn("reply.others", hs.length - 2))}</button>`;
+      who = tr("{a} {b} and {others}", { a: link(hs[0]), b: link(hs[1]), others: others });
+    }
+    return `<div class="replying">${tr("Replying to")} ${who}</div>`;
+  }
+
+  function replyListDialog() {
+    const box = STATE.replyList || { platform: "x", handles: [] };
+    const rows = (box.handles || []).map((h) => {
+      const acct = catalogAccount(box.platform, h) || {};
+      return `<a class="acct-row" href="${esc(accountHash(box.platform, h))}" data-act="close-reply-list">${avatar(acct.avatar || "", acct.name || h)}<span class="rl-copy"><span class="rl-name">${esc(acct.name || h)}</span><span class="handle">@${esc(h)}</span></span></a>`;
+    }).join("");
+    return `<div class="modal-back" data-act="close-modal"><div class="modal reply-list-modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Replying to"))}" data-act="stop">
+      <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Replying to")}</h2></div>
+      <div class="modal-body">${rows}</div></div></div>`;
+  }
+
   function clipLoops(media, seconds) {
     if (media && media.type === "animated_gif") return true;
     const dur = Number(seconds != null ? seconds : (media && media.duration)) || 0;
@@ -3479,10 +3598,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const rows = Object.keys(LINK_PREVIEW.mem).map((url) => [url, LINK_PREVIEW.mem[url]]).filter((row) => row[1] && !row[1].pending)
         .sort((a, b) => b[1].at - a[1].at).slice(0, LINK_PREVIEW.max);
       const out = {};
-      rows.forEach((row) => {
+      // Bounded by size as well as count: newest cards first, stop near 100k characters.
+      let size = 2;
+      rows.some((row) => {
         const value = row[1];
         // Embedded posts live in the fx/status cache; keep the card only.
-        out[row[0]] = value.quote ? { at: value.at, quoteRef: true, none: false } : value;
+        const keep = value.quote ? { at: value.at, quoteRef: true, none: false } : value;
+        size += row[0].length + JSON.stringify(keep).length + 4;
+        if (size > 100000) return true;
+        out[row[0]] = keep;
+        return false;
       });
       try { localStorage.setItem(LINK_PREVIEW.lsKey, JSON.stringify(out)); } catch (err) { /* quota */ }
     }
@@ -4065,7 +4190,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const body = myDevices && myDevices.loaded
       ? (rows || `<div class="set-block"><p class="phandle">${esc(myDevices.failed ? tr("Could not load your devices.") : tr("No devices yet."))}</p></div>`)
       : `<div class="set-block"><p class="phandle">${esc(tr("Loading…"))}</p></div>`;
-    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div><div class="set-block device-wipe"><p class="phandle">${esc(tr("Signs this device out and erases everything the app saved on it: drafts, messages, notifications, downloads and the offline copy."))}</p><button class="outline danger" type="button" data-act="device-wipe-self">${esc(tr("Remove this device and erase its data"))}</button></div>`;
+    return settingsHead(tr("My devices"), "#/settings") + `<div class="set-block"><p class="phandle">${esc(tr("Devices signed in to this account show up here on their own. Removing one signs it out. QR codes are only for linking a different account."))}</p></div><div class="set-list">${body}</div><div class="set-block"><a class="outline" href="#/link-tv">${esc(tr("Link a TV"))}</a></div><div class="set-block device-wipe"><p class="phandle">${esc(tr("Signs this device out and erases everything the app saved on it: drafts, messages, notifications, downloads and the offline copy."))}</p><button class="outline danger" type="button" data-act="device-wipe-self">${esc(tr("Remove this device and erase its data"))}</button></div>`;
   }
 
   function accountsApi() {
@@ -5954,7 +6079,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       goHash(watchHash(post));
       return;
     }
-    openVideoViewer(post, media, src, time);
+    openVideoViewer(post, media, src, time, tile);
   }
 
   function followButton(id, large) {
@@ -6077,6 +6202,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(handle || "").replace(/^@/, "");
   }
 
+  /* A quote the server dropped for this device's blocks: a stub, no fetch. */
+  function quoteBlockedStub(post) {
+    return post && !post.quoted && post.quoteBlocked ? `<div class="quote quote-gone">${esc(tr("This post is from an account you blocked."))}</div>` : "";
+  }
   /* A referenced (quoted) item normally arrives embedded and fully normalized
      (docs/POST-SCHEMA.md). When the sync could only record its ref
      (embedded === false), fetch it once on demand and re-render. */
@@ -6098,6 +6227,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function quoteCard(quoted) {
     if (!quoted) return "";
+    if (quoteHidden(quoted) && !(STATE.revealedHidden && STATE.revealedHidden["q:" + String(quoted.statusId || quoted.id || "")])) {
+      return `<div class="quote quote-gone">${esc(tr("This post is from an account you blocked."))} <button type="button" class="linkish" data-act="reveal-hidden" data-id="${esc("q:" + String(quoted.statusId || quoted.id || ""))}">${esc(tr("Show"))}</button></div>`;
+    }
     fillReferenced(quoted);
     const platform = quoted.platform || "x";
     const asQuoted = asPost(quoted, platform);
@@ -6228,11 +6360,145 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  /* Muted & blocked. Rules sit in STATE.settings (mutedWords, mutedAccounts,
+     repostOff, and blocks for single posts and comments, whole sources, and
+     content types per account). They are hashed into one small set by
+     shared/blocklist.js. The same hashes go to the Worker in X-Block so feed
+     pages and comment lists arrive without blocked items; nothing raw leaves
+     the device. Each post's answer is cached until the rules change, so the
+     check is cheap enough to run before any card, avatar or media exists. */
+  function cleanBlocks(raw) {
+    const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const list = (value, max) => (Array.isArray(value) ? value : []).map((item) => String(item || "").trim()).filter((item) => item && item.length <= 200).filter((item, i, all) => all.indexOf(item) === i).slice(-max);
+    const types = {};
+    const rawTypes = src.types && typeof src.types === "object" && !Array.isArray(src.types) ? src.types : {};
+    Object.keys(rawTypes).slice(0, 300).forEach((key) => {
+      const kinds = (Array.isArray(rawTypes[key]) ? rawTypes[key] : []).filter((kind) => kind === "replies" || kind === "videos" || kind === "reposts");
+      if (key && key.length <= 200 && kinds.length) types[key] = kinds.filter((kind, i, all) => all.indexOf(kind) === i);
+    });
+    return { at: Number(src.at) || 0, accounts: list(src.accounts, 500), posts: list(src.posts, 2000), sources: list(src.sources, 300), types: types, showHidden: src.showHidden === true };
+  }
+
+  let blockVersion = 1;
+  let blockHashes = null;
+  let blockHashSet = null;
+  let blockReasons = new WeakMap();
+  const BLOCK_HEADER_KEY = "viktorychapp-block-h";
+  function blocksApi() { return window.ViktorychBlocks || null; }
+  function blockSettings() {
+    if (!STATE.settings) return null;
+    if (!STATE.settings.blocks) STATE.settings.blocks = cleanBlocks(null);
+    return STATE.settings.blocks;
+  }
+  function showHiddenOn() {
+    const b = STATE.settings && STATE.settings.blocks;
+    // Save data keeps hidden posts out entirely, even with Show hidden on.
+    if (STATE.settings && STATE.settings.saveData === true) return false;
+    return !!(b && b.showHidden);
+  }
+  let blockFor = null;
+  function blockSig(src) {
+    const v = src || {};
+    return JSON.stringify([v.mutedWords || [], v.mutedAccounts || [], v.repostOff || [], v.blocks || null]);
+  }
+  // A settings object loaded again (sign-in sync, import) brings its own rules.
+  function blockFresh() {
+    if (blockFor === STATE.settings) return;
+    blockFor = STATE.settings;
+    blockHashSet = null;
+    blockHashes = null;
+    blockReasons = new WeakMap();
+  }
+  function currentBlockSet() {
+    blockFresh();
+    if (blockHashSet) return blockHashSet;
+    const api = blocksApi();
+    if (!api || !STATE.settings) return null;
+    blockHashes = api.rulesFromSettings(STATE.settings);
+    blockHashSet = new Set(blockHashes);
+    // Keep the stored header in step, so the next boot's first request carries it.
+    const value = showHiddenOn() ? "" : api.headerValue(blockHashes);
+    if (window.__viktorychBlockHeader !== value) {
+      window.__viktorychBlockHeader = value;
+      try {
+        if (value) localStorage.setItem(BLOCK_HEADER_KEY, value);
+        else localStorage.removeItem(BLOCK_HEADER_KEY);
+      } catch (err) { /* storage blocked: the device still filters */ }
+    }
+    return blockHashSet;
+  }
+  /* The header the boot script and every API read send. With Show hidden on,
+     the server keeps everything so the hidden rows can show as placeholders. */
+  function blockHeader() {
+    const api = blocksApi();
+    if (!api || showHiddenOn()) return "";
+    currentBlockSet();
+    return api.headerValue(blockHashes || []);
+  }
+  function publishBlockHeader() {
+    const value = blockHeader();
+    try {
+      if (value) localStorage.setItem(BLOCK_HEADER_KEY, value);
+      else localStorage.removeItem(BLOCK_HEADER_KEY);
+    } catch (err) { /* storage blocked: the device still filters */ }
+    window.__viktorychBlockHeader = value;
+  }
+  function blocksChanged() {
+    blockVersion += 1;
+    blockHashSet = null;
+    blockHashes = null;
+    blockReasons = new WeakMap();
+    publishBlockHeader();
+  }
+  if (typeof window.addEventListener === "function") window.addEventListener("viktorych-blocks", () => { blocksChanged(); if (STATE.settings) render({ y: window.scrollY }); });
+
+  /* Why this device hides a post or comment: "account", "post", "source",
+     "type", "word", or "". */
+  function blockReason(post) {
+    if (!post || typeof post !== "object") return "";
+    blockFresh();
+    const cached = blockReasons.get(post);
+    if (cached !== undefined) return cached;
+    let why = "";
+    if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) why = "account";
+    if (!why) {
+      const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
+      if (blocks && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) why = "account";
+    }
+    if (!why) {
+      const set = currentBlockSet();
+      const api = blocksApi();
+      if (set && set.size && api) why = api.reason(set, post);
+    }
+    if (!why && wordMuted([post.text, post.title].filter(Boolean).join("\n"))) why = "word";
+    if (!why && repostsOff(post)) why = "type";
+    blockReasons.set(post, why);
+    return why;
+  }
+
+  function quoteHidden(quoted) {
+    if (!quoted) return false;
+    const set = currentBlockSet();
+    const api = blocksApi();
+    if (set && set.size && api && api.quoteBlocked(set, quoted)) return true;
+    if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], quoted.handle, quoted.platform || "x", quoted.feedId)) return true;
+    return wordMuted(quoted.text);
+  }
+
+  /* The comments hook (window.ViktorychBlocklist.hides): true when this
+     device's blocks hide a post or reply, so the comments client drops it
+     before its card, avatar or media is built. Show hidden keeps it. */
+  window.ViktorychBlocklist = {
+    hides(post) {
+      if (!post || !STATE.settings) return false;
+      return !!blockReason(post) && !showHiddenOn();
+    },
+    reason(post) { return post && STATE.settings ? blockReason(post) || "" : ""; }
+  };
   function hiddenPost(post) {
     if (!post) return false;
     if (catalogRowHidden(post)) return true;
     if (window.FeedsPeople && window.FeedsPeople.hidden && window.FeedsPeople.hidden(post)) return true;
-    if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
     const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
     if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
     // Hook for the shared blocklist (mute/block data): checked before a reply
@@ -6241,9 +6507,111 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (list && typeof list.hides === "function") {
       try { if (list.hides(post)) return true; } catch (err) { /* a broken list must not hide the thread */ }
     }
-    if (wordMuted(post.text)) return true;
-    return repostsOff(post);
+    if (!blockReason(post)) return false;
+    // Show hidden keeps the row as a placeholder that loads nothing.
+    return !showHiddenOn();
   }
+
+  /* A row in place of a hidden post or comment. No avatar, media, preview or
+     reaction request is made until the reader taps Show. */
+  function hiddenRow(post, mode) {
+    const id = String(post.id || post.statusId || "");
+    const label = mode === "reply" ? tr("Hidden comment") : tr("Hidden post");
+    return `<article class="post post-hidden" data-post="${esc(id)}"><div class="post-row"><div class="post-main"><p class="phandle">${esc(label)} · ${esc(blockReasonLabel(blockReason(post)))}</p><button type="button" class="outline" data-act="reveal-hidden" data-id="${esc(id)}">${esc(tr("Show"))}</button></div></div></article>`;
+  }
+  function blockReasonLabel(why) {
+    if (why === "post") return tr("You hid this");
+    if (why === "source") return tr("From a source you blocked");
+    if (why === "type") return tr("A content type you turned off");
+    if (why === "word") return tr("Contains a muted word");
+    return tr("From an account you blocked");
+  }
+
+  /* The keys a menu writes. Accounts are stored as platform:handle, or the
+     feed id when there is one; never sent anywhere raw. */
+  function blockAccountKey(post) {
+    if (!post) return "";
+    if (post.authorId && post.appPost) return "app:" + String(post.authorId);
+    const handle = String(post.handle || "").replace(/^@/, "").toLowerCase();
+    if (handle) return (post.platform || "x") + ":" + handle;
+    return post.feedId ? String(post.feedId) : "";
+  }
+  function blockPostKey(post) {
+    if (!post) return "";
+    const status = String(post.statusId || post.id || "");
+    return status ? (post.platform || "x").toLowerCase() + ":" + status.toLowerCase() : "";
+  }
+  function blockSourceKey(post) {
+    const api = blocksApi();
+    if (!api || !post) return "";
+    const keys = api.sourceKeys(post);
+    // The most specific source: a community, subreddit or channel before the feed.
+    return keys.find((key) => key.indexOf("feed:") !== 0) || keys[0] || "";
+  }
+  function blockSourceLabel(key) {
+    const text = String(key || "");
+    const at = text.indexOf(":");
+    const kind = text.slice(0, at);
+    const name = text.slice(at + 1);
+    if (kind === "feed") {
+      const feed = feedById(name) || feeds().find((item) => String(item.id || "").toLowerCase() === name);
+      return feed ? (feed.name || feed.handle || name) : name;
+    }
+    if (kind === "reddit") return "r/" + name;
+    if (kind === "community") return communityName(name);
+    return name;
+  }
+  function addBlock(kind, value) {
+    const b = blockSettings();
+    if (!b || !value) return false;
+    const list = b[kind] || (b[kind] = []);
+    if (list.indexOf(value) >= 0) return false;
+    list.push(value);
+    b.at = Date.now();
+    return true;
+  }
+  function removeBlock(kind, value) {
+    const b = blockSettings();
+    if (!b) return;
+    b[kind] = (b[kind] || []).filter((item) => item !== value);
+    b.at = Date.now();
+  }
+  function toggleBlockType(account, kind) {
+    const b = blockSettings();
+    if (!b || !account) return false;
+    const now = (b.types[account] || []).slice();
+    const at = now.indexOf(kind);
+    if (at >= 0) now.splice(at, 1); else now.push(kind);
+    if (now.length) b.types[account] = now; else delete b.types[account];
+    b.at = Date.now();
+    return at < 0;
+  }
+  function blockTypeOn(account, kind) {
+    const b = STATE.settings && STATE.settings.blocks;
+    return !!(b && b.types && (b.types[account] || []).indexOf(kind) >= 0);
+  }
+
+  /* Another tab changed the rules: apply them here at once. */
+  if (typeof window.addEventListener === "function") window.addEventListener("storage", (event) => {
+    if (!event || !STATE.settings) return;
+    if (event.key !== BLOCK_HEADER_KEY && event.key !== storeName("settings-v1")) return;
+    if (event.key === BLOCK_HEADER_KEY && event.newValue === (window.__viktorychBlockHeader || null)) return;
+    let next = null;
+    try { next = JSON.parse(readStored(localStorage, "settings-v1") || "null"); } catch (err) { next = null; }
+    if (!next) return;
+    next.blocks = cleanBlocks(next.blocks);
+    if (blockSig(next) === blockSig(STATE.settings)) return;
+    STATE.settings.mutedWords = Array.isArray(next.mutedWords) ? next.mutedWords : [];
+    STATE.settings.mutedAccounts = Array.isArray(next.mutedAccounts) ? next.mutedAccounts : [];
+    STATE.settings.repostOff = Array.isArray(next.repostOff) ? next.repostOff : [];
+    STATE.settings.blocks = next.blocks;
+    blockVersion += 1;
+    blockHashSet = null;
+    blockHashes = null;
+    blockReasons = new WeakMap();
+    window.__viktorychBlockHeader = blockHeader();
+    render({ y: window.scrollY });
+  });
 
   function sameThread(parent, child) {
     if (!parent || !child) return false;
@@ -8697,7 +9065,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
         const hit = entries.filter((entry) => entry.isIntersecting);
         hit.forEach((entry) => { if (entry.target.id === "author-more") loadOlderAuthorPosts(entry.target.getAttribute("data-id")); });
-        if (hit.some((entry) => entry.target.id !== "author-more")) revealMoreTimeline();
+        hit.forEach((entry) => { if (entry.target.id === "ext-graph-more") extGraphMore(entry.target); });
+        if (hit.some((entry) => entry.target.id !== "author-more" && entry.target.id !== "ext-graph-more")) revealMoreTimeline();
       }, { rootMargin: "600px" });
     }
     ARCHIVE_OBS.disconnect();
@@ -8707,6 +9076,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (liveSentinel) ARCHIVE_OBS.observe(liveSentinel);
     const authorSentinel = document.getElementById("author-more");
     if (authorSentinel) ARCHIVE_OBS.observe(authorSentinel);
+    const graphSentinel = document.getElementById("ext-graph-more");
+    if (graphSentinel) ARCHIVE_OBS.observe(graphSentinel);
   }
 
   function ensureYtSubs(feed) {
@@ -8893,6 +9264,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       + `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`
       + `<button type="button" class="odai-btn" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button>`
       + (post.appPost ? appMenuItems(post) : (post.url ? `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""))
+      + blockMenuItems(post, "status")
       + (fresh ? `<div class="menu-note reply-fresh">${esc(fresh)}</div>` : "");
     return `<span class="status-menu-wrap">${btn}<div class="menu status-menu" data-act="stop" role="menu">${items}</div></span>`;
   }
@@ -9098,6 +9470,106 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return quote + `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>` + muteCommunity;
   }
 
+  /* "..." on any post or comment: hide it, block its account, or open the
+     sheet with the source and per-account content types. */
+  function blockMenuItems(post, mode) {
+    const mine = signedAccount();
+    if (post.appPost && mine && mine.publicId && mine.publicId === post.authorId) return "";
+    const acct = blockAccountKey(post);
+    const id = esc(post.id || "");
+    const handle = String(post.handle || "").replace(/^@/, "");
+    const one = mode === "reply" ? tr("Hide this comment") : tr("Hide this post");
+    let out = `<button type="button" data-act="block-post" data-id="${id}">${esc(one)}</button>`;
+    if (acct) out += `<button type="button" data-act="block-account" data-id="${id}">${esc(handle ? tr("Block @{handle}", { handle: handle }) : tr("Block this account"))}</button>`;
+    out += `<button type="button" data-act="block-more" data-id="${id}">${esc(tr("More block options…"))}</button>`;
+    return out;
+  }
+
+  function blockKeyLabel(key) {
+    const text = String(key || "");
+    if (text.indexOf("app:") === 0) {
+      const found = (publicPosts || []).find((item) => item && item.authorId === text.slice(4));
+      return found && found.handle ? "@" + found.handle : tr("Account on this app");
+    }
+    const at = text.indexOf(":");
+    if (at < 0) {
+      const feed = feedById(text);
+      return feed ? (feed.name || feed.handle || text) : text;
+    }
+    return "@" + text.slice(at + 1) + " · " + (PLATFORM[text.slice(0, at)] || text.slice(0, at));
+  }
+
+  // Settings > Muted & blocked: everything lives on this device and syncs privately to the account.
+  function mutedSettingsHtml() {
+    const b = cleanBlocks(STATE.settings.blocks);
+    const row = (label, kind, value) => `<div class="mute-row"><span>${esc(label)}</span><button type="button" data-act="unblock" data-kind="${esc(kind)}" data-value="${esc(value)}">${esc(tr("Remove"))}</button></div>`;
+    const kindName = { replies: tr("Replies"), videos: tr("Videos"), reposts: tr("Reposts") };
+    const none = `<p class="phandle">${esc(tr("Nothing here yet."))}</p>`;
+    const accounts = b.accounts.map((key) => row(blockKeyLabel(key), "accounts", key)).join("");
+    const postsHtml = b.posts.slice().reverse().map((key) => {
+      const at = key.indexOf(":");
+      const plat = at > 0 ? (PLATFORM[key.slice(0, at)] || key.slice(0, at)) : "";
+      return row(tr("Post or comment") + (plat ? " · " + plat : ""), "posts", key);
+    }).join("");
+    const sources = b.sources.map((key) => row(blockSourceLabel(key), "sources", key)).join("");
+    const types = Object.keys(b.types).map((key) => row(blockKeyLabel(key) + " — " + b.types[key].map((kind) => kindName[kind] || kind).join(", "), "types", key)).join("");
+    const show = b.showHidden;
+    return `<p class="phandle">${esc(signedAccount() ? tr("Your rules are stored on this device and synced privately to your account. They are never shared.") : tr("Your rules stay on this device."))}</p>
+      <p class="phandle">${esc(tr("Blocked items are dropped before anything loads: no avatars, images, previews or reactions, and blocked sources aren't fetched at all."))}</p>
+      <button class="tab-switch${show ? " on" : ""}" type="button" role="switch" aria-checked="${show ? "true" : "false"}" data-act="show-hidden-toggle"><span>${esc(tr("Show hidden"))}</span><i></i></button>
+      <p class="phandle set-desc">${esc(tr("Show a small placeholder where something was hidden. Off saves the most data."))}</p>
+      <h2>${esc(tr("Muted words"))}</h2>
+      <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
+      <h2>${esc(tr("Muted accounts"))}</h2>
+      <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">${esc(tr("Remove"))}</button></div>`).join("")}
+      <h2>${esc(tr("Blocked accounts"))}</h2>
+      ${accounts || none}
+      <h2>${esc(tr("Hidden posts and comments"))}</h2>
+      ${postsHtml || none}
+      <h2>${esc(tr("Blocked sources and communities"))}</h2>
+      <form class="mute-form" data-mute="source"><label class="search"><input id="block-source" placeholder="${esc(tr("r/name or community"))}" aria-label="${esc(tr("Block a source"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      ${sources || none}
+      <h2>${esc(tr("Content types"))}</h2>
+      ${types || none}`;
+  }
+
+  function blockTarget(id) {
+    const key = String(id || "");
+    if (!key) return null;
+    const found = findAnyPost(key);
+    if (found) return found;
+    const pub = (publicPosts || []).find((item) => item && (item.id === key || postKey(item) === key));
+    return pub || null;
+  }
+
+  function blockSheet() {
+    const post = STATE.blockSheetPost;
+    if (!post) return "";
+    const acct = blockAccountKey(post);
+    const handle = String(post.handle || "").replace(/^@/, "");
+    const who = handle ? "@" + handle : tr("this account");
+    const source = blockSourceKey(post);
+    const rows = [];
+    if (STATE.blockSheetFull) {
+      rows.push(profileSheetRow("block-post", post.commentRow ? tr("Hide this comment") : tr("Hide this post"), `data-sheet="1"`));
+      if (acct) rows.push(profileSheetRow("block-account", handle ? tr("Block @{handle}", { handle: handle }) : tr("Block this account"), `data-sheet="1"`));
+    }
+    const sw = (act, label, on, extra) => `<button class="bell-choice" type="button" role="menuitemcheckbox" aria-checked="${on ? "true" : "false"}" data-act="${act}" ${extra || ""}><span class="bell-choice-label">${esc(label)}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
+    if (source) {
+      const on = ((STATE.settings.blocks || {}).sources || []).indexOf(source) >= 0;
+      rows.push(sw("block-source", tr("Block everything from {source}", { source: blockSourceLabel(source) }), on, `data-key="${esc(source)}"`));
+    }
+    if (acct) {
+      rows.push(sw("block-type", tr("Hide replies from {who}", { who: who }), blockTypeOn(acct, "replies"), `data-kind="replies"`));
+      rows.push(sw("block-type", tr("Hide videos from {who}", { who: who }), blockTypeOn(acct, "videos"), `data-kind="videos"`));
+      rows.push(sw("block-type", tr("Hide reposts from {who}", { who: who }), blockTypeOn(acct, "reposts"), `data-kind="reposts"`));
+    }
+    rows.push(`<a class="bell-choice" href="#/settings/muted" data-act="close-block-sheet"><span class="bell-choice-label">${esc(tr("Muted & blocked"))}</span></a>`);
+    return `<div class="bell-sheet" data-act="close-block-sheet"><div class="menu bell-menu profile-menu" data-act="stop" role="menu" aria-label="${esc(tr("Block options"))}"><div class="bell-grab" aria-hidden="true"></div>${rows.join("")}</div></div>`;
+  }
+
   function card(post, mode, opts) {
     if (post && post.appPost && post.spamHidden) {
       return `<article class="post" data-post="${esc(post.id)}"><div class="post-row"><div class="post-main"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></div></div></article>`;
@@ -9106,6 +9578,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
+    if (post && !(STATE.revealedHidden && STATE.revealedHidden[String(post.id || post.statusId || "")]) && blockReason(post)) {
+      // Nothing of a blocked item is drawn, so its avatar and media never load.
+      if (showHiddenOn() || mode === "status" || mode === "author") return hiddenRow(post, mode);
+      return "";
+    }
     if (!opts.inThread && mode !== "reply" && mode !== "status") {
       const parent = threadParent(post);
       if (parent) return threadPair(parent, post, mode, opts);
@@ -9114,9 +9591,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const repost = repostBanner(post, hideRepost ? "author" : "");
     const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
-    const showReply = opts.parentShown ? (mode !== "status" && !!(post.replyingTo && post.replyingTo.handle)) : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
-    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
-    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    /* As on X: no "Replying to" when the parent sits right above on the thread line. */
+    const showReply = opts.parentShown ? false : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
+    const reply = showReply ? replyContextHtml(post) : "";
     const repostFeed = feedOf(post);
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
       ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? tr("Turn on reposts") : tr("Turn off reposts")}</button>`
@@ -9129,14 +9606,17 @@ const here = parseRoute();
     const forYouItem = here.name === "home" && (here.tab || "foryou") === "foryou"
       ? `<button data-act="foryou-less" data-id="${esc(post.id)}">${tr("Show less often")}</button><button data-act="foryou-hide" data-id="${esc(post.id)}">${tr("Not interested")}</button>`
       : "";
+    const busyKey = post.appPost ? "" : busyKeyOf(post);
+    const busyItem = busyKey ? `<button data-act="busy-menu" data-key="${esc(busyKey)}" data-name="${esc(post.author || post.name || "")}" data-handle="${esc(post.handle || "")}" data-platform="${esc(post.platform || "x")}">${tr("Posting volume")}</button>` : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${forYouItem}${histItem}${repostItem}${quoteDelete}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
+    const blockItems = STATE.menu === post.id ? blockMenuItems(post, mode) : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
     const eager = !!opts.eager;
     watchArticle(post);
-    const shown = opts.parentShown ? mentionless(displayPost(post)) : displayPost(post);
+    const shown = opts.parentShown ? mentionless(displayPost(post)) : replyBody(displayPost(post));
     const dest = articleOf(post) ? articleHash(post) : (post.watch ? watchHash(post) : statusHash(post));
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
@@ -9168,6 +9648,7 @@ const here = parseRoute();
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${post.edited ? `<span class="edited">${tr("Edited")}</span>` : ""}
             ${postSourceBadges(post)}
+            ${shown.text && String(shown.text).trim().length > 20 ? `<button class="explain-btn odai-btn" type="button" data-act="odai-summarize" data-key="${esc(post.id)}" data-scope="post" aria-label="${esc(tr("Explain this post"))}" data-tooltip="${esc(tr("Explain this post"))}">${icon("aiExplain")}</button>` : ""}
             <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="${tr("More")}">${icon("more")}</button>
           </div>
           ${reply}
@@ -9178,9 +9659,10 @@ const here = parseRoute();
           ${mediaHtml(post.media, eager, post)}
           ${post.appPost ? (post.appExtra || "") : ""}
           ${postCards(post)}
-          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
+          ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
           ${giftChip(post)}
           ${threadLink}
+          ${cnSlot(post)}
           ${actionBar(post)}
         </div>
       </div>
@@ -9198,7 +9680,13 @@ const here = parseRoute();
   }
 
   function parseRouteInner() {
-    const hash = location.hash || "#/";
+    let hash = location.hash || "#/";
+    /* Messages is now Inbox. #/inbox… links open the same page as #/messages…,
+       which old links, servers and the Discord mirror keep using. */
+    if (/^#\/inbox(?=$|[/?])/.test(hash)) {
+      hash = "#/messages" + hash.slice(7);
+      try { history.replaceState(history.state, "", hash); } catch (err) { /* the address bar keeps #/inbox */ }
+    }
     const qAt = hash.indexOf("?");
     const query = qAt >= 0 ? new URLSearchParams(hash.slice(qAt + 1)) : new URLSearchParams();
     const path = (qAt >= 0 ? hash.slice(0, qAt) : hash).replace(/^#/, "") || "/";
@@ -9227,13 +9715,15 @@ const here = parseRoute();
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
       const platform = parts[1] === "twitter" ? "x" : parts[1];
-      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "friends" || parts[3] === "mutuals" || parts[3] === "requests") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
+      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "followers_you_follow" || parts[3] === "friends" || parts[3] === "mutuals" || parts[3] === "requests") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
       return { name: "user", platform: platform, handle: parts[2], query };
     }
     if (parts[0] === "p" && parts[1]) {
       if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "mutuals" || parts[2] === "requests") return { name: "connections", personId: parts[1], tab: parts[2], platform: "", handle: "", query };
       return { name: "person", id: parts[1], query };
     }
+    if (parts[0] === "messages" && parts[1] === "sms") return { name: "messages", sms: true, channel: "", server: "", query };
+    if (parts[0] === "messages" && (parts[1] === "mail" || parts[1] === "connect" || parts[1] === "aliases")) return { name: "messages", mail: true, channel: "", server: "", query };
     if (parts[0] === "messages") {
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
       const server = (parts[1] === "s" || parts[1] === "join") && parts[2] ? parts[2] : "";
@@ -9260,7 +9750,9 @@ const here = parseRoute();
     if (parts[0] === "connect") return { name: "connect", query };
     if (parts[0] === "store" || parts[0] === "gifts") return { name: "store", sub: parts[1] || "", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
+    if (parts[0] === "link-tv") return { name: "linktv", query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
+    if (parts[0] === "send-to-tv") return { name: "sendtv", brand: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
       if (parts[1] === "trash") return { name: "drive", section: "files", trash: true, folder: "", view: "", album: "", query };
       if (parts[1] === "folder" && parts[2]) return { name: "drive", section: "files", trash: false, folder: parts[2], view: "", album: "", query };
@@ -9274,8 +9766,10 @@ const here = parseRoute();
     }
     if (parts[0] === "vault") return { name: "vault", tab: parts[1] || "my", query };
     if (parts[0] === "packages") return { name: "packages", tab: parts[1] || "active", query };
+    if (parts[0] === "communitynotes") return { name: "communitynotes", tab: parts[1] || "", query };
     if (parts[0] === "customize") return { name: "customize", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
+    if (parts[0] === "feeds" && parts[1] === "lists") return { name: "sourcelists", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -9288,6 +9782,7 @@ const here = parseRoute();
     } else if (["bsky", "mastodon", "nostr"].includes(parts[0]) && parts[1]) {
       // Profiles followed on this device (fediverse, Bluesky, Nostr) open live.
       if (parts[2] === "status" && parts[3]) return { name: "status", platform: parts[0], handle: parts[1], id: parts.slice(3).join("/"), query };
+      if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "followers_you_follow") return { name: "connections", platform: parts[0], handle: parts[1], tab: parts[2], query };
       return { name: "user", platform: parts[0], handle: parts[1], query };
     } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram", "tiktok", "app"].includes(parts[0])) {
       platform = parts[0];
@@ -9297,7 +9792,7 @@ const here = parseRoute();
       return { name: "home", tab: "foryou", query };
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
-    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
+    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "followers_you_follow" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
     return { name: "profile", platform, handle, query };
   }
 
@@ -9426,11 +9921,22 @@ const here = parseRoute();
       case "notifications":
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
-        return { id: "messages", href: "#/messages", icon: "mail", label: tr("Messages"), active: (r) => r.name === "messages" };
+        return { id: "messages", href: "#/messages", icon: "mail", label: tr("Inbox"), active: (r) => r.name === "messages" && !(window.ViktorychInbox && window.ViktorychInbox.splitHere && window.ViktorychInbox.splitHere(location.hash)) };
+      case "inbox-servers":
+      case "inbox-discord":
+      case "inbox-mail":
+      case "inbox-sms": {
+        /* inbox.js owns these; the fallback keeps the nav editors whole
+           before it loads. A split icon shows only once inbox.js says so. */
+        const inbox = window.ViktorychInbox;
+        const sec = (inbox && inbox.sectionByNav && inbox.sectionByNav(id)) || INBOX_NAV_FALLBACK[id];
+        const label = inbox && inbox.sectionLabel ? inbox.sectionLabel(sec.id) : tr(sec.label);
+        return { id, href: sec.href, icon: sec.icon, label, active: (r) => r.name === "messages" && !!(inbox && inbox.navActive && inbox.navActive(id, location.hash)), visible: () => !!(inbox && inbox.navVisible && inbox.navVisible(id)) };
+      }
       case "online":
         return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
-        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" };
+        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" };
       case "lists":
         return { id: "lists", href: "#/lists", icon: "lists", label: tr("Lists"), active: (r) => r.name === "lists" || r.name === "list" };
       case "history":
@@ -9767,7 +10273,7 @@ const here = parseRoute();
   }
 
   function followSuggestions() {
-    const list = feeds().filter((f) => f.id);
+    const list = feeds().filter((f) => f.id && !feedBlocked(f));
     if (window.FeedsPeople && window.FeedsPeople.suggestions) return window.FeedsPeople.suggestions(list, isFollowed);
     return list.filter((f) => !isFollowed(f.id)).sort((a, b) => (b.configured ? 1 : 0) - (a.configured ? 1 : 0));
   }
@@ -9799,7 +10305,8 @@ const here = parseRoute();
   const BOTTOM_NAV_MIN = 2;
   const BOTTOM_NAV_MAX = 6;
   const BOTTOM_NAV_IDS = [
-    "home", "explore", "tv", "communities", "notifications", "messages", "online",
+    "home", "explore", "tv", "communities", "notifications", "messages",
+    "inbox-servers", "inbox-discord", "inbox-mail", "inbox-sms", "online",
     "feeds", "lists", "history", "music", "shorts", "games",
     "subscriptions", "vault", "packages", "storage", "settings"
   ];
@@ -10449,6 +10956,133 @@ const here = parseRoute();
     return kept;
   }
 
+  /* Busy accounts (busy.js): detection, per-account caps, folding and
+     interleaving all run here on the device, from posts already cached, so
+     they work offline and on a slow server. The pace is read in idle slices
+     and remembered, so the first paint already knows which accounts are busy. */
+  const BUSY_KEY = "viktorychapp-busy-v1";
+  function busyApi() { return window.ViktorychBusy || null; }
+  function cleanBusyPrefs(raw) {
+    const api = busyApi();
+    if (api) return api.cleanPrefs(raw);
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : { at: 0, modes: {}, mutes: {}, server: true };
+  }
+  function busyPrefs() {
+    if (!STATE.settings) return { modes: {}, mutes: {} };
+    if (!STATE.settings.busyPrefs || !STATE.settings.busyPrefs.modes) STATE.settings.busyPrefs = cleanBusyPrefs(STATE.settings.busyPrefs);
+    return STATE.settings.busyPrefs;
+  }
+  function busyStats() {
+    if (STATE.busyStats) return STATE.busyStats;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(BUSY_KEY) || "null"); } catch (err) { saved = null; }
+    STATE.busyStats = saved && typeof saved === "object" && saved.map && typeof saved.map === "object" ? saved.map : {};
+    return STATE.busyStats;
+  }
+  let busySig = "";
+  let busyCancel = null;
+  /* Read the pace again when the cache changed. Never on the render path:
+     the slices run when the device is idle and a changed busy set repaints
+     once, keeping the scroll position. */
+  function busyRefresh(all) {
+    const api = busyApi();
+    if (!api || !Array.isArray(all) || !all.length) return;
+    const first = all[0];
+    const sig = all.length + "|" + String((first && (first.id || first.statusId)) || "") + "|" + String((STATE.data && STATE.data.updated) || "");
+    if (sig === busySig) return;
+    busySig = sig;
+    if (busyCancel) busyCancel();
+    busyCancel = api.statsLater(all, {}, (fresh) => {
+      busyCancel = null;
+      const map = {};
+      Object.keys(fresh).forEach((key) => { if (fresh[key].busy) map[key] = { busy: true, perDay: fresh[key].perDay, replyShare: fresh[key].replyShare }; });
+      const before = Object.keys(busyStats()).sort().join("\n");
+      STATE.busyStats = map;
+      try { localStorage.setItem(BUSY_KEY, JSON.stringify({ at: Date.now(), map: map })); } catch (err) { /* storage full: kept in memory */ }
+      if (Object.keys(map).sort().join("\n") !== before && parseRoute().name === "home") render({ y: window.scrollY });
+    });
+  }
+  function busyOn(key) {
+    const row = key && busyStats()[key];
+    return !!(row && row.busy);
+  }
+  function busyKeyOf(post) {
+    const api = busyApi();
+    return api ? api.keyOf(post) : String((post && post.feedId) || "");
+  }
+  /* The Home list with every account's choice applied and spread out so no
+     single account fills a screen. Folded posts are never handed to card(). */
+  function homeShaped(route) {
+    const tab = route.tab || "foryou";
+    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
+    const api = busyApi();
+    if (!api || tabView(tab) === "reposts") return sorted;
+    try {
+      busyRefresh((STATE.data && STATE.data.posts) || []);
+      if (!STATE.busyOpen) STATE.busyOpen = {};
+      const shaped = api.shape(sorted, { prefs: busyPrefs(), busy: busyStats(), open: STATE.busyOpen, now: Date.now() });
+      STATE.busyCounts = shaped.counts || null;
+      return tabSort(tab) === "popular" ? shaped : api.interleave(shaped);
+    } catch (err) {
+      return sorted;
+    }
+  }
+  function busyName(row) {
+    const feed = row && row.feedId ? feedById(row.feedId) : null;
+    return String((feed && (feed.name || feed.handle)) || (row && (row.author || row.handle)) || "");
+  }
+  function busyHandle(row) {
+    const feed = row && row.feedId ? feedById(row.feedId) : null;
+    return String((feed && feed.handle) || (row && row.handle) || "").replace(/^@/, "");
+  }
+  /* One row in place of the posts it folds. Text only, no media, previews or
+     reactions: those load when the reader opens the row. */
+  function busyRow(group) {
+    const n = group.posts.length;
+    const handle = busyHandle(group);
+    const who = handle ? "@" + handle : busyName(group);
+    if (group.kind === "digest") {
+      const lines = group.posts.slice(0, 3).map((post) => `<li dir="auto">${esc(String(post.text || post.title || "").replace(/\s+/g, " ").slice(0, 140))}</li>`).join("");
+      return `<article class="post busy-digest" data-post="${esc(group.id)}"><button type="button" class="busy-open" data-act="busy-open" data-id="${esc(group.id)}" aria-label="${esc(tr("Show all {n} posts", { n: n }))}"><span class="busy-digest-head"><b dir="auto">${esc(busyName(group) || who)}</b> <span class="phandle">· ${esc(tr("Daily digest"))} · ${esc(tr("{n} posts", { n: formatCount(n) }))}</span></span><ul class="busy-digest-lines">${lines}</ul><span class="busy-more-link">${esc(tr("Show all {n} posts", { n: formatCount(n) }))}</span></button></article>`;
+    }
+    return `<div class="busy-more" data-post="${esc(group.id)}"><button type="button" class="busy-open" data-act="busy-open" data-id="${esc(group.id)}"><span class="busy-more-line" aria-hidden="true"></span><span class="busy-more-link" dir="auto">${esc(tr("+{n} more from {name}", { n: formatCount(n), name: who }))}</span></button></div>`;
+  }
+  function busyTarget(key, name, handle, platform) {
+    return { key: String(key || ""), name: String(name || ""), handle: String(handle || "").replace(/^@/, ""), platform: String(platform || "x") };
+  }
+  function busySheet() {
+    const sheet = STATE.busySheet;
+    if (!sheet || !sheet.key) return "";
+    const prefs = busyPrefs();
+    const busy = busyOn(sheet.key);
+    const muted = Number((prefs.mutes || {})[sheet.key]) > Date.now();
+    const mode = (prefs.modes || {})[sheet.key] || "auto";
+    const stat = busyStats()[sheet.key];
+    const choice = (id, text, note) => {
+      const on = mode === id;
+      return `<button class="bell-choice busy-choice" type="button" role="menuitemradio" aria-checked="${on ? "true" : "false"}" data-act="busy-mode" data-mode="${id}"><span class="bell-choice-label">${esc(text)}${note ? `<small>${esc(note)}</small>` : ""}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
+    };
+    const who = sheet.handle ? "@" + sheet.handle : sheet.name;
+    const pace = stat && stat.perDay ? `<p class="bell-note">${esc(tr("About {n} posts a day", { n: formatCount(Math.round(stat.perDay)) }))}</p>` : "";
+    const mutes = muted
+      ? `<button class="bell-choice" type="button" data-act="busy-mute" data-hours="0"><span class="bell-choice-label">${esc(tr("Unmute"))}</span></button>`
+      : [[8, tr("Mute for 8 hours")], [24, tr("Mute for 1 day")], [168, tr("Mute for 7 days")]].map((row) => `<button class="bell-choice" type="button" data-act="busy-mute" data-hours="${row[0]}"><span class="bell-choice-label">${esc(row[1])}</span></button>`).join("");
+    return `<div class="bell-sheet busy-sheet" data-act="busy-close"><div class="menu bell-menu busy-menu" data-act="stop" role="menu" aria-label="${esc(tr("Posting volume"))}"><div class="bell-grab" aria-hidden="true"></div><p class="busy-title"><b>${esc(tr("Posting volume"))}</b> <span class="phandle" dir="auto">${esc(who)}</span></p>${pace}
+      ${choice("auto", busy ? tr("Automatic (busy account)") : tr("Automatic"), tr("Hides replies to other people and shows up to 3 posts every 2 hours when the account posts a lot"))}
+      ${choice("all", tr("Show all"), "")}
+      ${choice("originals", tr("Only original posts"), tr("No replies"))}
+      ${choice("top", tr("Top posts only"), tr("By likes and reposts"))}
+      ${choice("digest", tr("Daily digest"), tr("One grouped card a day"))}
+      <div class="bell-split"></div>${mutes}
+      <p class="bell-note">${esc(tr("Folded posts load nothing until you open them. Your choice follows your account."))}</p></div></div>`;
+  }
+  function busyChanged() {
+    const prefs = busyPrefs();
+    prefs.at = Date.now();
+    STATE.settings.prefsAt = Object.assign({}, STATE.settings.prefsAt || {}, { busyPrefs: prefs.at });
+    saveSettings();
+  }
+
   function homeSorted(route) {
     const tab = route.tab || "foryou";
     let list = posts().filter((post) => homeShows(post, route));
@@ -10496,7 +11130,7 @@ const here = parseRoute();
       return;
     }
     const tab = route.tab || "foryou";
-    const list = homeSorted(route);
+    const list = homeShaped(route);
     const count = (STATE.feedShown && STATE.feedShown[tab]) || FEED_PAGE;
     if (count < list.length) {
       if (!STATE.feedShown) STATE.feedShown = {};
@@ -11380,7 +12014,7 @@ const here = parseRoute();
   function homeView(route) {
     const tab = route.tab || "foryou";
     if (tab.indexOf("ctab:") === 0) return communityTabView(tab);
-    const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
+    const sorted = homeShaped(route);
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
@@ -11389,7 +12023,7 @@ const here = parseRoute();
       : "";
     const tabLoading = !list.length && tabStillLoading(tab);
     if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
-    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(list.map((p, i) => card(p, null, { eager: i === 0 })), tab) : emptyBlock(
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(list.map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i === 0 })), tab) : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -12646,6 +13280,7 @@ const here = parseRoute();
     if (menu === "more") {
       rows.push(profileSheetRow("share", tr("Share"), `data-kind="profile" data-id="${esc(target.feedId || link)}"`));
       if (!target.own && (target.feedId || target.handle)) rows.push(profileSheetRow("profile-mute", tr("Mute"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}"`));
+      if (!target.own && (target.feedId || target.handle) && target.platform !== "app") rows.push(profileSheetRow("busy-menu", tr("Posting volume"), `data-key="${esc(target.feedId || ((target.platform || "x") + ":" + String(target.handle || "").toLowerCase()))}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}" data-platform="${esc(target.platform || "x")}"`));
       const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
       if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
       if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
@@ -12783,7 +13418,7 @@ const here = parseRoute();
     const self = !!(me && row.id === "app:" + me.publicId);
     const bio = row.bio ? `<span class="connect-bio">${esc(row.bio)}</span>` : "";
     const button = self ? "" : followButtonClean(row.id);
-    const handle = row.handle ? "@" + esc(row.handle) : "";
+    const handle = row.displayHandle ? esc(row.displayHandle) : row.handle ? "@" + esc(row.handle) : "";
     const appId = String(row.id || "").startsWith("app:") ? String(row.id).slice(4) : "";
     let face = avatar(row.avatar, row.name || row.handle, "", row.avatarFace);
     if (/^\d{12}$/.test(appId) && window.ViktorychPresence) face = window.ViktorychPresence.wrap(appId, face);
@@ -12814,11 +13449,187 @@ const here = parseRoute();
     return { id: feed.id, name: feed.name || feed.handle, handle: feed.handle || "" };
   }
 
+  /* ---------- Following / Followers of external accounts ----------
+     Read live through ViktorychFollowLists (follow-lists.js): Bluesky,
+     the fediverse and Nostr from this device; X and YouTube through the
+     Worker pool. Nothing is stored. A platform that keeps these lists
+     behind its own sign-in gets a calm empty state with the count. */
+  const EXT_GRAPH_LIVE = ["x", "bsky", "bluesky", "mastodon", "nostr", "youtube"];
+  STATE.extSubjects = STATE.extSubjects || {};
+  STATE.extKnown = STATE.extKnown || {};
+
+  function extGraphName(platform) {
+    const p = platform === "bsky" ? "bluesky" : platform;
+    return PLATFORM[p] || String(platform || "").toUpperCase();
+  }
+
+  /* Ids and counts a list source needs, from what the app already knows,
+     then one cheap header read when something is missing. */
+  function extGraphSubject(platform, handle) {
+    const key = liveKey(platform, handle);
+    const feed = findFeed(platform, handle);
+    const live = STATE.liveUsers[key];
+    const prof = (live && live.profile) || {};
+    const held = STATE.extSubjects[key] || {};
+    const pick = (field) => (held[field] != null ? held[field] : prof[field] != null ? prof[field] : feed && feed[field] != null ? feed[field] : null);
+    const subject = {
+      platform: platform,
+      handle: String(handle || "").replace(/^@/, ""),
+      name: pick("name") || "",
+      displayHandle: pick("displayHandle") || "",
+      following: pick("following"),
+      followers: pick("followers"),
+      remoteId: pick("remoteId") || "",
+      instance: pick("instance") || "",
+      pubkey: pick("pubkey") || "",
+      channelId: pick("channelId") || (/^UC[A-Za-z0-9_-]{22}$/.test(String(handle || "")) ? handle : ""),
+      ready: true
+    };
+    if (platform === "mastodon" && !subject.remoteId) subject.ready = false;
+    if (platform === "youtube" && !subject.channelId) subject.ready = false;
+    if (platform === "nostr" && !subject.pubkey && !/^(npub1|nprofile1)|^[0-9a-f]{64}$/i.test(subject.handle)) subject.ready = false;
+    if (!held.asked && (!subject.ready || subject.following == null || !subject.name)) {
+      held.asked = true;
+      STATE.extSubjects[key] = held;
+      const done = (data) => {
+        if (data && typeof data === "object" && !data.error) Object.assign(held, data);
+        held.settled = true;
+        render();
+      };
+      if (platform === "bsky" || platform === "bluesky") loadBskyHeader(subject.handle).then(done, () => done(null));
+      else if (platform === "mastodon") loadMastodonHeader(subject.handle).then(done, () => done(null));
+      else if (platform === "x") fxHeader(subject.handle).then(done, () => done(null));
+      else if (platform === "youtube" || platform === "nostr") {
+        const row = ensureLiveUser(platform, subject.handle);
+        Promise.resolve(row && row.pageTask).then(() => done(row && row.profile), () => done(null));
+      } else held.settled = true;
+    }
+    if (!subject.ready && held.settled) subject.failed = true;
+    return subject;
+  }
+
+  function extGraphRows(items) {
+    return (items || []).map(connectRow).join("");
+  }
+
+  function extGraphEmpty(platform, tab, subject, row) {
+    const name = extGraphName(platform);
+    const count = tab === "followers" ? subject.followers : subject.following;
+    const countText = count != null && isFinite(Number(count)) ? formatCount(Number(count)) : "";
+    if (!window.ViktorychFollowLists || !window.ViktorychFollowLists.supports(platform, tab) || (row && row.none)) {
+      const title = tab === "followers" ? tr("This platform doesn’t show who follows this account publicly") : tr("This platform doesn’t show who this account follows publicly");
+      const body = countText
+        ? (tab === "followers" ? tr("{platform} shows {count} followers, but only lists them inside its own app.", { platform: name, count: countText }) : tr("{platform} shows {count} following, but only lists them inside its own app.", { platform: name, count: countText }))
+        : tr("{platform} only shows this list inside its own app.", { platform: name });
+      return `<div class="empty ext-graph-empty">${countText ? `<div class="ext-graph-count"><b>${esc(countText)}</b> <span>${esc(tab === "followers" ? tr("Followers") : tr("Following count"))}</span></div>` : ""}<h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
+    }
+    if (row && row.unavailable === "nostr_off") {
+      return `<div class="empty ext-graph-empty"><h2>${esc(tr("Turn on Nostr to see this list"))}</h2><p>${esc(tr("Nostr lists are read from relays on this device."))}</p><a class="retry" href="#/settings/nostr">${esc(tr("Open Nostr settings"))}</a></div>`;
+    }
+    if (row && row.hidden) {
+      return `<div class="empty ext-graph-empty"><h2>${esc(tr("This list is hidden"))}</h2><p>${esc(tr("This account chose not to show this list publicly."))}</p></div>`;
+    }
+    if (subject.failed || (row && (row.error || row.unavailable))) {
+      return `<div class="empty ext-graph-empty"><h2>${esc(tr("Couldn’t load this list right now"))}</h2><p>${esc(tr("The public sources for this list are busy. Try again in a bit."))}</p><button class="retry" type="button" data-act="ext-graph-retry" data-platform="${esc(platform)}" data-handle="${esc(subject.handle)}" data-tab="${esc(tab)}">${esc(tr("Retry"))}</button></div>`;
+    }
+    const title = tab === "followers" ? tr("No followers yet") : tr("Not following anyone yet");
+    const copy = tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
+    return emptyBlock(title, copy);
+  }
+
+  /* People this viewer follows who follow the subject. Bluesky answers
+     exactly (public getRelationships); elsewhere it is what the loaded
+     Followers pages and the app's own followers already show. */
+  function extKnownRows(platform, subject, appRows) {
+    const out = [];
+    const seen = {};
+    const add = (item) => {
+      const id = String(item && item.id || "").toLowerCase();
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      out.push(item);
+    };
+    (appRows || []).forEach((item) => { if (isFollowed(item.id)) add(item); });
+    const FL = window.ViktorychFollowLists;
+    const loaded = FL ? FL.state(platform, subject.handle, "followers") : null;
+    ((loaded && loaded.items) || []).forEach((item) => { if (isFollowed(item.id)) add(item); });
+    if ((platform === "bsky" || platform === "bluesky") && FL) {
+      const key = liveKey(platform, subject.handle);
+      const known = STATE.extKnown[key];
+      const mine = (STATE.settings.follows || []).filter((id) => /^(bsky|bluesky):/.test(String(id))).map((id) => String(id).replace(/^[a-z]+:/, ""));
+      const sig = mine.join(",");
+      // Asked again when the follow list changes (sign-in sync) or after five minutes.
+      if (!known || known.sig !== sig || Date.now() - known.at > 5 * 60 * 1000) {
+        STATE.extKnown[key] = { at: Date.now(), sig: sig, items: (known && known.items) || [], loading: mine.length > 0 };
+        if (mine.length) FL.bskyFollowersAmong(subject, mine).then((items) => { STATE.extKnown[key] = { at: Date.now(), sig: sig, items: items }; render(); });
+      }
+      (STATE.extKnown[key].items || []).forEach(add);
+    }
+    return out;
+  }
+
+  function externalConnectionsView(route, tab, appPack) {
+    const platform = route.platform || "x";
+    const FL = window.ViktorychFollowLists;
+    const subject = extGraphSubject(platform, route.handle);
+    const name = subject.name || subject.handle;
+    const shown = String(subject.displayHandle || subject.handle || "").replace(/^@/, "");
+    const sub = platform === "nostr" ? (subject.displayHandle || "") : (shown ? "@" + shown : "");
+    const head = `<div class="topbar profile-bar ext-graph-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
+    const tabLink = (id, label) => `<a class="tab${tab === id ? " on" : ""}" role="tab" aria-selected="${tab === id ? "true" : "false"}" href="${esc(connectionsHash(route, id))}"><span>${esc(label)}</span></a>`;
+    const tabs = `<div class="tabs ptabs ext-graph-tabs" role="tablist" aria-label="${esc(tr("Profile"))}">${tabLink("followers_you_follow", tr("Followers you know"))}${tabLink("followers", tr("Followers"))}${tabLink("following", tr("Following count"))}</div>`;
+    const appRows = (appPack && appPack.accounts) || [];
+    if (tab === "followers_you_follow") {
+      if (FL && FL.supports(platform, "followers") && subject.ready) FL.load(platform, subject, "followers", render);
+      const known = extKnownRows(platform, subject, appRows);
+      if (known.length) return head + tabs + `<div class="ext-graph-list">${extGraphRows(known)}</div>`;
+      const waiting = STATE.extKnown[liveKey(platform, subject.handle)];
+      if (waiting && waiting.loading) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+      return head + tabs + emptyBlock(tr("No followers you know yet"), tr("When someone you follow follows this account, they’ll show up here."));
+    }
+    const merged = tab === "followers" ? appRows.slice() : [];
+    const live = FL && FL.supports(platform, tab);
+    if (!live) {
+      if (merged.length) return head + tabs + `<div class="ext-graph-list">${extGraphRows(merged)}</div>` + extGraphEmpty(platform, tab, subject, null);
+      return head + tabs + extGraphEmpty(platform, tab, subject, null);
+    }
+    if (!subject.ready) {
+      if (subject.failed) return head + tabs + extGraphEmpty(platform, tab, subject, null);
+      return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+    }
+    const row = FL.load(platform, subject, tab, render);
+    if (row.count != null) {
+      if (tab === "followers" && subject.followers == null) subject.followers = row.count;
+      if (tab === "following" && subject.following == null) subject.following = row.count;
+    }
+    (row.items || []).forEach((item) => merged.push(item));
+    if (!merged.length) {
+      if (row.loading || !row.at) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+      return head + tabs + extGraphEmpty(platform, tab, subject, row);
+    }
+    const more = row.cursor && !row.error ? `<div id="ext-graph-more" class="reply-empty ext-graph-more" data-platform="${esc(platform)}" data-handle="${esc(subject.handle)}" data-tab="${esc(tab)}">${row.loading ? esc(tr("Loading…")) : ""}</div>` : "";
+    const tail = row.error && merged.length ? `<div class="ext-graph-more"><button class="retry" type="button" data-act="ext-graph-more" data-platform="${esc(platform)}" data-handle="${esc(subject.handle)}" data-tab="${esc(tab)}">${esc(tr("Retry"))}</button></div>` : "";
+    return head + tabs + `<div class="ext-graph-list">${extGraphRows(merged)}</div>` + more + tail;
+  }
+
+  function extGraphMore(el) {
+    const FL = window.ViktorychFollowLists;
+    if (!FL || !el) return;
+    const platform = el.getAttribute("data-platform") || "x";
+    const tab = el.getAttribute("data-tab") === "followers" ? "followers" : "following";
+    const subject = extGraphSubject(platform, el.getAttribute("data-handle") || "");
+    if (!subject.ready) return;
+    const row = FL.state(platform, subject.handle, tab);
+    if (row && row.error) row.error = false;
+    FL.load(platform, subject, tab, render, true);
+    render();
+  }
+
   function connectionsView(route) {
     if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
       return pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This account is currently locked."));
     }
-    const tab = (route.tab === "followers" || route.tab === "friends" || route.tab === "mutuals" || route.tab === "requests") ? route.tab : "following";
+    const tab = (route.tab === "followers" || route.tab === "followers_you_follow" || route.tab === "friends" || route.tab === "mutuals" || route.tab === "requests") ? route.tab : "following";
     const subject = connectionsSubject(route);
     const name = subject.name || subject.handle || route.handle || "";
     const sub = subject.handle ? "@" + subject.handle : "";
@@ -12842,6 +13653,16 @@ const here = parseRoute();
     }
     if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
     const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
+    // An account from another platform: its own public lists, read live,
+    // with the app's followers of it (when signed in) kept on top.
+    if (!route.personId && subject.kind !== "account" && (route.platform || "x") !== "app") {
+      let appPack = null;
+      if (signed && subject.id && window.ViktorychAccounts && window.ViktorychAccounts.ensureList && tab !== "following") {
+        window.ViktorychAccounts.ensureList(subject.id, "followers");
+        appPack = window.ViktorychAccounts.listPack(subject.id, "followers");
+      }
+      return externalConnectionsView(route, tab === "followers" || tab === "followers_you_follow" ? tab : "following", appPack);
+    }
     if (subject.kind === "account" && subject.id && window.ViktorychAccounts && window.ViktorychAccounts.graphListHtml) {
       if (!signed) return head + tabs + emptyBlock(tr("Followers"), tr("Sign in to see this list."));
       return head + tabs + window.ViktorychAccounts.graphListHtml(subject.id, tab, subject.handle || name);
@@ -13042,9 +13863,8 @@ const here = parseRoute();
     const slice = talk == null ? replySlice(post) : { loading: false, shown: [] };
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
     const parentShown = chain.nodes.length > 0;
-    const focusPost = parentShown ? mentionless(post) : post;
-    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
-    const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">${tr("Replying to")} <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    const focusPost = parentShown ? mentionless(post) : replyBody(post);
+    const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? replyContextHtml(post).replace('<div class="replying">', '<div class="replying status-replying">') : "";
     const body = `${forwardLine(post)}${replyLine}
         ${textBlock(focusPost, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">${tr("Muted on this device.")}</p>` : ""}
@@ -13054,7 +13874,7 @@ const here = parseRoute();
         ${mediaHtml(post.media, false, post)}
         ${post.appPost ? (post.appExtra || "") : ""}
         ${postCards(post)}
-        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
         ${statusMeta(post)}
         ${actionBar(post, true)}`;
     const face = authorFace(post);
@@ -14826,17 +15646,24 @@ const here = parseRoute();
     if (kind === "friend_request") return tr("{name} sent you a friend request", { name: who });
     if (kind === "friend_accept") return tr("{name} accepted your friend request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
+    if (kind === "community_note") {
+      const text = note && note.text;
+      if (text === "Your Community Note is now showing") return tr("Your Community Note is now showing");
+      if (text === "Readers added context to your post") return tr("Readers added context to your post");
+      return tr("Readers added context to a post you interacted with");
+    }
     if (kind === "game_invite") return tr("{name} invited you to play {game}", { name: who, game: (note && note.text) || "ReGone" });
     if (kind === "gift" && !(note && (note.name || note.handle))) return tr("You received a gift");
     if (kind === "gift") return tr("{name} sent you a gift", { name: who });
     if (kind === "birthday") return tr("It's {name}'s birthday today", { name: who });
     if (kind === "birthday_self") return tr("Happy birthday");
     if (kind === "package") return tr("Package update: {name}", { name: (note && note.name) || tr("Packages") });
+    if (kind === "tv_signin") return esc(tr("Approve sign-in on TV?"));
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
   function noteBody(note) {
-    const text = note && note.text ? String(note.text) : "";
+    const text = note && note.text && note.kind !== "community_note" ? String(note.text) : "";
     if (!text) return "";
     const ai = window.ViktorychOnDeviceAi;
     if (ai && ai.hiddenSpam && ai.hiddenSpam(text, "notification")) {
@@ -14900,11 +15727,66 @@ const here = parseRoute();
     if (kind === "reply" || kind === "mention" || (note && note.mention)) return "reply";
     if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "user";
     if (kind === "live") return "mic";
+    if (kind === "community_note") return "communities";
+    if (kind === "tv_signin") return "tv";
     return "bellOn";
   }
 
+  /* "Approve sign-in on TV?": a TV asked to sign in to this account by
+     username. Approve signs the TV in; Deny turns it away. The buttons go
+     once the code expires or after an answer. */
+  const tvNoteDone = {};
+  function tvNoteCode(note) {
+    const code = String((note && note.text) || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return /^[A-HJKMNP-Z2-9]{6}$/.test(code) ? code : "";
+  }
+  function tvNoteRow(note, unreadIds) {
+    const unread = !!(unreadIds && unreadIds[note.id]);
+    const code = tvNoteCode(note);
+    const when = noteWhen(note);
+    const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
+    const done = tvNoteDone[code] || "";
+    const expired = !code || (Number(note.expiresAt) > 0 && Number(note.expiresAt) <= Date.now());
+    const shown = code ? code.slice(0, 3) + " " + code.slice(3) : "";
+    let tail = "";
+    if (done === "approved") tail = `<p class="tvn-state ok" role="status">${esc(tr("Approved. Your TV is signing in."))}</p>`;
+    else if (done === "denied") tail = `<p class="tvn-state" role="status">${esc(tr("Denied. The TV was not signed in."))}</p>`;
+    else if (done === "failed") tail = `<p class="tvn-state bad" role="status">${esc(tr("That request is no longer valid."))}</p>`;
+    else if (done === "busy") tail = `<p class="tvn-state" role="status">${esc(tr("Loading…"))}</p>`;
+    else if (expired) tail = `<p class="tvn-state" role="status">${esc(tr("This request expired."))}</p>`;
+    else tail = `<div class="tvn-actions"><button class="tvn-btn primary" type="button" data-tvnote="approve" data-code="${esc(code)}">${esc(tr("Approve"))}</button><button class="tvn-btn" type="button" data-tvnote="deny" data-code="${esc(code)}">${esc(tr("Deny"))}</button></div>`;
+    const copy = `<div class="note-copy"><p>${esc(tr("A TV asked to sign in to your account. Check that it shows this code:"))}</p><p class="tvn-code">${esc(shown)}</p><p class="tvn-warn">${esc(tr("Only approve if this TV is in front of you. If you didn't ask, choose Deny."))}</p></div>`;
+    return `<article class="note-row tvn${unread ? " is-unread" : ""}" data-note-ids="${esc(String(note.id || ""))}" data-tvn="${esc(code)}"><div class="note-ico">${icon("tv")}</div><div class="note-main"><p class="note-line"><b>${esc(tr("Approve sign-in on TV?"))}</b>${time}</p>${copy}${tail}</div>${note.id ? noteX([String(note.id)]) : ""}</article>`;
+  }
+  function tvNoteAnswer(btn) {
+    const act = btn.getAttribute("data-tvnote");
+    const code = tvNoteCode({ text: btn.getAttribute("data-code") });
+    const accounts = window.ViktorychAccounts;
+    const token = accounts && accounts.token ? accounts.token() : "";
+    if (!code || !token || !accounts.call || tvNoteDone[code] === "busy") return;
+    tvNoteDone[code] = "busy";
+    render();
+    const path = act === "approve" ? "/v1/tv-pair/approve" : "/v1/tv-pair/deny";
+    accounts.call(path, { method: "POST", body: { code }, token }).then((res) => {
+      tvNoteDone[code] = res && res.status === 200 ? (act === "approve" ? "approved" : "denied") : "failed";
+      render();
+    }, () => {
+      delete tvNoteDone[code];
+      toast(tr("Could not reach the server. Try again."));
+      render();
+    });
+  }
+  document.addEventListener("click", (event) => {
+    const btn = event.target && event.target.closest ? event.target.closest("[data-tvnote]") : null;
+    if (!btn) return;
+    event.preventDefault();
+    event.stopPropagation();
+    tvNoteAnswer(btn);
+  }, true);
+
   function noteRow(note, unreadIds) {
     if (!note) return "";
+    if (note.kind === "tv_signin") return tvNoteRow(note, unreadIds);
     const unread = !!(unreadIds && unreadIds[note.id]);
     const when = noteWhen(note);
     const time = when ? `<span class="note-time"> · ${esc(when)}</span>` : "";
@@ -15225,7 +16107,7 @@ const here = parseRoute();
     let title = fallbackTitle;
     let description = "";
     let image = icon;
-    let url = location.origin + location.pathname;
+    let url = shareRoot();
     if (route && route.name === "profile" && window.ViktorychAccounts && window.ViktorychAccounts.storedAccount) {
       const account = window.ViktorychAccounts.storedAccount(route.handle);
       if (account && account.handle) {
@@ -15264,6 +16146,7 @@ const here = parseRoute();
     let key = "";
     if (route.name === "home") key = tr("Home");
     else if (route.name === "status") key = tr("Post noun");
+    else if (route.name === "communitynotes") key = tr("Community Notes");
     else if (route.name === "incoming") key = tr("Add account");
     else if (route.name === "customize") key = tr("Customize");
     else if (route.name === "settings") {
@@ -15272,11 +16155,13 @@ const here = parseRoute();
       if (sub === "display-language" || section === "display-language") key = tr("Display language");
       else if (section === "accessibility") key = tr("Accessibility, display and languages");
       else if (section === "display") key = tr("Display");
+      else if (section === "keyboard") key = tr("Keyboard shortcuts");
       else if (section === "device") key = tr("Device performance");
       else if (section === "languages") key = tr("Languages");
       else if (section === "data") key = tr("Data usage");
       else if (section === "notifications") key = tr("Notifications");
       else if (section === "privacy") key = tr("Privacy and safety");
+      else if (section === "muted") key = tr("Muted & blocked");
       else if (section === "usernames") key = tr("Usernames");
       else if (section === "nostr") key = tr("Nostr");
       else if (section === "live-translate") key = tr("Live Translate");
@@ -15291,7 +16176,7 @@ const here = parseRoute();
     } else {
       const map = {
         notifications: tr("Notifications"),
-        messages: tr("Messages"),
+        messages: tr("Inbox"),
         feeds: tr("Feeds"),
         lists: tr("Lists"),
         list: tr("List"),
@@ -15624,6 +16509,8 @@ const here = parseRoute();
       const current = kind === "banners" ? faceSetting("showBanners") : faceSetting("showPictures");
       return `<button class="outline${current === mode ? " on" : ""}" type="button" data-act="face-pref" data-kind="${kind}" data-mode="${mode}">${esc(label)}</button>`;
     };
+    const shape = STATE.settings && STATE.settings.avatarShape === "square" ? "square" : "round";
+    const shapeBtn = (mode, label) => `<button class="outline${shape === mode ? " on" : ""}" type="button" data-act="ava-shape" data-mode="${mode}" aria-pressed="${shape === mode ? "true" : "false"}">${esc(label)}</button>`;
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${esc(label)}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     const lang = window.SI18n ? window.SI18n.getLang() : "en";
@@ -15647,9 +16534,14 @@ const here = parseRoute();
         ${settingsRow("#/settings/display", tr("Display"))}
         ${settingsRow("#/settings/languages", tr("Languages"))}
         ${settingsRow("#/settings/data", tr("Data usage"))}
+        ${settingsRow("#/settings/keyboard", tr("Keyboard shortcuts"))}
       </div>`;
     }
+    if (section === "keyboard") {
+      return settingsHead(tr("Keyboard shortcuts"), "#/settings/accessibility") + (window.ViktorychKeysUi ? window.ViktorychKeysUi.settingsHtml() : "");
+    }
     if (section === "display" && sub === "navigation") return bottomNavSettings();
+    if (section === "display" && sub === "inbox") return settingsHead(tr("Inbox sections"), "#/settings/display") + (window.ViktorychInbox && window.ViktorychInbox.settingsHtml ? window.ViktorychInbox.settingsHtml() : "");
     if (section === "device") {
       if (!window.ViktorychDevice) {
         loadDeviceCore().then(() => {
@@ -15664,6 +16556,7 @@ const here = parseRoute();
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
         ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
+        ${settingsRow("#/settings/display/inbox", tr("Inbox sections"), tr("Keep sections inside Inbox or give them their own page."))}
         ${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
@@ -15679,6 +16572,11 @@ const here = parseRoute();
           ${faceBtn("pictures", "default", tr("Default"))}
           ${faceBtn("pictures", "none", tr("None"))}
         </div>
+        <h2>${esc(tr("Profile picture shape"))}</h2>
+        <div class="theme-row" role="group" aria-label="${esc(tr("Profile picture shape"))}">
+          ${shapeBtn("round", tr("Round"))}
+          ${shapeBtn("square", tr("Square"))}
+        </div>
         <h2>${esc(tr("Home"))}</h2>
         ${homeFeatureSwitch("homePills", tr("Live pills row"), tr("Weather, scores and live spaces above the timeline. Off loads nothing for it."))}
         ${homeFeatureSwitch("stories", tr("Stories"), tr("The stories tray and viewer. Off loads nothing for it."))}
@@ -15692,6 +16590,7 @@ const here = parseRoute();
         ${logoSettingsHtml()}
         ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
         ${window.ViktorychDock && window.ViktorychDock.settingsHtml ? window.ViktorychDock.settingsHtml() : ""}
+        ${window.ViktorychDesktop && window.ViktorychDesktop.settingsHtml ? window.ViktorychDesktop.settingsHtml() : ""}
         <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">${esc(tr("Collapse sidebar"))}</button></div>
       </div>`;
     }
@@ -15731,6 +16630,7 @@ const here = parseRoute();
           ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
         </div>
         ${window.ViktorychReactions ? window.ViktorychReactions.settingsHtml(STATE.settings && STATE.settings.reactionsData) : ""}
+        ${window.ViktorychCommunityNotes ? window.ViktorychCommunityNotes.settingsHtml(STATE.settings && STATE.settings.communityNotesData) : ""}
         ${peerMediaSettingsHtml()}
         ${window.ViktorychFriendP2P ? window.ViktorychFriendP2P.settingsHtml() : ""}
       </div>${ownerFeaturesSection()}`;
@@ -15759,6 +16659,8 @@ const here = parseRoute();
         ${prefRow("reposts", tr("Reposts"))}
         ${prefRow("follows", tr("Follows"))}
         ${prefRow("dms", tr("Direct messages"))}
+        ${prefRow("games", tr("Game invites"))}
+        ${window.ViktorychGameSocial ? window.ViktorychGameSocial.notifyHtml() : ""}
         ${sameSwitch}
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
@@ -15778,6 +16680,7 @@ const here = parseRoute();
       const body = window.ViktorychUsernames && window.ViktorychUsernames.settingsHtml ? window.ViktorychUsernames.settingsHtml() : "";
       return settingsHead(tr("Usernames"), "#/settings/privacy") + `<div class="set-block">${body}</div>`;
     }
+    if (section === "muted") return settingsHead(tr("Muted & blocked"), "#/settings/privacy") + `<div class="set-block">${mutedSettingsHtml()}</div>`;
     if (section === "privacy") {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       const privSection = acct ? `<h2>${esc(tr("Private followers and following"))}</h2>
@@ -15796,6 +16699,7 @@ const here = parseRoute();
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${notesSwitch}
         ${presenceBlock}
+        ${acct && window.ViktorychGameSocial ? window.ViktorychGameSocial.privacyHtml() : ""}
         ${optToggle("friendsRail", tr("Friends panel"), tr("Show active friends beside the home feed."), true)}
         ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${window.ViktorychPYMK ? window.ViktorychPYMK.privacyHtml() : ""}
@@ -15813,11 +16717,7 @@ const here = parseRoute();
         ${optToggle("privacyAntiFingerprint", tr("Fingerprint resistance"), tr("Reduces browser fingerprinting by disabling battery status and sensor enumeration APIs."), true)}
 
         <h2>${esc(tr("Mute and block"))}</h2>
-        <p class="phandle">${esc(signedAccount() ? tr("Muted words, muted accounts, and reposts you turn off follow your account and are stored encrypted.") : tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
-        <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
-        ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
-        <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
-        ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">${esc(tr("Remove"))}</button></div>`).join("")}
+        <div class="set-list">${settingsRow("#/settings/muted", tr("Muted & blocked"), tr("Muted words, blocked accounts, posts, comments and sources."))}</div>
 
         <h2>${esc(tr("Local data shredder"))}</h2>
         <p class="phandle">${esc(tr("Immediately purges all stored accounts, history, bookmarks, and cached files from this device."))}</p>
@@ -15850,6 +16750,7 @@ const here = parseRoute();
     if (section === "resources") {
       return settingsHead(tr("Additional resources"), "#/settings") + `<div class="set-block">
         ${installControl()}
+        <div class="set-list">${settingsRow("#/send-to-tv", tr("Send to my TV"), tr("Open the app on your TV without typing a long address."))}</div>
         <button class="primary" type="button" data-act="export">${esc(tr("Export settings"))}</button>
         <label class="primary import-btn">${esc(tr("Import settings"))}<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
         <h2>${esc(tr("About"))}</h2>
@@ -15877,13 +16778,25 @@ const here = parseRoute();
       return settingsHead(tr("Post to X"), "#/settings") + body;
     }
     if (section === "devices") return myDevicesView();
-    if (section === "keys") {
-      const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
-        ? window.OwnerKeys.sectionHtml()
-        : `<div class="set-block"><p class="phandle">${esc(tr("Keys are available only to the owner."))}</p></div>`;
-      return settingsHead(tr("Connected keys"), "#/settings") + keys;
+    /* Settings > Connected keys > one service: its own page, like X's
+       Connected apps > app. */
+    if (section === "keys" && sub === "nzlay" && window.NzlayKeys && window.NzlayKeys.enabled() && window.NzlayKeys.detailHtml) {
+      return settingsHead(window.NzlayKeys.titleFor(), "#/settings/keys") + window.NzlayKeys.detailHtml();
     }
-    const keysRow = window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()
+    if (section === "keys" && sub && window.OwnerKeys && window.OwnerKeys.detailHtml) {
+      return settingsHead(window.OwnerKeys.titleFor(sub), "#/settings/keys") + window.OwnerKeys.detailHtml(sub);
+    }
+    if (section === "keys") {
+      const ownerKeys = window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible();
+      /* Every user can keep their own spare Discord key on this device. */
+      const localKeys = window.DiscordLocal && window.DiscordLocal.sectionHtml ? window.DiscordLocal.sectionHtml() : "";
+      const nzlayKeys = window.NzlayKeys && window.NzlayKeys.enabled() && window.NzlayKeys.sectionHtml ? window.NzlayKeys.sectionHtml() : "";
+      const keys = ownerKeys && window.OwnerKeys.sectionHtml
+        ? window.OwnerKeys.sectionHtml()
+        : (localKeys || nzlayKeys ? "" : `<div class="set-block"><p class="phandle">${esc(tr("Keys are available only to the owner."))}</p></div>`);
+      return settingsHead(tr("Connected keys"), "#/settings") + localKeys + nzlayKeys + keys;
+    }
+    const keysRow = (window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()) || window.DiscordLocal || (window.NzlayKeys && window.NzlayKeys.enabled())
       ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
       : "";
     return settingsHead(tr("Settings"), "") + settingsSearchHtml() + `<div class="set-block set-main-note"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list set-main-list"${String(STATE.settingsQ || "").trim() ? " hidden" : ""}>
@@ -15892,8 +16805,11 @@ const here = parseRoute();
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
+      ${settingsRow("#/settings/muted", tr("Muted & blocked"))}
+      ${accountToken() ? settingsRow("#/communitynotes", tr("Community Notes"), tr("Rate and write notes that add context to posts.")) : ""}
       ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
       ${accountToken() ? settingsRow("#/settings/devices", tr("My devices"), tr("Every device signed in to this account.")) : ""}
+      ${accountToken() ? settingsRow("#/link-tv", tr("Link a TV"), tr("Sign a TV in with the code it shows. Nothing to type on the TV.")) : ""}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/suggestions", tr("Suggestions in your feed"), tr("People you may know, account types, and swipeable cards."))}
@@ -15901,6 +16817,7 @@ const here = parseRoute();
       ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
       ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
+      ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Theme, data usage, notifications, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
     </div>${settingsSearchOut()}` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
@@ -16279,7 +17196,7 @@ const here = parseRoute();
       if (!item.href) return "";
       return `<a href="${esc(item.href)}">${esc(item.label)}</a>`;
     }).join("");
-    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${rows}</div></div>`;
+    return `<div class="acct-menu-back" data-act="close-account-menu"><div class="acct-menu" role="menu" aria-label="${esc(tr("Account menu"))}" data-act="stop">${accounts}${window.ViktorychDesktop && window.ViktorychDesktop.menuRowsHtml ? window.ViktorychDesktop.menuRowsHtml("popup") : ""}${rows}</div></div>`;
   }
 
   function drawerEditModal() {
@@ -16300,6 +17217,7 @@ const here = parseRoute();
         ${rows}
         ${STATE.drawerEdit ? "" : '<div class="live-row drawer-lives" data-live-row hidden></div>'}
         ${install}
+        ${!STATE.drawerEdit && window.ViktorychDesktop && window.ViktorychDesktop.menuRowsHtml ? window.ViktorychDesktop.menuRowsHtml("drawer") : ""}
       </div>
       <div class="drawer-foot"><button class="drawer-theme" type="button" data-act="explore-theme" aria-label="${esc(tr("Theme"))}">${icon("moon")}</button></div>
     </div></div>`;
@@ -16447,6 +17365,7 @@ if (STATE.histClear) {
         <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (!STATE.modal) return "";
+    if (STATE.modal === "reply-list") return replyListDialog();
     if (STATE.modal === "install") return installOfferHtml();
     if (STATE.modal === "compose") {
       if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
@@ -16573,7 +17492,7 @@ if (STATE.histClear) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
@@ -16586,7 +17505,7 @@ if (STATE.histClear) {
     const giftsWide = route.name === "store";
     const mode = (wide || giftsWide ? " wide" : "") + (giftsWide ? " gifts-mode" : "") + (explore ? " explore-mode" : "");
     const messageSelect = route.name === "messages" ? ' data-privacy="messages"' : "";
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${messageSelect}>${main}</main>${wide || explore || giftsWide ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${accountPopup()}${drawerEditModal()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${busySheet()}${tabAssignMenu()}${tabContextMenu()}${profileSheets()}${blockSheet()}`;
   }
 
   function toggleReaction(act, id) {
@@ -17961,11 +18880,10 @@ if (STATE.histClear) {
 
   function ancestorCard(post, parentShown) {
     const showReply = !parentShown && !!(post.replyingTo && post.replyingTo.handle);
-    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
-    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    const reply = showReply ? replyContextHtml(post) : "";
     const face = authorFace(post);
     const ancHandle = internalPostHandle(post.handle || "", post);
-    const shown = parentShown ? mentionless(post) : post;
+    const shown = parentShown ? mentionless(post) : replyBody(post);
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
       <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
@@ -17978,7 +18896,7 @@ if (STATE.histClear) {
         ${reply}
         ${textBlock(shown, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
-        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted)}
+        ${post.quoteGone ? `<div class="quote quote-gone">${esc(tr("This post is unavailable."))}</div>` : quoteCard(post.quoted) || quoteBlockedStub(post)}
       </div>
     </article>`;
   }
@@ -18105,6 +19023,86 @@ if (STATE.histClear) {
   function nativeServerHash(hash) {
     return /^#\/messages\/(?:s|join)\//.test(hash || "");
   }
+  /* Owner-only SMS codes inside Inbox. The module loads on demand. */
+  function inboxSmsView(route) {
+    if (window.ViktorychInboxSms && window.ViktorychInboxSms.page) return window.ViktorychInboxSms.page(route);
+    ensureLazy("inboxsms");
+    const chips = window.ViktorychInbox && window.ViktorychInbox.tabsHtml ? window.ViktorychInbox.tabsHtml() : "";
+    return `<div class="inbox-sms"><header class="dmsgs-head"><h1>${esc(inboxTitle())}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
+  }
+  /* Members' Mail, Add and Aliases inside Inbox. The module loads on demand. */
+  function inboxTitle() {
+    return window.ViktorychInbox && window.ViktorychInbox.title ? window.ViktorychInbox.title(location.hash) : tr("Inbox");
+  }
+  /* Inbox sections live in settings.inboxLayout (inbox.js reads and cleans
+     it). A section split into its own page gets a bottom-bar icon next to
+     Inbox (the last ordinary icon makes room when the bar is full) and a
+     sidebar row; merging or hiding it takes the icon back. */
+  function bindInboxLayout() {
+    const inbox = window.ViktorychInbox;
+    if (!inbox || !inbox.bindLayout) return;
+    inbox.bindLayout({
+      get: () => STATE.settings && STATE.settings.inboxLayout,
+      save: (next, prev) => {
+        if (!STATE.settings) return;
+        STATE.settings.inboxLayout = next;
+        const bar = getBottomNav();
+        let barChanged = false;
+        inbox.SECTIONS.forEach((sec) => {
+          const was = prev.split.includes(sec.id);
+          const now = next.split.includes(sec.id);
+          const pinNow = now && next.pinned.includes(sec.id);
+          const pinWas = was && prev.pinned.includes(sec.id);
+          const hidden = new Set(bar.hidden);
+          if (now && (!was || (pinNow && !pinWas))) {
+            if (!was) {
+              bar.order = bar.order.filter((x) => x !== sec.nav);
+              let at = bar.order.indexOf("messages") + 1;
+              while (at > 0 && at < bar.order.length && INBOX_NAV_IDS.includes(bar.order[at])) at += 1;
+              bar.order.splice(at > 0 ? at : bar.order.length, 0, sec.nav);
+            }
+            const shown = bar.order.filter((x) => !hidden.has(x) && x !== sec.nav && (x === "home" || bottomNavAvailable(x)));
+            if (shown.length + 1 > BOTTOM_NAV_MAX) {
+              const bump = shown.slice().reverse().find((x) => x !== "home" && x !== "messages" && !INBOX_NAV_IDS.includes(x));
+              if (!bump) return;
+              hidden.add(bump);
+              next.gave[sec.id] = bump;
+            }
+            hidden.delete(sec.nav);
+            bar.hidden = bar.order.filter((x) => hidden.has(x));
+            barChanged = true;
+          } else if (was && !now && !hidden.has(sec.nav)) {
+            hidden.add(sec.nav);
+            const back = prev.gave && prev.gave[sec.id];
+            if (back && hidden.has(back) && bottomNavAvailable(back)) hidden.delete(back);
+            bar.hidden = bar.order.filter((x) => hidden.has(x));
+            barChanged = true;
+          }
+        });
+        if (barChanged) {
+          STATE.settings.bottomNav = cleanBottomNav(bar);
+          STATE.settings.bottomNavCustom = true;
+        }
+        saveSettings();
+      }
+    });
+  }
+  bindInboxLayout();
+  window.addEventListener("vk-inbox-layout", () => render());
+  function inboxMailView(route) {
+    if (window.ViktorychInboxMail && window.ViktorychInboxMail.page) return window.ViktorychInboxMail.page(route);
+    ensureLazy("inboxmail");
+    const chips = window.ViktorychInbox && window.ViktorychInbox.tabsHtml ? window.ViktorychInbox.tabsHtml() : "";
+    return `<div class="inbox-mail"><header class="dmsgs-head"><h1>${esc(inboxTitle())}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
+  }
+  /* Which Inbox view a hash shows: a change between them repaints the page. */
+  function inboxViewKey(hash) {
+    const h = String(hash || "");
+    const sec = h.match(/^#\/(?:messages|inbox)\/(sms|mail|connect|aliases)(?:$|[/?])(.*)$/);
+    if (sec) return sec[1] + ":" + sec[2];
+    const m = h.match(/[?&]f=([a-z-]+)/);
+    return m ? m[1] : "";
+  }
   function lazySkeleton(title) {
     /* Local-first: a page whose module is still loading paints its last
        saved screen instead of a skeleton when this device has one. */
@@ -18125,8 +19123,8 @@ if (STATE.histClear) {
      placeholder and this device has the last screen of that page, paint that
      screen now; the live render replaces it in place when data arrives. Each
      finished screen is saved (bounded, least recently used first out, wiped on
-     sign-out). Pages that hold secrets or live media are never saved. */
-  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1 };
+     sign-out). Pages that hold secrets, private lists or live media are never saved. */
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1 };
   function routeLoading(html) {
     if (!html) return true;
     if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
@@ -18172,6 +19170,10 @@ if (STATE.histClear) {
       if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
       return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
     }
+    if (route.name === "communitynotes") {
+      const owner = route.tab === "admin";
+      return pageHead(owner ? tr("Owner panel") : tr("Community Notes"), "", true) + (window.ViktorychCommunityNotes ? window.ViktorychCommunityNotes.page(route) : emptyBlock(tr("Community Notes"), tr("Reload the page.")));
+    }
     if (route.name === "packages") {
       if (window.ViktorychPackages && window.ViktorychPackages.visible()) return window.ViktorychPackages.page(route);
       if (!window.ViktorychPackages) { ensureLazy("packages"); return lazySkeleton(tr("Packages")); }
@@ -18195,6 +19197,18 @@ if (STATE.histClear) {
       if (lazyHtml) return snapRoute(lazyHtml);
       ensureLazy("communities");
       return lazySkeleton(tr("Communities"));
+    }
+    if (route.name === "sendtv") {
+      const lazyHtml = window.ViktorychSendTV ? window.ViktorychSendTV.page(route) : "";
+      if (lazyHtml) return lazyHtml;
+      ensureLazy("sendtv");
+      return lazySkeleton(tr("Send to my TV"));
+    }
+    if (route.name === "linktv") {
+      const lazyHtml = window.ViktorychTVPair ? window.ViktorychTVPair.linkPage(route) : "";
+      if (lazyHtml) return lazyHtml;
+      ensureLazy("tvpair");
+      return lazySkeleton(tr("Link a TV"));
     }
     if (route.name === "tv") {
       const lazyHtml = window.ViktorychTV ? window.ViktorychTV.page(route) : "";
@@ -18235,6 +19249,7 @@ if (STATE.histClear) {
     if (route.name === "status") return statusView(route);
     if (route.name === "explore") return exploreView(route);
     if (route.name === "feeds") return feedsView();
+    if (route.name === "sourcelists") return window.SourceLists ? window.SourceLists.view() : feedsView();
     if (route.name === "lists") return listsView();
     if (route.name === "list") return listView(route);
     if (route.name === "history" || route.name === "bookmarks") return historyView(route.name === "history" ? route : { name: "history", tab: "bookmarks", query: route.query });
@@ -18249,8 +19264,10 @@ if (STATE.histClear) {
       ensureLazy("servers");
       return `<div class="dmsgs"><div class="dmsgs-skel" style="flex:1"><span></span><span></span><span></span><span></span></div></div>`;
     }
+    if (route.name === "messages" && route.sms) return inboxSmsView(route);
+    if (route.name === "messages" && route.mail) return inboxMailView(route);
     if (route.name === "messages" && window.FeedsDiscord) return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + window.FeedsDiscord.page(route);
-    if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
+    if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Inbox"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
     return homeView({ tab: "foryou", query: new URLSearchParams() });
   }
@@ -18277,7 +19294,7 @@ if (STATE.histClear) {
     window.scrollTo({ top: 0, behavior: repeat || reduced ? "auto" : "smooth" });
     if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = 0;
     STATE.headerHidden = false;
-    document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
+    paintChromeHidden(false);
     document.querySelectorAll('.tab-caret[aria-expanded="true"]').forEach((btn) => btn.setAttribute("aria-expanded", "false"));
     const sheet = document.querySelector(".tab-sheet");
     if (sheet) sheet.remove();
@@ -18311,6 +19328,11 @@ if (STATE.histClear) {
     if (route && route.name === "games" && route.game) return false;
     const here = navSection(route && route.name);
     const there = hrefSection(href);
+    if (here === "messages" && there === "messages" && window.ViktorychInbox && window.ViktorychInbox.splitHere) {
+      /* Inbox and its split pages share a route; they are one section only
+         when both sides land on the same page. */
+      return window.ViktorychInbox.splitHere(location.hash || "") === window.ViktorychInbox.splitHere(href);
+    }
     return !!here && here === there;
   }
 
@@ -19090,6 +20112,15 @@ if (STATE.histClear) {
     if (!(route.name === "home" && STATE.tabMenu === currentTab)) STATE.tabMenu = null;
     const nextKey = routeScrollKey();
     const routeChanged = !!STATE.scrollKey && STATE.scrollKey !== nextKey;
+    /* A render that runs after the hash moved but before the hashchange
+       handler (a fetch or module repaint landing in that gap, common on slow
+       CPUs) used to paint the new route at the old page's scrollY and then
+       save that as the new route's position, so going back to a list wiped
+       its remembered 1200 to 0. Paint it at the remembered position instead,
+       exactly as the hashchange render will. */
+    if (routeChanged && !routing && lastKey !== (location.hash || "#/") && lastKey !== location.hash && !STATE.snapTop && !(opts && (opts.reset || Object.prototype.hasOwnProperty.call(opts, "y")))) {
+      opts = Object.assign({}, opts || {}, { y: SCROLLS[nextKey] || 0 });
+    }
     if (route.name !== "watch") STATE.notedWatch = "";
     if (route.name !== "status") STATE.notedStatus = "";
     if (route.name !== "article") STATE.notedArticle = "";
@@ -19179,6 +20210,10 @@ if (STATE.histClear) {
         if (route.name === "packages") window.ViktorychPackages.mount(route);
         else window.ViktorychPackages.unmount();
       }
+      if (window.ViktorychCommunityNotes) {
+        if (route.name === "communitynotes") window.ViktorychCommunityNotes.mount(route);
+        else window.ViktorychCommunityNotes.unmount();
+      }
       if (window.ViktorychTV) {
         if (route.name === "tv") window.ViktorychTV.mount(route);
         else window.ViktorychTV.unmount();
@@ -19228,7 +20263,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
           }
         }
       }
-      document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
+      paintChromeHidden(STATE.headerHidden && window.innerWidth < 500);
       if (route.name === "subscriptions" && route.channel && (routeChanged || !STATE.scrollKey)) revealSubsChannel();
       STATE.scrollKey = nextKey;
       lastKey = location.hash;
@@ -19296,6 +20331,14 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     toast._t = setTimeout(() => { el.hidden = true; }, 1800);
   }
 
+  function toastUndo(message, kind, value) {
+    const el = document.getElementById("toast");
+    if (!el) return;
+    el.hidden = false;
+    el.innerHTML = `${esc(message)} <button type="button" class="toast-link" data-act="block-undo" data-kind="${esc(kind)}" data-value="${esc(value)}">${esc(tr("Undo"))}</button>`;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, 4000);
+  }
   /* A toast with one action (Undo, Add, Merge) and an optional Not now. */
   function toastAction(message, label, run, later) {
     const el = document.getElementById("toast");
@@ -19418,6 +20461,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       window.ViktorychLive.onAct(act, el);
       return;
     }
+    if (act && act.indexOf("desk-") === 0 && window.ViktorychDesktop && window.ViktorychDesktop.onAct) {
+      // Full screen must start inside this click (a user gesture), so it runs before render.
+      window.ViktorychDesktop.onAct(act, el);
+      if (act !== "desk-pref") { STATE.drawer = false; STATE.accountMenu = false; }
+      render();
+      return;
+    }
     if (act === "dock-pref") {
       if (window.ViktorychDock && window.ViktorychDock.setPref) window.ViktorychDock.setPref(el.dataset.key, el.dataset.value);
       render();
@@ -19536,7 +20586,9 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "htab" || act === "like" || act === "bookmark" || act === "follow" || act === "back" || act === "view" || act === "story") tapHaptic();
+    if (el.closest && el.closest("#viewer .xv-pills")) setTimeout(xvRepaintPills, 0);
     if (act === "close-viewer") { closeViewer(); return; }
+    if (act === "xv-play" || act === "xv-mute" || act === "xv-speed" || act === "xv-more" || act === "xv-menu") { xvAct(act, el); return; }
     if (act === "back") {
       if (STATE.viewer) { closeViewer(); return; }
       if (history.length > 1) history.back();
@@ -19859,6 +20911,18 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }
       saveNavCustom(custom);
       render();
+      return;
+    }
+    if (act === "reply-others") {
+      let handles = [];
+      try { handles = JSON.parse(el.dataset.handles || "[]"); } catch (err) { handles = []; }
+      STATE.replyList = { platform: el.dataset.platform || "x", handles: handles.map((h) => String(h || "")).filter(Boolean).slice(0, 50) };
+      STATE.modal = "reply-list";
+      render();
+      return;
+    }
+    if (act === "close-reply-list") {
+      STATE.modal = null; STATE.replyList = null;
       return;
     }
     if (act === "close-modal" || act === "close-remove") {
@@ -20310,6 +21374,83 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       else render();
       return;
     }
+    if (act === "block-post" || act === "block-account" || act === "block-more") {
+      const post = el.dataset.sheet ? STATE.blockSheetPost : blockTarget(el.dataset.id);
+      STATE.menu = null;
+      if (!post) { render(); return; }
+      if (act === "block-more") {
+        STATE.blockSheetPost = post;
+        STATE.blockSheetFull = false;
+        render();
+        return;
+      }
+      STATE.blockSheetPost = null;
+      const key = act === "block-post" ? blockPostKey(post) : blockAccountKey(post);
+      if (!key) { render(); return; }
+      addBlock(act === "block-post" ? "posts" : "accounts", key);
+      saveSettings();
+      if (act === "block-account" && post.appPost && post.authorId && signedAccount()) {
+        // A ViktorychApp account is also muted on the server, so it is gone on every device.
+        accountCall("/v1/mutes", { method: "POST", body: { accountId: post.authorId } }).then(() => { publicStamp = 0; schedulePublicPosts(); }).catch(() => {});
+      }
+      if (window.ViktorychCommunities && window.ViktorychCommunities.requestRender) { /* communities redraw with the app */ }
+      toastUndo(act === "block-post" ? tr("Hidden. It won't show in any feed.") : tr("Blocked. Their posts and comments won't load."), act === "block-post" ? "posts" : "accounts", key);
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "block-source") {
+      const key = el.dataset.key || "";
+      const b = blockSettings();
+      if (key && b) {
+        if ((b.sources || []).indexOf(key) >= 0) removeBlock("sources", key);
+        else addBlock("sources", key);
+        saveSettings();
+      }
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "block-type") {
+      const post = STATE.blockSheetPost;
+      const acct = blockAccountKey(post);
+      if (acct) { toggleBlockType(acct, el.dataset.kind || ""); saveSettings(); }
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "close-block-sheet") {
+      STATE.blockSheetPost = null;
+      STATE.blockSheetFull = false;
+      if (el.tagName !== "A") { render(); return; }
+      return;
+    }
+    if (act === "reveal-hidden") {
+      STATE.revealedHidden = STATE.revealedHidden || {};
+      STATE.revealedHidden[String(el.dataset.id || "")] = true;
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "unblock") {
+      const kind = el.dataset.kind || "";
+      const value = el.dataset.value || "";
+      if (kind === "types") {
+        const b = blockSettings();
+        if (b) { delete b.types[value]; b.at = Date.now(); }
+      } else if (kind === "posts" || kind === "accounts" || kind === "sources") removeBlock(kind, value);
+      saveSettings();
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "block-undo") {
+      removeBlock(el.dataset.kind || "", el.dataset.value || "");
+      saveSettings();
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "show-hidden-toggle") {
+      const b = blockSettings();
+      if (b) { b.showHidden = !b.showHidden; b.at = Date.now(); saveSettings(); }
+      render({ y: window.scrollY });
+      return;
+    }
     if (act === "repost-off") {
       const id = el.dataset.id;
       const list = STATE.settings.repostOff || (STATE.settings.repostOff = []);
@@ -20345,6 +21486,18 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "show-original") {
       if (window.FeedsTranslate) window.FeedsTranslate.showOriginal(el.dataset.key);
       else { STATE.originalShown[el.dataset.key] = true; render(); }
+      return;
+    }
+    if (act === "ext-graph-retry" || act === "ext-graph-more") {
+      if (window.ViktorychFollowLists) {
+        const platform = el.dataset.platform || "x";
+        if (act === "ext-graph-retry") {
+          window.ViktorychFollowLists.retry(platform, el.dataset.handle || "", el.dataset.tab || "following");
+          const held = STATE.extSubjects[liveKey(platform, el.dataset.handle || "")];
+          if (held && held.settled && !held.remoteId && !held.channelId && !held.pubkey) delete STATE.extSubjects[liveKey(platform, el.dataset.handle || "")];
+        } else extGraphMore(el);
+      }
+      render();
       return;
     }
     if (act === "follow") {
@@ -20545,6 +21698,11 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "run-setup") {
+      const accts = window.ViktorychAccounts;
+      if (accts && accts.runSetup) accts.runSetup();
+      return;
+    }
     if (act === "install") {
       STATE.drawer = false;
       STATE.drawerEdit = false;
@@ -20638,6 +21796,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
+    if (act === "ava-shape") {
+      STATE.settings.avatarShape = el.dataset.mode === "square" ? "square" : "round";
+      saveSettings();
+      applyTheme();
+      render();
+      return;
+    }
     if (act === "face-pref") {
       const mode = el.dataset.mode === "default" || el.dataset.mode === "none" ? el.dataset.mode : "show";
       if (el.dataset.kind === "banners") STATE.settings.showBanners = mode;
@@ -20675,6 +21840,13 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       }[key];
       if (!flip || !STATE.settings) return;
       STATE.settings[key] = STATE.settings[key] === flip[0] ? flip[1] : flip[0];
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "cnotes-data") {
+      const mode = el.dataset.mode;
+      STATE.settings.communityNotesData = mode === "full" || mode === "lite" ? mode : "auto";
       saveSettings();
       render();
       return;
@@ -21035,6 +22207,35 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (String(key || "").indexOf("desc:") === 0) STATE.expanded[key] = !STATE.expanded[key];
       else STATE.expanded[key] = true;
       render();
+      return;
+    }
+    if (act === "busy-open") {
+      if (!STATE.busyOpen) STATE.busyOpen = {};
+      STATE.busyOpen[el.dataset.id || ""] = true;
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "busy-menu") {
+      STATE.menu = null;
+      STATE.profileMenu = null;
+      STATE.busySheet = busyTarget(el.dataset.key, el.dataset.name, el.dataset.handle, el.dataset.platform);
+      render({ y: window.scrollY });
+      return;
+    }
+    if (act === "busy-close") { STATE.busySheet = null; render({ y: window.scrollY }); return; }
+    if (act === "busy-mode" || act === "busy-mute") {
+      const sheet = STATE.busySheet;
+      const api = busyApi();
+      if (!sheet || !sheet.key || !api || !STATE.settings) return;
+      if (act === "busy-mode") STATE.settings.busyPrefs = api.setMode(busyPrefs(), sheet.key, el.dataset.mode || "auto");
+      else {
+        const hours = Number(el.dataset.hours) || 0;
+        STATE.settings.busyPrefs = api.mute(busyPrefs(), sheet.key, hours ? Date.now() + hours * 3600000 : 0);
+      }
+      busyChanged();
+      STATE.busySheet = null;
+      if (act === "busy-mute") toast(Number(el.dataset.hours) ? tr("Muted for now. Change it any time in Posting volume.") : tr("Unmuted"));
+      render({ y: window.scrollY });
       return;
     }
     if (act === "menu") { STATE.menu = STATE.menu === el.dataset.id ? null : el.dataset.id; render(); return; }
@@ -21971,6 +23172,18 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       render();
       return;
     }
+    if (muteForm && muteForm.dataset.mute === "source") {
+      event.preventDefault();
+      const input = muteForm.querySelector("input");
+      const raw = input ? input.value.trim().toLowerCase().slice(0, 80) : "";
+      if (!raw) return;
+      const sub = raw.replace(/^https?:\/\/(?:www\.|old\.)?reddit\.com\//, "").match(/^\/?r\/([a-z0-9_]+)/);
+      const feed = feeds().find((item) => String(item.id || "").toLowerCase() === raw);
+      const key = sub ? "reddit:" + sub[1] : (feed ? "feed:" + String(feed.id).toLowerCase() : "community:" + raw.replace(/^#\/communities\//, "").replace(/[^a-z0-9_.-]/g, ""));
+      if (addBlock("sources", key)) saveSettings();
+      render({ y: window.scrollY });
+      return;
+    }
     if (muteForm) {
       event.preventDefault();
       const input = muteForm.querySelector("input");
@@ -22145,42 +23358,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
       }
     }
-    if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !STATE.modal && !STATE.drawer && !STATE.viewer) {
-      const tag = event.target && event.target.tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (event.target && event.target.isContentEditable);
-      if (!typing) {
-        const box = visibleSearch();
-        if (box) {
-          event.preventDefault();
-          box.focus();
-          return;
-        }
-      }
-    }
-    if (event.key === "Tab" && STATE.modal && !document.querySelector("#account-layer .acct-modal")) {
-      const modal = document.querySelector(".modal[role='dialog']");
-      if (modal) {
-        const items = [...modal.querySelectorAll("button, a[href], input, select, textarea")].filter((el) => !el.disabled && el.tabIndex !== -1);
-        if (items.length) {
-          const first = items[0];
-          const last = items[items.length - 1];
-          const active = document.activeElement;
-          if (event.shiftKey && (active === first || !modal.contains(active))) {
-            event.preventDefault();
-            last.focus();
-            return;
-          }
-          if (!event.shiftKey && (active === last || !modal.contains(active))) {
-            event.preventDefault();
-            first.focus();
-            return;
-          }
-        }
-      }
-    }
-    if (event.key === "Escape" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.onEscape && window.ViktorychXCompose.onEscape()) return;
-    if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.drawerEdit || STATE.accountMenu || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
+  });
+
+  /* Shortcut keys live in keys.js (one registry). These are the app actions
+     it calls: Esc, the dialog focus trap, search focus and the rest. */
+  function escapeOverlays() {
+    if (STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.onEscape && window.ViktorychXCompose.onEscape()) return true;
+    if (STATE.viewer) { closeViewer(); return true; }
+    if (STATE.modal || STATE.drawer || STATE.drawerEdit || STATE.accountMenu || STATE.noteGear || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.busySheet || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || STATE.repostMenu || (STATE.confirm && STATE.confirm.kind === "feed-tab")) {
       STATE.modal = null;
       STATE.composeVia = "";
       STATE.drawer = false;
@@ -22193,15 +23378,94 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       STATE.groupMenu = null;
       STATE.tabMenu = null;
       STATE.bellMenu = null;
+      STATE.busySheet = null;
       STATE.tabAssign = null;
       STATE.tabContext = null;
       if (STATE.confirm && STATE.confirm.kind === "feed-tab") STATE.confirm = null;
       STATE.confirm = null;
       STATE.histClear = "";
       STATE.removeFeed = null;
+      STATE.repostMenu = null;
       render();
+      return true;
     }
-  });
+    return false;
+  }
+
+  function trapModalTab(back) {
+    if (!STATE.modal || document.querySelector("#account-layer .acct-modal")) return false;
+    const modal = document.querySelector(".modal[role='dialog']");
+    if (!modal) return false;
+    const items = [...modal.querySelectorAll("button, a[href], input, select, textarea")].filter((el) => !el.disabled && el.tabIndex !== -1);
+    if (!items.length) return false;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (back && (active === first || !modal.contains(active))) { last.focus(); return true; }
+    if (!back && (active === last || !modal.contains(active))) { first.focus(); return true; }
+    return false;
+  }
+
+  function keysAct(name, data) {
+    const el = document.createElement("button");
+    el.dataset.act = name;
+    Object.keys(data || {}).forEach((key) => { el.dataset[key] = String(data[key]); });
+    onAct(el);
+    return true;
+  }
+
+  window.ViktorychKeysHost = {
+    state: () => ({
+      route: parseRoute().name,
+      modal: STATE.modal || "",
+      drawer: !!STATE.drawer,
+      menu: !!(STATE.menu || STATE.accountMenu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.repostMenu || STATE.tabContext || STATE.tabAssign || STATE.drawerEdit || STATE.noteGear || STATE.removeFeed || (STATE.confirm && STATE.confirm.kind === "feed-tab")),
+      viewer: STATE.viewer ? (STATE.viewer.video ? "video" : "photo") : ""
+    }),
+    act: keysAct,
+    escape: escapeOverlays,
+    trapTab: trapModalTab,
+    go: (hash) => { goHash(hash); return true; },
+    focusSearch: () => {
+      const box = visibleSearch();
+      if (box) { box.focus(); return true; }
+      goHash("#/explore");
+      setTimeout(() => { const next = visibleSearch(); if (next) next.focus(); }, 150);
+      return true;
+    },
+    profileHash: () => drawerProfileHref() || "",
+    muteAuthor: (id) => {
+      const post = findAnyPost(id);
+      if (!post || !post.handle || !STATE.settings) return false;
+      const handle = String(post.handle).replace(/^@/, "");
+      const muted = STATE.settings.mutedAccounts || (STATE.settings.mutedAccounts = []);
+      if (!matchesMute(muted, handle, post.platform, post.feedId)) muted.push((post.platform || "x") + ":" + handle);
+      saveSettings();
+      toast(tr("Account muted"));
+      render();
+      return true;
+    },
+    viewerStep: (delta) => {
+      const view = STATE.viewer;
+      if (!view || view.video) return false;
+      const photos = photoList(findAnyPost(view.id));
+      if (photos.length < 2) return false;
+      openViewer(view.id, (view.index + delta + photos.length) % photos.length);
+      return true;
+    },
+    themes: () => ["default", "dim", "lightsout"].concat(FLAG_THEME_IDS),
+    theme: () => (STATE.settings && STATE.settings.appearance) || "lightsout",
+    themeLabel: (id) => themeLabel(id),
+    accounts: () => shownFeeds(feeds()).slice(0, 3000).map((f) => ({ name: f.name || f.handle || "", handle: f.handle || "", platform: f.platform || "x", hash: accountHash(f.platform, f.handle) })),
+    keyboardPrefs: () => (STATE.settings && STATE.settings.keyboard) || null,
+    saveKeyboardPrefs: (prefs) => {
+      if (!STATE.settings) return;
+      STATE.settings.keyboard = prefs;
+      saveSettings();
+    },
+    toast: (text) => toast(text),
+    render: () => render()
+  };
 
   function primeTelegramImages(root) {
     const scope = root && root.querySelectorAll ? root : document;
@@ -22478,7 +23742,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         railObserver.observe(el);
       }
     }
-    const top = Math.min(0, Math.round((window.innerHeight || 0) - el.offsetHeight));
+    // The installed app's own title bar (Window Controls Overlay) sits above the rail.
+    const bar = document.documentElement.classList.contains("vk-wco") ? (document.querySelector(".wco") || {}).offsetHeight || 0 : 0;
+    const top = Math.min(bar, Math.round((window.innerHeight || 0) - el.offsetHeight));
     const want = top + "px";
     if (el.style.getPropertyValue("--rail-top") !== want) el.style.setProperty("--rail-top", want);
   }
@@ -22491,6 +23757,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   })();
   window.addEventListener("orientationchange", () => syncShell());
   syncShell();
+  function paintChromeHidden(hidden) {
+    const root = document.documentElement;
+    const on = !!hidden;
+    if (root.classList.contains("chrome-hidden") !== on) root.classList.toggle("chrome-hidden", on);
+    document.querySelectorAll(".topbar").forEach((el) => {
+      if (el.classList.contains("is-hidden") !== on) el.classList.toggle("is-hidden", on);
+    });
+  }
   function paintProfileChrome() {
     const bar = document.querySelector(".profile-chrome");
     if (!bar) return;
@@ -22502,19 +23776,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (copy) copy.hidden = !solid;
     STATE.profileSolid = solid;
   }
-  window.addEventListener("scroll", () => {
+  /* X mobile: the top bar slides up and the bottom bar fades while
+     scrolling down; both come back on the way up. One rAF per frame,
+     transform/opacity only, and classes change only when the state flips. */
+  let scrollTick = 0;
+  function onChromeScroll() {
+    scrollTick = 0;
     paintProfileChrome();
     const homeStories = parseRoute().name === "home" && document.querySelector(".story-shell");
     if (window.innerWidth >= 500 || homeStories) {
       STATE.headerHidden = false;
-      if (homeStories) document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
+      paintChromeHidden(false);
       return;
     }
     const y = window.scrollY;
     if (y > lastY + 8 && y > 70) STATE.headerHidden = true;
     else if (y < lastY - 8 || y < 40) STATE.headerHidden = false;
     lastY = y;
-    document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden));
+    paintChromeHidden(STATE.headerHidden);
+  }
+  window.addEventListener("scroll", () => {
+    if (!scrollTick) scrollTick = requestAnimationFrame(onChromeScroll);
   }, { passive: true });
 
   let hoverTimer = 0;
@@ -22740,7 +24022,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       scrollFreeze = false;
       return;
     }
-    if (!nativePrev && !nativeNext && /^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
+    if (!nativePrev && !nativeNext && /^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && inboxViewKey(prevHash) === inboxViewKey(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
       lastKey = nextHash;
       STATE.scrollKey = "#/messages";
       routing = false;
@@ -22867,6 +24149,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const theme = resolvedTheme();
     if (THEMES.apply) THEMES.apply(theme);
     else document.documentElement.setAttribute("data-theme", theme);
+    if (STATE.settings && STATE.settings.avatarShape === "square") document.documentElement.setAttribute("data-ava-shape", "square");
+    else document.documentElement.removeAttribute("data-ava-shape");
     applyNavLayout();
     const color = THEME_COLORS[theme] || "#000000";
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
@@ -23597,6 +24881,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return timelineFeeds();
   }
 
+  /* A feed whose account or whole source is blocked is never fetched. */
+  function feedBlocked(feed) {
+    if (!feed || showHiddenOn()) return false;
+    const set = currentBlockSet();
+    const api = blocksApi();
+    if (!set || !set.size || !api) return false;
+    const who = feed.platform === "reddit" && feed.redditKind === "r"
+      ? { feedId: feed.id, subreddit: feed.handle, platform: "reddit" }
+      : { feedId: feed.id, handle: feed.handle, platform: feed.platform || "x" };
+    const why = api.reason(set, who);
+    return why === "account" || why === "source";
+  }
+
   function feedsForTabs(tabs) {
     const out = [];
     const seen = {};
@@ -23604,6 +24901,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       feedsForTab(tab).forEach((feed) => {
         const id = String(feed && feed.id || "").toLowerCase();
         if (!id || seen[id]) return;
+        if (feedBlocked(feed)) { seen[id] = true; skippedBlockedFeeds += 1; return; }
         seen[id] = true;
         out.push(feed);
       });
@@ -23716,6 +25014,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return job;
   }
 
+  let skippedBlockedFeeds = 0;
+  window.ViktorychBlockStats = () => ({ skippedFeeds: skippedBlockedFeeds });
   let liveRefreshFlight = null;
   const homeTabJobs = {};
   function refreshHomeTabs(tabs) {
@@ -23851,6 +25151,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const saved = JSON.parse(readStored(localStorage, "account-v1") || "null");
         if (saved && saved.token) headers.Authorization = "Bearer " + saved.token;
       } catch (err) { /* a missing session still settles empty */ }
+      const blockList = blockHeader();
+      if (blockList) headers["X-Block"] = blockList;
     }
     return { cache: "no-store", credentials: "omit", headers: headers };
   }
@@ -23893,7 +25195,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return missingCatalog();
   }
 
+  /* Lists the owner assigned to this account join the timeline here; other
+     accounts never fetch them. */
   async function fetchFeeds(fresh) {
+    const doc = await fetchFeedsRaw(fresh);
+    const lists = window.SourceLists;
+    if (!lists || !doc || !Array.isArray(doc.posts)) return doc;
+    await Promise.race([lists.ready(), new Promise((done) => setTimeout(done, 400))]);
+    return lists.merge(doc);
+  }
+
+  async function fetchFeedsRaw(fresh) {
     const boot = fresh && window.__homeFreshBoot && window.__homeFreshBoot.feeds;
     if (boot) window.__homeFreshBoot.feeds = null;
     try {
@@ -24203,41 +25515,35 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const box = document.getElementById("viewer");
     if (!box) return;
     const view = STATE.viewer;
-    if (!view) { box.hidden = true; box.innerHTML = ""; return; }
+    if (!view) { box.hidden = true; box.innerHTML = ""; box.classList.remove("xv"); return; }
     if (view.video) {
       const post = findAnyPost(view.id);
       const media = view.media || ((post && post.media) || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || {};
       box.hidden = false;
-      if (box._ytPlayer && box._ytPlayer.destroy) {
-        try { box._ytPlayer.destroy(); } catch (err) {}
-        box._ytPlayer = null;
-      }
-      box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>`;
+      xvTeardown(box);
+      const stage = xvFrame(box, view, post, media);
+      const live = () => STATE.viewer === view && !!view.video;
       const known = post || { platform: view.platform || "", statusId: view.statusId || "", id: view.statusId || view.id || "", url: view.url || "" };
       const xplan = xPlaybackPlan(known, media);
       if (xplan) {
-        box._gen = (box._gen || 0) + 1;
-        startXPlayback(box, known, media, xplan, {
+        stage._gen = (stage._gen || 0) + 1;
+        startXPlayback(stage, known, media, xplan, {
           preview: false,
           muted: !!(media && media.type === "animated_gif"),
           loop: !!(media && media.type === "animated_gif"),
           resume: view.time || 0,
-          active: () => !!(STATE.viewer && STATE.viewer.video)
+          active: live
         });
         return;
       }
       let video;
       const viewerPoster = (media && (media.poster || media.url)) || (post && post.poster) || "";
-      if (typeof window.YtPlayer === "function") {
-        box._ytPlayer = new window.YtPlayer(box, { post: post, media: media, poster: viewerPoster });
-        video = box._ytPlayer.video;
-        video.id = "viewer-video";
-      } else {
-        video = document.createElement("video");
-        video.id = "viewer-video";
-        video.controls = true;
-        box.appendChild(video);
-      }
+      video = document.createElement("video");
+      video.id = "viewer-video";
+      video.controls = false;
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      stage.appendChild(video);
       if (!video) return;
       if (viewerPoster && !video.poster && typeof viewerPoster === "string" && viewerPoster.indexOf(".mp4") < 0) {
         video.poster = viewerPoster;
@@ -24249,7 +25555,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       let viewerFramed = false;
       if (typeof video.requestVideoFrameCallback === "function") {
         const onVFrame = () => {
-          if (!STATE.viewer || !STATE.viewer.video) return;
+          if (!live()) return;
           if (video.videoWidth > 0 && video.videoHeight > 0) {
             viewerFramed = true;
           } else if (!viewerFramed) {
@@ -24263,7 +25569,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       };
       const startFile = (url, kind) => {
         const go = () => {
-          if (!STATE.viewer || !STATE.viewer.video) {
+          if (!live()) {
             try { video.pause(); video.removeAttribute("src"); video.load(); } catch (err) {}
             return;
           }
@@ -24272,14 +25578,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         };
         if (kind === "hls" && !video.canPlayType("application/vnd.apple.mpegurl")) {
           loadHls().then((Hls) => {
-            if (!STATE.viewer || !STATE.viewer.video || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
+            if (!live() || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
             const hls = new Hls(hlsAhead());
-            box._hls = hls;
-            armPeer(box, hls, url);
+            stage._hls = hls;
+            armPeer(stage, hls, url);
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              if (!STATE.viewer || !STATE.viewer.video) {
+              if (!live()) {
                 try { video.pause(); hls.destroy(); } catch (err) {}
                 return;
               }
@@ -24291,7 +25597,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
         try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.src = url;
-        armPeer(box, null, url);
+        armPeer(stage, null, url);
         if (video.readyState >= 1) go();
         else video.addEventListener("loadedmetadata", go, { once: true });
       };
@@ -24304,10 +25610,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       const showCover = () => {
-        if (!STATE.viewer || !STATE.viewer.video) return;
-        if (box._ytPlayer && box._ytPlayer.destroy) {
-          try { box._ytPlayer.destroy(); } catch (err) {}
-          box._ytPlayer = null;
+        if (!live()) return;
+        if (stage._ytPlayer && stage._ytPlayer.destroy) {
+          try { stage._ytPlayer.destroy(); } catch (err) {}
+          stage._ytPlayer = null;
         }
         const poster = (media && (media.poster || media.url)) || "";
         const stills = stillCandidates(post || {}, media);
@@ -24317,11 +25623,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const img = poster || posterKey
           ? `<img decoding="async" alt="" referrerpolicy="no-referrer"${lead ? tgLead(posterKey, stills.slice(1), poster) : ` src="${esc(poster)}"`}>`
           : "";
-        box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>${img}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
-        primeTelegramImages(box);
+        stage.innerHTML = `${img}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
+        primeTelegramImages(stage);
       };
       const playAt = (list, index) => {
-        if (!STATE.viewer || !STATE.viewer.video) return;
+        if (!live()) return;
         const files = (list || []).filter((row) => row && row.kind !== "iframe" && row.url);
         const file = files[index];
         if (!file) {
@@ -24338,7 +25644,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const fail = () => playAt(list, index + 1);
         if (file.telegram && file.kind === "hls") {
           loadTelegramHls().then((Hls) => {
-            if (!STATE.viewer || !STATE.viewer.video || !accountToken() || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
+            if (!live() || !accountToken() || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
             video.crossOrigin = "anonymous";
             const hls = new Hls(hlsAhead({
               xhrSetup: (xhr, url) => {
@@ -24351,8 +25657,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             }));
             hls.on(Hls.Events.ERROR, (_event, data) => { if (data && data.fatal) fail(); });
             hls.on(Hls.Events.MANIFEST_PARSED, () => { lockHlsTop(hls); seek(); video.play().catch(() => {}); });
-            box._hls = hls;
-            armPeer(box, hls, file.url);
+            stage._hls = hls;
+            armPeer(stage, hls, file.url);
             hls.loadSource(file.url);
             hls.attachMedia(video);
           }).catch(fail);
@@ -24365,7 +25671,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             ? window.ViktorychAccounts.syncPlaybackAuth()
             : Promise.resolve();
           ready.then(() => {
-            if (!STATE.viewer || !STATE.viewer.video) return;
+            if (!live()) return;
             video.crossOrigin = "anonymous";
             video.src = file.url;
             video.addEventListener("error", fail, { once: true });
@@ -24377,7 +25683,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.addEventListener("error", fail, { once: true });
         const onBlackScreen = () => {
-          if (!STATE.viewer || !STATE.viewer.video) return;
+          if (!live()) return;
           if (!viewerFramed && video.currentTime > 1.0 && !hasDecodedFrames(video)) {
             video.removeEventListener("timeupdate", onBlackScreen);
             fail();
@@ -24389,6 +25695,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       sourcesFor(post || {}, media, 0).then((list) => playAt(list, 0)).catch(() => showCover());
       return;
     }
+    box.classList.remove("xv");
     const post = findAnyPost(view.id);
     const photos = photoList(post);
     const item = photos[view.index] || photos[0];
@@ -24406,12 +25713,391 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     primeTelegramImages(box);
   }
 
-  function openVideoViewer(post, media, src, time) {
+  /* Full-screen video viewer, laid out like X's mobile app: black stage with
+     the clip centred, round back and ⋮ buttons on top, the author, the post
+     text (tap to expand, the clip dims), the action pills, a thin progress
+     line and a control bar (play, time left, speed, sound, exit). A vertical
+     swipe (scroll-snap) or j/k and the arrow keys move to the next or
+     previous video post of the feed it was opened from; the next clip only
+     preloads its metadata. Media is hotlinked as is, never re-encoded. */
+  const XV_SPEEDS = [1, 1.25, 1.5, 2, 0.5];
+
+  function xvStageClean(el) {
+    if (!el) return;
+    if (el._xEmbedStop) {
+      try { el._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
+      el._xEmbedStop = null;
+    }
+    releasePeer(el);
+    if (el._hls && el._hls.destroy) {
+      try { el._hls.destroy(); } catch (err) { /* already gone */ }
+      el._hls = null;
+    }
+    if (el._ytPlayer && el._ytPlayer.destroy) {
+      try { el._ytPlayer.destroy(); } catch (err) { /* already gone */ }
+      el._ytPlayer = null;
+    }
+    el._gen = (el._gen || 0) + 1;
+    el.querySelectorAll("video, audio").forEach((m) => {
+      try { m.pause(); m.removeAttribute("src"); m.load(); } catch (err) { /* closing */ }
+    });
+    el.querySelectorAll("iframe").forEach((f) => {
+      try { f.src = "about:blank"; } catch (err) { /* closing */ }
+    });
+  }
+
+  function xvTeardown(box) {
+    if (!box) return;
+    if (box._xvStop) { try { box._xvStop(); } catch (err) { /* already unbound */ } box._xvStop = null; }
+    box.querySelectorAll(".xv-media").forEach(xvStageClean);
+    xvStageClean(box);
+  }
+
+  function xvQueue(tile) {
+    const out = [];
+    let at = -1;
+    document.querySelectorAll('.vplay[data-preview="feed"]').forEach((el) => {
+      if (el.closest("#viewer")) return;
+      const post = playPost(el);
+      if (!post) return;
+      const media = playMedia(el, post) || {};
+      if (youtubeId(post, media) || post.watch || (post.platform === "youtube" && post.kind !== "community")) return;
+      if (out.some((row) => row.pid === post.id && row.mi === (el.dataset.mi || "0"))) return;
+      if (el === tile) at = out.length;
+      out.push({ pid: post.id, mi: el.dataset.mi || "0" });
+    });
+    return { list: out, at: at };
+  }
+
+  function xvItem(row) {
+    if (!row) return null;
+    const post = findAnyPost(row.pid);
+    if (!post) return null;
+    const videos = (post.media || []).filter((item) => item && (item.type === "video" || item.type === "animated_gif"));
+    const media = (post.media || [])[Number(row.mi) || 0];
+    const pick = media && (media.type === "video" || media.type === "animated_gif") ? media : videos[0];
+    return pick ? { post: post, media: pick } : null;
+  }
+
+  function xvClock(sec) {
+    const n = Math.max(0, Math.floor(Number(sec) || 0));
+    const h = Math.floor(n / 3600);
+    const m = Math.floor((n % 3600) / 60);
+    const ss = String(n % 60).padStart(2, "0");
+    return h ? h + ":" + String(m).padStart(2, "0") + ":" + ss : m + ":" + ss;
+  }
+
+  function xvInfo(post) {
+    const shown = displayPost(post);
+    const face = authorFace(post);
+    const creator = isRepost(post) ? creatorOf(post) : null;
+    const name = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
+    const handle = internalPostHandle(creator ? (post.handle || creator.handle || "") : (post.handle || ""), post, creator);
+    const text = String(shown.text || "").trim();
+    const body = text ? linkify(text, shown.links || [], post.platform, post.handle) : "";
+    return `<div class="xv-info">
+      <div class="xv-who">${avatar(face.avatar, name)}<div class="xv-names"><span class="xv-name">${esc(name || "")}${badge(face.verified)}</span>${handle ? `<span class="xv-handle">@${esc(handle)}</span>` : ""}</div></div>
+      ${body ? `<div class="xv-text" role="button" tabindex="0" data-act="xv-more" aria-expanded="false" aria-label="${esc(tr("Show more"))}"><div class="xv-body" dir="auto">${body}</div></div>` : ""}
+      ${post.date ? `<div class="xv-when">${esc(relTime(post.date))}</div>` : ""}
+      <div class="xv-pills">${actionBar(post, true)}</div>
+    </div>`;
+  }
+
+  function xvPosterOf(post, media) {
+    const poster = (media && (media.poster || (media.type !== "video" ? media.url : ""))) || (post && post.poster) || "";
+    return typeof poster === "string" && poster.indexOf(".mp4") < 0 ? poster : "";
+  }
+
+  function xvSlide(item, cls, qi) {
+    const poster = xvPosterOf(item.post, item.media);
+    return `<section class="xv-slide ${cls}" data-qi="${qi}"><div class="xv-media">${poster ? `<img class="xv-poster" alt="" decoding="async" referrerpolicy="no-referrer" src="${esc(poster)}">` : ""}</div>${xvInfo(item.post)}</section>`;
+  }
+
+  function xvFrame(box, view, post, media) {
+    const known = post || { platform: view.platform || "", statusId: view.statusId || "", id: view.statusId || view.id || "", url: view.url || "", media: [media] };
+    const queue = view.queue || [];
+    const prev = view.qi > 0 ? xvItem(queue[view.qi - 1]) : null;
+    const next = view.qi >= 0 && view.qi < queue.length - 1 ? xvItem(queue[view.qi + 1]) : null;
+    const href = originalOf(known, media);
+    const link = sharePostUrl(known, "post") || known.url || sitePermalink(statusHash(known));
+    const gif = media && media.type === "animated_gif";
+    box.classList.add("xv");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-label", tr("Video"));
+    box.innerHTML = `<div class="xv-top">
+        <button class="xv-round" type="button" data-act="close-viewer" aria-label="${tr("Back")}">${icon("back")}</button>
+        <span class="xv-menu-wrap"><button class="xv-round" type="button" data-act="xv-menu" aria-label="${tr("More")}" aria-haspopup="menu" aria-expanded="false">${icon("more")}</button>
+        <div class="menu xv-menu" role="menu" hidden><button type="button" role="menuitem" data-act="copy" data-url="${esc(link || "")}">${tr("Copy link")}</button>${href ? `<a role="menuitem" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href)}">${esc(watchOn(known.platform || ""))}</a>` : ""}</div></span>
+      </div>
+      <div class="xv-track" role="region" aria-label="${esc(tr("Video posts"))}">
+        ${prev ? xvSlide(prev, "xv-prev", view.qi - 1) : ""}
+        ${xvSlide({ post: known, media: media }, "xv-cur", view.qi)}
+        ${next ? xvSlide(next, "xv-next", view.qi + 1) : ""}
+      </div>
+      <div class="xv-bar">
+        <div class="xv-prog" role="slider" tabindex="0" aria-label="${tr("Seek")}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="xv-fill"></span></div>
+        <div class="xv-ctl">
+          <button type="button" data-act="xv-play" aria-label="${tr("Pause")}">${icon("pause")}</button>
+          <span class="xv-left" aria-live="off">${gif ? "" : "-0:00"}</span>
+          <span class="xv-gap"></span>
+          <button type="button" class="xv-speed" data-act="xv-speed" aria-label="${tr("Playback speed")}">1x</button>
+          <button type="button" data-act="xv-mute" aria-label="${tr("Mute")}">${icon("vol")}</button>
+          <button type="button" data-act="close-viewer" aria-label="${tr("Exit full screen")}">${icon("exitFull")}</button>
+        </div>
+      </div>`;
+    const track = box.querySelector(".xv-track");
+    const cur = box.querySelector(".xv-cur");
+    if (track && cur) track.scrollTop = cur.offsetTop;
+    xvBind(box, view, next);
+    return cur.querySelector(".xv-media");
+  }
+
+  function xvVideo(box) {
+    const stage = box && box.querySelector(".xv-cur .xv-media");
+    return stage ? stage.querySelector("video") : null;
+  }
+
+  function xvPaintState(box) {
+    const video = xvVideo(box);
+    if (!video) return;
+    const play = box.querySelector('[data-act="xv-play"]');
+    if (play) {
+      const paused = video.paused;
+      play.innerHTML = icon(paused ? "play" : "pause");
+      play.setAttribute("aria-label", paused ? tr("Play") : tr("Pause"));
+    }
+    const mute = box.querySelector('[data-act="xv-mute"]');
+    if (mute) {
+      mute.innerHTML = icon(video.muted ? "volOff" : "vol");
+      mute.setAttribute("aria-label", video.muted ? tr("Unmute") : tr("Mute"));
+    }
+    const dur = video.duration;
+    const t = video.currentTime || 0;
+    const fill = box.querySelector(".xv-fill");
+    const prog = box.querySelector(".xv-prog");
+    const pct = isFinite(dur) && dur > 0 ? Math.min(100, (t / dur) * 100) : 0;
+    if (fill) fill.style.width = pct.toFixed(2) + "%";
+    if (prog) prog.setAttribute("aria-valuenow", String(Math.round(pct)));
+    const left = box.querySelector(".xv-left");
+    if (left && isFinite(dur) && dur > 0) left.textContent = "-" + xvClock(dur - t);
+    const speed = box.querySelector(".xv-speed");
+    if (speed) speed.textContent = String(video.playbackRate || 1).replace(/^0\./, ".") + "x";
+  }
+
+  function xvBind(box, view, next) {
+    const stage = box.querySelector(".xv-cur .xv-media");
+    const track = box.querySelector(".xv-track");
+    let bound = null;
+    const paint = () => xvPaintState(box);
+    const events = ["play", "pause", "timeupdate", "durationchange", "volumechange", "ratechange", "loadedmetadata"];
+    const attach = () => {
+      const video = stage && stage.querySelector("video");
+      if (!video || video === bound) return;
+      if (bound) events.forEach((name) => bound.removeEventListener(name, paint));
+      bound = video;
+      video.controls = false;
+      video.setAttribute("playsinline", "");
+      if (view.rate) video.playbackRate = view.rate;
+      events.forEach((name) => video.addEventListener(name, paint));
+      video.addEventListener("playing", () => { if (next) xvPreload(box, next); }, { once: true });
+      paint();
+    };
+    const watch = typeof MutationObserver === "function" && stage ? new MutationObserver(attach) : null;
+    if (watch) watch.observe(stage, { childList: true, subtree: true });
+    // Tap on the clip: collapse the expanded text, else play or pause.
+    // Capture phase: the chrome owns taps on the clip, so the player's own
+    // tap handlers below do not toggle it a second time.
+    const onTap = (event) => {
+      if (event.target.closest("button, a, .xv-info, .xv-bar, .xv-top, .menu")) return;
+      if (!event.target.closest(".xv-cur")) return;
+      event.stopPropagation();
+      const menu = box.querySelector(".xv-menu");
+      if (menu && !menu.hidden) { menu.hidden = true; return; }
+      if (box.classList.contains("xv-open")) { xvMore(box, false); return; }
+      const video = xvVideo(box);
+      if (!video) return;
+      if (video.paused) video.play().catch(() => {}); else video.pause();
+    };
+    box.addEventListener("click", onTap, true);
+    // Seek on the progress line: tap or drag.
+    const prog = box.querySelector(".xv-prog");
+    let dragging = false;
+    const seekAt = (event) => {
+      const video = xvVideo(box);
+      if (!video || !prog || !isFinite(video.duration) || video.duration <= 0) return;
+      const r = prog.getBoundingClientRect();
+      const at = Math.max(0, Math.min(1, (event.clientX - r.left) / Math.max(1, r.width)));
+      try { video.currentTime = at * video.duration; } catch (err) { /* not seekable yet */ }
+      paint();
+    };
+    const down = (event) => { dragging = true; seekAt(event); try { prog.setPointerCapture(event.pointerId); } catch (err) { /* old browser */ } };
+    const move = (event) => { if (dragging) seekAt(event); };
+    const up = () => { dragging = false; };
+    const key = (event) => {
+      const video = xvVideo(box);
+      if (!video || !isFinite(video.duration)) return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        event.stopPropagation();
+        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (event.key === "ArrowLeft" ? -5 : 5)));
+      }
+    };
+    if (prog) {
+      prog.addEventListener("pointerdown", down);
+      prog.addEventListener("pointermove", move);
+      prog.addEventListener("pointerup", up);
+      prog.addEventListener("pointercancel", up);
+      prog.addEventListener("keydown", key);
+    }
+    // Vertical swipe: the track snaps a slide at a time; once it settles on a
+    // neighbour, that post becomes the current one.
+    let settle = 0;
+    const onScroll = () => {
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        const cur = box.querySelector(".xv-cur");
+        if (!track || !cur || STATE.viewer !== view) return;
+        const h = track.clientHeight || 1;
+        const delta = Math.round((track.scrollTop - cur.offsetTop) / h);
+        if (delta) xvStep(delta > 0 ? 1 : -1);
+      }, "onscrollend" in window ? 0 : 140);
+    };
+    if (track) track.addEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll, { passive: true });
+    attach();
+    box._xvStop = () => {
+      clearTimeout(settle);
+      if (watch) watch.disconnect();
+      if (bound) events.forEach((name) => bound.removeEventListener(name, paint));
+      box.removeEventListener("click", onTap, true);
+      if (track) track.removeEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll);
+    };
+  }
+
+  /* Only the next clip warms up, and only its metadata: the service worker
+     cache answers first, the peer swarm joins once it plays, then the
+     original host. HLS gets its playlist fetched, nothing more. */
+  function xvPreload(box, next) {
+    if (!next || !box.isConnected || !dataAllow("prefetch")) return;
+    const slide = box.querySelector(".xv-next .xv-media");
+    if (!slide || slide.querySelector("video")) return;
+    sourcesFor(next.post, next.media, 0).then((list) => {
+      const file = (list || []).find((row) => row && row.url && row.kind !== "iframe" && !row.telegram && row.kind !== "tg");
+      if (!file || !slide.isConnected) return;
+      if (file.kind === "hls") {
+        fetch(file.url, { mode: "cors", credentials: "omit" }).catch(() => {});
+        return;
+      }
+      const warm = document.createElement("video");
+      warm.className = "xv-warm";
+      warm.muted = true;
+      warm.preload = "metadata";
+      warm.setAttribute("playsinline", "");
+      warm.src = file.url;
+      slide.appendChild(warm);
+    }).catch(() => {});
+  }
+
+  function xvMore(box, open) {
+    const want = open == null ? !box.classList.contains("xv-open") : !!open;
+    box.classList.toggle("xv-open", want);
+    box.querySelectorAll(".xv-cur .xv-text").forEach((el) => {
+      el.setAttribute("aria-expanded", want ? "true" : "false");
+      el.setAttribute("aria-label", want ? tr("Show less") : tr("Show more"));
+    });
+  }
+
+  function xvStep(delta) {
+    const view = STATE.viewer;
+    if (!view || !view.video || !view.queue) return false;
+    const qi = view.qi + delta;
+    const item = qi >= 0 && qi < view.queue.length ? xvItem(view.queue[qi]) : null;
+    const box = document.getElementById("viewer");
+    if (!item) {
+      const cur = box && box.querySelector(".xv-cur");
+      const track = box && box.querySelector(".xv-track");
+      if (track && cur) track.scrollTo({ top: cur.offsetTop, behavior: "smooth" });
+      return false;
+    }
+    const old = xvVideo(box);
+    if (old && STATE.viewer.id && isFinite(old.currentTime)) {
+      const post = findAnyPost(view.id);
+      if (post) noteVideo(post, { position: old.currentTime, touch: true });
+    }
+    STATE.viewer = {
+      id: item.post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: 0, src: "",
+      media: item.media, platform: item.post.platform || "", statusId: item.post.statusId || item.post.id || "", url: item.post.url || "",
+      queue: view.queue, qi: qi, rate: old ? old.playbackRate : view.rate, pushed: view.pushed
+    };
+    paintViewer();
+    return true;
+  }
+
+  function xvAct(act, el) {
+    const box = document.getElementById("viewer");
+    if (!box || !STATE.viewer || !STATE.viewer.video) return;
+    const video = xvVideo(box);
+    if (act === "xv-play") {
+      if (!video) return;
+      if (video.paused) video.play().catch(() => {}); else video.pause();
+    } else if (act === "xv-mute") {
+      if (!video) return;
+      video.muted = !video.muted;
+      if (!video.muted && video.volume === 0) video.volume = 1;
+    } else if (act === "xv-speed") {
+      if (!video) return;
+      const at = XV_SPEEDS.indexOf(video.playbackRate);
+      video.playbackRate = XV_SPEEDS[(at + 1) % XV_SPEEDS.length];
+      STATE.viewer.rate = video.playbackRate;
+    } else if (act === "xv-more") {
+      xvMore(box);
+    } else if (act === "xv-menu") {
+      const menu = box.querySelector(".xv-menu");
+      if (!menu) return;
+      menu.hidden = !menu.hidden;
+      if (el) el.setAttribute("aria-expanded", menu.hidden ? "false" : "true");
+      return;
+    }
+    xvPaintState(box);
+  }
+
+  /* After a like, repost or bookmark the pills repaint in place; the viewer
+     sits outside the app root, so a full render does not reach it. */
+  function xvRepaintPills() {
+    const box = document.getElementById("viewer");
+    const view = STATE.viewer;
+    if (!box || !view || !view.video || !box.classList.contains("xv")) return;
+    box.querySelectorAll(".xv-slide").forEach((slide) => {
+      const row = view.queue && view.queue[Number(slide.dataset.qi)];
+      const post = findAnyPost(row ? row.pid : (slide.classList.contains("xv-cur") ? view.id : ""));
+      const pills = slide.querySelector(".xv-pills");
+      if (post && pills) pills.innerHTML = actionBar(post, true);
+    });
+  }
+
+  function xvKeys() {
+    const keys = window.ViktorychKeys;
+    if (!keys || typeof keys.register !== "function" || xvKeys.done) return !!xvKeys.done;
+    const inViewer = () => !!(STATE.viewer && STATE.viewer.video);
+    keys.register({ id: "video.next", keys: ["j", "down"], scope: "media", label: "Next video", when: inViewer, run: () => xvStep(1) });
+    keys.register({ id: "video.prev", keys: ["up"], scope: "media", label: "Previous video", when: inViewer, run: () => xvStep(-1) });
+    xvKeys.done = true;
+    return true;
+  }
+
+  function openVideoViewer(post, media, src, time, tile) {
     if (STATE.autoEl) pausePreview(STATE.autoEl);
     STATE.autoEl = null;
     document.querySelectorAll(".vplay.is-playing").forEach((el) => pausePreview(el));
     const clean = src && src.indexOf("about:blank") < 0 ? src : "";
-    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null, platform: post.platform || "", statusId: post.statusId || post.id || "", url: post.url || "" };
+    const queue = tile ? xvQueue(tile) : { list: [], at: -1 };
+    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null, platform: post.platform || "", statusId: post.statusId || post.id || "", url: post.url || "", queue: queue.at >= 0 ? queue.list : null, qi: queue.at };
+    xvKeys();
+    // Back closes the viewer: it gets its own history entry.
+    try {
+      history.pushState(Object.assign({}, history.state || {}, { xv: 1 }), "", location.href);
+      STATE.viewer.pushed = true;
+    } catch (err) { /* history is locked down; Esc and the back button still close */ }
     paintViewer();
   }
 
@@ -24424,9 +26110,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     paintViewer();
   }
 
-  function closeViewer() {
+  function closeViewer(fromHistory) {
+    const pushed = !!(STATE.viewer && STATE.viewer.pushed);
     const box = document.getElementById("viewer");
     if (box) {
+      xvTeardown(box);
+      box.classList.remove("xv", "xv-open");
+      box.removeAttribute("role");
+      box.removeAttribute("aria-modal");
+      box.removeAttribute("aria-label");
       box._gen = (box._gen || 0) + 1;
       if (box._xEmbedStop) {
         try { box._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
@@ -24467,7 +26159,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     STATE.viewer = null;
     paintViewer();
+    if (pushed && fromHistory !== true) {
+      try { if (history.state && history.state.xv) history.back(); } catch (err) { /* nothing to pop */ }
+    }
   }
+
+  window.addEventListener("popstate", () => {
+    if (STATE.viewer && STATE.viewer.video && STATE.viewer.pushed) closeViewer(true);
+  });
 
   function shiftViewer(delta) {
     const view = STATE.viewer;
@@ -24747,7 +26446,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function notePrefs() {
     const saved = STATE.settings && STATE.settings.notePrefs;
-    const base = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
+    const base = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", games: "push", mentionsFrom: "all" };
     if (!saved || typeof saved !== "object") return base;
     const out = Object.assign({}, base);
     Object.keys(base).forEach((key) => {
@@ -24760,6 +26459,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return out;
   }
 
+  // Game invites ask whether they may pop up (Notifications > Game invites).
+  window.ViktorychNotePrefs = function () { return notePrefs(); };
   function saveNotePrefs(next) {
     if (!STATE.settings) return;
     STATE.settings.notePrefs = next;
@@ -24887,7 +26588,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       body: {
         messages: fresh,
         mutedChannels: snap.mutedChannels || [],
-        mutedServers: snap.mutedServers || []
+        mutedServers: snap.mutedServers || [],
+        privateChannels: snap.privateChannels || []
       }
     }).then((res) => {
       if (!res || res.status !== 200) return;
@@ -25283,6 +26985,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     if (msg.op === "event" && msg.topic === "notifications" && msg.data) applyHubEvent(msg.data);
+    if (msg.op === "event" && msg.topic === "games" && msg.data && window.ViktorychGameSocial) window.ViktorychGameSocial.onChannel(msg.data);
     if (msg.op === "event" && msg.topic === "posts") {
       clearTimeout(postsLiveTimer);
       postsLiveTimer = setTimeout(refreshAppPosts, 600);
@@ -26085,6 +27788,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         return;
       }
       if (event.touches.length !== 1) return;
+      /* Dragging a slider or typing must never count as an edge swipe Back:
+         a slider thumb at its lowest step sits inside the 28px edge zone. */
+      if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable="true"]')) { swipe = null; return; }
       if (event.target.closest && event.target.closest(".story-tray, .story-shell, #stories")) return;
       /* A sideways drag on a tab row or pill row scrolls that row. It must
          not switch Home tabs or refresh the feed. */
@@ -26124,6 +27830,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       swipe = null;
       if (fromViewer && view) {
         if (view.video) {
+          // In the X-style viewer a vertical swipe moves between posts; a
+          // pull down only closes it from the first one.
+          const xvBox = document.getElementById("viewer");
+          if (xvBox && xvBox.classList.contains("xv") && xvBox.querySelector(".xv-prev")) return;
           if (dy > 90 && Math.abs(dy) > Math.abs(dx)) closeViewer();
           return;
         }
@@ -26901,12 +28611,31 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     bindShellModules(false);
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) renderSoon();
   });
+  function communityItem(handle, text, platform, extra) {
+    const more = extra || {};
+    const plat = platform || "app";
+    const clean = String(handle || "").replace(/^\/?u\//i, "").replace(/^@/, "");
+    const item = { handle: clean, text: text, platform: plat, feedId: "", id: more.id ? String(more.id) : "", statusId: more.id ? String(more.id) : "" };
+    if (more.community) {
+      item.community = { name: String(more.community) };
+      if (plat === "reddit") item.subreddit = String(more.community);
+    }
+    if (more.authorId) { item.authorId = String(more.authorId); item.appPost = true; }
+    return item;
+  }
   function bindCommunitiesModule() {
     if (!window.ViktorychCommunities) return;
     window.ViktorychCommunities.requestRender = function () { render(); };
     window.ViktorychCommunities.toast = toast;
-    window.ViktorychCommunities.hidden = function (handle, text, platform) {
-      return hiddenPost({ handle: handle, text: text, platform: platform || "app", feedId: "" });
+    window.ViktorychCommunities.hidden = function (handle, text, platform, extra) {
+      return hiddenPost(communityItem(handle, text, platform, extra));
+    };
+    window.ViktorychCommunities.blockMenu = function (item) {
+      const post = communityItem(item.handle, "", item.platform, item);
+      post.commentRow = !!item.comment;
+      STATE.blockSheetPost = post;
+      STATE.blockSheetFull = true;
+      render();
     };
     window.ViktorychCommunities.note = function (item) { commitBellNotes(item ? [item] : []); };
     window.ViktorychCommunities.readTabs = function () { return STATE.settings ? STATE.settings.communityTabs : null; };
@@ -27174,7 +28903,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       render();
     },
     skipWelcome: () => writeWelcome({ step: 2, done: true }),
-    done: () => render()
+    done: () => render(),
+    /* Notifications are explained first; the browser prompt comes only
+       after the button. */
+    notifyState: () => {
+      if (typeof Notification === "undefined") return "unsupported";
+      if (Notification.permission === "granted" && STATE.settings && STATE.settings.notify) return "on";
+      return Notification.permission;
+    },
+    enableNotifications: () => enableNotifications().then(() => window.ViktorychSetup.notifyState()),
+    installInfo: () => ({ standalone: isStandalone(), kind: installKindNow(), prompt: !!((STATE.installPrompt && STATE.installPrompt.prompt) || (window.__VIKTORYCH_INSTALL && window.__VIKTORYCH_INSTALL.prompt)) }),
+    promptInstall: () => {
+      const prompt = STATE.installPrompt || window.__VIKTORYCH_INSTALL;
+      if (!prompt || !prompt.prompt) return Promise.resolve(false);
+      STATE.installPrompt = null;
+      window.__VIKTORYCH_INSTALL = null;
+      return Promise.resolve().then(() => prompt.prompt()).then(() => prompt.userChoice).then((choice) => !!(choice && choice.outcome === "accepted")).catch(() => false);
+    },
+    installLater: () => {
+      const api = window.ViktorychNative;
+      if (api && api.writeInstallChoice) api.writeInstallChoice("later");
+    }
   };
   window.ViktorychFaces = {
     picture: function (src, accountFace) { return faceChoice("picture", src, accountFace); },
@@ -27530,7 +29279,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const next = loadSettings();
     // Synced display choices from another device apply right away.
     let lookChanged = false;
-    ["appearance", "homePills", "reactionsData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
+    ["appearance", "homePills", "reactionsData", "communityNotesData", "stories", "prefsAt", "syncUi", "syncUiAt", "showPictures", "showBanners", "profileTabs", "autoplay", "followingSort", "forYouReposts", "forYouReplies", "livePreview", "friendsRail", "translateTo", "translateAuto", "translateNever", "notify", "bells", "mutedWords", "mutedAccounts", "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "brandLogo", "peopleLinks", "inboxLayout", "busyPrefs", "avatarShape", "accent", "fontSize", "density", "reduceMotion"].forEach((key) => {
       if (JSON.stringify(STATE.settings[key]) === JSON.stringify(next[key])) return;
       STATE.settings[key] = next[key];
       lookChanged = true;
@@ -27600,6 +29349,33 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       accountHash: accountHash,
       platformIcon: platformIcon,
       STATE: STATE
+    });
+  }
+  if (window.SourceLists) {
+    window.SourceLists.attach({
+      tr: tr,
+      esc: esc,
+      avatar: avatar,
+      pageHead: pageHead,
+      signedOwner: signedOwner,
+      accountsApi: accountsApi,
+      accountToken: accountToken,
+      toast: toast,
+      render: render,
+      readStored: readStored,
+      writeStored: writeStored,
+      removeStored: removeStored,
+      STATE: STATE,
+      onChange: () => {
+        if (!STATE.data || !Array.isArray(STATE.data.posts)) return;
+        const next = window.SourceLists.merge(STATE.data);
+        if (next === STATE.data) return;
+        const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(next);
+        STATE.data = withMemory(next);
+        if (feedsChanged) adoptFeeds(next);
+        render({ y: window.scrollY });
+        saveHomeSnapshot();
+      }
     });
   }
   initTooltipController();

@@ -106,7 +106,7 @@ const kept = sandbox.mentionless({ text: "hello @cara", html: "" });
 assert.strictEqual(kept.text, "hello @cara");
 
 assert.ok(app.indexOf('return `<div class="thread">${parentHtml}${childHtml}</div>`') >= 0, "thread wrapper");
-assert.ok(app.indexOf("opts.parentShown ? (mode !== \"status\"") >= 0, "reply line shows beside the parent in feeds and hides on the status page");
+assert.ok(app.indexOf("const showReply = opts.parentShown ? false :") >= 0, "as on X, no reply line when the parent sits right above on the thread line");
 assert.ok(app.indexOf("opts.parentShown ? mentionless(displayPost(post))") >= 0, "leading mentions drop only beside the parent");
 assert.ok(app.indexOf("function quoteCard(") >= 0 && app.indexOf('return `<div class="quote"') >= 0, "quotes stay bordered cards");
 const cardStart = app.indexOf("function card(post, mode, opts)");

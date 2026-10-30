@@ -60,7 +60,10 @@
     err: "",
     loading: false,
     focusOn: false,
-    health: null
+    health: null,
+    captcha: null,
+    captchaBusy: false,
+    failCode: ""
   };
 
   function defaults(server) {
@@ -107,10 +110,12 @@
           state.waitId = "";
           state.note = tr("Joined. Pick the channels to show.");
           openPickerFor(state.waitGuild, true);
-        } else if (state.join.status === "captcha" || state.join.status === "verification") {
-          state.err = tr("This server can’t be joined that way. Discord asked for a captcha or verification.");
+        } else if ((state.join.status === "needs_captcha" || state.join.status === "captcha_failed") && state.join.captcha) {
           state.waitId = "";
-          state.step = "invite";
+          showCaptcha(state.join.captcha, state.join.status === "captcha_failed");
+        } else if (state.join.status === "captcha" || state.join.status === "verification" || state.join.status === "needs_captcha" || state.join.status === "captcha_failed") {
+          failJoin(state.join.code, tr("Discord asked for a captcha. Open the invite in the Discord app with the spare account, join there, then press Check again."));
+          state.waitId = "";
         } else if (state.join.status !== "pending") {
           state.err = tr("Couldn’t join that server.");
           state.waitId = "";
@@ -128,6 +133,109 @@
     }).catch(function () {
       state.loading = false;
       state.err = tr("Couldn’t load Discord servers.");
+      paint();
+    });
+  }
+
+  /* Discord asked for a captcha. The owner solves it by hand in an hCaptcha
+     widget; nothing here solves or retries it. */
+  function showCaptcha(captcha, again) {
+    state.captcha = { id: String(captcha.id || ""), sitekey: String(captcha.sitekey || ""), rqdata: String(captcha.rqdata || ""), code: inviteOf() };
+    state.captchaBusy = false;
+    state.step = "captcha";
+    state.err = again ? tr("Discord didn’t accept that check. Solve the new one, or open the invite in Discord.") : "";
+  }
+
+  function inviteOf(code) {
+    var c = String(code || (state.invite && state.invite.code) || (state.join && state.join.code) || (state.captcha && state.captcha.code) || "");
+    return /^[A-Za-z0-9-]{2,32}$/.test(c) ? c : "";
+  }
+
+  function failJoin(code, message) {
+    state.failCode = inviteOf(code);
+    state.captcha = null;
+    state.step = "failed";
+    state.err = message;
+  }
+
+  var hcLoading = null;
+  function loadHcaptcha() {
+    if (root.hcaptcha && root.hcaptcha.render) return Promise.resolve(root.hcaptcha);
+    if (hcLoading) return hcLoading;
+    hcLoading = new Promise(function (resolve, reject) {
+      var tag = document.createElement("script");
+      tag.src = "https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off";
+      tag.async = true;
+      tag.onload = function () { root.hcaptcha ? resolve(root.hcaptcha) : reject(new Error("hcaptcha")); };
+      tag.onerror = function () { hcLoading = null; reject(new Error("hcaptcha")); };
+      document.head.appendChild(tag);
+    });
+    return hcLoading;
+  }
+
+  function mountCaptcha() {
+    var host = typeof document !== "undefined" ? document.getElementById("dpick-hc") : null;
+    if (!host || host.getAttribute("data-on") || !state.captcha) return;
+    host.setAttribute("data-on", "1");
+    var want = state.captcha;
+    loadHcaptcha().then(function (hc) {
+      if (state.captcha !== want || !document.body.contains(host)) return;
+      var dark = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+      var wid = hc.render(host, {
+        sitekey: want.sitekey,
+        theme: dark ? "dark" : "light",
+        callback: function (answer) { submitCaptcha(want, answer); },
+        "expired-callback": function () { state.err = tr("The check expired. Solve it again."); paintNote(); },
+        "error-callback": function () { failJoin(want.code, tr("The check couldn’t load here. Open the invite in Discord with the spare account instead.")); paint(); }
+      });
+      if (want.rqdata && hc.setData) hc.setData(wid, { rqdata: want.rqdata });
+    }).catch(function () {
+      failJoin(want.code, tr("The check couldn’t load here. Open the invite in Discord with the spare account instead."));
+      paint();
+    });
+  }
+
+  function paintNote() {
+    var el = typeof document !== "undefined" ? document.querySelector(".dpick-sheet .dpick-err") : null;
+    if (el) el.textContent = state.err;
+    else paint();
+  }
+
+  /* One join per human answer. The Worker spends the challenge first. */
+  function submitCaptcha(want, answer) {
+    if (state.captchaBusy || state.captcha !== want || !answer) return;
+    state.captchaBusy = true;
+    state.err = "";
+    state.note = tr("Joining…");
+    api("/v1/discord/picks/captcha", { method: "POST", body: { id: want.id, solution: String(answer), confirm: true } }).then(function (body) {
+      state.captchaBusy = false;
+      var word = body && (body.bodyStatus || "");
+      if (!body || body.status >= 400) {
+        var gone = body && (body.error === "captcha_expired" || body.error === "captcha_used" || body.error === "no_captcha");
+        failJoin(want.code, gone ? tr("That check expired before Discord got it. Open the invite in Discord, or try joining again.") : tr("Couldn’t join that server."));
+      } else if (word === "joined") {
+        state.captcha = null;
+        state.waitGuild = snowflake(body.guild) || state.waitGuild;
+        state.waitSince = Date.now();
+        state.note = tr("Joined. Pick the channels to show.");
+        state.step = "waiting";
+        askRefresh(state.waitGuild).then(function () { pollJoin(); });
+      } else if (word === "captcha_failed" && body.captcha) {
+        showCaptcha(body.captcha, true);
+      } else if (word === "pending") {
+        state.captcha = null;
+        state.waitId = String(body.id || want.id);
+        state.waitSince = Date.now();
+        state.note = tr("Joining… this usually takes under a minute.");
+        state.step = "waiting";
+        pollJoin();
+      } else {
+        failJoin(want.code, tr("Discord didn’t accept it. Open the invite in Discord with the spare account, then press Check again."));
+      }
+      paint();
+    }).catch(function () {
+      state.captchaBusy = false;
+      failJoin(want.code, tr("Couldn’t join that server."));
       paint();
     });
   }
@@ -159,7 +267,9 @@
     api("/v1/discord/picks/invite?code=" + encodeURIComponent(code)).then(function (body) {
       state.inviteBusy = false;
       if (!body || body.status >= 400) {
-        state.err = body && body.error === "invite_not_found" ? tr("That invite wasn’t found.") : tr("Couldn’t look up that invite.");
+        state.err = body && body.error === "invite_not_found" ? tr("That invite wasn’t found.")
+          : body && body.error === "discord_busy" ? tr("Discord is busy right now. Try again in {seconds} s.", { seconds: Math.max(1, Math.round(Number(body.retry) || 30)) })
+          : tr("Couldn’t look up that invite.");
         state.invite = null;
         paint();
         return;
@@ -180,11 +290,14 @@
     state.joinBusy = true;
     state.err = "";
     paint();
-    api("/v1/discord/picks/join", { method: "POST", body: { code: state.invite.code, confirm: true } }).then(function (body) {
+    var g = state.invite.guild || {};
+    api("/v1/discord/picks/join", { method: "POST", body: { code: state.invite.code, guild: snowflake(g.id), name: String(g.name || "").slice(0, 80), confirm: true } }).then(function (body) {
       state.joinBusy = false;
       if (!body || body.status >= 400) {
+        var secs = Math.max(1, Math.round(Number(body && body.retry) || 60));
         if (body && body.error === "confirm_required") state.err = tr("Confirm the join first.");
-        else if (body && body.status === 429) state.err = tr("Wait a minute before joining another server.");
+        else if (body && body.error === "discord_busy") state.err = tr("Discord is busy right now. Try again in {seconds} s.", { seconds: secs });
+        else if (body && body.status === 429) state.err = tr("Wait {seconds} s before joining another server.", { seconds: secs });
         else state.err = tr("Couldn’t start the join.");
         paint();
         return;
@@ -192,6 +305,33 @@
       state.waitId = String(body.id || "");
       state.waitGuild = snowflake(body.guild && body.guild.id);
       state.waitSince = Date.now();
+      var word = body.bodyStatus || "pending";
+      if (word === "needs_captcha" && body.captcha) {
+        state.waitId = "";
+        showCaptcha(body.captcha, false);
+        paint();
+        return;
+      }
+      if (word === "joined") {
+        state.waitId = "";
+        state.note = tr("Joined. Pick the channels to show.");
+        state.step = "waiting";
+        paint();
+        askRefresh(state.waitGuild).then(function () { pollJoin(); });
+        return;
+      }
+      if (word === "unauthorized" || word === "forbidden") {
+        state.waitId = "";
+        failJoin(state.invite && state.invite.code, tr("Discord key needs replacing"));
+        paint();
+        return;
+      }
+      if (word !== "pending") {
+        state.waitId = "";
+        failJoin(state.invite && state.invite.code, tr("Discord didn’t accept it. Open the invite in Discord with the spare account, then press Check again."));
+        paint();
+        return;
+      }
       state.note = tr("Joining… this usually takes under a minute.");
       state.step = "waiting";
       paint();
@@ -299,6 +439,17 @@
           : '<p class="dpick-hint">' + esc(tr("One tap joins with the spare Discord account. Discord may ask for a captcha; if so, this server can’t be joined that way.")) + "</p>" +
             '<button type="button" class="dpick-btn" data-dpick="join"' + (state.joinBusy ? " disabled" : "") + ">" + esc(state.joinBusy ? tr("Joining…") : tr("Join with spare account")) + "</button>") +
         '<button type="button" class="dpick-link" data-dpick="back">' + esc(tr("Back")) + "</button>";
+    } else if (state.step === "captcha" && state.captcha) {
+      body = "<h3>" + esc(tr("Quick check from Discord")) + "</h3>" +
+        '<p class="dpick-hint">' + esc(tr("Solve it yourself to finish joining. Your answer is sent to Discord once.")) + "</p>" +
+        '<div id="dpick-hc" class="dpick-hc"></div>' +
+        (state.captchaBusy ? '<p class="dpick-hint">' + esc(tr("Joining…")) + "</p>" : "") +
+        (state.captcha.code ? '<a class="dpick-link" href="https://discord.gg/' + esc(state.captcha.code) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open in Discord")) + "</a>" : "") +
+        '<button type="button" class="dpick-link" data-dpick="back">' + esc(tr("Back")) + "</button>";
+    } else if (state.step === "failed") {
+      body = (state.failCode ? '<a class="dpick-btn" href="https://discord.gg/' + esc(state.failCode) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open in Discord")) + "</a>" : "") +
+        '<button type="button" class="dpick-link" data-dpick="refresh">' + esc(tr("Check again")) + "</button>" +
+        '<button type="button" class="dpick-link" data-dpick="back">' + esc(tr("Back")) + "</button>";
     } else if (state.step === "waiting") {
       body = '<p class="dpick-hint">' + esc(state.note || tr("Joining…")) + "</p>" +
         '<button type="button" class="dpick-btn" data-dpick="refresh">' + esc(tr("Check again")) + "</button>" +
@@ -358,6 +509,7 @@
       document.body.appendChild(host);
     }
     host.innerHTML = sheetHtml();
+    if (state.step === "captcha") mountCaptcha();
     var input = document.getElementById("dpick-code");
     if (input) {
       input.oninput = function () { state.inviteInput = input.value; };
@@ -374,6 +526,17 @@
     state.invite = null;
     paint();
     load();
+  }
+
+  /* Feeds › Add account hands a pasted Discord invite here: the sheet opens
+     with it filled in and looks it up. Nothing joins until the owner taps. */
+  function openInvite(raw) {
+    if (!isOwner()) return false;
+    open();
+    state.inviteInput = String(raw || "").trim().slice(0, 200);
+    paint();
+    previewInvite();
+    return true;
   }
 
   function close() {
@@ -396,6 +559,8 @@
     if (act === "close") { close(); return; }
     if (act === "back") {
       state.step = "list";
+      state.captcha = null;
+      state.failCode = "";
       state.invite = null;
       state.picker = null;
       state.err = "";
@@ -405,6 +570,7 @@
     if (act === "preview") { previewInvite(); return; }
     if (act === "join") { confirmJoin(); return; }
     if (act === "refresh") {
+      if (state.step === "failed") { state.step = "list"; state.err = ""; }
       askRefresh(state.waitGuild || "").then(function () {
         state.note = tr("Asked the sync to re-list servers.");
         paint();
@@ -445,9 +611,10 @@
 
   function keyBannerHtml() {
     if (!isOwner() || !state.health || state.health.status !== "invalid") return "";
-    return '<div class="dpick-keywarn" role="status">' +
-      "<p>" + esc(tr("Discord key stopped working, paste a new one")) + "</p>" +
-      '<a class="dpick-btn" href="#/settings/keys">' + esc(tr("Connected keys")) + "</a>" +
+    // A calm note, not an alarm: cached messages still show.
+    return '<div class="dpick-keywarn calm" role="status">' +
+      "<p>" + esc(tr("Discord key needs replacing")) + "</p>" +
+      '<a class="dpick-link" href="#/settings/keys">' + esc(tr("Paste new key")) + "</a>" +
       "</div>";
   }
 
@@ -473,6 +640,7 @@
 
   root.DiscordPicks = {
     open: open,
+    openInvite: openInvite,
     close: close,
     addButtonHtml: addButtonHtml,
     isOwner: isOwner,

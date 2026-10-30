@@ -1,0 +1,64 @@
+/* Inbox › SMS codes (owner only). X black theme. */
+.inbox-sms { display: flex; flex-direction: column; min-height: 100vh; max-width: 600px; border-right: 1px solid var(--line, #2f3336); }
+.sms-section { padding: 0 0 80px; }
+.sms-sub { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line, #2f3336); }
+.sms-sub b { display: block; font-size: 17px; font-weight: 800; }
+.sms-sub span { color: var(--muted, #71767b); font-size: 13px; }
+.sms-refresh { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--text, #e7e9ea); cursor: pointer; display: grid; place-items: center; }
+.sms-refresh:hover { background: rgba(231, 233, 234, .1); }
+.sms-refresh svg { width: 20px; height: 20px; fill: currentColor; }
+.sms-refresh.spin svg { animation: sms-spin .9s linear infinite; }
+@keyframes sms-spin { to { transform: rotate(360deg); } }
+.sms-h { margin: 0; padding: 14px 16px 6px; font-size: 15px; font-weight: 800; color: var(--muted, #71767b); }
+.sms-card { padding: 14px 16px; border-bottom: 1px solid var(--line, #2f3336); }
+.sms-top { display: flex; align-items: center; gap: 12px; }
+.sms-av { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #16181c; border: 1px solid var(--line, #2f3336); font-weight: 800; font-size: 17px; }
+.sms-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sms-meta b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sms-meta span { color: var(--muted, #71767b); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sms-badge { flex: none; height: 24px; padding: 0 10px; border-radius: 9999px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 700; background: rgba(113, 118, 123, .2); color: var(--muted, #71767b); }
+.st-received .sms-badge { background: rgba(0, 186, 124, .15); color: #00ba7c; }
+.st-waiting .sms-badge { background: rgba(29, 155, 240, .15); color: var(--blue, #1d9bf0); }
+.st-refunded .sms-badge { background: rgba(255, 212, 0, .12); color: #ffd400; }
+.st-expired .sms-badge, .st-cancelled .sms-badge { background: rgba(244, 33, 46, .12); color: #f4212e; }
+.sms-code { margin: 12px 0 0 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: calc(100% - 52px); padding: 10px 14px; border: 1px solid var(--line, #2f3336); border-radius: 16px; background: #0b0c0d; color: var(--text, #e7e9ea); cursor: pointer; text-align: left; }
+.sms-code:hover { background: #111214; }
+.sms-code:active { transform: scale(.99); }
+.sms-digits { font-size: 22px; font-weight: 800; letter-spacing: .08em; font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.sms-code.big .sms-digits { font-size: 34px; }
+.sms-copy-ic { flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--blue, #1d9bf0); font-size: 14px; font-weight: 700; }
+.sms-copy-ic em { font-style: normal; }
+.sms-copy-ic svg { width: 18px; height: 18px; fill: currentColor; }
+.sms-code.copied { border-color: #00ba7c; }
+.sms-code.copied .sms-copy-ic { color: #00ba7c; }
+.sms-full { margin: 8px 0 0 52px; color: var(--muted, #71767b); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.sms-wait, .sms-none { margin: 12px 0 0 52px; color: var(--muted, #71767b); font-size: 15px; display: flex; align-items: center; gap: 10px; }
+.sms-dots { display: inline-flex; gap: 4px; }
+.sms-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--blue, #1d9bf0); animation: sms-dot 1.2s infinite ease-in-out; }
+.sms-dots i:nth-child(2) { animation-delay: .15s; }
+.sms-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes sms-dot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.sms-foot { margin: 10px 0 0 52px; display: flex; flex-direction: column; gap: 6px; }
+.sms-left { color: var(--muted, #71767b); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sms-bar { height: 3px; border-radius: 3px; background: rgba(113, 118, 123, .25); overflow: hidden; }
+.sms-bar i { display: block; height: 100%; background: var(--blue, #1d9bf0); transition: width 1s linear; }
+.sms-msgs { list-style: none; margin: 4px 0 0; padding: 0; }
+.sms-msg { padding: 8px 0 0; }
+.sms-msg .sms-code { margin-top: 8px; }
+.sms-msg p { margin: 6px 0 0 52px; font-size: 15px; line-height: 20px; overflow-wrap: anywhere; }
+.sms-msg-meta { display: block; margin: 2px 0 0 52px; color: var(--muted, #71767b); font-size: 13px; }
+.sms-empty { padding: 40px 32px; max-width: 400px; margin: 0 auto; }
+.sms-empty h2 { margin: 0 0 8px; font-size: 31px; line-height: 36px; font-weight: 800; }
+.sms-empty p { margin: 0; color: var(--muted, #71767b); font-size: 15px; line-height: 20px; }
+.sms-note { margin: 0; padding: 10px 16px; color: var(--muted, #71767b); font-size: 13px; border-bottom: 1px solid var(--line, #2f3336); }
+.sms-more { display: block; width: 100%; padding: 16px; border: 0; background: transparent; color: var(--blue, #1d9bf0); font-size: 15px; text-align: left; cursor: pointer; }
+.sms-more:hover { background: rgba(231, 233, 234, .03); }
+@media (max-width: 700px) {
+  .inbox-sms { border-right: 0; max-width: none; }
+  .sms-code, .sms-full, .sms-wait, .sms-none, .sms-foot, .sms-msg p, .sms-msg-meta { margin-left: 0; width: auto; }
+  .sms-code { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sms-dots i, .sms-refresh.spin svg { animation: none; }
+  .sms-bar i { transition: none; }
+}

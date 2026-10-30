@@ -1,10 +1,10 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a139-__SW_VERSION__";
+const VERSION = "viktorych-a161-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-29T19:32:32Z-yt-card-inline
+// cache-bust: 2026-10-30T07:44:05Z-ytcard
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -53,7 +53,12 @@ const SHELL_FILES = [
   "./customize.css",
   "./dock.css",
   "./dock.js",
+  "./desktop-app.js",
+  "./keys.js",
+  "./keys-ui.js",
+  "./keys.css",
   "./i18n.js",
+  "./shared/blocklist.js",
   "./i18n/en.js",
   "./i18n/ru.js",
   "./i18n/es.js",
@@ -93,13 +98,20 @@ const SHELL_FILES = [
   "./tv.js",
   "./tv.css",
   "./shared/tv-boot.js",
+  "./shared/short-link.js",
+  "./shared/x-range.js",
   "./shared/tv-builder.js",
   "./tv-page.js",
   "./tv-page.css",
+  "./tv-pair.js",
+  "./tv-pair.css",
+  "./vendor/qrcode-1.4.4.js",
+  "./send-tv.js",
+  "./send-tv.css",
   "./split.js",
   "./discord-ui.js",
   "./discord-picks.js",
-  "./discord-ui.css",
+  "./discord-ui.css","./inbox.js","./inbox-sms.js","./inbox-sms.css","./inbox-mail.js","./inbox-mail.css",
   "./spaces.js",
   "./spaces.css",
   "./stories.js",
@@ -110,6 +122,8 @@ const SHELL_FILES = [
   "./live.css",
   "./marks.js",
   "./logo-text.js",
+  "./busy.js",
+  "./ytm.js",
   "./music.js",
   "./music.css",
   "./presence.js",
@@ -119,14 +133,17 @@ const SHELL_FILES = [
   "./about-ui.js",
   "./gifts-ui.js",
   "./reactions.js",
+  "./community-notes.js",
   "./shared/gift-catalog.js",
   "./badges.js",
   "./badges.css",
+  "./shared/local-budget.js",
   "./setting-alerts.js",
   "./setting-alerts.css",
   "./audience-ui.js",
   "./gifts.css",
   "./reactions.css",
+  "./community-notes.css",
   "./settings-sync.js",
   "./notif-privacy.js",
   "./accounts.js",
@@ -137,6 +154,13 @@ const SHELL_FILES = [
   "./shared/app-lock-crypto.js",
   "./shared/ios.js",
   "./owner-keys.js",
+  "./discord-local.js",
+  "./discord-local.css",
+  "./nzlay-keys.js",
+  "./nzlay-forum.js",
+  "./nzlay-forum.css",
+  "./discord-key-helper.js",
+  "./discord-key-helper.css",
   "./accounts.css",
   "./landing.css",
   "./landing/og.jpg",
@@ -160,6 +184,8 @@ const SHELL_FILES = [
   "./drive.js",
   "./drive.css",
   "./games.js",
+  "./game-social.js",
+  "./game-social.css",
   "./games.css",
   "./communities.js",
   "./communities.css",
@@ -177,6 +203,7 @@ const SHELL_FILES = [
   "./mention-suggest.js",
   "./settings-assistant.js",
   "./nostr.js",
+  "./follow-lists.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/x-compose.js",
@@ -187,6 +214,7 @@ const SHELL_FILES = [
   "./shared/for-you-weights.js",
   "./shared/feed-sources.js",
   "./feeds-page.js",
+  "./source-lists.js",
   "./shared/home-fresh.js",
   "./shared/pill-data.js",
   "./shared/tiktok-lock.js",
@@ -228,7 +256,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 
 function versionSha(version) {
   const text = String(version || "");
-  const prefix = "viktorych-a139-";
+  const prefix = "viktorych-a161-";
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
@@ -1999,6 +2027,14 @@ self.addEventListener("fetch", (event) => {
     })().catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
     return;
   }
+  // Sealed catalogs are encrypted copies whose age the app checks itself:
+  // network (or a mirror when Pages is blocked), never this worker's cache.
+  if (url.origin === self.location.origin && /\/sealed\/[^/]+\.json$/.test(url.pathname)) {
+    event.respondWith(mirrorFetch(request).catch(() => new Response("", { status: 504 })));
+    return;
+  }
+  // A local Discord key: these requests go straight to Discord, never cached here.
+  if (url.hostname === "discord.com" || /(^|\.)hcaptcha\.com$/.test(url.hostname)) return;
   if (isGameHost(url)) return;
   if (isTikTokCdn(url)) return;
   if (isArchiveStore(url)) return;
@@ -2173,7 +2209,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|video-providers\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|video-embed\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|tv-pair\.js|tv-pair\.css|qrcode-1\.4\.4\.js|send-tv\.js|send-tv\.css|split\.js|discord-ui\.js|discord-ui\.css|discord-key-helper\.js|discord-key-helper\.css|community-notes\.js|community-notes\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|game-social\.js|game-social\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|highlights\.js|audience-ui\.js|live\.js|live\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|logo-text\.js|busy\.js|about-ui\.js|gifts-ui\.js|gifts\.css|reactions\.js|reactions\.css|accounts\.js|onboarding\.js|onboarding\.css|owner-keys\.js|nzlay-keys\.js|nzlay-forum\.js|nzlay-forum\.css|video-providers\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/fonts\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -2738,8 +2774,36 @@ async function showCompactPush(c) {
     icon: shown.icon,
     image: shown.image,
     tag: "n-" + (c.sid || c.kind),
-    data: { hash: shown.hash, id: (note && note.id) || "" }
+    data: { hash: shown.hash, id: (note && note.id) || "", invite: gameInviteId(c.kind, shown.hash) },
+    ...gameInviteActions(c.kind, shown.hash)
   });
+}
+
+// Game invites get Join and Not now buttons. Join opens the game; Not now
+// answers from here without opening a window.
+function gameInviteId(kind, hash) {
+  if (kind !== "game_invite") return "";
+  const m = /[?&]invite=([a-f0-9]{24})(?:&|$)/.exec(String(hash || ""));
+  return m ? m[1] : "";
+}
+function gameInviteActions(kind, hash) {
+  if (!gameInviteId(kind, hash)) return {};
+  return {
+    requireInteraction: true,
+    actions: [{ action: "join", title: tr("Join") }, { action: "decline", title: tr("Not now") }]
+  };
+}
+async function declineGameInvite(id) {
+  const db = await idb();
+  const auth = await idbGet(db, "auth-state");
+  const api = await idbGet(db, "api-base");
+  if (!auth || !auth.token || !api || !id) return;
+  await fetch(String(api).replace(/\/$/, "") + "/v1/games/invite/answer", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + auth.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: id, answer: "decline" }),
+    cache: "no-store"
+  }).catch(() => null);
 }
 
 self.addEventListener("push", (event) => {
@@ -2786,7 +2850,8 @@ self.addEventListener("push", (event) => {
       body: shownL ? shownL.body : ((data && data.body) || ""),
       icon: shownL ? shownL.icon : ((data && data.icon) || "icons/icon-192.png"),
       tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
-      data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "" }
+      data: { hash: shownL ? shownL.hash : ((data && data.hash) || "#/"), id: (data && data.id) || "", invite: gameInviteId(data && data.kind, data && data.hash) },
+      ...gameInviteActions(data && data.kind, data && data.hash)
     });
   })());
 });
@@ -2795,7 +2860,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
     const payload = event.notification.data || {};
-    const hash = payload.hash || "#/";
+    if (payload.invite && event.action === "decline") {
+      await declineGameInvite(payload.invite);
+      const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      open.forEach((client) => {
+        try { client.postMessage({ type: "game-invite-answer", id: payload.invite, act: "decline", done: true }); }
+        catch (err) { /* the page refreshes invites on its own */ }
+      });
+      return;
+    }
+    const hash = payload.invite && event.action === "join" ? "#/games/regone?invite=" + payload.invite + "&act=join" : (payload.hash || "#/");
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     if (clients[0]) {
       try { clients[0].postMessage({ type: "note-open", id: payload.id || "", hash: hash }); }

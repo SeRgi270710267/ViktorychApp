@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Controller play (GameActivity). -->
+<resources>
+    <string name="pad_no_pad">Conecta un mando para jugar. El control remoto funciona en los menús.</string>
+    <string name="pad_title">Mando</string>
+    <string name="pad_resume">Continuar</string>
+    <string name="pad_game_menu">Menú del juego</string>
+    <string name="pad_mode">Modo: %1$s</string>
+    <string name="pad_mode_play">Jugar</string>
+    <string name="pad_mode_cursor">Cursor de menú</string>
+    <string name="pad_mode_watch">Espectador</string>
+    <string name="pad_controls">Controles</string>
+    <string name="pad_sensitivity">Sensibilidad de la vista: %1$d</string>
+    <string name="pad_invert_on">Invertir vista: Sí</string>
+    <string name="pad_invert_off">Invertir vista: No</string>
+    <string name="pad_move_keys">Moverse con: teclas W A S D</string>
+    <string name="pad_move_stick">Moverse con: joystick en pantalla</string>
+    <string name="pad_glyphs">Iconos de botones: %1$s</string>
+    <string name="pad_glyphs_xbox">Xbox</string>
+    <string name="pad_glyphs_ps">PlayStation</string>
+    <string name="pad_show_hints">Mostrar controles</string>
+    <string name="pad_exit">Salir del juego</string>
+    <string name="pad_reset">Restablecer</string>
+    <string name="pad_back">Atrás</string>
+    <string name="pad_press">Pulsa un botón para %1$s (Menú cancela)</string>
+    <string name="act_jump">Saltar</string>
+    <string name="act_crouch">Agacharse</string>
+    <string name="act_reload">Recargar</string>
+    <string name="act_use">Usar</string>
+    <string name="act_sprint">Correr</string>
+    <string name="act_prone">Tumbarse</string>
+    <string name="act_binoculars">Prismáticos</string>
+    <string name="act_buy">Comprar</string>
+    <string name="act_inspect">Inspeccionar</string>
+    <string name="act_melee">Cuerpo a cuerpo</string>
+    <string name="act_scoreboard">Marcador</string>
+    <string name="act_fire">Disparar</string>
+    <string name="act_aim">Apuntar</string>
+    <string name="act_weapon_next">Arma siguiente</string>
+    <string name="act_weapon_prev">Arma anterior</string>
+    <string name="act_none">Nada</string>
+    <string name="hint_move">Mover</string>
+    <string name="hint_look">Mirar</string>
+    <string name="hint_menu">Menú</string>
+    <string name="hint_tap">Tocar</string>
+    <string name="hint_cursor">Cursor</string>
+    <string name="hint_back">Atrás</string>
+    <string name="hint_switch">+ Menú: cambiar modo</string>
+    <string name="hint_next">Siguiente</string>
+    <string name="hint_prev">Anterior</string>
+    <string name="hint_view">Vista</string>
+</resources>
