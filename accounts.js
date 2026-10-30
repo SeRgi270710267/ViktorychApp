@@ -3003,7 +3003,7 @@ function signupPayload() {
     if (token && hasApi()) api("/v1/logout", { method: "POST", token: token }).catch(function () {});
     paint();
   }
-  function logout(all) {
+  function logout(all, wipeAll) {
     var session = readSession();
     var token = session && session.token;
     var prep = window.ViktorychNotes && window.ViktorychNotes.beforeSignOut ? window.ViktorychNotes.beforeSignOut(!!all, token) : null;
@@ -3013,12 +3013,22 @@ function signupPayload() {
       // Signing out erases what this device saved for the account (app-lock.js).
       var lock = window.ViktorychAppLock;
       var wiping = lock && lock.wipeData ? lock.wipeData(true).catch(function () {}) : null;
-      var done = function () { Promise.resolve(wiping).then(function () { location.replace(location.pathname + location.search); location.reload(); }); };
+      // The device key goes too, so encrypted leftovers can't be read (device-seal.js).
+      var seal = window.ViktorychSeal;
+      var keyGone = seal && seal.destroyKey ? seal.destroyKey().catch(function () {}) : null;
+      var done = function () {
+        Promise.all([wiping, keyGone]).then(function () {
+          if (wipeAll && seal && seal.wipeAll) { seal.wipeAll({ reason: "wiped" }); return; }
+          location.replace(location.pathname + location.search);
+          location.reload();
+        });
+      };
       if (!token || !hasApi()) { done(); return; }
       api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
     }, function () {
       removeStored("account-v1");
       tellSW(false, "signout");
+      if (wipeAll && window.ViktorychSeal) { window.ViktorychSeal.wipeAll({ reason: "wiped" }); return; }
       location.replace(location.pathname + location.search);
       location.reload();
     });
@@ -5566,7 +5576,7 @@ function signupPayload() {
     var aboutPrivacy = window.ProfileAbout && window.ProfileAbout.privacyOpen() ? window.ProfileAbout.privacyHtml(account.about || { sections: [] }) : "";
     return '<div class="set-block acct-settings">' + tempSettingsHtml(account) + '<h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-about="privacy">' + esc(tr("About privacy")) + "</button>" + aboutPrivacy + '<h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
       '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? ownerTempHtml() + '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + (tempExpiresAt(account) ? "" : inactivityHtml(account) + deleteEntryHtml(account)) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); if (window.ViktorychNostr && !window.ViktorychNostr.allowed()) return ""; return '<h2>' + esc(tr("Nostr (NIP-05)")) + '</h2><p class="set-sub">' + esc(tr("Let Nostr apps find your account by its NIP-05 name. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? ownerTempHtml() + '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" + (window.ViktorychAffiliations ? window.ViktorychAffiliations.adminHtml() : "") : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + (tempExpiresAt(account) ? "" : inactivityHtml(account) + deleteEntryHtml(account)) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + '</button><button class="outline acct-danger" type="button" data-acct="logout-wipe">' + esc(tr("Sign out and delete data on this device")) + "</button></div>" + health;  }
   function onClick(event) {
     var reqKind = event.target && event.target.closest ? event.target.closest("[data-req-kind]") : null;
     if (reqKind) {
@@ -5863,6 +5873,10 @@ function signupPayload() {
     else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
     else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
+    else if (act === "logout-wipe") {
+      var dd = window.ViktorychDeviceData;
+      Promise.resolve(dd && dd.confirmWipe ? dd.confirmWipe(true) : window.confirm(tr("Sign out and delete data on this device?"))).then(function (yes) { if (yes) logout(false, true); });
+    }
     else if (act === "open-delete") {
       deleteState = { phase: "", error: "", step: -1, accountNumber: "", handle: "", busy: false };
       location.hash = "#/settings/delete-account";
@@ -6368,6 +6382,10 @@ else if (act === "copy-id") copyAccountId();
 
   window.ViktorychAccounts = {
     signOut: function () { logout(false); },
+    signOutAndWipe: function () {
+      if (readSession()) logout(false, true);
+      else if (window.ViktorychSeal) window.ViktorychSeal.wipeAll({ reason: "wiped" });
+    },
     uiSyncOn: function () { return uiSyncOn(); },
     deviceOwnUi: deviceOwnUi,
     setDeviceOwnUi: function (on) { setDeviceOwnUi(on); if (!on) pullSoon(); },

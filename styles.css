@@ -6814,6 +6814,21 @@ html[data-flag] .action.like:hover .count { color: var(--text); }
 /* Links are white for contrast; flag blue marks them as links. */
 html[data-flag] a.entity { text-decoration: underline; text-decoration-color: var(--flag-2); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
+/* This device: delete all data (device-data.js). X-style confirm. */
+.vseal-block .vseal-go { width: 100%; margin: 16px 0 4px; min-height: 40px; border-radius: 999px; font-weight: 700; border: 0; }
+.vseal-steps { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.vseal-steps li { margin: 6px 0; }
+.vseal-steps b { color: var(--text); }
+.vseal-confirm { position: fixed; inset: 0; z-index: 10050; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(91, 112, 131, 0.4); }
+.vseal-card { width: 100%; max-width: 320px; padding: 32px; border-radius: 16px; background: var(--bg); color: var(--text); box-shadow: 0 0 15px var(--shadow-tight); }
+.vseal-card h2 { margin: 0 0 8px; font-size: 20px; line-height: 24px; font-weight: 700; }
+.vseal-card p { margin: 0 0 24px; color: var(--muted); font-size: 15px; line-height: 20px; }
+.vseal-card button { display: block; width: 100%; min-height: 44px; margin-top: 12px; border-radius: 999px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.vseal-card .vseal-yes { background: var(--red); color: #fff; border: 0; }
+.vseal-card .vseal-yes:hover { background: #dc1e2b; }
+.vseal-card .vseal-no { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.vseal-card .vseal-no:hover { background: var(--hover); }
+.install-note { margin: 10px 0 0; color: var(--muted); font-size: 13px; line-height: 18px; }
 /* Full-screen video viewer, X mobile style. */
 #viewer.xv {
   display: block;
