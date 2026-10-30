@@ -1229,12 +1229,6 @@
     }, true);
     document.addEventListener("keydown", function (event) {
       var open = host && host.modalOpen && host.modalOpen();
-      var typing = event.target && event.target.getAttribute && event.target.getAttribute("data-xc") === "text";
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && (open || typing)) {
-        event.preventDefault();
-        publish(open ? modalSlot : (event.target.getAttribute("data-slot") || "post"));
-        return;
-      }
       if (event.key === "Escape" && aiMenu && !open) {
         aiMenu = "";
         aiTones = false;
@@ -1358,6 +1352,15 @@
     requestClose: requestClose,
     onEscape: onEscape,
     publish: publish,
+    // Ctrl/Cmd+Enter is bound in keys.js; it posts from the open dialog or
+    // from the focused inline composer.
+    publishFrom: function (el) {
+      var open = host && host.modalOpen && host.modalOpen();
+      var typing = el && el.getAttribute && el.getAttribute("data-xc") === "text";
+      if (!open && !typing) return false;
+      publish(open ? modalSlot : (el.getAttribute("data-slot") || "post"));
+      return true;
+    },
     flushDrafts: flushDrafts,
     bind: function (next) { host = next || null; }
   };
