@@ -4502,5 +4502,20 @@ SI18n.addPack("hi", {
   "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "इंस्टॉल किया गया ऐप पेज का स्क्रॉलबार छिपाता है। आप फिर भी व्हील, ट्रैकपैड, कीबोर्ड या टच से स्क्रॉल कर सकते हैं। ब्राउज़र टैब में यह हमेशा दिखता है।",
   "Full screen shortcut": "फ़ुल स्क्रीन शॉर्टकट",
   "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (Mac पर ⌘+Shift+F) फ़ुल स्क्रीन चालू और बंद करता है। Esc या F11 से भी बाहर निकल सकते हैं।",
-  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "आपके कंप्यूटर के अपने मिनिमाइज़, मैक्सिमाइज़ और क्लोज़ बटन हमेशा कोने में रहते हैं। ऐप अपना टाइटल बार उनके बगल में बनाता है।"
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "आपके कंप्यूटर के अपने मिनिमाइज़, मैक्सिमाइज़ और क्लोज़ बटन हमेशा कोने में रहते हैं। ऐप अपना टाइटल बार उनके बगल में बनाता है।",
+  "Followers you know": "आपके जानने वाले फ़ॉलोअर्स",
+  "This platform doesn’t show who follows this account publicly": "यह प्लेटफ़ॉर्म सार्वजनिक रूप से नहीं दिखाता कि इस अकाउंट को कौन फ़ॉलो करता है",
+  "This platform doesn’t show who this account follows publicly": "यह प्लेटफ़ॉर्म सार्वजनिक रूप से नहीं दिखाता कि यह अकाउंट किसे फ़ॉलो करता है",
+  "{platform} shows {count} followers, but only lists them inside its own app.": "{platform} {count} फ़ॉलोअर्स दिखाता है, लेकिन उनकी सूची सिर्फ़ अपने ऐप में दिखाता है।",
+  "{platform} shows {count} following, but only lists them inside its own app.": "{platform} {count} फ़ॉलोइंग दिखाता है, लेकिन उनकी सूची सिर्फ़ अपने ऐप में दिखाता है।",
+  "{platform} only shows this list inside its own app.": "{platform} यह सूची सिर्फ़ अपने ऐप में दिखाता है।",
+  "Turn on Nostr to see this list": "यह सूची देखने के लिए Nostr चालू करें",
+  "Nostr lists are read from relays on this device.": "Nostr सूचियाँ इसी डिवाइस पर रिले से पढ़ी जाती हैं।",
+  "Open Nostr settings": "Nostr सेटिंग्स खोलें",
+  "This list is hidden": "यह सूची छिपी हुई है",
+  "This account chose not to show this list publicly.": "इस अकाउंट ने यह सूची सार्वजनिक रूप से न दिखाने का फ़ैसला किया है।",
+  "Couldn’t load this list right now": "अभी यह सूची लोड नहीं हो सकी",
+  "The public sources for this list are busy. Try again in a bit.": "इस सूची के सार्वजनिक स्रोत अभी व्यस्त हैं। थोड़ी देर बाद फिर कोशिश करें।",
+  "No followers you know yet": "अभी तक कोई जाना-पहचाना फ़ॉलोअर नहीं",
+  "When someone you follow follows this account, they’ll show up here.": "जब आपके फ़ॉलो किए गए लोगों में से कोई इस अकाउंट को फ़ॉलो करेगा, वह यहाँ दिखेगा।"
 });

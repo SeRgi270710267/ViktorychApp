@@ -4510,5 +4510,20 @@ SI18n.addPack("es", {
   "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "La app instalada oculta la barra de desplazamiento de la página. Puedes seguir desplazándote con la rueda, el trackpad, el teclado o el tacto. Las pestañas del navegador siempre la muestran.",
   "Full screen shortcut": "Atajo de pantalla completa",
   "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (⌘+Shift+F en Mac) activa y desactiva la pantalla completa. Esc o F11 también la cierran.",
-  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Los botones propios de tu computadora para minimizar, maximizar y cerrar siempre se quedan en la esquina. La app dibuja su barra de título junto a ellos."
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Los botones propios de tu computadora para minimizar, maximizar y cerrar siempre se quedan en la esquina. La app dibuja su barra de título junto a ellos.",
+  "Followers you know": "Seguidores que conoces",
+  "This platform doesn’t show who follows this account publicly": "Esta plataforma no muestra públicamente quién sigue a esta cuenta",
+  "This platform doesn’t show who this account follows publicly": "Esta plataforma no muestra públicamente a quién sigue esta cuenta",
+  "{platform} shows {count} followers, but only lists them inside its own app.": "{platform} muestra {count} seguidores, pero solo los enumera dentro de su propia app.",
+  "{platform} shows {count} following, but only lists them inside its own app.": "{platform} muestra {count} siguiendo, pero solo los enumera dentro de su propia app.",
+  "{platform} only shows this list inside its own app.": "{platform} solo muestra esta lista dentro de su propia app.",
+  "Turn on Nostr to see this list": "Activa Nostr para ver esta lista",
+  "Nostr lists are read from relays on this device.": "Las listas de Nostr se leen desde los relays en este dispositivo.",
+  "Open Nostr settings": "Abrir ajustes de Nostr",
+  "This list is hidden": "Esta lista está oculta",
+  "This account chose not to show this list publicly.": "Esta cuenta eligió no mostrar esta lista públicamente.",
+  "Couldn’t load this list right now": "No se pudo cargar esta lista ahora",
+  "The public sources for this list are busy. Try again in a bit.": "Las fuentes públicas de esta lista están ocupadas. Inténtalo de nuevo en un rato.",
+  "No followers you know yet": "Aún no hay seguidores que conozcas",
+  "When someone you follow follows this account, they’ll show up here.": "Cuando alguien a quien sigues siga a esta cuenta, aparecerá aquí."
 });
