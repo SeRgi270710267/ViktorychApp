@@ -185,6 +185,30 @@ async function run(browser, origin, vp) {
   await page.evaluate(() => document.querySelector('[data-feed-act="clear-filters"]').click());
   await page.locator('.feeds-row[data-id="telegram:member_test"]').waitFor({ timeout: 5000 }).catch(() => fail(tag + ": clear filters brings the list back"));
 
+  // A redraw while typing keeps the text, the caret and the focus in the add box.
+  await page.click("#add-account");
+  await page.keyboard.type("https://t.me/sync_us");
+  await page.evaluate(() => {
+    const el = document.getElementById("add-account");
+    el.setSelectionRange(5, 5);
+    el.dataset.oldNode = "1";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  });
+  await page.waitForFunction(() => {
+    const el = document.getElementById("add-account");
+    return el && !el.dataset.oldNode;
+  }, null, { timeout: 5000 }).catch(() => fail(tag + ": the page redraws the add box"));
+  await page.waitForFunction(() => document.activeElement && document.activeElement.id === "add-account", null, { timeout: 2000 }).catch(() => {});
+  const kept = await page.evaluate(() => {
+    const el = document.getElementById("add-account");
+    return { value: el.value, focus: document.activeElement === el, start: el.selectionStart, end: el.selectionEnd, hint: (document.getElementById("feeds-add-hint") || {}).textContent || "" };
+  });
+  if (kept.value !== "https://t.me/sync_us") fail(tag + ": a redraw keeps the typed text " + JSON.stringify(kept));
+  if (!kept.focus || kept.start !== 5 || kept.end !== 5) fail(tag + ": a redraw keeps focus and caret " + JSON.stringify(kept));
+  if (!/Detected: Telegram/.test(kept.hint)) fail(tag + ": a redraw keeps the detected platform " + JSON.stringify(kept));
+  await page.keyboard.press("End");
+  await page.keyboard.type("er");
+  if (await page.inputValue("#add-account") !== "https://t.me/sync_user") fail(tag + ": typing carries on after a redraw");
   await page.fill("#add-account", "https://t.me/sync_user");
   await page.waitForFunction(() => /Detected: Telegram/.test((document.getElementById("feeds-add-hint") || {}).textContent || ""), null, { timeout: 5000 }).catch(() => fail(tag + ": the platform is detected while typing"));
   const t0 = Date.now();
