@@ -205,7 +205,6 @@
     quoteTarget: "",
     composeSeed: "",
     navEditingFolder: null,
-    navNewFolderOpen: false,
     shared: {},
     sharedState: {},
     chain: {},
@@ -10248,11 +10247,6 @@ const here = parseRoute();
         <span class="nav-label">${esc(tr("Install app"))}</span>
       </button>`;
     }
-    html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
-      <span class="nav-ico">${icon("sliders")}</span>
-      <span class="nav-label">${tr("Customize sidebar")}</span>
-    </button>`;
-
     return html;
   }
 
@@ -17554,95 +17548,6 @@ const here = parseRoute();
     return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">${esc(go)}</button><button type="button" class="remove-cancel" data-act="close-remove">${tr("Cancel")}</button></div></div>`;
   }
 
-  function navCustomizeModal() {
-    const custom = getNavCustom();
-    const hiddenSet = new Set(custom.hidden || []);
-    const folderMap = new Map();
-    custom.folders.forEach((f) => folderMap.set(f.id, f));
-
-    const rows = custom.order.map((entry, index) => {
-      if (entry.startsWith("folder:")) {
-        const fId = entry.slice(7);
-        const folder = folderMap.get(fId);
-        if (!folder) return "";
-        const dispName = folderDisplayName(folder);
-        const folderItems = (folder.items || []).map((itId, subIdx) => {
-          const def = navItemDef(itId);
-          if (!def) return "";
-          const isHidden = hiddenSet.has(itId);
-          return `<div class="nav-cust-folder-subrow${isHidden ? " is-hidden" : ""}">
-            <span class="nav-cust-icon">${icon(def.icon)}</span>
-            <span class="nav-cust-name">${esc(def.label)}</span>
-            <div class="nav-cust-actions">
-              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="-1" aria-label="${tr("Move up")}"${subIdx === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="1" aria-label="${tr("Move down")}"${subIdx === folder.items.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-              <button class="outline" type="button" data-act="nav-remove-from-folder" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" style="height:28px;padding:0 8px;font-size:12px;">${tr("Remove from folder")}</button>
-              ${itId === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(itId)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
-            </div>
-          </div>`;
-        }).join("");
-
-        return `<div class="nav-cust-folder-box">
-          <div class="nav-cust-folder-head">
-            <span class="nav-cust-icon">${icon("folder")}</span>
-            <span class="nav-cust-name">${esc(dispName)} <span class="muted small">(${folder.items.length})</span></span>
-            <div class="nav-cust-actions">
-              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-              <button class="icon-btn" type="button" data-act="nav-prompt-rename" data-folder-id="${esc(folder.id)}" aria-label="${tr("Rename folder")}" data-tooltip="${tr("Rename folder")}">${icon("pencil")}</button>
-              <button class="icon-btn danger" type="button" data-act="nav-delete-folder" data-folder-id="${esc(folder.id)}" aria-label="${tr("Delete folder")}" data-tooltip="${tr("Delete folder")}">${icon("trash")}</button>
-            </div>
-          </div>
-          <div class="nav-cust-folder-items">
-            ${folderItems || `<div class="muted small" style="padding:4px 8px;">${tr("This folder is empty.")}</div>`}
-          </div>
-        </div>`;
-      } else {
-        const def = navItemDef(entry);
-        if (!def) return "";
-        const isHidden = hiddenSet.has(entry);
-        return `<div class="nav-cust-item-row${isHidden ? " is-hidden" : ""}">
-          <span class="nav-cust-icon">${icon(def.icon)}</span>
-          <span class="nav-cust-name">${esc(def.label)}</span>
-          <div class="nav-cust-actions">
-            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-            <select class="nav-move-select" data-act="nav-select-folder" data-id="${esc(entry)}">
-              <option value="">${tr("Move to folder")}...</option>
-              ${custom.folders.map((f) => `<option value="${esc(f.id)}">${esc(folderDisplayName(f))}</option>`).join("")}
-            </select>
-            ${entry === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(entry)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
-          </div>
-        </div>`;
-      }
-    }).join("");
-
-    return `<div class="modal-back" data-act="close-modal"><div class="modal nav-customize-modal" role="dialog" aria-label="${tr("Customize sidebar")}" data-act="stop">
-      <div class="modal-head">
-        <button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button>
-        <h2>${tr("Customize sidebar")}</h2>
-        <button class="outline" type="button" data-act="nav-reset-default" style="height:32px;padding:0 12px;font-size:13px;">${tr("Reset to default")}</button>
-        <button class="save" type="button" data-act="close-modal">${tr("Done")}</button>
-      </div>
-      <div class="modal-body">
-        <div class="nav-customize-intro">
-          <p class="muted">${tr("Reorder items and organize them into folders.")}</p>
-          <button class="outline primary" type="button" data-act="nav-open-new-folder" style="height:32px;padding:0 12px;font-size:13px;display:flex;align-items:center;gap:6px;">${icon("plus")} ${tr("New folder")}</button>
-        </div>
-        ${STATE.navNewFolderOpen ? `
-          <form class="nav-new-folder-form" data-act="nav-create-folder-submit">
-            <input type="text" id="nav-new-folder-input" class="nav-folder-rename-input" placeholder="${tr("Folder name")}" maxlength="30" required autofocus />
-            <button type="submit" class="save" style="height:32px;padding:0 14px;">${tr("Save")}</button>
-            <button type="button" class="outline" data-act="nav-close-new-folder" style="height:32px;padding:0 10px;">${tr("Cancel")}</button>
-          </form>
-        ` : ""}
-        <div class="nav-cust-list">
-          ${rows}
-        </div>
-      </div>
-    </div></div>`;
-  }
-
   function postAskDialog() {
     return `<div class="modal-back remove-back" data-act="close-modal"><div class="modal remove-sheet" role="alertdialog" aria-modal="true" aria-labelledby="post-del-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="post-del-title">${esc(tr("Delete post?"))}</h2><p>${esc(tr("This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results."))}</p><button type="button" class="remove-go" data-act="confirm-post-delete">${esc(tr("Delete"))}</button><button type="button" class="remove-cancel" data-act="close-modal">${esc(tr("Cancel"))}</button></div></div>`;
   }
@@ -17771,7 +17676,6 @@ if (STATE.histClear) {
         </div>
       </div></div>`;
     }
-    if (STATE.modal === "nav-customize") return navCustomizeModal();
     if (STATE.modal === "tabs") {
       const pinned = STATE.settings.lists.filter((list) => list.pinned);
       const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${trn("members", (list.members || []).length)}</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="${esc(tr("Move {name} left", { name: list.name }))}"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="${esc(tr("Move {name} right", { name: list.name }))}"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">${tr("Unpin")}</button></div>`).join("");
@@ -21064,33 +20968,6 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
-    if (act === "open-nav-customize") {
-      STATE.drawerEdit = true;
-      STATE.accountMenu = false;
-      STATE.modal = null;
-      STATE.navNewFolderOpen = false;
-      STATE.drawer = !sidebarOwnsNav();
-      render();
-      return;
-    }
-    if (act === "nav-open-new-folder") {
-      STATE.navNewFolderOpen = true;
-      render();
-      const input = document.getElementById("nav-new-folder-input");
-      if (input) input.focus();
-      return;
-    }
-    if (act === "nav-close-new-folder") {
-      STATE.navNewFolderOpen = false;
-      render();
-      return;
-    }
-    if (act === "nav-reset-default") {
-      saveNavCustom(DEFAULT_NAV_CUSTOM);
-      render();
-      toast(tr("Reset to default"));
-      return;
-    }
     if (act === "bottom-nav-move") {
       moveBottomNav(el.dataset.id, Number(el.dataset.dir));
       refocusBottom(el.dataset.id, "move", el.dataset.dir);
@@ -21134,100 +21011,6 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
-    if (act === "nav-order-move") {
-      const idx = Number(el.dataset.idx);
-      const dir = Number(el.dataset.dir);
-      const custom = getNavCustom();
-      const target = idx + dir;
-      if (target >= 0 && target < custom.order.length) {
-        const tmp = custom.order[idx];
-        custom.order[idx] = custom.order[target];
-        custom.order[target] = tmp;
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-subitem-move") {
-      const folderId = el.dataset.folderId;
-      const itemId = el.dataset.id;
-      const dir = Number(el.dataset.dir);
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        const idx = folder.items.indexOf(itemId);
-        const target = idx + dir;
-        if (idx !== -1 && target >= 0 && target < folder.items.length) {
-          const tmp = folder.items[idx];
-          folder.items[idx] = folder.items[target];
-          folder.items[target] = tmp;
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
-    if (act === "nav-remove-from-folder") {
-      const folderId = el.dataset.folderId;
-      const itemId = el.dataset.id;
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        folder.items = folder.items.filter((it) => it !== itemId);
-        const fKey = "folder:" + folderId;
-        const fIdx = custom.order.indexOf(fKey);
-        if (fIdx !== -1) custom.order.splice(fIdx + 1, 0, itemId);
-        else custom.order.push(itemId);
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-prompt-rename") {
-      const folderId = el.dataset.folderId;
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        const next = window.prompt(tr("Folder name"), folder.name);
-        if (next && next.trim()) {
-          folder.name = next.trim().slice(0, 30);
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
-    if (act === "nav-delete-folder") {
-      const folderId = el.dataset.folderId;
-      const custom = getNavCustom();
-      const folderIdx = custom.folders.findIndex((f) => f.id === folderId);
-      if (folderIdx !== -1) {
-        const folder = custom.folders[folderIdx];
-        const fKey = "folder:" + folderId;
-        const ordIdx = custom.order.indexOf(fKey);
-        if (ordIdx !== -1) {
-          custom.order.splice(ordIdx, 1, ...(folder.items || []));
-        }
-        custom.folders.splice(folderIdx, 1);
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-toggle-vis") {
-      const itemId = el.dataset.id;
-      if (itemId === "settings" || itemId === "home") return;
-      const custom = getNavCustom();
-      const idx = custom.hidden.indexOf(itemId);
-      if (idx !== -1) {
-        custom.hidden.splice(idx, 1);
-      } else {
-        custom.hidden.push(itemId);
-      }
-      saveNavCustom(custom);
-      render();
-      return;
-    }
     if (act === "reply-others") {
       let handles = [];
       try { handles = JSON.parse(el.dataset.handles || "[]"); } catch (err) { handles = []; }
@@ -21243,7 +21026,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "close-modal" || act === "close-remove") {
       if (act === "close-modal" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.requestClose && window.ViktorychXCompose.requestClose()) return;
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
-      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; STATE.navNewFolderOpen = false; render(); return;
+      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; render(); return;
     }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
@@ -23827,26 +23610,6 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       render();
       return;
     }
-    const newFolderForm = event.target.closest && event.target.closest("form[data-act='nav-create-folder-submit']");
-    if (newFolderForm) {
-      event.preventDefault();
-      const input = newFolderForm.querySelector("#nav-new-folder-input");
-      const val = input ? input.value.trim().slice(0, 30) : "";
-      if (val) {
-        const custom = getNavCustom();
-        const newId = "f_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        custom.folders.push({
-          id: newId,
-          name: val,
-          items: []
-        });
-        custom.order.push("folder:" + newId);
-        saveNavCustom(custom);
-      }
-      STATE.navNewFolderOpen = false;
-      render();
-      return;
-    }
     if (event.target.closest && event.target.closest("form.hist-search")) {
       event.preventDefault();
       const input = event.target.querySelector("#hist-q");
@@ -23990,23 +23753,6 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   });
 
   document.addEventListener("change", (event) => {
-    const navSel = event.target && event.target.closest && event.target.closest("select[data-act='nav-select-folder']");
-    if (navSel) {
-      const folderId = navSel.value;
-      const itemId = navSel.dataset.id;
-      if (folderId && itemId) {
-        const custom = getNavCustom();
-        const targetFolder = custom.folders.find((f) => f.id === folderId);
-        if (targetFolder) {
-          custom.order = custom.order.filter((it) => it !== itemId);
-          custom.folders.forEach((f) => { f.items = f.items.filter((it) => it !== itemId); });
-          targetFolder.items.push(itemId);
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
     if (event.target.id === "translate-to" && window.FeedsTranslate) {
       window.FeedsTranslate.setTarget(event.target.value);
       return;
