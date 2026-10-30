@@ -4946,5 +4946,17 @@ SI18n.addPack("en", {
   "The security check didn't pass. Reload the page and try again.": "The security check didn't pass. Reload the page and try again.",
   "Sign-up is temporarily unavailable. Try again in a few minutes.": "Sign-up is temporarily unavailable. Try again in a few minutes.",
   "Something went wrong (error {code}). Try again.": "Something went wrong (error {code}). Try again.",
-  "The server is slow. Still trying…": "The server is slow. Still trying…"
+  "The server is slow. Still trying…": "The server is slow. Still trying…",
+  "Newsletter": "Newsletter",
+  "Newsletters": "Newsletters",
+  "Looking for the newsletter’s feed…": "Looking for the newsletter’s feed…",
+  "Couldn’t find a feed or archive for that newsletter.": "Couldn’t find a feed or archive for that newsletter.",
+  "Open the original issue": "Open the original issue",
+  "Loading the issue…": "Loading the issue…",
+  "This issue has no text in its feed.": "This issue has no text in its feed.",
+  "This issue is no longer in the newsletter’s feed.": "This issue is no longer in the newsletter’s feed.",
+  "Open the newsletter’s website": "Open the newsletter’s website",
+  "Paste a newsletter link": "Paste a newsletter link",
+  "Add a newsletter": "Add a newsletter",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts."
 });

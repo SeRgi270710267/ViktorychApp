@@ -4949,5 +4949,17 @@ SI18n.addPack("es", {
   "The security check didn't pass. Reload the page and try again.": "La comprobación de seguridad no se superó. Recarga la página e inténtalo de nuevo.",
   "Sign-up is temporarily unavailable. Try again in a few minutes.": "El registro no está disponible por ahora. Inténtalo de nuevo en unos minutos.",
   "Something went wrong (error {code}). Try again.": "Algo salió mal (error {code}). Inténtalo de nuevo.",
-  "The server is slow. Still trying…": "El servidor va lento. Seguimos intentándolo…"
+  "The server is slow. Still trying…": "El servidor va lento. Seguimos intentándolo…",
+  "Newsletter": "Boletín",
+  "Newsletters": "Boletines",
+  "Looking for the newsletter’s feed…": "Buscando el feed del boletín…",
+  "Couldn’t find a feed or archive for that newsletter.": "No se encontró un feed ni un archivo para ese boletín.",
+  "Open the original issue": "Abrir el número original",
+  "Loading the issue…": "Cargando el número…",
+  "This issue has no text in its feed.": "Este número no tiene texto en su feed.",
+  "This issue is no longer in the newsletter’s feed.": "Este número ya no está en el feed del boletín.",
+  "Open the newsletter’s website": "Abrir el sitio web del boletín",
+  "Paste a newsletter link": "Pega el enlace de un boletín",
+  "Add a newsletter": "Añadir un boletín",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, archivos de Mailchimp o cualquier sitio con feed. Los números aparecen como publicaciones."
 });

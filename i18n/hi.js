@@ -4935,5 +4935,17 @@ SI18n.addPack("hi", {
   "The security check didn't pass. Reload the page and try again.": "सुरक्षा जाँच पास नहीं हुई। पेज रीलोड करें और फिर से कोशिश करें।",
   "Sign-up is temporarily unavailable. Try again in a few minutes.": "साइन अप अभी कुछ देर के लिए उपलब्ध नहीं है। कुछ मिनट बाद फिर से कोशिश करें।",
   "Something went wrong (error {code}). Try again.": "कुछ गड़बड़ हो गई (त्रुटि {code})। फिर से कोशिश करें।",
-  "The server is slow. Still trying…": "सर्वर धीमा है। अभी भी कोशिश कर रहे हैं…"
+  "The server is slow. Still trying…": "सर्वर धीमा है। अभी भी कोशिश कर रहे हैं…",
+  "Newsletter": "न्यूज़लेटर",
+  "Newsletters": "न्यूज़लेटर",
+  "Looking for the newsletter’s feed…": "न्यूज़लेटर की फ़ीड ढूँढ रहे हैं…",
+  "Couldn’t find a feed or archive for that newsletter.": "इस न्यूज़लेटर की कोई फ़ीड या संग्रह नहीं मिला।",
+  "Open the original issue": "मूल अंक खोलें",
+  "Loading the issue…": "अंक लोड हो रहा है…",
+  "This issue has no text in its feed.": "इस अंक की फ़ीड में कोई टेक्स्ट नहीं है।",
+  "This issue is no longer in the newsletter’s feed.": "यह अंक अब न्यूज़लेटर की फ़ीड में नहीं है।",
+  "Open the newsletter’s website": "न्यूज़लेटर की वेबसाइट खोलें",
+  "Paste a newsletter link": "न्यूज़लेटर का लिंक चिपकाएँ",
+  "Add a newsletter": "न्यूज़लेटर जोड़ें",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp संग्रह या फ़ीड वाली कोई भी साइट। अंक पोस्ट की तरह दिखते हैं।"
 });

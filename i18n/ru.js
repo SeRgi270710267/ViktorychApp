@@ -4948,5 +4948,17 @@ SI18n.addPack("ru", {
   "The security check didn't pass. Reload the page and try again.": "Проверка безопасности не пройдена. Обновите страницу и попробуйте ещё раз.",
   "Sign-up is temporarily unavailable. Try again in a few minutes.": "Регистрация временно недоступна. Попробуйте ещё раз через несколько минут.",
   "Something went wrong (error {code}). Try again.": "Что-то пошло не так (ошибка {code}). Попробуйте ещё раз.",
-  "The server is slow. Still trying…": "Сервер отвечает медленно. Продолжаем попытки…"
+  "The server is slow. Still trying…": "Сервер отвечает медленно. Продолжаем попытки…",
+  "Newsletter": "Рассылка",
+  "Newsletters": "Рассылки",
+  "Looking for the newsletter’s feed…": "Ищем ленту рассылки…",
+  "Couldn’t find a feed or archive for that newsletter.": "Не удалось найти ленту или архив этой рассылки.",
+  "Open the original issue": "Открыть оригинальный выпуск",
+  "Loading the issue…": "Загружаем выпуск…",
+  "This issue has no text in its feed.": "В ленте нет текста этого выпуска.",
+  "This issue is no longer in the newsletter’s feed.": "Этого выпуска больше нет в ленте рассылки.",
+  "Open the newsletter’s website": "Открыть сайт рассылки",
+  "Paste a newsletter link": "Вставьте ссылку на рассылку",
+  "Add a newsletter": "Добавить рассылку",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, архивы Mailchimp или любой сайт с лентой. Выпуски появляются как посты."
 });
