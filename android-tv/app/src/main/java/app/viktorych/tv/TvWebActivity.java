@@ -22,6 +22,9 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import app.viktorych.tv.tune.DisplayTune;
+import app.viktorych.tv.tune.Specs;
+
 /** Full-screen WebView for TVs without Chrome. Same site, plus:
  *  - window.ViktorychTVApp.setName(preset, title) for the home-screen name
  *  - APK links are downloaded and handed to the system installer (one press). */
@@ -31,6 +34,9 @@ public class TvWebActivity extends Activity {
     private long pending = -1;
     private String waitingUrl;
     private boolean fellBack;
+    private DisplayTune tune;
+    /** The page now showing is our site (kept for bridge calls off the UI thread). */
+    private volatile boolean onSite;
 
     private final BroadcastReceiver done = new BroadcastReceiver() {
         @Override
@@ -51,6 +57,8 @@ public class TvWebActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        tune = new DisplayTune(this);
+        tune.applyColor();
         web = new WebView(this);
         web.setFocusable(true);
         web.setFocusableInTouchMode(true);
@@ -73,6 +81,12 @@ public class TvWebActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return route(Uri.parse(url));
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                onSite = url != null && siteHost(Uri.parse(url).getHost());
+                if (!onSite) tune.reset();
             }
 
             @Override
@@ -193,7 +207,7 @@ public class TvWebActivity extends Activity {
     }
 
     @Override
-    protected void onPause() { web.onPause(); super.onPause(); }
+    protected void onPause() { tune.reset(); web.onPause(); super.onPause(); }
 
     @Override
     protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); web.saveState(out); }
@@ -234,6 +248,22 @@ public class TvWebActivity extends Activity {
         }
         @JavascriptInterface public void install(final String url) {
             runOnUiThread(() -> { if (ours()) TvWebActivity.this.install(url); });
+        }
+        // TV tuning (first-time setup and Settings > TV). The specs are read
+        // on this TV and only handed to the page; nothing is sent anywhere.
+        @JavascriptInterface public String specs(boolean fresh) {
+            if (!onSite) return "{}";
+            if (fresh) Specs.forget();
+            return Specs.json(TvWebActivity.this);
+        }
+        @JavascriptInterface public void setTune(final boolean frameMatch, final boolean hdr, final boolean passthrough, final boolean padHints) {
+            runOnUiThread(() -> { if (ours()) tune.set(frameMatch, hdr, passthrough, padHints); });
+        }
+        @JavascriptInterface public void matchFrameRate(final double fps) {
+            runOnUiThread(() -> { if (ours()) tune.match(fps); });
+        }
+        @JavascriptInterface public void resetFrameRate() {
+            runOnUiThread(() -> tune.reset());
         }
     }
 }
