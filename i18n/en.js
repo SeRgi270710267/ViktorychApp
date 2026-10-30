@@ -4149,5 +4149,8 @@ SI18n.addPack("en", {
   "reply.others.one": "{n} other",
   "reply.others.few": "{n} others",
   "reply.others.many": "{n} others",
-  "reply.others.other": "{n} others"
+  "reply.others.other": "{n} others",
+  "Run setup again": "Run setup again",
+  "Theme, data usage, notifications, install and follows.": "Theme, data usage, notifications, install and follows.",
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "Theme, save data and notifications keep their defaults. Change them in Settings."
 });

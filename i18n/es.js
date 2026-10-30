@@ -4149,5 +4149,8 @@ SI18n.addPack("es", {
   "reply.others.one": "{n} más",
   "reply.others.few": "{n} más",
   "reply.others.many": "{n} más",
-  "reply.others.other": "{n} más"
+  "reply.others.other": "{n} más",
+  "Run setup again": "Volver a ejecutar la configuración",
+  "Theme, data usage, notifications, install and follows.": "Tema, uso de datos, notificaciones, instalación y cuentas que sigues.",
+  "Theme, save data and notifications keep their defaults. Change them in Settings.": "El tema, el ahorro de datos y las notificaciones quedan con sus valores predeterminados. Cámbialos en Configuración."
 });
