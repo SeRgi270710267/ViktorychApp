@@ -367,6 +367,37 @@ export async function handleCommunityRoute(request, env, path, url, deps) {
   return json(404, { error: "not_found" });
 }
 
+/* The owner add, also used when the owner allows a community request. */
+export async function addOwnerCommunity(env, raw, deps) {
+  const name = communityName(raw);
+  if (!name) return { error: "bad_community", status: 400 };
+  const feedRequests = await import("./feed-requests.js");
+  if (await feedRequests.bannedKeys(env, ["reddit:r:" + name, "reddit:" + name])) return { error: "banned", status: 403 };
+  const doc = await readOwner(env);
+  doc.removed = doc.removed.filter((item) => item !== name);
+  if (!doc.added.some((item) => item.name === name)) {
+    if (doc.added.length >= CAP) return { error: "full", status: 400 };
+    doc.added.push({ name, title: "", addedAt: Date.now() });
+  }
+  await writeOwner(env, doc);
+  let dispatched = false;
+  try { dispatched = await deps.dispatchWorkflows(env, ["sync.yml", "reddit.yml"]); }
+  catch (err) { dispatched = false; }
+  return { community: { name }, dispatched };
+}
+
+/* A banned subreddit leaves the owner list, so the sync stops fetching it. */
+export async function dropOwnerCommunities(env, names) {
+  const want = (names || []).map((name) => communityName(name)).filter(Boolean);
+  if (!want.length || !env.DATA) return 0;
+  const doc = await readOwner(env);
+  const before = doc.added.length;
+  doc.added = doc.added.filter((item) => want.indexOf(item.name) < 0);
+  want.forEach((name) => { if (doc.removed.indexOf(name) < 0) doc.removed.push(name); });
+  await writeOwner(env, doc);
+  return before - doc.added.length;
+}
+
 async function handleOwner(request, env, path, deps) {
   const { json, rateHit, limited, readJson, requireOwnerHidden, dispatchWorkflows } = deps;
   const gate = await requireOwnerHidden(request, env);
@@ -384,19 +415,9 @@ async function handleOwner(request, env, path, deps) {
     if (!hit.ok) return limited(hit);
     const body = await readJson(request, 2000);
     if (body.error) return json(400, { error: body.error });
-    const name = communityName(body.name || body.url || "");
-    if (!name) return json(400, { error: "bad_community" });
-    const doc = await readOwner(env);
-    doc.removed = doc.removed.filter((item) => item !== name);
-    if (!doc.added.some((item) => item.name === name)) {
-      if (doc.added.length >= CAP) return json(400, { error: "full" });
-      doc.added.push({ name, title: "", addedAt: Date.now() });
-    }
-    await writeOwner(env, doc);
-    let dispatched = false;
-    try { dispatched = await dispatchWorkflows(env, ["sync.yml", "reddit.yml"]); }
-    catch (err) { dispatched = false; }
-    return json(200, { community: { name }, dispatched });
+    const added = await addOwnerCommunity(env, body.name || body.url || "", deps);
+    if (added.error) return json(added.status || 400, { error: added.error });
+    return json(200, added);
   }
   const match = path.match(/^\/v1\/owner\/communities\/([^/]+)$/);
   if (match && request.method === "DELETE") {

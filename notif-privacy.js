@@ -79,6 +79,8 @@
     if (type === "notes") return t("New Community Note");
     if (kind === "post" || kind === "bell" || kind === "live") return t("New post");
     if (kind === "game_invite") return t("New game invite");
+    if (kind === "feed_request") return t("New source request");
+    if (kind === "feed_approved" || kind === "feed_rejected") return t("Your source request was answered");
     return t("New notification");
   }
 
@@ -94,12 +96,18 @@
     if (kind === "dm") return t("{name} sent you a message", v);
     if (kind === "follow") return t("{name} followed you", v);
     if (kind === "game_invite") return t("{name} invited you to play", v);
+    if (kind === "feed_request") return t("Source request: {name}", v);
+    if (kind === "feed_approved") return t("Source request approved: {name}", v);
+    if (kind === "feed_rejected") return t("Source request not approved: {name}", v);
     return name;
   }
 
   // Older full pushes carry an English title key instead of a kind.
   function kindFromTitleKey(key) {
     var k = String(key || "");
+    if (/^Source request approved/.test(k)) return "feed_approved";
+    if (/^Source request not approved/.test(k)) return "feed_rejected";
+    if (/^Source request/.test(k)) return "feed_request";
     if (/liked/.test(k)) return "like";
     if (/reposted/.test(k)) return "repost";
     if (/quoted/.test(k)) return "quote";

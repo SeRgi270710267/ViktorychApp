@@ -4,7 +4,7 @@ const VERSION = "viktorych-a172-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T10:45:08Z-personalize-cleanup
+// cache-bust: 2026-10-30T11:02:06Z-personalize-cleanup
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -218,6 +218,7 @@ const SHELL_FILES = [
   "./shared/feed-sources.js",
   "./feeds-page.js",
   "./source-lists.js",
+  "./feed-requests.js",
   "./shared/home-fresh.js",
   "./shared/pill-data.js",
   "./shared/tiktok-lock.js",

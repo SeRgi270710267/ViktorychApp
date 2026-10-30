@@ -60,6 +60,7 @@ import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
 import { handleOwnerSourceLists, handleMySourceLists, refreshWanted } from "./source-lists.js";
+import { handleFeedRequests, handleOwnerFeedRequests, requestInsteadOfAdd, followGate, importFilter, feedRequestsOn, fileRequest, bannedKeys, newsletterBanned } from "./feed-requests.js";
 import { handleOwnerSms, handleMemberSms } from "./sms-pool.js";
 import { handleMail } from "./mail-relay.js";
 import { claimedJobs } from "./job-runner.js";
@@ -4116,6 +4117,7 @@ async function handleTikTokAccounts(request, env) {
     if (body.error) return json(400, { error: body.error });
     const typed = normalizeTikTokInput(body.handle || body.url || "");
     if (!typed) return json(400, { error: "bad_handle" });
+    if (await bannedKeys(env, ["tiktok:" + typed])) return json(403, { error: "banned" });
     const doc = await readTikTokAccounts(env);
     const existing = doc.added.find((item) => tiktokRowMatches(item, typed));
     if (!existing && doc.added.length >= TIKTOK_ACCOUNT_CAP) return json(400, { error: "full" });
@@ -4794,6 +4796,7 @@ async function handleAddedAccounts(request, env, url) {
     if (!addedPlatform(request, url, body)) return json(400, { error: "unsupported" });
     const typed = normalizeXInput(body.handle || body.url || "");
     if (!typed) return json(400, { error: "bad_handle" });
+    if (await bannedKeys(env, ["x:" + typed])) return json(403, { error: "banned" });
     const doc = await readAddedAccounts(env);
     const looked = await lookupXProfile(typed);
     if (looked.error) return json(looked.error === "not_found" ? 404 : 503, { error: looked.error });
@@ -5037,6 +5040,8 @@ async function handleFollowPut(request, env) {
   if (target.error) return target.error;
   const id = target.id;
   if (id === "app:" + gate.row.public_id) return json(400, { error: "bad_follow", message: "That account can’t be followed." });
+  const sourceGate = await followGate(env, gate.row, id, { json, rateHit, limited });
+  if (sourceGate) return sourceGate;
   const decision = await prepareFollowPut(env, gate.row.public_id, id);
   if (decision.mode === "blocked") return json(403, { error: "blocked", message: "You can’t follow this account." });
   if (decision.mode === "request" || decision.mode === "pending-exists") {
@@ -5117,6 +5122,10 @@ async function handleFollowImport(request, env) {
     }
     ids.push(id);
   }
+  // Banned sources and device sources nobody follows yet stay out of an import.
+  const kept = await importFilter(env, gate.row, ids);
+  ids.length = 0;
+  kept.forEach((id) => ids.push(id));
   const now = Date.now();
   // A bulk import must not notify. Only a new follow from PUT does.
   for (let i = 0; i < ids.length; i += 40) {
@@ -5485,7 +5494,16 @@ async function route(request, env, ctx) {
     return handleXVideo(request, { fetch: (u, init) => fetch(u, init), cache: caches.default, waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
   if ((path === "/v1/newsletter" || path === "/v1/newsletter/issue") && request.method === "GET") {
-    return handleNewsletter(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+    // A banned newsletter stops here, before anything is fetched for it.
+    if (env.DB && await newsletterBanned(env, url.searchParams.get("key"))) return json(403, { error: "banned" });
+    const letter = await handleNewsletter(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+    if (env.DB && path === "/v1/newsletter" && letter.status === 200 && url.searchParams.get("url")) {
+      try {
+        const doc = await letter.clone().json();
+        if (doc && await newsletterBanned(env, doc.key)) return json(403, { error: "banned" });
+      } catch (err) { /* not JSON: pass it through */ }
+    }
+    return letter;
   }
   if (path === "/v1/comments" && request.method === "GET") {
     return handleComments(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
@@ -5532,6 +5550,25 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path, ctx);
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
+  }
+  // Source requests: only the owner adds a source. A member's add becomes a request.
+  if (path === "/v1/feed-requests" || path.startsWith("/v1/feed-requests/")) {
+    return handleFeedRequests(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+  }
+  if (path === "/v1/owner/feed-requests" || path.startsWith("/v1/owner/feed-requests/") || path === "/v1/owner/feed-bans" || path.startsWith("/v1/owner/feed-bans/")) {
+    return handleOwnerFeedRequests(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, sessionAccount, dispatchWorkflows });
+  }
+  {
+    const asked = await requestInsteadOfAdd(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (asked) return asked;
+  }
+  if (path === "/v1/me/source-lists/requests" && request.method === "POST" && env.DB && await feedRequestsOn(env)) {
+    const me = await sessionAccount(env, request);
+    if (!me) return json(401, { error: "auth" });
+    const body = await readJson(request, 1500);
+    if (body.error) return json(400, { error: body.error });
+    const made = await fileRequest(env, me, { input: body.input, note: body.note }, { json, rateHit, limited });
+    return json(made.status, Object.assign({ ok: made.status === 200 }, made.body));
   }
   if (path === "/v1/owner/source-lists" || path.startsWith("/v1/owner/source-lists/")) {
     return handleOwnerSourceLists(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
