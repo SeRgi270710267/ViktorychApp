@@ -18,6 +18,7 @@
   var STORAGE_KEY = "viktorychapp-storage";
   var P2P_KEY = "viktorychapp-friend-p2p";
   var LT_KEY = "viktorychapp-live-translate-v1";
+  var POOL_KEY = "viktorychapp-peer-pool-v1";
 
   /* [store, key, data-saving value, normal default, what it costs]. */
   var KEYS = [
@@ -25,6 +26,7 @@
     ["settings", "autoplay", "never", "all", "video autoplay in the timeline"],
     ["settings", "livePreview", "off", "auto", "live stream previews"],
     ["settings", "reactionsData", "lite", "auto", "reaction counts only, no pictures in the who-reacted list"],
+    ["settings", "communityNotesData", "lite", "auto", "Community Notes only for posts on screen, refreshed less often"],
     ["settings", "videoHd", false, true, "HD video variants"],
     ["settings", "imageLoad", "wifi", "always", "photos download on Wi-Fi or on tap"],
     ["settings", "imageSize", "small", "auto", "smaller previews the source already serves"],
@@ -64,8 +66,10 @@
     ["storage", "prefetch", false, true, "media and feed prefetch"],
     ["storage", "maxBytes", 1 * GB, 0, "cache size limit"],
     ["storage", "unlimited", false, false, "unlimited cache"],
+    ["storage", "picked", false, false, "cache size set by hand on the slider"],
     ["storage", "keep", "3d", "week", "how long media stays cached"],
     ["friendP2P", "on", false, true, "direct connections and media from friends"],
+    ["pool", "mode", "off", "auto", "sharing pool: feed files and app updates with nearby devices"],
     ["liveTranslate", "on", false, false, "live translation audio"],
     ["liveTranslate", "mode", "subtitles", "both", "translated voice audio"],
     ["liveTranslate", "sessionMin", 5, 10, "minutes per translation session"],
@@ -78,14 +82,15 @@
     settings: ["version", "initialized", "follows", "seenFeeds", "seenDefaults", "lists", "likes", "bookmarks", "reposts", "savedPosts",
       "privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyZeroTrace", "privacyAntiFingerprint",
       "appearance", "mutedWords", "mutedAccounts", "repostOff", "groups", "groupsOwn", "subsGroup", "followingSort", "forYouReposts",
-      "forYouReplies", "tabViews", "translateTo", "translateNever", "bells", "bellNotes", "bellSeen", "bellRead", "historyPause",
+      "forYouReplies", "tabViews", "translateTo", "translateNever", "bells", "bellNotes", "bellSeen", "bellRead", "notifPrivacy", "historyPause",
       "feedTabs", "lastNoteTab", "networkMode", "navCustom", "bottomNav", "bottomNavCustom", "navLayout", "navLayoutLand", "navLayoutSync",
       "noteTabs", "noteTabsSame", "noteClearedAt", "noteDismissed", "drawerMenu", "devicePerf", "communitiesHome", "notePrefs", "profileTabs",
       "prefsAt", "syncUi", "syncUiAt", "historyCut", "accountFollows", "bellsAt", "builtinNoteRead", "redditVotes", "navCustomAt",
-      "brandLogo", "communityTabs", "peopleLinks"],
+      "brandLogo", "avatarShape", "communityTabs", "peopleLinks", "blocks"],
     device: ["profile", "webllmAccepted"],
     storage: [],
     friendP2P: [],
+    pool: ["smart"],
     liveTranslate: ["model", "engine", "target", "source", "voice", "duck", "chrome"]
   };
 
@@ -240,6 +245,7 @@
     if (store === "storage") return readJson(STORAGE_KEY) || {};
     if (store === "friendP2P") return readJson(P2P_KEY) || {};
     if (store === "liveTranslate") return readJson(LT_KEY) || {};
+    if (store === "pool") return readJson(POOL_KEY) || {};
     return {};
   }
 
@@ -299,6 +305,12 @@
     writeJson(P2P_KEY, p2p);
     var friends = typeof self !== "undefined" ? self.ViktorychFriendP2P : null;
     if (friends && friends.setEnabled && p2p.on === false) friends.setEnabled(false);
+
+    var poolMode = plan.pool && plan.pool.mode;
+    var sharing = typeof self !== "undefined" ? self.ViktorychPool : null;
+    if (sharing && sharing.setMode) sharing.setMode(poolMode || "auto");
+    else if (poolMode === undefined) { var poolPrefs = readStore("pool"); delete poolPrefs.mode; writeJson(POOL_KEY, poolPrefs); }
+    else writeJson(POOL_KEY, Object.assign({}, readStore("pool"), { mode: poolMode }));
 
     var lt = Object.assign({}, readStore("liveTranslate"));
     Object.keys(plan.liveTranslate).forEach(function (key) { if (plan.liveTranslate[key] === undefined) delete lt[key]; else lt[key] = plan.liveTranslate[key]; });

@@ -8,11 +8,15 @@
     shorts: { classic: true, scripts: ["shorts.js", "shorts.css"] },
     games: { classic: true, scripts: ["games.js", "games.css"] },
     tv: { classic: true, scripts: ["tv-page.js", "tv-page.css"] },
+    tvpair: { classic: true, scripts: ["vendor/qrcode-1.4.4.js", "tv-pair.js", "tv-pair.css"] },
+    sendtv: { classic: true, scripts: ["send-tv.js", "send-tv.css"] },
     vault: { classic: false, scripts: ["vault.js", "vault.css"] },
     packages: { classic: false, scripts: ["packages.js", "packages.css"] },
     drive: { classic: false, scripts: ["drive.js", "drive.css"] },
     communities: { classic: true, scripts: ["communities.js", "communities.css"] },
-    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] }
+    servers: { classic: true, scripts: ["servers-ui.js", "servers.css"] },
+    inboxsms: { classic: true, scripts: ["inbox-sms.js", "inbox-sms.css", "inbox-mail.css"] },
+    inboxmail: { classic: true, scripts: ["inbox-mail.js", "inbox-sms.css", "inbox-mail.css"] }
   };
   var loads = {};
   var preloadStarted = false;

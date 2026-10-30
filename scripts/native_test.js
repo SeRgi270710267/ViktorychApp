@@ -69,7 +69,7 @@ assert.ok(manifest.protocol_handlers.some((row) => row.protocol === "web+viktory
 assert.strictEqual(manifest.share_target.method, "POST");
 assert.strictEqual(manifest.share_target.enctype, "multipart/form-data");
 assert.ok(manifest.share_target.params.files.some((row) => row.name === "media"));
-assert.deepStrictEqual(manifest.shortcuts.slice(0, 4).map((row) => row.name), ["Home", "Notifications", "Messages", "Post"]);
+assert.deepStrictEqual(manifest.shortcuts.slice(0, 4).map((row) => row.name), ["Home", "Notifications", "Inbox", "Post"]);
 
 const worker = read("sw.js");
 assert.ok(worker.includes("navigationPreload"));

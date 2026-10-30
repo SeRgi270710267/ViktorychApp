@@ -31,7 +31,7 @@ function staticChecks() {
   const external = read("app.js");
   const profile = external.slice(external.indexOf("function profileView"), external.indexOf("function statusView"));
   if (profile.includes("ProfileAbout") || profile.includes("?tab=about")) fail("external profiles must not grow an About tab");
-  if (!read("sw.js").includes('VERSION = "viktorych-a134-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a154-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok about layout rules");
 }
 
@@ -136,4 +136,6 @@ async function browserChecks() {
 staticChecks();
 /* Badge achievement toast and its settings ride along with the profile badges. */
 execFileSync(process.execPath, [path.join(root, "scripts", "achievement_test.js")], { stdio: "inherit" });
+/* Settings alerts reuse the same pop-out for warnings and the auto-open countdown. */
+execFileSync(process.execPath, [path.join(root, "scripts", "setting_alerts_test.js")], { stdio: "inherit" });
 await browserChecks();

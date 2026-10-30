@@ -1,0 +1,167 @@
+/* Settings > Connected keys > Connect your Discord (local). X-style sheet. */
+.dloc-section { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.dloc-h { display: flex; align-items: center; gap: 8px; }
+.dloc-h svg { width: 20px; height: 20px; flex: none; }
+.dloc-status { margin: 8px 0 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.dloc-status.is-calm { color: var(--muted); }
+.dloc-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.dloc-btn {
+  border: 0; background: var(--text); color: var(--bg); border-radius: 999px;
+  min-height: 36px; padding: 0 16px; font-family: inherit; font-weight: 700; font-size: 15px; line-height: 20px; cursor: pointer;
+}
+.dloc-btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.dloc-btn:disabled { opacity: 0.5; cursor: default; }
+.dloc-btn:focus-visible, .dloc-row:focus-visible, .dloc-ch:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.dloc-note { color: var(--muted); font-size: 13px; }
+.dloc-calm {
+  margin: 10px 0 0; padding: 12px 14px; border: 1px solid var(--line);
+  border-radius: 12px; background: rgba(29, 155, 240, 0.06);
+}
+.dloc-calm p { margin: 0; color: var(--text); font-size: 14px; line-height: 19px; }
+#dloc-host {
+  position: fixed; inset: 0; z-index: 85; background: rgba(91, 112, 131, 0.4);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.dloc-sheet {
+  width: min(600px, 100%); max-height: min(92vh, 760px); overflow: auto;
+  background: var(--bg); color: var(--text); border-radius: 16px 16px 0 0;
+  padding: 8px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+.dloc-sheet header, .dloc-pop-card header { display: flex; align-items: center; justify-content: space-between; min-height: 53px; }
+.dloc-sheet header b, .dloc-pop-card header b { font-size: 20px; line-height: 24px; font-weight: 800; }
+.dloc-x { border: 0; background: transparent; color: var(--text); font-size: 26px; line-height: 1; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
+.dloc-x:hover { background: rgba(239, 243, 244, 0.1); }
+.dloc-warn { margin: 0 0 6px; font-size: 15px; line-height: 20px; color: var(--text); }
+.dloc-hint { margin: 6px 0; color: var(--muted); font-size: 13px; line-height: 17px; }
+.dloc-err { margin: 6px 0; color: #f4212e; font-size: 13px; min-height: 0; }
+.dloc-err:empty { display: none; }
+.dloc-note { display: block; margin: 6px 0; color: var(--muted); }
+.dloc-key { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; align-items: center; }
+.dloc-label { width: 100%; font-size: 13px; color: var(--muted); }
+.dloc-key input {
+  flex: 1; min-width: 0; min-height: 40px; border: 1px solid var(--line); background: transparent;
+  color: var(--text); border-radius: 4px; padding: 8px 12px; font-family: inherit; font-size: 15px; line-height: 20px;
+}
+.dloc-key input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.dloc-me { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+.dloc-me div { flex: 1; display: flex; flex-direction: column; }
+.dloc-me span { color: var(--muted); font-size: 13px; }
+.dloc-tabs { display: flex; border-bottom: 1px solid var(--line); margin: 8px -16px 4px; }
+.dloc-tabs button {
+  flex: 1; border: 0; background: transparent; color: var(--muted); min-height: 53px;
+  font-family: inherit; font-weight: 500; font-size: 15px; cursor: pointer; position: relative;
+}
+.dloc-tabs button[aria-selected="true"] { color: var(--text); font-weight: 700; }
+.dloc-tabs button[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+  width: 56px; height: 4px; border-radius: 999px; background: var(--blue);
+}
+.dloc-list { display: flex; flex-direction: column; margin: 0 -16px; }
+.dloc-row, .dloc-ch {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  border: 0; background: transparent; color: var(--text); padding: 12px 16px; font: inherit; cursor: pointer;
+}
+.dloc-row:hover, .dloc-ch:hover { background: rgba(231, 233, 234, 0.03); }
+.dloc-row b, .dloc-ch b { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dloc-ch span { color: var(--muted); }
+.dloc-ch em { color: var(--muted); font-style: normal; font-size: 13px; }
+.dloc-av {
+  width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none;
+  background: #2f3336; color: var(--text); display: grid; place-items: center; font-weight: 700; font-size: 14px;
+}
+.dloc-sub { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+.dloc-sub b { font-size: 17px; }
+.dloc-back { border: 0; background: transparent; color: var(--text); font-size: 28px; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
+.dloc-msgs { list-style: none; margin: 0 -16px; padding: 0; }
+.dloc-msgs li { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.dloc-msgs p { margin: 0; }
+.dloc-msgs time { color: var(--muted); font-size: 13px; }
+.dloc-txt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 20px; margin-top: 2px !important; }
+.dloc-sheet h3 { margin: 20px 0 4px; font-size: 17px; font-weight: 800; }
+.dloc-invite { display: flex; gap: 12px; align-items: center; margin: 12px 0; }
+.dloc-invite div { display: flex; flex-direction: column; }
+.dloc-invite span { color: var(--muted); font-size: 13px; }
+.dloc-link {
+  display: inline-block; margin-top: 16px; border: 0; background: transparent; padding: 0;
+  color: var(--link, var(--blue)); font-family: inherit; font-weight: 600; font-size: 15px; cursor: pointer; text-decoration: none;
+}
+.dloc-link.danger { display: block; color: #f4212e; }
+.dloc-pop {
+  position: fixed; inset: 0; z-index: 86; background: rgba(91, 112, 131, 0.4);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.dloc-pop-card { width: min(420px, 100%); background: var(--bg); color: var(--text); border-radius: 16px; padding: 4px 16px 20px; }
+.dloc-hc { min-height: 80px; margin: 8px 0; display: flex; justify-content: center; }
+/* Composer: X.com reply composer look. */
+.dloc-msgs li { position: relative; }
+.dloc-msgs li.is-pending .dloc-txt { opacity: 0.6; }
+.dloc-who {
+  border: 0; background: transparent; padding: 0; color: var(--text); font: inherit; font-weight: 700; cursor: pointer;
+}
+.dloc-who:hover { text-decoration: underline; }
+.dloc-re, .dloc-replying { margin: 2px 0 0 !important; color: var(--muted); font-size: 15px; line-height: 20px; }
+.dloc-re span, .dloc-replying span { color: var(--link, var(--blue)); }
+.dloc-sending, .dloc-failed { margin: 4px 0 0 !important; font-size: 13px; color: var(--muted); }
+.dloc-failed { color: #f4212e; }
+.dloc-retry { border: 0; background: transparent; padding: 0; color: var(--link, var(--blue)); font: inherit; font-weight: 700; cursor: pointer; }
+.dloc-acts-row { display: flex; margin: 4px 0 -6px -8px; }
+.dloc-ic {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%;
+  background: transparent; color: var(--muted); cursor: pointer; padding: 0;
+}
+.dloc-ic svg { width: 18.75px; height: 18.75px; }
+.dloc-ic:hover { color: var(--blue); background: rgba(29, 155, 240, 0.1); }
+.dloc-ic.blue { color: var(--blue); }
+.dloc-compose {
+  position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom, 0px)); z-index: 1;
+  margin: 0 -16px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg); border-top: 1px solid var(--line);
+}
+.dloc-replying { display: flex; align-items: center; gap: 4px; padding-left: 52px; }
+.dloc-replying span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dloc-x.sm { width: 28px; height: 28px; font-size: 20px; color: var(--muted); }
+.dloc-compose-row { display: flex; gap: 12px; align-items: flex-start; padding-top: 4px; }
+.dloc-compose textarea {
+  flex: 1; min-width: 0; min-height: 40px; max-height: 200px; resize: none; border: 0; outline: none;
+  background: transparent; color: var(--text); font-family: inherit; font-size: 20px; line-height: 24px;
+  padding: 8px 0; overflow-y: auto;
+}
+.dloc-compose textarea::placeholder { color: var(--muted); }
+.dloc-compose-bar { display: flex; align-items: center; gap: 8px; padding-left: 44px; margin-top: 4px; }
+.dloc-count { margin-left: auto; color: var(--muted); font-size: 13px; }
+.dloc-count.over { color: #f4212e; }
+.dloc-post {
+  border: 0; border-radius: 9999px; background: var(--blue); color: #fff;
+  min-height: 36px; min-width: 36px; padding: 0 16px; font-family: inherit; font-weight: 700; font-size: 15px; line-height: 20px;
+  cursor: pointer; transition: background-color 0.2s;
+}
+.dloc-post:hover:not(:disabled) { background: #1a8cd8; }
+.dloc-post:disabled { opacity: 0.5; cursor: default; }
+.dloc-post:focus-visible, .dloc-ic:focus-visible, .dloc-who:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.dloc-send-note { margin: 8px 0 0; padding-left: 52px; color: var(--muted); font-size: 13px; line-height: 17px; }
+.dloc-send-note:empty { display: none; }
+.dloc-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin: 8px 0 0 44px; }
+.dloc-emoji-grid button {
+  border: 0; background: transparent; border-radius: 8px; font-size: 22px; line-height: 1; height: 38px; cursor: pointer;
+}
+.dloc-emoji-grid button:hover { background: rgba(29, 155, 240, 0.1); }
+.dloc-self {
+  margin: 4px 0 8px; padding: 12px 14px; border: 1px solid var(--line);
+  border-radius: 12px; background: rgba(29, 155, 240, 0.06);
+}
+.dloc-self p { margin: 0; color: var(--text); font-size: 14px; line-height: 19px; }
+.dloc-pop-card .dloc-post { width: 100%; margin-top: 8px; min-height: 44px; }
+@media (min-width: 700px) {
+  #dloc-host { align-items: center; }
+  .dloc-sheet { border-radius: 16px; }
+}
+
+.dloc-get { margin: 12px 0 4px; }
+.dloc-get .dloc-btn { width: 100%; }
+.dloc-get .dloc-hint { margin-top: 8px; }
+.dloc-acts .dloc-btn + .dloc-btn { margin-left: 8px; }
+@media (max-width: 420px) {
+  .dloc-acts { display: flex; flex-direction: column; gap: 8px; }
+  .dloc-acts .dloc-btn + .dloc-btn { margin-left: 0; }
+}

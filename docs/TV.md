@@ -264,6 +264,11 @@ jobs:
 - Android always asks to allow unknown sources once and to press Install; this cannot be skipped.
 - The site's language packs are English, Russian and Spanish. Hindi is in the app's own strings and the `/tv` page.
 
+## Controller play (app 1.2.0)
+
+The app plays ReGone with an Xbox, PlayStation or other controller in its own game screen
+(`viktorychtv://game/regone`). See [TV-CONTROLLER.md](TV-CONTROLLER.md).
+
 ## Signing key
 
 The key is never in the repo (`android-tv/.gitignore` blocks `*.jks`, `*.keystore` and `*.pass`).
@@ -288,4 +293,6 @@ androidbrowserhelper 2.5.0. Set `sdk.dir` in `android-tv/local.properties` (not 
 - `node scripts/tv_boot_test.js`: TV detection, defaults, switches, in-app detection and the published files (in selftest).
 - `node scripts/tv_mode_test.mjs` (needs Playwright): a keyboard-only run on a Google TV user agent,
   covering the install card, D-pad focus, Enter, Back, the settings switches and the update banner.
+- `cd android-tv && gradle testDebugUnitTest`: the controller mapping (dead zone, look, remap, modes).
+- `node scripts/tv_controller_link_test.mjs` (needs Playwright): the Play with controller button and note.
 - `cd worker && npm test`: includes `test/tv-build.test.mjs` (sign-in, name rules, owner check, signed download, daily limit).

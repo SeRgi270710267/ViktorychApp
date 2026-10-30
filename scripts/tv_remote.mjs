@@ -243,7 +243,7 @@ async function tizen(browser) {
   info = await untilNav(page);
   assert(info.cls.indexOf("nav-item") >= 0, "ArrowLeft from the timeline opens the sidebar, got " + JSON.stringify(info));
   const openLabels = await page.locator(".nav-label").allInnerTexts();
-  assert(openLabels.indexOf("Home") >= 0 && openLabels.indexOf("Messages") >= 0, "sidebar keeps desktop labels");
+  assert(openLabels.indexOf("Home") >= 0 && openLabels.indexOf("Inbox") >= 0, "sidebar keeps desktop labels");
   await shot(page, "tv_desktop_nav_1080.png");
 
   for (let i = 0; i < 6; i++) {
@@ -267,7 +267,7 @@ async function tizen(browser) {
   if (info.cls.indexOf("nav-item") < 0) info = await untilNav(page);
   for (let i = 0; i < 8; i++) {
     info = await focusInfo(page);
-    if (info.label === "Messages" || info.text === "Messages") break;
+    if (info.label === "Inbox" || info.text === "Inbox") break;
     await press(page, info.cls.indexOf("nav-item") >= 0 ? "ArrowDown" : "ArrowLeft");
   }
   await page.keyboard.press("Enter");
