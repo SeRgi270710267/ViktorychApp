@@ -4,10 +4,15 @@
    non-extractable, so not even this page can read the raw key bytes back.
    Reads go straight from this device to discord.com (Discord answers CORS
    for any origin), never through our Worker, Render, D1, R2 or logs, and the
-   key is never shared. Reads are read-only, one at a time with a pause and
-   jitter, and stop on a 429 until Discord's retry_after has passed. A 401
-   stops everything and shows a calm "needs replacing" note. Joins only
-   start from a tap, and a captcha is solved by the user in a popup. */
+   key is never shared. Reads go one at a time with a pause and jitter, and
+   stop on a 429 until Discord's retry_after has passed. A 401 stops
+   everything and shows a calm "needs replacing" note. Joins only start from
+   a tap, and a captcha is solved by the user in a popup.
+   Sending: the person types a message and taps Post (or presses Enter).
+   One tap is one send. Nothing here sends on a timer, in bulk, on repeat or
+   as an automatic reply. Sends are spaced (1.5 s apart, a soft cap per
+   minute), a 429 shows a wait note and is never retried by itself, and a
+   captcha opens the same popup. A DM only opens from a tap on a person. */
 (function (root) {
   "use strict";
   var API = "https://discord.com/api/v10";
@@ -18,6 +23,11 @@
   var FRESH_MS = 10 * 60 * 1000;
   var JOIN_GAP_MS = 60 * 1000;
   var TEXT_TYPES = { 0: true, 5: true, 15: true };
+  var SEND_GAP_MS = 1500;
+  var SEND_PER_MIN = 8;
+  var DM_GAP_MS = 5000;
+  var MAX_LEN = 2000;
+  var EMOJI = ["😀", "😂", "🥲", "😍", "😎", "🤔", "😮", "😢", "🙏", "👍", "👎", "👏", "🔥", "🎉", "❤️", "💯"];
   var netFetch = root.fetch ? root.fetch.bind(root) : null;
 
   var state = {
@@ -42,7 +52,18 @@
     lastJoinAt: 0,
     captcha: null,
     captchaBusy: false,
-    pausedUntil: 0
+    pausedUntil: 0,
+    draft: "",
+    replyTo: null,
+    sending: false,
+    lastSendAt: 0,
+    sendTimes: [],
+    sendWaitUntil: 0,
+    sendNote: "",
+    emoji: false,
+    person: null,
+    dmBusy: false,
+    lastDmAt: 0
   };
 
   function tr(key, vars) { return root.t ? root.t(key, vars) : fill(key, vars); }
@@ -166,7 +187,7 @@
           var secs = Number(body && body.retry_after);
           var ms = (isFinite(secs) && secs > 0 ? secs * 1000 : 5000) + 500 + Math.random() * 1500;
           state.pausedUntil = Date.now() + Math.min(ms, 10 * 60 * 1000);
-          if (tries < 2 && ms <= 60 * 1000) return sleep(state.pausedUntil - Date.now()).then(function () { return send(path, opts, tries + 1); });
+          if (!opts.once && tries < 2 && ms <= 60 * 1000) return sleep(state.pausedUntil - Date.now()).then(function () { return send(path, opts, tries + 1); });
           throw err("slow", { wait: ms });
         }
         if (res.status === 401 && !opts.anon) {
@@ -265,23 +286,167 @@
       }).map(function (c) { return { id: snowflake(c.id), name: String(c.name || ""), cat: cats[c.parent_id] || "" }; });
     }).catch(function (e) { state.channels = []; failNote(e); }).then(paint);
   }
+  function trimMessage(m) {
+    var u = trimUser(m.author) || { id: "", name: "" };
+    var ref = m.referenced_message && trimUser(m.referenced_message.author);
+    return {
+      id: snowflake(m.id), uid: u.id, who: u.name, text: String(m.content || ""), at: String(m.timestamp || ""),
+      files: (m.attachments || []).length + (m.embeds || []).length,
+      re: ref && ref.name ? ref.name : ""
+    };
+  }
   function openChannel(id, name, back) {
     if (!snowflake(id)) return;
     state.channel = { id: id, name: name, back: back };
+    state.draft = "";
+    state.replyTo = null;
+    state.sendNote = "";
+    state.emoji = false;
+    state.person = null;
     state.view = "channel";
     state.messages = null;
     state.err = "";
     paint();
     discord("/channels/" + id + "/messages?limit=25").then(function (list) {
-      state.messages = (list || []).map(function (m) {
-        var u = trimUser(m.author) || { name: "" };
-        return { id: snowflake(m.id), who: u.name, text: String(m.content || ""), at: String(m.timestamp || ""), files: (m.attachments || []).length + (m.embeds || []).length };
-      }).reverse();
+      if (!state.channel || state.channel.id !== id) return;
+      state.messages = (list || []).map(trimMessage).reverse();
     }).catch(function (e) {
       state.messages = [];
       if (e && e.code === "http" && (e.status === 403 || e.status === 404)) state.err = tr("This account can’t read that channel.");
       else failNote(e);
     }).then(paint);
+  }
+
+  /* ---------- send (one per human tap or Enter) ---------- */
+  function makeNonce() {
+    /* A snowflake-shaped number so Discord can match the echo to this send. */
+    var n = String(Date.now() - 1420070400000) + String(Math.floor(Math.random() * 1e6)).padStart(6, "0");
+    return n.slice(0, 19);
+  }
+  function sendGuard(now) {
+    if (state.sendWaitUntil > now) return tr("Discord asked to wait. You can send again in {n} seconds.", { n: Math.ceil((state.sendWaitUntil - now) / 1000) });
+    if (now - state.lastSendAt < SEND_GAP_MS) return tr("One message at a time. Try again in a moment.");
+    state.sendTimes = state.sendTimes.filter(function (t) { return now - t < 60 * 1000; });
+    if (state.sendTimes.length >= SEND_PER_MIN) {
+      return tr("That’s a lot of messages this minute. You can send again in {n} seconds.", { n: Math.ceil((state.sendTimes[0] + 60 * 1000 - now) / 1000) });
+    }
+    return "";
+  }
+  function findPending(nonce) {
+    return (state.messages || []).filter(function (m) { return m.nonce === nonce; })[0] || null;
+  }
+  /* Called only from the composer's submit (a tap on Post or Enter) and from a
+     tap on "Try again" on a message that didn't go out. */
+  function sendMessage(text, retryNonce) {
+    var ch = state.channel;
+    if (!ch || !snowflake(ch.id) || state.sending || state.status !== "ok") return Promise.resolve(false);
+    var retry = retryNonce ? findPending(retryNonce) : null;
+    if (retryNonce && (!retry || !retry.failed)) return Promise.resolve(false);
+    text = retry ? retry.text : String(text || "").replace(/\s+$/, "").replace(/^\s*\n/, "");
+    if (!text.trim()) return Promise.resolve(false);
+    if (text.length > MAX_LEN) { state.sendNote = tr("Messages can be up to {n} characters.", { n: MAX_LEN }); paint(); return Promise.resolve(false); }
+    var now = Date.now();
+    var wait = sendGuard(now);
+    if (wait) { state.sendNote = wait; paint(); return Promise.resolve(false); }
+    state.lastSendAt = now;
+    state.sendTimes.push(now);
+    state.sendNote = "";
+    var msg = retry || {
+      id: "", uid: state.me ? state.me.id : "", who: state.me ? state.me.name : "", text: text, at: new Date().toISOString(), files: 0,
+      re: state.replyTo ? state.replyTo.who : "", reId: state.replyTo ? state.replyTo.id : "", nonce: makeNonce(), mine: true
+    };
+    msg.pending = true;
+    msg.failed = false;
+    if (!retry) {
+      state.messages = (state.messages || []).concat([msg]);
+      state.draft = "";
+      state.replyTo = null;
+      state.emoji = false;
+    }
+    paint();
+    scrollEnd();
+    return postMessage(ch, msg, null);
+  }
+  function postMessage(ch, msg, captchaHeaders) {
+    var body = { content: msg.text, nonce: msg.nonce, tts: false, flags: 0, allowed_mentions: { parse: ["users"], replied_user: true } };
+    if (msg.reId) body.message_reference = { message_id: msg.reId, channel_id: ch.id, fail_if_not_exists: false };
+    state.sending = true;
+    return send("/channels/" + ch.id + "/messages", { method: "POST", body: body, headers: captchaHeaders, once: true }, 0).then(function (out) {
+      var real = out ? trimMessage(out) : null;
+      msg.pending = false;
+      msg.failed = false;
+      if (real && real.id) { msg.id = real.id; msg.at = real.at || msg.at; msg.uid = real.uid || msg.uid; msg.who = real.who || msg.who; }
+      if (state.captcha && state.captcha.kind === "send") state.captcha = null;
+      return true;
+    }).catch(function (e) {
+      msg.pending = false;
+      msg.failed = true;
+      var b = e && e.body;
+      if (e && e.code === "http" && b && b.captcha_sitekey) {
+        state.captcha = {
+          kind: "send", nonce: msg.nonce, channel: ch.id,
+          sitekey: String(b.captcha_sitekey),
+          rqdata: b.captcha_rqdata ? String(b.captcha_rqdata) : "",
+          rqtoken: b.captcha_rqtoken ? String(b.captcha_rqtoken) : "",
+          session: b.captcha_session_id ? String(b.captcha_session_id) : "",
+          again: !!captchaHeaders
+        };
+        state.captchaBusy = false;
+        state.sendNote = tr("Discord wants a quick check before this message goes out.");
+      } else {
+        if (state.captcha && state.captcha.kind === "send") state.captcha = null;
+        state.sendNote = sendFailText(e);
+      }
+      return false;
+    }).then(function (sent) { state.sending = false; paint(); return sent; });
+  }
+  function sendFailText(e) {
+    var code = e && e.code;
+    var dc = e && e.body && Number(e.body.code);
+    if (code === "slow") {
+      var secs = Math.max(1, Math.ceil((Number(e.wait) || 5000) / 1000));
+      state.sendWaitUntil = Date.now() + secs * 1000;
+      return tr("Discord asked to wait. You can send again in {n} seconds.", { n: secs });
+    }
+    if (code === "replace") return "";
+    if (code === "http" && dc === 50007) return tr("Discord won’t deliver messages to this person from this account.");
+    if (code === "http" && (e.status === 403 || dc === 50013 || dc === 50001)) return tr("This account can’t send messages here.");
+    if (code === "http" && dc === 50035) return tr("Discord didn’t accept that message.");
+    return tr("Message not sent. Check your connection and tap Try again.");
+  }
+  function scrollEnd() {
+    if (typeof document === "undefined") return;
+    var sheet = document.querySelector(".dloc-sheet");
+    if (sheet) sheet.scrollTop = sheet.scrollHeight;
+  }
+
+  /* ---------- open a DM (only from a tap on a person) ---------- */
+  function openDm(person) {
+    if (!person || !snowflake(person.id) || state.dmBusy) return;
+    if (state.me && person.id === state.me.id) return;
+    var known = (state.dms || []).filter(function (c) { return c.people.length === 1 && c.people[0].id === person.id; })[0];
+    if (known) { state.person = null; openChannel(known.id, known.name, "dms"); return; }
+    var wait = state.lastDmAt + DM_GAP_MS - Date.now();
+    if (wait > 0) { state.err = tr("Wait {n} seconds before opening another chat.", { n: Math.ceil(wait / 1000) }); paint(); return; }
+    state.lastDmAt = Date.now();
+    state.dmBusy = true;
+    state.err = "";
+    paint();
+    discord("/users/@me/channels", { method: "POST", body: { recipients: [person.id] }, once: true }).then(function (c) {
+      if (!c || !snowflake(c.id)) throw err("http", { status: 500 });
+      var dm = trimDm(c);
+      if (!dm.name) dm.name = person.name;
+      state.dms = [dm].concat((state.dms || []).filter(function (x) { return x.id !== dm.id; }));
+      saveCache();
+      state.person = null;
+      state.dmBusy = false;
+      openChannel(dm.id, dm.name, "dms");
+    }).catch(function (e) {
+      state.dmBusy = false;
+      if (e && e.code === "http") state.err = tr("Discord didn’t open a chat with this person.");
+      else failNote(e);
+      paint();
+    });
   }
 
   /* ---------- save / remove ---------- */
@@ -326,6 +491,12 @@
     state.view = "servers";
     state.invite = null;
     state.captcha = null;
+    state.channel = null;
+    state.messages = null;
+    state.draft = "";
+    state.replyTo = null;
+    state.person = null;
+    state.sendNote = "";
     state.err = "";
     state.note = tr("Key removed from this device.");
     var closing = dbOpen ? dbOpen.then(function (d) { try { d.close(); } catch (e) { /* closed */ } }).catch(function () {}) : Promise.resolve();
@@ -438,7 +609,15 @@
           /* One join per human answer. */
           if (state.captcha !== want || state.captchaBusy || !answer) return;
           state.captchaBusy = true;
-          join({ "X-Captcha-Key": String(answer), "X-Captcha-Rqtoken": want.rqtoken, "X-Captcha-Session-Id": want.session });
+          var headers = { "X-Captcha-Key": String(answer), "X-Captcha-Rqtoken": want.rqtoken, "X-Captcha-Session-Id": want.session };
+          if (want.kind === "send") {
+            var msg = findPending(want.nonce);
+            if (!msg || !state.channel || state.channel.id !== want.channel) { state.captcha = null; paint(); return; }
+            msg.failed = false;
+            msg.pending = true;
+            paint();
+            postMessage(state.channel, msg, headers);
+          } else join(headers);
         },
         "expired-callback": function () { state.err = tr("The check expired. Solve it again."); paintNote(); },
         "error-callback": captchaFailed
@@ -534,21 +713,65 @@
     }
     return body;
   }
+  var ICON_REPLY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg>';
+  var ICON_EMOJI = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 9.5C8 8.119 8.672 7 9.5 7S11 8.119 11 9.5 10.328 12 9.5 12 8 10.881 8 9.5zm6.5 2.5c.828 0 1.5-1.119 1.5-2.5S15.328 7 14.5 7 13 8.119 13 9.5s.672 2.5 1.5 2.5zM12 16c-2.224 0-3.021-2.227-3.051-2.316l-1.897.633c.05.15 1.271 3.684 4.949 3.684s4.898-3.533 4.949-3.684l-1.896-.638c-.033.095-.83 2.322-3.053 2.322zm10.25-4.001c0 5.652-4.598 10.25-10.25 10.25S1.75 17.652 1.75 12 6.348 1.75 12 1.75 22.25 6.348 22.25 12zm-2 0c0-4.549-3.701-8.25-8.25-8.25S3.75 7.451 3.75 12s3.701 8.25 8.25 8.25 8.25-3.701 8.25-8.25z"/></svg>';
+  function msgRow(m) {
+    var when = "";
+    try { when = m.at ? new Date(m.at).toLocaleString(root.SI18n ? root.SI18n.locale() : undefined, { dateStyle: "short", timeStyle: "short" }) : ""; } catch (e) { when = ""; }
+    var mine = m.mine || (state.me && m.uid && m.uid === state.me.id);
+    var who = !mine && m.uid
+      ? '<button type="button" class="dloc-who" data-dloc="person" data-id="' + esc(m.uid) + '" data-name="' + esc(m.who) + '">' + esc(m.who) + "</button>"
+      : "<b>" + esc(m.who) + "</b>";
+    var status = m.pending ? '<p class="dloc-sending">' + esc(tr("Sending…")) + "</p>"
+      : m.failed ? '<p class="dloc-failed">' + esc(tr("Not sent.")) + ' <button type="button" class="dloc-retry" data-dloc="retry" data-nonce="' + esc(m.nonce) + '">' + esc(tr("Try again")) + "</button></p>"
+      : "";
+    return '<li class="' + (m.pending ? "is-pending" : "") + (m.failed ? " is-failed" : "") + '"' + (m.nonce ? ' data-nonce="' + esc(m.nonce) + '"' : "") + ">" +
+      "<p>" + who + " <time>" + esc(when) + "</time></p>" +
+      (m.re ? '<p class="dloc-re">' + esc(tr("Replying to")) + " <span>@" + esc(m.re) + "</span></p>" : "") +
+      (m.text ? '<p class="dloc-txt">' + esc(m.text) + "</p>" : "") +
+      (m.files ? '<p class="dloc-hint">' + esc(tr("Attachments: {n}", { n: m.files })) + "</p>" : "") +
+      status +
+      (m.id && !m.pending ? '<div class="dloc-acts-row"><button type="button" class="dloc-ic" data-dloc="reply" data-id="' + esc(m.id) + '" data-name="' + esc(m.who) + '" aria-label="' + esc(tr("Reply")) + '">' + ICON_REPLY + "</button></div>" : "") +
+      "</li>";
+  }
+  function composer() {
+    var ch = state.channel || {};
+    var r = state.replyTo;
+    var len = state.draft.length;
+    var over = len > MAX_LEN;
+    var empty = !state.draft.trim();
+    return '<form class="dloc-compose" data-dloc-form="send" autocomplete="off">' +
+      (r ? '<p class="dloc-replying">' + esc(tr("Replying to")) + " <span>@" + esc(r.who) + '</span><button type="button" class="dloc-x sm" data-dloc="reply-cancel" aria-label="' + esc(tr("Cancel reply")) + '">×</button></p>' : "") +
+      '<div class="dloc-compose-row">' + userIcon(state.me) +
+      '<textarea id="dloc-msg" rows="1" maxlength="' + (MAX_LEN + 200) + '" enterkeyhint="send" aria-label="' + esc(tr("Message")) + '" placeholder="' +
+      esc(r ? tr("Post your reply") : tr("Message {name}", { name: ch.name || "" })) + '">' + esc(state.draft) + "</textarea></div>" +
+      (state.emoji ? '<div class="dloc-emoji-grid" role="listbox" aria-label="' + esc(tr("Emoji")) + '">' + EMOJI.map(function (e) {
+        return '<button type="button" data-dloc="emoji-pick" data-e="' + esc(e) + '">' + esc(e) + "</button>";
+      }).join("") + "</div>" : "") +
+      '<div class="dloc-compose-bar"><button type="button" class="dloc-ic blue" data-dloc="emoji" aria-label="' + esc(tr("Emoji")) + '" aria-expanded="' + !!state.emoji + '">' + ICON_EMOJI + "</button>" +
+      '<span class="dloc-count' + (over ? " over" : "") + '">' + (len > MAX_LEN - 200 ? esc(String(MAX_LEN - len)) : "") + "</span>" +
+      '<button type="submit" class="dloc-post"' + (empty || over || state.sending ? " disabled" : "") + ">" + esc(r ? tr("Reply") : tr("Post")) + "</button></div>" +
+      '<p class="dloc-send-note" role="status" aria-live="polite">' + esc(state.sendNote) + "</p>" +
+      "</form>";
+  }
   function channelView() {
     var ch = state.channel || {};
     var head = '<button type="button" class="dloc-back" data-dloc="back" aria-label="' + esc(tr("Back")) + '">‹</button><b>' + esc(ch.name || "") + "</b>";
     var rows;
     if (!state.messages) rows = '<p class="dloc-hint">' + esc(tr("Loading…")) + "</p>";
     else if (!state.messages.length) rows = '<p class="dloc-hint">' + esc(tr("No messages to show.")) + "</p>";
-    else rows = '<ol class="dloc-msgs">' + state.messages.map(function (m) {
-      var when = "";
-      try { when = m.at ? new Date(m.at).toLocaleString(root.SI18n ? root.SI18n.locale() : undefined, { dateStyle: "short", timeStyle: "short" }) : ""; } catch (e) { when = ""; }
-      return "<li><p><b>" + esc(m.who) + "</b> <time>" + esc(when) + "</time></p>" +
-        (m.text ? '<p class="dloc-txt">' + esc(m.text) + "</p>" : "") +
-        (m.files ? '<p class="dloc-hint">' + esc(tr("Attachments: {n}", { n: m.files })) + "</p>" : "") + "</li>";
-    }).join("") + "</ol>";
+    else rows = '<ol class="dloc-msgs">' + state.messages.map(msgRow).join("") + "</ol>";
     return '<div class="dloc-sub">' + head + "</div>" +
-      '<p class="dloc-hint">' + esc(tr("Read-only. This app never sends messages.")) + "</p>" + rows;
+      '<p class="dloc-hint">' + esc(tr("Messages you post here go out from the spare account, one tap at a time.")) + "</p>" + rows +
+      (state.messages ? composer() : "") + (state.person ? personView() : "");
+  }
+  function personView() {
+    var p = state.person;
+    return '<div class="dloc-pop" role="dialog" aria-modal="true" aria-labelledby="dloc-person-h"><div class="dloc-pop-card">' +
+      '<header><b id="dloc-person-h">' + esc(p.name) + '</b><button type="button" class="dloc-x" data-dloc="person-close" aria-label="' + esc(tr("Close")) + '">×</button></header>' +
+      '<p class="dloc-hint">' + esc(tr("Start a direct message with this person from the spare account.")) + "</p>" +
+      '<button type="button" class="dloc-post" data-dloc="dm-open"' + (state.dmBusy ? " disabled" : "") + ">" + esc(state.dmBusy ? tr("Opening…") : tr("Message")) + "</button>" +
+      "</div></div>";
   }
   function guildView() {
     var g = state.guild || {};
@@ -563,14 +786,15 @@
   }
   function captchaView() {
     var c = state.captcha;
-    var url = "https://discord.com/invite/" + encodeURIComponent(c.code);
+    var sending = c.kind === "send";
+    var url = sending ? "https://discord.com/channels/@me" : "https://discord.com/invite/" + encodeURIComponent(c.code);
     return '<div class="dloc-pop" role="dialog" aria-modal="true" aria-labelledby="dloc-cap-h"><div class="dloc-pop-card">' +
       '<header><b id="dloc-cap-h">' + esc(tr("Discord wants a quick check")) + '</b><button type="button" class="dloc-x" data-dloc="cap-close" aria-label="' + esc(tr("Close")) + '">×</button></header>' +
       (c.broken
-        ? '<p class="dloc-hint">' + esc(tr("The check couldn’t load here. Open the invite in the Discord app with the spare account instead.")) + "</p>"
-        : '<p class="dloc-hint">' + esc(c.again ? tr("Discord didn’t accept that check. Solve the new one.") : tr("Solve it yourself to finish joining. Nothing solves it for you.")) + "</p>" +
+        ? '<p class="dloc-hint">' + esc(sending ? tr("The check couldn’t load here. Send this message in the Discord app instead.") : tr("The check couldn’t load here. Open the invite in the Discord app with the spare account instead.")) + "</p>"
+        : '<p class="dloc-hint">' + esc(c.again ? tr("Discord didn’t accept that check. Solve the new one.") : sending ? tr("Solve it yourself to send your message. Nothing solves it for you.") : tr("Solve it yourself to finish joining. Nothing solves it for you.")) + "</p>" +
           '<div id="dloc-hc" class="dloc-hc"></div>' +
-          (state.captchaBusy ? '<p class="dloc-hint">' + esc(tr("Joining…")) + "</p>" : "")) +
+          (state.captchaBusy ? '<p class="dloc-hint">' + esc(sending ? tr("Sending…") : tr("Joining…")) + "</p>" : "")) +
       '<a class="dloc-link" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open in Discord")) + "</a>" +
       "</div></div>";
   }
@@ -591,6 +815,9 @@
     return '<div class="dloc-sheet" role="dialog" aria-modal="true" aria-labelledby="dloc-title">' +
       '<header><b id="dloc-title">' + esc(tr("Connect your Discord (local)")) + '</b><button type="button" class="dloc-x" data-dloc="close" aria-label="' + esc(tr("Close")) + '">×</button></header>' +
       '<p class="dloc-warn">' + esc(warnText()) + "</p>" +
+      (!state.has || state.status === "replace" || state.view === "servers" || state.view === "dms"
+        ? '<div class="dloc-self"><p>' + esc(tr("You can read and send messages here as the spare account. Every message is one you type and send yourself. Discord may flag automated or self-bot use, so keep it to a spare account.")) + "</p></div>"
+        : "") +
       '<p class="dloc-hint">' + esc(tr("Requests go straight from this device to Discord. Our servers never see the key.")) + "</p>" +
       '<p class="dloc-err" aria-live="polite">' + esc(state.err) + "</p>" +
       (state.note ? '<p class="dloc-note">' + esc(state.note) + "</p>" : "") +
@@ -610,6 +837,10 @@
       host.id = "dloc-host";
       document.body.appendChild(host);
     }
+    var box = document.getElementById("dloc-msg");
+    var typing = box && document.activeElement === box ? { a: box.selectionStart, b: box.selectionEnd } : null;
+    var sheetEl = host.querySelector(".dloc-sheet");
+    var scrolled = sheetEl ? sheetEl.scrollTop : 0;
     var hc = document.getElementById("dloc-hc");
     var keepHc = hc && state.captcha && hc.getAttribute("data-on") && !state.captcha.broken ? hc : null;
     host.innerHTML = sheetHtml();
@@ -617,7 +848,43 @@
       var slot = document.getElementById("dloc-hc");
       if (slot) slot.parentNode.replaceChild(keepHc, slot);
     }
+    var sheetNew = host.querySelector(".dloc-sheet");
+    if (sheetNew && scrolled) sheetNew.scrollTop = scrolled;
+    var boxNew = document.getElementById("dloc-msg");
+    if (boxNew) {
+      fitBox(boxNew);
+      if (typing) {
+        try { boxNew.focus({ preventScroll: true }); boxNew.setSelectionRange(Math.min(typing.a, boxNew.value.length), Math.min(typing.b, boxNew.value.length)); } catch (e) { /* old browser */ }
+      }
+    }
     mountCaptcha();
+  }
+
+  function fitBox(el) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }
+  function syncComposer() {
+    var box = document.getElementById("dloc-msg");
+    if (!box) return;
+    state.draft = box.value;
+    fitBox(box);
+    var form = box.closest(".dloc-compose");
+    var post = form && form.querySelector(".dloc-post");
+    var over = state.draft.length > MAX_LEN;
+    if (post) post.disabled = !state.draft.trim() || over || state.sending;
+    var count = form && form.querySelector(".dloc-count");
+    if (count) { count.textContent = state.draft.length > MAX_LEN - 200 ? String(MAX_LEN - state.draft.length) : ""; count.classList.toggle("over", over); }
+  }
+  function insertEmoji(e) {
+    var box = document.getElementById("dloc-msg");
+    var v = state.draft;
+    var a = box ? box.selectionStart : v.length;
+    var b = box ? box.selectionEnd : v.length;
+    state.draft = v.slice(0, a) + e + v.slice(b);
+    paint();
+    var nb = document.getElementById("dloc-msg");
+    if (nb) { try { nb.focus({ preventScroll: true }); nb.setSelectionRange(a + e.length, a + e.length); } catch (x) { /* old browser */ } }
   }
 
   function open() {
@@ -635,6 +902,7 @@
   function close() {
     state.open = false;
     state.captcha = null;
+    state.person = null;
     paint();
   }
 
@@ -667,6 +935,18 @@
       paint();
     } else if (act === "join") join(null);
     else if (act === "cap-close") { state.captcha = null; state.captchaBusy = false; paint(); }
+    else if (act === "reply") {
+      var rid = snowflake(btn.getAttribute("data-id"));
+      if (rid) { state.replyTo = { id: rid, who: btn.getAttribute("data-name") || "" }; paint(); var rb = document.getElementById("dloc-msg"); if (rb) rb.focus(); }
+    } else if (act === "reply-cancel") { state.replyTo = null; paint(); }
+    else if (act === "emoji") { state.emoji = !state.emoji; paint(); }
+    else if (act === "emoji-pick") insertEmoji(btn.getAttribute("data-e") || "");
+    else if (act === "retry") sendMessage("", btn.getAttribute("data-nonce"));
+    else if (act === "person") {
+      var pid = snowflake(btn.getAttribute("data-id"));
+      if (pid && !(state.me && pid === state.me.id)) { state.person = { id: pid, name: btn.getAttribute("data-name") || "" }; paint(); }
+    } else if (act === "person-close") { state.person = null; paint(); }
+    else if (act === "dm-open") openDm(state.person);
   }
   function onSubmit(event) {
     var form = event.target && event.target.closest ? event.target.closest("[data-dloc-form]") : null;
@@ -678,14 +958,34 @@
       var raw = input ? input.value : "";
       if (input) input.value = "";
       connect(raw);
+    } else if (kind === "send") {
+      var box = document.getElementById("dloc-msg");
+      if (box) state.draft = box.value;
+      sendMessage(state.draft, null);
     } else if (kind === "invite") {
       var inv = document.getElementById("dloc-inv");
       lookUp(inv ? inv.value : "");
     }
   }
   function onKey(event) {
-    if (event.key !== "Escape" || !state.open) return;
-    if (state.captcha) { state.captcha = null; paint(); } else close();
+    if (!state.open) return;
+    var t = event.target;
+    if (event.key === "Enter" && t && t.id === "dloc-msg" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
+      /* Enter sends once; holding the key down never sends again. */
+      event.preventDefault();
+      if (event.repeat) return;
+      state.draft = t.value;
+      sendMessage(state.draft, null);
+      return;
+    }
+    if (event.key !== "Escape") return;
+    if (state.captcha) { state.captcha = null; paint(); }
+    else if (state.person) { state.person = null; paint(); }
+    else if (state.replyTo) { state.replyTo = null; paint(); }
+    else close();
+  }
+  function onInput(event) {
+    if (event.target && event.target.id === "dloc-msg") syncComposer();
   }
 
   var api = {
@@ -695,13 +995,14 @@
     remove: remove,
     connect: connect,
     status: function () { return boot().then(function () { return state.status; }); },
-    _test: { cleanKey: cleanKey, inviteCode: inviteCode, state: state, unseal: unseal, get: get, API: API }
+    _test: { cleanKey: cleanKey, inviteCode: inviteCode, state: state, unseal: unseal, get: get, API: API, SEND_GAP_MS: SEND_GAP_MS, SEND_PER_MIN: SEND_PER_MIN }
   };
   root.DiscordLocal = api;
   if (typeof document !== "undefined") {
     document.addEventListener("click", onClick, true);
     document.addEventListener("submit", onSubmit, true);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("input", onInput);
     root.addEventListener("viktorych-account-deleted", function () { remove(); });
   }
 })(typeof window !== "undefined" ? window : this);
