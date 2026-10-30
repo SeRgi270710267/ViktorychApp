@@ -3,6 +3,7 @@
    Block, mute, and a hidden flag keep people and reported posts out of the
    timeline. The moderation list is owner-only. */
 
+import { lockedAccountSet } from "./locked-sql.js";
 import { resolveName, viewerHandle } from "./usernames.js";
 import { viewerDisplay } from "./name-rules.js";
 import { awardActivity, clawback, giftForPost } from "./points.js";
@@ -510,6 +511,9 @@ async function listPosts(request, env, deps) {
     ? await env.DB.prepare(select + " AND p.author_id = ? AND p.created_at <= ? ORDER BY p.created_at DESC LIMIT 60").bind(now, author, upTo).all()
     : await env.DB.prepare(select + " ORDER BY p.created_at DESC LIMIT 60").bind(now).all();
   const skip = await hiddenAuthors(env, session.public_id);
+  // Home and For You leave out locked follows; their posts show in the
+  // Locked area only.
+  if (!author) (await lockedAccountSet(env, session.public_id)).forEach((id) => skip.add(id));
   const rows = ((listed && listed.results) || []).filter((row) => !skip.has(row.author_id));
   const sets = await audienceSets(env, session.public_id, rows.map((row) => row.author_id));
   const visible = [];
