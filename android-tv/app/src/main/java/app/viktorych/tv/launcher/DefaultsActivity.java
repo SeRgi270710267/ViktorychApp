@@ -13,7 +13,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import app.viktorych.tv.R;
+import app.viktorych.tv.ime.KeyboardDefaults;
 import app.viktorych.tv.player.MediaDefaults;
+import app.viktorych.tv.search.SearchDefaults;
 
 /** "Make ViktorychTV your default": one row per TV job, each with a Set
  *  button that opens Android's own picker. Nothing changes until the user
@@ -36,7 +38,10 @@ public class DefaultsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Coming back from the TV's settings: stay on the row that sent us there.
+        int keep = list == null || list.getFocusedChild() == null ? -1 : list.indexOfChild(list.getFocusedChild()) - 2;
         render();
+        if (keep > 0) focusRow(keep);
     }
 
     @Override
@@ -112,11 +117,39 @@ public class DefaultsActivity extends Activity {
         dream.setOnFocusChangeListener((v, f) -> { if (f) showDreamDetails(); });
         list.addView(dream, gap());
 
+        // Remote keyboard (ime/TvKeyboard).
+        boolean kbOn = KeyboardDefaults.enabled(this);
+        View keyboard = row(R.drawable.kb_keyboard, getString(R.string.def_keyboard),
+            getString(kbOn ? R.string.def_on : R.string.def_off), kbOn);
+        keyboard.setOnClickListener(v -> {
+            KeyboardDefaults.enable(this, true);
+            KeyboardDefaults.nextStep(this);
+            render();
+            focusRow(3);
+        });
+        keyboard.setOnFocusChangeListener((v, f) -> { if (f) showKeyboardDetails(); });
+        list.addView(keyboard, gap());
+
+        // Feed search (search/).
+        boolean searchOn = SearchDefaults.enabled(this);
+        View search = row(R.drawable.kb_find, getString(R.string.def_search),
+            getString(searchOn ? R.string.def_on : R.string.def_off), searchOn);
+        search.setOnClickListener(v -> {
+            boolean was = SearchDefaults.enabled(this);
+            SearchDefaults.enable(this, true);
+            if (was) SearchDefaults.open(this);
+            else { render(); focusRow(4); }
+        });
+        search.setOnFocusChangeListener((v, f) -> { if (f) showSearchDetails(); });
+        list.addView(search, gap());
+
         setContentView(root);
         if (guideFor) showGuide(); else showHomeDetails(on);
         String want = getIntent() == null ? null : getIntent().getStringExtra("focus");
         if ("dream".equals(want)) { dream.requestFocus(); getIntent().removeExtra("focus"); }
         else if ("player".equals(want)) { player.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("keyboard".equals(want)) { keyboard.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("search".equals(want)) { search.requestFocus(); getIntent().removeExtra("focus"); }
         else home.requestFocus();
     }
 
@@ -167,6 +200,47 @@ public class DefaultsActivity extends Activity {
                 MediaDefaults.enable(this, MediaDefaults.dream(this), false);
                 render();
                 focusRow(2);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showKeyboardDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.kb_keyboard, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_keyboard), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_keyboard_desc), 13, Ui.TEXT_DIM, 10);
+        if (KeyboardDefaults.enabled(this)) {
+            if (!KeyboardDefaults.allowedBySystem(this)) {
+                addSideText(col, getString(R.string.def_keyboard_allow), 13, 0xFF8AB4F8, 14);
+            } else if (!KeyboardDefaults.isDefault(this)) {
+                addSideText(col, getString(R.string.def_keyboard_pick), 13, 0xFF8AB4F8, 14);
+            }
+            if (!KeyboardDefaults.isDefault(this)) sideButton(col, getString(R.string.def_keyboard_next), () -> KeyboardDefaults.nextStep(this));
+            sideButton(col, getString(R.string.def_keyboard_settings), () -> KeyboardDefaults.openKeyboardSettings(this));
+            sideButton(col, getString(R.string.def_keyboard_off), () -> {
+                if (KeyboardDefaults.isDefault(this)) KeyboardDefaults.showPicker(this);
+                KeyboardDefaults.enable(this, false);
+                render();
+                focusRow(3);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showSearchDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.kb_find, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_search), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_search_desc), 13, Ui.TEXT_DIM, 10);
+        if (SearchDefaults.enabled(this)) {
+            sideButton(col, getString(R.string.def_search_try), () -> SearchDefaults.open(this));
+            sideButton(col, getString(R.string.def_search_off), () -> {
+                SearchDefaults.enable(this, false);
+                render();
+                focusRow(4);
             });
         }
         side.addView(col);
