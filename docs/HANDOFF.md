@@ -86,6 +86,10 @@ The TV can also ask an account by username: the Worker sends an "Approve sign-in
 
 The TV app 1.2.0 (versionCode 3) plays ReGone with a controller in its own WebView screen (`GameActivity`, `viktorychtv://game/regone`); controller input becomes real key presses and touches. Design, layout, limits and the device test checklist: [TV-CONTROLLER.md](TV-CONTROLLER.md). Still needs a real-TV test: whether ReGone reads keys while its touch controls are on (fallback: Menu > Move with > On-screen joystick). After the PR merges, upload `tv/ViktorychTV.apk` to the latest GitHub release as `ViktorychTV.apk`.
 
+## NZlay Forums community
+
+The NZlay forum (`nzlay.com`, SocialEngine) is in the Communities tab as an X-style Community: live reads through the Worker, and post/reply after the user signs in on their own device (session stored encrypted on-device only, like the Discord local keys; a no-storage/no-logging Worker relay carries the cookie). ReGone links (online + Play header, author rank/stats badges, room-join chips, Games link-back) each sit behind their own switch. Flags `nzlay_forum`, `nzlay_forum_post`, `nzlay_forum_regone` (all default on). Live posting is **not yet verified against a real NZlay account** (signing up / posting was not authorized). Details: [NZLAY-FORUM.md](NZLAY-FORUM.md).
+
 ## 6. Gotchas
 
 - `scripts/handle_guard.py` rejects any token from the private owner catalog, including product and assistant names used as handles. Keep docs neutral.

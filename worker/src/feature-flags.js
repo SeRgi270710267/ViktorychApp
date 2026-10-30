@@ -17,6 +17,11 @@ export const FEATURES = {
   regone_online: { paths: ["/v1/games/regone/online"] },
   regone_rooms: { paths: ["/v1/games/regone/rooms", "/v1/games/rooms"] },
   regone_profile_stats: { paths: ["/v1/games/regone/profile-stats"] },
+  // NZlay's forum in Communities (read through the Worker), signing in to
+  // post and reply there, and the ReGone links inside it. On by default.
+  nzlay_forum: { paths: ["/v1/nzlay/forum"] },
+  nzlay_forum_post: { paths: ["/v1/nzlay/relay"] },
+  nzlay_forum_regone: { paths: ["/v1/games/regone/forum-badges"] },
   // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
   nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true }
 };
