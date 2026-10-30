@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Heart eyes",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/heart_eyes.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "heart_eyes"
+    },
+    {
+      "trait_type": "Index",
+      "value": 28
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreic5zcgk4mmejvgzg3qdk5igkwnnop622okwcjbezpienepemq5pwu",
+  "image_sha256": "5dc88cae31844d4d936e0357506559ad73fdad395612424cbd04691e4643afb5"
+}

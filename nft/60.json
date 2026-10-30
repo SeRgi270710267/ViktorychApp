@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Sparkling heart",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/sparkling_heart.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "sparkling_heart"
+    },
+    {
+      "trait_type": "Index",
+      "value": 60
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreib4svuqq2wnsyya7zxzhx2g6g4hxrwtfz4qbrxrqpfci4qebx3mcm",
+  "image_sha256": "3c9569086acd96300fe6f93df46f1b87bc6d32e7900c6f183ca2472040df6c13"
+}

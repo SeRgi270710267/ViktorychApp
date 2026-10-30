@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Blowing a kiss",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/blow_kiss.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "blow_kiss"
+    },
+    {
+      "trait_type": "Index",
+      "value": 6
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreiea3lp7fo4iso3spbuumfomtenjpmksxmjiqyipfz62zyg6mes6n4",
+  "image_sha256": "80dadff2bb8893b7278694615cc991a97b152bb1288610f2e7dace0de6125e6f"
+}

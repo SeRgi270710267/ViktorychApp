@@ -4944,5 +4944,15 @@ SI18n.addPack("hi", {
   "Open the newsletter’s website": "न्यूज़लेटर की वेबसाइट खोलें",
   "Paste a newsletter link": "न्यूज़लेटर का लिंक चिपकाएँ",
   "Add a newsletter": "न्यूज़लेटर जोड़ें",
-  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp संग्रह या फ़ीड वाली कोई भी साइट। अंक पोस्ट की तरह दिखते हैं।"
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp संग्रह या फ़ीड वाली कोई भी साइट। अंक पोस्ट की तरह दिखते हैं।",
+  "Gift NFTs": "उपहार NFT",
+  "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.": "लोगों को हमारी अपनी कला वाले उपहार का संग्रहणीय NFT अपने वॉलेट से बनाने देता है। जब तक आप इसे चालू करके कॉन्ट्रैक्ट सेट नहीं करते, यह बंद रहता है।",
+  "Make it an NFT": "इसे NFT बनाएँ",
+  "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.": "इससे {chain} पर इस उपहार का एक संग्रहणीय NFT बनेगा। नेटवर्क शुल्क आपका वॉलेट देता है। यह एक संग्रहणीय वस्तु है, निवेश नहीं, और हम इसे कभी वापस नहीं खरीदते या इसके लिए भुगतान नहीं करते। आपका उपहार हर हाल में यहीं रहेगा।",
+  "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.": "कोई वॉलेट नहीं मिला। यह पेज अपने वॉलेट ऐप के ब्राउज़र में खोलें, या वॉलेट एक्सटेंशन जोड़ें।",
+  "This gift is already an NFT.": "यह उपहार पहले से NFT है।",
+  "Confirm in your wallet…": "अपने वॉलेट में पुष्टि करें…",
+  "Sent to the network. It shows in your wallet once it is confirmed.": "नेटवर्क को भेज दिया गया। पुष्टि होने पर यह आपके वॉलेट में दिखेगा।",
+  "Cancelled.": "रद्द किया गया।",
+  "Couldn't make this gift an NFT.": "इस उपहार को NFT नहीं बनाया जा सका।"
 });

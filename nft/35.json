@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Leaf gift",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/leaf.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "leaf"
+    },
+    {
+      "trait_type": "Index",
+      "value": 35
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreih6zuak3rb65guxzngxxti7rio63ihmrafrgifqkc3cmuaj5mucu4",
+  "image_sha256": "fecd00adc43ee9a97cb4d7bcd1f8a1deda0ec880b1320b050b6265009eb282a7"
+}

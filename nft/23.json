@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Diamond",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/gem.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "gem"
+    },
+    {
+      "trait_type": "Index",
+      "value": 23
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreifo4lat5aph3p2ksmhnivva7nfhviisc7aw2lorh2v2lb62wwrdg4",
+  "image_sha256": "aee2c13e81e7dbf4a930ed456a0fb4a7aa11217c16d2dd13eaba587dab5a2337"
+}

@@ -4957,5 +4957,15 @@ SI18n.addPack("ru", {
   "Open the newsletter’s website": "Открыть сайт рассылки",
   "Paste a newsletter link": "Вставьте ссылку на рассылку",
   "Add a newsletter": "Добавить рассылку",
-  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, архивы Mailchimp или любой сайт с лентой. Выпуски появляются как посты."
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, архивы Mailchimp или любой сайт с лентой. Выпуски появляются как посты.",
+  "Gift NFTs": "NFT из подарков",
+  "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.": "Позволяет сделать коллекционный NFT из подарка с нашим собственным рисунком, из своего кошелька. Выключено, пока вы не включите это и не укажете контракт.",
+  "Make it an NFT": "Сделать NFT",
+  "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.": "Будет создан коллекционный NFT этого подарка в сети {chain}. Комиссию сети оплачивает ваш кошелёк. Это коллекционный предмет, а не инвестиция: мы никогда не выкупаем его и ничего за него не выплачиваем. Подарок в любом случае останется здесь.",
+  "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.": "Кошелёк не найден. Откройте эту страницу в браузере приложения кошелька или добавьте расширение кошелька.",
+  "This gift is already an NFT.": "Этот подарок уже стал NFT.",
+  "Confirm in your wallet…": "Подтвердите в кошельке…",
+  "Sent to the network. It shows in your wallet once it is confirmed.": "Отправлено в сеть. Появится в кошельке после подтверждения.",
+  "Cancelled.": "Отменено.",
+  "Couldn't make this gift an NFT.": "Не удалось сделать NFT из этого подарка."
 });

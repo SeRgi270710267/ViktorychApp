@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Dog",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/dog.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "dog"
+    },
+    {
+      "trait_type": "Index",
+      "value": 19
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreichlzl5r3mdmguvacnkhaculdnnaxrj3roq6dz4mnal576rbrazte",
+  "image_sha256": "475e57d8ed8361a95009aa3805458dad05e29dc5d0f0f3c6340beffd10c41999"
+}
