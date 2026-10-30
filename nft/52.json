@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Ring",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/ring.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "ring"
+    },
+    {
+      "trait_type": "Index",
+      "value": 52
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreieqqveelqmasenmqhriai5i7i4pfnc3sxqfm6qootzhzxbfhhauua",
+  "image_sha256": "90854845c180911ac81e28023a8fa38f2b45b95e0567a0e74f27cdc2539c14a0"
+}

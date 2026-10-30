@@ -4,7 +4,7 @@ const VERSION = "viktorych-a160-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T09:23:13Z-setup-settings
+// cache-bust: 2026-10-30T09:31:08Z-signup-retry
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -134,6 +134,7 @@ const SHELL_FILES = [
   "./shared/presence.js",
   "./about-ui.js",
   "./gifts-ui.js",
+  "./nft-ui.js",
   "./reactions.js",
   "./community-notes.js",
   "./shared/gift-catalog.js",

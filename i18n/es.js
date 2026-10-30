@@ -4961,5 +4961,15 @@ SI18n.addPack("es", {
   "Open the newsletter’s website": "Abrir el sitio web del boletín",
   "Paste a newsletter link": "Pega el enlace de un boletín",
   "Add a newsletter": "Añadir un boletín",
-  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, archivos de Mailchimp o cualquier sitio con feed. Los números aparecen como publicaciones."
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, archivos de Mailchimp o cualquier sitio con feed. Los números aparecen como publicaciones.",
+  "Gift NFTs": "NFT de regalos",
+  "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.": "Permite crear un NFT coleccionable de un regalo con nuestro propio arte, desde la propia cartera. Desactivado hasta que lo actives y configures el contrato.",
+  "Make it an NFT": "Convertir en NFT",
+  "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.": "Esto crea un NFT coleccionable de este regalo en {chain}. Tu cartera paga la comisión de la red. Es un coleccionable, no una inversión, y nunca lo recompramos ni pagamos por él. Tu regalo se queda aquí de todos modos.",
+  "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.": "No se encontró ninguna cartera. Abre esta página en el navegador de tu app de cartera o añade una extensión de cartera.",
+  "This gift is already an NFT.": "Este regalo ya es un NFT.",
+  "Confirm in your wallet…": "Confirma en tu cartera…",
+  "Sent to the network. It shows in your wallet once it is confirmed.": "Enviado a la red. Aparecerá en tu cartera cuando se confirme.",
+  "Cancelled.": "Cancelado.",
+  "Couldn't make this gift an NFT.": "No se pudo convertir este regalo en NFT."
 });

@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Hedgehog",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/hedgehog.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "hedgehog"
+    },
+    {
+      "trait_type": "Index",
+      "value": 29
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreifom7iooe5plzgoyjsrq2v573iczzytofg5m3t25vw4wdxw6hncga",
+  "image_sha256": "ae67d0e713af5e4cec265186abdfed02ce713714dd66e7aed6dcb0ef6f1da230"
+}

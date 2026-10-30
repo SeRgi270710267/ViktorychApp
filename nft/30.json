@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Hot drink",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/hot_drink.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "hot_drink"
+    },
+    {
+      "trait_type": "Index",
+      "value": 30
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreia2dc2pwjkdaw44iqlsm7kfb7xa2ujxzn5xwjju4wfs7aadkgylbm",
+  "image_sha256": "1a18b4fb254305b9c4417267d450fee0d5137cb7b7b2534e58b2f800351b0b0b"
+}
