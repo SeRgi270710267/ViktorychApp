@@ -4941,5 +4941,10 @@ SI18n.addPack("en", {
   "Privacy > Games": "Privacy > Games",
   "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "Unlink ReGone? Your ReGone name, rank and stats leave your profile.",
   "Usage didn't load": "Usage didn't load",
-  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers."
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.",
+  "The server took too long to answer. Try again in a minute.": "The server took too long to answer. Try again in a minute.",
+  "The security check didn't pass. Reload the page and try again.": "The security check didn't pass. Reload the page and try again.",
+  "Sign-up is temporarily unavailable. Try again in a few minutes.": "Sign-up is temporarily unavailable. Try again in a few minutes.",
+  "Something went wrong (error {code}). Try again.": "Something went wrong (error {code}). Try again.",
+  "The server is slow. Still trying…": "The server is slow. Still trying…"
 });

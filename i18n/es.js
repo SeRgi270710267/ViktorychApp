@@ -4944,5 +4944,10 @@ SI18n.addPack("es", {
   "Privacy > Games": "Privacidad > Juegos",
   "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "¿Desvincular ReGone? Tu nombre, rango y estadísticas de ReGone saldrán de tu perfil.",
   "Usage didn't load": "El uso no se cargó",
-  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "El servidor no respondió a tiempo. Tus servidores siguen funcionando; solo faltan los números de este panel."
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "El servidor no respondió a tiempo. Tus servidores siguen funcionando; solo faltan los números de este panel.",
+  "The server took too long to answer. Try again in a minute.": "El servidor tardó demasiado en responder. Inténtalo de nuevo en un minuto.",
+  "The security check didn't pass. Reload the page and try again.": "La comprobación de seguridad no se superó. Recarga la página e inténtalo de nuevo.",
+  "Sign-up is temporarily unavailable. Try again in a few minutes.": "El registro no está disponible por ahora. Inténtalo de nuevo en unos minutos.",
+  "Something went wrong (error {code}). Try again.": "Algo salió mal (error {code}). Inténtalo de nuevo.",
+  "The server is slow. Still trying…": "El servidor va lento. Seguimos intentándolo…"
 });

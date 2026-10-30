@@ -450,7 +450,9 @@
     return "";
   }
   function lang() {
-    return validLang(state.lang) || validLang(window.SI18n && window.SI18n.getLang && window.SI18n.getLang()) || "en";
+    // The language the page shows wins, so a title never stays in the
+    // browser's language while the rest of the screen is translated.
+    return validLang(window.SI18n && window.SI18n.getLang && window.SI18n.getLang()) || validLang(state.lang) || "en";
   }
   function t(key, vars) {
     var pack = STR[lang()] || STR.en;

@@ -4943,5 +4943,10 @@ SI18n.addPack("ru", {
   "Privacy > Games": "Конфиденциальность > Игры",
   "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "Отвязать ReGone? Имя, ранг и статистика ReGone исчезнут из профиля.",
   "Usage didn't load": "Не удалось загрузить использование",
-  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "Сервер не ответил вовремя. Ваши серверы продолжают работать, просто в этой панели пока нет цифр."
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "Сервер не ответил вовремя. Ваши серверы продолжают работать, просто в этой панели пока нет цифр.",
+  "The server took too long to answer. Try again in a minute.": "Сервер слишком долго не отвечал. Попробуйте ещё раз через минуту.",
+  "The security check didn't pass. Reload the page and try again.": "Проверка безопасности не пройдена. Обновите страницу и попробуйте ещё раз.",
+  "Sign-up is temporarily unavailable. Try again in a few minutes.": "Регистрация временно недоступна. Попробуйте ещё раз через несколько минут.",
+  "Something went wrong (error {code}). Try again.": "Что-то пошло не так (ошибка {code}). Попробуйте ещё раз.",
+  "The server is slow. Still trying…": "Сервер отвечает медленно. Продолжаем попытки…"
 });

@@ -49,7 +49,9 @@ function startServer() {
       if (url.pathname === "/accounts.config.js") {
         const body = "window.VIKTORYCH_ACCOUNTS = " + JSON.stringify({
           api: pageOrigin, gate: true, turnstileSiteKey: "",
-          emergencyHash: "f".repeat(64)
+          emergencyHash: "f".repeat(64),
+          // Short sign-up tries so the lost-answer test below runs quickly.
+          signupTryMs: [4000, 15000]
         }) + ";\n";
         res.writeHead(200, { "content-type": TYPES[".js"], "cache-control": "no-store" });
         res.end(body);
@@ -151,11 +153,34 @@ async function logOut(page) {
   });
 }
 
+// Right after a log out the sign-in wall can draw once more while the
+// server answers, and a Sign up click that lands on the old wall opens
+// nothing (seen on CI). Click again until the welcome step is up.
+async function openWelcome(page) {
+  const welcome = page.locator("#onb-layer [data-step='welcome'] [data-onb='next']");
+  for (let attempt = 0; ; attempt++) {
+    await page.getByRole("button", { name: "Sign up" }).first().click({ timeout: 15000 }).catch(() => {});
+    if (await welcome.waitFor({ timeout: 6000 }).then(() => true, () => false)) return;
+    if (attempt >= 2) throw new Error("Sign up never opened the welcome step");
+  }
+}
+
+// After Log in the sign-in form is drawn on the next frame; wait for the
+// number field rather than reading it straight away (it was null on CI).
+async function openLogin(page) {
+  await page.waitForFunction(() => !document.querySelector("#account-layer .acct-modal"), null, { timeout: 10000 }).catch(() => {});
+  for (let attempt = 0; ; attempt++) {
+    await page.getByRole("button", { name: "Log in" }).first().click({ timeout: 15000 }).catch(() => {});
+    if (await page.locator("#acct-accountNumber").waitFor({ timeout: 6000 }).then(() => true, () => false)) return;
+    if (attempt >= 2) throw new Error("Log in never showed the number field");
+  }
+}
+
 async function openSignup(page) {
   // Sign up opens the first-time setup, one step per screen: welcome,
   // language, a choice of how to start, then the account steps in the same
   // full-screen frame.
-  await page.getByRole("button", { name: "Sign up" }).first().click();
+  await openWelcome(page);
   // The welcome screen also offers a temporary account with its delete-time
   // picker; Back returns to the welcome screen.
   await page.locator("#onb-layer [data-step='welcome'] [data-onb='temp']").click({ timeout: 15000 });
@@ -372,6 +397,152 @@ async function quickFlow(page, viewport) {
     await page.evaluate(() => document.querySelector("[data-act='run-setup']").click());
     const theme = await page.locator("#onb-layer [data-step='theme']").waitFor({ timeout: 15000 }).then(() => true, () => false);
     if (!theme) notes.push(label + ": Run setup again did not open the theme step");
+  }
+  return notes;
+}
+
+// Temporary accounts in Spanish on a browser set to English: every word on
+// the screen is Spanish, a sign-up whose answer is lost is sent again and
+// gives back the same account, a failing server says what failed, and each
+// delete time (1 hour, 1 day, 7 days, 30 days, a picked date) is kept.
+const SPANISH = () => {
+  localStorage.setItem("viktorychapp-lang-user-picked", "1");
+  localStorage.setItem("superintelapp-lang", "es");
+  localStorage.setItem("viktorychapp-settings-v1", JSON.stringify({ version: 1, initialized: true, lang: "es" }));
+};
+async function freshSpanish(page) {
+  // A new session reloads the app on its own, which can cut a navigation
+  // short; start over from a page load until a signed-out wall is up.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await page.goto(pageOrigin + "/", { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+      await page.evaluate(SPANISH);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => window.ViktorychAccounts && window.ViktorychAccounts.blocking, null, { timeout: 20000 });
+      return;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      await page.waitForTimeout(1000);
+    }
+  }
+}
+// From the sign-in wall, or (via "welcome") from Sign up and the setup's
+// welcome step, which draws it in the setup look.
+async function openTempScreen(page, via) {
+  for (let attempt = 0; ; attempt++) {
+    if (via === "welcome") {
+      if (!(await page.locator("#onb-layer [data-step='welcome'] [data-onb='temp']").count())) {
+        await page.locator("[data-acct='signup']:visible").first().click({ timeout: 15000 }).catch(() => {});
+      }
+      await page.locator("#onb-layer [data-step='welcome'] [data-onb='temp']").click({ timeout: 8000 }).catch(() => {});
+    } else {
+      await page.locator("[data-acct='open-temp']:visible").first().click({ timeout: 15000 }).catch(() => {});
+    }
+    if (await page.locator(".acct-temp-setup [data-acct='do-temp'], #account-layer [data-acct='do-temp']").first().waitFor({ timeout: 6000 }).then(() => true, () => false)) return;
+    if (attempt >= 2) throw new Error("the temporary account screen did not open");
+  }
+}
+// The new session, read again until it shows up; the app reloads itself
+// once it has an account, so a single read can land mid-navigation.
+async function tempSession(page, ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const seen = await page.evaluate(() => {
+      try {
+        const s = JSON.parse(localStorage.getItem("viktorychapp-account-v1") || "null");
+        return s && s.token && s.account && s.account.temporary ? { at: Number(s.account.temporary.expiresAt) || Date.parse(s.account.temporary.expiresAt) || 0 } : null;
+      } catch (err) { return null; }
+    }).catch(() => null);
+    if (seen) return seen;
+    await page.waitForTimeout(250);
+  }
+  return null;
+}
+async function tempFlow(page) {
+  const notes = [];
+  const label = "phone temp (es)";
+  // Before the app's own scripts, since it saves its settings on unload.
+  await page.addInitScript(SPANISH);
+  await freshSpanish(page);
+  await openTempScreen(page);
+  const wallTitle = (await page.locator("#account-layer .acct-body h1").first().innerText()).trim();
+  if (wallTitle !== "Cuenta temporal") notes.push(label + ": title from the wall is " + JSON.stringify(wallTitle) + ", not Cuenta temporal");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("#account-layer .acct-modal"), null, { timeout: 10000 }).catch(() => {});
+  await openTempScreen(page, "welcome");
+  const title = (await page.locator(".acct-temp-setup #oobe-title").first().innerText()).trim();
+  if (title !== "Cuenta temporal") notes.push(label + ": title in setup is " + JSON.stringify(title) + ", not Cuenta temporal");
+  const screen = await page.locator("#account-layer").innerText();
+  for (const english of ["Temporary account", "Delete after", "Use less data", "Start temporary account", "1 day"]) {
+    if (screen.indexOf(english) >= 0) notes.push(label + ": English text on the Spanish screen: " + english);
+  }
+  // The first sign-up reaches the server but its answer never comes back,
+  // the way a stalled worker looks from the phone.
+  const posts = [];
+  await page.route("**/v1/signup", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    posts.push(JSON.parse(route.request().postData() || "{}"));
+    if (posts.length > 1) return route.continue();
+    await route.fetch().catch(() => {});
+    await new Promise((r) => setTimeout(r, 6000));
+    return route.abort().catch(() => {});
+  });
+  await page.locator("#account-layer input[name='displayName']").fill("Lector Temporal");
+  const started = Date.now();
+  await page.locator("[data-acct='do-temp']").first().click();
+  const slow = await page.locator("#account-layer .acct-wait").waitFor({ timeout: 10000 }).then(() => page.locator("#account-layer .acct-wait").innerText(), () => "");
+  if (slow.indexOf("El servidor va lento") < 0) notes.push(label + ": no Spanish still-trying note while the answer was lost (" + JSON.stringify(slow) + ")");
+  const first = await tempSession(page, 30000);
+  if (!first) {
+    const err = await page.locator("#acct-error").innerText().catch(() => "");
+    notes.push(label + ": a lost answer ended without an account: " + JSON.stringify(err));
+  } else {
+    const want = started + 86400000;
+    if (Math.abs(first.at - want) > 120000) notes.push(label + ": 1 day account expires at the wrong time");
+  }
+  if (posts.length !== 2) notes.push(label + ": expected one retry, saw " + posts.length + " sign-up posts");
+  if (!posts[0] || !posts[0].signupKey || !posts[1] || posts[0].signupKey !== posts[1].signupKey) notes.push(label + ": the retry did not carry the same sign-up key");
+  const made = await bindings.DB.prepare("SELECT COUNT(*) AS n FROM accounts WHERE display_name = ?").bind("Lector Temporal").first();
+  if (!made || Number(made.n) !== 1) notes.push(label + ": the retried sign-up made " + (made && made.n) + " accounts, not 1");
+  await page.unroute("**/v1/signup");
+
+  // A server that keeps failing gets a specific Spanish message, with the
+  // code, after one quiet retry. Never the bare "Algo salió mal".
+  await freshSpanish(page);
+  let failed = 0;
+  await page.route("**/v1/signup", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    failed += 1;
+    return route.fulfill({ status: 500, contentType: "text/plain", body: "" });
+  });
+  await openTempScreen(page);
+  await page.locator("[data-acct='do-temp']").first().click();
+  await page.locator("#account-layer .acct-error[role='alert']").waitFor({ timeout: 20000 }).catch(() => {});
+  const text = (await page.locator("#acct-error").innerText().catch(() => "")).trim();
+  if (text !== "Algo salió mal (error 500). Inténtalo de nuevo.") notes.push(label + ": a failing server showed " + JSON.stringify(text));
+  if (failed !== 2) notes.push(label + ": a failing server was tried " + failed + " times, not 2");
+  await page.unroute("**/v1/signup");
+  await page.route("**/v1/signup", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "unavailable" }) });
+  });
+  await page.locator("[data-acct='do-temp']").first().click();
+  await page.waitForFunction(() => /no está disponible/.test((document.getElementById("acct-error") || {}).textContent || ""), null, { timeout: 20000 })
+    .catch(() => notes.push(label + ": an unavailable server did not say sign-up is unavailable"));
+  await page.unroute("**/v1/signup");
+
+  // Every delete time.
+  const span = { "1h": 3600000, "7d": 7 * 86400000, "30d": 30 * 86400000, custom: 3 * 86400000 };
+  for (const pick of Object.keys(span)) {
+    await freshSpanish(page);
+    await openTempScreen(page);
+    await page.locator("[data-acct='temp-pick'][data-pick='" + pick + "']").click();
+    const at = Date.now();
+    await page.locator("[data-acct='do-temp']").first().click();
+    const made = await tempSession(page, 20000);
+    if (!made) { notes.push(label + ": " + pick + " temporary account was not made: " + JSON.stringify(await page.locator("#acct-error").innerText().catch(() => ""))); continue; }
+    if (Math.abs(made.at - (at + span[pick])) > (pick === "custom" ? 10 * 60000 : 120000)) notes.push(label + ": " + pick + " account expires at the wrong time");
   }
   return notes;
 }
@@ -657,7 +828,7 @@ async function firstRun(page) {
   await openPage(page, "/#/settings");
   await logOut(page);
   await page.getByRole("heading", { name: "ViktorychApp" }).waitFor({ timeout: 20000 });
-  await page.getByRole("button", { name: "Log in" }).first().click();
+  await openLogin(page);
   await page.evaluate(() => {
     const input = document.querySelector("#acct-accountNumber");
     input.focus();
@@ -667,7 +838,7 @@ async function firstRun(page) {
   });
   await page.getByText("Could not sign in.").waitFor({ timeout: 20000 });
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Log in" }).first().click();
+  await openLogin(page);
   const loggedIn = await page.evaluate(() => {
     const number = JSON.parse(sessionStorage.getItem("viktorychapp-signup-number") || "null");
     const input = document.querySelector("#acct-accountNumber");
@@ -884,6 +1055,7 @@ try {
     { name: "phone full", viewport: VIEWPORTS[0], run: fullFlow },
     { name: "desktop full", viewport: VIEWPORTS[3], run: fullFlow },
     { name: "phone quick", viewport: VIEWPORTS[0], run: quickFlow },
+    { name: "phone temp", viewport: VIEWPORTS[0], run: tempFlow },
     { name: "desktop quick", viewport: VIEWPORTS[3], run: quickFlow },
     { name: "motion", viewport: VIEWPORTS[3], run: (page) => motionPass(page, false) },
     { name: "reduced motion", viewport: VIEWPORTS[0], reduced: true, run: (page) => motionPass(page, true) }
