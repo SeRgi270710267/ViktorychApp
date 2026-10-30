@@ -140,76 +140,264 @@
     else if (!body || !body.status) note = tr("Could not reach the key store.");
     else note = tr("Could not save that key.");
   }
-  function keyLine(key) {
-    var line = statusLabel(key.status, true);
-    var used = key.lastUsed ? tr("Last used {time}", { time: when(key.lastUsed) }) : tr("Never used");
-    var err = errorLabel(key.lastError);
-    return line + " · " + used + (err ? " · " + err : "");
+  /* X-style icons (24px outline, currentColor), drawn for this page. */
+  var ICONS = {
+    chev: "M14.586 12L7.543 4.96l1.414-1.42L17.414 12l-8.457 8.46-1.414-1.42L14.586 12z",
+    key: "M7.5 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM3 12a4.5 4.5 0 0 1 8.66-1.73H21v3.46h-2V16h-2v-2.27h-2V16h-2v-2.27h-1.34A4.5 4.5 0 0 1 3 12z",
+    cookie: "M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5zm-1.9 2.2a6 6 0 0 0 5.1 4.68 6 6 0 0 0 4.62 4.62A8 8 0 1 1 10.1 4.2zM8.5 9a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm2 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm5 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2z",
+    apps: "M4 4h7v7H4V4zm2 2v3h3V6H6zm7-2h7v7h-7V4zm2 2v3h3V6h-3zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm7-2h7v7h-7v-7zm2 2v3h3v-3h-3z",
+    pulse: "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM1.5 12C1.5 6.2 6.2 1.5 12 1.5S22.5 6.2 22.5 12 17.8 22.5 12 22.5 1.5 17.8 1.5 12zm9.5 2.59l5.29-5.3 1.42 1.42L11 17.41l-4.21-4.2 1.42-1.42L11 14.59z",
+    plus: "M11 11V4h2v7h7v2h-7v7h-2v-7H4v-2h7z",
+    device: "M8 1.75h8A2.25 2.25 0 0 1 18.25 4v16A2.25 2.25 0 0 1 16 22.25H8A2.25 2.25 0 0 1 5.75 20V4A2.25 2.25 0 0 1 8 1.75zm0 2a.25.25 0 0 0-.25.25v16c0 .14.11.25.25.25h8a.25.25 0 0 0 .25-.25V4a.25.25 0 0 0-.25-.25H8zM10 17h4v2h-4v-2z"
+  };
+  function svg(name) {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + ICONS[name] + '"></path></svg>';
+  }
+  function kindIcon(kind) {
+    if (kind === "pair") return "apps";
+    if (kind === "token") return "key";
+    return "cookie";
+  }
+  function shortDate(value) {
+    var n = Number(value) || 0;
+    if (!n) return "";
+    try { return new Date(n).toLocaleDateString((window.SI18n ? window.SI18n.locale() : undefined), { month: "short", day: "numeric" }); }
+    catch (err) { return ""; }
+  }
+  function findSlot(id) {
+    var slots = cache && cache.slots ? cache.slots : [];
+    return slots.filter(function (item) { return item.id === id; })[0] || null;
+  }
+  /* Discord's own daily key check (scripts/discord_picks.py) lands in the
+     picks document; "invalid" means Discord turned the key down. */
+  var discordHealth = null;
+  var discordAt = 0;
+  function loadDiscordHealth() {
+    if (!visible() || Date.now() - discordAt < 15 * 60 * 1000) return;
+    discordAt = Date.now();
+    send("/v1/discord/picks", "GET").then(function (body) {
+      if (!body || body.status !== 200 || !body.health) return;
+      discordHealth = body.health;
+      render();
+    });
+  }
+  function discordInvalid(slot) {
+    return slot.id === "discord" && discordHealth && discordHealth.status === "invalid" && Array.isArray(slot.keys) && slot.keys.length > 0;
+  }
+  /* One calm word per state: green when working, amber when the owner has
+     to paste a new key, grey otherwise. Never a red alarm. */
+  function tone(status) {
+    if (status === "working") return { cls: "ok", text: tr("Connected") };
+    if (status === "expired" || status === "needs_attention" || status === "invalid") return { cls: "warn", text: tr("Needs a new key") };
+    if (status === "empty") return { cls: "off", text: tr("Not connected") };
+    return { cls: "off", text: tr("Connected · not tested yet") };
+  }
+  function slotTone(slot) {
+    var keys = Array.isArray(slot.keys) ? slot.keys : [];
+    if (!keys.length) return tone("empty");
+    if (discordInvalid(slot)) return tone("invalid");
+    var good = keys.some(function (key) { return key.status === "working"; });
+    if (good) return tone("working");
+    var bad = keys.every(function (key) { return key.status === "expired" || key.status === "needs_attention"; });
+    return tone(bad ? "expired" : "unknown");
+  }
+  function keyTone(slot, key, index) {
+    if (index === 0 && discordInvalid(slot)) return tone("invalid");
+    return tone(key.status);
+  }
+  function statusLine(t, extra) {
+    return '<span class="xk-status ' + t.cls + '"><i aria-hidden="true"></i>' + esc(t.text) + "</span>" + (extra ? '<span class="xk-dot" aria-hidden="true">·</span><span>' + esc(extra) + "</span>" : "");
+  }
+  function slotMeta(slot) {
+    var keys = Array.isArray(slot.keys) ? slot.keys : [];
+    if (!keys.length) return helpShort(slot.kind);
+    var newest = 0;
+    keys.forEach(function (key) { newest = Math.max(newest, Number(key.updatedAt) || 0); });
+    var added = newest ? tr("Added {date}", { date: shortDate(newest) }) : "";
+    var count = keys.length > 1 ? tr("Keys: {count}", { count: keys.length }) : "";
+    return [added, count].filter(Boolean).join(" · ");
+  }
+  function helpShort(kind) {
+    if (kind === "pair") return tr("Client id and secret from your own app");
+    if (kind === "token") return tr("A token from your own account");
+    return tr("Cookies from your own signed-in browser");
+  }
+  function row(href, icon, title, meta, status, attrs) {
+    var tag = href ? "a" : "div";
+    return "<" + tag + ' class="xk-row"' + (href ? ' href="' + esc(href) + '"' : "") + (attrs || "") + ">" +
+      '<span class="xk-ico">' + svg(icon) + "</span>" +
+      '<span class="xk-copy"><b>' + esc(title) + "</b>" +
+      (meta ? '<span class="xk-sub">' + esc(meta) + "</span>" : "") +
+      (status ? '<span class="xk-line">' + status + "</span>" : "") + "</span>" +
+      (href ? '<span class="xk-chev">' + svg("chev") + "</span>" : "") + "</" + tag + ">";
+  }
+  function noteHtml() {
+    return note ? '<p class="xk-note" role="status">' + esc(note) + "</p>" : "";
+  }
+  /* "On this device" holds keys that never leave this browser (the local
+     Discord key). Its module adds rows through DiscordLocal.rowsHtml(). */
+  function deviceGroupHtml() {
+    var mod = window.DiscordLocal;
+    var rows = mod && typeof mod.rowsHtml === "function" ? mod.rowsHtml() : "";
+    if (!rows) return "";
+    return '<section class="xk-group" data-xk-group="device"><h2 class="xk-h2">' + esc(tr("On this device")) + "</h2>" +
+      '<p class="xk-desc">' + esc(tr("Stays in this browser only. Our servers never see it.")) + "</p>" + rows + "</section>";
+  }
+  /* The local Discord key module (discord-local.js) paints its own
+     #dloc-section above this page's body. Group it under "On this device"
+     and keep the page description first, without touching that module. */
+  function groupDeviceSection() {
+    if (typeof document === "undefined") return;
+    var box = document.getElementById("dloc-section");
+    var page = document.querySelector(".xk.keys-settings");
+    if (!box || !page || box.getAttribute("data-xk-grouped") === "1") return;
+    box.setAttribute("data-xk-grouped", "1");
+    box.classList.add("xk-device");
+    var head = document.createElement("h2");
+    head.className = "xk-h2 xk-device-h";
+    head.textContent = tr("On this device");
+    var intro = page.querySelector(".xk-intro");
+    var wrap = document.createElement("section");
+    wrap.className = "xk-group";
+    wrap.setAttribute("data-xk-group", "device");
+    box.parentNode.insertBefore(wrap, box);
+    wrap.appendChild(head);
+    wrap.appendChild(box);
+    if (intro) wrap.parentNode.insertBefore(intro, wrap);
+  }
+  function afterPaint() {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(groupDeviceSection);
+    else setTimeout(groupDeviceSection, 0);
+  }
+  function sectionHtml() {
+    afterPaint();
+    if (!visible()) return '<div class="set-block"><p class="phandle">' + esc(tr("Keys are available only to the owner.")) + "</p></div>";
+    load(false);
+    loadDiscordHealth();
+    if (cache && cache.ready === false) {
+      return '<div class="xk"><p class="xk-desc keys-status">' + esc(tr("Setup needed")) + "</p></div>";
+    }
+    var slots = cache && cache.slots ? cache.slots : [];
+    var rows = slots.map(function (slot) {
+      var t = slotTone(slot);
+      var slow = slot.pace && slot.pace.reason ? tr("Slowing down") : "";
+      return row("#/settings/keys/" + encodeURIComponent(slot.id), kindIcon(slot.kind), tr(slot.label), slotMeta(slot), statusLine(t, slow), ' data-xk-slot="' + esc(slot.id) + '"');
+    }).join("");
+    if (!cache) rows = '<p class="xk-desc">' + esc(tr("Loading…")) + "</p>";
+    return '<div class="xk keys-settings">' +
+      '<p class="xk-desc xk-intro">' + esc(tr("Paste keys from your own accounts. They stay encrypted, and the saved value is never shown again.")) + " " + esc(tr("Keys are backups. One key is used at a time, highest priority first.")) + "</p>" +
+      noteHtml() + deviceGroupHtml() +
+      '<section class="xk-group" data-xk-group="server"><h2 class="xk-h2">' + esc(tr("Your accounts")) + "</h2>" + rows + "</section>" +
+      healthHtml() + "</div>";
+  }
+  function titleFor(id) {
+    var slot = findSlot(id);
+    return slot ? tr(slot.label) : tr("Connected keys");
   }
   function pasteField(slot, keyId, label) {
     var hint = slot.kind === "pair" ? tr("Paste the client id and the client secret from your own app, one on each line.") : tr("Paste a Cookie header or a Netscape cookies.txt file.");
     if (slot.kind === "token") hint = tr("Paste the token from your own account.");
-    return '<label class="field"><span>' + esc(tr("Optional label")) + '</span><input class="keys-label" data-keys-label="' + esc(slot.id) + '" maxlength="40" autocomplete="off" spellcheck="false" value="' + esc(label || "") + '" aria-label="' + esc(tr("Key label")) + '"></label>' +
-      '<label class="field"><span>' + esc(hint) + '</span><textarea class="keys-paste" data-keys-paste="' + esc(slot.id) + '" autocomplete="off" spellcheck="false" maxlength="100000" aria-label="' + esc(tr(slot.label)) + '"></textarea></label>' +
-      '<button class="primary" type="button" data-act="keys-save" data-slot="' + esc(slot.id) + '" data-key="' + esc(keyId) + '">' + esc(tr("Save key")) + "</button>";
+    var cancel = (findSlot(slot.id) && slotKeys(slot.id).length)
+      ? '<button class="xk-pill outline" type="button" data-act="keys-cancel" data-slot="' + esc(slot.id) + '">' + esc(tr("Cancel")) + "</button>" : "";
+    return '<div class="xk-form">' +
+      '<label class="xk-field"><span>' + esc(tr("Optional label")) + '</span><input class="keys-label" data-keys-label="' + esc(slot.id) + '" maxlength="40" autocomplete="off" spellcheck="false" value="' + esc(label || "") + '" aria-label="' + esc(tr("Key label")) + '"></label>' +
+      '<label class="xk-field"><span>' + esc(hint) + '</span><textarea class="keys-paste" data-keys-paste="' + esc(slot.id) + '" autocomplete="off" spellcheck="false" maxlength="100000" rows="4" aria-label="' + esc(tr(slot.label)) + '"></textarea></label>' +
+      '<div class="xk-actions"><button class="xk-pill primary" type="button" data-act="keys-save" data-slot="' + esc(slot.id) + '" data-key="' + esc(keyId) + '">' + esc(tr("Save key")) + "</button>" + cancel + "</div></div>";
   }
-  function sectionHtml() {
-    if (!visible()) return '<div class="set-block"><p class="phandle">' + esc(tr("Keys are available only to the owner.")) + "</p></div>";
+  var askRemove = null;
+  function removeSheet(slot) {
+    if (!askRemove || askRemove.slot !== slot.id) return "";
+    return '<div class="xk-sheet-back" data-act="keys-cancel" data-slot="' + esc(slot.id) + '"></div>' +
+      '<div class="xk-sheet" role="dialog" aria-modal="true" aria-labelledby="xk-sheet-title">' +
+      '<h2 id="xk-sheet-title">' + esc(tr("Remove this key?")) + "</h2>" +
+      "<p>" + esc(tr("{service} stops using it. You can paste it again later.", { service: tr(slot.label) })) + "</p>" +
+      '<button class="xk-pill danger wide" type="button" data-act="keys-delete" data-slot="' + esc(slot.id) + '" data-key="' + esc(askRemove.key) + '">' + esc(tr("Remove")) + "</button>" +
+      '<button class="xk-pill outline wide" type="button" data-act="keys-cancel" data-slot="' + esc(slot.id) + '">' + esc(tr("Cancel")) + "</button></div>";
+  }
+  function detailHtml(id) {
+    if (!visible()) return sectionHtml();
     load(false);
-    if (cache && cache.ready === false) {
-      return '<div class="set-block keys-settings"><p class="phandle keys-status">' + esc(tr("Setup needed")) + "</p></div>";
+    loadDiscordHealth();
+    var slot = findSlot(id);
+    if (!slot) return '<div class="xk"><p class="xk-desc">' + esc(cache ? tr("Key not connected") : tr("Loading…")) + "</p></div>";
+    var keys = Array.isArray(slot.keys) ? slot.keys : [];
+    var out = '<div class="xk keys-settings" data-xk-detail="' + esc(slot.id) + '"><p class="xk-desc">' + esc(helpFor(slot.kind)) + "</p>" + noteHtml();
+    if (slot.pace && slot.pace.reason) {
+      out += '<p class="xk-desc keys-status">' + esc(tr("This service is slowing down. The same key stays in use.")) + "</p>";
     }
-    var slots = cache && cache.slots ? cache.slots : [];
-    var blocks = slots.map(function (slot) {
-      var keys = Array.isArray(slot.keys) ? slot.keys : [];
-      var items = keys.map(function (key, index) {
-        var title = key.name ? '<p class="phandle">' + esc(key.name) + "</p>" : "";
-        var move = "";
-        if (keys.length > 1 && index > 0) {
-          move += '<button class="outline" type="button" data-act="keys-up" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Move up")) + "</button>";
-        }
-        if (keys.length > 1 && index < keys.length - 1) {
-          move += '<button class="outline" type="button" data-act="keys-down" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Move down")) + "</button>";
-        }
-        return '<article class="keys-item">' + title +
-          '<p class="phandle keys-status">' + esc(keyLine(key)) + "</p>" +
-          '<p class="phandle keys-mask" aria-label="' + esc(tr("Saved value hidden")) + '">' + esc(key.mask || "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022") + "</p>" +
-          '<div class="theme-row">' +
-          '<button class="outline" type="button" data-act="keys-test" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Test key")) + "</button>" +
-          '<button class="outline" type="button" data-act="keys-replace" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Replace key")) + "</button>" +
-          '<button class="outline" type="button" data-act="keys-delete" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Delete")) + "</button>" +
-          move +
-          "</div></article>";
-      }).join("");
-      var adding = !keys.length || (openSlot === slot.id && openKey === "new");
-      var replacing = openSlot === slot.id && openKey && openKey !== "new";
-      var replaceName = "";
-      if (replacing) {
-        keys.forEach(function (key) { if (key.id === openKey) replaceName = key.name || ""; });
-      }
-      var field = "";
-      if (adding) field = pasteField(slot, "new", "");
-      else if (replacing) field = pasteField(slot, openKey, replaceName);
-      var add = "";
-      if (keys.length && keys.length < 8 && !(openSlot === slot.id && openKey === "new")) {
-        add = '<button class="outline" type="button" data-act="keys-add" data-slot="' + esc(slot.id) + '">' + esc(tr("Add another key")) + "</button>";
-      }
-      var slow = slot.pace && slot.pace.reason
-        ? '<p class="phandle keys-status">' + esc(tr("Slowing down")) + " · " + esc(tr("This service is slowing down. The same key stays in use.")) + "</p>"
-        : "";
-      return '<section class="keys-slot"><h2>' + esc(tr(slot.label)) + "</h2><p class=\"phandle\">" + esc(helpFor(slot.kind)) + "</p>" + slow + items + field + add + "</section>";
-    }).join("");
-    return '<div class="set-block keys-settings"><p class="phandle">' + esc(tr("Paste keys from your own accounts. They stay encrypted, and the saved value is never shown again.")) + "</p>" +
-      '<p class="phandle">' + esc(tr("Keys are backups. One key is used at a time, highest priority first.")) + "</p>" +
-      (note ? '<p class="phandle">' + esc(note) + "</p>" : "") + healthHtml() + blocks + "</div>";
+    if (slot.id === "discord" && discordHealth && keys.length) {
+      var checked = discordHealth.at ? shortDate(Date.parse(discordHealth.at)) : "";
+      var ok = discordHealth.status !== "invalid";
+      out += '<section class="xk-group"><h2 class="xk-h2">' + esc(tr("Daily check")) + "</h2>" +
+        row("", "pulse", ok ? tr("Discord accepted the key") : tr("Discord turned the key down"), checked ? tr("Checked {date}", { date: checked }) : "", statusLine(tone(ok ? "working" : "invalid"))) + "</section>";
+    }
+    out += '<section class="xk-group"><h2 class="xk-h2">' + esc(keys.length > 1 ? tr("Keys, in order of use") : tr("Key")) + "</h2>";
+    keys.forEach(function (key, index) {
+      var name = key.name || (keys.length > 1 ? tr("Key {n}", { n: index + 1 }) : tr(slot.label));
+      var bits = [];
+      if (key.updatedAt) bits.push(tr("Added {date}", { date: shortDate(key.updatedAt) }));
+      bits.push(key.lastUsed ? tr("Last used {time}", { time: shortDate(key.lastUsed) }) : tr("Never used"));
+      var err = errorLabel(key.lastError);
+      var editing = openSlot === slot.id && openKey === key.id;
+      out += '<article class="xk-key keys-item">' +
+        row("", kindIcon(slot.kind), name, bits.join(" · "), statusLine(keyTone(slot, key, index))) +
+        (err ? '<p class="xk-err keys-status">' + esc(err) + "</p>" : "") +
+        '<p class="xk-mask keys-mask" aria-label="' + esc(tr("Saved value hidden")) + '">' + esc(tr("Value hidden")) + "</p>" +
+        (editing ? pasteField(slot, key.id, key.name || "") :
+          '<div class="xk-actions">' +
+          '<button class="xk-pill primary" type="button" data-act="keys-replace" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Replace key")) + "</button>" +
+          '<button class="xk-pill outline" type="button" data-act="keys-test" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Test key")) + "</button>" +
+          (keys.length > 1 && index > 0 ? '<button class="xk-pill outline" type="button" data-act="keys-up" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Move up")) + "</button>" : "") +
+          (keys.length > 1 && index < keys.length - 1 ? '<button class="xk-pill outline" type="button" data-act="keys-down" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Move down")) + "</button>" : "") +
+          '<button class="xk-text danger" type="button" data-act="keys-remove-ask" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Remove")) + "</button>" +
+          "</div>") +
+        "</article>";
+    });
+    if (!keys.length || (openSlot === slot.id && openKey === "new")) {
+      out += pasteField(slot, "new", "");
+    } else if (keys.length < 8) {
+      out += '<button class="xk-row xk-add" type="button" data-act="keys-add" data-slot="' + esc(slot.id) + '"><span class="xk-ico">' + svg("plus") + '</span><span class="xk-copy"><b>' + esc(tr("Add another key")) + '</b><span class="xk-sub">' + esc(tr("Backups take over when the first key stops working.")) + "</span></span></button>";
+    }
+    return out + "</section>" + removeSheet(slot) + "</div>";
   }
   /* Site health from the Worker watchdog (worker/src/watchdog.js). Owner only.
      Problem lines come from the server in plain English. */
   var health = null;
   var healthLoading = false;
   var healthAt = 0;
-  function serious(doc) {
+  /* The Worker's own request quota is one origin of the server pool; while
+     the pool has room, an exhausted Worker is only skipped (Usage shows a
+     quiet note), so its alert stays out of the banner and the list. */
+  function poolHasRoom() {
+    var acc = window.ViktorychAccounts;
+    var sp = null;
+    try { sp = acc && acc.serverPool ? acc.serverPool() : null; } catch (err) { sp = null; }
+    if (sp && sp.cap > 0) return sp.pct < 100 && sp.origins.some(function (o) { return !o.out; });
+    var cfg = window.ViktorychAccountsConfig || window.VIKTORYCH_ACCOUNTS || {};
+    return !!cfg.backupApi;
+  }
+  function problemsOf(doc) {
     var list = doc && Array.isArray(doc.problems) ? doc.problems : [];
+    var room = poolHasRoom();
+    return list.filter(function (p) { return !(p && p.code === "usage_worker_requests" && room); });
+  }
+  /* Each entry calls tr() itself so the phrase is translated when shown. */
+  var USAGE_TEXT = {
+    usage_worker_requests: function (v) { return tr("Worker requests today are at {pct}% of the free limit.", v); },
+    usage_d1_reads: function (v) { return tr("Database rows read today are at {pct}% of the free limit.", v); },
+    usage_d1_writes: function (v) { return tr("Database rows written today are at {pct}% of the free limit.", v); },
+    usage_durable: function (v) { return tr("Durable Object requests today are at {pct}% of the free limit.", v); },
+    usage_r2_class_a: function (v) { return tr("Storage writes this month are at {pct}% of the free limit.", v); },
+    usage_r2_class_b: function (v) { return tr("Storage reads this month are at {pct}% of the free limit.", v); },
+    usage_r2_storage: function (v) { return tr("File storage is at {pct}% of the free limit.", v); },
+    usage_d1_storage: function (v) { return tr("Database size is at {pct}% of the free limit.", v); }
+  };
+  function problemText(p) {
+    if (p && USAGE_TEXT[p.code] && Number.isFinite(Number(p.ratio))) return USAGE_TEXT[p.code]({ pct: Math.round(Number(p.ratio) * 100) });
+    return p ? p.text || p.code : "";
+  }
+  function serious(doc) {
+    var list = problemsOf(doc);
     var now = Date.now();
     return list.filter(function (p) {
       return p.level === "down" || now - (Number(p.since) || now) > 2 * 3600 * 1000;
@@ -232,35 +420,43 @@
     var list = serious(health);
     var old = document.getElementById("owner-health-banner");
     var key = "viktorych-health-dismissed";
-    var sig = list.map(function (p) { return p.code; }).sort().join(",");
+    // One dismissal per day per problem and threshold (warn or down).
+    var sig = new Date().toISOString().slice(0, 10) + "|" + list.map(function (p) { return p.code + ":" + p.level; }).sort().join(",");
     var dismissed = "";
-    try { dismissed = sessionStorage.getItem(key) || ""; } catch (err) { dismissed = ""; }
+    try { dismissed = localStorage.getItem(key) || ""; } catch (err) { dismissed = ""; }
     if (!list.length || !visible() || dismissed === sig) {
       if (old) old.remove();
       return;
     }
     var bar = old || document.createElement("div");
+    /* Placed by styles.css at the bottom, like X's toasts, so it never
+       covers a page's own header or the alert banner under it. */
     bar.id = "owner-health-banner";
     bar.setAttribute("role", "status");
-    bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);z-index:9999;max-width:92vw;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;background:#f4212e;color:#fff;font:600 13px/1.3 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3)";
+    bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:999px;background:#f4212e;color:#fff;font:600 13px/1.3 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3)";
     bar.innerHTML = '<a href="#/settings/keys" style="color:#fff;text-decoration:none">' + esc(tr("Site health: {count} problems need you", { count: list.length })) + "</a>" +
       '<button type="button" aria-label="' + esc(tr("Dismiss")) + '" style="background:none;border:0;color:#fff;font:inherit;cursor:pointer;padding:0 2px">✕</button>';
     bar.querySelector("button").onclick = function () {
-      try { sessionStorage.setItem(key, sig); } catch (err) { /* hides until reload */ }
+      try { localStorage.setItem(key, sig); } catch (err) { /* hides until reload */ }
       bar.remove();
     };
     if (!old) document.body.appendChild(bar);
   }
   function healthHtml() {
     loadHealth(false);
-    var list = health && Array.isArray(health.problems) ? health.problems : [];
+    var list = problemsOf(health);
     var when2 = health && health.at ? when(health.at) : "";
     var head = !health ? tr("Site health not checked yet") : (list.length ? tr("Site health: {count} problems need you", { count: list.length }) : tr("Site health: all good"));
+    var t = !health ? tone("unknown") : (list.length ? tone("expired") : tone("working"));
+    t = { cls: t.cls, text: head };
     var items = list.map(function (p) {
-      return '<p class="phandle keys-status">' + esc(p.level === "down" ? "⛔ " : "⚠️ ") + esc(p.text || p.code) + "</p>";
+      return '<p class="xk-problem keys-status ' + (p.level === "down" ? "down" : "warn") + '">' + esc(problemText(p)) + "</p>";
     }).join("");
-    return '<section class="keys-slot"><h2>' + esc(tr("Site health")) + '</h2><p class="phandle">' + esc(head) + (when2 ? " · " + esc(when2) : "") + "</p>" + items +
-      '<button class="outline" type="button" data-act="keys-health-check" data-slot="health">' + esc(tr("Check now")) + "</button></section>";
+    return '<section class="xk-group"><h2 class="xk-h2">' + esc(tr("Site health")) + "</h2>" +
+      '<div class="xk-row xk-health"><span class="xk-ico">' + svg("pulse") + '</span><span class="xk-copy"><span class="xk-line">' + statusLine(t) + "</span>" +
+      (when2 ? '<span class="xk-sub">' + esc(when2) + "</span>" : "") + "</span>" +
+      '<button class="xk-pill outline small" type="button" data-act="keys-health-check" data-slot="health">' + esc(tr("Check now")) + "</button></div>" +
+      items + "</section>";
   }
   function pasteValue(slot) {
     var field = document.querySelector('[data-keys-paste="' + slot + '"]');
@@ -285,6 +481,19 @@
     if (!slot) return false;
     if (act === "keys-health-check") {
       loadHealth("run");
+      return true;
+    }
+    if (act === "keys-remove-ask") {
+      askRemove = { slot: slot, key: key };
+      note = "";
+      render();
+      return true;
+    }
+    if (act === "keys-cancel") {
+      askRemove = null;
+      openSlot = "";
+      openKey = "";
+      render();
       return true;
     }
     if (act === "keys-add") {
@@ -319,6 +528,7 @@
     }
     if (act === "keys-delete") {
       note = "";
+      askRemove = null;
       var path = "/v1/owner/keys/" + encodeURIComponent(slot) + (key ? "/" + encodeURIComponent(key) : "");
       send(path, "DELETE").then(function (body) {
         if (!body || body.status !== 200) fail(body);
@@ -353,6 +563,7 @@
         return true;
       }
       note = "";
+      if (slot === "discord") discordAt = 0;
       var savePath = "/v1/owner/keys/" + encodeURIComponent(slot);
       if (key && key !== "new") savePath += "/" + encodeURIComponent(key);
       var payload = { value: value };
@@ -380,6 +591,8 @@
   window.OwnerKeys = {
     visible: visible,
     sectionHtml: sectionHtml,
+    detailHtml: detailHtml,
+    titleFor: titleFor,
     onAct: onAct,
     load: load
   };

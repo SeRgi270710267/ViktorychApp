@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>Elon Musk / @copperlane</title>
+    <title>Copper Lane / @copperlane</title>
     <link>https://nitter.example/copperlane</link>
     <image><url>https://example.com/elon.jpg</url><title>Elon</title><link>https://nitter.example/copperlane</link></image>
     <item>
@@ -12,7 +12,7 @@
       <pubDate>Mon, 20 Oct 2026 12:00:00 GMT</pubDate>
     </item>
     <item>
-      <title>Elon Musk: Check this quote</title>
+      <title>Copper Lane: Check this quote</title>
       <description>Check this quote&lt;blockquote&gt;&lt;a href="https://nitter.example/someone/status/9"&gt;@someone&lt;/a&gt;: quoted line&lt;/blockquote&gt;</description>
       <link>https://nitter.example/copperlane/status/556</link>
       <guid>556</guid>

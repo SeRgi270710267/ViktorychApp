@@ -17,6 +17,7 @@
     original: ORIGINAL
   }];
   var BEAT_MS = 60 * 1000;
+  var CLOSE = "M10.59 12L4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z";
   var ROTATE = "M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zm-6.25-.77a1.49 1.49 0 0 0-2.12 0L1.75 8.11a1.49 1.49 0 0 0 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z";
   var clock = 0;
   var beatTimer = 0;
@@ -30,6 +31,10 @@
   var clockAt = 0;
   var clockId = "";
   var failTimer = 0;
+  var mini = false;
+  function gs() {
+    return window.ViktorychGameSocial || null;
+  }
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -107,8 +112,9 @@
     if (!id || ms < 1000) return;
     beatMs = 0;
     tellWorker(true);
-    call("/v1/games/play", { method: "POST", body: { gameId: id, ms: ms } }).then(function (res) {
+    call("/v1/games/play", { method: "POST", body: { gameId: id, ms: ms, tz: -new Date().getTimezoneOffset() } }).then(function (res) {
       if (!res || res.status !== 200) return;
+      if (Array.isArray(res.achievements) && res.achievements.length && gs()) gs().celebrate(res.achievements);
       patch(id, { streak: Number(res.streak) || 0, best: Number(res.bestStreak) || 0, day: String(new Date().toISOString().slice(0, 10)) });
     });
   }
@@ -163,7 +169,7 @@
     var played = duration(row.ms);
     var seen = when(row.last);
     var meta = [tr("Web shooter"), seen, played].filter(Boolean).join(" · ");
-    return '<article class="game-card"><a class="game-open" href="#/games/' + esc(item.id) + '"><span class="game-art">' + svg(PAD) + '</span><span class="game-copy"><span class="game-name">' + esc(item.name) + '</span><span class="game-meta">' + esc(meta) + '</span></span></a>' + heartBtn(item.id, row.fav) + '</article>';
+    return '<article class="game-card"><a class="game-open" href="#/games/' + esc(item.id) + '"><span class="game-art">' + svg(PAD) + '</span>' + (item.id === "regone" && gs() ? gs().tileChipHtml() : "") + '<span class="game-copy"><span class="game-name">' + esc(item.name) + '</span><span class="game-meta">' + esc(meta) + '</span></span></a>' + heartBtn(item.id, row.fav) + '</article>';
   }
   function rail(title, items, empty) {
     var body = items.length ? '<div class="games-row">' + items.map(card).join("") + "</div>" : '<p class="games-empty">' + esc(empty) + "</p>";
@@ -193,7 +199,7 @@
       var metric = boardTab === "streak" ? tr("{n}-day streak", { n: p.streak }) : minutes(p.weekMs);
       var ava = p.avatar ? '<img class="ava" src="' + esc(p.avatar) + '" alt="" loading="lazy">' : '<span class="ava initials">' + esc(String(p.name || p.handle || "?").charAt(0).toUpperCase()) + "</span>";
       var live = p.playing ? '<span class="games-live">' + esc(tr("Playing now")) + "</span>" : "";
-      var invite = p.me ? "" : '<button class="outline games-invite" type="button" data-game-invite="' + esc(p.publicId) + '">' + esc(tr("Invite")) + "</button>";
+      var invite = p.me ? "" : '<button class="outline games-invite" type="button" data-gs-invite="' + esc(p.publicId) + '" data-gs-name="' + esc(p.name || "") + '">' + esc(tr("Invite")) + "</button>";
       return '<li class="games-person"><span class="games-rank">' + (i + 1) + "</span>" + ava + '<span class="games-who"><span class="games-pname">' + esc(p.me ? tr("You") : p.name) + "</span>" + live + '</span><span class="games-metric">' + esc(metric) + "</span>" + invite + "</li>";
     }).join("");
     var empty = friendCount ? "" : '<p class="games-empty">' + esc(tr("Add friends to compete on play time and streaks.")) + "</p>";
@@ -217,16 +223,6 @@
       paintBoard();
     });
   }
-  function invite(btn) {
-    var to = btn.getAttribute("data-game-invite") || "";
-    if (!/^\d{12}$/.test(to)) return;
-    btn.disabled = true;
-    call("/v1/games/invite", { method: "POST", body: { gameId: "regone", to: to } }).then(function (res) {
-      var ok = res && res.status === 200;
-      btn.textContent = ok ? tr("Invited") : tr("Try again");
-      btn.disabled = ok;
-    });
-  }
   function streakLine() {
     var row = stat("regone");
     if (!row.streak && !row.best) return "";
@@ -234,14 +230,18 @@
   }
   function hub() {
     setTimeout(function () { loadBoard(false); }, 0);
+    var social = gs();
+    var tabs = social ? social.hubTabsHtml() : "";
+    if (social && social.tab() === "top") return tabs + social.topHtml();
     var recent = GAMES.filter(function (item) { return stat(item.id).last > 0; }).sort(function (a, b) { return stat(b.id).last - stat(a.id).last; });
     var favs = GAMES.filter(function (item) { return stat(item.id).fav; });
-    return rail(tr("Recently played"), recent, tr("Nothing played yet.")) +
+    return tabs + (social ? social.hubHtml() : "") + rail(tr("Recently played"), recent, tr("Nothing played yet.")) +
       rail(tr("Favourites"), favs, tr("No favourites yet.")) +
-      '<section class="games-rail"><h2>' + esc(tr("Games")) + '</h2>' + streakLine() + '<div class="games-grid">' + GAMES.map(card).join("") + "</div></section>" +
+      '<section class="games-rail"><h2>' + esc(tr("Games")) + '</h2>' + streakLine() + (tvPad() ? '<div class="games-tvpad">' + tvPadLink("games-pad-play") + '<p class="games-empty">' + esc(tr("Xbox, PlayStation and other controllers work in the TV app.")) + "</p></div>" : "") + '<div class="games-grid">' + GAMES.map(card).join("") + "</div></section>" +
       boardSection();
   }
   function page(route) {
+    if (gs()) setTimeout(function () { gs().handleRoute(route); }, 0);
     if (route && route.game) {
       var item = gameById(route.game);
       if (!item) return head(tr("Games"), "#/games") + '<div class="empty"><h2>' + esc(tr("That game isn’t here.")) + "</h2></div>";
@@ -272,7 +272,7 @@
   function place() {
     var host = hostEl();
     var stage = document.querySelector(".game-stage");
-    if (!host || host.hidden) return;
+    if (!host || host.hidden || mini) return;
     if (document.fullscreenElement === host || host.classList.contains("immersive")) return;
     if (!stage) return;
     var rect = stage.getBoundingClientRect();
@@ -311,10 +311,12 @@
     var host = hostEl();
     if (!host || host.dataset.ready === "1") return host;
     host.dataset.ready = "1";
-    host.innerHTML = '<div class="game-bar"><a class="game-back" href="#/games" aria-label="' + esc(tr("Back")) + '">' + svg(BACK) + '</a><span class="game-grow"></span><button class="game-tool" type="button" data-game-fav="regone" aria-pressed="false" aria-label="' + esc(tr("Favorite")) + '">' + svg(HEART) + '</button><button class="outline game-share" type="button" data-act="game-share">' + esc(tr("Share to feed")) + '</button><button class="game-tool" type="button" data-game-full aria-label="' + esc(tr("Full screen")) + '">' + svg(FULL) + '</button></div><div class="game-frame"></div><div class="game-loading"><span class="spin"></span><p>' + esc(tr("Loading")) + '</p></div><div class="game-fail"><h2>' + esc(tr("The game didn’t load.")) + '</h2><a class="outline" href="' + esc(ORIGINAL) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open original")) + '</a></div><p class="game-credit">' + esc(CREDIT) + ' · <a href="' + esc(ORIGINAL) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open original")) + "</a></p>" +
+    host.innerHTML = '<div class="game-bar"><a class="game-back" href="#/games" aria-label="' + esc(tr("Back")) + '">' + svg(BACK) + '</a><span class="game-grow"></span>' + (gs() ? gs().roomChipHtml() : "") + '<button class="game-tool" type="button" data-game-fav="regone" aria-pressed="false" aria-label="' + esc(tr("Favorite")) + '">' + svg(HEART) + '</button><button class="outline game-share" type="button" data-act="game-share">' + esc(tr("Share to feed")) + '</button><button class="game-tool" type="button" data-game-full aria-label="' + esc(tr("Full screen")) + '">' + svg(FULL) + '</button></div><div class="game-frame"></div><div class="game-loading"><span class="spin"></span><p>' + esc(tr("Loading")) + '</p></div><div class="game-fail"><h2>' + esc(tr("The game didn’t load.")) + '</h2><a class="outline" href="' + esc(ORIGINAL) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open original")) + '</a></div><p class="game-credit">' + esc(CREDIT) + ' · <a href="' + esc(ORIGINAL) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open original")) + "</a></p>" +
       '<button class="game-handle" type="button" data-game-chrome aria-label="' + esc(tr("Show controls")) + '">' + svg(PAD) + "</button>" +
       '<div class="game-rotate"><span class="game-rotate-icon">' + svg(ROTATE) + "</span><h2>" + esc(tr("Turn your phone sideways to play")) + "</h2>" + (canFull() ? '<button class="game-rotate-go" type="button" data-game-full>' + esc(tr("Play full screen")) + "</button>" : "") + '<a class="game-rotate-back" href="#/games">' + esc(tr("Back")) + '</a><p class="game-rotate-credit">' + esc(CREDIT) + "</p></div>" +
-      '<div class="game-pad-note" role="status" aria-live="polite"></div>';
+      '<div class="game-pad-note" role="status" aria-live="polite"></div>' +
+      '<div class="game-mini-cover" data-game-mini role="button" tabindex="0" aria-label="' + esc(tr("Expand game")) + '"><span class="game-mini-label">ReGone</span></div>' +
+      '<button class="game-mini-close" type="button" data-game-close aria-label="' + esc(tr("Close game")) + '">' + svg(CLOSE) + "</button>";
     return host;
   }
   function mount(route) {
@@ -324,6 +326,8 @@
     }
     var host = ensureHost();
     if (!host) return;
+    var resumed = mini;
+    leaveMini(host);
     host.hidden = false;
     host.classList.toggle("immersive", immersive());
     document.documentElement.classList.toggle("game-immersive", immersive());
@@ -334,13 +338,56 @@
     padCheck();
     var row = stat("regone");
     patch("regone", { last: Date.now(), ms: row.ms, fav: row.fav });
-    startClock("regone");
+    if (!resumed || !clockId) startClock("regone");
+    if (gs()) {
+      var social = gs();
+      var chip = host.querySelector(".game-bar .game-room");
+      if (chip) chip.outerHTML = social.roomChipHtml();
+      social.handleRoute(route);
+      social.showHint();
+    }
     if (window.ProfileGifts && window.ProfileGifts.played) window.ProfileGifts.played("regone");
     paintChrome();
     requestAnimationFrame(place);
   }
+  /* Leaving the game page keeps the same game frame running in a small
+     window in the corner. Tap it to come back, X to close. The frame is
+     never rebuilt, so the match keeps going as it was. */
   function unmount() {
-    var was = playing;
+    var host = hostEl();
+    var frame = host && host.querySelector(".game-frame iframe");
+    if (mini) return;
+    if (!host || host.hidden || !frame || host.classList.contains("is-failed")) {
+      close();
+      return;
+    }
+    goMini(host);
+  }
+  function goMini(host) {
+    mini = true;
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () { /* already out */ });
+    if (chromeTimer) clearTimeout(chromeTimer);
+    chromeTimer = 0;
+    setBusy(false);
+    dropWake();
+    host.classList.remove("immersive", "chrome-hidden");
+    host.classList.add("mini");
+    host.style.top = "";
+    host.style.left = "";
+    host.style.width = "";
+    host.style.height = "";
+    var hint = host.querySelector(".gs-hint");
+    if (hint) hint.remove();
+  }
+  function leaveMini(host) {
+    if (!mini && !host.classList.contains("mini")) return;
+    mini = false;
+    host.classList.remove("mini", "placed", "dragging");
+    host.style.top = "";
+    host.style.left = "";
+  }
+  function close() {
+    var was = playing || mini;
     stopClock();
     if (was) {
       setBusy(false);
@@ -353,13 +400,55 @@
     failTimer = 0;
     var host = hostEl();
     if (!host) return;
+    if (mini) leaveMini(host);
+    var frame = host.querySelector("iframe");
     host.hidden = true;
     host.classList.remove("is-loaded", "is-failed", "immersive", "chrome-hidden");
-    var frame = host.querySelector("iframe");
     if (frame) {
       frame.src = "about:blank";
       frame.remove();
+      if (gs()) gs().leftGame();
     }
+  }
+  function isMini() {
+    return mini;
+  }
+  /* Drag the mini window by its cover; a tap without movement expands it. */
+  var drag = null;
+  document.addEventListener("pointerdown", function (event) {
+    var cover = event.target.closest && event.target.closest("[data-game-mini]");
+    var host = hostEl();
+    if (!cover || !host || !mini) return;
+    var rect = host.getBoundingClientRect();
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, w: rect.width, h: rect.height, moved: false };
+    try { cover.setPointerCapture(event.pointerId); } catch (err) { /* old browser */ }
+  });
+  document.addEventListener("pointermove", function (event) {
+    var host = hostEl();
+    if (!drag || event.pointerId !== drag.id || !host) return;
+    var dx = event.clientX - drag.x;
+    var dy = event.clientY - drag.y;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 8) return;
+    drag.moved = true;
+    host.classList.add("placed", "dragging");
+    var left = Math.max(4, Math.min(window.innerWidth - drag.w - 4, drag.left + dx));
+    var top = Math.max(4, Math.min(window.innerHeight - drag.h - 4, drag.top + dy));
+    host.style.left = Math.round(left) + "px";
+    host.style.top = Math.round(top) + "px";
+  });
+  function endDrag(event) {
+    var host = hostEl();
+    if (!drag || event.pointerId !== drag.id) return;
+    var tapped = !drag.moved && event.type === "pointerup";
+    drag = null;
+    if (host) host.classList.remove("dragging");
+    if (tapped) expand();
+  }
+  document.addEventListener("pointerup", endDrag);
+  document.addEventListener("pointercancel", endDrag);
+  function expand() {
+    if (!mini) return;
+    location.hash = "#/games/regone";
   }
   function toggleFav(id) {
     if (!gameById(id)) return;
@@ -427,11 +516,12 @@
     if (!host.classList.contains("immersive")) return;
     chromeTimer = setTimeout(function () { host.classList.add("chrome-hidden"); }, 4000);
   }
-  function padNote(text) {
+  function padNote(text, html) {
     var host = hostEl();
     var el = host && host.querySelector(".game-pad-note");
     if (!el) return;
-    el.textContent = text;
+    if (html) el.innerHTML = text;
+    else el.textContent = text;
     el.classList.add("on");
     if (padTimer) clearTimeout(padTimer);
     padTimer = setTimeout(function () { el.classList.remove("on"); }, 6000);
@@ -448,11 +538,30 @@
     } catch (err) { /* private mode: show it anyway */ }
     padNote(tr("The joystick and buttons appear once you join a match. Tap menus directly."));
   }
+  /* The ViktorychTV app (1.2.0, versionCode 3 and up) plays ReGone with a
+     controller in its own screen: viktorychtv://game/regone. */
+  var TV_PAD_VERSION = 3;
+  function tvPad() {
+    var b = window.ViktorychTVMode;
+    try { return !!(b && b.inApp && b.inApp() && b.appVersion() >= TV_PAD_VERSION); } catch (err) { return false; }
+  }
+  function tvPadHref() {
+    var b = window.ViktorychTVMode;
+    var pkg = (b && b.APP_PACKAGE) || "app.viktorych.tv";
+    return "intent://game/regone#Intent;scheme=viktorychtv;package=" + pkg + ";end";
+  }
+  function tvPadLink(cls) {
+    return '<a class="' + cls + '" href="' + esc(tvPadHref()) + '" data-game-tvpad="regone">' + svg(PAD) + "<span>" + esc(tr("Play with controller")) + "</span></a>";
+  }
+  function padMessage() {
+    if (tvPad()) return esc(tr("Controller connected.")) + " " + tvPadLink("game-pad-go");
+    return esc(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse.")) + " " + esc(tr("Play with a controller in the ViktorychTV app."));
+  }
   function padCheck() {
     var pads = [];
     try { pads = navigator.getGamepads ? Array.prototype.slice.call(navigator.getGamepads() || []) : []; } catch (err) { pads = []; }
     var pad = pads.filter(Boolean)[0];
-    if (pad) padNote(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse."));
+    if (pad) padNote(padMessage(), true);
   }
   function toggleFull() {
     var host = hostEl();
@@ -482,6 +591,13 @@
       toggleFull();
       return;
     }
+    var shut = event.target.closest && event.target.closest("[data-game-close]");
+    if (shut) {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      return;
+    }
     var handle = event.target.closest && event.target.closest("[data-game-chrome]");
     if (handle) {
       event.preventDefault();
@@ -495,21 +611,22 @@
       paintBoard();
       return;
     }
-    var inv = event.target.closest && event.target.closest("[data-game-invite]");
-    if (inv) {
-      event.preventDefault();
-      invite(inv);
-      return;
-    }
     if (event.target.closest && event.target.closest("#game-host .game-bar")) showChrome();
+  });
+  document.addEventListener("keydown", function (event) {
+    if (!mini || (event.key !== "Enter" && event.key !== " ")) return;
+    if (event.target.closest && event.target.closest("[data-game-mini]")) {
+      event.preventDefault();
+      expand();
+    }
   });
   document.addEventListener("visibilitychange", function () {
     flush();
     if (document.visibilityState === "visible") holdWake();
-    else if (playing) beat();
+    else if (playing || mini) beat();
   });
   window.addEventListener("gamepadconnected", function () {
-    if (playing) padNote(tr("Controller connected, but ReGone doesn't support controllers yet. Use touch, or keyboard and mouse."));
+    if (playing) padNote(padMessage(), true);
   });
   window.addEventListener("resize", function () {
     var host = hostEl();
@@ -528,5 +645,5 @@
     return playing;
   }
 
-  window.ViktorychGames = { page: page, mount: mount, unmount: unmount, shareText: shareText, busy: busy, playUrl: playUrl };
+  window.ViktorychGames = { page: page, mount: mount, unmount: unmount, close: close, isMini: isMini, shareText: shareText, busy: busy, playUrl: playUrl };
 })();
