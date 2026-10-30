@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Party popper",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/party_popper.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "party_popper"
+    },
+    {
+      "trait_type": "Index",
+      "value": 46
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreia2r5mv65uyocbwxo4byfdmt2b52el62p5yorcybmhjstx6kvkpw4",
+  "image_sha256": "1a8f595f769870836bbb81c146c9e83dd117ed3fb8744580b0e994efe5554fb7"
+}

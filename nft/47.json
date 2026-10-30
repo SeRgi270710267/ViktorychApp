@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Penguin",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/penguin.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "penguin"
+    },
+    {
+      "trait_type": "Index",
+      "value": 47
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreia6sivvc4p3hiwtvmerpxxn23iv5ta2awjxtamvf7bhkbhdvh4q7m",
+  "image_sha256": "1e922b5171fb3a2d3ab0917deedd6d15ecc1a05937981952fc27504e3a9f90fb"
+}

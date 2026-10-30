@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Turtle",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/turtle.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "turtle"
+    },
+    {
+      "trait_type": "Index",
+      "value": 66
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreibirm4usp5xfprqikx6qszpn4bs4omrusj6qdegoacu7b3dsopb2u",
+  "image_sha256": "288b39493fb72be3042afe84b2f6f032e3991a493e80c8670054f8763939e1d5"
+}

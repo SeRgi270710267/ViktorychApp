@@ -27,7 +27,10 @@ async function graphql(env, query, variables) {
   const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
     method: "POST",
     headers: { "content-type": "application/json", Authorization: "Bearer " + env.CF_ANALYTICS_TOKEN },
-    body: JSON.stringify({ query, variables })
+    body: JSON.stringify({ query, variables }),
+    // A slow analytics read must not hold the owner's panel; the report
+    // then says analytics_unavailable and the panel still shows its rows.
+    signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
   });
   if (!res.ok) throw new Error("analytics " + res.status);
   const body = await res.json();

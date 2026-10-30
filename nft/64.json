@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Thank you",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/thanks.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "thanks"
+    },
+    {
+      "trait_type": "Index",
+      "value": 64
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreifgz2fa2f4nuyvwapwx6ni2l3ifk2fltd7e77yb6qlj4ggbx7lxve",
+  "image_sha256": "a6ce8a0d178da62b603ed7f351a5ed05568ab98fe4fff01f4169e18c1bfd77a9"
+}

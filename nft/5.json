@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Black cat",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/black_cat.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "black_cat"
+    },
+    {
+      "trait_type": "Index",
+      "value": 5
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreicpzsuc2dsf56ql4vaa46dzkkj6aagua7gcrguhdrzc6mzxaaggw4",
+  "image_sha256": "4fcca82d0e45efa0be5400e78795293e000d407cc289a871c722f3337000c6b7"
+}

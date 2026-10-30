@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Chipmunk",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/chipmunk.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "chipmunk"
+    },
+    {
+      "trait_type": "Index",
+      "value": 14
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreic3usdu3si7svf4pvzxaprujnao25wikxfeagbp3fluuy4tgktv4e",
+  "image_sha256": "5ba4874dc91f954bc7d73703e344b40ed76c855ca40182fd9574a639332a75e1"
+}

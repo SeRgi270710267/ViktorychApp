@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Kiss",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/kiss.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "kiss"
+    },
+    {
+      "trait_type": "Index",
+      "value": 33
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreielypktmr7nsxfkggysohnjno5kpkklaginnboy6qmk4553zxrfcq",
+  "image_sha256": "8bc3d53647ed95caa31b1271da96bbaa7a94b0190d685d8f418ae77bbcde2514"
+}

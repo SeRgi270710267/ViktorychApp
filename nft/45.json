@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Panda",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/panda.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "panda"
+    },
+    {
+      "trait_type": "Index",
+      "value": 45
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreiflahms4z7qzscfewntdf3c6q4qgejqejeecxqeuqbgqmketczkfa",
+  "image_sha256": "ab01d92e67f0cc845259b319762f4390311302248415e04a40268314498b2a28"
+}

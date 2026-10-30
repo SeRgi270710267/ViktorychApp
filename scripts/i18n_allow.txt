@@ -320,6 +320,10 @@ app.js|Mail
 app.js|SMS codes
 # The sharing pool public signing key (a technical token, not text).
 shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM
+# Wallet chain names and the network currency (proper nouns).
+nft-ui.js|Base
+nft-ui.js|Base Sepolia
+nft-ui.js|Ether
 shared/regone.js|NZlay Mini 01 - EU
 shared/regone.js|NZlay Medium 01 - EU
 shared/regone.js|NZlay Large 01 - EU

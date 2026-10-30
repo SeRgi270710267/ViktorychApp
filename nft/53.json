@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Rocket",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/rocket.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "rocket"
+    },
+    {
+      "trait_type": "Index",
+      "value": 53
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreifvekfvju5jpoeipsyamg6tk4kzeatewck2zgwffkv2zw3mbrsnye",
+  "image_sha256": "b5228b54d3a97b8887cb0061bd35715920264b095ac9ac52aabacdb6c0c64dc1"
+}
