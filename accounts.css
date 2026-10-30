@@ -324,6 +324,12 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
   color: #f4212e;
   font-size: 13px;
 }
+.acct-wait {
+  min-height: 16px;
+  margin: 12px 0 0;
+  color: #71767b;
+  font-size: 13px;
+}
 .acct-hp {
   position: absolute;
   left: -10000px;
