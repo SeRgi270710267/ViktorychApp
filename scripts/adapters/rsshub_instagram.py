@@ -49,7 +49,7 @@ def parse(payload, feed: dict | None = None) -> dict:
     root = parse_xml(payload) if isinstance(payload, str) else payload
     channel = _channel(root)
     title = child_text(channel, "title")
-    # "Mark Zuckerberg (@birchlane) - Instagram"
+    # "Moss Point (@birchlane) - Instagram"
     match = re.search(r"@([\w.]+)", title)
     handle = feed.get("handle") or (match.group(1) if match else "instagram")
     name = re.sub(r"\s*\(@.*$", "", title).replace(" - Instagram", "").strip() or handle

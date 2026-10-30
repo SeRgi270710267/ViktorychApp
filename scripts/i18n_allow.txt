@@ -239,7 +239,7 @@ shared/tiktok-play.js|TikTok returned
 shared/webauthn.js|RSASSA-PKCS1-v1_5
 404.html|Open ViktorychApp
 404.html|Abrir ViktorychApp
-index.html|Elon Musk
+index.html|Copper Lane
 index.html|“Lack of electricity” is an oversimplification. Everything is hard about bringing massive compute online at extremely high speed. If there was twice as much time, this would be relatively easy, but there is not.
 index.html|Johann Sebastian Bach is the Shakespeare of music. Best there ever was.
 index.html|Something went wrong
