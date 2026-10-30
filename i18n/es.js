@@ -4942,5 +4942,7 @@ SI18n.addPack("es", {
   "Removes your ReGone name, rank and stats from your profile.": "Quita de tu perfil tu nombre, rango y estadísticas de ReGone.",
   "Who can see my games": "Quién puede ver mis juegos",
   "Privacy > Games": "Privacidad > Juegos",
-  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "¿Desvincular ReGone? Tu nombre, rango y estadísticas de ReGone saldrán de tu perfil."
+  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "¿Desvincular ReGone? Tu nombre, rango y estadísticas de ReGone saldrán de tu perfil.",
+  "Suggested for you": "Sugerencia para ti",
+  "{n} online": "{n} en línea"
 });

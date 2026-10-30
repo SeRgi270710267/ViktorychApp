@@ -10080,7 +10080,7 @@ const here = parseRoute();
   }
 
   function sidebar() {
-    const people = followSuggestions().slice(0, 3);
+    const people = window.ViktorychPYMK && window.ViktorychPYMK.sideHtml ? [] : followSuggestions().slice(0, 3);
     const rows = people.map((f) => `<div class="who-row">
       <a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">
         ${avatar(f.avatar, f.name)}
@@ -10094,13 +10094,20 @@ const here = parseRoute();
       </form>
       ${(!STATE.settings || STATE.settings.friendsRail !== false) && window.ViktorychPresence && window.ViktorychPresence.railHtml ? window.ViktorychPresence.railHtml() : ""}
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
-      ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
+      ${window.ViktorychPYMK && window.ViktorychPYMK.sideHtml ? window.ViktorychPYMK.sideHtml() : people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
       <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
     </aside>`;
   }
 
   if (window.ViktorychPYMK && window.ViktorychPYMK.setHost) {
-    window.ViktorychPYMK.setHost({ esc, avatar, badge, icon, isFollowed, follow: followButtonClean, render: () => render() });
+    window.ViktorychPYMK.setHost({
+      esc, avatar, badge, icon, isFollowed, sourceBadge,
+      follow: followButtonClean,
+      render: () => render(),
+      /* Outside sources the user can follow, for the unified right-column
+         "Who to follow" panel and the people tab of #/connect. */
+      feedPeople: () => followSuggestions().slice(0, 40).map((f) => Object.assign({}, f, { href: accountHash(f.platform, f.channelId || f.handle) }))
+    });
   }
 
   const BOTTOM_NAV_MIN = 2;

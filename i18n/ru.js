@@ -4941,5 +4941,7 @@ SI18n.addPack("ru", {
   "Removes your ReGone name, rank and stats from your profile.": "Убирает из профиля ваше имя, ранг и статистику ReGone.",
   "Who can see my games": "Кто видит мои игры",
   "Privacy > Games": "Конфиденциальность > Игры",
-  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "Отвязать ReGone? Имя, ранг и статистика ReGone исчезнут из профиля."
+  "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "Отвязать ReGone? Имя, ранг и статистика ReGone исчезнут из профиля.",
+  "Suggested for you": "Рекомендуем вам",
+  "{n} online": "{n} в сети"
 });
