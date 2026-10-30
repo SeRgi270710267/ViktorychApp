@@ -8,7 +8,7 @@ b78a108ab26940b2b58111cc5e633252e8849e4d555ce2a53c10ff0d439f7fa8  src/main/java/
 194589b81c6495bfb1c24a1a164354250261bb145f381b7eabe33fd0127cec62  src/main/java/app/viktorych/tv/Replaced.java
 9d464f82bea66559b30f970e04feeb0057aa7546c1762fe7b91b149249e20034  src/main/java/app/viktorych/tv/TvApp.java
 b130f74e720de7c9a67a8b7331821e959bead107be409edd124e1b809455788b  src/main/java/app/viktorych/tv/TvLauncherActivity.java
-a8ec43f0386dec5e10b5fe489065b7144fcb5bc56d3fe3af5cb880de7a5ed41f  src/main/java/app/viktorych/tv/TvWebActivity.java
+9fa0ee414cd075a22cdf5c4fabd18d18174d335ef2693fb7be0a8e17474576ff  src/main/java/app/viktorych/tv/TvWebActivity.java
 bce49128ee15559c56f78902ce35169c663df0a8be7f034ad954df4ec78d782a  src/main/java/app/viktorych/tv/mesh/BleMesh.java
 a16b0fa9b854e210762eec73aa1e50d9ada8a849dbccfb8783296f814bffec0b  src/main/java/app/viktorych/tv/mesh/Crypto.java
 b6f062f932bbc7d07f0f670aa0ae1c59f3980c6f2ef4689efa5a674ab2f39488  src/main/java/app/viktorych/tv/mesh/MeshCore.java
@@ -26,6 +26,8 @@ c10301f1a1e1b2fdcfb2003d7e1f9ad2ba5c9bb59fbde1156e999957cfebc48d  src/main/java/
 6c8e684702d8fc282d3754c0a1b8b27679fdea7560780c173975759b49fad534  src/main/java/app/viktorych/tv/pad/PadModes.java
 38b0c22204e2b8d41c96396ffb1440313fd6e083410113c61974d7a7e7995b8d  src/main/java/app/viktorych/tv/pad/PadPrefs.java
 a29b9e3e8156afcae81511971887e8c1ee0ff95efe2e2b62e3d87e39f420e749  src/main/java/app/viktorych/tv/pad/TouchInjector.java
+3e09d3ec20bb8d909b562db0ab08661cedaf7c63b33dd6b5c1214e69133966e1  src/main/java/app/viktorych/tv/tune/DisplayTune.java
+bf2edb813d324bf8f896574da6117e25beb4f594ad88b56f9cd71cdf77a84d36  src/main/java/app/viktorych/tv/tune/Specs.java
 2e05e7358b785d077cc7f5b4bca0054828505dfe53a793cb9b3ff0da3b28e75a  src/main/res/drawable-xhdpi/banner.png
 d17ab384448361a4717ab4e1a64177e0a2b1c373870f95c928f77cabf1ea45b5  src/main/res/drawable-xhdpi/banner_browser.png
 f59bf4df0fc2bfce23d2d81e0400d1aefda09626af39fcc64df4ce7e5c14d43c  src/main/res/drawable-xhdpi/banner_media.png

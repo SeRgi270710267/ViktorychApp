@@ -3,5 +3,5 @@
   "versionName": "1.4.0",
   "apk": "tv/ViktorychTV.apk",
   "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
-  "notes": "Optional home screen: make ViktorychTV your TV's home with big app tiles, folders, and a top bar for search, inputs and settings. The app itself works exactly as before."
+  "notes": "New, optional: make ViktorychTV your TV's home screen, with big app tiles, folders, and a top bar for search, inputs and settings. The app itself works exactly as before. Also checks this TV's screen, HDR, decoders, sound, memory and network on first open and picks the best settings."
 }
