@@ -170,6 +170,15 @@
       try {
         installed = navigator.standalone === true || (window.matchMedia && (window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches));
       } catch (err2) { installed = false; }
+      // Installed desktop chrome before first paint (desktop-app.js keeps it in sync).
+      try {
+        var rootEl = document.documentElement;
+        var wco = navigator.windowControlsOverlay;
+        if (installed || (window.matchMedia && window.matchMedia("(display-mode: minimal-ui)").matches)) rootEl.classList.add("vk-installed");
+        if ((wco && wco.visible === true) || (window.matchMedia && window.matchMedia("(display-mode: window-controls-overlay)").matches)) rootEl.classList.add("vk-wco");
+        var desk = JSON.parse(localStorage.getItem("viktorych-desktop-v1") || "{}");
+        if (desk && desk.showScrollbar === true) rootEl.classList.add("vk-show-scrollbar");
+      } catch (err3) { /* old browser */ }
       if (cfg.gate === true && !signed && !installed) {
         document.documentElement.setAttribute("data-wall", "1");
         var theme = document.documentElement.getAttribute("data-theme");
@@ -658,6 +667,7 @@
   <script src="shared/mirror.js" defer></script>
   <script src="shared/x-range.js" defer></script>
   <script src="dock.js" defer></script>
+  <script src="desktop-app.js" defer></script>
   <script src="video-embed.js" defer></script>
   <template id="late-scripts-rest">
     <script src="shared/pill-data.js" type="module"></script>

@@ -4,7 +4,7 @@ const VERSION = "viktorych-a150-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T01:44:34Z-keys-x-settings
+// cache-bust: 2026-10-30T02:00:00Z-desktop-titlebar
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -53,6 +53,7 @@ const SHELL_FILES = [
   "./customize.css",
   "./dock.css",
   "./dock.js",
+  "./desktop-app.js",
   "./i18n.js",
   "./i18n/en.js",
   "./i18n/ru.js",
