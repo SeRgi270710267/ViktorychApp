@@ -2097,6 +2097,8 @@ def main() -> None:
     check("function runXPlayback(" in embed_js and "function xEmbedUrl(" in embed_js and "function startXPlayback(" in app and "dev.playbackUrl" in app and "armPeer(el, null, source.url)" in app and "function publicMediaPolicy(" in worker_js and "cacheEverything: false" in worker_js, "X video tries the original file, then the official embed, and a relayed file skips the CDN cache")
     embed_flow = subprocess.run(["node", str(ROOT / "scripts" / "video_embed_test.js")], cwd=ROOT)
     check(embed_flow.returncode == 0, "official embed urls, fallbacks, and combined-file selection pass")
+    providers_flow = subprocess.run(["node", str(ROOT / "scripts" / "video_providers_test.js")], cwd=ROOT)
+    check(providers_flow.returncode == 0, "link card video providers match golden urls and only frame official players")
     check("latest_version" not in (ROOT / "scripts" / "yt_remote.py").read_text(encoding="utf-8"), "sync does not bake an invidious itag url")
     from adapters.common import dates_moved_later, lock_publish_time, publish_date_from_html, relative_label
     from adapters.youtube_rss import backfill_youtube_dates
