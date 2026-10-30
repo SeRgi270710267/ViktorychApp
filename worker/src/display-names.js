@@ -18,7 +18,15 @@
    next to a name (lists, search, mentions, replies, messages and so on).
 
    loadDisplayNames(env, id) returns { names, listOrder } with each name's
-   audience in the stored form, for owner tooling that sees all of them. */
+   audience in the stored form, for owner tooling that sees all of them.
+
+   The site owner (accounts.owner = 1) sees everything: audience rules never
+   hide a name from them. Wherever a name is returned they get the main name,
+   the profile carries every name (allDisplayNames), and
+   GET /v1/display-names/of?handle= lists one account's names with their
+   audiences. Each bypass is written to display_name_audit (one row per
+   account per request), readable at GET /v1/display-names/audit; both
+   routes answer 403 for everyone else. */
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import {
@@ -31,6 +39,8 @@ export const DISPLAY_NAME_SCHEMA = [
   "CREATE INDEX IF NOT EXISTS display_names_owner ON display_names(public_id, position)",
   "CREATE TABLE IF NOT EXISTS display_name_prefs (public_id TEXT PRIMARY KEY, primary_audience TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)",
   "CREATE INDEX IF NOT EXISTS display_name_prefs_active ON display_name_prefs(active)",
+  "CREATE TABLE IF NOT EXISTS display_name_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, viewer_id TEXT NOT NULL, target_id TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '')",
+  "CREATE INDEX IF NOT EXISTS display_name_audit_at ON display_name_audit(at)",
   // One-time move of the old "Friends see this instead of your display name".
   "INSERT OR IGNORE INTO display_names (id, public_id, name, audience, position, created_at) SELECT 'fn' || public_id, public_id, name, '{\"include\":{\"friends\":true}}', 0, updated_at FROM friend_names WHERE name != ''",
   "INSERT INTO display_name_prefs (public_id, primary_audience, active, updated_at) SELECT public_id, '', 1, updated_at FROM friend_names WHERE name != '' ON CONFLICT(public_id) DO UPDATE SET active = 1",
@@ -118,9 +128,49 @@ async function activeSet(env, request, ownerId) {
   return memo.get(key);
 }
 
+/* Is this viewer the site owner (accounts.owner = 1)? Memoized per request. */
+export async function isSiteOwner(env, request, viewerId) {
+  if (!viewerId) return false;
+  const memo = memoFor(request);
+  const key = "owner:" + viewerId;
+  if (!memo.has(key)) {
+    memo.set(key, (async () => {
+      try {
+        const row = await env.DB.prepare("SELECT owner FROM accounts WHERE public_id = ?").bind(viewerId).first();
+        return !!(row && Number(row.owner) === 1);
+      } catch (err) { return false; }
+    })());
+  }
+  return memo.get(key);
+}
+
+/* One audit row per owner, account and action per request. */
+export async function auditOwnerView(env, request, viewerId, targetId, action, detail) {
+  const memo = memoFor(request);
+  const key = "audit:" + action + ":" + targetId;
+  if (memo.has(key)) return;
+  memo.set(key, true);
+  let where = "";
+  try { where = new URL(request.url).pathname; } catch (err) { where = ""; }
+  const info = Object.assign({ path: where }, detail || {});
+  try {
+    await env.DB.prepare("INSERT INTO display_name_audit (at, viewer_id, target_id, action, detail) VALUES (?, ?, ?, ?, ?)").bind(Date.now(), viewerId, targetId, action, JSON.stringify(info).slice(0, 1000)).run();
+  } catch (err) { /* table boots with the schema; never block a read on the log */ }
+}
+
+/* Every name an account has, for the site owner's eyes only. */
+export async function ownerSeesAll(env, request, ownerId, viewerId) {
+  if (!ownerId || ownerId === viewerId || !(await isSiteOwner(env, request, viewerId))) return null;
+  const set = await activeSet(env, request, ownerId);
+  if (!set) return null;
+  await auditOwnerView(env, request, viewerId, ownerId, "view", { names: set.names.length });
+  return set.names.map((item) => ({ id: item.id, name: item.name, primary: !!item.primary }));
+}
+
 /* What this viewer sees for ownerId: null when the account has only one
    plain public name (callers keep what they have), else
-   { name, hidden, alt } where alt means a name other than the main one. */
+   { name, hidden, alt } where alt means a name other than the main one.
+   The site owner always gets the main name, never hidden, plus all names. */
 export async function displayFor(env, request, ownerId, viewerId) {
   if (!ownerId || ownerId === viewerId) return null;
   const set = await activeSet(env, request, ownerId);
@@ -129,6 +179,8 @@ export async function displayFor(env, request, ownerId, viewerId) {
   const key = "pick:" + ownerId + ">" + (viewerId || "");
   if (!memo.has(key)) {
     memo.set(key, (async () => {
+      const all = await ownerSeesAll(env, request, ownerId, viewerId);
+      if (all) return { name: set.names[0].name, hidden: false, alt: false, owner: true, all };
       const rel = await relationTo(env, ownerId, viewerId || "");
       const picked = pickDisplayName(set, rel);
       return picked ? { name: picked.name, hidden: false, alt: !picked.primary } : { name: "", hidden: true, alt: false };
@@ -315,6 +367,26 @@ export async function handleDisplayNames(request, env, path, deps) {
   };
 
   if (path === "/v1/display-names" && method === "GET") return json(200, await present(env, request, ownerId), nocache);
+
+  /* Site owner only: one account's names with their audiences, and the log. */
+  if ((path === "/v1/display-names/of" || path === "/v1/display-names/audit") && method === "GET") {
+    if (!(await isSiteOwner(env, request, ownerId))) return json(403, { error: "forbidden" });
+    const url = new URL(request.url);
+    if (path === "/v1/display-names/audit") {
+      const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit")) || 100));
+      const list = rowsOf(await env.DB.prepare("SELECT a.id, a.at, a.action, a.detail, t.handle AS target FROM display_name_audit a LEFT JOIN accounts t ON t.public_id = a.target_id WHERE a.viewer_id = ? ORDER BY a.id DESC LIMIT ?").bind(ownerId, limit).all());
+      return json(200, { entries: list.map((row) => ({ id: row.id, at: row.at, action: row.action, target: row.target || "", detail: (() => { try { return JSON.parse(row.detail || "{}"); } catch (err) { return {}; } })() })) }, nocache);
+    }
+    const who = String(url.searchParams.get("handle") || "").replace(/^@/, "");
+    const targetId = who ? await idForHandle(env, who, ownerId) : "";
+    if (!targetId) return json(404, { error: "not_found" });
+    const set = await loadDisplayNames(env, targetId);
+    if (!set) return json(404, { error: "not_found" });
+    await auditOwnerView(env, request, ownerId, targetId, "list", { names: set.names.length });
+    const names = [];
+    for (const item of set.names) names.push({ id: item.id, name: item.name, primary: item.primary, audience: await audienceOut(env, request, targetId, item.audience) });
+    return json(200, { handle: who, names, listOrder: set.listOrder }, nocache);
+  }
 
   if (path === "/v1/display-names/preview" && method === "GET") {
     const url = new URL(request.url);
