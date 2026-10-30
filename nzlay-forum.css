@@ -36,7 +36,8 @@
 /* post cards */
 .nzf-post { cursor: pointer; }
 .nzf-post a, .nzf-post button, .nzf-post [data-gs-join-room] { cursor: pointer; }
-.nzf-title { font-weight: 800; }
+.nzf-title { font-size: 15px; line-height: 20px; font-weight: 700; margin: 0 0 4px; }
+.nzf-title + .nzf-text { margin-top: 0; }
 .nzf-line { display: flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 13px; font-weight: 600; margin-left: 52px; }
 .nzf-line svg { width: 16px; height: 16px; fill: currentColor; }
 .nzf-more { display: inline-block; color: var(--nzf-accent); text-decoration: none; margin-top: 2px; font-size: 15px; }
@@ -66,7 +67,7 @@
 
 /* thread focus post */
 .nzf-focus .nzf-focus-head { align-items: center; }
-.nzf-focus-title { font-size: 19px; font-weight: 800; margin: 10px 0 6px; line-height: 1.3; }
+.nzf-focus-title { font-size: 17px; font-weight: 700; margin: 12px 0 4px; line-height: 24px; }
 .nzf-focus-body .post-text { font-size: 17px; line-height: 1.5; }
 .nzf-focus-meta { display: flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 14px; margin-top: 12px; }
 .nzf-focus-meta .dot { color: var(--text-dim); }
@@ -140,5 +141,5 @@
   .nzf-regone { gap: 8px; }
   .nzf-back { padding: 0; align-items: stretch; }
   .nzf-sheet { width: 100%; max-height: 100vh; height: 100%; border-radius: 0; }
-  .nzf-focus-title { font-size: 18px; }
+  .nzf-focus-title { font-size: 17px; }
 }
