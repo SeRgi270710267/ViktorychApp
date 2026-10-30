@@ -113,12 +113,14 @@ async function main() {
   else launch.channel = "chrome";
   const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), "link-preview-")), launch);
   const imageLoads = [];
+  const embedLoads = [];
   try {
     await ctx.route("**/*", (route) => {
       const url = route.request().url();
       if (url.startsWith("http://127.0.0.1")) return route.continue();
       if (url.startsWith("https://api.fxtwitter.com/2/status/" + STATUS)) return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(fxStatus) });
       if (url.startsWith("https://public.api.bsky.app/")) return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(bskyThread) });
+      if (url.startsWith("https://www.youtube-nocookie.com/embed/")) { embedLoads.push(url); return route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>player</title>" }); }
       if (/img\.fixture\.test|i\.ytimg\.com|pbs\.twimg\.com/.test(url)) { imageLoads.push(url); return route.fulfill({ status: 200, contentType: "image/png", body: PIXEL }); }
       return route.fulfill({ status: 404, body: "{}" });
     });
@@ -166,6 +168,22 @@ async function main() {
     check(s["Quote"] && s["Quote"].quote && /Quoted words here/.test(s["Quote"].quoteText), "an X status link embeds the quoted post");
     check(s["Dead"] && s["Dead"].chip && !s["Dead"].large, "a page without tags falls back to a domain chip");
     check(s["Video"] && s["Video"].large && s["Video"].play, "a YouTube link shows a video card with a play button");
+    // Tap plays the official player in the card itself: no navigation, no
+    // full screen, and the title still links to the page.
+    const before0 = page.url();
+    const facade = page.locator("#app article.post:has-text('Video') .lv-facade").first();
+    const hadFrame = await page.locator("iframe.lv-frame").count();
+    check(hadFrame === 0 && embedLoads.length === 0, "no player loads before a tap");
+    await facade.click();
+    await page.waitForTimeout(600);
+    const tapped = await page.evaluate(() => {
+      const card = document.querySelector(".lv-card.lv-on");
+      const frame = card && card.querySelector("iframe.lv-frame");
+      const link = card && card.querySelector("a.lv-copy");
+      return { src: frame ? frame.src : "", allow: frame ? frame.getAttribute("allow") : "", link: link ? link.href : "", full: !!document.fullscreenElement, viewer: !!document.querySelector("#viewer:not([hidden])") };
+    });
+    check(/^https:\/\/www\.youtube-nocookie\.com\/embed\/dQw4w9WgXcQ\?autoplay=1&playsinline=1/.test(tapped.src) && /autoplay/.test(tapped.allow), "a tap swaps in the YouTube embed with autoplay and playsinline (" + tapped.src + ")");
+    check(page.url() === before0 && !tapped.full && !tapped.viewer && /youtube\.com\/watch\?v=dQw4w9WgXcQ/.test(tapped.link), "the tap stays in the feed and the title still opens the video page");
     check(s["Sky"] && s["Sky"].quote && /Hello from the sky/.test(s["Sky"].quoteText), "a Bluesky link embeds the post");
     check(s["Has media"] && s["Has media"].cards === 0, "a post with its own media shows no page card");
     check(s["Same link again"] && s["Same link again"].large, "a repeated link reuses the same card");

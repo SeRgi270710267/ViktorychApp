@@ -81,3 +81,36 @@ test("YouTube links use oEmbed and a video card", async () => {
   assert.equal(body.large, true);
   assert.match(seen[0], /youtube\.com\/oembed/);
 });
+
+test("unfurl keeps the og:video player type and reads an oEmbed video player", async () => {
+  const seen = [];
+  const og = `<html><head><meta property="og:title" content="Clip"><meta property="og:video:url" content="https://tube.example/videos/embed/fake-0001"><meta property="og:video:type" content="text/html"><meta property="og:video:width" content="1280"><meta property="og:video:height" content="720"><link rel="alternate" type="application/json+oembed" href="/services/oembed?url=x"></head>`;
+  const rumbleLike = `<html><head><meta property="og:title" content="Clip two"><link rel="alternate" type="application/json+oembed" href="https://video.example/api/oembed.json?url=fake"></head>`;
+  const oembed = JSON.stringify({ type: "video", width: 640, height: 360, html: '<iframe src="https://video.example/embed/vfake0/?pub=fake" width="640" height="360"></iframe>' });
+  const deps = { fetch: site({
+    "https://tube.example/w/fake-0001": { body: og },
+    "https://video.example/vfake-title.html": { body: rumbleLike },
+    "https://video.example/api/oembed.json?url=fake": { body: oembed, type: "application/json" }
+  }, seen) };
+  const first = await (await handleUnfurl(req("https://tube.example/w/fake-0001"), deps)).json();
+  assert.equal(first.video, "https://tube.example/videos/embed/fake-0001");
+  assert.equal(first.videoType, "text/html");
+  assert.equal(first.videoWidth, 1280);
+  assert.equal(first.oembed, undefined);
+  assert.equal(first.embed, undefined);
+  assert.ok(!seen.some((row) => /services\/oembed/.test(row.url)), "a page with an html player needs no oEmbed fetch");
+  const second = await (await handleUnfurl(req("https://video.example/vfake-title.html"), deps)).json();
+  assert.deepEqual(second.embed, { src: "https://video.example/embed/vfake0/?pub=fake", width: 640, height: 360 });
+});
+
+test("an oEmbed answer that is not a video, or not https, adds no player", async () => {
+  const page = (href) => `<html><head><meta property="og:title" content="T"><link rel="alternate" type="application/json+oembed" href="${href}"></head>`;
+  const deps = { fetch: site({
+    "https://a.example/p": { body: page("https://a.example/o") },
+    "https://a.example/o": { body: JSON.stringify({ type: "rich", html: '<iframe src="https://a.example/e"></iframe>' }), type: "application/json" },
+    "https://b.example/p": { body: page("https://b.example/o") },
+    "https://b.example/o": { body: JSON.stringify({ type: "video", html: '<iframe src="http://b.example/e"></iframe>' }), type: "application/json" }
+  }, []) };
+  assert.equal((await (await handleUnfurl(req("https://a.example/p"), deps)).json()).embed, undefined);
+  assert.equal((await (await handleUnfurl(req("https://b.example/p"), deps)).json()).embed, undefined);
+});
