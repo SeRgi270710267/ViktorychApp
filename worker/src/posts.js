@@ -528,6 +528,7 @@ async function listPosts(request, env, deps) {
     stamped.push({ at: Number(post.createdAt) || 0, post: post });
   }
   let communitiesHome = true;
+  let communityPrefs = null;
   if (author) {
     // Profiles list the account's community posts and replies too; they live in
     // community_posts, not public_posts.
@@ -548,6 +549,7 @@ async function listPosts(request, env, deps) {
   try {
     const pack = await communityHomeRows(env, request, session, deps.presentAccount);
     communitiesHome = !(pack && pack.communitiesHome === false);
+    communityPrefs = (pack && pack.prefs) || null;
     const extra = (pack && pack.posts) || [];
     for (let i = 0; i < extra.length; i++) {
       const post = extra[i];
@@ -563,7 +565,7 @@ async function listPosts(request, env, deps) {
   }
   await withParents(env, request, session, posts, skip);
   await decorate(env, posts, session.public_id);
-  return deps.json(200, { posts: posts, communitiesHome: communitiesHome });
+  return deps.json(200, communityPrefs ? { posts: posts, communitiesHome: communitiesHome, communityPrefs: communityPrefs } : { posts: posts, communitiesHome: communitiesHome });
 }
 
 async function replyAllowed(env, session, parent) {
