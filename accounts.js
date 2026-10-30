@@ -1764,7 +1764,18 @@ var numberNote = form.passkey
     var main = names.filter(function (n) { return n.primary; })[0] || names[0];
     return names.length > 1 ? tr("@{handle} and {count} more", { handle: main.handle, count: names.length - 1 }) : "@" + main.handle;
   }
+  function displayNamesSub() {
+    var api = window.ViktorychDisplayNames;
+    var names = api && api.names ? api.names() : null;
+    if (!names || names.length < 2) return tr("Choose which name each audience sees.");
+    var main = names.filter(function (n) { return n.primary; })[0] || names[0];
+    return tr("{name} and {count} more", { name: main.name, count: names.length - 1 });
+  }
   function editBody() {
+    if (form.sub === "displaynames") {
+      var dn = window.ViktorychDisplayNames;
+      return '<div class="ep-subpage">' + (dn && dn.profileHtml ? dn.profileHtml() : '<p class="acct-sub">' + esc(tr("Loading…")) + "</p>") + "</div>";
+    }
     if (form.sub === "usernames") {
       var api = window.ViktorychUsernames;
       return '<div class="ep-subpage">' + (api && api.profileHtml ? api.profileHtml() : '<p class="acct-sub">' + esc(tr("Loading…")) + "</p>") + "</div>";
@@ -1772,6 +1783,7 @@ var numberNote = form.passkey
     var privRow = epSwitch("toggle-form-private", form.privateFollows, tr("Keep followers and following private"), tr("Only you can see your followers and following lists."));
     var profLessRow = epSwitch("toggle-form-profileless", form.profileLess, tr("Profile-less account"), tr("No public profile. Browse and comment anonymously."));
     var rows = '<div class="ep-rows">' +
+      (window.ViktorychDisplayNames ? epRow("edit-sub", tr("Display names"), displayNamesSub(), ' data-sub="displaynames"') : "") +
       (window.ViktorychUsernames ? epRow("edit-sub", tr("Usernames"), usernamesSub(), ' data-sub="usernames"') : "") +
       epRow("open-link-identity", tr("Linked social accounts"), tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) +
       "</div>";
@@ -1784,8 +1796,8 @@ var numberNote = form.passkey
   function editModal(body) {
     var anim = form.anim || "";
     form.anim = "";
-    var sub = form.sub === "usernames";
-    var title = sub ? tr("Usernames") : tr("Edit profile");
+    var sub = form.sub === "usernames" || form.sub === "displaynames";
+    var title = form.sub === "displaynames" ? tr("Display names") : sub ? tr("Usernames") : tr("Edit profile");
     var lead = sub
       ? '<button class="icon-btn" type="button" data-acct="edit-back" aria-label="' + esc(tr("Back")) + '">' + backIcon() + "</button>"
       : '<button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + "</button>";
@@ -2003,6 +2015,7 @@ var numberNote = form.passkey
       form.initial = epSnapshot();
       loadBirthday(account);
       watchUsernames();
+      watchDisplayNames();
     }
     paint();
   }
@@ -2016,6 +2029,25 @@ var numberNote = form.passkey
       form.subFrom = from === "settings" ? "settings" : "";
       paint();
     }
+  }
+  /* Making another display name the main one changes Name; the open form
+     follows unless it was edited by hand. */
+  var displayNamesWatched = false;
+  function watchDisplayNames() {
+    var api = window.ViktorychDisplayNames;
+    if (displayNamesWatched || !api || !api.watch) return;
+    displayNamesWatched = true;
+    api.watch(function () {
+      if (view !== "edit") return;
+      var names = api.names ? api.names() : null;
+      var main = names ? names.filter(function (n) { return n.primary; })[0] : null;
+      var start = form.initial || {};
+      if (main && main.name && String(form.displayName || "") === String(start.displayName || "") && main.name !== form.displayName) {
+        form.displayName = main.name;
+        start.displayName = main.name;
+      }
+      paint();
+    });
   }
   var usernamesWatched = false;
   function watchUsernames() {
@@ -3332,6 +3364,7 @@ function signupPayload() {
     var prep = window.ViktorychNotes && window.ViktorychNotes.beforeSignOut ? window.ViktorychNotes.beforeSignOut(!!all, token) : null;
     Promise.resolve(prep).then(function () {
       removeStored("account-v1");
+      if (window.ViktorychDisplayNames && window.ViktorychDisplayNames.reset) window.ViktorychDisplayNames.reset();
       tellSW(false, "signout");
       // Signing out erases what this device saved for the account (app-lock.js).
       var lock = window.ViktorychAppLock;
@@ -3535,6 +3568,7 @@ function signupPayload() {
         writeSession(session);
         remember(res.account);
         dirtyLists();
+        if (window.ViktorychDisplayNames && window.ViktorychDisplayNames.names && window.ViktorychDisplayNames.names()) window.ViktorychDisplayNames.load();
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
         return saveBirthday(session.token).then(function (bdayOk) {
           form.saving = false;
@@ -3762,12 +3796,21 @@ function signupPayload() {
     if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
     if (account.viewerFriendStatus != null && !(graphCounts[id].friendAt && Date.now() - graphCounts[id].friendAt < 60000)) graphCounts[id].friendStatus = account.viewerFriendStatus;
     if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
+    if (account.friendsCount != null) graphCounts[id].friendsOff = account.friendsOff === true;
+    if (typeof account.canRequest === "boolean") graphCounts[id].canRequest = account.canRequest;
     graphCounts[id].pending = !!account.viewerPending;
     graphCounts[id].viewerBlocks = !!account.viewerBlocks;
     graphCounts[id].blockedBy = !!account.blockedBy;
     graphCounts[id].muted = !!account.viewerMutes;
     graphCounts[id].locked = !!account.locked;
     if (account.followingCount != null || account.followersCount != null || account.friendsCount != null) countsChanged(id);
+  }
+  function friendsOffNow() { return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff()); }
+  function friendsHiddenFor(account) {
+    var ref = accountRef(account);
+    if (account && account.friendsOff) return true;
+    if (ref && graphCounts[ref] && graphCounts[ref].friendsOff) return true;
+    return !!(account && profileMine(account) && friendsOffNow());
   }
   function countLink(account, tab, n, label) {
     var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
@@ -3776,7 +3819,7 @@ function signupPayload() {
   function accountCountsHtml(account) {
     var ref = accountRef(account);
     if (ref && (accountStat(account, "following") == null || accountStat(account, "followers") == null)) ensureCounts(ref);
-    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + "</div>";
+    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + (friendsHiddenFor(account) ? "" : countLink(account, "friends", accountStat(account, "friends"), tr("Friends"))) + "</div>";
   }
   function followersOf(id) {
     var known = graphCounts[id];
@@ -4089,6 +4132,13 @@ function signupPayload() {
     var session = readSession();
     var ref = accountRef(account);
     if (!session || !account || !ref || profileMine(account)) return "";
+    // Friends off for me: no friend buttons anywhere.
+    if (friendsOffNow()) return "";
+    var known = graphCounts[ref] || {};
+    var curStatus = known.friendStatus || account.viewerFriendStatus || "none";
+    if (account.friendsOff || known.friendsOff || ((account.canRequest === false || known.canRequest === false) && curStatus === "none")) {
+      return '<span class="friend-off-note" role="note">' + esc(tr("Not accepting friend requests")) + "</span>";
+    }
     if (!friendRequestsLoaded && Date.now() - friendReqTriedAt > 60000) { friendReqTriedAt = Date.now(); ensureFriendRequests(); }
     var status = (graphCounts[ref] && graphCounts[ref].friendStatus) || account.viewerFriendStatus || "none";
     var recent = graphCounts[ref] && graphCounts[ref].friendAt && Date.now() - graphCounts[ref].friendAt < 60000;
@@ -4127,6 +4177,8 @@ function signupPayload() {
       if (res.friendsCount != null) graphCounts[id].friends = res.friendsCount;
       if (friendWord(res)) graphCounts[id].friendStatus = friendWord(res);
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
+      graphCounts[id].friendsOff = res.friendsOff === true;
+      if (typeof res.canRequest === "boolean") graphCounts[id].canRequest = res.canRequest;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { friendsLoads[key] = false; friendsFailedAt[key] = Date.now(); });
   }
@@ -4225,6 +4277,14 @@ function signupPayload() {
 
     var ep = "/v1/friends/" + action;
     api(ep, { method: "POST", token: session.token, body: { targetId: tId } }).then(function (res) {
+      if (res && res.status === 403 && (res.error === "friends_off" || res.error === "not_accepting")) {
+        if (res.error === "friends_off") graphCounts[idKey].friendsOff = true;
+        graphCounts[idKey].canRequest = false;
+        if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(tr("This account isn’t accepting friend requests."));
+      }
+      if (res && res.status === 403 && res.error === "friends_off_self" && window.ViktorychAccounts && window.ViktorychAccounts.toast) {
+        window.ViktorychAccounts.toast(tr("Turn Friends on in Settings to do this."));
+      }
       if (!res || res.status !== 200) {
         graphCounts[idKey].friendStatus = prevStatus;
         graphCounts[idKey].friendAt = 0;
@@ -4733,6 +4793,7 @@ function signupPayload() {
       if (id === "about") return !!showAbout;
       if (id === "gifts") return !!showGifts;
       if (id === "highlights") return !!(mine || highlightHtml);
+      if (id === "friends") return !friendsHiddenFor(account);
       if (id === "games") return !!(window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabAvailable && window.ViktorychGameSocial.profileTabAvailable(account, mine));
       return true;
     }
@@ -6203,7 +6264,8 @@ function signupPayload() {
     else if (act === "edit") openAuth("edit");
     else if (act === "edit-usernames") openEdit("usernames", "settings");
     else if (act === "edit-sub") {
-      form.sub = acct.getAttribute("data-sub") === "usernames" ? "usernames" : "";
+      var wanted = acct.getAttribute("data-sub");
+      form.sub = wanted === "usernames" || wanted === "displaynames" ? wanted : "";
       form.subFrom = "";
       form.anim = "sub";
       paint();
@@ -6212,7 +6274,7 @@ function signupPayload() {
     }
     else if (act === "edit-back") {
       if (form.subFrom === "settings") { form.sub = ""; requestEditClose(true); }
-      else { form.sub = ""; form.anim = "back"; paint(); var row = document.querySelector('#account-layer [data-acct="edit-sub"]'); if (row) row.focus(); }
+      else { var was = form.sub; form.sub = ""; form.anim = "back"; paint(); var row = document.querySelector('#account-layer [data-acct="edit-sub"][data-sub="' + was + '"]') || document.querySelector('#account-layer [data-acct="edit-sub"]'); if (row) row.focus(); }
     }
     else if (act === "discard-yes") { form.confirmDiscard = false; requestEditClose(true); }
     else if (act === "discard-no") { form.confirmDiscard = false; paint(); }
@@ -6856,6 +6918,7 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
     profileTabPlan: profileTabPlan,
     onHistoryReady: onHistoryReady,
     requestRender: null,
+    friendsOffFor: function (id) { var k = graphCounts[id]; return !!(k && k.friendsOff); },
     profilePostsHtml: null,
     call: api,
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
