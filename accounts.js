@@ -849,7 +849,9 @@
     var list = (!opts.method || opts.method === "GET") ? readOrder(true) : bySpeed(apiOrder());
     // Owner usage and limits come from the main Worker's own analytics;
     // a backup answering them would report only itself.
-    if (/^\/v1\/owner\/(usage|limits)/.test(String(path))) {
+    // A Discord join and its captcha answer must reach the same Worker: the
+    // challenge, its one retry and the owner's key all live there.
+    if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path))) {
       var mainRoot = String(config().api || "").replace(/\/$/, "");
       if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
     }
@@ -5268,7 +5270,7 @@ function signupPayload() {
       sessionStorage.clear();
       sessionStorage.setItem(DELETED_KEY, "1");
     } catch (err) { /* the screen still replaces the page */ }
-    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord", "viktorych-discord-local", "viktorych-notes"];
+    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord", "viktorych-discord-local", "viktorych-notes", "viktorych-swr"];
     if (window.indexedDB && indexedDB.deleteDatabase) {
       databases.forEach(function (name) {
         try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }

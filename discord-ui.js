@@ -1899,9 +1899,16 @@
     });
   }
 
+  /* A copy for the first paint. The full index stays in the IndexedDB doc
+     cache; a big one is not copied to localStorage, which is for settings. */
+  const INDEX_LOCAL_MAX = 60000;
   function rememberIndex(index) {
     if (!index || typeof index !== "object") return;
-    try { localStorage.setItem(INDEX_KEY, JSON.stringify(index)); }
+    try {
+      const text = JSON.stringify(index);
+      if (text.length > INDEX_LOCAL_MAX) localStorage.removeItem(INDEX_KEY);
+      else localStorage.setItem(INDEX_KEY, text);
+    }
     catch (err) { /* private mode can refuse */ }
   }
 
