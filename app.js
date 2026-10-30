@@ -27127,7 +27127,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const body = text ? linkify(text, shown.links || [], post.platform, post.handle) : "";
     return `<div class="xv-info">
       <div class="xv-who">${avatar(face.avatar, name)}<div class="xv-names"><span class="xv-name">${esc(name || "")}${badge(face.verified)}</span>${handle ? `<span class="xv-handle">@${esc(handle)}</span>` : ""}</div></div>
-      ${body ? `<div class="xv-text" role="button" tabindex="0" data-act="xv-more" aria-expanded="false" aria-label="${esc(tr("Show more"))}"><div class="xv-body" dir="auto">${body}</div></div>` : ""}
+      ${body ? `<div class="xv-text" role="button" tabindex="0" data-act="xv-more" aria-expanded="false" aria-label="${esc(tr("Show more"))}"><div class="xv-body" dir="auto">${body}</div><span class="xv-more-cue" aria-hidden="true">${esc(tr("Show more"))}</span></div>` : ""}
       ${post.date ? `<div class="xv-when">${esc(relTime(post.date))}</div>` : ""}
       <div class="xv-pills">${actionBar(post, true)}</div>
     </div>`;
@@ -27231,6 +27231,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (view.rate) video.playbackRate = view.rate;
       events.forEach((name) => video.addEventListener(name, paint));
       video.addEventListener("playing", () => { if (next) xvPreload(box, next); }, { once: true });
+      xvMerge(box, stage);
       paint();
     };
     const watch = typeof MutationObserver === "function" && stage ? new MutationObserver(attach) : null;
@@ -27239,7 +27240,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     // Capture phase: the chrome owns taps on the clip, so the player's own
     // tap handlers below do not toggle it a second time.
     const onTap = (event) => {
-      if (event.target.closest("button, a, .xv-info, .xv-bar, .xv-top, .menu")) return;
+      if (event.target.closest("button, a, .xv-info, .xv-bar, .xv-top, .menu, .ytp-chrome-bottom, .ytp-settings-menu")) return;
       if (!event.target.closest(".xv-cur")) return;
       event.stopPropagation();
       const menu = box.querySelector(".xv-menu");
@@ -27247,8 +27248,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (box.classList.contains("xv-open")) { xvMore(box, false); return; }
       const video = xvVideo(box);
       if (!video) return;
+      // One player: on a touch screen a tap shows or hides the controls and
+      // the post text together, like X; the play button plays and pauses.
+      const yt = xvYt(box);
+      if (yt && xvTouch()) {
+        // The browser sends a mouse move ahead of the click, which already
+        // shows the controls; go by how they looked when the finger landed.
+        const wasHidden = Date.now() - downAt < 1500 ? downHidden : yt.el.classList.contains("ytp-autohide");
+        if (wasHidden) yt.resetAutoHide_(); else yt.setAutoHide_(true);
+        return;
+      }
       if (video.paused) video.play().catch(() => {}); else video.pause();
+      if (yt) yt.resetAutoHide_();
     };
+    let downAt = 0;
+    let downHidden = false;
+    const onDown = () => {
+      const yt = xvYt(box);
+      downAt = Date.now();
+      downHidden = !!(yt && yt.el.classList.contains("ytp-autohide"));
+    };
+    box.addEventListener("pointerdown", onDown, true);
     box.addEventListener("click", onTap, true);
     // Seek on the progress line: tap or drag.
     const prog = box.querySelector(".xv-prog");
@@ -27288,6 +27308,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       settle = setTimeout(() => {
         const cur = box.querySelector(".xv-cur");
         if (!track || !cur || STATE.viewer !== view) return;
+        if (track._xvQuiet && Date.now() < track._xvQuiet) { track.scrollTop = cur.offsetTop; return; }
         const h = track.clientHeight || 1;
         const delta = Math.round((track.scrollTop - cur.offsetTop) / h);
         if (delta) xvStep(delta > 0 ? 1 : -1);
@@ -27295,12 +27316,112 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     };
     if (track) track.addEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll, { passive: true });
     attach();
+    const wake = () => { const yt = xvYt(box); if (yt && !xvTouch()) yt.resetAutoHide_(); };
+    box.addEventListener("mousemove", wake, { passive: true });
+    const clamp = () => xvClamp(box);
+    window.addEventListener("resize", clamp);
+    requestAnimationFrame(clamp);
     box._xvStop = () => {
       clearTimeout(settle);
+      box.removeEventListener("mousemove", wake);
+      window.removeEventListener("resize", clamp);
+      if (box._xvUnmerge) { box._xvUnmerge(); box._xvUnmerge = null; }
+      box.classList.remove("xv-yt", "xv-chrome-off");
       if (watch) watch.disconnect();
       if (bound) events.forEach((name) => bound.removeEventListener(name, paint));
       box.removeEventListener("click", onTap, true);
+      box.removeEventListener("pointerdown", onDown, true);
       if (track) track.removeEventListener("onscrollend" in window ? "scrollend" : "scroll", onScroll);
+    };
+  }
+
+  /* One player in the viewer. When the clip plays in our YouTube-style
+     player, its bottom chrome is the only control bar: the red progress
+     line, play, next, sound and time on the left, our speed button, the
+     player's settings and picture in picture, and exit full screen on the
+     right. The old bar under the clip goes away, the post text and the
+     X action pills sit right above the chrome, and both hide together. */
+  function xvYt(box) {
+    const stage = box && box.querySelector(".xv-cur .xv-media");
+    const yt = stage && stage._ytPlayer;
+    return yt && yt.el && yt.el.isConnected ? yt : null;
+  }
+
+  function xvTouch() {
+    return !!(window.matchMedia && window.matchMedia("(hover: none)").matches);
+  }
+
+  function xvClamp(box) {
+    if (!box || !box.isConnected) return;
+    box.querySelectorAll(".xv-text").forEach((el) => {
+      const body = el.querySelector(".xv-body");
+      if (body && !box.classList.contains("xv-open")) el.classList.toggle("is-clamped", body.scrollHeight > body.clientHeight + 1);
+    });
+  }
+
+  function xvMerge(box, stage) {
+    const yt = stage && stage._ytPlayer;
+    const player = yt && yt.el;
+    if (!player || !player.isConnected) return;
+    const had = box.classList.contains("xv-yt");
+    box.classList.add("xv-yt");
+    const bar = box.querySelector(".xv-bar");
+    if (bar) bar.remove();
+    // The track just grew by the old bar's height; keep this clip in place.
+    const track = box.querySelector(".xv-track");
+    const cur = box.querySelector(".xv-cur");
+    if (!had && track && cur) {
+      track._xvQuiet = Date.now() + 400;
+      track.scrollTop = cur.offsetTop;
+    }
+    if (player._xvMerged) return;
+    player._xvMerged = true;
+    if (box._xvUnmerge) box._xvUnmerge();
+    if (yt.options) yt.options.onNext = () => { xvStep(1); };
+    const right = player.querySelector(".ytp-pill-right");
+    if (right) {
+      const speed = document.createElement("button");
+      speed.type = "button";
+      speed.className = "ytp-button xv-speed";
+      speed.dataset.act = "xv-speed";
+      speed.setAttribute("aria-label", tr("Playback speed"));
+      speed.title = tr("Playback speed");
+      speed.textContent = String((stage.querySelector("video") || {}).playbackRate || 1).replace(/^0\./, ".") + "x";
+      right.insertBefore(speed, right.firstChild);
+      const exit = document.createElement("button");
+      exit.type = "button";
+      exit.className = "ytp-button xv-exit";
+      exit.dataset.act = "close-viewer";
+      exit.setAttribute("aria-label", tr("Exit full screen"));
+      exit.title = tr("Exit full screen");
+      exit.innerHTML = icon("exitFull");
+      right.appendChild(exit);
+    }
+    const chrome = player.querySelector(".ytp-chrome-bottom");
+    const size = () => { if (chrome && chrome.offsetHeight) box.style.setProperty("--xv-chrome", chrome.offsetHeight + "px"); };
+    const sizer = typeof ResizeObserver === "function" && chrome ? new ResizeObserver(size) : null;
+    if (sizer) sizer.observe(chrome);
+    size();
+    const sync = () => box.classList.toggle("xv-chrome-off", player.classList.contains("ytp-autohide") && !box.classList.contains("xv-open"));
+    const watch = typeof MutationObserver === "function" ? new MutationObserver(sync) : null;
+    if (watch) watch.observe(player, { attributes: true, attributeFilter: ["class"] });
+    sync();
+    // j, up and down still move between posts while a player button has
+    // focus, as they do everywhere else in the viewer.
+    const keys = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const down = event.key === "ArrowDown" || event.key === "j" || event.key === "J";
+      if (!down && event.key !== "ArrowUp") return;
+      if (event.target.closest && event.target.closest(".ytp-volume-area, .ytp-settings-menu")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      xvStep(down ? 1 : -1);
+    };
+    stage.addEventListener("keydown", keys, true);
+    box._xvUnmerge = () => {
+      if (sizer) sizer.disconnect();
+      if (watch) watch.disconnect();
+      stage.removeEventListener("keydown", keys, true);
     };
   }
 
@@ -27331,6 +27452,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function xvMore(box, open) {
     const want = open == null ? !box.classList.contains("xv-open") : !!open;
     box.classList.toggle("xv-open", want);
+    const yt = xvYt(box);
+    if (yt) { if (want) yt.clearAutoHide_(); else yt.resetAutoHide_(); }
     box.querySelectorAll(".xv-cur .xv-text").forEach((el) => {
       el.setAttribute("aria-expanded", want ? "true" : "false");
       el.setAttribute("aria-label", want ? tr("Show less") : tr("Show more"));
