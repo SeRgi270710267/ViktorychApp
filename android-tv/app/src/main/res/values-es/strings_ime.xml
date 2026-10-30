@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remote keyboard (ime/) and feed search (search/). -->
+<resources>
+    <string name="kb_label">Teclado ViktorychTV</string>
+    <string name="kb_search">Buscar</string>
+    <string name="kb_go">Ir</string>
+    <string name="kb_send">Enviar</string>
+    <string name="kb_next">Siguiente</string>
+    <string name="kb_done">Listo</string>
+    <string name="srch_label">ViktorychApp</string>
+    <string name="srch_title">Buscar en ViktorychApp</string>
+    <string name="srch_hint">Busca publicaciones, personas y temas</string>
+    <string name="srch_voice">Buscar por voz</string>
+    <string name="srch_recent">Búsquedas recientes</string>
+    <string name="srch_clear">Borrar</string>
+    <string name="srch_for">Buscar “%1$s” en ViktorychApp</string>
+    <string name="srch_where">Abre Explorar en ViktorychApp</string>
+    <string name="srch_note">Los resultados se abren en Explorar. Las búsquedas recientes se quedan en esta TV.</string>
+    <string name="def_keyboard">Teclado</string>
+    <string name="def_keyboard_desc">Un teclado hecho para el mando: las flechas mueven, OK escribe y mantener OK pone mayúscula. Letras en inglés, español, ruso e hindi, símbolos, emoji y dictado con el reconocimiento de voz de la propia TV. Lo que escribes se queda en esta TV.</string>
+    <string name="def_keyboard_allow">Siguiente: activa Teclado ViktorychTV en la lista de teclados de la TV. La TV muestra su aviso habitual para cualquier teclado.</string>
+    <string name="def_keyboard_pick">Siguiente: elige Teclado ViktorychTV como el que se usa</string>
+    <string name="def_keyboard_next">Siguiente paso</string>
+    <string name="def_keyboard_settings">Abrir ajustes del teclado</string>
+    <string name="def_keyboard_off">Dejar de usar el teclado</string>
+    <string name="def_search">Búsqueda</string>
+    <string name="def_search_desc">Busca en tus feeds desde una pantalla de búsqueda con voz, y desde la búsqueda de la propia TV en las TV que muestran resultados de apps. Los resultados se abren en Explorar.</string>
+    <string name="def_search_try">Probar una búsqueda</string>
+    <string name="def_search_off">Dejar de usar la búsqueda</string>
+</resources>

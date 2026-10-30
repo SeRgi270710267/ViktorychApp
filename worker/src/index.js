@@ -81,7 +81,7 @@ import { AFFILIATION_SCHEMA, handleAffiliations } from "./affiliations.js";
 import { AUDIENCE_SCHEMA, handleAudienceLists } from "./audience.js";
 import { USERNAME_SCHEMA, handleUsernames, nameTaken, resolveName, viewerHandle } from "./usernames.js";
 import { NAME_RULES_SCHEMA, handleNameRules, viewerDisplay } from "./name-rules.js";
-import { DISPLAY_NAME_SCHEMA, handleDisplayNames, withDisplayNames } from "./display-names.js";
+import { DISPLAY_NAME_SCHEMA, handleDisplayNames, withDisplayNames, ownerSeesAll } from "./display-names.js";
 import { handleBirthdayRoutes, runBirthdaySweep } from "./birthdays.js";
 import { POINTS_SCHEMA, handlePoints, awardActivity, awardBirthdayBonuses, clawback } from "./points.js";
 import { STORE_SCHEMA, handleStore } from "./store.js";
@@ -1217,6 +1217,9 @@ async function handleProfileGet(request, env, handle) {
     if (shown.hidden) account.displayNameHidden = true;
     if (shown.nickname) account.nickname = shown.nickname;
     if (shown.friendName) account.friendName = shown.friendName;
+    // The site owner sees every name, whatever its audience (audit-logged).
+    const allNames = viewer ? await ownerSeesAll(env, request, row.public_id, viewer.public_id) : null;
+    if (allNames) account.allDisplayNames = allNames;
   }
   await liveProfileCounts(env, row, account, viewer);
   account.identities = await visibleIdentities(env, row.public_id, viewer, own);
