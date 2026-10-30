@@ -153,3 +153,6 @@ const echo = dock.activeProvider();
   console.error(err);
   process.exit(1);
 });
+
+// Keyboard shortcut registry tests ride along with this CI step.
+require("./keys_test.js");
