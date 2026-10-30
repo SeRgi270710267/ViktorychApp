@@ -376,6 +376,7 @@
         '<div class="theme-row">' + auto("off", tr("Off")) + auto("muted", tr("Muted")) + auto("on", tr("On")) + "</div>" +
         '<div class="theme-row"><button class="outline" type="button" data-tv-reset="1">' + esc(tr("Reset TV defaults")) + "</button></div>";
     }
+    if (TV.on && window.ViktorychTVTune) html += window.ViktorychTVTune.settingsHtml();
     if (!TV.on) html += '<div class="theme-row"><a class="outline" href="#/send-to-tv">' + esc(tr("Send to my TV")) + "</a></div>";
     html += nameHtml();
     html += appCardHtml("settings");
@@ -573,6 +574,8 @@
   }
 
   function overlayRoot() {
+    var tune = document.querySelector("#tv-tune-layer .tvt-card");
+    if (tune) return tune;
     var acct = document.querySelector("#account-layer .acct-modal");
     if (acct) return acct;
     var viewer = document.getElementById("viewer");
@@ -1228,10 +1231,23 @@
     document.documentElement.classList.add("tv-on");
     checkInstalled();
     checkUpdate();
+    loadTune();
     applyTitle();
     applyScale();
     TV.hash = location.hash || "#/";
     scheduleRestore();
+  }
+
+  /* TV tuning (tv-tune.js): the first-open spec check and its settings.
+     Loaded only in TV mode. */
+  function loadTune() {
+    if (window.ViktorychTVTune || TV.tuneLoading) return;
+    TV.tuneLoading = true;
+    var s = document.createElement("script");
+    s.src = "tv-tune.js";
+    s.async = true;
+    s.onload = function () { if (document.querySelector(".tv-settings")) rerenderSettings(null); };
+    document.head.appendChild(s);
   }
 
   function exit() {
@@ -1253,7 +1269,7 @@
 
   function onFocusIn(event) {
     if (!TV.on || !event.target || !event.target.classList) return;
-    if (event.target.closest && !event.target.closest("#app, #viewer, #account-layer")) return;
+    if (event.target.closest && !event.target.closest("#app, #viewer, #account-layer, #tv-tune-layer")) return;
     remember(event.target);
     paint(event.target);
   }
@@ -1294,6 +1310,7 @@
   window.FeedsTV = {
     settingsHtml: settingsHtml,
     attach: attach,
+    focus: function (el) { if (TV.on && el) setFocus(el, false); },
     enabled: function () { return TV.on; }
   };
 
