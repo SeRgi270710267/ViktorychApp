@@ -5106,5 +5106,8 @@ SI18n.addPack("ru", {
   "Turn off to get no friend requests and hide friend features.": "Отключите, чтобы не получать запросы в друзья и скрыть функции друзей.",
   "Who can see your friends list": "Кто видит ваш список друзей",
   "Who can send you friend requests": "Кто может отправлять вам запросы в друзья",
-  "Your friends ({n})": "Ваши друзья ({n})"
+  "Your friends ({n})": "Ваши друзья ({n})",
+  "TV home screen": "Главный экран ТВ",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "По желанию. Сделайте это приложение главным экраном ТВ: большие плитки приложений, папки, поиск, входы и настройки. Само приложение остаётся точно таким же.",
+  "Home screen and defaults": "Главный экран и приложения по умолчанию"
 });

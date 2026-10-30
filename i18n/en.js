@@ -5104,5 +5104,8 @@ SI18n.addPack("en", {
   "Turn off to get no friend requests and hide friend features.": "Turn off to get no friend requests and hide friend features.",
   "Who can see your friends list": "Who can see your friends list",
   "Who can send you friend requests": "Who can send you friend requests",
-  "Your friends ({n})": "Your friends ({n})"
+  "Your friends ({n})": "Your friends ({n})",
+  "TV home screen": "TV home screen",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.",
+  "Home screen and defaults": "Home screen and defaults"
 });

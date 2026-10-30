@@ -5093,5 +5093,8 @@ SI18n.addPack("hi", {
   "Turn off to get no friend requests and hide friend features.": "फ़्रेंड अनुरोध न पाने और दोस्त सुविधाएँ छिपाने के लिए बंद करें।",
   "Who can see your friends list": "आपकी दोस्तों की सूची कौन देख सकता है",
   "Who can send you friend requests": "आपको फ़्रेंड अनुरोध कौन भेज सकता है",
-  "Your friends ({n})": "आपके दोस्त ({n})"
+  "Your friends ({n})": "आपके दोस्त ({n})",
+  "TV home screen": "टीवी होम स्क्रीन",
+  "Optional. Use this app as your TV's home: big app tiles, folders, search, inputs and settings. The app itself stays exactly as it is.": "वैकल्पिक। इस ऐप को अपने टीवी का होम बनाएं: बड़ी ऐप टाइलें, फ़ोल्डर, खोज, इनपुट और सेटिंग्स। ऐप खुद बिल्कुल वैसा ही रहता है।",
+  "Home screen and defaults": "होम स्क्रीन और डिफ़ॉल्ट"
 });
