@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViktorychTV Player and screensaver (player/). -->
+<resources>
+    <string name="player_label">Reproductor ViktorychTV</string>
+    <string name="dream_label">Feed de ViktorychTV</string>
+    <string name="mp_play">Reproducir</string>
+    <string name="mp_pause">Pausa</string>
+    <string name="mp_rewind">Retroceder 10 segundos</string>
+    <string name="mp_forward">Avanzar 10 segundos</string>
+    <string name="mp_mute">Silenciar</string>
+    <string name="mp_unmute">Activar sonido</string>
+    <string name="mp_seek">Progreso</string>
+    <string name="mp_live">EN VIVO</string>
+    <string name="mp_video">Vídeo</string>
+    <string name="mp_music">Música</string>
+    <string name="mp_error">No se puede reproducir este enlace aquí, así que se abre en el navegador.</string>
+    <string name="mp_x_failed">No se pudo cargar esta publicación.</string>
+    <string name="dream_empty">Abre ViktorychTV, ve a Ajustes &gt; TV y pulsa \"Usar mi feed para el salvapantallas\" para ver aquí fotos de tu feed.</string>
+    <string name="dream_cleared">Fotos del salvapantallas eliminadas</string>
+    <string name="def_player">Enlaces de vídeo y música</string>
+    <string name="def_player_desc">Los enlaces de YouTube, X, Twitch y de vídeo o música se abren en el Reproductor ViktorychTV: barra de progreso roja, botones redondos y el texto de la publicación arriba. OK reproduce o pausa, izquierda y derecha saltan 10 segundos. Las demás apps siguen igual que antes.</string>
+    <string name="def_player_pending">Elige Reproductor ViktorychTV y Siempre cuando se abra un enlace</string>
+    <string name="def_player_off">Dejar de usar el reproductor</string>
+    <string name="def_dream">Salvapantallas</string>
+    <string name="def_dream_desc">Fotos y clips cortos sin sonido de tu feed, con el texto de la publicación y un reloj. Envíalos desde el sitio: Ajustes &gt; TV &gt; Usar mi feed para el salvapantallas. Se quedan en esta TV.</string>
+    <string name="def_dream_pending">Elige Feed de ViktorychTV en los ajustes de salvapantallas de la TV</string>
+    <string name="def_dream_open">Abrir ajustes del salvapantallas</string>
+    <string name="def_dream_off">Dejar de usar el salvapantallas</string>
+    <string name="def_dream_guide">En Google TV: Ajustes &gt; Sistema &gt; Modo ambiente &gt; Salvapantallas. En otras TV: Ajustes &gt; Preferencias del dispositivo &gt; Salvapantallas. Elige Feed de ViktorychTV.</string>
+    <plurals name="dream_saved">
+        <item quantity="one">%d foto guardada para el salvapantallas</item>
+        <item quantity="other">%d fotos guardadas para el salvapantallas</item>
+    </plurals>
+    <plurals name="def_dream_items">
+        <item quantity="one">%d foto lista</item>
+        <item quantity="other">%d fotos listas</item>
+    </plurals>
+</resources>
