@@ -65,7 +65,7 @@ export function normalizeNameAudience(raw) {
   };
 }
 
-function parseAudience(text, fallback) {
+export function parseAudience(text, fallback) {
   if (!text) return normalizeNameAudience(fallback);
   try { return normalizeNameAudience(JSON.parse(text)); }
   catch (err) { return normalizeNameAudience(fallback); }
@@ -80,7 +80,7 @@ function excluded(aud, rel) {
   return false;
 }
 
-function cleanRel(rel) {
+export function cleanRel(rel) {
   const src = rel || {};
   return { self: !!src.self, id: String(src.id || ""), follows: !!src.follows, friends: !!src.friends, lists: Array.isArray(src.lists) ? src.lists.map(String) : [] };
 }
@@ -224,19 +224,19 @@ export async function nameTaken(env, skeleton, publicId) {
   return "";
 }
 
-async function idForHandle(env, handle, ownerId) {
+export async function idForHandle(env, handle, ownerId) {
   const found = await resolveName(env, handle, ownerId);
   return found && found.publicId !== ownerId ? found.publicId : "";
 }
 
-async function ownerLists(env, ownerId) {
+export async function ownerLists(env, ownerId) {
   try {
     return rowsOf(await env.DB.prepare("SELECT id FROM audience_lists WHERE public_id = ?").bind(ownerId).all()).map((row) => row.id);
   } catch (err) { return []; }
 }
 
 /* Client form uses handles for people; stored form uses ids. */
-async function audienceIn(env, ownerId, raw, fallback) {
+export async function audienceIn(env, ownerId, raw, fallback) {
   const src = raw && typeof raw === "object" ? raw : fallback;
   const lists = await ownerLists(env, ownerId);
   async function people(list) {
@@ -256,7 +256,7 @@ async function audienceIn(env, ownerId, raw, fallback) {
   });
 }
 
-async function audienceOut(env, request, ownerId, aud) {
+export async function audienceOut(env, request, ownerId, aud) {
   async function people(ids) {
     const out = [];
     for (let i = 0; i < ids.length; i++) {
@@ -287,7 +287,7 @@ async function savePrefs(env, ownerId, fields) {
     .bind(ownerId, fields.primaryAudience == null ? "" : fields.primaryAudience, fields.listOrder == null ? "[]" : fields.listOrder, now, fields.primaryAudience == null ? null : fields.primaryAudience, fields.listOrder == null ? null : fields.listOrder, now).run();
 }
 
-function previewRel(as, lists) {
+export function previewRel(as, lists) {
   const text = String(as || "");
   if (text === "public") return cleanRel({});
   if (text === "followers") return cleanRel({ follows: true });
