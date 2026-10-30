@@ -4391,5 +4391,16 @@ SI18n.addPack("hi", {
   "Paste the key you copied. It is checked straight from this device and kept here only.": "आपने जो की कॉपी की उसे पेस्ट करें। इसे इसी डिवाइस से जाँचा जाता है और सिर्फ़ यहीं रखा जाता है।",
   "Your spare account": "आपका स्पेयर अकाउंट",
   "Check key": "की जाँचें",
-  "Couldn’t check the key. Try again.": "की जाँच नहीं हो सकी। फिर कोशिश करें।"
+  "Couldn’t check the key. Try again.": "की जाँच नहीं हो सकी। फिर कोशिश करें।",
+  "Full screen isn’t available here.": "यहाँ फ़ुल स्क्रीन उपलब्ध नहीं है।",
+  "Some of what you were writing can’t be saved on this device, like attached photos or video. Close anyway?": "आप जो लिख रहे थे उसका कुछ हिस्सा इस डिवाइस पर सेव नहीं हो सकता, जैसे जोड़ी गई फ़ोटो या वीडियो। फिर भी बंद करें?",
+  "Your browser kept this window open. Press {keys} to close it.": "आपके ब्राउज़र ने यह विंडो खुली रखी। इसे बंद करने के लिए {keys} दबाएँ।",
+  "Close app": "ऐप बंद करें",
+  "Title bar": "टाइटल बार",
+  "Desktop app": "डेस्कटॉप ऐप",
+  "Show scrollbar": "स्क्रॉलबार दिखाएँ",
+  "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "इंस्टॉल किया गया ऐप पेज का स्क्रॉलबार छिपाता है। आप फिर भी व्हील, ट्रैकपैड, कीबोर्ड या टच से स्क्रॉल कर सकते हैं। ब्राउज़र टैब में यह हमेशा दिखता है।",
+  "Full screen shortcut": "फ़ुल स्क्रीन शॉर्टकट",
+  "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (Mac पर ⌘+Shift+F) फ़ुल स्क्रीन चालू और बंद करता है। Esc या F11 से भी बाहर निकल सकते हैं।",
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "आपके कंप्यूटर के अपने मिनिमाइज़, मैक्सिमाइज़ और क्लोज़ बटन हमेशा कोने में रहते हैं। ऐप अपना टाइटल बार उनके बगल में बनाता है।"
 });

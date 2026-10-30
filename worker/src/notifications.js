@@ -282,6 +282,25 @@ function legacyMedia(value) {
   return /\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(String(value || "")) || /^media\/(?:avatars|banners)\/\d{12}\//.test(String(value || ""));
 }
 
+/* Notification links must not carry 12-digit account IDs, so a trailing
+   12-digit run is cut from the link. Live links and the values of internal
+   invite and pairing parameters (?invite=, ?code=) are random tokens, not
+   account IDs: cutting them broke the link, so they are left alone. */
+const NOTE_HASH_KEEP = /^(invite|code)$/;
+export function scrubNoteHash(hash) {
+  const text = String(hash || "");
+  if (text.startsWith("#/live/")) return text;
+  const cut = (part) => part.replace(/([A-Za-z0-9_\u0400-\u04FF]{1,32})\d{12}\b/g, "$1");
+  const q = text.indexOf("?");
+  if (q < 0) return cut(text);
+  const query = text.slice(q + 1).split("&").map((pair) => {
+    const eq = pair.indexOf("=");
+    if (eq > 0 && NOTE_HASH_KEEP.test(pair.slice(0, eq))) return pair;
+    return cut(pair);
+  }).join("&");
+  return cut(text.slice(0, q)) + "?" + query;
+}
+
 async function presentNote(env, request, viewer, item) {
   const next = Object.assign({}, item);
   next.actorId = "";
@@ -293,9 +312,7 @@ async function presentNote(env, request, viewer, item) {
     const row = await env.DB.prepare("SELECT handle FROM accounts WHERE public_id = ?").bind(match[1]).first();
     next.feedId = row && row.handle ? "app:@" + row.handle : "";
   }
-  if ((legacyMedia(next.hash) || /\d{12}/.test(String(next.hash || ""))) && !String(next.hash || "").startsWith("#/live/")) {
-    next.hash = String(next.hash || "").replace(/([A-Za-z0-9_\u0400-\u04FF]{1,32})\d{12}\b/g, "$1");
-  }
+  if (legacyMedia(next.hash) || /\d{12}/.test(String(next.hash || ""))) next.hash = scrubNoteHash(next.hash);
   if (next.handle && request && viewer) {
     const shown = await visibleAvatarUrl(env, request, viewer, next.handle);
     if (shown === null) {

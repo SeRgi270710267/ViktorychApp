@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
-import { notificationSelfTest, notifyLiveStarted } from "../src/notifications.js";
+import { notificationSelfTest, notifyLiveStarted, scrubNoteHash } from "../src/notifications.js";
 
 let mf;
 
@@ -255,4 +255,17 @@ test("two devices share notes, read state, and the account channel", async () =>
   assert.equal(Number(none.n), 0);
   const sessions = await one("SELECT COUNT(*) AS n FROM sessions WHERE public_id = ?", ada.account.publicId);
   assert.equal(Number(sessions.n), 0);
+});
+
+test("notification links drop account IDs but keep invite and pairing tokens whole", () => {
+  // A game invite id can end in 12 digits by chance; cutting it broke the link.
+  assert.equal(scrubNoteHash("#/games/regone?invite=3681e391a79b790448272536"), "#/games/regone?invite=3681e391a79b790448272536");
+  assert.equal(scrubNoteHash("#/link-tv?code=ab000000000000"), "#/link-tv?code=ab000000000000");
+  assert.equal(scrubNoteHash("#/live/x100000000001"), "#/live/x100000000001");
+  // Account IDs in the path or in other parameters are still cut.
+  assert.equal(scrubNoteHash("#/post/p100000000001"), "#/post/p");
+  assert.equal(scrubNoteHash("#/games/regone?invite=abc&from=u100000000001"), "#/games/regone?invite=abc&from=u");
+  assert.equal(scrubNoteHash("#/communities/c100000000001?invite=k200000000002"), "#/communities/c?invite=k200000000002");
+  assert.equal(scrubNoteHash(""), "");
+  assert.equal(scrubNoteHash("#/messages"), "#/messages");
 });
