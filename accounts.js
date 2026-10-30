@@ -657,9 +657,11 @@
     if (!order.length) return Promise.resolve(new Response("", { status: 401 }));
     var headers = new Headers(init && init.headers || (typeof input !== "string" && input && input.headers) || {});
     headers.set("Authorization", "Bearer " + session.token);
-    var held = pulseHeld(key);
+    var blockList = /^(?:feeds\.json|(?:comments|live)\/)/.test(key) ? blockHeader() : "";
+    if (blockList) headers.set("X-Block", blockList);
+    var held = blockList ? null : pulseHeld(key);
     if (held) return Promise.resolve(new Response(held.text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "x-pulse": "reuse" } }));
-    var mark = pulseMark(key);
+    var mark = blockList ? "" : pulseMark(key);
     var path = "/v1/data/" + key.split("/").map(encodeURIComponent).join("/");
     function attempt(i) {
       var apiRoot = order[i];
@@ -754,6 +756,13 @@
     if (!etagHeld[key]) etagOrder.push(key);
     etagHeld[key] = { tag: tag, text: text };
     while (etagOrder.length > 60) delete etagHeld[etagOrder.shift()];
+  }
+  /* The device's blocklist as hashed keys only (see shared/blocklist.js), so
+     the server drops blocked posts and comments before they are sent. */
+  var BLOCK_PATH = /^\/v1\/(?:posts|communities|x\/thread|thread)(?:[/?]|$)/;
+  function blockHeader() {
+    try { return String(localStorage.getItem("viktorychapp-block-h") || ""); }
+    catch (err) { return ""; }
   }
   /* How fast each API root answered lately, kept per device. A root that
      stalls (DPI throttling looks like a hang, not an error) drops behind a
@@ -865,6 +874,10 @@
     }
 
     var reading = !opts.method || opts.method === "GET";
+    if (reading && BLOCK_PATH.test(String(path || ""))) {
+      var blockList = blockHeader();
+      if (blockList) headers["X-Block"] = blockList;
+    }
 
     function send(root, signal) {
       var tagKey = reading ? etagKey(root + path, opts.token) : "";
@@ -1990,6 +2003,16 @@ var numberNote = form.passkey
     return out;
   }
 
+  /* Blocks merge as one unit by their own stamp, so an unblock on one device
+     is not undone by a union with another. */
+  function pickBlocks(local, remote) {
+    var l = local && typeof local === "object" ? local : null;
+    var r = remote && typeof remote === "object" ? remote : null;
+    if (!l) return r || { at: 0 };
+    if (!r) return l;
+    return (Number(r.at) || 0) > (Number(l.at) || 0) ? r : l;
+  }
+
   function snapshotFrom(settings) {
     settings = settings || {};
     var snap = {
@@ -2008,6 +2031,7 @@ var numberNote = form.passkey
       mutedWords: settings.mutedWords || [],
       mutedAccounts: settings.mutedAccounts || [],
       repostOff: settings.repostOff || [],
+      blocks: settings.blocks && typeof settings.blocks === "object" ? settings.blocks : { at: 0 },
       groups: settings.groups || [],
       groupsOwn: !!settings.groupsOwn,
       subsGroup: settings.subsGroup || "",
@@ -2248,6 +2272,7 @@ var numberNote = form.passkey
       mutedWords: uniq([].concat(local.mutedWords || [], remote.mutedWords || [])),
       mutedAccounts: uniq([].concat(local.mutedAccounts || [], remote.mutedAccounts || [])),
       repostOff: uniq([].concat(local.repostOff || [], remote.repostOff || [])),
+      blocks: pickBlocks(local.blocks, remote.blocks),
       groups: unionById(local.groups, remote.groups),
       tabViews: unionObjects(local.tabViews, remote.tabViews),
       groupsOwn: !!local.groupsOwn,
