@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Trophy",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/trophy.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "trophy"
+    },
+    {
+      "trait_type": "Index",
+      "value": 65
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreihz43mejpq6luy5mwdlcng4vjr5vr372lyq5ezgt72hlxeo2gtmpm",
+  "image_sha256": "f9e6d844be1e5d31d6586b134dcaa63dac77fd2f10e93269ff475dc8ed1a6c7b"
+}

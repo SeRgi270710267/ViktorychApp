@@ -4958,5 +4958,15 @@ SI18n.addPack("en", {
   "Open the newsletter’s website": "Open the newsletter’s website",
   "Paste a newsletter link": "Paste a newsletter link",
   "Add a newsletter": "Add a newsletter",
-  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts."
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.",
+  "Gift NFTs": "Gift NFTs",
+  "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.": "Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.",
+  "Make it an NFT": "Make it an NFT",
+  "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.": "This makes a collectible NFT of this gift on {chain}. Your wallet pays the network fee. It is a collectible, not an investment, and we never buy it back or pay out for it. Your gift stays here either way.",
+  "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.": "No wallet found. Open this page in your wallet app's browser, or add a wallet extension.",
+  "This gift is already an NFT.": "This gift is already an NFT.",
+  "Confirm in your wallet…": "Confirm in your wallet…",
+  "Sent to the network. It shows in your wallet once it is confirmed.": "Sent to the network. It shows in your wallet once it is confirmed.",
+  "Cancelled.": "Cancelled.",
+  "Couldn't make this gift an NFT.": "Couldn't make this gift an NFT."
 });

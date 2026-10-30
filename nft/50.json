@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Present",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/present.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "present"
+    },
+    {
+      "trait_type": "Index",
+      "value": 50
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreiarr2px7aezjgn5uiyv7ncv4gjbcvw7hmjfca7q5yoy7imegshkzi",
+  "image_sha256": "118e9f7f8099499bda2315fb455e1921156df3b125103f0ee1d8fa184348eaca"
+}

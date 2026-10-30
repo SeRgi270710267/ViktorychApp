@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Comet gift",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/comet.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "comet"
+    },
+    {
+      "trait_type": "Index",
+      "value": 15
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreidfmnjpf2ojurndou2wgkog5i43evbbh3tejuqltqp26dw3mmgu2i",
+  "image_sha256": "656352f2e9c9a45a375356329c6ea39b254213ee644d20b9c1faf0edb630d4d2"
+}
