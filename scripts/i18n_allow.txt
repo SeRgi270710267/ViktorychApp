@@ -345,3 +345,4 @@ desktop-app.js|Alt+F4
 # app.js: keyboard registry labels are pack keys, translated where the registry renders them
 app.js|Next video
 app.js|Previous video
+own: tv-tune.js

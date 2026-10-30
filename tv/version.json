@@ -1,7 +1,7 @@
 {
-  "versionCode": 3,
-  "versionName": "1.2.0",
+  "versionCode": 4,
+  "versionName": "1.3.0",
   "apk": "tv/ViktorychTV.apk",
   "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
-  "notes": "Play ReGone with an Xbox, PlayStation or other controller. Also opens Sign in with your phone right away and falls back to GitHub Pages if the short address is down."
+  "notes": "On first open the app checks this TV's screen, HDR, video decoders, sound, memory and network, and picks the best settings for it. Settings > TV has Re-detect TV."
 }

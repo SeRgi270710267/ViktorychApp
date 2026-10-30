@@ -1,0 +1,45 @@
+/* TV tuning (tv-tune.js): the first-open spec check, in the setup's look:
+   black, one big title, one line under it, one primary button. The layer
+   undoes TV mode's page zoom so the whole summary fits a 16:9 screen. */
+#tv-tune-layer { position: fixed; inset: 0; z-index: 2147483000; background: #000; color: #e7e9ea; display: flex; align-items: stretch; justify-content: center; font-family: inherit; }
+html[data-tvt-open] body { overflow: hidden; }
+.tvt-card { width: 100%; max-width: 1180px; display: flex; flex-direction: column; padding: 3.5vh 5vw; box-sizing: border-box; min-height: 0; }
+.tvt-head { display: flex; justify-content: space-between; align-items: center; min-height: 40px; }
+.tvt-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; scroll-behavior: smooth; }
+.tvt-body::-webkit-scrollbar { display: none; }
+.tvt-ico { display: block; width: 40px; height: 40px; color: #e7e9ea; }
+.tvt-ico svg { width: 100%; height: 100%; }
+.tvt-body h1 { font-size: 30px; line-height: 1.15; font-weight: 800; margin: 10px 0 4px; outline: none; }
+.tvt-sub { color: #71767b; font-size: 16px; line-height: 1.35; margin: 0 0 14px; }
+.tvt-note { color: #71767b; font-size: 13px; margin: 8px 0 0; }
+.tvt-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 14px; }
+.tvt-btn { min-height: 44px; padding: 0 28px; border-radius: 999px; border: 1px solid #eff3f4; background: #eff3f4; color: #0f1419; font: 700 16px/1 inherit; font-family: inherit; cursor: pointer; }
+.tvt-btn.quiet { background: transparent; color: #e7e9ea; border-color: #536471; }
+.tvt-link, .tvt-skip { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 0; background: transparent; color: #71767b; font: 700 15px/1 inherit; font-family: inherit; cursor: pointer; }
+.tvt-skip { color: #e7e9ea; }
+.tvt-link { margin-left: auto; }
+#tv-tune-layer button:focus { outline: 3px solid #1d9bf0; outline-offset: 3px; }
+.tvt-checks { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.tvt-checks li { display: flex; align-items: center; gap: 14px; font-size: 18px; animation: tvt-in 0.3s ease-out both; animation-delay: calc(var(--i) * 0.18s); }
+.tvt-spin { width: 20px; height: 20px; border-radius: 50%; border: 3px solid #2f3336; border-top-color: #1d9bf0; animation: tvt-spin 0.9s linear infinite; flex: none; }
+@keyframes tvt-spin { to { transform: rotate(360deg); } }
+@keyframes tvt-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tvt-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; }
+.tvt-cols h2 { font-size: 15px; font-weight: 800; color: #e7e9ea; margin: 0 0 6px; text-transform: none; }
+.tvt-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 17px; }
+.tvt-table th { text-align: left; font-weight: 600; color: #71767b; padding: 3px 12px 3px 0; white-space: nowrap; vertical-align: top; width: 1%; }
+.tvt-table td { color: #e7e9ea; padding: 3px 0; overflow-wrap: anywhere; }
+.tvt-table tr + tr th, .tvt-table tr + tr td { border-top: 1px solid #16181c; }
+.tvt-picked tr.is-change td { color: #fff; font-weight: 700; }
+.tvt-kept { display: inline-block; margin-left: 8px; color: #71767b; font-weight: 400; font-size: 12px; }
+.tvt-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-top: 6px; }
+.tvt-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; min-height: 50px; padding: 6px 14px; border-radius: 12px; border: 1px solid #2f3336; background: transparent; color: #e7e9ea; font-family: inherit; cursor: pointer; }
+.tvt-opt b { display: block; font-size: 15px; }
+.tvt-opt small { display: block; color: #71767b; font-size: 13px; margin-top: 2px; }
+.tvt-opt i { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 2px solid #536471; color: transparent; display: grid; place-items: center; }
+.tvt-opt i svg { width: 14px; height: 14px; }
+.tvt-opt.on i { background: #1d9bf0; border-color: #1d9bf0; color: #fff; }
+.tvt-toast { position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%); z-index: 2147483001; background: #1d9bf0; color: #fff; padding: 12px 22px; border-radius: 999px; font-weight: 700; font-size: 16px; }
+@media (max-width: 760px) { .tvt-cols, .tvt-opts { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .tvt-checks li { animation: none; } .tvt-spin { animation-duration: 2.4s; } .tvt-body { scroll-behavior: auto; } }
+html.tv-calm .tvt-spin { animation-duration: 0.9s !important; animation-iteration-count: infinite !important; }
