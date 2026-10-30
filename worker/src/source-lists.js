@@ -13,6 +13,7 @@
 
 import { ERROR_TEXT, accountId, cleanLabel, detectInput } from "../../shared/feed-sources.js";
 import { probeAccount } from "./owner-feeds.js";
+import { bannedSpec, keyVariants } from "./feed-requests.js";
 
 const DOC_KEY = "owner/source-lists.json";
 const WANTED_KEY = "owner/lists/wanted.json";
@@ -216,6 +217,7 @@ async function addSource(env, doc, list, input) {
   const spec = detectInput(input || "");
   if (!spec.ok) return { error: spec.error || "bad_input", status: 400 };
   if (spec.platform === "tiktok") return { error: "unsupported_tiktok", status: 400 };
+  if (await bannedSpec(env, spec)) return { error: "banned", status: 403 };
   if (list.sources.length >= SOURCES_PER_LIST) return { error: "full", status: 400 };
   const probed = await probeAccount(spec);
   if (probed.error) return { error: probed.error, status: probed.error === "not_found" ? 404 : probed.error === "rate" ? 429 : 400 };
@@ -437,4 +439,49 @@ async function refreshWanted(env, now) {
   return writeWanted(env, await readDoc(env), now || Date.now());
 }
 
+/* An allowed source request lands in a list: an existing one, or a new one
+   named after the source. memberIds are assigned to it. */
+async function allowIntoList(env, deps, opts) {
+  if (!env.DATA) return { error: "not_configured", status: 503 };
+  const doc = await readDoc(env);
+  let list = doc.lists.find((item) => item.id === opts.listId);
+  if (!list) {
+    const name = cleanName(opts.newList);
+    if (!name || doc.lists.length >= LIST_CAP) return { error: "bad_list", status: 400 };
+    list = { id: newId("s"), name, sources: [], members: [], at: Date.now() };
+    doc.lists.push(list);
+  }
+  const added = await addSource(env, doc, list, opts.input);
+  if (added.error) return added;
+  (opts.memberIds || []).forEach((id) => {
+    const text = String(id || "");
+    if (/^\d{12}$/.test(text) && list.members.indexOf(text) < 0 && list.members.length < MEMBERS_PER_LIST) list.members.push(text);
+  });
+  await afterChange(env, doc, deps || {});
+  return { listId: list.id, sourceId: added.id };
+}
+
+async function listsSummary(env) {
+  if (!env.DATA) return [];
+  const doc = await readDoc(env);
+  return doc.lists.map((row) => ({ id: row.id, name: row.name, members: row.members.length, sources: row.sources.length }));
+}
+
+/* A banned source leaves every list, so the list sync stops fetching it. */
+async function dropSourceKeys(env, keys, deps) {
+  if (!env.DATA) return 0;
+  const want = new Set(keyVariants(keys));
+  const doc = await readDoc(env);
+  const gone = Object.keys(doc.sources).filter((id) => {
+    const row = doc.sources[id] || {};
+    const alias = (String(row.platform || "") + ":" + String(row.handle || "")).toLowerCase();
+    return want.has(id.toLowerCase()) || want.has(alias);
+  });
+  if (!gone.length) return 0;
+  doc.lists.forEach((row) => { row.sources = row.sources.filter((id) => gone.indexOf(id) < 0); });
+  await afterChange(env, doc, deps || {});
+  return gone.length;
+}
+
+export { allowIntoList, listsSummary, dropSourceKeys };
 export { handleOwnerSourceLists, handleMySourceLists, refreshWanted, DOC_KEY, WANTED_KEY, INDEX_KEY, SHARD_PREFIX };

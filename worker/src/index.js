@@ -25,6 +25,7 @@ import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlayl
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys, readUsableKey, markKeyAttention } from "./owner-keys.js";
+import { cleanSignupKey, findUndelivered, rememberSignup, replayPrefix } from "./signup-replay.js";
 import { TEMP_SCHEMA, cleanDeviceKey, decorateTemporary, handleTemporary, markTemporary, sweepTemporary, tempBlockedPointsRoute, tempExpiry, tempSignupsPerDay, isTemporary } from "./temp-accounts.js";
 import { DELETION_SCHEMA, deleteAccountById, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, handleInactivity, resumeAccountDeletions, sweepInactive } from "./account-delete.js";
 import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscordKey } from "./discord-picks.js";
@@ -42,6 +43,7 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleXVideo } from "./xvideo.js";
 import { handleNewsletter, sweepNewsletters } from "./newsletters.js";
 import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
@@ -58,6 +60,7 @@ import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
 import { handleOwnerSourceLists, handleMySourceLists, refreshWanted } from "./source-lists.js";
+import { handleFeedRequests, handleOwnerFeedRequests, requestInsteadOfAdd, followGate, importFilter, feedRequestsOn, fileRequest, bannedKeys, newsletterBanned } from "./feed-requests.js";
 import { handleOwnerSms, handleMemberSms } from "./sms-pool.js";
 import { handleMail } from "./mail-relay.js";
 import { claimedJobs } from "./job-runner.js";
@@ -834,6 +837,14 @@ async function handleSignup(request, env) {
   if (!(await verifyTurnstile(request, env, body.turnstileToken))) return json(403, { error: "turnstile" });
   const guard = await verifySignupGuard(env, body);
   if (!guard.ok) return json(guard.status || 400, { error: guard.error || "guard_required" });
+  // A retry of a sign-up whose answer was lost takes over the account the
+  // first try made (src/signup-replay.js). The owner handle never replays.
+  const replay = checked.owner ? "" : await replayPrefix(sha256Hex, cleanSignupKey(body.signupKey));
+  if (replay) {
+    const earlier = await findUndelivered(env, replay, Date.now());
+    const again = earlier ? await resumeSignup(env, request, earlier, { temporary, tempUntil, displayName, handle: checked.handle, replay }) : null;
+    if (again) return again;
+  }
   if (checked.owner) {
     const code = String(body.claimCode || "");
     const secret = String(env.OWNER_CLAIM_CODE || "");
@@ -867,6 +878,10 @@ async function handleSignup(request, env) {
     profileLess: isProfileLess
   });
   if (created.error) return json(created.error === "handle_taken" ? 409 : 503, { error: created.error });
+  if (replay) {
+    try { await rememberSignup(env, replay, created.account.publicId, Date.now()); }
+    catch (err) { /* a retry then makes a new account instead */ }
+  }
   await rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
   if (temporary) {
     try {
@@ -892,6 +907,39 @@ async function handleSignup(request, env) {
     recoveryCodes: recoveryCodes,
     account: created.account
   });
+}
+
+/* Hand over an account an earlier try of this same sign-up made but whose
+   answer never arrived: a new account number, a new session (the lost one
+   is revoked) and new recovery codes. Returns null when that account is
+   gone or does not match this request, and the sign-up goes on as new. */
+async function resumeSignup(env, request, publicId, opts) {
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (!row || Number(row.owner) === 1) return null;
+  const temp = await env.DB.prepare("SELECT expires_at FROM account_temp WHERE public_id = ?").bind(publicId).first().catch(() => null);
+  if (!!temp !== !!opts.temporary) return null;
+  if (!opts.temporary && String(row.handle || "") !== String(opts.handle || "")) return null;
+  const now = Date.now();
+  const rounds = iterationsOf(env);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const number = randomDigits(16);
+  const lookup = await hmacHex(env.ACCOUNT_PEPPER, number);
+  const hash = encodeNumberHash(rounds, await slowHash(number, salt, rounds));
+  await env.DB.batch([
+    env.DB.prepare("UPDATE accounts SET number_lookup = ?, number_hash = ?, salt = ?, display_name = ? WHERE public_id = ?").bind(lookup, hash, bytesToB64(salt), opts.displayName || row.display_name, publicId),
+    env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId)
+  ]);
+  if (opts.temporary) await markTemporary(env, publicId, opts.tempUntil, now);
+  const token = await mintSession(env, publicId);
+  try { await rememberSignup(env, opts.replay, publicId, now); } catch (err) { /* the window just ends sooner */ }
+  const fresh = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
+  const account = await presentAccount(env, request, fresh || row, true);
+  if (opts.temporary) {
+    account.temporary = { expiresAt: opts.tempUntil };
+    return json(201, { token: token, accountNumber: number, recoveryCodes: [], account: account, temporary: { expiresAt: opts.tempUntil }, resumed: true });
+  }
+  const recoveryCodes = await issueRecoveryCodes(env, publicId, recoveryDeps());
+  return json(201, { token: token, accountNumber: number, recoveryCodes: recoveryCodes, account: account, resumed: true });
 }
 
 /* A new account starts out following only the owner's own accounts: the
@@ -4070,6 +4118,7 @@ async function handleTikTokAccounts(request, env) {
     if (body.error) return json(400, { error: body.error });
     const typed = normalizeTikTokInput(body.handle || body.url || "");
     if (!typed) return json(400, { error: "bad_handle" });
+    if (await bannedKeys(env, ["tiktok:" + typed])) return json(403, { error: "banned" });
     const doc = await readTikTokAccounts(env);
     const existing = doc.added.find((item) => tiktokRowMatches(item, typed));
     if (!existing && doc.added.length >= TIKTOK_ACCOUNT_CAP) return json(400, { error: "full" });
@@ -4748,6 +4797,7 @@ async function handleAddedAccounts(request, env, url) {
     if (!addedPlatform(request, url, body)) return json(400, { error: "unsupported" });
     const typed = normalizeXInput(body.handle || body.url || "");
     if (!typed) return json(400, { error: "bad_handle" });
+    if (await bannedKeys(env, ["x:" + typed])) return json(403, { error: "banned" });
     const doc = await readAddedAccounts(env);
     const looked = await lookupXProfile(typed);
     if (looked.error) return json(looked.error === "not_found" ? 404 : 503, { error: looked.error });
@@ -4991,6 +5041,8 @@ async function handleFollowPut(request, env) {
   if (target.error) return target.error;
   const id = target.id;
   if (id === "app:" + gate.row.public_id) return json(400, { error: "bad_follow", message: "That account can’t be followed." });
+  const sourceGate = await followGate(env, gate.row, id, { json, rateHit, limited });
+  if (sourceGate) return sourceGate;
   const decision = await prepareFollowPut(env, gate.row.public_id, id);
   if (decision.mode === "blocked") return json(403, { error: "blocked", message: "You can’t follow this account." });
   if (decision.mode === "request" || decision.mode === "pending-exists") {
@@ -5071,6 +5123,10 @@ async function handleFollowImport(request, env) {
     }
     ids.push(id);
   }
+  // Banned sources and device sources nobody follows yet stay out of an import.
+  const kept = await importFilter(env, gate.row, ids);
+  ids.length = 0;
+  kept.forEach((id) => ids.push(id));
   const now = Date.now();
   // A bulk import must not notify. Only a new follow from PUT does.
   for (let i = 0; i < ids.length; i += 40) {
@@ -5435,8 +5491,20 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
     return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
   }
+  if (path === "/v1/xv" && request.method === "GET") {
+    return handleXVideo(request, { fetch: (u, init) => fetch(u, init), cache: caches.default, waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
   if ((path === "/v1/newsletter" || path === "/v1/newsletter/issue") && request.method === "GET") {
-    return handleNewsletter(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+    // A banned newsletter stops here, before anything is fetched for it.
+    if (env.DB && await newsletterBanned(env, url.searchParams.get("key"))) return json(403, { error: "banned" });
+    const letter = await handleNewsletter(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+    if (env.DB && path === "/v1/newsletter" && letter.status === 200 && url.searchParams.get("url")) {
+      try {
+        const doc = await letter.clone().json();
+        if (doc && await newsletterBanned(env, doc.key)) return json(403, { error: "banned" });
+      } catch (err) { /* not JSON: pass it through */ }
+    }
+    return letter;
   }
   if (path === "/v1/comments" && request.method === "GET") {
     return handleComments(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
@@ -5483,6 +5551,25 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path, ctx);
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
+  }
+  // Source requests: only the owner adds a source. A member's add becomes a request.
+  if (path === "/v1/feed-requests" || path.startsWith("/v1/feed-requests/")) {
+    return handleFeedRequests(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+  }
+  if (path === "/v1/owner/feed-requests" || path.startsWith("/v1/owner/feed-requests/") || path === "/v1/owner/feed-bans" || path.startsWith("/v1/owner/feed-bans/")) {
+    return handleOwnerFeedRequests(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, sessionAccount, dispatchWorkflows });
+  }
+  {
+    const asked = await requestInsteadOfAdd(request, env, path, { json, readJson, rateHit, limited, sessionAccount });
+    if (asked) return asked;
+  }
+  if (path === "/v1/me/source-lists/requests" && request.method === "POST" && env.DB && await feedRequestsOn(env)) {
+    const me = await sessionAccount(env, request);
+    if (!me) return json(401, { error: "auth" });
+    const body = await readJson(request, 1500);
+    if (body.error) return json(400, { error: body.error });
+    const made = await fileRequest(env, me, { input: body.input, note: body.note }, { json, rateHit, limited });
+    return json(made.status, Object.assign({ ok: made.status === 200 }, made.body));
   }
   if (path === "/v1/owner/source-lists" || path.startsWith("/v1/owner/source-lists/")) {
     return handleOwnerSourceLists(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
