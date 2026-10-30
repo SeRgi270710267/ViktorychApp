@@ -197,6 +197,31 @@ async function main() {
       fail("scroll position was not kept: " + before + " -> " + after + " (" + info + ")");
     }
 
+    /* 4. Content that arrives after the route paints still gets its scroll
+       back: hold the page short while going back, then let it grow. */
+    await page.evaluate(() => {
+      const a = document.createElement("a");
+      a.href = "#/communities/placeholder_one/placeholder_one_p0";
+      (document.querySelector("main") || document.body).appendChild(a);
+      a.click();
+    });
+    await page.waitForFunction(ROUTES[2].ready, null, { timeout: 8000 });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      const style = document.createElement("style");
+      style.id = "late-content";
+      style.textContent = "#app{max-height:600px;overflow:hidden}";
+      document.head.appendChild(style);
+    });
+    await page.goBack();
+    await page.waitForFunction(ROUTES[1].ready, null, { timeout: 8000 });
+    await page.waitForTimeout(600);
+    const clamped = await page.evaluate(() => window.scrollY);
+    await page.evaluate(() => document.getElementById("late-content").remove());
+    await page.waitForFunction((y) => Math.abs(window.scrollY - y) <= 80, after, { timeout: 3000 }).catch(() => {});
+    const late = await page.evaluate(() => window.scrollY);
+    if (clamped > 300 || Math.abs(late - after) > 80) fail("scroll was not restored once late content arrived: " + clamped + " -> " + late + " (wanted " + after + ")");
+
     console.log("communities local-first ok (" + stored.keys.length + " cached entries, " + stored.bytes + " bytes)");
   } finally {
     await browser.close();

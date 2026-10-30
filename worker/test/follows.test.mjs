@@ -124,7 +124,7 @@ test("follows persist for the signed-in account and stay private", async () => {
     body: {
       id: "x:copperlane",
       profile: {
-        name: "Elon Musk",
+        name: "Copper Lane",
         handle: "copperlane",
         platform: "x",
         bio: "Mars",
@@ -170,7 +170,7 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(elon.kind, "feed");
   assert.equal(elon.handle, "copperlane");
   assert.equal(elon.bio, "Mars");
-  assert.equal(elon.name, "Elon Musk");
+  assert.equal(elon.name, "Copper Lane");
   const dumped = JSON.stringify(following.body);
   assert.equal(dumped.includes("secret@example.com"), false);
   assert.equal(dumped.includes("accountNumber"), false);

@@ -106,7 +106,7 @@ const kept = sandbox.mentionless({ text: "hello @cara", html: "" });
 assert.strictEqual(kept.text, "hello @cara");
 
 assert.ok(app.indexOf('return `<div class="thread">${parentHtml}${childHtml}</div>`') >= 0, "thread wrapper");
-assert.ok(app.indexOf("opts.parentShown ? (mode !== \"status\"") >= 0, "reply line shows beside the parent in feeds and hides on the status page");
+assert.ok(app.indexOf("const showReply = opts.parentShown ? false :") >= 0, "as on X, no reply line when the parent sits right above on the thread line");
 assert.ok(app.indexOf("opts.parentShown ? mentionless(displayPost(post))") >= 0, "leading mentions drop only beside the parent");
 assert.ok(app.indexOf("function quoteCard(") >= 0 && app.indexOf('return `<div class="quote"') >= 0, "quotes stay bordered cards");
 const cardStart = app.indexOf("function card(post, mode, opts)");
@@ -123,7 +123,7 @@ assert.ok(css.indexOf("--thread: #38444d") >= 0, "dim thread");
 assert.ok(css.indexOf("--thread: #cfd9de") >= 0, "light thread");
 assert.ok(css.indexOf(".thread > .post.continues { border-bottom: 0; }") >= 0, "no divider between a reply and its parent");
 assert.ok(css.indexOf(".replying { color: var(--muted); font-size: 15px; line-height: 20px;") >= 0, "replying line");
-assert.ok(css.indexOf(".replying a { color: var(--blue); }") >= 0, "replying handle");
+assert.ok(/\.replying a \{ color: var\((?:--link, var\()?--blue\)\)?; \}/.test(css), "replying handle");
 assert.ok(css.indexOf(".status-text { font-size: 17px; line-height: 24px;") >= 0, "focused post text");
 assert.ok(css.indexOf(".ancestor .post-text { font-size: 15px; line-height: 20px; }") >= 0, "ancestor text");
 assert.ok(css.indexOf(".media.m1 > .tile.has-ratio") >= 0 && css.indexOf("max-height: 125cqi") >= 0, "desktop clamp");

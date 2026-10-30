@@ -239,7 +239,7 @@ shared/tiktok-play.js|TikTok returned
 shared/webauthn.js|RSASSA-PKCS1-v1_5
 404.html|Open ViktorychApp
 404.html|Abrir ViktorychApp
-index.html|Elon Musk
+index.html|Copper Lane
 index.html|“Lack of electricity” is an oversimplification. Everything is hard about bringing massive compute online at extremely high speed. If there was twice as much time, this would be relatively easy, but there is not.
 index.html|Johann Sebastian Bach is the Shakespeare of music. Best there ever was.
 index.html|Something went wrong
@@ -252,6 +252,7 @@ index.html|Regístrate
 index.html|Entrar
 reactions.js|Shift+F10
 reactions.js|800px 0px
+community-notes.js|800px 0px
 servers-ui.js|MENTION_EVERYONE
 servers-ui.js|CREATE_INVITE
 servers-ui.js|MANAGE_MESSAGES
@@ -264,8 +265,59 @@ people.js|Fediverse
 own: onboarding.js
 # data-saver.js: the fifth column of KEYS is a code note, never rendered
 data-saver.js|HD video variants
+data-saver.js|Community Notes only for posts on screen, refreshed less often
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
+send-tv.js|Samsung
+send-tv.js|SmartThings
+send-tv.js|LG ThinQ
+send-tv.js|Google TV
+send-tv.js|Fire TV
+send-tv.js|Amazon Fire TV
+# Keyboard shortcut labels are pack keys, translated with tr() where they render.
+# keys.js: scope labels are pack keys; key-cap names (Space, Tab, Menu) and
+# aria-keyshortcuts tokens stay as printed on keyboards.
+keys: keys.js
+keys: keys-ui.js
+keys.js|Meta
+keys.js|Alt
+keys.js|Backspace
+keys.js|Control
+keys.js|Ctrl
+keys.js|Enter
+keys.js|Esc
+keys.js|Escape
+keys.js|Hyper
+keys.js|Page Down
+keys.js|Page Up
+keys.js|Shift
+keys.js|Super
+keys.js|Win
+inbox-mail.js|Yandex Mail
+inbox-mail.js|Gmail
+inbox-mail.js|Outlook
+inbox-mail.js|Mail.ru
+inbox-mail.js|ViktorychApp codes
+inbox-mail.js|from:(simplelogin.co OR simplelogin.io) OR to:(@{alias-domain})
+inbox.js|Servers
+inbox.js|Mail
+inbox.js|SMS codes
+app.js|Servers
+app.js|Mail
+app.js|SMS codes
 # The sharing pool public signing key (a technical token, not text).
 shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM
+shared/regone.js|NZlay Mini 01 - EU
+shared/regone.js|NZlay Medium 01 - EU
+shared/regone.js|NZlay Large 01 - EU
+shared/regone.js|NZlay Mega 05 - EU
+shared/regone.js|NZlay Mini 01 - USA
+shared/regone.js|NZlay Medium 03 - USA
+shared/regone.js|NZlay Large 01 - USA
+shared/regone.js|NZlay Large 02 - USA
+
+discord-key-helper.js
+nzlay-forum.js|NZlay Forums
+# The OS close shortcut shown in the desktop close hint.
+desktop-app.js|Alt+F4

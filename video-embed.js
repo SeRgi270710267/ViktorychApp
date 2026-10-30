@@ -57,7 +57,9 @@
   function youtubeEmbed(id, opts) {
     opts = opts || {};
     var clean = String(id || "").replace(/[^A-Za-z0-9_-]/g, "");
-    var base = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(clean);
+    /* opts.host "youtube": the regular embed, so a signed-in viewer gets
+       their own account (Premium quality, no ads). Default stays private. */
+    var base = (opts.host === "youtube" ? "https://www.youtube.com/embed/" : "https://www.youtube-nocookie.com/embed/") + encodeURIComponent(clean);
     var origin = pageOrigin(opts);
     var api = "&enablejsapi=1&origin=" + encodeURIComponent(origin) + "&widget_referrer=" + encodeURIComponent(origin + "/");
     if (opts.preview) return base + "?autoplay=1&mute=1&playsinline=1&controls=0&rel=0" + api;
@@ -780,6 +782,10 @@
     var duration = 0;
     var volume = opts.volume != null ? Number(opts.volume) : 100;
     var poll = 0;
+    var quality = "";
+    var levels = [];
+    var hostKind = opts.host === "youtube" ? "youtube" : "nocookie";
+    var mountedKind = "";
     function send(func, args) {
       if (!frame || !frame.contentWindow) return;
       try {
@@ -800,6 +806,7 @@
       send("addEventListener", ["onReady"]);
       send("addEventListener", ["onStateChange"]);
       send("addEventListener", ["onError"]);
+      send("addEventListener", ["onPlaybackQualityChange"]);
     }
     function onMessage(event) {
       var origin = String(event.origin || "");
@@ -816,9 +823,17 @@
         send("setVolume", [volume]);
         if (typeof opts.onReady === "function") opts.onReady(api);
       }
+      if (data.event === "onError") {
+        if (typeof opts.onError === "function") opts.onError(Number(info) || 0);
+        return;
+      }
       if (info && typeof info === "object") {
         if (typeof info.currentTime === "number") current = info.currentTime;
         if (typeof info.duration === "number" && info.duration > 0) duration = info.duration;
+        var changed = false;
+        if (typeof info.playbackQuality === "string" && info.playbackQuality !== quality) { quality = info.playbackQuality; changed = true; }
+        if (Array.isArray(info.availableQualityLevels) && info.availableQualityLevels.join() !== levels.join()) { levels = info.availableQualityLevels.slice(0, 12).map(String); changed = true; }
+        if (changed && typeof opts.onQuality === "function") opts.onQuality(quality, levels.slice());
       }
       var state = null;
       if (data.event === "onStateChange") state = info;
@@ -839,7 +854,9 @@
       if (typeof opts.onState === "function") opts.onState(stateNum);
     }
     function mount(id) {
-      var url = youtubeEmbed(id, { origin: pageOrigin(opts), controls: 0, preview: false });
+      var url = youtubeEmbed(id, { origin: pageOrigin(opts), controls: opts.controls === 1 ? 1 : 0, preview: false, host: hostKind });
+      mountedKind = hostKind;
+      ready = false;
       if (!frame) {
         frame = document.createElement("iframe");
         frame.id = "mu-yt-frame";
@@ -858,7 +875,7 @@
     }
     var api = {
       loadVideoById: function (id) {
-        if (ready && frame && frame.contentWindow) {
+        if (ready && frame && frame.contentWindow && mountedKind === hostKind) {
           send("loadVideoById", [String(id || "")]);
           return;
         }
@@ -871,6 +888,14 @@
       getCurrentTime: function () { return current; },
       getDuration: function () { return duration; },
       setVolume: function (n) { volume = Number(n) || 0; send("setVolume", [volume]); },
+      /* The IFrame API keeps setPlaybackQuality for old players; current
+         players mostly pick by size and connection. It is still sent. */
+      setPlaybackQuality: function (q) { send("setPlaybackQuality", [String(q || "default")]); },
+      getPlaybackQuality: function () { return quality; },
+      getAvailableQualityLevels: function () { return levels.slice(); },
+      setHost: function (kind) { hostKind = kind === "youtube" ? "youtube" : "nocookie"; },
+      host: function () { return mountedKind || hostKind; },
+      frame: function () { return frame; },
       destroy: function () {
         if (poll) clearInterval(poll);
         window.removeEventListener("message", onMessage);

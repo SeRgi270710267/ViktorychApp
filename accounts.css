@@ -966,3 +966,13 @@ html[data-wall="1"] .temp-countdown { display: none; }
   padding: 0;
 }
 .land-temp:hover { text-decoration: underline; }
+
+/* Quick sign-up: the plain one-page form, with a basic fade only. */
+.acct-quick { background: var(--bg, #000); animation: acct-quick-in 180ms ease-out both; }
+.acct-quick .acct-modal { border: 1px solid var(--line); }
+.acct-quick .acct-pref-row { margin: 20px 0 0; padding: 12px 0 0; }
+.acct-quick .acct-pref-row .tab-switch { width: auto; min-height: 0; padding: 0; border: 0; flex: none; }
+.acct-quick-passkey { width: 100%; margin-top: 12px; }
+@keyframes acct-quick-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .acct-quick { animation: none; } }
+@media (max-width: 700px) { .acct-quick .acct-modal { border: 0; } }
