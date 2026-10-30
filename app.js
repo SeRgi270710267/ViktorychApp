@@ -205,7 +205,6 @@
     quoteTarget: "",
     composeSeed: "",
     navEditingFolder: null,
-    navNewFolderOpen: false,
     shared: {},
     sharedState: {},
     chain: {},
@@ -2081,6 +2080,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function statusHash(post) {
+    if (post && post.cmHash) return post.cmHash;
     const platform = post.platform || "x";
     const handle = post.handle || "";
     const id = post.statusId || post.id;
@@ -2733,7 +2733,31 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return foreignScript(sample);
   }
 
+  /* Reddit posts and forum topics carry a title apart from the body (separate
+     source fields): drawn as its own bold line above the text, like a titled
+     post on X. Bodies that repeat the title (older link previews) drop it. */
+  function postTitleOf(post) {
+    if (!post || !post.title || typeof post.title !== "string") return "";
+    if (!(post.cmMirror || post.platform === "reddit" || post.platform === "forum")) return "";
+    return post.title.trim();
+  }
+  function titledBody(post) {
+    const title = postTitleOf(post);
+    if (!title) return post;
+    const text = String(post.text || "");
+    if (text.trim().indexOf(title) !== 0) return post;
+    return Object.assign({}, post, { text: text.trim().slice(title.length).replace(/^\s+/, "") });
+  }
   function textBlock(post, key, full, cls) {
+    const title = postTitleOf(post);
+    if (title) {
+      post = titledBody(post);
+      const head = `<div class="post-title${cls === "status-text" ? " status-title" : cls === "quote-text" ? " quote-title" : ""}" dir="auto">${esc(title)}</div>`;
+      return head + (String(post.text || "").trim() ? textBlockBody(post, key, full, cls) : "");
+    }
+    return textBlockBody(post, key, full, cls);
+  }
+  function textBlockBody(post, key, full, cls) {
     const sample = String(post.text || "").trim().slice(0, 5000);
     if (sample) STATE.translateText[key] = sample;
     STATE.translateLinks = STATE.translateLinks || {};
@@ -3693,7 +3717,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         author: "r/" + (d.subreddit || ""),
         handle: "",
         avatar: "",
-        text: d.title + (d.selftext ? "\n\n" + String(d.selftext).slice(0, 400) : ""),
+        title: String(d.title),
+        text: d.selftext ? String(d.selftext).slice(0, 400) : "",
         date: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : "",
         url: "https://www.reddit.com" + (d.permalink || ""),
         media: media
@@ -4586,8 +4611,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if ((hls.levels || []).length) { hls.autoLevelCapping = sdTop(hls.levels); hls.capLevelToPlayerSize = true; }
       return;
     }
-    const top = (hls.levels || []).length - 1;
+    let top = (hls.levels || []).length - 1;
     if (top < 0) return;
+    // TV tuning: stay under this TV's max video quality, in a codec it decodes in hardware.
+    const tune = window.ViktorychTVTune;
+    const tvTop = tune && tune.pickTop ? tune.pickTop(hls.levels) : -1;
+    if (tvTop >= 0) top = tvTop;
     hls.capLevelToPlayerSize = false;
     hls.currentLevel = top;
   }
@@ -6316,7 +6345,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${quotedHandle ? `<span class="handle">@${esc(quotedHandle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
-      ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
+      ${shown.text || postTitleOf(shown) ? textBlock(shown, key, false, "quote-text") : ""}
       ${articleCardHtml(asQuoted)}
       ${mediaHtml(asQuoted.media, false, asQuoted)}
       ${quoted.appPost && quoted.appExtra ? quoted.appExtra : ""}
@@ -9679,7 +9708,7 @@ const here = parseRoute();
     const busyItem = busyKey ? `<button data-act="busy-menu" data-key="${esc(busyKey)}" data-name="${esc(post.author || post.name || "")}" data-handle="${esc(post.handle || "")}" data-platform="${esc(post.platform || "x")}">${tr("Posting volume")}</button>` : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
     const blockItems = STATE.menu === post.id ? blockMenuItems(post, mode) : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: post.cmSource || PLATFORM[post.platform] || tr("Web") })}</a>${post.cmMirror ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : ""}`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -9690,7 +9719,10 @@ const here = parseRoute();
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
     const displayHandle = internalPostHandle(creator ? (post.handle || creator.handle || "") : (post.handle || ""), post, creator);
-    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
+    // Community mirror authors have no profile here: their links open the community.
+    const whoHref = post.cmMirror ? "#/communities/" + encodeURIComponent(post.community.name) : accountHash(post.platform, who);
+    const whoCard = post.cmMirror ? "" : ` data-card="${esc(post.platform + ":" + who)}"`;
+    const avaLink = `<a href="${esc(whoHref)}"${whoCard} aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
@@ -9698,7 +9730,7 @@ const here = parseRoute();
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     const community = post.community && post.community.name && !opts.parentShown
-      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(communityName(post.community.name))}</a></div>`
+      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(post.community.label || communityName(post.community.name))}</a></div>`
       : (redditSub(post) && !opts.parentShown
         ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(redditSub(post))}">${esc("r/" + redditSub(post))}</a></div>`
         : "");
@@ -9711,8 +9743,8 @@ const here = parseRoute();
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
-            ${displayHandle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(displayHandle)}</a>` : ""}
+            <a class="name" href="${esc(whoHref)}"${whoCard}>${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
+            ${displayHandle ? `<a class="handle" href="${esc(whoHref)}"${whoCard}>@${esc(displayHandle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${post.edited ? `<span class="edited">${tr("Edited")}</span>` : ""}
@@ -9722,7 +9754,7 @@ const here = parseRoute();
           </div>
           ${reply}
           ${discordMeta(post)}
-          ${shown.text ? textBlock(shown, post.id, false) : ""}
+          ${shown.text || postTitleOf(shown) ? textBlock(shown, post.id, false) : ""}
           ${articleCardHtml(post)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
@@ -10248,11 +10280,6 @@ const here = parseRoute();
         <span class="nav-label">${esc(tr("Install app"))}</span>
       </button>`;
     }
-    html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
-      <span class="nav-ico">${icon("sliders")}</span>
-      <span class="nav-label">${tr("Customize sidebar")}</span>
-    </button>`;
-
     return html;
   }
 
@@ -11088,9 +11115,288 @@ const here = parseRoute();
     const api = busyApi();
     return api ? api.keyOf(post) : String((post && post.feedId) || "");
   }
+  /* Communities on For you. Mirrored communities (Reddit, Discourse forums) and
+     the NZlay forum are read by the Communities page only, so their posts never
+     reached Home. For you now mixes in recent posts from the communities the
+     reader joined (the owner reads all), at most one in four, each under X's
+     community line. Docs load lazily, a few per pass, and are kept on the
+     device for a while so Home doesn't add Worker reads on every visit. */
+  const CMFY_KEY = "foryou-communities-v1";
+  const CMFY_DOC_TTL = 15 * 60 * 1000;
+  const CMFY_NZLAY_TTL = 10 * 60 * 1000;
+  const CMFY_INDEX_TTL = 30 * 60 * 1000;
+  const CMFY_MAX_AGE = 14 * 86400000;
+  const CMFY_PER = 8;
+  const CMFY_BATCH = 3;
+  const CMFY_GAP = 3;
+  let cmFy = null;
+  function cmFyState() {
+    if (cmFy) return cmFy;
+    let saved = null;
+    try { saved = JSON.parse(readStored(localStorage, CMFY_KEY) || "null"); } catch (err) { saved = null; }
+    saved = saved && typeof saved === "object" ? saved : {};
+    cmFy = {
+      index: Array.isArray(saved.index) ? saved.index : [],
+      indexAt: Number(saved.indexAt) || 0,
+      docs: saved.docs && typeof saved.docs === "object" ? saved.docs : {},
+      prefs: saved.prefs && typeof saved.prefs === "object" ? saved.prefs : null,
+      hidden: Array.isArray(saved.hidden) ? saved.hidden : [],
+      mutedAt: saved.mutedAt && typeof saved.mutedAt === "object" ? saved.mutedAt : {},
+      busy: false,
+      nextAt: 0,
+      cards: null
+    };
+    return cmFy;
+  }
+  function cmFySave() {
+    const st = cmFyState();
+    st.cards = null;
+    try {
+      writeStored(localStorage, CMFY_KEY, JSON.stringify({ index: st.index, indexAt: st.indexAt, docs: st.docs, prefs: st.prefs, hidden: st.hidden.slice(-200), mutedAt: st.mutedAt }));
+    } catch (err) { /* storage full: the next pass refetches */ }
+  }
+  function cmFyPrefs(prefs) {
+    if (!prefs || typeof prefs !== "object") return;
+    const st = cmFyState();
+    const next = { joined: (prefs.joined || []).map(String), hidden: (prefs.hidden || []).map(String), all: !!prefs.all };
+    if (JSON.stringify(next) === JSON.stringify(st.prefs)) return;
+    st.prefs = next;
+    cmFySave();
+  }
+  // A mute holds on this device until the server's own list has caught up.
+  // The Communities page reads the joined list from here too.
+  window.ViktorychCommunityPrefs = () => (cmFyState().prefs ? { joined: cmFyState().prefs.joined.slice(), hidden: cmFyState().prefs.hidden.slice(), all: !!cmFyState().prefs.all } : null);
+  function cmFyMute(name) {
+    const st = cmFyState();
+    st.mutedAt[name] = Date.now();
+    cmFySave();
+  }
+  function cmFyHideId(id) {
+    const st = cmFyState();
+    if (st.hidden.indexOf(id) < 0) st.hidden.push(id);
+    cmFySave();
+  }
+  function cmFyNzlayOn() {
+    if (serverOffList().indexOf("nzlay_forum") >= 0) return false;
+    const api = window.ViktorychNzlayForum;
+    return !!(api && (!api.enabled || api.enabled()));
+  }
+  function cmFyNzlayTitle() {
+    const api = window.ViktorychNzlayForum;
+    return String((api && api.row && api.row.title) || "nzlay");
+  }
+  function cmFyKind(row) {
+    const type = String((row && (row.type || row.source)) || "");
+    if (type === "nzlay") return "nzlay";
+    if (type === "discourse" || type === "flarum" || type === "forum") return "forum";
+    return "reddit";
+  }
+  /* Which communities feed For you: the joined ones (all for the owner), minus
+     the ones hidden from Home or muted. Before joining anything a reader gets
+     the first few hub communities, as the Communities Home tab does. */
+  function cmFyCommunities() {
+    const st = cmFyState();
+    const prefs = st.prefs || { joined: [], hidden: [], all: false };
+    const hidden = new Set(prefs.hidden || []);
+    Object.keys(st.mutedAt).forEach((name) => {
+      if (Date.now() - (Number(st.mutedAt[name]) || 0) < 10 * 60 * 1000) hidden.add(name);
+      else delete st.mutedAt[name];
+    });
+    const rows = st.index.slice();
+    if (cmFyNzlayOn() && !rows.some((row) => row.name === "nzlay")) rows.unshift({ name: "nzlay", title: cmFyNzlayTitle(), type: "nzlay" });
+    const byName = {};
+    rows.forEach((row) => { if (row && row.name) byName[row.name] = row; });
+    let names;
+    if (prefs.all) names = rows.map((row) => row.name);
+    else {
+      names = (prefs.joined || []).filter((name) => byName[name]);
+      if (!names.length) names = rows.slice(0, 3).map((row) => row.name);
+    }
+    return names.filter((name, i) => name && names.indexOf(name) === i && !hidden.has(name) && !(name === "nzlay" && !cmFyNzlayOn())).map((name) => byName[name]);
+  }
+  function cmFyClean(raw) {
+    return String(raw || "")
+      .replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "")
+      .replace(/&#32;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+      .replace(/\[link\]|\[comments\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function cmFyMedia(list) {
+    return (Array.isArray(list) ? list : []).filter((m) => m && /^https:\/\//.test(String(m.url || ""))).slice(0, 4).map((m) => {
+      const item = { type: m.type === "video" ? "video" : "photo", url: String(m.url) };
+      if (m.poster && /^https:\/\//.test(String(m.poster))) item.poster = String(m.poster);
+      if (Number(m.width) > 0 && Number(m.height) > 0) { item.width = Number(m.width); item.height = Number(m.height); }
+      if (m.alt) item.alt = String(m.alt).slice(0, 300);
+      return item;
+    });
+  }
+  function cmFySlimMirror(doc) {
+    const now = Date.now();
+    return (Array.isArray(doc && doc.posts) ? doc.posts : []).map((p) => {
+      const at = (Number(p && p.created) || 0) * 1000;
+      if (!p || !p.id || !at || now - at > CMFY_MAX_AGE) return null;
+      return {
+        id: String(p.id), title: String(p.title || "").trim().slice(0, 300), text: cmFyClean(p.text).slice(0, 1500),
+        author: String(p.author || "").replace(/https?:\/\/\S*/g, "").replace(/^\/?u\//i, "").trim().slice(0, 60),
+        at: at, score: Number(p.score) || 0, comments: Number(p.comments) || 0, url: /^https:\/\//.test(String(p.url || "")) ? String(p.url) : "",
+        media: cmFyMedia(p.media)
+      };
+    }).filter(Boolean).sort((a, b) => b.at - a.at).slice(0, CMFY_PER);
+  }
+  function cmFySlimNzlay(feed) {
+    const now = Date.now();
+    return (Array.isArray(feed && feed.topics) ? feed.topics : []).map((t) => {
+      const starter = (t && t.starter) || {};
+      const at = Date.parse(starter.at || t.lastAt || "") || 0;
+      if (!t || !t.id || !at || now - at > CMFY_MAX_AGE) return null;
+      const author = starter.author || {};
+      return {
+        id: String(t.id), title: String(t.title || "").trim().slice(0, 300), text: String(starter.text || "").trim().slice(0, 1500),
+        author: String(author.name || "").slice(0, 60), avatar: /^https:\/\//.test(String(author.avatar || "")) ? String(author.avatar) : "",
+        at: at, score: 0, comments: Number(t.replies) || 0, views: Number(t.views) || 0, url: /^https:\/\//.test(String(t.url || "")) ? String(t.url) : "",
+        media: cmFyMedia(starter.media)
+      };
+    }).filter(Boolean).sort((a, b) => b.at - a.at).slice(0, CMFY_PER);
+  }
+  function cmFyFetchJson(url) {
+    return fetch(url, { cache: "no-cache" }).then((res) => (res && res.ok ? res.json() : null)).catch(() => null);
+  }
+  function cmFyLoadOne(row) {
+    const st = cmFyState();
+    const kind = cmFyKind(row);
+    if (kind === "nzlay") {
+      const api = window.ViktorychNzlayForum;
+      const cached = api && api._state && api._state.feed && Date.now() - (Number(api._state.feedAt) || 0) < CMFY_NZLAY_TTL ? api._state.feed : null;
+      const have = cached && Array.isArray(cached.topics) && cached.topics.length ? Promise.resolve(cached) : accountCall("/v1/nzlay/forum");
+      return have.then((feed) => {
+        if (!feed || !Array.isArray(feed.topics)) { st.docs.nzlay = Object.assign({}, st.docs.nzlay || { posts: [] }, { at: Date.now() }); return; }
+        st.docs.nzlay = { at: Date.now(), kind: "nzlay", title: cmFyNzlayTitle(), posts: cmFySlimNzlay(feed) };
+      }).catch(() => {});
+    }
+    return cmFyFetchJson("data/communities/" + encodeURIComponent(row.name) + ".json").then((doc) => {
+      const prev = st.docs[row.name];
+      if (!doc) { st.docs[row.name] = Object.assign({}, prev || { posts: [] }, { at: Date.now() }); return; }
+      st.docs[row.name] = { at: Date.now(), kind: kind === "reddit" && (doc.type === "discourse" || doc.source === "discourse" || doc.source === "flarum") ? "forum" : kind, title: String(doc.title || row.title || row.name).slice(0, 80), posts: cmFySlimMirror(doc) };
+    });
+  }
+  /* One lazy pass: refresh the index when stale, then up to CMFY_BATCH stale
+     community docs. Re-renders For you once when anything changed. */
+  function cmFyPump() {
+    const st = cmFyState();
+    const now = Date.now();
+    if (st.busy || now < st.nextAt) return;
+    if (gameBusy() || document.documentElement.getAttribute("data-wall") === "1" || !accountToken()) return;
+    if (STATE.settings && STATE.settings.communitiesHome === false) return;
+    st.busy = true;
+    const indexStep = now - st.indexAt > CMFY_INDEX_TTL
+      ? cmFyFetchJson("data/communities/index.json").then((doc) => {
+          st.indexAt = Date.now();
+          const rows = doc && Array.isArray(doc.communities) ? doc.communities : null;
+          if (rows) st.index = rows.filter((row) => row && row.name).slice(0, 60).map((row) => ({ name: String(row.name), title: String(row.title || row.name).slice(0, 80), type: String(row.type || row.source || ""), icon: /^https:\/\//.test(String(row.icon || "")) ? String(row.icon) : "" }));
+        })
+      : Promise.resolve();
+    indexStep.then(() => {
+      const stale = cmFyCommunities().filter((row) => {
+        const doc = st.docs[row.name];
+        return !doc || Date.now() - (Number(doc.at) || 0) > (row.name === "nzlay" ? CMFY_NZLAY_TTL : CMFY_DOC_TTL);
+      });
+      const batch = stale.slice(0, CMFY_BATCH);
+      return Promise.all(batch.map(cmFyLoadOne)).then(() => stale.length > batch.length);
+    }).then((more) => {
+      st.busy = false;
+      st.nextAt = Date.now() + (more ? 4000 : 60000);
+      cmFySave();
+      const route = parseRoute();
+      if (route.name === "home" && (route.tab || "foryou") === "foryou") render();
+    }).catch(() => {
+      st.busy = false;
+      st.nextAt = Date.now() + 60000;
+    });
+  }
+  function cmFyCard(row, doc, p) {
+    const name = row.name;
+    const id = "cm:" + name + ":" + p.id;
+    const kind = doc.kind || cmFyKind(row);
+    const label = kind === "reddit" ? "r/" + name : String(doc.title || row.title || name);
+    const sourceUrl = p.url || (kind === "reddit" ? "https://www.reddit.com/r/" + encodeURIComponent(name) + "/comments/" + encodeURIComponent(String(p.id).replace(/^t3_/, "")) : "");
+    const author = p.author || (kind === "reddit" ? "reddit" : label);
+    return {
+      id: id,
+      statusId: id,
+      kind: "post",
+      platform: kind === "reddit" ? "reddit" : "forum",
+      handle: /\s/.test(author) ? "" : author,
+      author: author,
+      avatar: p.avatar || "",
+      date: new Date(p.at).toISOString(),
+      title: p.title,
+      text: p.text,
+      links: [],
+      media: p.media || [],
+      url: sourceUrl,
+      score: kind === "reddit" ? (p.score || 0) : undefined,
+      stats: { replies: p.comments || 0, likes: kind === "reddit" ? 0 : Math.max(0, p.score || 0), views: p.views || 0 },
+      community: { name: name, rootId: p.id, label: label },
+      cmMirror: true,
+      cmHash: "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(p.id),
+      cmSource: kind === "reddit" ? "Reddit" : label,
+      cmScore: 0
+    };
+  }
+  function cmFyCards() {
+    const st = cmFyState();
+    if (st.cards) return st.cards;
+    const now = Date.now();
+    const joined = new Set((st.prefs && st.prefs.joined) || []);
+    const hiddenIds = new Set(st.hidden);
+    const out = [];
+    cmFyCommunities().forEach((row) => {
+      const doc = st.docs[row.name];
+      if (!doc || !Array.isArray(doc.posts)) return;
+      doc.posts.forEach((p) => {
+        const card = cmFyCard(row, doc, p);
+        if (hiddenIds.has(card.id)) return;
+        const ageH = Math.max(0, now - p.at) / 3600000;
+        const engagement = Math.log10(2 + Math.max(0, p.score || 0) + 2 * (p.comments || 0) + (p.views || 0) / 50);
+        card.cmScore = engagement / Math.pow(ageH + 2, 0.8) * (joined.has(row.name) ? 1.5 : 1);
+        STATE.shared[card.id] = card;
+        out.push(card);
+      });
+    });
+    out.sort((a, b) => b.cmScore - a.cmScore);
+    st.cards = out;
+    return out;
+  }
+  /* At most one community post in every four: CMFY_GAP Home posts between them. */
+  function cmFyMix(list) {
+    if (!Array.isArray(list)) return list;
+    if (STATE.settings && STATE.settings.communitiesHome === false) return list;
+    cmFyPump();
+    const extra = cmFyCards().filter((post) => !hiddenPost(post));
+    if (!extra.length) return list;
+    const out = [];
+    let since = 0;
+    let next = 0;
+    for (let i = 0; i < list.length; i++) {
+      out.push(list[i]);
+      since++;
+      if (since >= CMFY_GAP && next < extra.length) {
+        out.push(extra[next++]);
+        since = 0;
+      }
+    }
+    // A short Home still gets its share, keeping the one-in-four cap.
+    while (next < extra.length && since >= CMFY_GAP) { out.push(extra[next++]); since = 0; }
+    return out;
+  }
+
   /* The Home list with every account's choice applied and spread out so no
      single account fills a screen. Folded posts are never handed to card(). */
   function homeShaped(route) {
+    const tab = route.tab || "foryou";
+    const shaped = homeShapedBase(route);
+    return tab === "foryou" && tabView(tab) !== "reposts" ? cmFyMix(shaped) : shaped;
+  }
+  function homeShapedBase(route) {
     const tab = route.tab || "foryou";
     const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
     const api = busyApi();
@@ -11264,6 +11570,7 @@ const here = parseRoute();
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
       if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
+      if (res.communityPrefs) cmFyPrefs(res.communityPrefs);
       const merged = keepOwnPosts(res.posts);
       if (samePublicPosts(merged)) return;
       publicPosts = merged;
@@ -17554,95 +17861,6 @@ const here = parseRoute();
     return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">${esc(go)}</button><button type="button" class="remove-cancel" data-act="close-remove">${tr("Cancel")}</button></div></div>`;
   }
 
-  function navCustomizeModal() {
-    const custom = getNavCustom();
-    const hiddenSet = new Set(custom.hidden || []);
-    const folderMap = new Map();
-    custom.folders.forEach((f) => folderMap.set(f.id, f));
-
-    const rows = custom.order.map((entry, index) => {
-      if (entry.startsWith("folder:")) {
-        const fId = entry.slice(7);
-        const folder = folderMap.get(fId);
-        if (!folder) return "";
-        const dispName = folderDisplayName(folder);
-        const folderItems = (folder.items || []).map((itId, subIdx) => {
-          const def = navItemDef(itId);
-          if (!def) return "";
-          const isHidden = hiddenSet.has(itId);
-          return `<div class="nav-cust-folder-subrow${isHidden ? " is-hidden" : ""}">
-            <span class="nav-cust-icon">${icon(def.icon)}</span>
-            <span class="nav-cust-name">${esc(def.label)}</span>
-            <div class="nav-cust-actions">
-              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="-1" aria-label="${tr("Move up")}"${subIdx === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="1" aria-label="${tr("Move down")}"${subIdx === folder.items.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-              <button class="outline" type="button" data-act="nav-remove-from-folder" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" style="height:28px;padding:0 8px;font-size:12px;">${tr("Remove from folder")}</button>
-              ${itId === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(itId)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
-            </div>
-          </div>`;
-        }).join("");
-
-        return `<div class="nav-cust-folder-box">
-          <div class="nav-cust-folder-head">
-            <span class="nav-cust-icon">${icon("folder")}</span>
-            <span class="nav-cust-name">${esc(dispName)} <span class="muted small">(${folder.items.length})</span></span>
-            <div class="nav-cust-actions">
-              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-              <button class="icon-btn" type="button" data-act="nav-prompt-rename" data-folder-id="${esc(folder.id)}" aria-label="${tr("Rename folder")}" data-tooltip="${tr("Rename folder")}">${icon("pencil")}</button>
-              <button class="icon-btn danger" type="button" data-act="nav-delete-folder" data-folder-id="${esc(folder.id)}" aria-label="${tr("Delete folder")}" data-tooltip="${tr("Delete folder")}">${icon("trash")}</button>
-            </div>
-          </div>
-          <div class="nav-cust-folder-items">
-            ${folderItems || `<div class="muted small" style="padding:4px 8px;">${tr("This folder is empty.")}</div>`}
-          </div>
-        </div>`;
-      } else {
-        const def = navItemDef(entry);
-        if (!def) return "";
-        const isHidden = hiddenSet.has(entry);
-        return `<div class="nav-cust-item-row${isHidden ? " is-hidden" : ""}">
-          <span class="nav-cust-icon">${icon(def.icon)}</span>
-          <span class="nav-cust-name">${esc(def.label)}</span>
-          <div class="nav-cust-actions">
-            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
-            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
-            <select class="nav-move-select" data-act="nav-select-folder" data-id="${esc(entry)}">
-              <option value="">${tr("Move to folder")}...</option>
-              ${custom.folders.map((f) => `<option value="${esc(f.id)}">${esc(folderDisplayName(f))}</option>`).join("")}
-            </select>
-            ${entry === "home" ? `<span class="nav-cust-lock" title="${esc(tr("Home always stays in the navigation bar."))}" aria-label="${esc(tr("Home always stays in the navigation bar."))}">${icon("lock")}</span>` : `<button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(entry)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>`}
-          </div>
-        </div>`;
-      }
-    }).join("");
-
-    return `<div class="modal-back" data-act="close-modal"><div class="modal nav-customize-modal" role="dialog" aria-label="${tr("Customize sidebar")}" data-act="stop">
-      <div class="modal-head">
-        <button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button>
-        <h2>${tr("Customize sidebar")}</h2>
-        <button class="outline" type="button" data-act="nav-reset-default" style="height:32px;padding:0 12px;font-size:13px;">${tr("Reset to default")}</button>
-        <button class="save" type="button" data-act="close-modal">${tr("Done")}</button>
-      </div>
-      <div class="modal-body">
-        <div class="nav-customize-intro">
-          <p class="muted">${tr("Reorder items and organize them into folders.")}</p>
-          <button class="outline primary" type="button" data-act="nav-open-new-folder" style="height:32px;padding:0 12px;font-size:13px;display:flex;align-items:center;gap:6px;">${icon("plus")} ${tr("New folder")}</button>
-        </div>
-        ${STATE.navNewFolderOpen ? `
-          <form class="nav-new-folder-form" data-act="nav-create-folder-submit">
-            <input type="text" id="nav-new-folder-input" class="nav-folder-rename-input" placeholder="${tr("Folder name")}" maxlength="30" required autofocus />
-            <button type="submit" class="save" style="height:32px;padding:0 14px;">${tr("Save")}</button>
-            <button type="button" class="outline" data-act="nav-close-new-folder" style="height:32px;padding:0 10px;">${tr("Cancel")}</button>
-          </form>
-        ` : ""}
-        <div class="nav-cust-list">
-          ${rows}
-        </div>
-      </div>
-    </div></div>`;
-  }
-
   function postAskDialog() {
     return `<div class="modal-back remove-back" data-act="close-modal"><div class="modal remove-sheet" role="alertdialog" aria-modal="true" aria-labelledby="post-del-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="post-del-title">${esc(tr("Delete post?"))}</h2><p>${esc(tr("This can’t be undone and it will be removed from your profile, the timeline of any accounts that follow you, and from search results."))}</p><button type="button" class="remove-go" data-act="confirm-post-delete">${esc(tr("Delete"))}</button><button type="button" class="remove-cancel" data-act="close-modal">${esc(tr("Cancel"))}</button></div></div>`;
   }
@@ -17771,7 +17989,6 @@ if (STATE.histClear) {
         </div>
       </div></div>`;
     }
-    if (STATE.modal === "nav-customize") return navCustomizeModal();
     if (STATE.modal === "tabs") {
       const pinned = STATE.settings.lists.filter((list) => list.pinned);
       const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${trn("members", (list.members || []).length)}</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="${esc(tr("Move {name} left", { name: list.name }))}"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="${esc(tr("Move {name} right", { name: list.name }))}"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">${tr("Unpin")}</button></div>`).join("");
@@ -21064,33 +21281,6 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
-    if (act === "open-nav-customize") {
-      STATE.drawerEdit = true;
-      STATE.accountMenu = false;
-      STATE.modal = null;
-      STATE.navNewFolderOpen = false;
-      STATE.drawer = !sidebarOwnsNav();
-      render();
-      return;
-    }
-    if (act === "nav-open-new-folder") {
-      STATE.navNewFolderOpen = true;
-      render();
-      const input = document.getElementById("nav-new-folder-input");
-      if (input) input.focus();
-      return;
-    }
-    if (act === "nav-close-new-folder") {
-      STATE.navNewFolderOpen = false;
-      render();
-      return;
-    }
-    if (act === "nav-reset-default") {
-      saveNavCustom(DEFAULT_NAV_CUSTOM);
-      render();
-      toast(tr("Reset to default"));
-      return;
-    }
     if (act === "bottom-nav-move") {
       moveBottomNav(el.dataset.id, Number(el.dataset.dir));
       refocusBottom(el.dataset.id, "move", el.dataset.dir);
@@ -21134,100 +21324,6 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       render();
       return;
     }
-    if (act === "nav-order-move") {
-      const idx = Number(el.dataset.idx);
-      const dir = Number(el.dataset.dir);
-      const custom = getNavCustom();
-      const target = idx + dir;
-      if (target >= 0 && target < custom.order.length) {
-        const tmp = custom.order[idx];
-        custom.order[idx] = custom.order[target];
-        custom.order[target] = tmp;
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-subitem-move") {
-      const folderId = el.dataset.folderId;
-      const itemId = el.dataset.id;
-      const dir = Number(el.dataset.dir);
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        const idx = folder.items.indexOf(itemId);
-        const target = idx + dir;
-        if (idx !== -1 && target >= 0 && target < folder.items.length) {
-          const tmp = folder.items[idx];
-          folder.items[idx] = folder.items[target];
-          folder.items[target] = tmp;
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
-    if (act === "nav-remove-from-folder") {
-      const folderId = el.dataset.folderId;
-      const itemId = el.dataset.id;
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        folder.items = folder.items.filter((it) => it !== itemId);
-        const fKey = "folder:" + folderId;
-        const fIdx = custom.order.indexOf(fKey);
-        if (fIdx !== -1) custom.order.splice(fIdx + 1, 0, itemId);
-        else custom.order.push(itemId);
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-prompt-rename") {
-      const folderId = el.dataset.folderId;
-      const custom = getNavCustom();
-      const folder = custom.folders.find((f) => f.id === folderId);
-      if (folder) {
-        const next = window.prompt(tr("Folder name"), folder.name);
-        if (next && next.trim()) {
-          folder.name = next.trim().slice(0, 30);
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
-    if (act === "nav-delete-folder") {
-      const folderId = el.dataset.folderId;
-      const custom = getNavCustom();
-      const folderIdx = custom.folders.findIndex((f) => f.id === folderId);
-      if (folderIdx !== -1) {
-        const folder = custom.folders[folderIdx];
-        const fKey = "folder:" + folderId;
-        const ordIdx = custom.order.indexOf(fKey);
-        if (ordIdx !== -1) {
-          custom.order.splice(ordIdx, 1, ...(folder.items || []));
-        }
-        custom.folders.splice(folderIdx, 1);
-        saveNavCustom(custom);
-        render();
-      }
-      return;
-    }
-    if (act === "nav-toggle-vis") {
-      const itemId = el.dataset.id;
-      if (itemId === "settings" || itemId === "home") return;
-      const custom = getNavCustom();
-      const idx = custom.hidden.indexOf(itemId);
-      if (idx !== -1) {
-        custom.hidden.splice(idx, 1);
-      } else {
-        custom.hidden.push(itemId);
-      }
-      saveNavCustom(custom);
-      render();
-      return;
-    }
     if (act === "reply-others") {
       let handles = [];
       try { handles = JSON.parse(el.dataset.handles || "[]"); } catch (err) { handles = []; }
@@ -21243,7 +21339,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "close-modal" || act === "close-remove") {
       if (act === "close-modal" && STATE.modal === "compose" && window.ViktorychXCompose && window.ViktorychXCompose.requestClose && window.ViktorychXCompose.requestClose()) return;
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
-      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; STATE.navNewFolderOpen = false; render(); return;
+      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.postAsk = null; STATE.postEdit = null; render(); return;
     }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
@@ -21392,6 +21488,9 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "mute-community") {
       const name = el.dataset.name || "";
+      cmFyMute(name);
+      STATE.menu = null;
+      render();
       accountCall("/v1/communities/" + encodeURIComponent(name) + "/feed", { method: "POST", body: { muted: true } }).then(() => {
         publicPosts = publicPosts.filter((item) => !(item.community && item.community.name === name));
         toast(tr("Mute community"));
@@ -21501,6 +21600,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "foryou-hide" || act === "foryou-less") {
       const post = findAnyPost(el.dataset.id);
+      if (post && post.cmMirror && act === "foryou-hide") cmFyHideId(String(post.id));
       const memory = forYouMemory();
       if (post && memory && window.ForYou) {
         window.ForYou.note(memory, post, act === "foryou-hide" ? "hide" : "less");
@@ -23827,26 +23927,6 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       render();
       return;
     }
-    const newFolderForm = event.target.closest && event.target.closest("form[data-act='nav-create-folder-submit']");
-    if (newFolderForm) {
-      event.preventDefault();
-      const input = newFolderForm.querySelector("#nav-new-folder-input");
-      const val = input ? input.value.trim().slice(0, 30) : "";
-      if (val) {
-        const custom = getNavCustom();
-        const newId = "f_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        custom.folders.push({
-          id: newId,
-          name: val,
-          items: []
-        });
-        custom.order.push("folder:" + newId);
-        saveNavCustom(custom);
-      }
-      STATE.navNewFolderOpen = false;
-      render();
-      return;
-    }
     if (event.target.closest && event.target.closest("form.hist-search")) {
       event.preventDefault();
       const input = event.target.querySelector("#hist-q");
@@ -23990,23 +24070,6 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   });
 
   document.addEventListener("change", (event) => {
-    const navSel = event.target && event.target.closest && event.target.closest("select[data-act='nav-select-folder']");
-    if (navSel) {
-      const folderId = navSel.value;
-      const itemId = navSel.dataset.id;
-      if (folderId && itemId) {
-        const custom = getNavCustom();
-        const targetFolder = custom.folders.find((f) => f.id === folderId);
-        if (targetFolder) {
-          custom.order = custom.order.filter((it) => it !== itemId);
-          custom.folders.forEach((f) => { f.items = f.items.filter((it) => it !== itemId); });
-          targetFolder.items.push(itemId);
-          saveNavCustom(custom);
-          render();
-        }
-      }
-      return;
-    }
     if (event.target.id === "translate-to" && window.FeedsTranslate) {
       window.FeedsTranslate.setTarget(event.target.value);
       return;
@@ -29514,6 +29577,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.ViktorychCommunities.writeTabs = function (bag) {
       if (!STATE.settings) return;
       STATE.settings.communityTabs = bag;
+      saveSettings();
+    };
+    window.ViktorychCommunities.readFolders = function () { return STATE.settings ? STATE.settings.communityFolders : null; };
+    window.ViktorychCommunities.writeFolders = function (bag) {
+      if (!STATE.settings) return;
+      STATE.settings.communityFolders = bag;
       saveSettings();
     };
     window.ViktorychCommunities.profileInfo = function (id) {

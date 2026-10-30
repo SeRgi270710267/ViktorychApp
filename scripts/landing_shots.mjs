@@ -510,7 +510,9 @@ async function captureApp(browser, origin, outDir, only) {
   }
 
   if (want("sidebar")) {
-    await clickAct(page, "open-nav-customize");
+    await clickAct(page, "customize-page");
+    await waitFor(page, () => document.querySelector(".pz-page [data-act='drawer-edit']"), "customize page");
+    await clickAct(page, "drawer-edit");
     await waitFor(page, () => document.querySelector(".nav-customize-modal"), "sidebar");
     await save("sidebar");
     await page.keyboard.press("Escape");
