@@ -335,7 +335,11 @@
     return { communities: rows };
   }
 
+  function indexRetryMs() {
+    return Math.min(60000, 3000 * Math.pow(2, Math.max(0, (state.indexFails || 1) - 1)));
+  }
   function indexStale() {
+    if (state.indexFailAt && Date.now() - state.indexFailAt < indexRetryMs()) return false;
     return !state.indexAt || Date.now() - state.indexAt > INDEX_TTL;
   }
 
@@ -348,6 +352,8 @@
       state.index = mergeBuiltins(doc);
       state.indexAt = Date.now();
       state.indexPromise = null;
+      state.indexFailAt = 0;
+      state.indexFails = 0;
       if (doc && doc.communities && doc.communities.length) cachePut("cm:index", { communities: state.index.communities });
       rememberCommunities();
       return state.index;
@@ -361,8 +367,20 @@
         if (!res2.ok) throw new Error("index fallback " + res2.status);
         return res2.json();
       }).then(adopt).catch(function () {
-        /* Keep whatever is already rendered instead of replacing it with an empty list. */
-        return adopt(state.index);
+        /* Keep whatever is already rendered instead of replacing it with an empty list,
+           but do not mark it fresh: a failed read (no session yet, a cold Worker) must
+           not pin the built-in rows for the whole cache time. Retry after a short pause. */
+        state.index = mergeBuiltins(state.index);
+        state.indexFailAt = Date.now();
+        state.indexFails = (state.indexFails || 0) + 1;
+        state.indexPromise = null;
+        clearTimeout(state.indexRetry);
+        state.indexRetry = setTimeout(function () {
+          if (String(location.hash || "").indexOf("#/communities") !== 0) return;
+          loadIndex(true).then(render);
+        }, indexRetryMs());
+        rememberCommunities();
+        return state.index;
       });
     });
     return state.indexPromise;
@@ -658,6 +676,20 @@
   }
 
   /* Mirrored post card — Reddit layout for subreddits, forum layout for Discourse */
+  /* X cuts a long post at about 280 characters and adds "Show more", which
+     opens the post; the thread view shows the whole body. */
+  var SHOW_CUT = 280;
+  function cutBody(text) {
+    var s = String(text || "");
+    if (s.length <= SHOW_CUT) return { text: s, long: false };
+    var cut = s.slice(0, SHOW_CUT);
+    var sp = cut.lastIndexOf(" ");
+    if (sp > 220) cut = cut.slice(0, sp);
+    return { text: cut.replace(/\s+$/, "") + "…", long: true };
+  }
+  function showMore(href) {
+    return '<a class="show-more cm-show-more" href="' + esc(href) + '">' + esc(tr("Show more")) + "</a>";
+  }
   function redditCard(name, post, isThread) {
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
     var bag = state.internal[name] || {};
@@ -685,8 +717,9 @@
           '<span class="cm-reddit-time">' + esc(timeAgo((Number(post.created) || 0) * 1000)) + '</span>' +
           (post.flair ? '<span class="cm-reddit-flair">' + esc(post.flair) + '</span>' : "") +
         '</div>' +
-        '<a class="cm-reddit-title" href="' + href + '">' + esc(post.title || "") + '</a>' +
-        (cleanTxt ? '<div class="cm-reddit-text">' + esc(cleanTxt) + '</div>' : "") +
+        (post.title ? '<a class="cm-reddit-title" dir="auto" href="' + href + '">' + esc(post.title) + '</a>' : "") +
+        (cleanTxt ? '<div class="cm-reddit-text" dir="auto">' + esc(isThread ? cleanTxt : cutBody(cleanTxt).text) + '</div>' : "") +
+        (!isThread && cleanTxt && cutBody(cleanTxt).long ? showMore(href) : "") +
         mediaHtml(name, post, post.media) +
         '<div class="cm-reddit-actions">' +
           votePill(name, post.id, total, v, false) +
@@ -770,16 +803,37 @@
       return [row.name, row.title, row.about].some(function (v) { return String(v || "").toLowerCase().indexOf(q) >= 0; });
     });
   }
+  /* Joined = what the account joined. The per-community bag (loaded when a
+     community is opened or its feed loads) was the only source, so joined
+     communities whose bag hadn't loaded yet never reached the row. The joined
+     list that rides on /v1/posts (kept by app.js) fills the gap; a loaded bag
+     still wins so Join/Leave shows at once. The owner adds communities as
+     sources instead of joining them, so every hub community counts for them. */
+  function serverJoined() {
+    var get = window.ViktorychCommunityPrefs;
+    var prefs = typeof get === "function" ? get() : null;
+    return prefs && Array.isArray(prefs.joined) ? prefs : null;
+  }
+  function isJoined(name) {
+    var bag = state.internal[name];
+    if (bag && bag.joined) return true;
+    if (owner()) return true;
+    if (bag) return false;
+    var prefs = serverJoined();
+    return !!(prefs && (prefs.all || prefs.joined.indexOf(name) >= 0));
+  }
   function joinedRows(rows) {
-    return rows.filter(function (row) { var bag = state.internal[row.name]; return bag && bag.joined; });
+    return rows.filter(function (row) { return isJoined(row.name); });
   }
   /* Home shows what you joined; before you join anything it shows the most
      followed communities so the page is never empty. */
   function homeRows(rows) {
     var mine = joinedRows(rows);
     var list = mine.length ? mine : rows.slice().sort(function (a, b) { return (Number(b.subscribers) || 0) - (Number(a.subscribers) || 0); });
+    var prefs = serverJoined();
     return list.filter(function (row) {
       var bag = state.internal[row.name];
+      if (!bag && prefs && Array.isArray(prefs.hidden) && prefs.hidden.indexOf(row.name) >= 0) return false;
       return !(bag && (bag.muted || bag.showHome === false));
     });
   }
@@ -788,17 +842,377 @@
     String(name || "").split("").forEach(function (ch) { h = (h * 31 + ch.charCodeAt(0)) % 360; });
     return h;
   }
-  function coverCard(row) {
+  function coverCard(row, badge) {
     var label = isForum(row.name) ? (row.title || row.name) : "r/" + row.name;
     var img = row.banner
       ? '<img class="cm-cover-img" alt="" loading="lazy" decoding="async" src="' + esc(row.banner) + '">'
       : '<span class="cm-cover-img cm-cover-blank" style="--tone:' + hubTone(row.name) + '">' + (row.icon ? '<img alt="" loading="lazy" decoding="async" src="' + esc(row.icon) + '">' : (isForum(row.name) ? svgCommunities : svgSnoo)) + "</span>";
-    return '<a class="cm-cover" href="#/communities/' + encodeURIComponent(row.name) + '">' + img + '<b class="cm-cover-name"><span>' + esc(label) + "</span></b></a>";
+    return '<a class="cm-cover" href="#/communities/' + encodeURIComponent(row.name) + '">' + img + (badge || "") + '<b class="cm-cover-name"><span>' + esc(label) + "</span></b></a>";
   }
+  /* ---------- Joined row folders, full lists and featured pins ----------
+     Folders are the account's own: kept in its synced settings (or this
+     device when no account hook is present), never published. Featured pins
+     are the owner's order for Explore, read from the Worker. */
+  var FOLDERS_KEY = "va_cm_folders";
+  var FEATURED_KEY = "va_cm_featured";
+  function cleanFolders(bag) {
+    var list = bag && Array.isArray(bag.folders) ? bag.folders : [];
+    var folders = [];
+    var seen = {};
+    var used = {};
+    list.forEach(function (folder) {
+      if (!folder || typeof folder !== "object" || folders.length >= 20) return;
+      var id = String(folder.id || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
+      var name = String(folder.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40);
+      if (!id || !name || seen[id]) return;
+      seen[id] = true;
+      var items = [];
+      (Array.isArray(folder.items) ? folder.items : []).forEach(function (item) {
+        var key = String(item || "").toLowerCase();
+        if (/^[a-z0-9_]{2,21}$/.test(key) && !used[key] && items.length < 60) { used[key] = true; items.push(key); }
+      });
+      folders.push({ id: id, name: name, items: items });
+    });
+    var order = [];
+    (bag && Array.isArray(bag.order) ? bag.order : []).forEach(function (key) {
+      key = String(key || "");
+      if (order.length < 200 && /^(?:f:[A-Za-z0-9]{1,24}|c:[a-z0-9_]{2,21})$/.test(key) && order.indexOf(key) < 0) order.push(key);
+    });
+    return { at: Number(bag && bag.at) || 0, folders: folders, order: order };
+  }
+  function readFolders() {
+    var h = hooks();
+    var bag = h.readFolders ? h.readFolders() : null;
+    if (!bag) {
+      try { bag = JSON.parse(localStorage.getItem(FOLDERS_KEY) || "null"); } catch (_) { bag = null; }
+    }
+    return cleanFolders(bag);
+  }
+  function writeFolders(bag) {
+    var clean = cleanFolders(Object.assign({}, bag, { at: Date.now() }));
+    var h = hooks();
+    if (h.writeFolders) h.writeFolders(clean);
+    try { localStorage.setItem(FOLDERS_KEY, JSON.stringify(clean)); } catch (_) { /* the account copy still holds it */ }
+    return clean;
+  }
+  function folderById(bag, id) {
+    for (var i = 0; i < bag.folders.length; i++) if (bag.folders[i].id === id) return bag.folders[i];
+    return null;
+  }
+  function newFolderId() {
+    return "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+  /* The joined row in its saved order: folders and the communities that are
+     not inside one. Anything new lands at the end in the hub's order. */
+  function rowEntries(rows) {
+    var bag = readFolders();
+    var byName = {};
+    rows.forEach(function (row) { byName[row.name] = row; });
+    var inFolder = {};
+    var list = bag.folders.map(function (folder) {
+      folder.items.forEach(function (name) { inFolder[name] = true; });
+      return { kind: "folder", key: "f:" + folder.id, folder: folder, rows: folder.items.filter(function (name) { return byName[name]; }).map(function (name) { return byName[name]; }) };
+    });
+    rows.forEach(function (row) {
+      if (!inFolder[row.name]) list.push({ kind: "community", key: "c:" + row.name, row: row });
+    });
+    var pos = {};
+    bag.order.forEach(function (key, i) { pos[key] = i; });
+    return list.map(function (entry, i) { return { entry: entry, at: pos[entry.key] != null ? pos[entry.key] : 1000 + i }; })
+      .sort(function (a, b) { return a.at - b.at; })
+      .map(function (item) { return item.entry; });
+  }
+  function rowLabel(row) {
+    return isForum(row.name) ? (row.title || row.name) : "r/" + row.name;
+  }
+  function miniAva(row) {
+    var pic = row.icon || row.banner;
+    return '<span class="cm-folder-mini" style="--tone:' + hubTone(row.name) + '">' +
+      (pic ? '<img alt="" loading="lazy" decoding="async" src="' + esc(pic) + '">' : (isForum(row.name) ? svgCommunities : svgSnoo)) + "</span>";
+  }
+  function folderGrid(rows) {
+    var cells = rows.slice(0, 4).map(miniAva);
+    while (cells.length < 4) cells.push('<span class="cm-folder-mini cm-folder-empty"></span>');
+    return cells.join("");
+  }
+  /* Same size as a community tile: a 2x2 grid of the folder's avatars and its name. */
+  function folderTile(entry) {
+    var name = entry.folder.name;
+    return '<button class="cm-cover cm-folder" type="button" data-cm="cm-panel" data-panel="folder:' + esc(entry.folder.id) + '" aria-label="' + esc(tr("Open folder {name}", { name: name })) + '">' +
+      '<span class="cm-cover-img cm-folder-grid">' + folderGrid(entry.rows) + "</span>" +
+      '<b class="cm-cover-name"><span>' + esc(name) + "</span></b></button>";
+  }
+  function featuredList() {
+    if (!state.featured) {
+      try {
+        var saved = JSON.parse(localStorage.getItem(FEATURED_KEY) || "null");
+        if (saved && Array.isArray(saved.names)) { state.featured = saved.names; state.canPin = !!saved.canEdit; state.featuredAt = 0; }
+      } catch (_) { /* read again from the Worker */ }
+    }
+    if (signedIn() && !state.featuredBusy && Date.now() - (state.featuredAt || 0) > 5 * 60 * 1000) {
+      state.featuredBusy = true;
+      call("/v1/communities/featured").then(function (body) {
+        state.featuredBusy = false;
+        state.featuredAt = Date.now();
+        if (!body || !Array.isArray(body.featured)) return;
+        var same = JSON.stringify(body.featured) === JSON.stringify(state.featured || []) && !!body.canEdit === !!state.canPin;
+        state.featured = body.featured;
+        state.canPin = !!body.canEdit;
+        try { localStorage.setItem(FEATURED_KEY, JSON.stringify({ names: state.featured, canEdit: state.canPin })); } catch (_) { /* memory only */ }
+        if (!same) render();
+      });
+    }
+    return state.featured || [];
+  }
+  function canPin() {
+    return owner() || !!state.canPin;
+  }
+  /* Every community: the owner's featured ones first in their order, then
+     the rest by members. */
+  function allOrdered(rows) {
+    var pins = featuredList();
+    var byName = {};
+    rows.forEach(function (row) { byName[row.name] = row; });
+    var top = pins.filter(function (name) { return byName[name]; }).map(function (name) { return byName[name]; });
+    var rest = rows.filter(function (row) { return pins.indexOf(row.name) < 0; })
+      .sort(function (a, b) { return (Number(b.subscribers) || 0) - (Number(a.subscribers) || 0); });
+    return top.concat(rest);
+  }
+  function featuredBadge(name) {
+    return featuredList().indexOf(name) >= 0 ? '<i class="cm-featured-badge">' + esc(tr("Featured")) + "</i>" : "";
+  }
+  function allRow(rows) {
+    var list = allOrdered(rows);
+    if (!list.length) return "";
+    return '<div class="cm-section-head">' + esc(tr("All communities")) + "</div>" +
+      '<div class="cm-covers cm-all-row" role="list">' + list.map(function (row) { return coverCard(row, featuredBadge(row.name)); }).join("") +
+      '<button class="cm-see-all" type="button" data-cm="cm-panel" data-panel="all" aria-label="' + esc(tr("All communities")) + '">' + svgArrow + "</button></div>";
+  }
+  function panelHead(title, extra) {
+    return '<div class="cm-panel-head"><button class="cm-icon-btn" type="button" data-cm="panel-back" aria-label="' + esc(tr("Back")) + '">' + svgBack + "</button>" +
+      "<h2>" + esc(title) + "</h2>" + (extra || "") + "</div>";
+  }
+  function iconBtn(act, label, glyph, data) {
+    return '<button class="cm-mini-btn" type="button" data-cm="' + act + '"' + (data || "") + ' aria-label="' + esc(label) + '" title="' + esc(label) + '">' + glyph + "</button>";
+  }
+  function folderSelect(name, bag, current) {
+    var opts = '<option value=""' + (current ? "" : " selected") + ">" + esc(tr("No folder")) + "</option>" +
+      bag.folders.map(function (folder) {
+        return '<option value="' + esc(folder.id) + '"' + (folder.id === current ? " selected" : "") + ">" + esc(folder.name) + "</option>";
+      }).join("");
+    return '<label class="cm-move"><span>' + esc(tr("Move to folder")) + '</span><select data-cm="move-folder" data-sub="' + esc(name) + '">' + opts + "</select></label>";
+  }
+  function joinedLine(row, bag, folderId, scope) {
+    var data = ' data-sub="' + esc(row.name) + '" data-scope="' + esc(scope) + '"';
+    return '<div class="cm-line" data-line="' + esc(row.name) + '">' +
+      '<a class="cm-pick" href="#/communities/' + encodeURIComponent(row.name) + '">' + miniAva(row) + "<span>" + esc(rowLabel(row)) + "</span></a>" +
+      '<div class="cm-line-tools">' + folderSelect(row.name, bag, folderId) +
+        iconBtn("row-up", tr("Move up"), "↑", data) + iconBtn("row-down", tr("Move down"), "↓", data) +
+      "</div></div>";
+  }
+  function folderForm(id, value) {
+    return '<form class="cm-folder-form" data-cm="folder-save" data-folder="' + esc(id || "") + '">' +
+      '<input name="name" maxlength="40" required placeholder="' + esc(tr("Folder name")) + '" aria-label="' + esc(tr("Folder name")) + '" value="' + esc(value || "") + '">' +
+      '<button type="submit">' + esc(id ? tr("Save") : tr("Create")) + "</button>" +
+      '<button type="button" data-cm="folder-cancel">' + esc(tr("Cancel")) + "</button></form>";
+  }
+  function folderTools(folder) {
+    var data = ' data-folder="' + esc(folder.id) + '"';
+    return '<div class="cm-line-tools">' +
+      iconBtn("folder-rename", tr("Rename"), "✎", data) +
+      iconBtn("folder-delete", tr("Delete folder"), svgTrash, data) +
+      iconBtn("row-up", tr("Move up"), "↑", data + ' data-scope="row"') +
+      iconBtn("row-down", tr("Move down"), "↓", data + ' data-scope="row"') + "</div>";
+  }
+  function joinedPanel(rows) {
+    var bag = readFolders();
+    var entries = rowEntries(joinedRows(rows));
+    state.openFolders = state.openFolders || {};
+    var body = entries.map(function (entry) {
+      if (entry.kind === "community") return joinedLine(entry.row, bag, "", "row");
+      var folder = entry.folder;
+      var open = state.openFolders[folder.id] !== false;
+      var head = state.folderEdit === folder.id ? folderForm(folder.id, folder.name) :
+        '<button class="cm-folder-head" type="button" data-cm="folder-toggle" data-folder="' + esc(folder.id) + '" aria-expanded="' + (open ? "true" : "false") + '">' +
+          '<span class="cm-folder-grid cm-folder-small">' + folderGrid(entry.rows) + "</span>" +
+          "<b>" + esc(folder.name) + "</b><span class=\"cm-folder-count\">" + esc(String(entry.rows.length)) + "</span>" +
+          '<span class="cm-folder-caret">' + svgCaret + "</span></button>";
+      return '<section class="cm-folder-section' + (open ? " open" : "") + '" data-folder-section="' + esc(folder.id) + '">' +
+        '<div class="cm-folder-bar">' + head + (state.folderEdit === folder.id ? "" : folderTools(folder)) + "</div>" +
+        (open ? '<div class="cm-folder-items">' + (entry.rows.length ? entry.rows.map(function (row) { return joinedLine(row, bag, folder.id, folder.id); }).join("") : '<p class="cm-folder-empty-note">' + esc(tr("Move communities here with Move to folder.")) + "</p>") + "</div>" : "") +
+        "</section>";
+    }).join("");
+    var add = state.folderEdit === "new" ? folderForm("", "") :
+      '<button class="cm-new-folder" type="button" data-cm="folder-new">' + svgPlus + "<span>" + esc(tr("New folder")) + "</span></button>";
+    return panelHead(tr("Your Communities")) + '<div class="cm-panel-body">' + add +
+      (body || '<div class="empty"><h2>' + esc(tr("Join a community to see it here.")) + "</h2></div>") + "</div>";
+  }
+  function folderPanel(rows, id) {
+    var bag = readFolders();
+    var entry = rowEntries(joinedRows(rows)).filter(function (item) { return item.kind === "folder" && item.folder.id === id; })[0];
+    if (!entry) { state.panel = "joined"; return joinedPanel(rows); }
+    var head = state.folderEdit === id ? folderForm(id, entry.folder.name) : "";
+    var list = entry.rows.map(function (row) { return joinedLine(row, bag, id, id); }).join("");
+    return panelHead(entry.folder.name, state.folderEdit === id ? "" : folderTools(entry.folder)) + '<div class="cm-panel-body">' + head +
+      (list ? '<div class="cm-folder-items">' + list + "</div>" : '<p class="cm-folder-empty-note">' + esc(tr("Move communities here with Move to folder.")) + "</p>") + "</div>";
+  }
+  function allPanel(rows) {
+    var pins = featuredList();
+    var editor = canPin();
+    var list = allOrdered(rows).map(function (row) {
+      var pinned = pins.indexOf(row.name) >= 0;
+      var data = ' data-sub="' + esc(row.name) + '"';
+      var tools = editor ? '<div class="cm-line-tools">' +
+        (pinned ? iconBtn("pin-up", tr("Move up"), "↑", data) + iconBtn("pin-down", tr("Move down"), "↓", data) : "") +
+        '<button class="cm-pin-btn' + (pinned ? " on" : "") + '" type="button" data-cm="pin-toggle"' + data + ">" + esc(pinned ? tr("Unpin") : tr("Pin")) + "</button></div>" : "";
+      return '<div class="cm-line' + (pinned ? " pinned" : "") + '" data-line="' + esc(row.name) + '">' +
+        '<a class="cm-pick" href="#/communities/' + encodeURIComponent(row.name) + '">' + miniAva(row) + "<span>" + esc(rowLabel(row)) + "</span>" + featuredBadge(row.name) + "</a>" + tools + "</div>";
+    }).join("");
+    var hint = editor ? '<p class="cm-pin-hint">' + esc(tr("Pinned communities show first on Explore for everyone.")) + "</p>" : "";
+    return panelHead(tr("All communities")) + '<div class="cm-panel-body">' + hint + list + "</div>";
+  }
+  function panelPage(rows) {
+    if (state.panel === "joined") return joinedPanel(rows);
+    if (state.panel === "all") return allPanel(rows);
+    if (String(state.panel).indexOf("folder:") === 0) return folderPanel(rows, state.panel.slice(7));
+    return "";
+  }
+  function moveIn(list, item, step) {
+    var i = list.indexOf(item);
+    var j = i + step;
+    if (i < 0 || j < 0 || j >= list.length) return list;
+    var next = list.slice();
+    next[i] = list[j];
+    next[j] = item;
+    return next;
+  }
+  function savePins(names) {
+    var prev = state.featured || [];
+    state.featured = names;
+    render();
+    call("/v1/owner/communities/featured", { method: "POST", body: { names: names } }).then(function (body) {
+      if (!body || !Array.isArray(body.featured)) {
+        state.featured = prev;
+        toast(tr("Couldn't save the pins."));
+      } else {
+        state.featured = body.featured;
+        state.featuredAt = Date.now();
+        try { localStorage.setItem(FEATURED_KEY, JSON.stringify({ names: state.featured, canEdit: true })); } catch (_) { /* memory only */ }
+      }
+      render();
+    });
+  }
+  /* Panel and folder clicks; true when handled. */
+  function panelClick(act, el) {
+    var rows = hubRows();
+    var bag;
+    if (act === "cm-panel") {
+      state.panel = el.dataset.panel || "";
+      state.folderEdit = "";
+      state.picker = false;
+      render();
+      window.scrollTo(0, 0);
+      return true;
+    }
+    if (act === "panel-back") {
+      state.panel = String(state.panel).indexOf("folder:") === 0 && state.panelFrom === "joined" ? "joined" : "";
+      state.panelFrom = "";
+      state.folderEdit = "";
+      render();
+      return true;
+    }
+    if (act === "folder-new") { state.folderEdit = "new"; render(); focusFolderInput(); return true; }
+    if (act === "folder-cancel") { state.folderEdit = ""; render(); return true; }
+    if (act === "folder-rename") { state.folderEdit = el.dataset.folder || ""; render(); focusFolderInput(); return true; }
+    if (act === "folder-toggle") {
+      state.openFolders = state.openFolders || {};
+      var fid = el.dataset.folder;
+      state.openFolders[fid] = state.openFolders[fid] === false;
+      render();
+      return true;
+    }
+    if (act === "folder-delete") {
+      bag = readFolders();
+      var gone = folderById(bag, el.dataset.folder);
+      if (!gone) return true;
+      if (!window.confirm(tr("Delete folder {name}? Its communities stay joined.", { name: gone.name }))) return true;
+      bag.folders = bag.folders.filter(function (folder) { return folder.id !== gone.id; });
+      bag.order = bag.order.filter(function (key) { return key !== "f:" + gone.id; });
+      writeFolders(bag);
+      if (state.panel === "folder:" + gone.id) state.panel = state.panelFrom === "joined" ? "joined" : "";
+      render();
+      return true;
+    }
+    if (act === "row-up" || act === "row-down") {
+      var step = act === "row-up" ? -1 : 1;
+      bag = readFolders();
+      var scope = el.dataset.scope || "row";
+      if (scope === "row") {
+        var keys = rowEntries(joinedRows(rows)).map(function (entry) { return entry.key; });
+        var key = el.dataset.folder ? "f:" + el.dataset.folder : "c:" + el.dataset.sub;
+        bag.order = moveIn(keys, key, step);
+      } else {
+        var holder = folderById(bag, scope);
+        if (holder) holder.items = moveIn(holder.items, el.dataset.sub, step);
+      }
+      writeFolders(bag);
+      render();
+      return true;
+    }
+    if (act === "pin-toggle" || act === "pin-up" || act === "pin-down") {
+      if (!canPin()) return true;
+      var pins = featuredList().slice();
+      var name = el.dataset.sub;
+      if (act === "pin-toggle") pins = pins.indexOf(name) >= 0 ? pins.filter(function (item) { return item !== name; }) : pins.concat([name]);
+      else pins = moveIn(pins, name, act === "pin-up" ? -1 : 1);
+      savePins(pins);
+      return true;
+    }
+    return false;
+  }
+  function focusFolderInput() {
+    setTimeout(function () {
+      var box = document.querySelector(".cm-folder-form input");
+      if (box) { box.focus(); box.select(); }
+    }, 0);
+  }
+  function saveFolderForm(form) {
+    var input = form.querySelector("input");
+    var name = String(input && input.value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40);
+    if (!name) return;
+    var bag = readFolders();
+    var id = form.dataset.folder;
+    var folder = id ? folderById(bag, id) : null;
+    if (folder) folder.name = name;
+    else if (bag.folders.length < 20) {
+      var fresh = { id: newFolderId(), name: name, items: [] };
+      bag.folders.push(fresh);
+      bag.order = ["f:" + fresh.id].concat(rowEntries(joinedRows(hubRows())).map(function (entry) { return entry.key; }).filter(function (key) { return key !== "f:" + fresh.id; }));
+    }
+    writeFolders(bag);
+    state.folderEdit = "";
+    render();
+  }
+  function moveToFolder(name, folderId) {
+    var bag = readFolders();
+    bag.folders.forEach(function (folder) { folder.items = folder.items.filter(function (item) { return item !== name; }); });
+    var target = folderId ? folderById(bag, folderId) : null;
+    if (target) target.items.push(name);
+    writeFolders(bag);
+    render();
+  }
+  /* Communities Home: only what this account joined (like X), in its own
+     order with its folders; the arrow opens the full joined list. */
   function coverRow(rows) {
     if (!rows.length) return "";
-    return '<div class="cm-covers" role="list">' + rows.map(coverCard).join("") +
-      '<button class="cm-see-all" type="button" data-cm="hub-tab" data-hub="explore" aria-label="' + esc(tr("See all communities")) + '">' + svgArrow + "</button></div>";
+    var tiles = (joinedRows(hubRows()).length ? rowEntries(rows) : rows.map(function (row) { return { kind: "community", row: row }; })).map(function (entry) {
+      return entry.kind === "folder" ? folderTile(entry) : coverCard(entry.row);
+    }).join("");
+    /* Nothing joined yet: the row is the popular starter set and the arrow goes to Explore. */
+    var starter = !joinedRows(hubRows()).length;
+    var arrow = starter ? 'data-cm="hub-tab" data-hub="explore"' : 'data-cm="cm-panel" data-panel="joined"';
+    return '<div class="cm-covers' + (starter ? "" : " cm-joined-row") + '" role="list">' + tiles +
+      '<button class="cm-see-all" type="button" ' + arrow + ' aria-label="' + esc(tr("See all communities")) + '">' + svgArrow + "</button></div>";
   }
   function recordedDate(value) {
     var d = new Date(typeof value === "number" ? value * (value < 1e12 ? 1000 : 1) : String(value || ""));
@@ -843,14 +1257,16 @@
     var v = voteState(name, post.id);
     var bag = state.internal[name] || {};
     var extra = Number((bag.likes || {})[post.id]) || 0;
-    var who, handle, avatar, body, media = "", replies;
+    var who, handle, avatar, body, media = "", replies, more = false;
     if (item.source === "reddit") {
       var author = cleanAuthor(post.author);
       who = forum ? author : "u/" + author;
       handle = "";
       avatar = '<span class="cm-app-ava cm-x-snoo">' + (forum ? svgCommunities : svgSnoo) + "</span>";
       var text = cleanRedditText(post.text);
-      body = (post.title ? '<b class="cm-x-title">' + esc(post.title) + "</b>" : "") + (text ? '<span class="cm-x-body">' + esc(text) + "</span>" : "");
+      var cutText = cutBody(text);
+      more = cutText.long;
+      body = (post.title ? '<span class="cm-x-title" dir="auto">' + esc(post.title) + "</span>" : "") + (text ? '<span class="cm-x-body" dir="auto">' + esc(cutText.text) + "</span>" : "");
       media = mediaHtml(name, post, post.media);
       replies = count(post.comments);
     } else {
@@ -858,7 +1274,9 @@
       who = a.displayName || a.handle || "";
       handle = a.handle ? "@" + a.handle : "";
       avatar = face(a);
-      body = '<span class="cm-x-body">' + esc(post.body || "") + "</span>";
+      var cutApp = cutBody(post.body || "");
+      more = cutApp.long;
+      body = '<span class="cm-x-body" dir="auto">' + esc(cutApp.text) + "</span>";
       replies = "";
     }
     var total = (item.source === "reddit" ? (Number(post.score) || 0) : 0) + extra + (v.down ? -1 : 0);
@@ -867,7 +1285,7 @@
       '<div class="cm-x-row">' + avatar +
         '<div class="cm-x-main">' +
           '<div class="cm-x-by"><b>' + esc(who) + "</b>" + (handle ? '<span class="cm-x-handle">' + esc(handle) + "</span>" : "") + '<span class="cm-x-time">· ' + esc(relTime(item.created)) + "</span></div>" +
-          '<a class="cm-x-text" href="' + href + '">' + body + "</a>" +
+          '<a class="cm-x-text" href="' + href + '">' + body + "</a>" + (more ? showMore(href) : "") +
           media +
           '<div class="cm-x-acts">' +
             '<a class="cm-x-act" href="' + href + '" aria-label="' + esc(tr("Reply")) + '">' + svgComment + (replies ? "<span>" + esc(replies) + "</span>" : "") + "</a>" +
@@ -1000,8 +1418,10 @@
     var rows = hubRows();
     var body;
     var custom = currentTab();
-    if (state.hubTab === "explore") {
-      body = categoryBar() + exploreGrid(rows);
+    if (state.panel && !custom) {
+      body = panelPage(rows);
+    } else if (state.hubTab === "explore") {
+      body = allRow(rows) + '<div class="cm-hub-sep"></div>' + categoryBar() + exploreGrid(rows);
     } else if (custom) {
       body = customTabPage(custom);
     } else {
@@ -1782,8 +2202,15 @@
       event.stopPropagation();
       return;
     }
+    if (act === "cm-panel" && String(el.dataset.panel || "").indexOf("folder:") === 0) state.panelFrom = state.panel || "row";
+    if (panelClick(act, el)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (act === "hub-tab") {
       state.picker = false;
+      state.panel = "";
       state.hubTab = el.dataset.hub || "home";
       render();
       event.preventDefault();
@@ -1966,6 +2393,12 @@
     }
   }, true);
 
+  document.addEventListener("change", function (event) {
+    var pick = event.target.closest("[data-cm='move-folder']");
+    if (!pick) return;
+    moveToFolder(pick.dataset.sub, pick.value);
+  }, true);
+
   document.addEventListener("input", function (event) {
     var field = event.target.closest("[data-cm='ed-name'], [data-cm='ed-q']");
     if (field) {
@@ -1988,6 +2421,10 @@
     event.preventDefault();
     event.stopPropagation();
 
+    if (form.dataset.cm === "folder-save") {
+      saveFolderForm(form);
+      return;
+    }
     if (form.dataset.cm === "add") {
       var input = form.querySelector("input");
       var name = nameOf(input && input.value);
@@ -2117,6 +2554,8 @@
     openAssign: openAssign,
     readTabs: null,
     writeTabs: null,
+    readFolders: null,
+    writeFolders: null,
     profileInfo: null,
     profiles: null,
     profileItems: null,

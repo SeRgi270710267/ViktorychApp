@@ -53,8 +53,7 @@ const contextFn = new Function("tr", "esc", "icon", "PATH", "STATE", "subsHash",
 
 const STATE = {
   settings: {},
-  navEditingFolder: null,
-  navNewFolderOpen: false
+  navEditingFolder: null
 };
 
 const navModule = contextFn(
@@ -130,7 +129,8 @@ const html = renderNavLinks({ name: "home" });
 assert(html.includes('href="#/"'), "must render Home link");
 assert(html.includes('data-folder-id="media"'), "must render media folder");
 assert(html.includes('data-folder-id="library"'), "must render library folder");
-assert(html.includes('data-act="open-nav-customize"'), "must render customize button");
+assert(!html.includes('open-nav-customize'), "the old greyed 'Customize sidebar' button must not come back (use the Customize row)");
+assert(!html.includes('nav-customize-btn'), "the old greyed 'Customize sidebar' button must not come back");
 assert(html.includes('nav-folder-caret'), "must render folder caret arrow");
 assert(html.includes('nav-folder-rename-btn'), "must render folder rename pencil button");
 
@@ -162,3 +162,21 @@ assert(htmlEditing.includes('id="nav-folder-rename-input"'), "renders inline ren
 STATE.navEditingFolder = null;
 
 console.log("All customizable sidebar navigation tests passed successfully!");
+
+// Guard: the legacy greyed "Customize sidebar" entry and its old modal stay removed.
+// Customize (data-act="customize-page") -> Edit menu (data-act="drawer-edit") is the only path.
+console.log("  Checking the legacy Customize sidebar entry stays removed...");
+const cssCode = fs.readFileSync("styles.css", "utf-8");
+["open-nav-customize", "nav-customize-btn", "navCustomizeModal", "\"nav-customize\"", "nav-cust-", "nav-create-folder-submit", "nav-select-folder", "navNewFolderOpen", "Customize sidebar"].forEach((needle) => {
+  assert(!appCode.includes(needle), "app.js must not bring back legacy sidebar customizer: " + needle);
+});
+["nav-customize-btn", "nav-cust-", "nav-customize-intro", "nav-new-folder-form", "nav-move-select"].forEach((needle) => {
+  assert(!cssCode.includes(needle), "styles.css must not bring back legacy sidebar customizer CSS: " + needle);
+});
+["en", "es", "ru", "hi"].forEach((lang) => {
+  const pack = fs.readFileSync("i18n/" + lang + ".js", "utf-8");
+  assert(!pack.includes('"Customize sidebar"'), lang + " pack must not keep the legacy 'Customize sidebar' string");
+});
+assert(appCode.includes('if (id === "customize") return { id: id, href: "", icon: "sliders", label: tr("Customize"), locked: true, act: "customize-page" };'), "the white Customize row must stay in the menu");
+assert(appCode.includes('data-act="drawer-edit"'), "the Customize page must keep its Edit menu row");
+console.log("  Legacy entry guard OK");
