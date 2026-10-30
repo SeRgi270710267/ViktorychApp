@@ -7104,6 +7104,7 @@ body:has(#viewer.xv:not([hidden])) .share-back,
 body:has(#viewer.xv:not([hidden])) .drawer-back { z-index: 62; }
 @media (prefers-reduced-motion: reduce) {
   .xv-track { scroll-behavior: auto; }
+}
 /* Notification privacy: locked switches while names are off. */
 .notif-privacy .tab-switch[disabled] { opacity: .5; cursor: default; }
 
@@ -7303,14 +7304,15 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 .fr-state { color: var(--muted); font-size: 14px; font-weight: 700; white-space: nowrap; }
 .fr-state.is-approved { color: #00ba7c; }
 .fr-state.is-rejected, .fr-state.is-banned { color: #f4212e; }
-.fr-qrow { grid-template-columns: minmax(0, 1fr); align-items: start; border-bottom: 1px solid var(--line); }
-.fr-qrow:has(.feeds-check) { grid-template-columns: auto minmax(0, 1fr); }
+.feeds-row.fr-qrow { grid-template-columns: minmax(0, 1fr); align-items: start; border-bottom: 1px solid var(--line); }
+.feeds-row.fr-qrow:has(.feeds-check) { grid-template-columns: auto minmax(0, 1fr); }
+.fr-qrow .feeds-check { padding-top: 12px; }
 .fr-qrow.is-new { box-shadow: inset 3px 0 0 var(--accent, var(--blue)); }
 .fr-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .fr-count { margin-left: 6px; padding: 0 8px; border-radius: 9999px; background: var(--hover-soft); color: var(--muted); font-size: 12px; font-weight: 700; line-height: 20px; }
 .fr-who { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 14px; padding-left: 52px; }
 .fr-faces { display: flex; }
-.fr-mini > :first-child { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--bg); font-size: 10px; }
+.fr-faces .ava { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--bg); font-size: 10px; }
 .fr-mini + .fr-mini { margin-left: -6px; }
 .fr-notes { list-style: none; margin: 0; padding: 0 0 0 52px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
 .fr-preview { margin: 0 0 0 52px; padding: 8px 12px 8px 28px; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; color: var(--text); display: flex; flex-direction: column; gap: 6px; }
