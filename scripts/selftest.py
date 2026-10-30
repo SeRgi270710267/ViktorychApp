@@ -1647,7 +1647,7 @@ def main() -> None:
     import follow_request as follow_req
 
     check(not follow_req.allowed("stranger", "riverquoll") and follow_req.allowed("riverquoll", "riverquoll") and not follow_req.allowed("", "riverquoll"), "only the repository owner can change follows")
-    parsed_follow = follow_req.parse_issue("Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n")
+    parsed_follow = follow_req.parse_issue("Follow request: x sampleagency", "### Account\n\nsampleagency\n\n### Platform\n\nx\n")
     check(parsed_follow == {"kind": "follow", "account": "sampleagency", "platform": "x"}, "a follow issue form is read")
     x_spec = follow_req.normalize("https://x.com/sampleagency", "x")
     check(x_spec["platform"] == "x" and x_spec["handle"] == "sampleagency" and x_spec["url"] == "https://x.com/sampleagency", "an x profile URL becomes a handle")
@@ -1696,21 +1696,21 @@ def main() -> None:
     confirmed_yt = follow_req.confirm_source(dict(yt_spec), fake_follow_fetch, public_resolve)
     check(confirmed_yt["channelId"] == "UCsyntheticmaple00005000", "a youtube page supplies the channel id")
     follow_config = {"feeds": []}
-    added, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    added, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nsampleagency\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     added_row = follow_config["feeds"][0]
     check(added.startswith("Added x:sampleagency") and added_row["adapter"] == "fxtwitter" and added_row["fallbacks"][0]["adapter"] == "nitter_rss", "a follow adds the fxtwitter source and nitter fallbacks")
     duplicate_rejected = False
     try:
-        follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+        follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nsampleagency\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     except follow_req.Reject:
         duplicate_rejected = True
     check(duplicate_rejected, "a duplicate follow is rejected")
     removed, follow_config = follow_req.run("riverquoll", "riverquoll", "Unfollow request: x sampleagency", "### Account\n\nx:sampleagency\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     check(removed.startswith("Removed x:sampleagency") and follow_config["feeds"] == [] and "x:sampleagency" in follow_config.get("removed", []), "an unfollow removes the account and blocks auto-add")
-    brought, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    brought, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x sampleagency", "### Account\n\nsampleagency\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     check(brought.startswith("Added x:sampleagency") and follow_config["feeds"][0]["id"] == "x:sampleagency" and follow_config.get("removed") == [], "an explicit follow clears the auto-add block")
     untouched = {"feeds": [{"id": "x:keep"}]}
-    ignored, same_config = follow_req.run("someone", "riverquoll", "Follow request: x sampleagency", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
+    ignored, same_config = follow_req.run("someone", "riverquoll", "Follow request: x sampleagency", "### Account\n\nsampleagency\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
     check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
     group_body = "### Groups\n\n" + json.dumps([{"id": "grp_news", "name": "News", "icon": "https://example.com/a.png", "members": ["youtube:Someone"]}])
     saved, grouped = follow_req.run("riverquoll", "riverquoll", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
