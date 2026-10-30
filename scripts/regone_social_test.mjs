@@ -69,7 +69,7 @@ const ACH = { gameId: "regone", achievements: [
   { id: "streak_3", earnedAt: Date.now() - 3600000, seen: true },
   { id: "invite_sent", earnedAt: Date.now() - 600000, seen: true }
 ], totalMs: 7200000, bestStreak: 6, linkedName: "Synthetic Player 7", claimed: true, rank: { rank: 7, kills: 3200, kdr: "2.40", deaths: 1620, total: 6500 } };
-const PSTATS = { ok: true, linked: true, claimed: true, name: "Synthetic Player 7", stats: { kills: 237, weapons: { rifle: 120, pistol: 70, shotgun: 47 }, weaponBest: 120, favouriteWeapon: "rifle", hits: 260, headshots: 70, headshotRate: 0.27, multiKills: 12, matchesWon: 14, roundsWon: 40 }, fetchedAt: Date.now(), source: "https://nzlay.com/profile/", achievements: [] };
+const PSTATS = { ok: true, linked: true, claimed: true, name: "Synthetic Player 7", stats: { kills: 237, weapons: { rifle: 120, pistol: 70, shotgun: 47 }, weaponBest: 120, favouriteWeapon: "rifle", hits: 260, headshots: 70, headshotRate: 26.9, multiKills: 12, matchesWon: 14, roundsWon: 40 }, fetchedAt: Date.now(), source: "https://nzlay.com/profile/", achievements: [] };
 const PREFS = { audiences: { together: "friends", room: "friends", stats: "public" }, lists: { together: { include: [], exclude: [] }, room: { include: [], exclude: [] }, stats: { include: [], exclude: [] } }, streakReminder: false, quiet: { on: false, from: 22, to: 7 }, tz: 60, linkedName: "Synthetic Player 7" };
 
 async function shot(page, name) {
@@ -281,12 +281,12 @@ async function run(browser, origin, size) {
     const box = document.createElement("div");
     box.id = "gs-profile-probe";
     box.style.cssText = "padding:16px;max-width:600px";
-    box.innerHTML = window.ViktorychGameSocial.profileHtml({ publicId: me, handle: "user_1" }, true);
+    box.innerHTML = window.ViktorychGameSocial.profileTabHtml({ publicId: me, handle: "user_1" }, true);
     const main = document.querySelector("main") || document.body;
     main.prepend(box);
   }, ME);
-  await page.waitForSelector("#gs-profile-probe .gs-rank .gs-stats", { timeout: 8000 }).catch(() => fail(label + ": no rank card with stats"));
-  const rank = await page.textContent("#gs-profile-probe .gs-rank");
+  await page.waitForSelector("#gs-profile-probe .gs-card .gs-grid", { timeout: 8000 }).catch(() => fail(label + ": no rank card with stats"));
+  const rank = await page.textContent("#gs-profile-probe .gs-card");
   if (!/#7|7/.test(rank) || !/rifle/i.test(rank)) fail(label + ": rank card " + rank);
   await page.evaluate(() => { document.querySelector("#gs-profile-probe details") && (document.querySelector("#gs-profile-probe details").open = true); window.scrollTo(0, 0); });
   await shot(page, label + "-08-rank-card");

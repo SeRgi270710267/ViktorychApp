@@ -596,7 +596,7 @@ function publicAccount(row, request, own) {
   return account;
 }
 
-const PROFILE_TAB_SYNC_IDS = ["posts", "replies", "media", "highlights", "friends", "about", "gifts"];
+const PROFILE_TAB_SYNC_IDS = ["posts", "replies", "media", "games", "highlights", "friends", "about", "gifts"];
 
 function cleanProfileTabsSync(raw) {
   if (typeof raw === "string") {
