@@ -4,7 +4,7 @@ const VERSION = "viktorych-a205-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T13:53:06Z-usernames-x-ui
+// cache-bust: 2026-10-30T14:15:56Z-usernames-x-ui
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -96,6 +96,7 @@ const SHELL_FILES = [
   "./people.js",
   "./people.css",
   "./pymk.js",
+  "./friends-pref.js",
   "./pymk.css",
   "./tv.js",
   "./tv.css",
