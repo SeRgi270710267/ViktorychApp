@@ -43,6 +43,7 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleXVideo } from "./xvideo.js";
 import { handleNewsletter, sweepNewsletters } from "./newsletters.js";
 import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
@@ -5479,6 +5480,9 @@ async function route(request, env, ctx) {
   }
   if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
     return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
+  }
+  if (path === "/v1/xv" && request.method === "GET") {
+    return handleXVideo(request, { fetch: (u, init) => fetch(u, init), cache: caches.default, waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
   if ((path === "/v1/newsletter" || path === "/v1/newsletter/issue") && request.method === "GET") {
     return handleNewsletter(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
