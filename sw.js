@@ -5,6 +5,7 @@ const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
 // cache-bust: 2026-10-30T02:18:46Z-community-notes-ui
+// cache-bust: 2026-10-30T02:38:07Z-priv
 // cache-bust: 2026-10-30T03:50:00Z-nzlay-forum
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;

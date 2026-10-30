@@ -51,7 +51,7 @@
           "date": 1792607400,
           "expires_at": 1792693800,
           "type": "photo",
-          "photo": {"sizes": [{"url": "https://cdn.example/durov.jpg", "width": 800, "height": 800}]}
+          "photo": {"sizes": [{"url": "https://cdn.example/foxglen.jpg", "width": 800, "height": 800}]}
         }
       ]
     },
@@ -81,9 +81,9 @@
     {
       "id": 1,
       "first_name": "Pavel",
-      "last_name": "Durov",
-      "screen_name": "durov",
-      "photo_200": "https://cdn.example/durov-face.jpg"
+      "last_name": "foxglen",
+      "screen_name": "foxglen",
+      "photo_200": "https://cdn.example/foxglen-face.jpg"
     },
     {
       "id": 100,

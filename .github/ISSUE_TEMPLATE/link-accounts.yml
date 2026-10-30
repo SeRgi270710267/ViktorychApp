@@ -8,7 +8,7 @@ body:
     attributes:
       label: Person
       description: An existing person id or name, or a new name. A new name creates a person.
-      placeholder: Canadian Prepper
+      placeholder: North Lamp
     validations:
       required: true
   - type: textarea
