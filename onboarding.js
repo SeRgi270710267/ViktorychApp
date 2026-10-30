@@ -1588,7 +1588,7 @@
       paint();
     } else if (act === "pref") {
       var key = el.getAttribute("data-id") || "";
-      if (!/^(protected|privateFollows|discoverable|online|translateAuto|haptics|names|preview)$/.test(key)) return;
+      if (!/^(protected|privateFollows|discoverable|online|translateAuto|haptics|names|preview|friends)$/.test(key)) return;
       savePref(key, !prefNow(key));
     } else if (act === "accent") {
       var accent = el.getAttribute("data-mode");
