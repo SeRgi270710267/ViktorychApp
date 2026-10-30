@@ -9533,6 +9533,126 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return found;
   }
 
+  /* Reply context across sources. Copies of one post disagree: the replies
+     page and fxtwitter say who it answers, the plain timeline page, an RSS
+     lane or an older copy may not. The copy that knows wins the merge. */
+  function replyInfoOf(post) {
+    const to = post && post.replyingTo;
+    return to && typeof to === "object" && (to.handle || to.id || to.statusId) ? to : null;
+  }
+
+  function carryReplyInfo(kept, other) {
+    if (!kept || !other || kept === other || typeof kept !== "object" || typeof other !== "object") return false;
+    if (kept.kind === "repost" || other.kind === "repost") return false;
+    let changed = false;
+    if (other.conversationId && !kept.conversationId) { kept.conversationId = String(other.conversationId); changed = true; }
+    if (!kept.replyParent && other.replyParent) { kept.replyParent = other.replyParent; changed = true; }
+    const theirs = replyInfoOf(other);
+    if (!theirs) return changed;
+    const mine = replyInfoOf(kept) || {};
+    const merged = Object.assign({}, theirs);
+    Object.keys(mine).forEach((key) => { if (mine[key]) merged[key] = mine[key]; });
+    if (!mine.id && merged.statusId && !merged.id) merged.id = String(merged.statusId);
+    if (JSON.stringify(merged) !== JSON.stringify(kept.replyingTo || {})) { kept.replyingTo = merged; changed = true; }
+    if ((kept.kind || "post") === "post") { kept.kind = "reply"; changed = true; }
+    return changed;
+  }
+
+  /* An X post is known to be a reply when it says so, names a target, or
+     sits in someone else's conversation. */
+  function knownXReply(post) {
+    if (!post || post.tombstone || post.appPost || (post.platform || "x") !== "x" || post.kind === "repost") return false;
+    if (post.kind === "reply" || replyInfoOf(post)) return true;
+    const conv = String(post.conversationId || "");
+    return !!conv && conv !== String(post.statusId || post.id || "");
+  }
+
+  /* Timeline replies whose parent is not in the catalog: look the parent up
+     live (fxtwitter, cached), then draw it above the reply on X's thread
+     line. When the target is unknown, the reply itself is looked up first.
+     Until then, or when the lookup fails, the card keeps "Replying to". */
+  const PARENT_TTL = 6 * 60 * 60 * 1000;
+  const PARENT_Q = { want: [], busy: 0, done: {}, timer: 0 };
+
+  function parentStatusPost(id) {
+    const key = String(id || "");
+    if (!/^\d{1,25}$/.test(key)) return Promise.resolve(null);
+    return cacheGet("fx:status:" + key, PARENT_TTL).then((hit) => hit || fxStatusPost(key)).catch(() => null);
+  }
+
+  function wantLiveParent(post) {
+    if (!knownXReply(post) || post.replyParent) return;
+    const key = String(post.statusId || post.id || "");
+    if (!key || PARENT_Q.done[key] || PARENT_Q.want.indexOf(post) >= 0) return;
+    if (Object.keys(PARENT_Q.done).length >= 120) return;
+    PARENT_Q.done[key] = true;
+    PARENT_Q.want.push(post);
+    pumpLiveParents();
+  }
+
+  function pumpLiveParents() {
+    while (PARENT_Q.busy < 3 && PARENT_Q.want.length) {
+      const post = PARENT_Q.want.shift();
+      PARENT_Q.busy += 1;
+      resolveLiveParent(post).then((changed) => {
+        PARENT_Q.busy -= 1;
+        if (changed) redrawForParents();
+        pumpLiveParents();
+      });
+    }
+  }
+
+  function resolveLiveParent(post) {
+    let changed = false;
+    const known = () => String((replyInfoOf(post) || {}).id || (replyInfoOf(post) || {}).statusId || "");
+    const self = String(post.statusId || post.id || "");
+    const first = known() && (replyInfoOf(post) || {}).handle ? Promise.resolve(null) : parentStatusPost(self);
+    return first.then((fresh) => {
+      if (fresh && carryReplyInfo(post, fresh)) changed = true;
+      const parentId = known();
+      if (!parentId) return null;
+      const local = findAnyPost(parentId);
+      if (local && local !== post && !bridgeErrorPost(local)) return local;
+      return parentStatusPost(parentId);
+    }).then((parent) => {
+      if (parent && parent !== post && (parent.text || (parent.media || []).length || parent.quoted || parent.article)) {
+        post.replyParent = parent;
+        const to = replyInfoOf(post) || {};
+        if (!to.handle && parent.handle) post.replyingTo = Object.assign({}, to, { handle: parent.handle, name: to.name || parent.author || parent.handle });
+        changed = true;
+      }
+      return changed;
+    }).catch(() => changed);
+  }
+
+  function redrawForParents() {
+    if (PARENT_Q.timer) return;
+    PARENT_Q.timer = setTimeout(() => {
+      PARENT_Q.timer = 0;
+      let anchorId = "";
+      let anchorTop = 0;
+      const articles = document.querySelectorAll("article[data-post]");
+      for (let i = 0; i < articles.length; i++) {
+        const rect = articles[i].getBoundingClientRect();
+        if (rect.bottom > 0) { anchorId = articles[i].dataset.post || ""; anchorTop = rect.top; break; }
+      }
+      render(window.scrollY > 40 && anchorId ? { y: window.scrollY, anchorId: anchorId, anchorTop: anchorTop } : undefined);
+    }, 120);
+  }
+
+  /* As on X, a parent that is also in the timeline is drawn once, above
+     its reply, instead of a second time on its own. */
+  function groupThreads(list) {
+    const shownAbove = {};
+    (list || []).forEach((post) => {
+      if (!post || post.busyGroup || post.kind === "repost") return;
+      const parent = threadParent(post);
+      if (parent) shownAbove[String(parent.statusId || parent.id || "")] = true;
+    });
+    if (!Object.keys(shownAbove).length) return list;
+    return list.filter((post) => !post || post.busyGroup || post.kind === "repost" || !shownAbove[String(post.statusId || post.id || "")]);
+  }
+
   // Subreddit mirrors read "r/name"; internal communities and forums keep their own name.
   function communityName(name) {
     const lib = window.ViktorychCommunities;
@@ -9702,6 +9822,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!opts.inThread && mode !== "reply" && mode !== "status") {
       const parent = threadParent(post);
       if (parent) return threadPair(parent, post, mode, opts);
+      wantLiveParent(post);
     }
     const hideRepost = mode === "author" || mode === "status";
     const repost = repostBanner(post, hideRepost ? "author" : "");
@@ -12426,7 +12547,7 @@ const here = parseRoute();
       : "";
     const tabLoading = !list.length && tabStillLoading(tab);
     if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
-    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(list.map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i === 0 })), tab) : emptyBlock(
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(groupThreads(list).map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i === 0 })), tab) : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
@@ -19438,6 +19559,7 @@ if (STATE.histClear) {
     let current = focus;
     let loading = false;
     const seen = new Set([postKey(focus), String((focus && focus.id) || "")]);
+    if (focus && !(replyInfoOf(focus) || {}).id && !focus.replyParent && knownXReply(focus)) wantLiveParent(focus);
     for (let guard = 0; guard < 12; guard++) {
       const parentId = String((current.replyingTo || {}).id || (current.replyParent && (current.replyParent.statusId || current.replyParent.id)) || "");
       if (!parentId || seen.has(parentId)) break;
@@ -25213,10 +25335,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!doc) return doc;
     const posts = (doc.posts || []).slice();
     const have = {};
-    posts.forEach((post) => { have[memoryKey(post)] = true; });
+    posts.forEach((post) => { have[memoryKey(post)] = post; });
     memoryPosts().forEach((post) => {
       const key = memoryKey(post);
-      if (have[key]) return;
+      if (have[key]) { carryReplyInfo(have[key], post); return; }
       have[key] = true;
       posts.push(post);
     });
@@ -26136,6 +26258,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const kept = byKey[id];
       if (kept) {
         if (patchPostDates(kept, post)) changed = true;
+        if (carryReplyInfo(kept, post)) changed = true;
         return;
       }
       byKey[id] = post;
