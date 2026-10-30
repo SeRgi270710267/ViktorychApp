@@ -2110,7 +2110,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function nickEditButton(platform, handle, original, personId) {
     if (!nickOn() || !handle) return "";
     if (String(platform || "") === "app" && !(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return "";
-    return `<button class="nick-pen" type="button" data-act="nick-edit" data-platform="${esc(platform || "x")}" data-handle="${esc(String(handle).replace(/^@/, ""))}" data-original="${esc(original || "")}"${personId ? ` data-person="${esc(personId)}"` : ""} aria-label="${esc(tr("Set custom name"))}" data-tooltip="${esc(tr("Set custom name"))}">${icon("pencil")}</button>`;
+    return `<button class="nick-pen" type="button" data-act="nick-edit" data-platform="${esc(platform || "x")}" data-handle="${esc(String(handle).replace(/^@/, ""))}" data-original="${esc(original || "")}"${personId ? ` data-person="${esc(personId)}"` : ""} aria-label="${esc(tr("Set custom name"))}" data-tooltip="${esc(tr("Set custom name"))}"><svg class="nick-pen-ico" viewBox="0 0 24 24" aria-hidden="true">${LINE.pencil}</svg></button>`;
   }
   window.ViktorychNick = { name: nickName, byId: nickById, button: nickEditButton };
   /* Community Notes: the post ref the Worker and the X mirror use. */

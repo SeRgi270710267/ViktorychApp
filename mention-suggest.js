@@ -74,7 +74,7 @@
 
   function shownName(row) {
     var raw = row.name || row.handle;
-    var nk = window.ViktorychNick;
+    var nk = (typeof window !== "undefined" ? window.ViktorychNick : null);
     return nk && row.handle ? nk.name(row.platform || "app", row.handle, raw) : raw;
   }
 

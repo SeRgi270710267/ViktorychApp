@@ -222,7 +222,7 @@
   }
   function byline(author, at, href, moderator) {
     var name = (author && author.name) || tr("NZlay member");
-    var shown = author && author.name && window.ViktorychNick ? window.ViktorychNick.name("nzlay", author.name, name) : name;
+    var shown = author && author.name && (typeof window !== "undefined" ? window.ViktorychNick : null) ? window.ViktorychNick.name("nzlay", author.name, name) : name;
     return '<div class="byline">' +
       '<a class="name" href="' + esc(profileUrl(name)) + '" target="_blank" rel="noopener noreferrer" data-nzf-stop>' + esc(shown) + "</a>" + badgeHtml(author || {}, moderator) +
       '<a class="handle" href="' + esc(profileUrl(name)) + '" target="_blank" rel="noopener noreferrer" data-nzf-stop>@' + esc(name) + "</a>" +

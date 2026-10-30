@@ -101,7 +101,7 @@ html.tv-on .pchip-follow, body.tv .pfrom-pill, body.tv .pm-btn { min-height: 44p
 /* Private custom names (nicknames.js): the pen next to a profile name and
    the "Set custom name" sheet. A bottom sheet on phones, a card on wide screens. */
 .nick-pen { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin-left: 4px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; vertical-align: middle; }
-.nick-pen svg { width: 16px; height: 16px; }
+.nick-pen svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .nick-pen:hover, .nick-pen:focus-visible { background: var(--blue-dim); color: var(--blue); }
 .nick-sheet-wrap { position: fixed; inset: 0; z-index: 9100; display: flex; align-items: center; justify-content: center; background: rgba(91, 112, 131, .4); }
 .nick-sheet { box-sizing: border-box; width: min(420px, calc(100vw - 32px)); padding: 0 16px 20px; border-radius: 16px; background: var(--sheet, var(--bg)); color: var(--text); box-shadow: 0 0 15px var(--shadow, rgba(255,255,255,.2)); }

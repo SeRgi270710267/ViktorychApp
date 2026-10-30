@@ -5233,7 +5233,7 @@ function signupPayload() {
     var tabs = bar.html;
 
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
-    var nk = window.ViktorychNick;
+    var nk = (typeof window !== "undefined" ? window.ViktorychNick : null);
     var originalName = account.originalName || account.displayName || account.handle || "";
     var top = window.ViktorychProfile && window.ViktorychProfile.top ? window.ViktorychProfile.top({
       name: nk && !mine ? nk.name("app", account.handle || "", account.displayName || account.handle || "") : (account.displayName || account.handle || ""),
@@ -5307,7 +5307,7 @@ function signupPayload() {
      lock and the badges stay identical in size and order. */
   function nameRowHtml(account, nick) {
     var name = account.displayName || account.handle || "";
-    if (nick && window.ViktorychNick && account.handle) name = window.ViktorychNick.name("app", account.handle, name);
+    if (nick && (typeof window !== "undefined" ? window.ViktorychNick : null) && account.handle) name = window.ViktorychNick.name("app", account.handle, name);
     var lock = (account.privateFollows || account.locked) ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
     var temp = account.temporary ? '<span class="temp-label">' + esc(tr("Temporary")) + "</span>" : "";
     return '<span class="name-row-text">' + esc(name) + "</span>" + lock + temp + (account.owner ? badge() : "") + (window.ViktorychAffiliations ? window.ViktorychAffiliations.slot(account.publicId) : "");
