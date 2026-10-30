@@ -165,6 +165,10 @@
     var account = session().account;
     return !!(account && account.owner);
   }
+  /* Everyone else asks the owner for a community instead of adding it. */
+  function asking() {
+    return signedIn() && !owner() && !!(window.FeedRequests && window.FeedRequests.asks && window.FeedRequests.asks());
+  }
 
   function indexRow(name) {
     var rows = (state.index && state.index.communities) || [];
@@ -953,7 +957,7 @@
         ? '<img class="ava" src="' + esc(acct.avatar) + '" alt="">'
         : '<span class="ava initials">' + esc(String(acct.displayName || acct.handle || "Y").slice(0, 1).toUpperCase()) + "</span>";
     }
-    var add = owner() ? '<button class="cm-icon-btn" type="button" data-cm="toggle-add" aria-label="' + esc(tr("Add community")) + '">' + svgPlus + "</button>" : "";
+    var add = owner() || asking() ? '<button class="cm-icon-btn" type="button" data-cm="toggle-add" aria-label="' + esc(owner() ? tr("Add community") : tr("Request a community")) + '">' + svgPlus + "</button>" : "";
     return '<div class="topbar tall cm-hub-top">' +
       '<div class="cm-hub-bar">' +
         '<button class="m-ava" type="button" data-act="drawer" aria-label="' + esc(tr("Menu")) + '">' + face + "</button>" +
@@ -984,8 +988,8 @@
       }
       return hubHead() + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
-    var addBar = (owner() && state.showAdd)
-      ? '<form class="cm-add-bar" data-cm="add"><input name="name" placeholder="r/technology" aria-label="' + esc(tr("Add community")) + '"><button type="submit">' + esc(tr("Add")) + "</button></form>"
+    var addBar = ((owner() || asking()) && state.showAdd)
+      ? '<form class="cm-add-bar" data-cm="add"><input name="name" placeholder="r/technology" aria-label="' + esc(owner() ? tr("Add community") : tr("Request a community")) + '"><button type="submit">' + esc(owner() ? tr("Add") : tr("Request")) + "</button></form>"
       : "";
     var searchBar = (state.showSearch || state.search) ? '<div class="cm-search-wrap">' +
       '<div class="cm-search-box">' +
@@ -1988,6 +1992,13 @@
       var input = form.querySelector("input");
       var name = nameOf(input && input.value);
       if (!name) { toast(tr("That community wasn't found.")); return; }
+      if (!owner()) {
+        if (!asking()) return;
+        window.FeedRequests.submit(name, { kind: "community" }).then(function (stateNow) {
+          if (stateNow) { state.showAdd = false; render(); }
+        });
+        return;
+      }
       call("/v1/owner/communities", { method: "POST", body: { name: name } }).then(function (body) {
         if (!body || !body.community) { toast(tr("Couldn't post.")); return; }
         toast(tr("New posts show up after the next sync."));

@@ -189,6 +189,12 @@ def run_lists(config: dict, getter=None, putter=None, fetcher=None) -> dict:
         getter, putter = _r2()
     wanted = _read_json(getter(WANTED_KEY))
     sources = [row for row in (wanted.get("sources") or []) if isinstance(row, dict)][:SOURCE_CAP]
+    try:
+        from feed_bans import drop_banned, load_hashes
+
+        sources = drop_banned(sources, load_hashes(getter), "lists")
+    except Exception:
+        pass
     if not sources:
         return {"sources": 0, "lists": 0}
     try:
