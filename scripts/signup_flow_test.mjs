@@ -1060,7 +1060,7 @@ try {
     { name: "motion", viewport: VIEWPORTS[3], run: (page) => motionPass(page, false) },
     { name: "reduced motion", viewport: VIEWPORTS[0], reduced: true, run: (page) => motionPass(page, true) }
   ];
-  for (const item of runs.filter((r) => !process.env.ONLY || r.name === process.env.ONLY)) {
+  for (const item of runs.filter((r) => !process.env.ONLY || process.env.ONLY.split(",").includes(r.name))) {
     const { context, page, problems } = await openFresh(browser, item.viewport, item.reduced ? { reducedMotion: "reduce" } : {});
     try {
       await gotoFresh(page);
