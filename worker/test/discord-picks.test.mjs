@@ -101,6 +101,37 @@ test("a join needs a confirm, is one invite, and is queued for the sync", async 
   assert.equal((await handleDiscordPickRoutes(req("/v1/discord/picks/join", "POST", { code: "abc", confirm: true }), env, "/v1/discord/picks/join", gated)).status, 429);
 });
 
+test("a failed invite lookup does not use up the join cooldown", async () => {
+  const env = { DATA: bucket() };
+  let hits = 0;
+  const rateHit = async () => (++hits > 2 ? { ok: false, retry: 75 } : { ok: true });
+  const gone = deps(true, { fetch: async () => json(404, {}), rateHit });
+  assert.equal((await handleDiscordPickRoutes(req("/v1/discord/picks/join", "POST", { code: "abc", confirm: true }), env, "/v1/discord/picks/join", gone)).status, 404);
+  assert.equal(hits, 0);
+  assert.equal(env.DATA.store.has("discord/x/request.json"), false);
+});
+
+test("Discord pacing the server is not the owner's cooldown", async () => {
+  const env = { DATA: bucket() };
+  const busy = async () => new Response("{}", { status: 429, headers: { "retry-after": "12" } });
+  const look = await handleDiscordPickRoutes(req("/v1/discord/picks/invite?code=abc"), env, "/v1/discord/picks/invite", deps(true, { fetch: busy }));
+  assert.equal(look.status, 503);
+  assert.deepEqual(await look.json(), { error: "discord_busy", retry: 12 });
+  const noHint = await handleDiscordPickRoutes(req("/v1/discord/picks/join", "POST", { code: "abc", confirm: true }), env, "/v1/discord/picks/join", deps(true, { fetch: busy }));
+  assert.equal(noHint.status, 503);
+  const ok = await handleDiscordPickRoutes(req("/v1/discord/picks/join", "POST", { code: "abc", guild: G2, name: "Two", confirm: true }), env, "/v1/discord/picks/join", deps(true, { fetch: busy }));
+  assert.equal(ok.status, 202);
+  assert.equal(JSON.parse(env.DATA.store.get("discord/x/request.json")).join.guild, G2);
+});
+
+test("the join cooldown answers with the seconds left", async () => {
+  const env = { DATA: bucket() };
+  const fake = async () => json(200, { guild: { id: G2, name: "Two" } });
+  const res = await handleDiscordPickRoutes(req("/v1/discord/picks/join", "POST", { code: "abc", confirm: true }), env, "/v1/discord/picks/join", deps(true, { fetch: fake, rateHit: async () => ({ ok: false, retry: 75 }) }));
+  assert.equal(res.status, 429);
+  assert.deepEqual(await res.json(), { error: "join_cooldown", retry: 75 });
+});
+
 test("data keys: messages for signed-in readers, the catalog for the owner", () => {
   assert.equal(privateDiscordKey("discord/x/index.json"), "discord/x/index.json");
   assert.equal(privateDiscordKey("discord/x/messages/" + C(1) + "/p/2.json"), "discord/x/messages/" + C(1) + "/p/2.json");

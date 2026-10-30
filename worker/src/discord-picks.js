@@ -189,7 +189,12 @@ async function lookupInvite(env, code, deps) {
     return { error: "discord_unreachable", status: 502 };
   }
   if (res.status === 404) return { error: "invite_not_found", status: 404 };
-  if (res.status === 429) return { error: "rate_limited", status: 429 };
+  // Discord pacing this server's IP is not the owner's cooldown. Say so, with
+  // Discord's own wait, so the app does not blame the owner.
+  if (res.status === 429) {
+    const wait = Math.ceil(Number((res.headers && res.headers.get && res.headers.get("retry-after")) || 0));
+    return { error: "discord_busy", status: 503, retry: wait > 0 && wait < 3600 ? wait : 30 };
+  }
   if (!res.ok) return { error: "discord_error", status: 502 };
   let doc = null;
   try { doc = await res.json(); }
@@ -221,7 +226,7 @@ export async function handleDiscordPickRoutes(request, env, path, deps) {
       if (gate && gate.ok === false) return deps.limited(gate);
     }
     const found = await lookupInvite(env, code, deps);
-    if (!found.invite) return json(found.status, { error: found.error });
+    if (!found.invite) return json(found.status, found.retry ? { error: found.error, retry: found.retry } : { error: found.error });
     const out = found.invite;
     const catalog = await readDoc(env, CATALOG_KEY);
     out.joined = !!(catalog && Array.isArray(catalog.servers) && catalog.servers.some((s) => s && String(s.id) === out.guild.id));
@@ -235,19 +240,32 @@ export async function handleDiscordPickRoutes(request, env, path, deps) {
     if (body.confirm !== true) return json(400, { error: "confirm_required" });
     const code = inviteCode(body.code);
     if (!code) return json(400, { error: "bad_invite" });
-    if (deps.rateHit && deps.limited) {
-      const soon = await deps.rateHit(env, "discord-join:" + row.public_id, 1, 2 * 60 * 1000);
-      if (soon && soon.ok === false) return deps.limited(soon);
-      const day = await deps.rateHit(env, "discord-join-day:" + row.public_id, 10, 24 * 60 * 60 * 1000);
-      if (day && day.ok === false) return deps.limited(day);
-    }
+    // Check the invite first. A failed lookup must not use up the cooldown.
     const found = await lookupInvite(env, code, deps);
-    if (!found.invite) return json(found.status, { error: found.error });
+    let server = found.invite ? found.invite.guild : null;
+    if (!server) {
+      // Discord busy or unreachable: the preview the owner just confirmed
+      // already named the server. The sync joins by the invite code anyway.
+      const hint = String(body.guild || "");
+      const soft = found.error === "discord_busy" || found.error === "discord_unreachable" || found.error === "discord_error";
+      if (!soft || !SNOWFLAKE.test(hint)) return json(found.status, found.retry ? { error: found.error, retry: found.retry } : { error: found.error });
+      server = { id: hint, name: clip(body.name, 80) || hint, icon: "", description: "" };
+    }
+    if (deps.rateHit) {
+      const gates = [["discord-join:", 1, 2 * 60 * 1000], ["discord-join-day:", 10, 24 * 60 * 60 * 1000]];
+      for (const [prefix, limit, windowMs] of gates) {
+        const gate = await deps.rateHit(env, prefix + row.public_id, limit, windowMs);
+        if (gate && gate.ok === false) {
+          const retry = Math.max(1, Number(gate.retry) || 60);
+          return json(429, { error: "join_cooldown", retry }, { "retry-after": String(retry), "x-limit-scope": "action" });
+        }
+      }
+    }
     const id = randomId();
     const at = new Date().toISOString();
-    const guild = found.invite.guild.id;
+    const guild = server.id;
     await writeDoc(env, REQUEST_KEY, { requestedAt: at, guild, join: { code, id, guild } });
-    return json(202, { id, guild: found.invite.guild, requestedAt: at });
+    return json(202, { id, guild: server, requestedAt: at });
   }
   if (path === "/v1/discord/picks/refresh") {
     if (method !== "POST") return json(405, { error: "method_not_allowed" });

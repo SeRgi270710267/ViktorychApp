@@ -108,7 +108,7 @@
           state.note = tr("Joined. Pick the channels to show.");
           openPickerFor(state.waitGuild, true);
         } else if (state.join.status === "captcha" || state.join.status === "verification") {
-          state.err = tr("This server can’t be joined that way. Discord asked for a captcha or verification.");
+          state.err = tr("Discord asked for a captcha. Open the invite in the Discord app with the spare account, join there, then press Check again.");
           state.waitId = "";
           state.step = "invite";
         } else if (state.join.status !== "pending") {
@@ -159,7 +159,9 @@
     api("/v1/discord/picks/invite?code=" + encodeURIComponent(code)).then(function (body) {
       state.inviteBusy = false;
       if (!body || body.status >= 400) {
-        state.err = body && body.error === "invite_not_found" ? tr("That invite wasn’t found.") : tr("Couldn’t look up that invite.");
+        state.err = body && body.error === "invite_not_found" ? tr("That invite wasn’t found.")
+          : body && body.error === "discord_busy" ? tr("Discord is busy right now. Try again in {seconds} s.", { seconds: Math.max(1, Math.round(Number(body.retry) || 30)) })
+          : tr("Couldn’t look up that invite.");
         state.invite = null;
         paint();
         return;
@@ -180,11 +182,14 @@
     state.joinBusy = true;
     state.err = "";
     paint();
-    api("/v1/discord/picks/join", { method: "POST", body: { code: state.invite.code, confirm: true } }).then(function (body) {
+    var g = state.invite.guild || {};
+    api("/v1/discord/picks/join", { method: "POST", body: { code: state.invite.code, guild: snowflake(g.id), name: String(g.name || "").slice(0, 80), confirm: true } }).then(function (body) {
       state.joinBusy = false;
       if (!body || body.status >= 400) {
+        var secs = Math.max(1, Math.round(Number(body && body.retry) || 60));
         if (body && body.error === "confirm_required") state.err = tr("Confirm the join first.");
-        else if (body && body.status === 429) state.err = tr("Wait a minute before joining another server.");
+        else if (body && body.error === "discord_busy") state.err = tr("Discord is busy right now. Try again in {seconds} s.", { seconds: secs });
+        else if (body && body.status === 429) state.err = tr("Wait {seconds} s before joining another server.", { seconds: secs });
         else state.err = tr("Couldn’t start the join.");
         paint();
         return;
