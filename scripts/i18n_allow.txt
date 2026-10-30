@@ -277,3 +277,5 @@ shared/regone.js|NZlay Mini 01 - USA
 shared/regone.js|NZlay Medium 03 - USA
 shared/regone.js|NZlay Large 01 - USA
 shared/regone.js|NZlay Large 02 - USA
+
+discord-key-helper.js
