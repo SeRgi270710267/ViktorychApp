@@ -41,6 +41,7 @@ import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { handleUnfurl } from "./unfurl.js";
+import { handleNewsletter, sweepNewsletters } from "./newsletters.js";
 import { handleWatchdog, runWatchdog, watchdogPause } from "./watchdog.js";
 import { handleComments } from "./comments-edge.js";
 import { handleYtm } from "./ytmusic.js";
@@ -5432,6 +5433,9 @@ async function route(request, env, ctx) {
   if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
     return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
   }
+  if ((path === "/v1/newsletter" || path === "/v1/newsletter/issue") && request.method === "GET") {
+    return handleNewsletter(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
   if (path === "/v1/comments" && request.method === "GET") {
     return handleComments(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
   }
@@ -5915,6 +5919,7 @@ export default {
     // deploy and records health for the owner (src/watchdog.js).
     if (minute === 7) jobs.push(runWatchdog(env, at));
     if (minute === 0) run("birthdays", () => runBirthdaySweep(env, at));
+    if (minute === 23) jobs.push(sweepNewsletters(env.DATA, at).catch(() => 0));
     if (minute === 7) jobs.push(refreshWanted(env, at).catch(() => null));
     jobs.push(publishPulse(env, at));
     jobs.push(maybeBackupD1(env, at));

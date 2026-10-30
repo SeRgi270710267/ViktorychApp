@@ -4945,5 +4945,17 @@ SI18n.addPack("ru", {
   "Suggested for you": "Рекомендуем вам",
   "{n} online": "{n} в сети",
   "Usage didn't load": "Не удалось загрузить использование",
-  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "Сервер не ответил вовремя. Ваши серверы продолжают работать, просто в этой панели пока нет цифр."
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "Сервер не ответил вовремя. Ваши серверы продолжают работать, просто в этой панели пока нет цифр.",
+  "Newsletter": "Рассылка",
+  "Newsletters": "Рассылки",
+  "Looking for the newsletter’s feed…": "Ищем ленту рассылки…",
+  "Couldn’t find a feed or archive for that newsletter.": "Не удалось найти ленту или архив этой рассылки.",
+  "Open the original issue": "Открыть оригинальный выпуск",
+  "Loading the issue…": "Загружаем выпуск…",
+  "This issue has no text in its feed.": "В ленте нет текста этого выпуска.",
+  "This issue is no longer in the newsletter’s feed.": "Этого выпуска больше нет в ленте рассылки.",
+  "Open the newsletter’s website": "Открыть сайт рассылки",
+  "Paste a newsletter link": "Вставьте ссылку на рассылку",
+  "Add a newsletter": "Добавить рассылку",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, архивы Mailchimp или любой сайт с лентой. Выпуски появляются как посты."
 });

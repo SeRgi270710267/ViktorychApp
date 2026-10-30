@@ -4943,5 +4943,17 @@ SI18n.addPack("en", {
   "Suggested for you": "Suggested for you",
   "{n} online": "{n} online",
   "Usage didn't load": "Usage didn't load",
-  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers."
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.",
+  "Newsletter": "Newsletter",
+  "Newsletters": "Newsletters",
+  "Looking for the newsletter’s feed…": "Looking for the newsletter’s feed…",
+  "Couldn’t find a feed or archive for that newsletter.": "Couldn’t find a feed or archive for that newsletter.",
+  "Open the original issue": "Open the original issue",
+  "Loading the issue…": "Loading the issue…",
+  "This issue has no text in its feed.": "This issue has no text in its feed.",
+  "This issue is no longer in the newsletter’s feed.": "This issue is no longer in the newsletter’s feed.",
+  "Open the newsletter’s website": "Open the newsletter’s website",
+  "Paste a newsletter link": "Paste a newsletter link",
+  "Add a newsletter": "Add a newsletter",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts."
 });

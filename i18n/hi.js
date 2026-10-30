@@ -4932,5 +4932,17 @@ SI18n.addPack("hi", {
   "Suggested for you": "आपके लिए सुझाव",
   "{n} online": "{n} ऑनलाइन",
   "Usage didn't load": "उपयोग लोड नहीं हुआ",
-  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "सर्वर ने समय पर जवाब नहीं दिया। आपके सर्वर काम कर रहे हैं, बस इस पैनल में संख्याएँ नहीं हैं।"
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "सर्वर ने समय पर जवाब नहीं दिया। आपके सर्वर काम कर रहे हैं, बस इस पैनल में संख्याएँ नहीं हैं।",
+  "Newsletter": "न्यूज़लेटर",
+  "Newsletters": "न्यूज़लेटर",
+  "Looking for the newsletter’s feed…": "न्यूज़लेटर की फ़ीड ढूँढ रहे हैं…",
+  "Couldn’t find a feed or archive for that newsletter.": "इस न्यूज़लेटर की कोई फ़ीड या संग्रह नहीं मिला।",
+  "Open the original issue": "मूल अंक खोलें",
+  "Loading the issue…": "अंक लोड हो रहा है…",
+  "This issue has no text in its feed.": "इस अंक की फ़ीड में कोई टेक्स्ट नहीं है।",
+  "This issue is no longer in the newsletter’s feed.": "यह अंक अब न्यूज़लेटर की फ़ीड में नहीं है।",
+  "Open the newsletter’s website": "न्यूज़लेटर की वेबसाइट खोलें",
+  "Paste a newsletter link": "न्यूज़लेटर का लिंक चिपकाएँ",
+  "Add a newsletter": "न्यूज़लेटर जोड़ें",
+  "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts.": "Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp संग्रह या फ़ीड वाली कोई भी साइट। अंक पोस्ट की तरह दिखते हैं।"
 });
