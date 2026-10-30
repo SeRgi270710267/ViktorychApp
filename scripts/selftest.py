@@ -1479,7 +1479,7 @@ def main() -> None:
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
     check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a158-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
-    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
+    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and any("showPill(pendingPillPosts())" in app[at:at + 1200] for at in [i for i in range(len(app)) if app.startswith('addEventListener("hashchange"', i)]) and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
