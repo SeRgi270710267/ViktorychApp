@@ -4128,5 +4128,12 @@ SI18n.addPack("ru", {
   "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{used} из {limit} запросов на {n} серверах ({pct}%). Сброс в {reset}.",
   "Today's server pool is used up": "Пул серверов на сегодня исчерпан",
   "All {n} servers reached their free daily requests. Resets {reset}.": "Все {n} сервера исчерпали бесплатные запросы на день. Сброс в {reset}.",
-  "{name} is used up, so reads skip it.": "{name} исчерпан, поэтому чтение идёт в обход."
+  "{name} is used up, so reads skip it.": "{name} исчерпан, поэтому чтение идёт в обход.",
+  "{a} and {b}": "{a} и {b}",
+  "{a} {b} and {c}": "{a} {b} и {c}",
+  "{a} {b} and {others}": "{a} {b} и {others}",
+  "reply.others.one": "ещё {n}",
+  "reply.others.few": "ещё {n}",
+  "reply.others.many": "ещё {n}",
+  "reply.others.other": "ещё {n}"
 });

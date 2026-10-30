@@ -4120,5 +4120,12 @@ SI18n.addPack("hi", {
   "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{n} सर्वरों पर {limit} में से {used} अनुरोध ({pct}%)। {reset} पर रीसेट।",
   "Today's server pool is used up": "आज का सर्वर पूल खत्म हो गया",
   "All {n} servers reached their free daily requests. Resets {reset}.": "सभी {n} सर्वर अपने मुफ़्त दैनिक अनुरोधों तक पहुँच गए। {reset} पर रीसेट।",
-  "{name} is used up, so reads skip it.": "{name} खत्म हो गया है, इसलिए पढ़ना इसे छोड़ देता है।"
+  "{name} is used up, so reads skip it.": "{name} खत्म हो गया है, इसलिए पढ़ना इसे छोड़ देता है।",
+  "{a} and {b}": "{a} और {b}",
+  "{a} {b} and {c}": "{a} {b} और {c}",
+  "{a} {b} and {others}": "{a} {b} और {others}",
+  "reply.others.one": "{n} अन्य",
+  "reply.others.few": "{n} अन्य",
+  "reply.others.many": "{n} अन्य",
+  "reply.others.other": "{n} अन्य"
 });

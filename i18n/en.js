@@ -4128,5 +4128,12 @@ SI18n.addPack("en", {
   "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.",
   "Today's server pool is used up": "Today's server pool is used up",
   "All {n} servers reached their free daily requests. Resets {reset}.": "All {n} servers reached their free daily requests. Resets {reset}.",
-  "{name} is used up, so reads skip it.": "{name} is used up, so reads skip it."
+  "{name} is used up, so reads skip it.": "{name} is used up, so reads skip it.",
+  "{a} and {b}": "{a} and {b}",
+  "{a} {b} and {c}": "{a} {b} and {c}",
+  "{a} {b} and {others}": "{a} {b} and {others}",
+  "reply.others.one": "{n} other",
+  "reply.others.few": "{n} others",
+  "reply.others.many": "{n} others",
+  "reply.others.other": "{n} others"
 });

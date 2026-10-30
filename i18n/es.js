@@ -4128,5 +4128,12 @@ SI18n.addPack("es", {
   "{used} of {limit} requests across {n} servers ({pct}%). Resets {reset}.": "{used} de {limit} solicitudes en {n} servidores ({pct}%). Se reinicia a las {reset}.",
   "Today's server pool is used up": "El grupo de servidores de hoy está agotado",
   "All {n} servers reached their free daily requests. Resets {reset}.": "Los {n} servidores alcanzaron sus solicitudes diarias gratis. Se reinicia a las {reset}.",
-  "{name} is used up, so reads skip it.": "{name} está agotado, así que las lecturas lo omiten."
+  "{name} is used up, so reads skip it.": "{name} está agotado, así que las lecturas lo omiten.",
+  "{a} and {b}": "{a} y {b}",
+  "{a} {b} and {c}": "{a} {b} y {c}",
+  "{a} {b} and {others}": "{a} {b} y {others}",
+  "reply.others.one": "{n} más",
+  "reply.others.few": "{n} más",
+  "reply.others.many": "{n} más",
+  "reply.others.other": "{n} más"
 });
