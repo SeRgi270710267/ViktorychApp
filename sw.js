@@ -4,7 +4,7 @@ const VERSION = "viktorych-a152-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T04:42:33Z-inbox-mail
+// cache-bust: 2026-10-30T04:57:25Z-inbox-mail
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -58,6 +58,7 @@ const SHELL_FILES = [
   "./keys-ui.js",
   "./keys.css",
   "./i18n.js",
+  "./shared/blocklist.js",
   "./i18n/en.js",
   "./i18n/ru.js",
   "./i18n/es.js",
