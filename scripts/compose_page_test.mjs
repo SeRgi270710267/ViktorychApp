@@ -177,6 +177,7 @@ async function main() {
   });
   const riders = Promise.all([ride("community_home_test.mjs"), ride("communities_hub_test.mjs"), ride("own_post_test.mjs"), ride("post_page_test.mjs"), ride("music_dock_test.mjs"), ride("video_fallback_test.mjs"), ride("device_guard_test.mjs"), ride("usernames_settings_test.mjs"), ride("display_names_test.mjs"), ride("settings_assistant_test.mjs"), ride("nostr_settings_test.mjs"), ride("games_mobile_test.mjs"), ride("live_translate_test.mjs"), ride("friend_p2p_test.mjs"), ride("communities_instant_test.mjs"), ride("routes_instant_test.mjs"), ride("profile_by_name_test.mjs")]);
   const cmRows = ride("communities_rows_test.mjs");
+  const friendPrivacy = ride("friend_privacy_test.mjs");
   const fyCommunities = ride("foryou_communities_test.mjs");
   try {
     for (const vp of widths) {
@@ -203,6 +204,7 @@ async function main() {
     const fycomm = await fyCommunities;
     if (fycomm !== 0) fail("for you communities check failed");
     if ((await cmRows) !== 0) fail("communities rows check failed");
+    if ((await friendPrivacy) !== 0) fail("friend privacy check failed");
   } finally {
     await browser.close();
     server.close();
