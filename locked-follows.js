@@ -119,13 +119,20 @@
     loading = call("/state").then(function (res) {
       loading = null;
       if (res && res.status === 200) {
+        var before = stateKey();
         info = { setUp: !!res.setUp, code: !!res.code, device: !!res.device, hideEntry: !!res.hideEntry, relockSecs: Number(res.relockSecs) || 0, at: Date.now() };
         saveFilter(res.filter || null);
-        redraw();
+        /* Repaint only when something on screen can change, so a background
+           state check never swaps the page under an open composer. */
+        if (stateKey() !== before || /^#\/settings\/locked-follows|following/.test(String(root.location && root.location.hash || ""))) redraw();
       }
       return info;
     });
     return loading;
+  }
+  function stateKey() {
+    var f = filter && filter.owner === owner() ? Array.from(filter.set).sort().join(",") : "";
+    return f;
   }
   function afterChange() {
     var a = accounts();
@@ -668,7 +675,7 @@
     });
     root.addEventListener("hashchange", function () {
       ui.pull = false;
-      if (!/^#\/settings\/locked-follows/.test(root.location.hash)) ui.settingsOpen = false;
+      if (!/^#\/settings\/locked-follows|following/.test(root.location.hash)) ui.settingsOpen = false;
     });
     setTimeout(function () { if (token()) load(false); deviceAvailable(); }, 1500);
   }
