@@ -745,7 +745,7 @@
     if (pack.hidden && !mine) return "";
     var grid = (pack.gifts || []).map(function (gift) {
       var who = gift.sender && gift.sender.name ? gift.sender.name : (gift.sender && gift.sender.handle ? gift.sender.handle : tr("Anonymous gift"));
-      var hide = mine ? '<button type="button" data-gift="hide" data-id="' + esc(gift.id) + '">' + esc(gift.hidden ? tr("Show gift") : tr("Hide gift")) + "</button>" : "";
+      var hide = mine ? '<button type="button" data-gift="hide" data-id="' + esc(gift.id) + '">' + esc(gift.hidden ? tr("Show gift") : tr("Hide gift")) + "</button>" + (root.GiftNFT ? root.GiftNFT.buttonHtml(gift) : "") : "";
       var edition = gift.edition ? '<span class="vkg-edition">' + esc(tr("No. {n}", { n: String(gift.edition) })) + "</span>" : "";
       if (gift.wrapped) {
         var open = mine ? '<button type="button" class="gift-unwrap" data-gift="unwrap" data-id="' + esc(gift.id) + '">' + esc(tr("Open gift")) + "</button>" : "";

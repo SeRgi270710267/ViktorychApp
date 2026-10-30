@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Mushroom",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/mushroom.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "mushroom"
+    },
+    {
+      "trait_type": "Index",
+      "value": 42
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreihcwvtmkrdpgm6an2r2i6mbhww6yrtmg6ayzm4zb2jep2ew435ata",
+  "image_sha256": "e2b566c5446f333c06ea3a479813dadec466c37818cb3990e9247e896e6fa098"
+}

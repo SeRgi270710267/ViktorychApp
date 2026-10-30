@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Star gift",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/star.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "star"
+    },
+    {
+      "trait_type": "Index",
+      "value": 62
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreig75u5grigeyialyir3adkosibgbs7kcou6hr6hjsx7gfkppo6vxm",
+  "image_sha256": "dfed3a68a0c4c200bc223b00d4e920260cbea13a9e3c7c74caff3154f7bbd5bb"
+}

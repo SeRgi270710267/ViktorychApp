@@ -864,6 +864,10 @@
     if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path)) || /^\/v1\/ext-graph\/youtube\?/.test(String(path))) {
       var mainRoot = String(config().api || "").replace(/\/$/, "");
       if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
+      // Owner usage goes to the Worker only. Its analytics read can take a
+      // few seconds, and a hedged read to the backup used to win the race
+      // with an answer the panel cannot use, leaving it on "Loading" forever.
+      if (mainRoot && /^\/v1\/owner\/usage/.test(String(path))) list = [mainRoot];
     }
     if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     var headers = {};
@@ -4310,7 +4314,7 @@ function signupPayload() {
       (items.length > 1 ? '<button class="photo-gallery-nav next" type="button" data-acct="gallery-next" aria-label="' + esc(tr("Next")) + '">›</button>' : "") +
       "</div>";
   }
-  var PROFILE_TAB_IDS = ["posts", "replies", "media", "highlights", "friends", "about", "gifts"];
+  var PROFILE_TAB_IDS = ["posts", "replies", "media", "games", "highlights", "friends", "about", "gifts"];
   function profileTabLabel(id) {
     if (id === "posts") return tr("Posts");
     if (id === "replies") return tr("Replies");
@@ -4319,6 +4323,7 @@ function signupPayload() {
     if (id === "friends") return tr("Friends");
     if (id === "about") return tr("About");
     if (id === "gifts") return tr("Gifts");
+    if (id === "games") return tr("Games");
     return id;
   }
   function cleanProfileTabs(raw) {
@@ -4383,6 +4388,7 @@ function signupPayload() {
       if (id === "about") return !!showAbout;
       if (id === "gifts") return !!showGifts;
       if (id === "highlights") return !!(mine || highlightHtml);
+      if (id === "games") return !!(window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabAvailable && window.ViktorychGameSocial.profileTabAvailable(account, mine));
       return true;
     }
     var editing = !!(mine && profileTabEdit);
@@ -4555,14 +4561,14 @@ function signupPayload() {
     var aboutBody = activeTab === "about" && window.ProfileAbout ? window.ProfileAbout.html(account) : "";
     var giftsBody = activeTab === "gifts" && window.ProfileGifts ? window.ProfileGifts.giftsHtml(account.gifts, mine) : "";
     var highlightsBody = bar.highlightHtml || '<div class="empty"><h2>' + esc(tr("Highlights")) + "</h2></div>";
-    var body = activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
+    var gamesBody = activeTab === "games" && window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabHtml ? window.ViktorychGameSocial.profileTabHtml(account, mine) : "";
+    var body = activeTab === "games" ? gamesBody : activeTab === "about" ? aboutBody : activeTab === "gifts" ? giftsBody : activeTab === "friends" ? friendsBody : activeTab === "highlights" ? highlightsBody : postsBody;
 
     var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
     var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tn("mutualFriends", mutualCount, { count: mutualCount })) + '</div>' : '';
 
     var tabs = bar.html;
 
-    var gameInviteBtn = !mine && !account.viewerBlocks && account.publicId && window.ViktorychGameSocial ? window.ViktorychGameSocial.inviteButtonHtml(account.publicId, account.name || account.handle, false) : "";
     var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
     var top = window.ViktorychProfile && window.ViktorychProfile.top ? window.ViktorychProfile.top({
       name: account.displayName || account.handle || "",
@@ -4574,7 +4580,7 @@ function signupPayload() {
       count: count === "" ? "" : tn("posts", Number(count), { count: count })
     }, banner) : banner;
     top = birthdayBanner + top;
-    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + gameInviteBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + (window.ViktorychGameSocial ? window.ViktorychGameSocial.profileHtml(account, mine) : "") + "</div>" + tabs + body + galleryHtml(account);
+    return top + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + giftBtn + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + nameRowHtml(account) + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -4595,7 +4601,7 @@ function signupPayload() {
     if (!account.repostsLoaded) loadProfile(route.handle);
     if (account.handle && skel(account.handle) !== key) {
       var nextHash = "#/@" + encodeURIComponent(account.handle);
-      var tab = route.query && route.query.get && route.query.get("tab");
+      var tab = (route.query && route.query.get && route.query.get("tab")) || route.tab || "";
       if (tab) nextHash += "?tab=" + encodeURIComponent(tab);
       if ((location.hash || "") !== nextHash) location.replace(nextHash);
     }
@@ -4683,20 +4689,37 @@ function signupPayload() {
     }).catch(function () {});
   }
   /* Owner panel: usage against the free limits, read at most every five
-     minutes while settings are open. */
+     minutes while settings are open. The read never hangs the panel: after
+     USAGE_WAIT ms, or on any answer that is not a usable report, the panel
+     shows a calm error with Retry and each server as unknown. */
   var usageDoc = null;
   var usageAt = 0;
-  function loadUsage() {
+  var usageState = "idle"; // idle, loading, ok, failed
+  var usageTry = 0;
+  var USAGE_WAIT = 8000;
+  function usageSettle(state, body, tryId) {
+    if (tryId !== usageTry) return;
+    if (state === "ok") { usageDoc = body; usageState = "ok"; }
+    else if (usageState === "loading") usageState = "failed";
+    else return;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function loadUsage(force) {
     var session = readSession();
     if (!session || !session.token || !session.account || !session.account.owner) return;
-    if (Date.now() - usageAt < 5 * 60 * 1000) return;
+    if (usageState === "loading") return;
+    if (!force && usageState !== "failed" && Date.now() - usageAt < 5 * 60 * 1000) return;
+    // A failed read waits a little before the panel tries again on its own.
+    if (!force && usageState === "failed" && Date.now() - usageAt < 2 * 60 * 1000) return;
     usageAt = Date.now();
+    usageState = "loading";
+    var tryId = ++usageTry;
     loadBackupStatus();
+    later(function () { usageSettle("failed", null, tryId); }, Number(config().usageWaitMs) || USAGE_WAIT);
     api("/v1/owner/usage", { token: session.token }).then(function (body) {
-      if (!body || body.status !== 200) return;
-      usageDoc = body;
-      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-    }).catch(function () {});
+      if (!body || body.status !== 200 || !body.limits) return usageSettle("failed", null, tryId);
+      usageSettle("ok", body, tryId);
+    }).catch(function () { usageSettle("failed", null, tryId); });
   }
   /* Server pool: every origin that answers /v1 reads, with its own free
      daily capacity. The headline is total used over total capacity; each
@@ -4733,7 +4756,9 @@ function signupPayload() {
       var hours = backup && backup.hours ? backup.hours : backupHours();
       var resting = !!(hours && (hours.paused || Number(hours.pct) >= HOURS_PAUSE_PCT));
       var down = !resting && (!backup || backup.ok === false || (backup.egress && backup.egress.saver));
-      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down, resting: resting, restUntil: hours && (hours.resetAt || hours.reset) || "" });
+      // Usage did not load and the backup has not reported yet: unknown, not down.
+      var notYet = !!(u && u.failed && !backup && !resting);
+      origins.push({ id: "render", name: tr("Render backup"), used: t ? Number(t.requests) || 0 : 0, cap: Number(backup && backup.dayCapacity) || 100000, reset: nextUtcMidnight(at), known: !!t, down: !!down && !notYet, unknown: notYet, resting: resting, restUntil: hours && (hours.resetAt || hours.reset) || "" });
     }
     var used = 0, cap = 0;
     var unknown = origins.some(function (o) { return o.unknown; });
@@ -4767,7 +4792,7 @@ function signupPayload() {
         '<div class="usage-top"><span>' + esc(o.name) + '</span><b>' + esc(shown) + "</b></div>" +
         '<div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pctOf(o.pct) + '" aria-label="' + esc(o.name) + '"><i style="width:' + pctOf(o.pct) + '%"></i></div>' +
         '<div class="pool-meta"><span>' + esc(o.unknown ? tr("— of {limit}", { limit: formatNum(o.cap) }) : tr("{used} of {limit}", { used: formatNum(o.used), limit: formatNum(o.cap) })) + "</span><span>" + esc(tr("Resets {time}", { time: when })) + "</span></div>" +
-        (note ? '<p class="pool-note' + (o.resting ? " calm" : "") + '">' + esc(note) + "</p>" : "") + "</div>";
+        (note ? '<p class="pool-note' + (o.resting || o.unknown ? " calm" : "") + '">' + esc(note) + "</p>" : "") + "</div>";
     }).join("");
     return '<section class="pool-cap' + lvl(pool.pct) + '" data-pool-cap>' +
       '<div class="pool-head"><span>' + esc(tr("Server pool today")) + '</span><b class="pool-pct">' + esc(pool.pct + "%") + "</b></div>" +
@@ -4783,8 +4808,13 @@ function signupPayload() {
   }
   function usageHtml() {
     var u = usageDoc;
-    var head = '<div class="set-block usage-panel"><h2>' + esc(tr("Free tier usage")) + "</h2>";
-    if (!u) return head + '<p class="phandle">' + esc(tr("Loading…")) + "</p></div>";
+    var head = '<div class="set-block usage-panel" data-usage-state="' + esc(u ? "ok" : usageState === "failed" ? "failed" : "loading") + '"><h2>' + esc(tr("Free tier usage")) + "</h2>";
+    if (!u && usageState === "failed") {
+      return head + '<div class="usage-error" role="status"><b>' + esc(tr("Usage didn't load")) + '</b><p class="set-sub">' + esc(tr("The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.")) + '</p>' +
+        '<button class="outline usage-retry" type="button" data-acct="usage-retry">' + esc(tr("Retry")) + "</button></div>" +
+        poolCapacityHtml(serverPool({ failed: true, limits: {} }, backupStatus)) + "</div>";
+    }
+    if (!u) return head + '<p class="phandle" aria-busy="true">' + esc(tr("Loading…")) + "</p></div>";
     var L = u.limits || {};
     var rows = "";
     if (!u.configured) {
@@ -5891,7 +5921,8 @@ function signupPayload() {
     else if (act === "add-channel") addBackupChannel();
     else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
-else if (act === "copy-id") copyAccountId();
+else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender(); }
+    else if (act === "copy-id") copyAccountId();
     else if (act === "open-gallery") openGallery(acct.dataset.kind || "photo");
     else if (act === "gallery-close") { gallery.open = false; redraw(); }
     else if (act === "gallery-prev" || act === "gallery-next") stepGallery(act === "gallery-next" ? 1 : -1);
@@ -6416,6 +6447,7 @@ else if (act === "copy-id") copyAccountId();
     apiBase: function () { return activeApiRoot || String(config().api || "").replace(/\/$/, ""); },
     originPool: { readOrder: readOrder, quotaNote: quotaNote, shifted: quotaShifted, weights: function () { return poolWeights(apiOrder()); }, pick: weightedPick, warm: poolWarm, originWarm: originWarm, warmNote: warmNote, sealedText: sealedText, dataDenied: dataDenied, paused: backupPaused, hoursFactor: hoursFactor, wake: wakeBackup },
     serverPool: function () { loadUsage(); return usageDoc ? serverPool(usageDoc, backupStatus) : null; },
+    usagePanel: { load: loadUsage, html: usageHtml, state: function () { return usageState; } },
     serverPoolFrom: serverPool,
     poolCapacityHtml: poolCapacityHtml,
     saveOwnAccount: applyOwnAccount,

@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Lollipop",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/lollipop.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "lollipop"
+    },
+    {
+      "trait_type": "Index",
+      "value": 37
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreiakqa4wmhadux4tavv6pit4tpzvlmcw6qcgbmnlminuschelxjwue",
+  "image_sha256": "0a8039661c03a5f93056be7a27c9bf355b056f40460b1ab621b4908e45dd36a1"
+}

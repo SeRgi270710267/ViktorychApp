@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Bouquet",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/bouquet.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "bouquet"
+    },
+    {
+      "trait_type": "Index",
+      "value": 7
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreic3pjvnrkvkfzkzv7vscvcrbpclcwjlfc7b5tv345t6baedjpbwcu",
+  "image_sha256": "5b7a6ad8aaaa2e559afeb2154510bc4b1592b28be1ecebbe767e080834bc3615"
+}

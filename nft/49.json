@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Poodle",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/poodle.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "poodle"
+    },
+    {
+      "trait_type": "Index",
+      "value": 49
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreias35iyz7llgn2f22be66yfar4qpqbocxf6excfpw73ecunxhtnre",
+  "image_sha256": "12df518cfd6b33745d6824f7b05047907c02e15cbe25c457dbfb20a8db9e6d89"
+}

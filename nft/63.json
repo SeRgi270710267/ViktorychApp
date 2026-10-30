@@ -1,0 +1,18 @@
+{
+  "name": "Viktorych gift: Sunflower",
+  "description": "A collectible copy of a gift from ViktorychApp, made by the person who received it. Original art made for ViktorychApp. A collectible only: not an investment, with no cash value, buy-back or payout from ViktorychApp.",
+  "image": "https://viktorychgroup.github.io/ViktorychApp/icons/gifts/sunflower.webp",
+  "external_url": "https://viktorychgroup.github.io/ViktorychApp/",
+  "attributes": [
+    {
+      "trait_type": "Art",
+      "value": "sunflower"
+    },
+    {
+      "trait_type": "Index",
+      "value": 63
+    }
+  ],
+  "image_ipfs": "ipfs://bafkreic2vt54ubpcz6bllpispyxrzxtnz66k566jl5x6vknytohfhgjnze",
+  "image_sha256": "5aacfbca05e2cf82b5bd127e2f1cde6dcfbcaefbc95f6feaa9b89b8e53992dc9"
+}
