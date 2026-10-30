@@ -4,7 +4,7 @@ const VERSION = "viktorych-a148-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T01:18:24Z-keys-x-settings
+// cache-bust: 2026-10-30T01:32:57Z-keys-x-settings
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -144,6 +144,8 @@ const SHELL_FILES = [
   "./shared/app-lock-crypto.js",
   "./shared/ios.js",
   "./owner-keys.js",
+  "./discord-local.js",
+  "./discord-local.css",
   "./accounts.css",
   "./landing.css",
   "./landing/og.jpg",
@@ -2013,6 +2015,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(mirrorFetch(request).catch(() => new Response("", { status: 504 })));
     return;
   }
+  // A local Discord key: these requests go straight to Discord, never cached here.
+  if (url.hostname === "discord.com" || /(^|\.)hcaptcha\.com$/.test(url.hostname)) return;
   if (isGameHost(url)) return;
   if (isTikTokCdn(url)) return;
   if (isArchiveStore(url)) return;
