@@ -1,0 +1,144 @@
+/* NZlay Forums community (nzlay-forum.js) and its Connected-keys sheet
+   (nzlay-keys.js). It leans on the shared X post, hero and key-row styles
+   (.post, .cm-hero, .xk-*) and only adds what is NZlay-specific. */
+
+.nzf { --nzf-accent: #1d9bf0; }
+
+/* avatars */
+.nzf-ava { display: block; flex: none; }
+.nzf .ava, .nzk .ava, .nzf-ava .ava { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--fill); }
+.nzf .ava.initials, .nzk .ava.initials { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-dim); font-size: 16px; }
+.nzf-hero-avatar { object-fit: cover; background: var(--bg); }
+
+/* hero extras */
+.nzf-hero .cm-hero-about { color: var(--text); margin: 8px 0 0; font-size: 15px; line-height: 1.4; }
+.cm-forum-link { display: inline-flex; align-items: center; gap: 3px; color: var(--text-dim); text-decoration: none; }
+.cm-forum-link svg { width: 15px; height: 15px; fill: currentColor; }
+.cm-forum-link:hover { text-decoration: underline; }
+.cm-sep { color: var(--text-dim); }
+
+/* ReGone header row */
+.nzf-regone { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.nzf-online { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; color: var(--text); }
+.nzf-online i { width: 8px; height: 8px; border-radius: 50%; background: #00ba7c; box-shadow: 0 0 0 3px rgba(0,186,124,.2); }
+.nzf-online.quiet { color: var(--text-dim); font-weight: 600; }
+.nzf-chip { display: inline-flex; align-items: center; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--text); text-decoration: none; }
+.nzf-chip:hover { background: var(--fill-hover); }
+.nzf-play { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 6px 16px; border-radius: 999px; background: var(--nzf-accent); color: #fff; font-weight: 700; font-size: 14px; text-decoration: none; }
+.nzf-play svg { width: 18px; height: 18px; fill: currentColor; }
+.nzf-play:hover { filter: brightness(1.08); }
+
+/* tabs reuse .tabs/.tab; let categories scroll */
+.nzf-tabs { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+.nzf-tabs::-webkit-scrollbar { display: none; }
+.nzf-tabs .tab { flex: 0 0 auto; white-space: nowrap; }
+
+/* post cards */
+.nzf-post { cursor: pointer; }
+.nzf-post a, .nzf-post button, .nzf-post [data-gs-join-room] { cursor: pointer; }
+.nzf-title { font-weight: 800; }
+.nzf-line { display: flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 13px; font-weight: 600; margin-left: 52px; }
+.nzf-line svg { width: 16px; height: 16px; fill: currentColor; }
+.nzf-more { display: inline-block; color: var(--nzf-accent); text-decoration: none; margin-top: 2px; font-size: 15px; }
+.nzf-more:hover { text-decoration: underline; }
+.nzf-media img { background: var(--fill); }
+
+/* badges on the author line */
+.nzf-mod { display: inline-flex; color: var(--nzf-accent); }
+.nzf-mod svg { width: 17px; height: 17px; fill: currentColor; }
+.nzf-rank { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px; background: linear-gradient(135deg,#f4b400,#f57c00); color: #231500; font-weight: 800; font-size: 11px; text-decoration: none; }
+.nzf-linked { display: inline-flex; }
+.nzf-linked .ava { width: 18px; height: 18px; }
+.byline .nzf-mod, .byline .nzf-rank, .byline .nzf-linked { margin-left: 2px; }
+
+/* quote / replying */
+.nzf-quote { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; margin: 6px 0; }
+.nzf-quote-by { display: flex; gap: 5px; font-size: 13px; }
+.nzf-quote-by b { font-weight: 700; }
+.nzf-quote-by span { color: var(--text-dim); }
+.nzf-quote-text { color: var(--text-dim); font-size: 14px; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ReGone room chip inside a post */
+.nzf-room { display: inline-flex; align-items: center; gap: 7px; margin: 8px 0 2px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; font-weight: 600; }
+.nzf-room-dot { width: 7px; height: 7px; border-radius: 50%; background: #00ba7c; }
+.nzf-join { color: var(--nzf-accent); font-weight: 700; cursor: pointer; }
+.nzf-join:hover { text-decoration: underline; }
+
+/* thread focus post */
+.nzf-focus .nzf-focus-head { align-items: center; }
+.nzf-focus-title { font-size: 19px; font-weight: 800; margin: 10px 0 6px; line-height: 1.3; }
+.nzf-focus-body .post-text { font-size: 17px; line-height: 1.5; }
+.nzf-focus-meta { display: flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 14px; margin-top: 12px; }
+.nzf-focus-meta .dot { color: var(--text-dim); }
+.nzf-focus-stats { display: flex; gap: 18px; padding: 12px 0; margin-top: 12px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-dim); }
+.nzf-focus-stats b { color: var(--text); }
+.nzf-focus .status-actions { padding: 4px 0; }
+.nzf-crumb { display: flex; align-items: center; gap: 7px; padding: 10px 16px; color: var(--text-dim); font-size: 13px; font-weight: 600; text-decoration: none; }
+.nzf-crumb svg { width: 16px; height: 16px; fill: currentColor; }
+.nzf-crumb:hover { color: var(--text); }
+.nzf-pending { opacity: .7; }
+.nzf-pending-note { color: var(--text-dim); font-size: 13px; margin: 4px 0 0; }
+.nzf-more-replies { display: block; width: 100%; padding: 14px; background: none; border: none; border-top: 1px solid var(--border); color: var(--nzf-accent); font-size: 15px; cursor: pointer; }
+.nzf-more-replies:hover { background: var(--fill-hover); }
+
+/* compose row + sign-in prompt */
+.nzf-compose-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; background: none; border: none; border-bottom: 1px solid var(--border); cursor: pointer; text-align: left; }
+.nzf-compose-row:hover { background: var(--fill-hover); }
+.nzf-compose-hint { flex: 1; color: var(--text-dim); font-size: 17px; }
+.nzf-signin { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.nzf-signin p { flex: 1; min-width: 180px; margin: 0; color: var(--text-dim); font-size: 14px; }
+.nzf-pill { display: inline-flex; align-items: center; justify-content: center; padding: 8px 18px; border-radius: 999px; background: var(--nzf-accent); color: #fff; font-weight: 700; font-size: 14px; text-decoration: none; border: none; cursor: pointer; }
+.nzf-pill:hover { filter: brightness(1.08); }
+.nzf-pill[disabled] { opacity: .5; cursor: default; }
+
+/* composer sheet */
+.nzf-back { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.4); display: flex; align-items: flex-start; justify-content: center; padding: 5vh 16px; }
+.nzf-sheet { width: min(600px, 100%); max-height: 90vh; display: flex; flex-direction: column; background: var(--bg); border-radius: 16px; overflow: hidden; }
+.nzf-sheet-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.nzf-sheet-head .grow { flex: 1; }
+.nzf-sheet-head .icon-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 50%; color: var(--text); }
+.nzf-sheet-head .icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.nzf-sheet-replying { padding: 0 16px 6px; color: var(--text-dim); font-size: 14px; }
+.nzf-sheet-body { display: flex; gap: 12px; padding: 4px 16px 10px; overflow-y: auto; }
+.nzf-sheet-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.nzf-sheet-main select, .nzf-title-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); font-size: 15px; }
+.nzf-sheet-main textarea { width: 100%; min-height: 120px; border: none; resize: vertical; background: none; color: var(--text); font-size: 19px; line-height: 1.4; outline: none; font-family: inherit; }
+.nzf-sheet-foot { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 13px; }
+.nzf-sheet-note { padding: 10px 16px; color: var(--text); font-size: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.nzf-sheet-note p { margin: 0; }
+
+/* games page link back */
+.games-forum-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; text-decoration: none; color: var(--text); }
+.games-forum-card:hover { background: var(--fill-hover); }
+.games-forum-ico { display: flex; width: 44px; height: 44px; flex: none; align-items: center; justify-content: center; border-radius: 12px; background: var(--fill); }
+.games-forum-ico svg { width: 24px; height: 24px; fill: var(--nzf-accent, #1d9bf0); }
+.games-forum-copy { flex: 1; min-width: 0; }
+.games-forum-copy b { display: block; font-weight: 800; }
+.games-forum-copy span { color: var(--text-dim); font-size: 14px; }
+.games-forum-go svg { width: 22px; height: 22px; fill: var(--text-dim); }
+
+/* Connected keys: NZlay sign-in (reuses .xk-*) */
+.nzk-group .xk-ico svg, .nzk .xk-ico svg { width: 22px; height: 22px; fill: var(--nzf-accent, #1d9bf0); }
+.nzk-form { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+.nzk-field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-dim); }
+.nzk-field input { padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); font-size: 16px; }
+.nzk-field input:focus { border-color: var(--nzf-accent, #1d9bf0); outline: none; }
+.xk-pill.wide, .nzk-form .xk-pill { width: 100%; justify-content: center; }
+.nzk-small { font-size: 13px; }
+.nzk-small a { color: var(--nzf-accent, #1d9bf0); }
+.nzk-errors { background: rgba(244,33,46,.1); border: 1px solid rgba(244,33,46,.4); border-radius: 10px; padding: 8px 12px; }
+.nzk-errors p { margin: 0; color: #f4212e; font-size: 13px; }
+.nzk-captcha { background: var(--fill); border-radius: 12px; padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.nzk-captcha p { margin: 0; font-size: 14px; }
+.nzk-paste { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.nzk-paste summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.nzk-paste[open] summary { margin-bottom: 8px; }
+.nzk-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+
+@media (max-width: 600px) {
+  .nzf-play { margin-left: 0; }
+  .nzf-regone { gap: 8px; }
+  .nzf-back { padding: 0; align-items: stretch; }
+  .nzf-sheet { width: 100%; max-height: 100vh; height: 100%; border-radius: 0; }
+  .nzf-focus-title { font-size: 18px; }
+}

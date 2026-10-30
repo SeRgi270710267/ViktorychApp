@@ -36,6 +36,20 @@
     return window.ViktorychGameSocial || null;
   }
 
+  var FORUM_ICON = "M7.501 19.917L7.471 21H.472l.029-1.027c.184-6.618 3.736-8.977 7-8.977.963 0 1.95.212 2.87.672-.444.478-.851 1.03-1.212 1.656-.507-.204-1.054-.329-1.658-.329-2.767 0-4.57 2.223-4.938 6.004H7.56c-.023.302-.05.599-.059.917zm15.998.056L23.528 21H9.472l.029-1.027c.184-6.618 3.736-8.977 7-8.977s6.816 2.358 7 8.977zM21.437 19c-.367-3.781-2.17-6.004-4.938-6.004s-4.57 2.223-4.938 6.004h9.875z";
+  function serverOff(name) {
+    try {
+      var list = JSON.parse(localStorage.getItem("viktorychapp-server-off") || "[]");
+      return Array.isArray(list) && list.indexOf(name) >= 0;
+    } catch (err) { return false; }
+  }
+  /* A link from the Games page back to the forum community, behind the
+     forum switch and the ReGone-links switch. */
+  function forumLink() {
+    if (serverOff("nzlay_forum") || serverOff("nzlay_forum_regone")) return "";
+    return '<section class="games-rail games-forum"><h2>' + esc(tr("Community")) + '</h2><a class="games-forum-card" href="#/communities/nzlay"><span class="games-forum-ico">' + svg(FORUM_ICON) + '</span><span class="games-forum-copy"><b>' + esc(tr("NZlay Forums")) + '</b><span>' + esc(tr("News, help, clans and the players behind ReGone.")) + '</span></span><span class="games-forum-go">' + svg("M16.586 11H3v2h13.586l-5.043 5.04 1.414 1.42L20.414 12l-7.457-7.46-1.414 1.42z") + '</span></a></section>';
+  }
+
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
   }
@@ -238,7 +252,8 @@
     return tabs + (social ? social.hubHtml() : "") + rail(tr("Recently played"), recent, tr("Nothing played yet.")) +
       rail(tr("Favourites"), favs, tr("No favourites yet.")) +
       '<section class="games-rail"><h2>' + esc(tr("Games")) + '</h2>' + streakLine() + (tvPad() ? '<div class="games-tvpad">' + tvPadLink("games-pad-play") + '<p class="games-empty">' + esc(tr("Xbox, PlayStation and other controllers work in the TV app.")) + "</p></div>" : "") + '<div class="games-grid">' + GAMES.map(card).join("") + "</div></section>" +
-      boardSection();
+      boardSection() +
+      forumLink();
   }
   function page(route) {
     if (gs()) setTimeout(function () { gs().handleRoute(route); }, 0);

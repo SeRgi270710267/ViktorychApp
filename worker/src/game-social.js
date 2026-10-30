@@ -18,6 +18,7 @@
 
 import { emitNotification, readPrefs as readNotePrefs } from "./notifications.js";
 import { publishToAccount } from "./channel.js";
+import { readFlags } from "./feature-flags.js";
 import { actorHidden, blocksEither } from "./social.js";
 import { canSeeAudience, setListGrants, grantsFor, normalizeAudience } from "./audience.js";
 import {
@@ -855,6 +856,45 @@ async function topRoute(env, viewer, deps) {
   return deps.json(200, { ok: true, source: TOP_SOURCE, fetchedAt: top.fetchedAt || 0, players: top.players, friends, mine }, { "cache-control": "private, max-age=60" });
 }
 
+/* ReGone badges for the author names on one NZlay forum page: the public
+   Top 100 rank, and the app account of someone who linked that name to
+   themselves, only when their stats audience lets this viewer see it. */
+async function forumBadges(env, viewer, deps, url) {
+  const names = Array.from(new Set(String(url.searchParams.get("names") || "").split(",").map((n) => cleanRoom(n).slice(0, 40)).filter(Boolean))).slice(0, 40);
+  const badges = {};
+  if (!names.length) return deps.json(200, { ok: true, badges }, { "cache-control": "private, max-age=60" });
+  const off = await readFlags(env).catch(() => ({}));
+  const ranks = new Map();
+  if (!off.regone_leaderboard) {
+    const top = await topList(env);
+    if (top.ok) top.players.forEach((p) => ranks.set(foldName(p.name), p));
+  }
+  const folded = new Map(names.map((n) => [foldName(n), n]));
+  folded.forEach((name, key) => {
+    const hit = ranks.get(key);
+    if (hit) badges[name] = { rank: hit.rank, kills: Math.round(Number(hit.kills) || 0) };
+  });
+  if (!off.regone_profile_stats) {
+    const lowered = Array.from(folded.keys());
+    const got = rows(await env.DB.prepare("SELECT public_id, linked_name FROM game_prefs WHERE linked_name != '' AND lower(linked_name) IN (" + lowered.map(() => "?").join(",") + ") LIMIT 60").bind(...lowered).all());
+    const claimed = got.filter((r) => folded.has(foldName(r.linked_name)));
+    const who = await people(env, claimed.map((r) => r.public_id));
+    const taken = new Set();
+    for (const r of claimed) {
+      const key = foldName(r.linked_name);
+      if (taken.has(key)) continue;
+      const id = String(r.public_id);
+      if (!await canSeeGame(env, id, viewer.public_id, "stats")) continue;
+      const person = personOf(who.get(id));
+      if (!person) continue;
+      taken.add(key);
+      const name = folded.get(key);
+      badges[name] = Object.assign(badges[name] || {}, { person });
+    }
+  }
+  return deps.json(200, { ok: true, badges }, { "cache-control": "private, max-age=60" });
+}
+
 async function linkName(request, env, viewer, deps) {
   const body = await deps.readJson(request, 1000) || {};
   const paced = await deps.rateHit(env, "game-link:" + viewer.public_id, 10, 60 * 60 * 1000);
@@ -888,6 +928,7 @@ export async function handleGameSocial(request, env, path, url, viewer, deps, ex
   if (path === "/v1/games/together" && m === "GET") return togetherGet(env, viewer, deps, url);
   if (path === "/v1/games/together" && m === "DELETE") return togetherClear(env, viewer, deps);
   if (path === "/v1/games/regone/top" && m === "GET") return topRoute(env, viewer, deps);
+  if (path === "/v1/games/regone/forum-badges" && m === "GET") return forumBadges(env, viewer, deps, url);
   if (path === "/v1/games/link-name" && m === "POST") return linkName(request, env, viewer, deps);
   return null;
 }
