@@ -138,4 +138,41 @@ P.act("pymk-reset", { dataset: {} });
 assert.deepEqual(P.prefs().hidden, []);
 assert.equal(P.prefs().fewer, 0);
 
+// ---- Desktop right column: one "Who to follow" panel from both sources.
+seedCache({
+  people: [person("pym_ana"), Object.assign(person("pym_bo", { k: "fof", name: "Pym Cy", n: 2 }), { b: "Makes  maps\nand tea" })],
+  creators: [{ id: "app:@pym_maker", h: "pym_maker", n: "Pym Maker", a: "", k: "creator", r: { k: "cm", c: "pymgarden" } }]
+});
+const outside = [
+  { id: "x:pym_ana", platform: "x", handle: "pym_ana", name: "Someone Else", avatar: "", verifiedType: "blue", bio: "Same handle as an account" },
+  { id: "yt:pymchan", platform: "youtube", handle: "pymchan", name: "Pym Maker", avatar: "" },
+  { id: "x:pym_news", platform: "x", handle: "pym_news", name: "Pym News", avatar: "", bio: "Daily news" }
+];
+fresh({ feedPeople: () => outside, sourceBadge: (p) => `<span class="src">${p}</span>` });
+P.act("pymk-reset", { dataset: {} });
+const side = P.sideHtml();
+assert.ok(side.includes('class="card pymk-side"'), "side panel renders as a card");
+const sideRows = (side.match(/data-pymk-row="/g) || []).length;
+assert.equal(sideRows, 4, "duplicate handle and duplicate name are merged (5 → 4 rows)");
+assert.ok(side.indexOf("pym_ana") < side.indexOf("pym_news"), "accounts first, then outside sources");
+assert.ok(side.includes("Pym News") && side.includes("Daily news"), "outside source with its bio");
+assert.ok(side.includes("Followed by {name} and {n} others"), "mutual reason shown");
+assert.ok(side.includes('href="#/connect"'), "Show more opens the full list");
+assert.ok(!side.includes("Someone Else"), "outside duplicate of an account is dropped");
+// Dismissing an outside row stays on this device (no Worker call).
+const before2 = calls.length;
+P.act("pymk-dismiss", { dataset: { key: "x:pym_news", src: "feed", group: "people" } });
+assert.ok(!P.sideHtml().includes("Pym News"), "dismissed outside row is gone");
+assert.ok(!P.prefs().pending.some((x) => x.id === "x:pym_news"), "outside dismiss is not sent to the Worker");
+assert.ok(calls.length >= before2);
+// Signed out: outside sources still fill the panel; no account rows.
+globalThis.ViktorychAccounts.account = () => null;
+fresh({ feedPeople: () => outside });
+assert.ok(!P.sideHtml().includes("pym_bo"), "no account rows signed out");
+globalThis.ViktorychAccounts.account = acc;
+// Nothing at all: the panel stays, with an empty line.
+seedCache({});
+fresh({ feedPeople: () => [] });
+assert.ok(P.sideHtml().includes("pymk-side-empty"), "empty panel keeps its place");
+
 console.log("pymk ok");
