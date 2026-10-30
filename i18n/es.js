@@ -4944,5 +4944,7 @@ SI18n.addPack("es", {
   "Privacy > Games": "Privacidad > Juegos",
   "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "¿Desvincular ReGone? Tu nombre, rango y estadísticas de ReGone saldrán de tu perfil.",
   "Suggested for you": "Sugerencia para ti",
-  "{n} online": "{n} en línea"
+  "{n} online": "{n} en línea",
+  "Usage didn't load": "El uso no se cargó",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "El servidor no respondió a tiempo. Tus servidores siguen funcionando; solo faltan los números de este panel."
 });

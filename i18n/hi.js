@@ -4930,5 +4930,7 @@ SI18n.addPack("hi", {
   "Privacy > Games": "गोपनीयता > गेम",
   "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "ReGone हटाएँ? आपका ReGone नाम, रैंक और आँकड़े प्रोफ़ाइल से हट जाएँगे।",
   "Suggested for you": "आपके लिए सुझाव",
-  "{n} online": "{n} ऑनलाइन"
+  "{n} online": "{n} ऑनलाइन",
+  "Usage didn't load": "उपयोग लोड नहीं हुआ",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "सर्वर ने समय पर जवाब नहीं दिया। आपके सर्वर काम कर रहे हैं, बस इस पैनल में संख्याएँ नहीं हैं।"
 });

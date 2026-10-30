@@ -4943,5 +4943,7 @@ SI18n.addPack("ru", {
   "Privacy > Games": "Конфиденциальность > Игры",
   "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "Отвязать ReGone? Имя, ранг и статистика ReGone исчезнут из профиля.",
   "Suggested for you": "Рекомендуем вам",
-  "{n} online": "{n} в сети"
+  "{n} online": "{n} в сети",
+  "Usage didn't load": "Не удалось загрузить использование",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "Сервер не ответил вовремя. Ваши серверы продолжают работать, просто в этой панели пока нет цифр."
 });

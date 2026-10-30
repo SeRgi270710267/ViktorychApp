@@ -4941,5 +4941,7 @@ SI18n.addPack("en", {
   "Privacy > Games": "Privacy > Games",
   "Unlink ReGone? Your ReGone name, rank and stats leave your profile.": "Unlink ReGone? Your ReGone name, rank and stats leave your profile.",
   "Suggested for you": "Suggested for you",
-  "{n} online": "{n} online"
+  "{n} online": "{n} online",
+  "Usage didn't load": "Usage didn't load",
+  "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers.": "The server didn't answer in time. Your servers keep working; only this panel is missing its numbers."
 });
