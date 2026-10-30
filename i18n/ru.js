@@ -5519,6 +5519,8 @@ SI18n.addPack("ru", {
   "Lets people give any account, from any network, a private name only they see.": "Позволяет дать любому аккаунту из любой сети личное имя, которое видите только вы.",
   "Linked accounts": "Связанные аккаунты",
   "All their linked accounts": "Все связанные аккаунты",
+  "Add a custom name": "Добавить своё имя",
+  "Accounts here": "Аккаунты здесь",
   "Accounts on other networks": "Аккаунты в других сетях",
   "Set a custom name from any profile's menu.": "Задайте имя в меню любого профиля.",
   "Network": "Сеть",

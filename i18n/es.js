@@ -5520,6 +5520,8 @@ SI18n.addPack("es", {
   "Lets people give any account, from any network, a private name only they see.": "Permite poner a cualquier cuenta, de cualquier red, un nombre privado que solo ve quien lo pone.",
   "Linked accounts": "Cuentas vinculadas",
   "All their linked accounts": "Todas sus cuentas vinculadas",
+  "Add a custom name": "Añadir un nombre personalizado",
+  "Accounts here": "Cuentas de aquí",
   "Accounts on other networks": "Cuentas de otras redes",
   "Set a custom name from any profile's menu.": "Pon un nombre desde el menú de cualquier perfil.",
   "Network": "Red",

@@ -246,6 +246,17 @@
     return out.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
   }
 
+  /* Every name this viewer set: site accounts (platform "app") and other networks. */
+  function listAll() {
+    ensureScope();
+    var out = list();
+    Object.keys(store.app).forEach(function (h) { out.push({ key: "app:" + h, platform: "app", id: h, name: store.app[h].name, at: store.app[h].at || 0 }); });
+    return out.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+  }
+
+  var CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.64 18.952l-5.55-4.861 1.317-1.504 3.951 3.459 8.459-10.948L19.4 6.32 9.64 18.952z"/></svg>';
+  var CHEV_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.586 12 7.543 4.96l1.414-1.42L17.414 12l-8.457 8.46-1.414-1.42z"/></svg>';
+
   /* ---- The "Set custom name" sheet ---- */
 
   function closeSheet() {
@@ -278,7 +289,7 @@
         '<button type="button" class="nick-save" data-nick="save">' + esc(tr("Save")) + "</button></div>" +
         '<p class="nick-sub">' + esc(tr("Only you see this name. It shows everywhere this account appears.")) + "</p>" +
         '<label class="nick-field"><span class="nick-label">' + esc(tr("Name")) + '</span><input type="text" data-nick-input maxlength="' + NICK_MAX + '" value="' + esc(current) + '" placeholder="' + esc(original) + '" autocomplete="off" spellcheck="false"><span class="nick-count" data-nick-count>' + current.length + " / " + NICK_MAX + "</span></label>" +
-        (personKey ? '<label class="nick-scope"><input type="checkbox" data-nick-all' + (useAll ? " checked" : "") + '><span>' + esc(tr("Use for all their linked accounts")) + "</span></label>" : "") +
+        (personKey ? '<label class="nick-scope"><span class="nick-scope-copy">' + esc(tr("Use for all their linked accounts")) + '</span><input type="checkbox" class="nick-check-input" data-nick-all' + (useAll ? " checked" : "") + '><span class="nick-check" aria-hidden="true">' + CHECK_SVG + "</span></label>" : "") +
         (current ? '<button type="button" class="nick-reset" data-nick="reset">' + esc(tr("Reset to: {name}", { name: original })) + "</button>" : "") +
       "</div>";
     wrap.addEventListener("click", function (event) {
@@ -326,6 +337,82 @@
     if (field) { try { field.focus(); field.select(); } catch (err) { /* old Safari */ } }
   }
 
+  /* "Add a custom name": pick the network (X-style radio rows), the account
+     and the name. opts.platforms: [{ id, name, glyph }]. */
+  function openAddSheet(opts) {
+    if (typeof document === "undefined") return;
+    ensureScope();
+    closeSheet();
+    var nets = (opts && opts.platforms) || [{ id: "x", name: "X", glyph: "" }];
+    var pick = nets[0].id;
+    var listOpen = false;
+    var wrap = document.createElement("div");
+    wrap.className = "nick-sheet-wrap";
+    wrap.setAttribute("data-nick-sheet", "add");
+    function netOf(id) { for (var i = 0; i < nets.length; i++) if (nets[i].id === id) return nets[i]; return nets[0]; }
+    function paint() {
+      var cur = netOf(pick);
+      var acct = wrap.querySelector("[data-nick-acct]");
+      var name = wrap.querySelector("[data-nick-input]");
+      var keepA = acct ? acct.value : "";
+      var keepN = name ? name.value : "";
+      wrap.innerHTML =
+        '<div class="nick-sheet" role="dialog" aria-modal="true" aria-labelledby="nick-sheet-title">' +
+          '<div class="nick-sheet-head"><button type="button" class="nick-x" data-nick="close" aria-label="' + esc(tr("Close")) + '">×</button>' +
+          '<h2 id="nick-sheet-title">' + esc(tr("Add a custom name")) + "</h2>" +
+          '<button type="button" class="nick-save" data-nick="save"' + (keepA.trim() && keepN.trim() ? "" : " disabled") + ">" + esc(tr("Save")) + "</button></div>" +
+          '<p class="nick-sub">' + esc(tr("Only you see this name. It shows everywhere this account appears.")) + "</p>" +
+          '<button type="button" class="nick-pick" data-nick="pick" aria-expanded="' + (listOpen ? "true" : "false") + '"><span class="nick-pick-copy"><span class="nick-label">' + esc(tr("Network")) + '</span><span class="nick-pick-value">' + esc(cur.name) + '</span></span><span class="nick-pick-chev' + (listOpen ? " open" : "") + '">' + CHEV_SVG + "</span></button>" +
+          (listOpen ? '<div class="nick-radios" role="radiogroup" aria-label="' + esc(tr("Network")) + '">' + nets.map(function (n) {
+            var on = n.id === pick;
+            return '<button type="button" role="radio" aria-checked="' + (on ? "true" : "false") + '" class="nick-radio' + (on ? " on" : "") + '" data-nick="net" data-net="' + esc(n.id) + '"><span class="nick-radio-ico">' + (n.glyph || esc(String(n.name).slice(0, 1))) + '</span><span class="nick-radio-name">' + esc(n.name) + '</span><span class="nick-radio-dot" aria-hidden="true"></span></button>';
+          }).join("") + "</div>" : "") +
+          '<label class="nick-field"><span class="nick-label">' + esc(tr("Account")) + '</span><input type="text" data-nick-acct value="' + esc(keepA) + '" placeholder="@name" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+          '<label class="nick-field"><span class="nick-label">' + esc(tr("Name")) + '</span><input type="text" data-nick-input maxlength="' + NICK_MAX + '" value="' + esc(keepN) + '" autocomplete="off" spellcheck="false"><span class="nick-count" data-nick-count>' + keepN.length + " / " + NICK_MAX + "</span></label>" +
+        "</div>";
+    }
+    wrap.addEventListener("click", function (event) {
+      if (event.target === wrap) { closeSheet(); return; }
+      var el = event.target && event.target.closest ? event.target.closest("[data-nick]") : null;
+      if (!el) return;
+      event.preventDefault();
+      event.stopPropagation();
+      var act = el.getAttribute("data-nick");
+      if (act === "close") { closeSheet(); return; }
+      if (act === "pick") { listOpen = !listOpen; paint(); return; }
+      if (act === "net") { pick = el.getAttribute("data-net") || pick; listOpen = false; paint(); var f = wrap.querySelector("[data-nick-acct]"); if (f) f.focus(); return; }
+      if (act === "save") {
+        var acct = wrap.querySelector("[data-nick-acct]");
+        var input = wrap.querySelector("[data-nick-input]");
+        var handle = String(acct ? acct.value : "").trim().replace(/^@/, "");
+        var value = clean(input ? input.value : "");
+        if (!handle || !value) return;
+        var done = set(pick, handle, value);
+        closeSheet();
+        if (deps.toast) deps.toast(done ? tr("Custom name saved") : tr("That account name isn't valid."));
+      }
+    }, true);
+    wrap.addEventListener("input", function (event) {
+      var t = event.target;
+      if (!t || !t.hasAttribute) return;
+      var count = wrap.querySelector("[data-nick-count]");
+      var name = wrap.querySelector("[data-nick-input]");
+      var acct = wrap.querySelector("[data-nick-acct]");
+      if (count && name) count.textContent = String(name.value.length) + " / " + NICK_MAX;
+      var btn = wrap.querySelector('[data-nick="save"]');
+      if (btn) btn.disabled = !(acct && acct.value.trim() && name && name.value.trim());
+    });
+    wrap.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeSheet();
+      if (event.key === "Enter" && event.target && event.target.tagName === "INPUT") { var b = wrap.querySelector('[data-nick="save"]'); if (b && !b.disabled) b.click(); }
+    });
+    paint();
+    document.body.appendChild(wrap);
+    sheet = wrap;
+    var first = wrap.querySelector("[data-nick-acct]");
+    if (first) { try { first.focus(); } catch (err) { /* ignore */ } }
+  }
+
   /* Delegated: any element with data-act="nick-edit" opens the sheet. */
   if (typeof document !== "undefined") {
     document.addEventListener("click", function (event) {
@@ -354,6 +441,8 @@
     set: set,
     setKey: setKey,
     list: list,
+    listAll: listAll,
+    openAddSheet: openAddSheet,
     sync: sync,
     openSheet: openSheet,
     closeSheet: closeSheet,

@@ -5506,6 +5506,8 @@ SI18n.addPack("hi", {
   "Lets people give any account, from any network, a private name only they see.": "किसी भी नेटवर्क के किसी भी अकाउंट को ऐसा निजी नाम दें जो सिर्फ़ आपको दिखे।",
   "Linked accounts": "जुड़े अकाउंट",
   "All their linked accounts": "इनके सभी जुड़े अकाउंट",
+  "Add a custom name": "कस्टम नाम जोड़ें",
+  "Accounts here": "यहाँ के अकाउंट",
   "Accounts on other networks": "दूसरे नेटवर्क के अकाउंट",
   "Set a custom name from any profile's menu.": "किसी भी प्रोफ़ाइल के मेन्यू से नाम रखें।",
   "Network": "नेटवर्क",

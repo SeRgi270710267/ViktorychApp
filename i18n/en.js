@@ -5517,6 +5517,8 @@ SI18n.addPack("en", {
   "Lets people give any account, from any network, a private name only they see.": "Lets people give any account, from any network, a private name only they see.",
   "Linked accounts": "Linked accounts",
   "All their linked accounts": "All their linked accounts",
+  "Add a custom name": "Add a custom name",
+  "Accounts here": "Accounts here",
   "Accounts on other networks": "Accounts on other networks",
   "Set a custom name from any profile's menu.": "Set a custom name from any profile's menu.",
   "Network": "Network",

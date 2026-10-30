@@ -173,6 +173,37 @@ try {
   await page.waitForSelector('.un-ext[data-nick-key="x:luna_demo"]', { timeout: 15000 });
   await page.evaluate(() => { const r = document.querySelector(".un-ext"); if (r) r.scrollIntoView({ block: "center" }); });
   await shot(page, "4-ajustes-apodos.png");
+  // X-native settings: no raw browser form controls in the nicknames list.
+  const raw = await page.evaluate(() => {
+    const list = document.querySelector(".xn-list");
+    if (!list) return "missing .xn-list";
+    const bad = Array.from(list.querySelectorAll("select, input, textarea")).map((el) => el.outerHTML.slice(0, 80));
+    return bad.join(" | ");
+  });
+  if (raw) fail("raw form controls in Settings nicknames: " + raw);
+  // Tapping the row opens the same Edit name sheet.
+  await page.click('.un-ext[data-nick-key="x:luna_demo"]');
+  await page.waitForSelector(".nick-sheet .nick-reset", { timeout: 5000 });
+  await page.click('.nick-sheet [data-nick="close"]');
+  // "Add a custom name": X radio rows for the network, floating-label fields.
+  await page.click('[data-un="nick-add"]');
+  await page.waitForSelector('.nick-sheet [data-nick="pick"]', { timeout: 5000 });
+  if (await page.$(".nick-sheet select")) fail("the add sheet uses a raw <select>");
+  await page.click('.nick-sheet [data-nick="pick"]');
+  await page.waitForSelector('.nick-sheet [data-nick="net"][data-net="bluesky"]', { timeout: 5000 });
+  await shot(page, "6-anadir-nombre-red.png");
+  await page.click('.nick-sheet [data-nick="net"][data-net="bluesky"]');
+  await page.fill(".nick-sheet [data-nick-acct]", "@nube.example.com");
+  await page.fill(".nick-sheet [data-nick-input]", "Nube Prueba");
+  await shot(page, "7-anadir-nombre-sheet.png");
+  await page.click('.nick-sheet [data-nick="save"]');
+  await page.waitForSelector('.un-ext[data-nick-key="bsky:nube.example.com"]', { timeout: 5000 });
+  for (let i = 0; i < 20 && !ext.has("bsky:nube.example.com"); i++) await page.waitForTimeout(150);
+  if (!ext.has("bsky:nube.example.com")) fail("the added name did not reach the server: " + Array.from(ext.keys()).join(","));
+  await page.click('.un-ext[data-nick-key="bsky:nube.example.com"]');
+  await page.waitForSelector(".nick-sheet .nick-reset", { timeout: 5000 });
+  await page.click(".nick-sheet .nick-reset");
+  await page.waitForFunction(() => !document.querySelector('.un-ext[data-nick-key="bsky:nube.example.com"]'), null, { timeout: 5000 });
 
   // 5. Reset brings the real name back, everywhere, and clears the server.
   await page.goto(base + "/index.html#/@luna_demo", { waitUntil: "domcontentloaded" });
