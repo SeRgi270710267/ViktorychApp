@@ -2476,7 +2476,7 @@ var numberNote = form.passkey
     if (!reg) return [];
     return reg.localKeys({ allOff: !!settings && settings.syncUi === false, lookOwn: deviceOwnUi() });
   }
-  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "notifPrivacy", "accent", "fontSize", "density", "reduceMotion", "peopleLinks", "avatarShape", "haptics", "keyboard", "busyPrefs", "inboxLayout", "friendsRail", "brandLogo"];
+  var EXTRA_PREFS = ["privacyEmbedShield", "privacyWebRTC", "privacyNoReferrer", "privacyStripTrackers", "privacyAntiFingerprint", "translateAuto", "translateNever", "bells", "livePreview", "notifPrivacy", "accent", "fontSize", "density", "reduceMotion", "peopleLinks", "avatarShape", "haptics", "keyboard", "busyPrefs", "inboxLayout", "aiFab", "friendsRail", "brandLogo"];
   function pickPrefs(local, remote) {
     // Home pills and Stories: each key keeps the newer choice.
     var out = {};
@@ -6834,6 +6834,34 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {});
   }
+  /* Local AI: read and write the server-side privacy switches with the same
+     PATCH the Settings toggles use. Resolves true once the server saved it. */
+  var AI_PROFILE_KEYS = { "protected": 1, privateFollows: 1, profileLess: 1, hideAvatar: 1 };
+  function aiSettings() {
+    var session = readSession();
+    if (!session || !session.account) return null;
+    var a = session.account;
+    return { "protected": !!a.protected, privateFollows: !!a.privateFollows, profileLess: !!a.profileLess, hideAvatar: a.hideAvatar === "none" || a.hideAvatar === "default" ? a.hideAvatar : "" };
+  }
+  function aiSetting(key, value) {
+    var session = readSession();
+    if (!session || !hasApi()) return Promise.resolve(false);
+    if (key === "discoverable") {
+      return api("/v1/suggestions/prefs", { method: "PUT", token: session.token, body: { discoverable: !!value } }).then(function (res) { return !!res && res.status === 200; }, function () { return false; });
+    }
+    if (!AI_PROFILE_KEYS[key]) return Promise.resolve(false);
+    var body = {};
+    body[key] = key === "hideAvatar" ? (value === "none" || value === "default" ? value : "") : !!value;
+    return api("/v1/profile", { method: "PATCH", token: session.token, body: body }).then(function (res) {
+      if (!res || res.status !== 200 || !res.account) return false;
+      session.account = res.account;
+      writeSession(session);
+      remember(res.account);
+      if (key === "privateFollows" || key === "profileLess") dirtyLists();
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return true;
+    }, function () { return false; });
+  }
   document.addEventListener("pointerdown", function (event) {
     if (view === "edit" && form.mediaMenu) {
       var inside = event.target && event.target.closest && event.target.closest(".acct-pop, [data-acct='media-menu']");
@@ -7219,6 +7247,8 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
   });
 
   window.ViktorychAccounts = {
+    aiSettings: aiSettings,
+    aiSetting: aiSetting,
     signOut: function () { logout(false); },
     signOutAndWipe: function () {
       if (readSession()) logout(false, true);
