@@ -6899,3 +6899,30 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 @media (max-width: 699px) {
   #owner-health-banner { bottom: calc(env(safe-area-inset-bottom, 0px) + 76px); }
 }
+
+/* External Followers / Following lists: X's three equal tabs with the blue
+   underline, a calm empty state, and the infinite-scroll footer. */
+.ext-graph-tabs { height: 53px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.ext-graph-tabs .tab { flex: 1 0 auto; height: 53px; max-width: none; padding: 0 16px; }
+.ext-graph-tabs .tab.on > span::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -16.5px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--blue);
+}
+.ext-graph-empty { padding: 32px 32px 40px; text-align: left; max-width: 400px; margin: 0 auto; }
+.ext-graph-empty h2 { overflow-wrap: anywhere; }
+.ext-graph-empty p { margin: 0; max-width: none; }
+.ext-graph-empty .retry { margin-top: 20px; display: inline-flex; }
+.ext-graph-count { color: var(--muted); font-size: 15px; line-height: 20px; margin-bottom: 4px; }
+.ext-graph-count b { color: var(--text); font-weight: 700; }
+.ext-graph-more { min-height: 56px; display: flex; align-items: center; justify-content: center; }
+@media (max-width: 500px) {
+  .ext-graph-tabs .tab { padding: 0 10px; font-size: 14px; }
+  .ext-graph-empty { padding: 28px 20px 36px; }
+  .ext-graph-empty h2 { font-size: 27px; line-height: 32px; }
+}

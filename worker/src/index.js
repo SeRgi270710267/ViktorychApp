@@ -17,6 +17,7 @@ import { handleNostr } from "./nostr.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities, visibleIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
+import { handleExtGraph } from "./ext-graph.js";
 import { handleYtRoute } from "./ythls.js";
 import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
 import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
@@ -5423,6 +5424,10 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/unfurl" && request.method === "GET") {
     return handleUnfurl(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
+  }
+  // Who an external account follows: read live, edge-cached briefly, never stored.
+  if (path.startsWith("/v1/ext-graph/") && request.method === "GET") {
+    return handleExtGraph(request, env, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
   }
   if (path.startsWith("/v1/ytm/") && request.method === "GET") {
     return handleYtm(request, env, { fetch: (url, init) => fetch(url, init), cache: caches.default, r2: env.DATA || null, now: () => Date.now(), waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null });
