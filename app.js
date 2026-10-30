@@ -2080,6 +2080,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function statusHash(post) {
+    if (post && post.cmHash) return post.cmHash;
     const platform = post.platform || "x";
     const handle = post.handle || "";
     const id = post.statusId || post.id;
@@ -2732,7 +2733,31 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return foreignScript(sample);
   }
 
+  /* Reddit posts and forum topics carry a title apart from the body (separate
+     source fields): drawn as its own bold line above the text, like a titled
+     post on X. Bodies that repeat the title (older link previews) drop it. */
+  function postTitleOf(post) {
+    if (!post || !post.title || typeof post.title !== "string") return "";
+    if (!(post.cmMirror || post.platform === "reddit" || post.platform === "forum")) return "";
+    return post.title.trim();
+  }
+  function titledBody(post) {
+    const title = postTitleOf(post);
+    if (!title) return post;
+    const text = String(post.text || "");
+    if (text.trim().indexOf(title) !== 0) return post;
+    return Object.assign({}, post, { text: text.trim().slice(title.length).replace(/^\s+/, "") });
+  }
   function textBlock(post, key, full, cls) {
+    const title = postTitleOf(post);
+    if (title) {
+      post = titledBody(post);
+      const head = `<div class="post-title${cls === "status-text" ? " status-title" : cls === "quote-text" ? " quote-title" : ""}" dir="auto">${esc(title)}</div>`;
+      return head + (String(post.text || "").trim() ? textBlockBody(post, key, full, cls) : "");
+    }
+    return textBlockBody(post, key, full, cls);
+  }
+  function textBlockBody(post, key, full, cls) {
     const sample = String(post.text || "").trim().slice(0, 5000);
     if (sample) STATE.translateText[key] = sample;
     STATE.translateLinks = STATE.translateLinks || {};
@@ -3692,7 +3717,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         author: "r/" + (d.subreddit || ""),
         handle: "",
         avatar: "",
-        text: d.title + (d.selftext ? "\n\n" + String(d.selftext).slice(0, 400) : ""),
+        title: String(d.title),
+        text: d.selftext ? String(d.selftext).slice(0, 400) : "",
         date: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : "",
         url: "https://www.reddit.com" + (d.permalink || ""),
         media: media
@@ -6315,7 +6341,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${quotedHandle ? `<span class="handle">@${esc(quotedHandle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
-      ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
+      ${shown.text || postTitleOf(shown) ? textBlock(shown, key, false, "quote-text") : ""}
       ${articleCardHtml(asQuoted)}
       ${mediaHtml(asQuoted.media, false, asQuoted)}
       ${quoted.appPost && quoted.appExtra ? quoted.appExtra : ""}
@@ -9678,7 +9704,7 @@ const here = parseRoute();
     const busyItem = busyKey ? `<button data-act="busy-menu" data-key="${esc(busyKey)}" data-name="${esc(post.author || post.name || "")}" data-handle="${esc(post.handle || "")}" data-platform="${esc(post.platform || "x")}">${tr("Posting volume")}</button>` : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
     const blockItems = STATE.menu === post.id ? blockMenuItems(post, mode) : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>`}</div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: post.cmSource || PLATFORM[post.platform] || tr("Web") })}</a>${post.cmMirror ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : ""}`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -9689,7 +9715,10 @@ const here = parseRoute();
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
     const displayHandle = internalPostHandle(creator ? (post.handle || creator.handle || "") : (post.handle || ""), post, creator);
-    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
+    // Community mirror authors have no profile here: their links open the community.
+    const whoHref = post.cmMirror ? "#/communities/" + encodeURIComponent(post.community.name) : accountHash(post.platform, who);
+    const whoCard = post.cmMirror ? "" : ` data-card="${esc(post.platform + ":" + who)}"`;
+    const avaLink = `<a href="${esc(whoHref)}"${whoCard} aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
@@ -9697,7 +9726,7 @@ const here = parseRoute();
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     const community = post.community && post.community.name && !opts.parentShown
-      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(communityName(post.community.name))}</a></div>`
+      ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(post.community.name)}/${encodeURIComponent(post.community.rootId || post.id)}">${esc(post.community.label || communityName(post.community.name))}</a></div>`
       : (redditSub(post) && !opts.parentShown
         ? `<div class="repost-line community-line">${icon("communities")}<a data-act="stop" href="#/communities/${encodeURIComponent(redditSub(post))}">${esc("r/" + redditSub(post))}</a></div>`
         : "");
@@ -9710,8 +9739,8 @@ const here = parseRoute();
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
-            ${displayHandle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(displayHandle)}</a>` : ""}
+            <a class="name" href="${esc(whoHref)}"${whoCard}>${esc(displayName)}${badge(face.verified)}</a>${affSlot(post)}
+            ${displayHandle ? `<a class="handle" href="${esc(whoHref)}"${whoCard}>@${esc(displayHandle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${post.edited ? `<span class="edited">${tr("Edited")}</span>` : ""}
@@ -9721,7 +9750,7 @@ const here = parseRoute();
           </div>
           ${reply}
           ${discordMeta(post)}
-          ${shown.text ? textBlock(shown, post.id, false) : ""}
+          ${shown.text || postTitleOf(shown) ? textBlock(shown, post.id, false) : ""}
           ${articleCardHtml(post)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
@@ -11082,9 +11111,288 @@ const here = parseRoute();
     const api = busyApi();
     return api ? api.keyOf(post) : String((post && post.feedId) || "");
   }
+  /* Communities on For you. Mirrored communities (Reddit, Discourse forums) and
+     the NZlay forum are read by the Communities page only, so their posts never
+     reached Home. For you now mixes in recent posts from the communities the
+     reader joined (the owner reads all), at most one in four, each under X's
+     community line. Docs load lazily, a few per pass, and are kept on the
+     device for a while so Home doesn't add Worker reads on every visit. */
+  const CMFY_KEY = "foryou-communities-v1";
+  const CMFY_DOC_TTL = 15 * 60 * 1000;
+  const CMFY_NZLAY_TTL = 10 * 60 * 1000;
+  const CMFY_INDEX_TTL = 30 * 60 * 1000;
+  const CMFY_MAX_AGE = 14 * 86400000;
+  const CMFY_PER = 8;
+  const CMFY_BATCH = 3;
+  const CMFY_GAP = 3;
+  let cmFy = null;
+  function cmFyState() {
+    if (cmFy) return cmFy;
+    let saved = null;
+    try { saved = JSON.parse(readStored(localStorage, CMFY_KEY) || "null"); } catch (err) { saved = null; }
+    saved = saved && typeof saved === "object" ? saved : {};
+    cmFy = {
+      index: Array.isArray(saved.index) ? saved.index : [],
+      indexAt: Number(saved.indexAt) || 0,
+      docs: saved.docs && typeof saved.docs === "object" ? saved.docs : {},
+      prefs: saved.prefs && typeof saved.prefs === "object" ? saved.prefs : null,
+      hidden: Array.isArray(saved.hidden) ? saved.hidden : [],
+      mutedAt: saved.mutedAt && typeof saved.mutedAt === "object" ? saved.mutedAt : {},
+      busy: false,
+      nextAt: 0,
+      cards: null
+    };
+    return cmFy;
+  }
+  function cmFySave() {
+    const st = cmFyState();
+    st.cards = null;
+    try {
+      writeStored(localStorage, CMFY_KEY, JSON.stringify({ index: st.index, indexAt: st.indexAt, docs: st.docs, prefs: st.prefs, hidden: st.hidden.slice(-200), mutedAt: st.mutedAt }));
+    } catch (err) { /* storage full: the next pass refetches */ }
+  }
+  function cmFyPrefs(prefs) {
+    if (!prefs || typeof prefs !== "object") return;
+    const st = cmFyState();
+    const next = { joined: (prefs.joined || []).map(String), hidden: (prefs.hidden || []).map(String), all: !!prefs.all };
+    if (JSON.stringify(next) === JSON.stringify(st.prefs)) return;
+    st.prefs = next;
+    cmFySave();
+  }
+  // A mute holds on this device until the server's own list has caught up.
+  // The Communities page reads the joined list from here too.
+  window.ViktorychCommunityPrefs = () => (cmFyState().prefs ? { joined: cmFyState().prefs.joined.slice(), hidden: cmFyState().prefs.hidden.slice(), all: !!cmFyState().prefs.all } : null);
+  function cmFyMute(name) {
+    const st = cmFyState();
+    st.mutedAt[name] = Date.now();
+    cmFySave();
+  }
+  function cmFyHideId(id) {
+    const st = cmFyState();
+    if (st.hidden.indexOf(id) < 0) st.hidden.push(id);
+    cmFySave();
+  }
+  function cmFyNzlayOn() {
+    if (serverOffList().indexOf("nzlay_forum") >= 0) return false;
+    const api = window.ViktorychNzlayForum;
+    return !!(api && (!api.enabled || api.enabled()));
+  }
+  function cmFyNzlayTitle() {
+    const api = window.ViktorychNzlayForum;
+    return String((api && api.row && api.row.title) || "nzlay");
+  }
+  function cmFyKind(row) {
+    const type = String((row && (row.type || row.source)) || "");
+    if (type === "nzlay") return "nzlay";
+    if (type === "discourse" || type === "flarum" || type === "forum") return "forum";
+    return "reddit";
+  }
+  /* Which communities feed For you: the joined ones (all for the owner), minus
+     the ones hidden from Home or muted. Before joining anything a reader gets
+     the first few hub communities, as the Communities Home tab does. */
+  function cmFyCommunities() {
+    const st = cmFyState();
+    const prefs = st.prefs || { joined: [], hidden: [], all: false };
+    const hidden = new Set(prefs.hidden || []);
+    Object.keys(st.mutedAt).forEach((name) => {
+      if (Date.now() - (Number(st.mutedAt[name]) || 0) < 10 * 60 * 1000) hidden.add(name);
+      else delete st.mutedAt[name];
+    });
+    const rows = st.index.slice();
+    if (cmFyNzlayOn() && !rows.some((row) => row.name === "nzlay")) rows.unshift({ name: "nzlay", title: cmFyNzlayTitle(), type: "nzlay" });
+    const byName = {};
+    rows.forEach((row) => { if (row && row.name) byName[row.name] = row; });
+    let names;
+    if (prefs.all) names = rows.map((row) => row.name);
+    else {
+      names = (prefs.joined || []).filter((name) => byName[name]);
+      if (!names.length) names = rows.slice(0, 3).map((row) => row.name);
+    }
+    return names.filter((name, i) => name && names.indexOf(name) === i && !hidden.has(name) && !(name === "nzlay" && !cmFyNzlayOn())).map((name) => byName[name]);
+  }
+  function cmFyClean(raw) {
+    return String(raw || "")
+      .replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "")
+      .replace(/&#32;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+      .replace(/\[link\]|\[comments\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function cmFyMedia(list) {
+    return (Array.isArray(list) ? list : []).filter((m) => m && /^https:\/\//.test(String(m.url || ""))).slice(0, 4).map((m) => {
+      const item = { type: m.type === "video" ? "video" : "photo", url: String(m.url) };
+      if (m.poster && /^https:\/\//.test(String(m.poster))) item.poster = String(m.poster);
+      if (Number(m.width) > 0 && Number(m.height) > 0) { item.width = Number(m.width); item.height = Number(m.height); }
+      if (m.alt) item.alt = String(m.alt).slice(0, 300);
+      return item;
+    });
+  }
+  function cmFySlimMirror(doc) {
+    const now = Date.now();
+    return (Array.isArray(doc && doc.posts) ? doc.posts : []).map((p) => {
+      const at = (Number(p && p.created) || 0) * 1000;
+      if (!p || !p.id || !at || now - at > CMFY_MAX_AGE) return null;
+      return {
+        id: String(p.id), title: String(p.title || "").trim().slice(0, 300), text: cmFyClean(p.text).slice(0, 1500),
+        author: String(p.author || "").replace(/https?:\/\/\S*/g, "").replace(/^\/?u\//i, "").trim().slice(0, 60),
+        at: at, score: Number(p.score) || 0, comments: Number(p.comments) || 0, url: /^https:\/\//.test(String(p.url || "")) ? String(p.url) : "",
+        media: cmFyMedia(p.media)
+      };
+    }).filter(Boolean).sort((a, b) => b.at - a.at).slice(0, CMFY_PER);
+  }
+  function cmFySlimNzlay(feed) {
+    const now = Date.now();
+    return (Array.isArray(feed && feed.topics) ? feed.topics : []).map((t) => {
+      const starter = (t && t.starter) || {};
+      const at = Date.parse(starter.at || t.lastAt || "") || 0;
+      if (!t || !t.id || !at || now - at > CMFY_MAX_AGE) return null;
+      const author = starter.author || {};
+      return {
+        id: String(t.id), title: String(t.title || "").trim().slice(0, 300), text: String(starter.text || "").trim().slice(0, 1500),
+        author: String(author.name || "").slice(0, 60), avatar: /^https:\/\//.test(String(author.avatar || "")) ? String(author.avatar) : "",
+        at: at, score: 0, comments: Number(t.replies) || 0, views: Number(t.views) || 0, url: /^https:\/\//.test(String(t.url || "")) ? String(t.url) : "",
+        media: cmFyMedia(starter.media)
+      };
+    }).filter(Boolean).sort((a, b) => b.at - a.at).slice(0, CMFY_PER);
+  }
+  function cmFyFetchJson(url) {
+    return fetch(url, { cache: "no-cache" }).then((res) => (res && res.ok ? res.json() : null)).catch(() => null);
+  }
+  function cmFyLoadOne(row) {
+    const st = cmFyState();
+    const kind = cmFyKind(row);
+    if (kind === "nzlay") {
+      const api = window.ViktorychNzlayForum;
+      const cached = api && api._state && api._state.feed && Date.now() - (Number(api._state.feedAt) || 0) < CMFY_NZLAY_TTL ? api._state.feed : null;
+      const have = cached && Array.isArray(cached.topics) && cached.topics.length ? Promise.resolve(cached) : accountCall("/v1/nzlay/forum");
+      return have.then((feed) => {
+        if (!feed || !Array.isArray(feed.topics)) { st.docs.nzlay = Object.assign({}, st.docs.nzlay || { posts: [] }, { at: Date.now() }); return; }
+        st.docs.nzlay = { at: Date.now(), kind: "nzlay", title: cmFyNzlayTitle(), posts: cmFySlimNzlay(feed) };
+      }).catch(() => {});
+    }
+    return cmFyFetchJson("data/communities/" + encodeURIComponent(row.name) + ".json").then((doc) => {
+      const prev = st.docs[row.name];
+      if (!doc) { st.docs[row.name] = Object.assign({}, prev || { posts: [] }, { at: Date.now() }); return; }
+      st.docs[row.name] = { at: Date.now(), kind: kind === "reddit" && (doc.type === "discourse" || doc.source === "discourse" || doc.source === "flarum") ? "forum" : kind, title: String(doc.title || row.title || row.name).slice(0, 80), posts: cmFySlimMirror(doc) };
+    });
+  }
+  /* One lazy pass: refresh the index when stale, then up to CMFY_BATCH stale
+     community docs. Re-renders For you once when anything changed. */
+  function cmFyPump() {
+    const st = cmFyState();
+    const now = Date.now();
+    if (st.busy || now < st.nextAt) return;
+    if (gameBusy() || document.documentElement.getAttribute("data-wall") === "1" || !accountToken()) return;
+    if (STATE.settings && STATE.settings.communitiesHome === false) return;
+    st.busy = true;
+    const indexStep = now - st.indexAt > CMFY_INDEX_TTL
+      ? cmFyFetchJson("data/communities/index.json").then((doc) => {
+          st.indexAt = Date.now();
+          const rows = doc && Array.isArray(doc.communities) ? doc.communities : null;
+          if (rows) st.index = rows.filter((row) => row && row.name).slice(0, 60).map((row) => ({ name: String(row.name), title: String(row.title || row.name).slice(0, 80), type: String(row.type || row.source || ""), icon: /^https:\/\//.test(String(row.icon || "")) ? String(row.icon) : "" }));
+        })
+      : Promise.resolve();
+    indexStep.then(() => {
+      const stale = cmFyCommunities().filter((row) => {
+        const doc = st.docs[row.name];
+        return !doc || Date.now() - (Number(doc.at) || 0) > (row.name === "nzlay" ? CMFY_NZLAY_TTL : CMFY_DOC_TTL);
+      });
+      const batch = stale.slice(0, CMFY_BATCH);
+      return Promise.all(batch.map(cmFyLoadOne)).then(() => stale.length > batch.length);
+    }).then((more) => {
+      st.busy = false;
+      st.nextAt = Date.now() + (more ? 4000 : 60000);
+      cmFySave();
+      const route = parseRoute();
+      if (route.name === "home" && (route.tab || "foryou") === "foryou") render();
+    }).catch(() => {
+      st.busy = false;
+      st.nextAt = Date.now() + 60000;
+    });
+  }
+  function cmFyCard(row, doc, p) {
+    const name = row.name;
+    const id = "cm:" + name + ":" + p.id;
+    const kind = doc.kind || cmFyKind(row);
+    const label = kind === "reddit" ? "r/" + name : String(doc.title || row.title || name);
+    const sourceUrl = p.url || (kind === "reddit" ? "https://www.reddit.com/r/" + encodeURIComponent(name) + "/comments/" + encodeURIComponent(String(p.id).replace(/^t3_/, "")) : "");
+    const author = p.author || (kind === "reddit" ? "reddit" : label);
+    return {
+      id: id,
+      statusId: id,
+      kind: "post",
+      platform: kind === "reddit" ? "reddit" : "forum",
+      handle: /\s/.test(author) ? "" : author,
+      author: author,
+      avatar: p.avatar || "",
+      date: new Date(p.at).toISOString(),
+      title: p.title,
+      text: p.text,
+      links: [],
+      media: p.media || [],
+      url: sourceUrl,
+      score: kind === "reddit" ? (p.score || 0) : undefined,
+      stats: { replies: p.comments || 0, likes: kind === "reddit" ? 0 : Math.max(0, p.score || 0), views: p.views || 0 },
+      community: { name: name, rootId: p.id, label: label },
+      cmMirror: true,
+      cmHash: "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(p.id),
+      cmSource: kind === "reddit" ? "Reddit" : label,
+      cmScore: 0
+    };
+  }
+  function cmFyCards() {
+    const st = cmFyState();
+    if (st.cards) return st.cards;
+    const now = Date.now();
+    const joined = new Set((st.prefs && st.prefs.joined) || []);
+    const hiddenIds = new Set(st.hidden);
+    const out = [];
+    cmFyCommunities().forEach((row) => {
+      const doc = st.docs[row.name];
+      if (!doc || !Array.isArray(doc.posts)) return;
+      doc.posts.forEach((p) => {
+        const card = cmFyCard(row, doc, p);
+        if (hiddenIds.has(card.id)) return;
+        const ageH = Math.max(0, now - p.at) / 3600000;
+        const engagement = Math.log10(2 + Math.max(0, p.score || 0) + 2 * (p.comments || 0) + (p.views || 0) / 50);
+        card.cmScore = engagement / Math.pow(ageH + 2, 0.8) * (joined.has(row.name) ? 1.5 : 1);
+        STATE.shared[card.id] = card;
+        out.push(card);
+      });
+    });
+    out.sort((a, b) => b.cmScore - a.cmScore);
+    st.cards = out;
+    return out;
+  }
+  /* At most one community post in every four: CMFY_GAP Home posts between them. */
+  function cmFyMix(list) {
+    if (!Array.isArray(list)) return list;
+    if (STATE.settings && STATE.settings.communitiesHome === false) return list;
+    cmFyPump();
+    const extra = cmFyCards().filter((post) => !hiddenPost(post));
+    if (!extra.length) return list;
+    const out = [];
+    let since = 0;
+    let next = 0;
+    for (let i = 0; i < list.length; i++) {
+      out.push(list[i]);
+      since++;
+      if (since >= CMFY_GAP && next < extra.length) {
+        out.push(extra[next++]);
+        since = 0;
+      }
+    }
+    // A short Home still gets its share, keeping the one-in-four cap.
+    while (next < extra.length && since >= CMFY_GAP) { out.push(extra[next++]); since = 0; }
+    return out;
+  }
+
   /* The Home list with every account's choice applied and spread out so no
      single account fills a screen. Folded posts are never handed to card(). */
   function homeShaped(route) {
+    const tab = route.tab || "foryou";
+    const shaped = homeShapedBase(route);
+    return tab === "foryou" && tabView(tab) !== "reposts" ? cmFyMix(shaped) : shaped;
+  }
+  function homeShapedBase(route) {
     const tab = route.tab || "foryou";
     const sorted = tabView(tab) === "reposts" ? homeSorted(route) : mergeAppPosts(homeSorted(route), appHomePosts(tab).concat(deviceFollowPosts(tab)));
     const api = busyApi();
@@ -11258,6 +11566,7 @@ const here = parseRoute();
     accountCall("/v1/posts").then((res) => {
       if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
       if (typeof res.communitiesHome === "boolean") STATE.settings.communitiesHome = res.communitiesHome;
+      if (res.communityPrefs) cmFyPrefs(res.communityPrefs);
       const merged = keepOwnPosts(res.posts);
       if (samePublicPosts(merged)) return;
       publicPosts = merged;
@@ -21175,6 +21484,9 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "mute-community") {
       const name = el.dataset.name || "";
+      cmFyMute(name);
+      STATE.menu = null;
+      render();
       accountCall("/v1/communities/" + encodeURIComponent(name) + "/feed", { method: "POST", body: { muted: true } }).then(() => {
         publicPosts = publicPosts.filter((item) => !(item.community && item.community.name === name));
         toast(tr("Mute community"));
@@ -21284,6 +21596,7 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     }
     if (act === "foryou-hide" || act === "foryou-less") {
       const post = findAnyPost(el.dataset.id);
+      if (post && post.cmMirror && act === "foryou-hide") cmFyHideId(String(post.id));
       const memory = forYouMemory();
       if (post && memory && window.ForYou) {
         window.ForYou.note(memory, post, act === "foryou-hide" ? "hide" : "less");
@@ -29137,6 +29450,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.ViktorychCommunities.writeTabs = function (bag) {
       if (!STATE.settings) return;
       STATE.settings.communityTabs = bag;
+      saveSettings();
+    };
+    window.ViktorychCommunities.readFolders = function () { return STATE.settings ? STATE.settings.communityFolders : null; };
+    window.ViktorychCommunities.writeFolders = function (bag) {
+      if (!STATE.settings) return;
+      STATE.settings.communityFolders = bag;
       saveSettings();
     };
     window.ViktorychCommunities.profileInfo = function (id) {
