@@ -75,7 +75,7 @@ test("points ledger, caps, clawback, and gift privacy", async () => {
   const dee = await signup("user_d", "203.0.113.84");
 
   const start = await call("/v1/points", { ip: "203.0.113.85", token: ada.token });
-  assert.equal(start.body.balance, 25);
+  assert.equal(start.body.balance, 0, "signing up pays nothing");
   assert.equal(JSON.stringify(start.body.history).includes(bea.account.handle), false);
 
   const bought = await call("/v1/points/touch", {
@@ -84,56 +84,50 @@ test("points ledger, caps, clawback, and gift privacy", async () => {
     token: ada.token,
     body: { action: "login", points: 99999 }
   });
-  assert.equal(bought.body.awarded, 5);
-  const again = await call("/v1/points/touch", {
-    method: "POST",
-    ip: "203.0.113.87",
-    token: ada.token,
-    body: { action: "login", points: 99999 }
-  });
-  assert.equal(again.body.awarded, 0);
+  assert.equal(bought.body.awarded, 0, "a plain daily login pays nothing");
+  assert.equal(bought.body.streak, 1);
 
+  /* Earning needs an account that is a few days old. */
+  await bindings.DB.prepare("UPDATE accounts SET created_at = ?").bind(Date.now() - 30 * 86400000).run();
   const day = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   await bindings.DB.prepare(
-    "INSERT INTO point_streaks (public_id, kind, last_day, streak) VALUES (?, 'login', ?, 3) ON CONFLICT(public_id, kind) DO UPDATE SET last_day = excluded.last_day, streak = excluded.streak"
+    "INSERT INTO point_streaks (public_id, kind, last_day, streak) VALUES (?, 'login', ?, 6) ON CONFLICT(public_id, kind) DO UPDATE SET last_day = excluded.last_day, streak = excluded.streak"
   ).bind(bea.account.publicId, day).run();
   const streak = await call("/v1/points/touch", { method: "POST", ip: "203.0.113.88", token: bea.token, body: { action: "login" } });
-  assert.equal(streak.body.awarded, 8);
+  assert.equal(streak.body.streak, 7);
+  assert.equal(streak.body.awarded, 10, "a 7-day streak pays once");
+  const again = await call("/v1/points/touch", { method: "POST", ip: "203.0.113.87", token: bea.token, body: { action: "login" } });
+  assert.equal(again.body.awarded, 0);
 
-  let firstId = "";
   let lastId = "";
   for (let i = 0; i < 6; i++) {
     const posted = await call("/v1/posts", { method: "POST", ip: "203.0.113." + (110 + i), token: ada.token, body: { body: "note " + i } });
     assert.equal(posted.status, 201, JSON.stringify(posted.body));
-    if (!firstId) firstId = posted.body.post.id;
     lastId = posted.body.post.id;
   }
-  const capped = await call("/v1/points", { ip: "203.0.113.90", token: ada.token });
-  assert.equal(capped.body.balance, 25 + 5 + 8 * 5);
+  const quiet = await call("/v1/points", { ip: "203.0.113.90", token: ada.token });
+  assert.equal(quiet.body.history.some((row) => row.reason !== "badge"), false, "posting alone pays nothing");
 
-  const reply = await call("/v1/posts", {
-    method: "POST",
-    ip: "203.0.113.91",
-    token: ada.token,
-    body: { body: "own reply", parentId: lastId }
-  });
-  assert.equal(reply.status, 201);
-  const afterOwn = await call("/v1/points", { ip: "203.0.113.92", token: ada.token });
-  assert.equal(afterOwn.body.balance, capped.body.balance + 3);
+  const own = await call("/v1/posts", { method: "POST", ip: "203.0.113.91", token: ada.token, body: { body: "own reply", parentId: lastId } });
+  assert.equal(own.status, 201);
+  const repliers = [[bea, "203.0.113.93"], [cam, "203.0.113.94"]];
+  for (const [who, ip] of repliers) {
+    const replied = await call("/v1/posts", { method: "POST", ip, token: who.token, body: { body: "a reply", parentId: lastId } });
+    assert.equal(replied.status, 201);
+  }
+  const twice = await call("/v1/posts", { method: "POST", ip: "203.0.113.95", token: bea.token, body: { body: "again", parentId: lastId } });
+  assert.equal(twice.status, 201);
+  const two = await call("/v1/points", { ip: "203.0.113.96", token: ada.token });
+  assert.equal(two.body.history.some((row) => row.reason !== "badge"), false, "own replies and repeat repliers do not count");
+  const third = await call("/v1/posts", { method: "POST", ip: "203.0.113.97", token: dee.token, body: { body: "me too", parentId: lastId } });
+  assert.equal(third.status, 201);
+  const quality = await call("/v1/points", { ip: "203.0.113.98", token: ada.token });
+  assert.equal(quality.body.history.some((row) => row.reason === "quality_post" && row.delta === 15), true, "three distinct people make a quality post");
 
-  const other = await call("/v1/posts", {
-    method: "POST",
-    ip: "203.0.113.93",
-    token: bea.token,
-    body: { body: "a reply", parentId: lastId }
-  });
-  assert.equal(other.status, 201);
-  const received = await call("/v1/points", { ip: "203.0.113.94", token: ada.token });
-  assert.equal(received.body.balance, afterOwn.body.balance + 2);
-
-  await clawback(bindings, ada.account.publicId, "post", firstId);
-  const clawed = await call("/v1/points", { ip: "203.0.113.95", token: ada.token });
-  assert.equal(clawed.body.balance, received.body.balance - 8);
+  await clawback(bindings, ada.account.publicId, "post", lastId);
+  const clawed = await call("/v1/points", { ip: "203.0.113.99", token: ada.token });
+  assert.equal(clawed.body.balance, quality.body.balance - 15);
+  await bindings.DB.prepare("UPDATE point_balances SET balance = 67 WHERE public_id = ?").bind(ada.account.publicId).run();
 
   const closed = await call("/v1/gifts/prefs", { method: "PUT", ip: "203.0.113.96", token: bea.token, body: { who: "followers", hideTab: false } });
   assert.equal(closed.status, 200);
@@ -301,6 +295,7 @@ test("gift sending honors a private audience list", async () => {
   const ada = await signup("user_e", "203.0.113.130");
   const bea = await signup("user_f", "203.0.113.131");
   const cam = await signup("user_g", "203.0.113.132");
+  await bindings.DB.prepare("INSERT INTO point_balances (public_id, balance, updated_at) VALUES (?, 50, ?)").bind(bea.account.publicId, Date.now()).run();
   await call("/v1/follows", { method: "PUT", ip: "203.0.113.133", token: bea.token, body: { id: "app:" + ada.account.publicId } });
   await call("/v1/follows", { method: "PUT", ip: "203.0.113.134", token: cam.token, body: { id: "app:" + ada.account.publicId } });
   const list = await call("/v1/audience-lists", {

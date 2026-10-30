@@ -1,5 +1,7 @@
 # Third-party art
 
+The full per-asset audit, with a verdict on what may be sold, is in `docs/GIFTS-LICENSES.md`.
+
 ## Gift art (Gifts page, `shared/gift-catalog.js`)
 
 Most gifts use original illustrations made for this project in

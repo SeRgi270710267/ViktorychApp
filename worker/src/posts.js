@@ -6,6 +6,7 @@
 import { resolveName, viewerHandle } from "./usernames.js";
 import { viewerDisplay } from "./name-rules.js";
 import { awardActivity, clawback, giftForPost } from "./points.js";
+import { keepOwnedStickers } from "./store.js";
 import { canSeeAudience, setListGrants } from "./audience.js";
 import { addCommunityPost, communityHomeRows } from "./communities.js";
 import { attachParents } from "./reply-context.js";
@@ -597,7 +598,8 @@ async function createPost(request, env, deps) {
   const input = await readPostInput(request, deps);
   if (input.error) return deps.json(input.status || 400, { error: input.error });
   const poll = cleanPoll(input.fields.poll);
-  const body = cleanBody(input.fields.body);
+  /* Sticker tokens stay only for packs the author owns (bought, gifted or free). */
+  const body = cleanBody(await keepOwnedStickers(env, session.public_id, input.fields.body));
   const files = Array.isArray(input.files) ? input.files : (input.file ? [input.file] : []);
   if (!body && !files.length && !poll) return deps.json(400, { error: "bad_post" });
   if (poll && files.length) return deps.json(400, { error: "bad_post" });
