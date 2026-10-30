@@ -1831,6 +1831,18 @@ def main() -> None:
             except Exception as exc:
                 print(f"[video] status: {exc}", file=sys.stderr)
 
+    if not args.fixtures:
+        # Owner source lists go to private R2 only, never into feeds.json.
+        try:
+            from source_lists import run_lists
+
+            if over_deadline():
+                print("[lists] skipped; refresh budget spent", file=sys.stderr)
+            else:
+                print("[lists] " + json.dumps(run_lists(config)))
+        except Exception as exc:
+            print(f"[lists] {type(exc).__name__}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     try:
