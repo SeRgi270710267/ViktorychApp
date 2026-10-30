@@ -7,6 +7,7 @@
   <meta name="format-detection" content="telephone=no">
   <script src="shared/ios.js"></script>
   <script src="shared/tv-boot.js"></script>
+  <script src="shared/short-link.js"></script>
   <script>
     (function () {
       try {
@@ -169,6 +170,15 @@
       try {
         installed = navigator.standalone === true || (window.matchMedia && (window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches));
       } catch (err2) { installed = false; }
+      // Installed desktop chrome before first paint (desktop-app.js keeps it in sync).
+      try {
+        var rootEl = document.documentElement;
+        var wco = navigator.windowControlsOverlay;
+        if (installed || (window.matchMedia && window.matchMedia("(display-mode: minimal-ui)").matches)) rootEl.classList.add("vk-installed");
+        if ((wco && wco.visible === true) || (window.matchMedia && window.matchMedia("(display-mode: window-controls-overlay)").matches)) rootEl.classList.add("vk-wco");
+        var desk = JSON.parse(localStorage.getItem("viktorych-desktop-v1") || "{}");
+        if (desk && desk.showScrollbar === true) rootEl.classList.add("vk-show-scrollbar");
+      } catch (err3) { /* old browser */ }
       if (cfg.gate === true && !signed && !installed) {
         document.documentElement.setAttribute("data-wall", "1");
         var theme = document.documentElement.getAttribute("data-theme");
@@ -194,6 +204,31 @@
           return saved && saved.token ? String(saved.token) : "";
         } catch (err) { return ""; }
       }
+      function bytes(text) {
+        var raw = atob(String(text || ""));
+        var out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+      }
+      /* The sealed copy on Pages first (accounts.js keeps today's key);
+         anything missing, old, or unreadable goes to the API as before. */
+      function sealedCatalog(key, auth) {
+        var subtle = window.crypto && window.crypto.subtle;
+        var st = null;
+        try { st = JSON.parse(localStorage.getItem("viktorychapp-seal-v1") || "null"); } catch (err) { st = null; }
+        if (!subtle || !st || !st.keys || st.use === false || st.tail !== auth.slice(-12) || cfg.sealed === false || typeof TextEncoder !== "function") return Promise.resolve(null);
+        var maxAge = (Number(cfg.sealMaxAgeMin) || 75) * 60000;
+        return fetch("sealed/" + key, { credentials: "omit" }).then(function (res) {
+          return res && res.ok ? res.json() : null;
+        }).then(function (doc) {
+          if (!doc || doc.v !== 1 || !st.keys[doc.day] || !(Date.now() - Date.parse(doc.at) < maxAge)) return null;
+          return subtle.importKey("raw", bytes(st.keys[doc.day]), { name: "AES-GCM" }, false, ["decrypt"]).then(function (k) {
+            return subtle.decrypt({ name: "AES-GCM", iv: bytes(doc.iv), additionalData: new TextEncoder().encode(key) }, k, bytes(doc.ct));
+          }).then(function (plain) {
+            return new Response(new TextDecoder().decode(plain), { status: 200, headers: { "Content-Type": "application/json", "X-Sealed": "pages" } });
+          });
+        }).catch(function () { return null; });
+      }
       function loadCatalog(key) {
         var api = String(cfg.api || "").replace(/\/$/, "");
         var gated = !!(cfg.gate && api);
@@ -201,10 +236,14 @@
         var headers = { "X-Feed-Refresh": "1" };
         var auth = gated ? sessionToken() : "";
         if (auth) headers.Authorization = "Bearer " + auth;
-        return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
-          if (!res || !res.ok) return emptyBody(key);
-          return res;
-        }).catch(function () { return emptyBody(key); });
+        function fromApi() {
+          return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
+            if (!res || !res.ok) return emptyBody(key);
+            return res;
+          }).catch(function () { return emptyBody(key); });
+        }
+        if (!auth) return fromApi();
+        return sealedCatalog(key, auth).then(function (res) { return res || fromApi(); });
       }
       var boot = window.__homeFreshBoot || {};
       if (boot.feeds) return;
@@ -214,6 +253,7 @@
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="customize.css">
   <script>
     (function () {
       try {
@@ -337,6 +377,11 @@
         document.documentElement.setAttribute("data-nav-layout", navLayout);
         if (navLayout === "bar" && savedNav.navLayoutLand === true) document.documentElement.setAttribute("data-nav-bar-land", "1");
         else document.documentElement.removeAttribute("data-nav-bar-land");
+        var accents = { yellow: "#ffd400", pink: "#f91880", purple: "#7856ff", orange: "#ff7a00", green: "#00ba7c" };
+        if (accents[savedNav.accent]) document.documentElement.style.setProperty("--blue", accents[savedNav.accent]);
+        if ([14, 16, 17, 18].indexOf(Number(savedNav.fontSize)) >= 0) document.documentElement.setAttribute("data-fs", String(savedNav.fontSize));
+        if (savedNav.density === "compact" || savedNav.density === "comfy") document.documentElement.setAttribute("data-density", savedNav.density);
+        if (savedNav.reduceMotion === true) document.documentElement.setAttribute("data-motion", "reduce");
         var metas = document.querySelectorAll('meta[name="theme-color"]');
         for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", themes.color(mode));
         var scheme = document.querySelector('meta[name="color-scheme"]');
@@ -528,6 +573,18 @@
         if (snap && paintPosts(snap.posts)) return;
       } catch (err) { /* a broken saved copy must not stop the shell */ }
     })();
+    /* On a slow device the restored screen can be scrolled and tapped before
+       app.js runs. Remember how far down it was, so going back from the page
+       that was tapped lands on the same spot. app.js takes over at start. */
+    (function () {
+      var hash = location.hash || "#/";
+      var seen = window.__earlyScroll = { hash: hash, y: 0 };
+      function note() {
+        if (window.__earlyScroll !== seen) { window.removeEventListener("scroll", note); return; }
+        if ((location.hash || "#/") === hash) seen.y = window.scrollY || 0;
+      }
+      window.addEventListener("scroll", note, { passive: true });
+    })();
   </script>
   <div id="account-layer"></div>
   <script>
@@ -570,14 +627,19 @@
     <link rel="stylesheet" href="translate.css">
     <link rel="stylesheet" href="live-translate.css">
     <link rel="stylesheet" href="people.css">
+    <link rel="stylesheet" href="pymk.css">
     <link rel="stylesheet" href="tv.css">
     <link rel="stylesheet" href="discord-ui.css">
+    <link rel="stylesheet" href="discord-local.css">
+    <link rel="stylesheet" href="discord-key-helper.css">
     <link rel="stylesheet" href="spaces.css">
     <link rel="stylesheet" href="stories.css">
     <link rel="stylesheet" href="music.css">
     <link rel="stylesheet" href="accounts.css">
     <link rel="stylesheet" href="gifts.css">
     <link rel="stylesheet" href="badges.css">
+    <link rel="stylesheet" href="game-social.css">
+    <link rel="stylesheet" href="setting-alerts.css">
     <link rel="stylesheet" href="storage.css">
     <link rel="stylesheet" href="yt-player.css">
     <link rel="stylesheet" href="scores.css">
@@ -596,13 +658,16 @@
     <script src="shared/for-you.js" type="module"></script>
     <script src="shared/home-fresh.js" defer></script>
     <script src="people.js" defer></script>
+    <script src="pymk.js" defer></script>
     <script src="tv.js" defer></script>
     <script src="split.js" defer></script>
     <script src="discord-ui.js" defer></script>
     <script src="discord-picks.js" defer></script>
   </template>
   <script src="shared/mirror.js" defer></script>
+  <script src="shared/x-range.js" defer></script>
   <script src="dock.js" defer></script>
+  <script src="desktop-app.js" defer></script>
   <script src="video-embed.js" defer></script>
   <template id="late-scripts-rest">
     <script src="shared/pill-data.js" type="module"></script>
@@ -613,6 +678,7 @@
     <script src="highlights.js" defer></script>
     <script src="audience-ui.js" defer></script>
     <script src="usernames-ui.js" defer></script>
+    <script src="ytm.js" defer></script>
     <script src="music.js" defer></script>
     <script src="shared/handle-skeleton.js" type="module"></script>
     <script src="shared/reposts.js" type="module"></script>
@@ -624,15 +690,22 @@
     <script src="gifts-ui.js" defer></script>
     <script src="shared/gift-catalog.js" type="module"></script>
     <script src="badges.js" defer></script>
+    <script src="shared/regone.js" type="module"></script>
+    <script src="game-social.js" defer></script>
+    <script src="shared/local-budget.js" defer></script>
+    <script src="setting-alerts.js" defer></script>
     <script src="data-saver.js" defer></script>
     <script src="reactions.js" defer></script>
     <script src="settings-sync.js" defer></script>
+    <script src="notif-privacy.js" defer></script>
     <script src="pulse.js" defer></script>
     <script src="accounts.js" defer></script>
     <script src="mention-suggest.js" defer></script>
     <script src="settings-assistant.js" defer></script>
     <script src="nostr.js" defer></script>
     <script src="owner-keys.js" defer></script>
+    <script src="discord-local.js" defer></script>
+    <script src="discord-key-helper.js" defer></script>
     <script src="yt-player.js" defer></script>
     <script src="update.js" defer></script>
     <script src="storage.js" defer></script>

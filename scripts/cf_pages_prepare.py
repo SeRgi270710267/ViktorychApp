@@ -32,6 +32,7 @@ PROTECTED = {
     "robots.txt",
     ".nojekyll",
     "_headers",
+    "_redirects",
 }
 
 
