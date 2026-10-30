@@ -69,6 +69,21 @@ final class Session {
         return authed(c, "POST", "/v1/notifications/read", "{\"all\":true}");
     }
 
+    /** The next link cast from a phone of the same account, if any (Cast screen only). */
+    static Reply castNext(Context c) throws IOException {
+        return authed(c, "POST", "/v1/tv-cast/next", "{}");
+    }
+
+    /** The Cast screen closed: phones stop seeing this TV as listening (best effort). */
+    static void castStop(Context c) {
+        String token = prefs(c).getString("token", "");
+        if (token.isEmpty()) return;
+        Context app = c.getApplicationContext();
+        new Thread(() -> {
+            try { http("POST", api(app) + "/v1/tv-cast/stop", "{}", token); } catch (IOException | RuntimeException ignored) { }
+        }, "cast-stop").start();
+    }
+
     /** Forgets the session now and signs it out on the server in the background
      *  (one short request, best effort). */
     static void unlink(Context c) {

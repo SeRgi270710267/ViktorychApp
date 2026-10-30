@@ -5394,5 +5394,14 @@ SI18n.addPack("es", {
   "Nicknames people give you privately still win in their own view.": "Los apodos privados que otros te ponen siguen ganando en su propia vista.",
   "New display name": "Nuevo nombre",
   "New names start visible to friends only.": "Los nombres nuevos empiezan visibles solo para amigos.",
-  "Remove this display name?": "¿Quitar este nombre?"
+  "Remove this display name?": "¿Quitar este nombre?",
+  "Cast to the ViktorychTV app": "Enviar a la app ViktorychTV",
+  "On the TV, open Cast from the ViktorychTV home screen or its Defaults screen. Then send a post, video or song link from here, and it opens on the TV.": "En la TV, abre Enviar desde la pantalla de inicio de ViktorychTV o desde su pantalla de predeterminados. Luego envía desde aquí el enlace de una publicación, un video o una canción, y se abre en la TV.",
+  "Link to play on the TV": "Enlace para reproducir en la TV",
+  "Send to my TV app": "Enviar a mi app de TV",
+  "Sign in on this phone and link your TV app with the same account to cast.": "Inicia sesión en este teléfono y vincula tu app de TV con la misma cuenta para enviar.",
+  "Paste a link that starts with https://": "Pega un enlace que empiece por https://",
+  "Sent. It's opening on your TV.": "Enviado. Se está abriendo en tu TV.",
+  "Sent. Open Cast on the TV app in the next two minutes and it plays there.": "Enviado. Abre Enviar en la app de TV en los próximos dos minutos y se reproducirá allí.",
+  "Chromecast needs a paid Google registration, so we don't use it. Cast to the ViktorychTV app above uses our own free pairing instead.": "Chromecast requiere un registro de pago en Google, así que no lo usamos. Enviar a la app ViktorychTV, arriba, usa nuestra propia vinculación gratuita."
 });

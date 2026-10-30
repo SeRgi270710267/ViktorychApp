@@ -32,6 +32,7 @@ import { handleDiscordPickRoutes, isPickPath, ownerOnlyDiscordKey, privateDiscor
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel, publishToAccount } from "./channel.js";
 import { handleDevices } from "./devices.js";
 import { handleTvPair } from "./tv-pair.js";
+import { handleTvCast } from "./tv-cast.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { handlePool, notePoolDocument, poolSignable, poolUsage } from "./peer-pool.js";
 import { handleLive, LIVE_SCHEMA, sweepLive } from "./live.js";
@@ -5680,6 +5681,7 @@ async function route(request, env, ctx) {
     findAccount: async (db, name) => { const found = await resolveName(db, name, ""); return found ? found.publicId : ""; },
     waitUntil: ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null
   });
+  if (path.startsWith("/v1/tv-cast/")) return handleTvCast(request, env, { json, rateHit, limited, sessionAccount });
   if (path === "/v1/recovery/restore" && request.method === "POST") return handleRecoveryRestore(request, env, recoveryDeps());
   if (path === "/v1/recovery/codes" && request.method === "POST") return handleRecoveryRegenerate(request, env, recoveryDeps());
   if (path.startsWith("/v1/webauthn/")) {

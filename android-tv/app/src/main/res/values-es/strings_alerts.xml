@@ -8,7 +8,7 @@
     <string name="al_link_code">Código %1$s</string>
     <string name="al_link_or">O en ViktorychApp: Configuración › Mis dispositivos › Vincular una TV, e introduce el código.</string>
     <string name="al_link_wait">Obteniendo un código…</string>
-    <string name="al_link_note">Esto solo inicia sesión en el panel de alertas. Busca alertas nuevas mientras está en pantalla y se detiene al salir. Desactívalo en Haz de ViktorychTV tu predeterminado para cerrar la sesión.</string>
+    <string name="al_link_note">Esto vincula Alertas y Enviar de esta TV con tu cuenta. Alertas busca alertas nuevas mientras está en pantalla y se detiene al salir. Desactiva ambos en Haz de ViktorychTV tu predeterminado para cerrar la sesión de la TV.</string>
     <string name="al_new_code">Código nuevo</string>
     <string name="al_denied">Esa cuenta rechazó esta TV. Inténtalo de nuevo con un código nuevo.</string>
     <string name="al_offline">No se puede conectar con ViktorychApp ahora. Se volverá a intentar pronto.</string>
@@ -53,4 +53,27 @@
     <string name="def_alerts_open">Abrir Alertas</string>
     <string name="def_alerts_unlink">Cerrar la sesión de Alertas en esta TV</string>
     <string name="def_alerts_off">Dejar de usar Alertas</string>
+    <string name="cast_label">ViktorychTV Enviar</string>
+    <string name="cs_link_title">Envía del teléfono a esta TV</string>
+    <string name="cs_link_note">Esto vincula Enviar y Alertas de esta TV con tu cuenta. Enviar solo busca enlaces mientras esta pantalla está abierta. Desactiva ambos en Haz de ViktorychTV tu predeterminado para cerrar la sesión de la TV.</string>
+    <string name="cs_ready">Listo para recibir</string>
+    <string name="cs_linked">Vinculada a %1$s</string>
+    <string name="cs_steps">En tu teléfono, abre ViktorychApp › Configuración › Enviar a mi TV. Pega el enlace de una publicación, un video o una canción y elige Enviar a mi app de TV. Se abre aquí.</string>
+    <string name="cs_waiting">Esperando un enlace de tu teléfono…</string>
+    <string name="cs_opening">Abriendo %1$s…</string>
+    <string name="cs_last">Último envío: %1$s</string>
+    <string name="cs_refused">Esta TV solo abre enlaces de ViktorychApp, YouTube, X, Twitch y archivos multimedia, así que omitió un enlace de %1$s.</string>
+    <string name="cs_no_player">Nada en esta TV puede reproducir ese enlace. Activa Enlaces de vídeo y música en Haz de ViktorychTV tu predeterminado.</string>
+    <string name="cs_paused">En pausa tras 30 minutos sin envíos, para ahorrar datos.</string>
+    <string name="cs_keep">Seguir esperando</string>
+    <string name="cs_done">Listo</string>
+    <string name="cs_sign_out">Cerrar sesión en esta TV</string>
+    <string name="cs_note">Los envíos pasan por tu propia cuenta y nuestro servidor gratuito, sin Chromecast. No se ejecuta nada cuando esta pantalla está cerrada.</string>
+    <string name="def_cast">Enviar</string>
+    <string name="def_cast_desc">Envía publicaciones, videos y canciones del teléfono a esta TV con tu propia cuenta. Solo busca envíos mientras la pantalla Enviar está abierta.</string>
+    <string name="def_cast_linked">Vinculada a %1$s</string>
+    <string name="def_cast_link">Siguiente: abre Enviar y vincula esta TV</string>
+    <string name="def_cast_open">Abrir Enviar</string>
+    <string name="def_cast_unlink">Cerrar sesión en esta TV</string>
+    <string name="def_cast_off">Dejar de usar Enviar</string>
 </resources>

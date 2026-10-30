@@ -8,7 +8,7 @@
     <string name="al_link_code">Код %1$s</string>
     <string name="al_link_or">Или в ViktorychApp: Настройки › Мои устройства › Подключить телевизор, затем введите код.</string>
     <string name="al_link_wait">Получаем код…</string>
-    <string name="al_link_note">Вход выполняется только для панели оповещений. Она проверяет новые оповещения, пока открыта, и останавливается, когда вы уходите. Чтобы выйти, отключите её в «Сделать ViktorychTV основным».</string>
+    <string name="al_link_note">Так «Оповещения» и «Трансляция» на этом телевизоре привязываются к вашему аккаунту. Оповещения проверяются, пока панель открыта, и останавливаются, когда вы уходите. Чтобы выйти, отключите оба в «Сделать ViktorychTV основным».</string>
     <string name="al_new_code">Новый код</string>
     <string name="al_denied">Этот аккаунт отклонил телевизор. Попробуйте ещё раз с новым кодом.</string>
     <string name="al_offline">Сейчас нет связи с ViktorychApp. Скоро попробуем снова.</string>
@@ -53,4 +53,27 @@
     <string name="def_alerts_open">Открыть Оповещения</string>
     <string name="def_alerts_unlink">Выйти из Оповещений на этом телевизоре</string>
     <string name="def_alerts_off">Не использовать Оповещения</string>
+    <string name="cast_label">Трансляция ViktorychTV</string>
+    <string name="cs_link_title">Транслируйте с телефона на этот телевизор</string>
+    <string name="cs_link_note">Так «Трансляция» и «Оповещения» на этом телевизоре привязываются к вашему аккаунту. «Трансляция» проверяет ссылки, только пока этот экран открыт. Чтобы выйти, отключите оба в «Сделать ViktorychTV основным».</string>
+    <string name="cs_ready">Готово к трансляции</string>
+    <string name="cs_linked">Привязано к %1$s</string>
+    <string name="cs_steps">На телефоне откройте ViktorychApp › Настройки › Отправить на ТВ. Вставьте ссылку на пост, видео или песню и выберите «Отправить в приложение на ТВ». Она откроется здесь.</string>
+    <string name="cs_waiting">Ждём ссылку с телефона…</string>
+    <string name="cs_opening">Открываем %1$s…</string>
+    <string name="cs_last">Последняя трансляция: %1$s</string>
+    <string name="cs_refused">Этот телевизор открывает только ссылки ViktorychApp, YouTube, X, Twitch и медиафайлы, поэтому пропустил ссылку с %1$s.</string>
+    <string name="cs_no_player">На этом телевизоре нечем открыть эту ссылку. Включите «Ссылки на видео и музыку» в «Сделать ViktorychTV основным».</string>
+    <string name="cs_paused">Пауза после 30 минут без трансляций, чтобы экономить трафик.</string>
+    <string name="cs_keep">Продолжить ждать</string>
+    <string name="cs_done">Готово</string>
+    <string name="cs_sign_out">Выйти на этом телевизоре</string>
+    <string name="cs_note">Трансляция идёт через ваш аккаунт и наш бесплатный сервер, без Chromecast. Когда этот экран закрыт, ничего не работает.</string>
+    <string name="def_cast">Трансляция</string>
+    <string name="def_cast_desc">Отправляйте посты, видео и песни с телефона на этот телевизор через свой аккаунт. Проверка идёт, только пока открыт экран «Трансляция».</string>
+    <string name="def_cast_linked">Привязано к %1$s</string>
+    <string name="def_cast_link">Дальше: откройте «Трансляцию» и привяжите телевизор</string>
+    <string name="def_cast_open">Открыть «Трансляцию»</string>
+    <string name="def_cast_unlink">Выйти на этом телевизоре</string>
+    <string name="def_cast_off">Не использовать Трансляцию</string>
 </resources>

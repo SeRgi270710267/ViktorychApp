@@ -8,8 +8,8 @@ plugins { id "com.android.application" }
 
 // Bump appVersion (and appVersionName) for a new APK, then update
 // tv/version.json in the site. The site reads ?tvapp=N to offer the update.
-def appVersion = 10
-def appVersionName = "1.9.0"
+def appVersion = 11
+def appVersionName = "1.10.0"
 def host = "viktorychapp.pages.dev"
 // If the short address does not load, the WebView falls back to GitHub Pages.
 def fallbackHost = "viktorychgroup.github.io"

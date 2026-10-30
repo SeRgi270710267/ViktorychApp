@@ -8,7 +8,7 @@
     <string name="al_link_code">Code %1$s</string>
     <string name="al_link_or">Or in ViktorychApp: Settings › My devices › Link a TV, then enter the code.</string>
     <string name="al_link_wait">Getting a code…</string>
-    <string name="al_link_note">This signs in the alerts panel only. It checks for new alerts while it is on screen and stops when you leave. Turn it off in Make ViktorychTV your default to sign it out.</string>
+    <string name="al_link_note">This links Alerts and Cast on this TV to your account. Alerts checks for new alerts while it is on screen and stops when you leave. Turn both off in Make ViktorychTV your default to sign the TV out.</string>
     <string name="al_new_code">New code</string>
     <string name="al_denied">That account turned this TV down. Try again with a new code.</string>
     <string name="al_offline">Can\'t reach ViktorychApp right now. Trying again soon.</string>
@@ -53,4 +53,27 @@
     <string name="def_alerts_open">Open Alerts</string>
     <string name="def_alerts_unlink">Sign this TV out of Alerts</string>
     <string name="def_alerts_off">Stop using Alerts</string>
+    <string name="cast_label">ViktorychTV Cast</string>
+    <string name="cs_link_title">Cast from your phone to this TV</string>
+    <string name="cs_link_note">This links Cast and Alerts on this TV to your account. Cast only checks for links while this screen is open. Turn both off in Make ViktorychTV your default to sign the TV out.</string>
+    <string name="cs_ready">Ready to cast</string>
+    <string name="cs_linked">Linked to %1$s</string>
+    <string name="cs_steps">On your phone, open ViktorychApp › Settings › Send to my TV. Paste a post, video or song link and choose Send to my TV app. It opens here.</string>
+    <string name="cs_waiting">Waiting for a link from your phone…</string>
+    <string name="cs_opening">Opening %1$s…</string>
+    <string name="cs_last">Last cast: %1$s</string>
+    <string name="cs_refused">This TV only opens ViktorychApp, YouTube, X, Twitch and media links, so it skipped a link from %1$s.</string>
+    <string name="cs_no_player">Nothing on this TV can play that link. Turn on Video and music links in Make ViktorychTV your default.</string>
+    <string name="cs_paused">Paused after 30 minutes without a cast, to save data.</string>
+    <string name="cs_keep">Keep listening</string>
+    <string name="cs_done">Done</string>
+    <string name="cs_sign_out">Sign this TV out</string>
+    <string name="cs_note">Casting goes through your own account and our free server, with no Chromecast. Nothing runs when this screen is closed.</string>
+    <string name="def_cast">Cast</string>
+    <string name="def_cast_desc">Send posts, videos and songs from your phone to this TV through your own account. It checks for a cast only while the Cast screen is open.</string>
+    <string name="def_cast_linked">Linked to %1$s</string>
+    <string name="def_cast_link">Next: open Cast and link this TV</string>
+    <string name="def_cast_open">Open Cast</string>
+    <string name="def_cast_unlink">Sign this TV out</string>
+    <string name="def_cast_off">Stop using Cast</string>
 </resources>

@@ -5391,5 +5391,14 @@ SI18n.addPack("en", {
   "Nicknames people give you privately still win in their own view.": "Nicknames people give you privately still win in their own view.",
   "New display name": "New display name",
   "New names start visible to friends only.": "New names start visible to friends only.",
-  "Remove this display name?": "Remove this display name?"
+  "Remove this display name?": "Remove this display name?",
+  "Cast to the ViktorychTV app": "Cast to the ViktorychTV app",
+  "On the TV, open Cast from the ViktorychTV home screen or its Defaults screen. Then send a post, video or song link from here, and it opens on the TV.": "On the TV, open Cast from the ViktorychTV home screen or its Defaults screen. Then send a post, video or song link from here, and it opens on the TV.",
+  "Link to play on the TV": "Link to play on the TV",
+  "Send to my TV app": "Send to my TV app",
+  "Sign in on this phone and link your TV app with the same account to cast.": "Sign in on this phone and link your TV app with the same account to cast.",
+  "Paste a link that starts with https://": "Paste a link that starts with https://",
+  "Sent. It's opening on your TV.": "Sent. It's opening on your TV.",
+  "Sent. Open Cast on the TV app in the next two minutes and it plays there.": "Sent. Open Cast on the TV app in the next two minutes and it plays there.",
+  "Chromecast needs a paid Google registration, so we don't use it. Cast to the ViktorychTV app above uses our own free pairing instead.": "Chromecast needs a paid Google registration, so we don't use it. Cast to the ViktorychTV app above uses our own free pairing instead."
 });

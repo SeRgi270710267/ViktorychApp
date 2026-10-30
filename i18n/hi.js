@@ -5380,5 +5380,14 @@ SI18n.addPack("hi", {
   "Royal treasures": "शाही खज़ाना",
   "Founders’ crown": "संस्थापकों का ताज",
   "Halloween 2026 pumpkin": "हैलोवीन 2026 कद्दू",
-  "Golden unicorn": "सुनहरा यूनिकॉर्न"
+  "Golden unicorn": "सुनहरा यूनिकॉर्न",
+  "Cast to the ViktorychTV app": "ViktorychTV ऐप पर कास्ट करें",
+  "On the TV, open Cast from the ViktorychTV home screen or its Defaults screen. Then send a post, video or song link from here, and it opens on the TV.": "TV पर ViktorychTV होम स्क्रीन या उसकी डिफ़ॉल्ट स्क्रीन से Cast खोलें। फिर यहाँ से किसी पोस्ट, वीडियो या गाने का लिंक भेजें, वह TV पर खुल जाएगा।",
+  "Link to play on the TV": "TV पर चलाने के लिए लिंक",
+  "Send to my TV app": "मेरे TV ऐप पर भेजें",
+  "Sign in on this phone and link your TV app with the same account to cast.": "कास्ट करने के लिए इस फ़ोन पर साइन इन करें और अपने TV ऐप को उसी अकाउंट से लिंक करें।",
+  "Paste a link that starts with https://": "https:// से शुरू होने वाला लिंक पेस्ट करें",
+  "Sent. It's opening on your TV.": "भेज दिया। आपके TV पर खुल रहा है।",
+  "Sent. Open Cast on the TV app in the next two minutes and it plays there.": "भेज दिया। अगले दो मिनट में TV ऐप पर Cast खोलें, वहीं चलेगा।",
+  "Chromecast needs a paid Google registration, so we don't use it. Cast to the ViktorychTV app above uses our own free pairing instead.": "Chromecast के लिए Google पर पैसे देकर रजिस्ट्रेशन चाहिए, इसलिए हम इसे इस्तेमाल नहीं करते। ऊपर दिया ViktorychTV ऐप पर कास्ट हमारी अपनी मुफ़्त पेयरिंग से चलता है।"
 });

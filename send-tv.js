@@ -3,7 +3,10 @@
    A web page cannot find or command a TV on the home network (DIAL, UPnP
    and SSDP need an installed app, and browsers block local discovery), so
    the page puts the short TV link on the clipboard or share sheet and walks
-   through the TV maker's own free phone app, which can type into the TV. */
+   through the TV maker's own free phone app, which can type into the TV.
+   Cast to the ViktorychTV app uses our own pairing instead: the TV app,
+   linked to the same account, checks for a cast only while its Cast screen
+   is open, and the phone sends the link through the account server. */
 (function (root) {
   "use strict";
 
@@ -174,6 +177,7 @@
           "</div>" +
           '<p class="stv-status" data-stv-status role="status" aria-live="polite"></p>' +
         "</div>" +
+        castCard(route) +
         "<h2>" + esc(tr("Which TV do you have?")) + "</h2>" +
         '<nav class="stv-pills" aria-label="' + esc(tr("Which TV do you have?")) + '">' + pills + "</nav>" +
         (chosen ? brandHtml(chosen) : '<p class="stv-note">' + esc(tr("Pick your TV to see the fastest way for it.")) + "</p>") +
@@ -187,10 +191,71 @@
           "<ul>" +
             "<li>" + esc(tr("Find your TV on the Wi-Fi and open its browser by itself. Only the TV maker's app can do that, which is why the steps use it.")) + "</li>" +
             "<li>" + esc(tr("Screen mirroring (Smart View, AirPlay) only copies your phone's screen. It doesn't open the TV browser.")) + "</li>" +
-            "<li>" + esc(tr("One-tap casting needs a paid Google registration, so we don't use it.")) + "</li>" +
+            "<li>" + esc(tr("Chromecast needs a paid Google registration, so we don't use it. Cast to the ViktorychTV app above uses our own free pairing instead.")) + "</li>" +
           "</ul>" +
         "</section>" +
       "</div>";
+  }
+
+  function accounts() { return (typeof window !== "undefined" && window.ViktorychAccounts) || null; }
+  function signedIn() {
+    var a = accounts();
+    return !!(a && a.token && a.token());
+  }
+
+  /* An https link the TV app can open, or "". The TV checks it again. */
+  function castLink(value) {
+    var text = String(value || "").trim();
+    if (!text || text.length > 2000 || /[\s<>"\\^`{|}]/.test(text)) return "";
+    var m = /^https:\/\/([^\/?#@:]+)(?::\d+)?(?:[\/?#]|$)/i.exec(text);
+    return m && m[1].indexOf(".") > 0 ? text : "";
+  }
+
+  function castCard(route) {
+    var q = route && route.query && route.query.get ? route.query.get("u") : "";
+    var start = castLink(q);
+    return '<section class="stv-card stv-cast" data-stv-cast>' +
+      "<h2>" + esc(tr("Cast to the ViktorychTV app")) + "</h2>" +
+      '<p class="stv-note">' + esc(tr("On the TV, open Cast from the ViktorychTV home screen or its Defaults screen. Then send a post, video or song link from here, and it opens on the TV.")) + "</p>" +
+      '<label class="stv-label" for="stv-cast-url">' + esc(tr("Link to play on the TV")) + "</label>" +
+      '<input id="stv-cast-url" class="stv-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="https://" data-stv-cast-url value="' + esc(start) + '">' +
+      '<div class="stv-row">' +
+        '<button class="stv-btn primary" type="button" data-stv="cast">' + esc(tr("Send to my TV app")) + "</button>" +
+      "</div>" +
+      '<p class="stv-status" data-stv-cast-status role="status" aria-live="polite">' + (signedIn() ? "" : esc(tr("Sign in on this phone and link your TV app with the same account to cast."))) + "</p>" +
+    "</section>";
+  }
+
+  function castStatus(text, bad) {
+    var el = document.querySelector("[data-stv-cast-status]");
+    if (!el) return;
+    el.textContent = text;
+    if (el.classList) el.classList.toggle("bad", !!bad);
+  }
+
+  function doCast() {
+    var input = document.querySelector("[data-stv-cast-url]");
+    var url = castLink(input ? input.value : "");
+    if (!url) { castStatus(tr("Paste a link that starts with https://"), true); return; }
+    var a = accounts();
+    var token = a && a.token ? a.token() : "";
+    if (!token || !a.call) { castStatus(tr("Sign in on this phone and link your TV app with the same account to cast."), true); return; }
+    castStatus(tr("Sending…"), false);
+    a.call("/v1/tv-cast/send", { method: "POST", body: { url: url }, token: token }).then(function (res) {
+      if (res && res.status === 200) {
+        castStatus(res.listening ? tr("Sent. It's opening on your TV.") : tr("Sent. Open Cast on the TV app in the next two minutes and it plays there."), false);
+      } else if (res && res.status === 401) {
+        castStatus(tr("Sign in on this phone and link your TV app with the same account to cast."), true);
+      } else if (res && res.status === 429) {
+        castStatus(tr("Too many attempts. Try again later."), true);
+      } else if (res && res.status === 400) {
+        castStatus(tr("Paste a link that starts with https://"), true);
+      } else {
+        castStatus(tr("Could not reach the server. Try again."), true);
+      }
+    }, function () {
+      castStatus(tr("Could not reach the server. Try again."), true);
+    });
   }
 
   function status(text) {
@@ -245,6 +310,7 @@
       e.preventDefault();
       if (btn.getAttribute("data-stv") === "copy") doCopy();
       else if (btn.getAttribute("data-stv") === "share") doShare();
+      else if (btn.getAttribute("data-stv") === "cast") doCast();
       return;
     }
     var pill = t && t.closest ? t.closest("[data-stv-brand]") : null;
@@ -259,6 +325,7 @@
   root.ViktorychSendTV = {
     page: page,
     link: link,
+    castLink: castLink,
     host: host,
     brands: function () { return brandList().map(function (b) { return b.id; }); }
   };

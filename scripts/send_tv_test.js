@@ -55,6 +55,32 @@ assert.strictEqual(bad.api.host(), "viktorychapp.pages.dev", "bad hosts fall bac
 android.listeners.click({ target: { closest: (sel) => (sel === "[data-stv-brand]" ? { getAttribute: () => "samsung" } : null) }, preventDefault() {} });
 assert(android.api.page({}).includes('data-stv-guide="samsung"'), "remembered brand");
 
+/* Cast to the ViktorychTV app: our own pairing through the account server. */
+const castApi = android.api;
+assert.strictEqual(castApi.castLink(" https://youtu.be/dQw4w9WgXcQ "), "https://youtu.be/dQw4w9WgXcQ");
+for (const badLink of ["http://x.com/a/status/1", "javascript:alert(1)", "https://localhost/", "https://a.com/<b>", "ftp://a.com/x", ""]) assert.strictEqual(castApi.castLink(badLink), "", badLink);
+const castPage = castApi.page({ query: new URLSearchParams("u=" + encodeURIComponent("https://x.com/a/status/123456")) });
+assert(castPage.includes('data-stv="cast"') && castPage.includes("Cast to the ViktorychTV app"), "cast card");
+assert(castPage.includes('value="https://x.com/a/status/123456"'), "a link in #/send-to-tv?u= fills the box");
+assert(castPage.includes("Sign in on this phone and link your TV app"), "signed out: says how to cast");
+assert(!castApi.page({ query: new URLSearchParams("u=javascript:alert(1)") }).includes("javascript:"), "bad links never fill the box");
+assert(castPage.includes("Chromecast needs a paid Google registration") && !castPage.includes("One-tap casting"), "honest section points at our own casting");
+(async () => {
+  const sent = [];
+  const els = { "[data-stv-cast-url]": { value: "https://youtu.be/dQw4w9WgXcQ" }, "[data-stv-cast-status]": { textContent: "", classList: { toggle() {} } } };
+  const c = load("Android");
+  c.ctx.document.querySelector = (sel) => els[sel] || null;
+  c.ctx.ViktorychAccounts = { token: () => "va1.t", call: (p, o) => { sent.push([p, o]); return Promise.resolve({ status: 200, listening: true }); } };
+  c.listeners.click({ target: { closest: (sel) => (sel === "[data-stv]" ? { getAttribute: () => "cast" } : null) }, preventDefault() {} });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepStrictEqual(sent, [["/v1/tv-cast/send", { method: "POST", body: { url: "https://youtu.be/dQw4w9WgXcQ" }, token: "va1.t" }]]);
+  assert.strictEqual(els["[data-stv-cast-status]"].textContent, "Sent. It's opening on your TV.");
+  c.ctx.ViktorychAccounts = { token: () => "", call: () => { throw new Error("no call when signed out"); } };
+  c.listeners.click({ target: { closest: (sel) => (sel === "[data-stv]" ? { getAttribute: () => "cast" } : null) }, preventDefault() {} });
+  assert(els["[data-stv-cast-status]"].textContent.startsWith("Sign in on this phone"));
+  console.log("send to TV cast ok");
+})().catch((err) => { console.error(err); process.exit(1); });
+
 const lazy = fs.readFileSync(path.join(__dirname, "..", "shared", "lazy-modules.js"), "utf8");
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");

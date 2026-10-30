@@ -5393,5 +5393,14 @@ SI18n.addPack("ru", {
   "Nicknames people give you privately still win in their own view.": "Личные прозвища, которые вам дают другие, по-прежнему важнее в их собственном виде.",
   "New display name": "Новое отображаемое имя",
   "New names start visible to friends only.": "Новые имена сначала видны только друзьям.",
-  "Remove this display name?": "Удалить это отображаемое имя?"
+  "Remove this display name?": "Удалить это отображаемое имя?",
+  "Cast to the ViktorychTV app": "Трансляция в приложение ViktorychTV",
+  "On the TV, open Cast from the ViktorychTV home screen or its Defaults screen. Then send a post, video or song link from here, and it opens on the TV.": "На телевизоре откройте «Трансляцию» на главном экране ViktorychTV или на его экране «По умолчанию». Затем отправьте отсюда ссылку на пост, видео или песню, и она откроется на телевизоре.",
+  "Link to play on the TV": "Ссылка для воспроизведения на телевизоре",
+  "Send to my TV app": "Отправить в приложение на ТВ",
+  "Sign in on this phone and link your TV app with the same account to cast.": "Чтобы транслировать, войдите на этом телефоне и привяжите приложение на ТВ к тому же аккаунту.",
+  "Paste a link that starts with https://": "Вставьте ссылку, которая начинается с https://",
+  "Sent. It's opening on your TV.": "Отправлено. Открывается на телевизоре.",
+  "Sent. Open Cast on the TV app in the next two minutes and it plays there.": "Отправлено. Откройте «Трансляцию» в приложении на ТВ в течение двух минут, и ссылка откроется там.",
+  "Chromecast needs a paid Google registration, so we don't use it. Cast to the ViktorychTV app above uses our own free pairing instead.": "Chromecast требует платной регистрации в Google, поэтому мы его не используем. Трансляция в приложение ViktorychTV выше работает через нашу бесплатную привязку."
 });

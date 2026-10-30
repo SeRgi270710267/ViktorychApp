@@ -213,4 +213,17 @@ for (const [name, ua] of Object.entries(UAS)) {
   assert.ok(!manifest.includes("READ_EPG_DATA"), "channels only write their own guide");
 }
 
+{
+  // Optional Cast (TV app 1.10.0+): our own pairing, no Chromecast. The screen ships off and
+  // private, nothing listens in the background, and the phone side posts to our own server.
+  const manifest = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/AndroidManifest.xml"), "utf8");
+  const cast = /<activity[^>]*alerts\.CastActivity[^>]*>/.exec(manifest);
+  assert.ok(cast && cast[0].includes('android:enabled="false"') && cast[0].includes('android:exported="false"'), "the Cast screen ships off and private");
+  assert.ok(!/cast\.framework|play-services-cast|CastReceiver|mediarouter/i.test(manifest + fs.readFileSync(path.join(ROOT, "android-tv/app/build.gradle"), "utf8")), "no Chromecast or Google Cast SDK");
+  const castSrc = fs.readFileSync(path.join(ROOT, "android-tv/app/src/main/java/app/viktorych/tv/alerts/CastActivity.java"), "utf8");
+  assert.ok(castSrc.includes("onPause") && castSrc.includes("IDLE_MS"), "Cast stops when it leaves the screen and pauses when idle");
+  const sendTv = fs.readFileSync(path.join(ROOT, "send-tv.js"), "utf8");
+  assert.ok(sendTv.includes('"/v1/tv-cast/send"'), "the phone casts through our own account server");
+}
+
 console.log("tv boot checks passed");

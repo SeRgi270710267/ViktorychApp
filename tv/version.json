@@ -1,7 +1,7 @@
 {
-  "versionCode": 10,
-  "versionName": "1.9.0",
+  "versionCode": 11,
+  "versionName": "1.10.0",
   "apk": "tv/ViktorychTV.apk",
   "release": "https://github.com/ViktorychGroup/ViktorychApp/releases/latest/download/ViktorychTV.apk",
-  "notes": "New, optional: Live channels. ViktorychMusic joins the TV's own channel list and guide as channel 1, and plays only while you watch it. Turn it on in Make ViktorychTV your default. Everything else works as before."
+  "notes": "New, optional: Cast. Send posts, videos and songs from your phone to this TV through your own account (Send to my TV on the site), with no Chromecast. It only checks while the Cast screen is open. Turn it on in Make ViktorychTV your default. Everything else works as before."
 }

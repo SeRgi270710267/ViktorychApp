@@ -17,7 +17,8 @@ public final class AlertsDefaults {
     }
 
     public static void enable(Context c, boolean on) {
-        if (!on) unlink(c);
+        // The link is shared with Cast; it goes when neither one is on.
+        if (!on && !CastDefaults.enabled(c)) unlink(c);
         c.getPackageManager().setComponentEnabledSetting(part(c),
             on ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
             PackageManager.DONT_KILL_APP);

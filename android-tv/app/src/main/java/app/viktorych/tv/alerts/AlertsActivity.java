@@ -43,16 +43,16 @@ import app.viktorych.tv.launcher.Ui;
 /** Alerts: DMs, mentions and Live alerts from the account linked to this TV.
  *  It only talks to the server while it is on screen (a check when it opens, then
  *  once a minute until you leave). OK on an alert opens it in the app. */
-public final class AlertsActivity extends Activity {
+public class AlertsActivity extends Activity {
     private static final long REFRESH_MS = 60_000;
     private static final ExecutorService NET = Executors.newSingleThreadExecutor();
     private static final ExecutorService PICS = Executors.newFixedThreadPool(2);
     private static final LruCache<String, Bitmap> AVATARS = new LruCache<>(80);
 
-    private final Handler main = new Handler(Looper.getMainLooper());
-    private FrameLayout root;
-    private boolean visible;
-    private int gen;
+    protected final Handler main = new Handler(Looper.getMainLooper());
+    protected FrameLayout root;
+    protected boolean visible;
+    protected int gen;
 
     // Linking.
     private String pollSecret, code;
@@ -67,7 +67,7 @@ public final class AlertsActivity extends Activity {
     private TextView empty, status;
     private Adapter adapter;
 
-    private int d(float v) { return Ui.dp(this, v); }
+    protected int d(float v) { return Ui.dp(this, v); }
 
     @Override
     protected void onCreate(Bundle b) {
@@ -82,7 +82,7 @@ public final class AlertsActivity extends Activity {
         super.onResume();
         visible = true;
         gen++;
-        if (Session.linked(this)) showList(); else showLink();
+        if (Session.linked(this)) showLinked(); else showLink();
     }
 
     @Override
@@ -96,13 +96,20 @@ public final class AlertsActivity extends Activity {
 
     // ------------------------------------------------------------------ linking
 
-    private void showLink() {
+    /** What a linked TV shows. The Cast screen (CastActivity) shares the linking. */
+    protected void showLinked() { showList(); }
+
+    protected int linkIcon() { return R.drawable.al_bell; }
+    protected int linkTitle() { return R.string.al_link_title; }
+    protected int linkNote() { return R.string.al_link_note; }
+
+    protected void showLink() {
         root.removeAllViews();
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(d(80), d(56), d(80), d(32));
-        col.addView(Ui.icon(this, R.drawable.al_bell, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
-        TextView title = Ui.text(this, getString(R.string.al_link_title), 28, Ui.TEXT, Ui.REGULAR);
+        col.addView(Ui.icon(this, linkIcon(), 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        TextView title = Ui.text(this, getString(linkTitle()), 28, Ui.TEXT, Ui.REGULAR);
         title.setPadding(0, d(16), 0, 0);
         col.addView(title);
         TextView steps = Ui.text(this, getString(R.string.al_link_steps), 16, Ui.TEXT_DIM, Ui.REGULAR);
@@ -123,7 +130,7 @@ public final class AlertsActivity extends Activity {
         status.setSingleLine(false);
         status.setPadding(0, d(20), 0, 0);
         col.addView(status);
-        TextView note = Ui.text(this, getString(R.string.al_link_note), 13, Ui.TEXT_DIM, Ui.REGULAR);
+        TextView note = Ui.text(this, getString(linkNote()), 13, Ui.TEXT_DIM, Ui.REGULAR);
         note.setSingleLine(false);
         note.setPadding(0, d(24), 0, 0);
         col.addView(note);
@@ -199,7 +206,7 @@ public final class AlertsActivity extends Activity {
                 if (fst == 200 && !ft.isEmpty()) {
                     Session.save(this, ft, fn);
                     code = null; pollSecret = null;
-                    showList();
+                    showLinked();
                 } else if (fst == 403) {
                     code = null; pollSecret = null;
                     showLink();

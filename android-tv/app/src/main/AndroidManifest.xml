@@ -507,6 +507,22 @@
             </intent-filter>
         </activity>
 
+        <!-- Optional Cast screen (alerts/CastActivity): links sent from a phone of the
+             same account open here, through our own pairing and account server.
+             Off until chosen on the defaults screen; it only checks while on screen. -->
+        <activity
+            android:name=".alerts.CastActivity"
+            android:enabled="false"
+            android:exported="false"
+            android:label="@string/cast_label"
+            android:icon="@drawable/al_cast"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="app.viktorych.tv.category.TOOL" />
+            </intent-filter>
+        </activity>
+
         <!-- Optional Live channels (channels/). Off until chosen on the defaults screen.
              Only the system can bind the input, and it plays only while the channel is watched. -->
         <service

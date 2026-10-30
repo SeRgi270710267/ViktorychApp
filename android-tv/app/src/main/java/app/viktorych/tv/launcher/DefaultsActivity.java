@@ -14,6 +14,7 @@ import android.widget.TextView;
 
 import app.viktorych.tv.R;
 import app.viktorych.tv.alerts.AlertsDefaults;
+import app.viktorych.tv.alerts.CastDefaults;
 import app.viktorych.tv.channels.ChannelSync;
 import app.viktorych.tv.channels.ChannelsDefaults;
 import app.viktorych.tv.files.FilesDefaults;
@@ -199,6 +200,19 @@ public class DefaultsActivity extends Activity {
         channels.setOnFocusChangeListener((v, f) -> { if (f) showChannelsDetails(); });
         list.addView(channels, gap());
 
+        // Cast (alerts/CastActivity: our own pairing, no Chromecast).
+        boolean castOn = CastDefaults.enabled(this);
+        View cast = row(R.drawable.al_cast, getString(R.string.def_cast),
+            getString(castOn ? R.string.def_on : R.string.def_off), castOn);
+        cast.setOnClickListener(v -> {
+            boolean was = CastDefaults.enabled(this);
+            CastDefaults.enable(this, true);
+            if (was) CastDefaults.open(this);
+            else { render(); focusRow(9); }
+        });
+        cast.setOnFocusChangeListener((v, f) -> { if (f) showCastDetails(); });
+        list.addView(cast, gap());
+
         setContentView(root);
         if (guideFor) showGuide(); else showHomeDetails(on);
         String want = getIntent() == null ? null : getIntent().getStringExtra("focus");
@@ -210,6 +224,7 @@ public class DefaultsActivity extends Activity {
         else if ("files".equals(want)) { files.requestFocus(); getIntent().removeExtra("focus"); }
         else if ("alerts".equals(want)) { alerts.requestFocus(); getIntent().removeExtra("focus"); }
         else if ("channels".equals(want)) { channels.requestFocus(); getIntent().removeExtra("focus"); }
+        else if ("cast".equals(want)) { cast.requestFocus(); getIntent().removeExtra("focus"); }
         else home.requestFocus();
     }
 
@@ -383,6 +398,30 @@ public class DefaultsActivity extends Activity {
                 ChannelsDefaults.enable(this, false);
                 render();
                 focusRow(8);
+            });
+        }
+        side.addView(col);
+    }
+
+    private void showCastDetails() {
+        side.removeAllViews();
+        LinearLayout col = sideColumn();
+        col.addView(Ui.icon(this, R.drawable.al_cast, 40, Ui.TEXT), new LinearLayout.LayoutParams(d(40), d(40)));
+        addSideText(col, getString(R.string.def_cast), 20, Ui.TEXT, 16);
+        addSideText(col, getString(R.string.def_cast_desc), 13, Ui.TEXT_DIM, 10);
+        if (CastDefaults.enabled(this)) {
+            boolean linked = CastDefaults.linked(this);
+            addSideText(col, linked ? getString(R.string.def_cast_linked, CastDefaults.accountName(this)) : getString(R.string.def_cast_link), 13, 0xFF8AB4F8, 14);
+            sideButton(col, getString(R.string.def_cast_open), () -> CastDefaults.open(this));
+            if (linked) sideButton(col, getString(R.string.def_cast_unlink), () -> {
+                CastDefaults.unlink(this);
+                render();
+                focusRow(9);
+            });
+            sideButton(col, getString(R.string.def_cast_off), () -> {
+                CastDefaults.enable(this, false);
+                render();
+                focusRow(9);
             });
         }
         side.addView(col);

@@ -8,7 +8,7 @@
     <string name="al_link_code">कोड %1$s</string>
     <string name="al_link_or">या ViktorychApp में: सेटिंग्स › मेरे डिवाइस › टीवी लिंक करें, फिर कोड डालें।</string>
     <string name="al_link_wait">कोड लिया जा रहा है…</string>
-    <string name="al_link_note">इससे सिर्फ़ अलर्ट पैनल में साइन इन होता है। यह स्क्रीन पर रहते हुए ही नए अलर्ट देखता है और बाहर जाते ही रुक जाता है। साइन आउट के लिए इसे ViktorychTV को डिफ़ॉल्ट बनाएं में बंद करें।</string>
+    <string name="al_link_note">इससे इस TV पर अलर्ट और कास्ट आपके अकाउंट से लिंक होते हैं। अलर्ट स्क्रीन पर रहते हुए ही नए अलर्ट देखता है और बाहर जाते ही रुक जाता है। TV से साइन आउट के लिए ViktorychTV को डिफ़ॉल्ट बनाएं में दोनों बंद करें।</string>
     <string name="al_new_code">नया कोड</string>
     <string name="al_denied">उस खाते ने यह टीवी मना कर दिया। नए कोड के साथ फिर कोशिश करें।</string>
     <string name="al_offline">अभी ViktorychApp से जुड़ नहीं पा रहे। जल्द फिर कोशिश करेंगे।</string>
@@ -53,4 +53,27 @@
     <string name="def_alerts_open">अलर्ट खोलें</string>
     <string name="def_alerts_unlink">इस टीवी को अलर्ट से साइन आउट करें</string>
     <string name="def_alerts_off">अलर्ट का इस्तेमाल बंद करें</string>
+    <string name="cast_label">ViktorychTV कास्ट</string>
+    <string name="cs_link_title">फ़ोन से इस TV पर कास्ट करें</string>
+    <string name="cs_link_note">इससे इस TV पर कास्ट और अलर्ट आपके अकाउंट से लिंक होते हैं। कास्ट सिर्फ़ तभी लिंक देखता है जब यह स्क्रीन खुली हो। TV से साइन आउट के लिए ViktorychTV को डिफ़ॉल्ट बनाएं में दोनों बंद करें।</string>
+    <string name="cs_ready">कास्ट के लिए तैयार</string>
+    <string name="cs_linked">%1$s से लिंक है</string>
+    <string name="cs_steps">फ़ोन पर ViktorychApp › सेटिंग्स › मेरे TV पर भेजें खोलें। किसी पोस्ट, वीडियो या गाने का लिंक पेस्ट करें और मेरे TV ऐप पर भेजें चुनें। वह यहाँ खुल जाएगा।</string>
+    <string name="cs_waiting">फ़ोन से लिंक का इंतज़ार…</string>
+    <string name="cs_opening">%1$s खुल रहा है…</string>
+    <string name="cs_last">पिछला कास्ट: %1$s</string>
+    <string name="cs_refused">यह TV सिर्फ़ ViktorychApp, YouTube, X, Twitch और मीडिया लिंक खोलता है, इसलिए %1$s का लिंक छोड़ दिया।</string>
+    <string name="cs_no_player">इस TV पर वह लिंक चलाने वाला कुछ नहीं है। ViktorychTV को डिफ़ॉल्ट बनाएं में वीडियो और संगीत लिंक चालू करें।</string>
+    <string name="cs_paused">30 मिनट तक कोई कास्ट नहीं आया, इसलिए डेटा बचाने के लिए रोका गया।</string>
+    <string name="cs_keep">इंतज़ार जारी रखें</string>
+    <string name="cs_done">हो गया</string>
+    <string name="cs_sign_out">इस TV से साइन आउट करें</string>
+    <string name="cs_note">कास्ट आपके अपने अकाउंट और हमारे मुफ़्त सर्वर से होता है, Chromecast के बिना। यह स्क्रीन बंद होने पर कुछ नहीं चलता।</string>
+    <string name="def_cast">कास्ट</string>
+    <string name="def_cast_desc">अपने अकाउंट से फ़ोन से इस TV पर पोस्ट, वीडियो और गाने भेजें। यह सिर्फ़ तभी कास्ट देखता है जब कास्ट स्क्रीन खुली हो।</string>
+    <string name="def_cast_linked">%1$s से लिंक है</string>
+    <string name="def_cast_link">अगला: कास्ट खोलें और इस TV को लिंक करें</string>
+    <string name="def_cast_open">कास्ट खोलें</string>
+    <string name="def_cast_unlink">इस TV से साइन आउट करें</string>
+    <string name="def_cast_off">कास्ट का इस्तेमाल बंद करें</string>
 </resources>
