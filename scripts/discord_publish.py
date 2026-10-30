@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -52,12 +53,66 @@ def _github(path: str, token: str, accept: str = "application/vnd.github+json") 
         return response.read()
 
 
+PAGES_ARTIFACTS = ("github-pages", "app-shell-version")
+
+
+def pages_artifact(name: str) -> bool:
+    """Sync's Pages uploads: the build (github-pages) and the version publish
+    (app-shell-version), with or without the per-run suffix."""
+    name = str(name or "")
+    return any(name == base or name.startswith(base + "-") for base in PAGES_ARTIFACTS)
+
+
 def _latest_artifact(repo: str, token: str) -> dict | None:
-    raw = _github(f"/repos/{repo}/actions/artifacts?name=github-pages&per_page=20", token)
+    artifacts = []
+    raw = _github(f"/repos/{repo}/actions/artifacts?per_page=100", token)
     data = json.loads(raw.decode("utf-8"))
-    artifacts = [item for item in (data.get("artifacts") or []) if isinstance(item, dict) and not item.get("expired")]
+    artifacts = [item for item in (data.get("artifacts") or []) if isinstance(item, dict) and not item.get("expired") and pages_artifact(item.get("name"))]
+    if not artifacts:
+        raw = _github(f"/repos/{repo}/actions/artifacts?name=github-pages&per_page=20", token)
+        data = json.loads(raw.decode("utf-8"))
+        artifacts = [item for item in (data.get("artifacts") or []) if isinstance(item, dict) and not item.get("expired")]
     artifacts.sort(key=lambda item: item.get("created_at") or "", reverse=True)
     return artifacts[0] if artifacts else None
+
+
+def _head_sha(root: Path) -> str:
+    """The commit actually checked out (main after the refresh), not the
+    commit this long run was started on."""
+    try:
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+    except Exception:
+        sha = ""
+    if len(sha) == 40 and all(ch in "0123456789abcdef" for ch in sha):
+        return sha
+    return (os.environ.get("GITHUB_SHA") or "discord-live").strip() or "discord-live"
+
+
+def _live_version(repo: str) -> bytes | None:
+    """The version.json that is live now, so this publish never rolls it back."""
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        return None
+    url = f"https://{owner.lower()}.github.io/{name}/version.json"
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": UA, "Cache-Control": "no-cache"})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read()
+        doc = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        print(f"[discord-live] live version.json unreadable: {type(exc).__name__}")
+        return None
+    sha = str(doc.get("sha") or "") if isinstance(doc, dict) else ""
+    if len(sha) != 40:
+        return None
+    return body
+
+
+def _keep_live_version(dest: Path, repo: str) -> None:
+    body = _live_version(repo) if repo else None
+    if body:
+        (dest / "version.json").write_bytes(body)
+        print("[discord-live] kept the live version.json")
 
 
 def _safe_tar(tar: tarfile.TarFile, dest: Path) -> None:
@@ -131,7 +186,7 @@ def _overlay(root: Path, dest: Path) -> None:
             shutil.copy2(path, target)
     worker = dest / "sw.js"
     if worker.is_file():
-        sha = (os.environ.get("GITHUB_SHA") or "discord-live").strip() or "discord-live"
+        sha = _head_sha(root)
         text = worker.read_text(encoding="utf-8").replace("__SW_VERSION__", sha)
         built = assembler.commit_built(sha, root) if hasattr(assembler, "commit_built") else ""
         if built:
@@ -142,7 +197,7 @@ def _overlay(root: Path, dest: Path) -> None:
 
 def _from_checkout(root: Path, dest: Path) -> None:
     assembler = _shell(root)
-    assembler.build(root, dest, (os.environ.get("GITHUB_SHA") or "discord-live").strip() or "discord-live")
+    assembler.build(root, dest, _head_sha(root))
     subprocess.run([sys.executable, str(root / "scripts" / "share_pages.py"), "--site", str(dest)], check=False)
     assembler.verify_site(dest, assembler.shell_files(root))
 
@@ -188,6 +243,7 @@ def assemble(root: Path, token: str) -> Path:
         kept = accounts_publish.read_gate(dest)
         if not kept.get("gate") or not kept.get("api"):
             raise SystemExit("refusing to publish Pages without the login wall")
+    _keep_live_version(dest, repo)
     _token_clean(dest, token)
     return dest
 
@@ -202,9 +258,25 @@ def make_tar(site: Path, dest: Path) -> None:
             tar.add(path, arcname=str(path.relative_to(site)), recursive=False)
 
 
+def _pages_guard(root: Path):
+    sys.path.insert(0, str(root / "scripts"))
+    import pages_guard
+    return pages_guard
+
+
 def publish_site(root: Path, token: str = "") -> None:
+    in_actions = bool(os.environ.get("GITHUB_ACTIONS"))
+    repo = os.environ.get("GITHUB_REPOSITORY") or ""
+    gh = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    if in_actions:
+        # Sync feeds owns the app shell and version.json. Wait while its Pages
+        # deploy or version publish is in flight instead of racing it.
+        if not _pages_guard(root).wait_until_free(repo, gh):
+            print("[discord-live] Sync feeds is still publishing Pages; this refresh waits for the next cycle")
+            return
+    since = time.time()
     site = assemble(root, token)
-    if not os.environ.get("GITHUB_ACTIONS"):
+    if not in_actions:
         print("[discord-live] assembled _site; deploy runs in Actions")
         return
     handle = tempfile.NamedTemporaryFile(prefix="artifact-", suffix=".tar", delete=False)
@@ -213,7 +285,8 @@ def publish_site(root: Path, token: str = "") -> None:
     try:
         make_tar(site, tar_path)
         script = root / "scripts" / "pages_deploy.js"
-        result = subprocess.run(["node", str(script), str(tar_path)], cwd=root, check=False)
+        env = dict(os.environ, PAGES_GUARD_SINCE=str(int(since)))
+        result = subprocess.run(["node", str(script), str(tar_path)], cwd=root, check=False, env=env)
         if result.returncode != 0:
             print("[discord-live] pages deploy returned " + str(result.returncode))
     finally:
