@@ -3447,6 +3447,53 @@ def discord_picks_checks(discord_live) -> None:
         picker.join(store["discord/x/request.json"])
         picker.join(store["discord/x/request.json"])
         check(len(seen_urls) == 1 and seen_urls[0].endswith("/invites/abc") and store["discord/x/join.json"]["status"] == "joined", "one confirmed join is sent once")
+        cap_seen = []
+
+        def cap_transport(url, headers):
+            cap_seen.append(dict(headers))
+            if headers.get("X-Captcha-Key"):
+                return 200, b'{"guild":{"id":"%s"}}' % g3.encode()
+            return 400, b'{"captcha_key":["captcha-required"],"captcha_sitekey":"site-key-1","captcha_service":"hcaptcha","captcha_rqdata":"rq-data","captcha_rqtoken":"rq-token","captcha_session_id":"sess-1"}'
+
+        picker.join_transport = cap_transport
+        ask2 = {"requestedAt": "2026-01-03", "guild": g3, "join": {"code": "abc", "id": "abcdefgh5678", "guild": g3}}
+        picker.join(ask2)
+        cap_doc = store.get("discord/x/captcha.json") or {}
+        check(store["discord/x/join.json"]["status"] == "needs_captcha" and cap_doc.get("sitekey") == "site-key-1" and cap_doc.get("rqtoken") == "rq-token" and "secret-token-value" not in json.dumps(cap_doc), "a captcha is saved privately for the owner, never solved")
+        ask3 = {"requestedAt": "2026-01-03", "guild": g3, "join": {"code": "abc", "id": "abcdefgh5678", "guild": g3, "captcha": {"sid": "solution0001", "key": "owner-answer", "rqtoken": "rq-token", "session": "sess-1"}}}
+        picker.join(ask3)
+        picker.join(ask3)
+        check(len(cap_seen) == 2 and cap_seen[1].get("X-Captcha-Key") == "owner-answer" and cap_seen[1].get("X-Captcha-Rqtoken") == "rq-token" and store["discord/x/join.json"]["status"] == "joined", "the owner's own answer is sent once with Discord's captcha headers")
+        picker.join({"requestedAt": "2026-01-04", "guild": g3, "join": {"code": "abc", "id": "abcdefgh9999", "guild": g3, "by": "worker"}})
+        check(len(cap_seen) == 2, "a join the Worker already sent is not sent again")
+        check(discord_picks.key_check_due({}, "2026-01-05T00:00:00Z") and not discord_picks.key_check_due({"checkedAt": "2026-01-05T08:00:00Z"}, "2026-01-05T23:00:00Z"), "the key check runs once a day")
+        me_calls = []
+
+        class FakeMe:
+            token = "secret-token-value"
+
+            def key_check(self):
+                me_calls.append("/users/@me")
+                return {"id": "1"}
+
+        wrote = []
+        real_write = discord_live.write_health
+        discord_live.write_health = lambda status, reason, token, checked=None: wrote.append((status, checked))
+        try:
+            discord_live.daily_key_check(FakeMe(), {"checkedAt": "2026-01-04T00:00:00Z"}, "2026-01-05T00:00:00Z")
+            discord_live.daily_key_check(FakeMe(), {"checkedAt": "2026-01-05T00:00:00Z"}, "2026-01-05T09:00:00Z")
+        finally:
+            discord_live.write_health = real_write
+        check(me_calls == ["/users/@me"] and wrote == [("ok", "2026-01-05T00:00:00Z")], "one light /users/@me read a day, recorded without ids")
+        from adapters.discord import Client as _DClient, user_get_allowed as _uga
+        seen_urls = []
+        probe = _DClient("t", transport=lambda url, headers: (seen_urls.append(url) or (200, {}, b"{}")), sleep=lambda s: None, auth="user", min_interval=0)
+        check(probe.get_json("/users/@me") is None and probe.key_check() == {} and probe.get_json("/users/@me") is None and len(seen_urls) == 1 and not _uga("https://discord.com/api/v10/users/@me"), "/users/@me is read only by the daily key check")
+        capped = _DClient("t", transport=lambda url, headers: (200, {}, b"[]"), sleep=lambda s: None, auth="user", min_interval=0)
+        capped.max_requests = 3
+        got = [capped.get_json("/users/@me/guilds") for _ in range(5)]
+        check(capped.requests == 3 and capped.capped and got[3] is None, "user reads stop at the per-run cap")
+        picker.join_transport = transport
         store["discord/x/picks.json"] = picks
         added = picker.reload()
         check(added == {"300000000000000010"}, "a new pick is polled right away")

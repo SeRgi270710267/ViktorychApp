@@ -849,7 +849,9 @@
     var list = (!opts.method || opts.method === "GET") ? readOrder(true) : bySpeed(apiOrder());
     // Owner usage and limits come from the main Worker's own analytics;
     // a backup answering them would report only itself.
-    if (/^\/v1\/owner\/(usage|limits)/.test(String(path))) {
+    // A Discord join and its captcha answer must reach the same Worker: the
+    // challenge, its one retry and the owner's key all live there.
+    if (/^\/v1\/owner\/(usage|limits)/.test(String(path)) || /^\/v1\/discord\/picks\/(join|captcha)$/.test(String(path))) {
       var mainRoot = String(config().api || "").replace(/\/$/, "");
       if (mainRoot) list = [mainRoot].concat(list.filter(function (r) { return r !== mainRoot; }));
     }

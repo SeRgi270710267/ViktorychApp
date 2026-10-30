@@ -15,6 +15,10 @@ export const REQUEST_KEY = "discord/x/request.json";
 export const PRIVATE_INDEX_KEY = "discord/x/index.json";
 export const JOIN_KEY = "discord/x/join.json";
 export const HEALTH_KEY = "discord/x/health.json";
+/* A captcha Discord asked for on a join. Private: never served by /v1/data. */
+export const CAPTCHA_KEY = "discord/x/captcha.json";
+export const CAPTCHA_TTL_MS = 4 * 60 * 1000;
+const JOIN_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 export const MAX_SERVERS = 12;
 export const MAX_CHANNELS = 40;
 
@@ -176,7 +180,95 @@ async function dropRemoved(env, prev, next) {
                                         sends it once with the spare account
                                         and writes the answer to join.json. */
 export function isPickPath(path) {
-  return path === "/v1/discord/picks" || path === "/v1/discord/picks/refresh" || path === "/v1/discord/picks/invite" || path === "/v1/discord/picks/join";
+  return path === "/v1/discord/picks" || path === "/v1/discord/picks/refresh" || path === "/v1/discord/picks/invite" || path === "/v1/discord/picks/join" || path === "/v1/discord/picks/captcha";
+}
+
+const CAPTCHA_FIELD = /^[A-Za-z0-9_.:+/=-]{1,4096}$/;
+function captchaField(value) {
+  const text = String(value == null ? "" : value);
+  return CAPTCHA_FIELD.test(text) ? text : "";
+}
+
+/* The challenge in a Discord join answer, or null. Only the fields the
+   owner's hCaptcha widget and the one retry need. */
+export function captchaChallenge(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const keys = Array.isArray(payload.captcha_key) ? payload.captcha_key : [];
+  const sitekey = captchaField(payload.captcha_sitekey);
+  if (!sitekey && !keys.length) return null;
+  return {
+    sitekey,
+    service: captchaField(payload.captcha_service) || "hcaptcha",
+    rqdata: captchaField(payload.captcha_rqdata),
+    rqtoken: captchaField(payload.captcha_rqtoken),
+    sessionId: captchaField(payload.captcha_session_id)
+  };
+}
+
+/* What one join POST to Discord came back with. */
+export function joinResult(status, payload) {
+  if (status === 200) {
+    const guild = payload && payload.guild && typeof payload.guild === "object" ? payload.guild : {};
+    const id = String(guild.id || (payload && payload.guild_id) || "");
+    return { status: "joined", guild: SNOWFLAKE.test(id) ? id : "" };
+  }
+  const code = payload && Number(payload.code);
+  if (code === 40002) return { status: "verification" };
+  const challenge = captchaChallenge(payload);
+  if (challenge) return { status: "needs_captcha", challenge };
+  if (status === 401) return { status: "unauthorized" };
+  if (status === 403) return { status: "forbidden" };
+  if (status === 429) return { status: "rate-limit" };
+  if (status === 404) return { status: "invalid" };
+  return { status: "error" };
+}
+
+/* One POST to /invites/<code>. With a solution, Discord's captcha headers
+   ride along. Never called without the owner's tap. */
+async function postJoin(token, code, solution, challenge, deps) {
+  const fetcher = deps.fetch || fetch;
+  const headers = { authorization: token, "user-agent": JOIN_UA, accept: "application/json", "content-type": "application/json" };
+  if (solution) {
+    headers["x-captcha-key"] = solution;
+    if (challenge && challenge.rqtoken) headers["x-captcha-rqtoken"] = challenge.rqtoken;
+    if (challenge && challenge.sessionId) headers["x-captcha-session-id"] = challenge.sessionId;
+  }
+  let res = null;
+  try {
+    res = await fetcher("https://discord.com/api/v10/invites/" + encodeURIComponent(code), { method: "POST", headers, body: "{}" });
+  } catch (err) {
+    return { status: "error" };
+  }
+  let payload = null;
+  try { payload = JSON.parse((await res.text()).slice(0, 200000)); }
+  catch (err) { payload = null; }
+  return joinResult(res.status, payload);
+}
+
+/* Write the answer the app and the sync read, and keep a captcha privately. */
+async function recordJoin(env, id, code, guild, result, deps) {
+  const at = new Date().toISOString();
+  const status = result.status;
+  const done = { id, status, guild: result.guild || guild, at };
+  if (status === "needs_captcha") {
+    await writeDoc(env, CAPTCHA_KEY, Object.assign({ id, code, guild, at, used: false }, result.challenge));
+  }
+  await writeDoc(env, JOIN_KEY, done);
+  if (status === "joined") {
+    // Ask the sync to list the new server so its channels can be picked.
+    await writeDoc(env, REQUEST_KEY, { requestedAt: at, guild: done.guild || guild, join: { code, id, guild, by: "worker" } });
+  }
+  if ((status === "unauthorized" || status === "forbidden") && deps.markKey) {
+    try { await deps.markKey(env, status); } catch (err) { /* the sync marks it too */ }
+  }
+  return done;
+}
+
+function captchaView(doc, now) {
+  if (!doc || doc.used || !doc.sitekey) return null;
+  const age = now - Date.parse(String(doc.at || ""));
+  if (!(age >= 0 && age < CAPTCHA_TTL_MS)) return null;
+  return { id: clip(doc.id, 32), sitekey: doc.sitekey, rqdata: doc.rqdata || "", service: doc.service || "hcaptcha", expiresAt: new Date(Date.parse(doc.at) + CAPTCHA_TTL_MS).toISOString() };
 }
 
 async function lookupInvite(env, code, deps) {
@@ -264,8 +356,48 @@ export async function handleDiscordPickRoutes(request, env, path, deps) {
     const id = randomId();
     const at = new Date().toISOString();
     const guild = server.id;
+    // Fast path: the owner's pasted key is here, so the Worker sends the one
+    // join itself. A captcha comes back to the owner's screen right away.
+    const key = deps.readKey ? await deps.readKey(env).catch(() => null) : null;
+    if (key && key.value) {
+      await writeDoc(env, REQUEST_KEY, { requestedAt: at, guild, join: { code, id, guild, by: "worker" } });
+      const done = await recordJoin(env, id, code, guild, await postJoin(String(key.value), code, "", null, deps), deps);
+      const out = { id, guild: server, requestedAt: at, status: done.status };
+      if (done.status === "needs_captcha") out.captcha = captchaView(await readDoc(env, CAPTCHA_KEY), Date.now());
+      return json(202, out);
+    }
     await writeDoc(env, REQUEST_KEY, { requestedAt: at, guild, join: { code, id, guild } });
-    return json(202, { id, guild: server, requestedAt: at });
+    return json(202, { id, guild: server, requestedAt: at, status: "pending" });
+  }
+  if (path === "/v1/discord/picks/captcha") {
+    if (method !== "POST") return json(405, { error: "method_not_allowed" });
+    const body = await readJson(request, 16 * 1024);
+    if (!body || body.error) return json(400, { error: (body && body.error) || "bad_json" });
+    const solution = captchaField(body.solution);
+    if (!solution || body.confirm !== true) return json(400, { error: "solution_required" });
+    const doc = await readDoc(env, CAPTCHA_KEY);
+    if (!doc || String(doc.id || "") !== String(body.id || "")) return json(404, { error: "no_captcha" });
+    if (doc.used) return json(409, { error: "captcha_used" });
+    if (!captchaView(doc, Date.now())) return json(410, { error: "captcha_expired" });
+    // One join per human solution: spend the challenge before calling Discord.
+    await writeDoc(env, CAPTCHA_KEY, Object.assign({}, doc, { used: true, usedAt: new Date().toISOString() }));
+    const code = inviteCode(doc.code);
+    const guild = SNOWFLAKE.test(String(doc.guild || "")) ? String(doc.guild) : "";
+    const key = deps.readKey ? await deps.readKey(env).catch(() => null) : null;
+    if (key && key.value) {
+      const result = await postJoin(String(key.value), code, solution, doc, deps);
+      // A second captcha is not retried here: the owner gets a fresh one.
+      const done = await recordJoin(env, String(doc.id), code, guild, result.status === "needs_captcha" ? { status: "captcha_failed", challenge: result.challenge } : result, deps);
+      if (result.status === "needs_captcha") await writeDoc(env, CAPTCHA_KEY, Object.assign({ id: String(doc.id), code, guild, at: new Date().toISOString(), used: false }, result.challenge));
+      const out = { id: String(doc.id), status: done.status, guild };
+      if (result.status === "needs_captcha") out.captcha = captchaView(await readDoc(env, CAPTCHA_KEY), Date.now());
+      return json(200, out);
+    }
+    // No key here: the sync holds it. It sends this one retry within a minute.
+    const at = new Date().toISOString();
+    await writeDoc(env, REQUEST_KEY, { requestedAt: at, guild, join: { code, id: String(doc.id), guild, captcha: { sid: randomId(), key: solution, rqtoken: doc.rqtoken || "", session: doc.sessionId || "" } } });
+    await writeDoc(env, JOIN_KEY, { id: String(doc.id), status: "pending", guild, at });
+    return json(202, { id: String(doc.id), status: "pending", guild });
   }
   if (path === "/v1/discord/picks/refresh") {
     if (method !== "POST") return json(405, { error: "method_not_allowed" });
@@ -288,8 +420,10 @@ export async function handleDiscordPickRoutes(request, env, path, deps) {
       join: pending ? {
         id: clip(pending.id, 32),
         guild: SNOWFLAKE.test(String(pending.guild || "")) ? String(pending.guild) : "",
+        code: inviteCode(pending.code),
         status: joined && joined.id === pending.id ? clip(joined.status, 20) : "pending",
-        at: joined && joined.id === pending.id ? clip(joined.at, 40) : ""
+        at: joined && joined.id === pending.id ? clip(joined.at, 40) : "",
+        captcha: joined && joined.id === pending.id && (joined.status === "needs_captcha" || joined.status === "captcha_failed") ? captchaView(await readDoc(env, CAPTCHA_KEY), Date.now()) : null
       } : null,
       health: cleanHealth(health),
       limits: { servers: MAX_SERVERS, channels: MAX_CHANNELS }

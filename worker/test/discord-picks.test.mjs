@@ -150,3 +150,115 @@ test("health status is owner-readable and never includes a key", async () => {
   assert.equal(got.health.keyHash, undefined);
   assert.equal(got.health.token, undefined);
 });
+
+// A mocked Discord: GET is the public invite lookup, POST is the join.
+function mockDiscord(joins) {
+  const posts = [];
+  const fetch = async (url, init) => {
+    if (init && init.method === "POST") {
+      posts.push({ url, headers: init.headers });
+      const [status, body] = joins.shift();
+      return json(status, body);
+    }
+    return json(200, { guild: { id: G2, name: "Two" } });
+  };
+  return { fetch, posts };
+}
+const CAPTCHA = { captcha_key: ["captcha-required"], captcha_sitekey: "site-key-1", captcha_service: "hcaptcha", captcha_rqdata: "rq-data-1", captcha_rqtoken: "rq-token-1", captcha_session_id: "sess-1" };
+const keyed = (mock, extra) => deps(true, Object.assign({ fetch: mock.fetch, readKey: async () => ({ value: "owner-key" }) }, extra || {}));
+const join = (env, d) => handleDiscordPickRoutes(req("/v1/discord/picks/join", "POST", { code: "abc", confirm: true }), env, "/v1/discord/picks/join", d);
+const solve = (env, d, id, solution) => handleDiscordPickRoutes(req("/v1/discord/picks/captcha", "POST", { id, solution: solution || "human-answer", confirm: true }), env, "/v1/discord/picks/captcha", d);
+
+test("the captcha route is owner only", async () => {
+  const env = { DATA: bucket() };
+  assert.equal((await solve(env, deps(null), "x")).status, 401);
+  assert.equal((await solve(env, deps(false), "x")).status, 403);
+});
+
+test("a join Discord gates with a captcha is saved privately for the owner", async () => {
+  const env = { DATA: bucket() };
+  const mock = mockDiscord([[400, CAPTCHA]]);
+  const res = await join(env, keyed(mock));
+  const body = await res.json();
+  assert.equal(res.status, 202);
+  assert.equal(body.status, "needs_captcha");
+  assert.equal(mock.posts.length, 1);
+  assert.equal(mock.posts[0].headers["x-captcha-key"], undefined, "the first try carries no answer");
+  assert.equal(body.captcha.sitekey, "site-key-1");
+  assert.equal(body.captcha.rqdata, "rq-data-1");
+  assert.equal(body.captcha.rqtoken, undefined, "the rqtoken stays server side");
+  const saved = JSON.parse(env.DATA.store.get("discord/x/captcha.json"));
+  assert.equal(saved.rqtoken, "rq-token-1");
+  assert.equal(saved.used, false);
+  assert.equal(JSON.parse(env.DATA.store.get("discord/x/join.json")).status, "needs_captcha");
+  const got = await (await handleDiscordPickRoutes(req("/v1/discord/picks"), env, "/v1/discord/picks", keyed(mock))).json();
+  assert.equal(got.join.captcha.sitekey, "site-key-1");
+});
+
+test("the owner's answer is sent once with Discord's captcha headers", async () => {
+  const env = { DATA: bucket() };
+  const mock = mockDiscord([[400, CAPTCHA], [200, { guild: { id: G2, name: "Two" } }]]);
+  const first = await (await join(env, keyed(mock))).json();
+  assert.equal((await solve(env, keyed(mock), first.id, "bad answer!")).status, 400, "a malformed answer is refused");
+  const res = await solve(env, keyed(mock), first.id);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).status, "joined");
+  assert.equal(mock.posts.length, 2);
+  const h = mock.posts[1].headers;
+  assert.equal(h["x-captcha-key"], "human-answer");
+  assert.equal(h["x-captcha-rqtoken"], "rq-token-1");
+  assert.equal(h["x-captcha-session-id"], "sess-1");
+  assert.equal(JSON.parse(env.DATA.store.get("discord/x/captcha.json")).used, true);
+  assert.equal(JSON.parse(env.DATA.store.get("discord/x/request.json")).join.by, "worker", "the sync lists the server and does not join again");
+  const again = await solve(env, keyed(mock), first.id);
+  assert.equal(again.status, 409, "one join per solution");
+  assert.equal(mock.posts.length, 2);
+});
+
+test("an expired check is not sent to Discord", async () => {
+  const env = { DATA: bucket() };
+  const mock = mockDiscord([[400, CAPTCHA]]);
+  const first = await (await join(env, keyed(mock))).json();
+  const doc = JSON.parse(env.DATA.store.get("discord/x/captcha.json"));
+  env.DATA.store.set("discord/x/captcha.json", JSON.stringify(Object.assign(doc, { at: new Date(Date.now() - 10 * 60 * 1000).toISOString() })));
+  assert.equal((await solve(env, keyed(mock), first.id)).status, 410);
+  assert.equal((await solve(env, keyed(mock), "other")).status, 404);
+  assert.equal(mock.posts.length, 1);
+});
+
+test("a rejected answer gives a fresh check and is not retried", async () => {
+  const env = { DATA: bucket() };
+  const fresh = Object.assign({}, CAPTCHA, { captcha_rqdata: "rq-data-2", captcha_rqtoken: "rq-token-2" });
+  const mock = mockDiscord([[400, CAPTCHA], [400, fresh]]);
+  const first = await (await join(env, keyed(mock))).json();
+  const body = await (await solve(env, keyed(mock), first.id)).json();
+  assert.equal(body.status, "captcha_failed");
+  assert.equal(body.captcha.rqdata, "rq-data-2");
+  assert.equal(mock.posts.length, 2);
+  const saved = JSON.parse(env.DATA.store.get("discord/x/captcha.json"));
+  assert.equal(saved.used, false);
+  assert.equal(saved.rqtoken, "rq-token-2");
+});
+
+test("without a key here the answer goes to the sync, once", async () => {
+  const env = { DATA: bucket() };
+  const mock = mockDiscord([[400, CAPTCHA]]);
+  const first = await (await join(env, keyed(mock))).json();
+  const noKey = deps(true, { fetch: mock.fetch });
+  const res = await solve(env, noKey, first.id);
+  assert.equal(res.status, 202);
+  const ask = JSON.parse(env.DATA.store.get("discord/x/request.json"));
+  assert.equal(ask.join.captcha.key, "human-answer");
+  assert.equal(ask.join.captcha.rqtoken, "rq-token-1");
+  assert.equal(mock.posts.length, 1, "the Worker sent nothing itself");
+  assert.equal((await solve(env, noKey, first.id)).status, 409);
+});
+
+test("a rejected key is marked for replacing", async () => {
+  const env = { DATA: bucket() };
+  const marks = [];
+  const mock = mockDiscord([[401, { message: "401: Unauthorized", code: 0 }]]);
+  const body = await (await join(env, keyed(mock, { markKey: async (e, reason) => marks.push(reason) }))).json();
+  assert.equal(body.status, "unauthorized");
+  assert.deepEqual(marks, ["unauthorized"]);
+});
