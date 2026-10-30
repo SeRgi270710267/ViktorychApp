@@ -4753,6 +4753,15 @@ html[data-theme="default"] .xk-status.warn { color: #b26b00; }
 .xk-field input, .xk-field textarea { display: block; width: 100%; box-sizing: border-box; padding: 0; border: 0; outline: 0; background: none; color: var(--text); font-size: 17px; line-height: 24px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .xk-field input { font-family: inherit; }
 .xk-form .xk-actions { padding: 0; }
+/* discord-local.js's section, shown as the "On this device" group. */
+.xk-group[data-xk-group="device"] { border-top: 1px solid var(--line); }
+.xk-group > .dloc-section.xk-device { margin: 0; padding: 0 16px 12px; border: 0; border-bottom: 1px solid var(--line); background: none; border-radius: 0; }
+.dloc-section.xk-device .dloc-h { margin: 0; padding: 12px 0 2px; font-size: 15px; line-height: 20px; font-weight: 400; }
+.dloc-section.xk-device .phandle { margin: 0; color: var(--muted); font-size: 13px; line-height: 16px; }
+.dloc-section.xk-device .dloc-status { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 16px; }
+.dloc-section.xk-device .dloc-status.is-calm { color: #ffad1f; }
+html[data-theme="default"] .dloc-section.xk-device .dloc-status.is-calm { color: #b26b00; }
+.dloc-section.xk-device .dloc-acts { margin-top: 12px; }
 .xk-sheet-back { position: fixed; inset: 0; z-index: 9000; background: rgba(91, 112, 131, .4); }
 .xk-sheet { position: fixed; z-index: 9001; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(320px, calc(100vw - 32px)); box-sizing: border-box; padding: 32px; border-radius: 16px; background: var(--sheet); color: var(--text); }
 .xk-sheet h2 { margin: 0 0 8px; font-size: 20px; line-height: 24px; font-weight: 800; }

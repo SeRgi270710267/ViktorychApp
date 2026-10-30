@@ -243,7 +243,34 @@
     return '<section class="xk-group" data-xk-group="device"><h2 class="xk-h2">' + esc(tr("On this device")) + "</h2>" +
       '<p class="xk-desc">' + esc(tr("Stays in this browser only. Our servers never see it.")) + "</p>" + rows + "</section>";
   }
+  /* The local Discord key module (discord-local.js) paints its own
+     #dloc-section above this page's body. Group it under "On this device"
+     and keep the page description first, without touching that module. */
+  function groupDeviceSection() {
+    if (typeof document === "undefined") return;
+    var box = document.getElementById("dloc-section");
+    var page = document.querySelector(".xk.keys-settings");
+    if (!box || !page || box.getAttribute("data-xk-grouped") === "1") return;
+    box.setAttribute("data-xk-grouped", "1");
+    box.classList.add("xk-device");
+    var head = document.createElement("h2");
+    head.className = "xk-h2 xk-device-h";
+    head.textContent = tr("On this device");
+    var intro = page.querySelector(".xk-intro");
+    var wrap = document.createElement("section");
+    wrap.className = "xk-group";
+    wrap.setAttribute("data-xk-group", "device");
+    box.parentNode.insertBefore(wrap, box);
+    wrap.appendChild(head);
+    wrap.appendChild(box);
+    if (intro) wrap.parentNode.insertBefore(intro, wrap);
+  }
+  function afterPaint() {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(groupDeviceSection);
+    else setTimeout(groupDeviceSection, 0);
+  }
   function sectionHtml() {
+    afterPaint();
     if (!visible()) return '<div class="set-block"><p class="phandle">' + esc(tr("Keys are available only to the owner.")) + "</p></div>";
     load(false);
     loadDiscordHealth();
@@ -258,7 +285,7 @@
     }).join("");
     if (!cache) rows = '<p class="xk-desc">' + esc(tr("Loading…")) + "</p>";
     return '<div class="xk keys-settings">' +
-      '<p class="xk-desc">' + esc(tr("Paste keys from your own accounts. They stay encrypted, and the saved value is never shown again.")) + " " + esc(tr("Keys are backups. One key is used at a time, highest priority first.")) + "</p>" +
+      '<p class="xk-desc xk-intro">' + esc(tr("Paste keys from your own accounts. They stay encrypted, and the saved value is never shown again.")) + " " + esc(tr("Keys are backups. One key is used at a time, highest priority first.")) + "</p>" +
       noteHtml() + deviceGroupHtml() +
       '<section class="xk-group" data-xk-group="server"><h2 class="xk-h2">' + esc(tr("Your accounts")) + "</h2>" + rows + "</section>" +
       healthHtml() + "</div>";
