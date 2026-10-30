@@ -9513,6 +9513,7 @@ const here = parseRoute();
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "link-tv") return { name: "linktv", query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
+    if (parts[0] === "send-to-tv") return { name: "sendtv", brand: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
       if (parts[1] === "trash") return { name: "drive", section: "files", trash: true, folder: "", view: "", album: "", query };
       if (parts[1] === "folder" && parts[2]) return { name: "drive", section: "files", trash: false, folder: parts[2], view: "", album: "", query };
@@ -16168,6 +16169,7 @@ const here = parseRoute();
     if (section === "resources") {
       return settingsHead(tr("Additional resources"), "#/settings") + `<div class="set-block">
         ${installControl()}
+        <div class="set-list">${settingsRow("#/send-to-tv", tr("Send to my TV"), tr("Open the app on your TV without typing a long address."))}</div>
         <button class="primary" type="button" data-act="export">${esc(tr("Export settings"))}</button>
         <label class="primary import-btn">${esc(tr("Import settings"))}<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
         <h2>${esc(tr("About"))}</h2>
@@ -18530,6 +18532,12 @@ if (STATE.histClear) {
       if (lazyHtml) return snapRoute(lazyHtml);
       ensureLazy("communities");
       return lazySkeleton(tr("Communities"));
+    }
+    if (route.name === "sendtv") {
+      const lazyHtml = window.ViktorychSendTV ? window.ViktorychSendTV.page(route) : "";
+      if (lazyHtml) return lazyHtml;
+      ensureLazy("sendtv");
+      return lazySkeleton(tr("Send to my TV"));
     }
     if (route.name === "linktv") {
       const lazyHtml = window.ViktorychTVPair ? window.ViktorychTVPair.linkPage(route) : "";
