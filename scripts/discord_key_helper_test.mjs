@@ -1,0 +1,24 @@
+/* Unit checks for the Get-your-key stepper. No real handles or IDs. */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import assert from "node:assert/strict";
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const src = fs.readFileSync(path.join(root, "discord-key-helper.js"), "utf8");
+assert.ok(src.includes("discord.com/app"));
+assert.ok(src.includes("webpackChunkdiscord_app"));
+assert.ok(src.includes("navigator.clipboard.writeText"));
+assert.ok(!/console\.(log|info|debug|warn)\([^)]*token/i.test(src));
+assert.ok(!src.includes("Bearer "));
+assert.ok(src.includes("/users/@me"));
+assert.ok(src.includes("credentials: \"omit\""));
+assert.ok(src.includes("Self-XSS") || src.includes("Self\\u2011XSS") || src.includes("\u201cSelf-XSS\u201d"));
+const css = fs.readFileSync(path.join(root, "discord-key-helper.css"), "utf8");
+assert.ok(css.includes(".dkey-sheet"));
+const idx = fs.readFileSync(path.join(root, "index.html"), "utf8");
+assert.ok(idx.includes("discord-key-helper.js") && idx.includes("discord-key-helper.css"));
+const sw = fs.readFileSync(path.join(root, "sw.js"), "utf8");
+assert.ok(sw.includes('"./discord-key-helper.js"') && sw.includes("discord-key-helper\\.js"));
+const dl = fs.readFileSync(path.join(root, "discord-local.js"), "utf8");
+assert.ok(dl.includes('data-dloc="get-key"') && dl.includes("connect: connect"));
+console.log("discord_key_helper_test ok");

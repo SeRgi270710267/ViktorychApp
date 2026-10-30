@@ -3,6 +3,9 @@ main = "src/index.js"
 compatibility_date = "2026-01-15"
 workers_dev = true
 
+# SMSPOOL_API_KEY (optional) lets the owner read SMS codes in Inbox › SMS codes
+# (GET /v1/owner/sms, owner only, read-only). It is a Worker secret, not a var.
+# See docs/sms-codes.md. npx wrangler secret put SMSPOOL_API_KEY
 # TELEGRAM_BOT_TOKEN is a Worker secret, not a var:
 # npx wrangler secret put TELEGRAM_BOT_TOKEN
 # KEYS_ENC_KEY encrypts owner-pasted keys at rest. It is a Worker secret, not a var.
@@ -41,7 +44,9 @@ workers_dev = true
 # which of those stay visible while Shorts is locked. Both are secrets.
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
-PBKDF2_ITERATIONS = "8000"
+PBKDF2_ITERATIONS = "30000"
+# Hashes made before rounds were recorded used 8000; they upgrade on sign-in.
+PBKDF2_LEGACY_ITERATIONS = "8000"
 # Free sign-up check: proof of work, honeypot, and a short wait.
 # Keep this "on". Tests that post straight to /v1/signup leave it unset.
 SIGNUP_GUARD = "on"
@@ -51,6 +56,10 @@ REQUEST_GUARD = "on"
 # One flag. "owner" hides TikTok and Shorts except for the owner account.
 # "all" shows them to everyone. Keep this in step with accounts.config.js.
 TIKTOK_AUDIENCE = "owner"
+# Inbox relays for members: Mail (IMAP over TLS sockets, one chosen folder,
+# read-only) and their own SMSPool key. Stateless: nothing is stored or
+# logged. "on" enables POST /v1/inbox/mail and POST /v1/inbox/sms.
+INBOX_RELAY = "off"
 
 [[d1_databases]]
 binding = "DB"

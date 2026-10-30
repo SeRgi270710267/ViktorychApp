@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nearby chat (Bitchat-compatible mesh). Kept apart from strings.xml. -->
+<resources>
+    <string name="mesh_title">Чат рядом (Bitchat)</string>
+    <string name="mesh_intro">Запасной способ общаться, когда интернет или приложение заблокированы. Чат с людьми рядом по Bluetooth, совместим с приложением Bitchat на телефонах. Сообщения передаются через соседние устройства, до 7 переходов. Публичные сообщения может прочитать любой рядом; личные зашифрованы сквозным шифрованием. Работает только пока открыт этот экран, поэтому в остальное время не тратит батарею и трафик.</string>
+    <string name="mesh_turned_off">Чат рядом выключен. Приложение не будет использовать Bluetooth и Nostr.</string>
+    <string name="mesh_on">Включить</string>
+    <string name="mesh_off">Выключить</string>
+    <string name="mesh_back">Назад</string>
+    <string name="mesh_allow">Разрешить Bluetooth</string>
+    <string name="mesh_need_allow">Bluetooth ещё не разрешён. Нажмите «Разрешить Bluetooth», чтобы общаться с людьми рядом.</string>
+    <string name="mesh_perm_denied">Разрешение Bluetooth не дано. Чат района через интернет всё равно доступен.</string>
+    <string name="mesh_location_note">В этой версии Android для поиска Bluetooth-устройств нужно разрешение на геолокацию и включённая геолокация. Ваше местоположение не считывается и не отправляется.</string>
+    <string name="mesh_no_ble">На этом устройстве нет Bluetooth LE. Доступен только чат района через интернет.</string>
+    <string name="mesh_bt_off">Bluetooth выключен. Включите его в настройках ТВ.</string>
+    <string name="mesh_central_only">Другие не могут найти этот ТВ по Bluetooth (его Bluetooth-чип не умеет вещать), но он сам может подключаться к телефонам рядом.</string>
+    <string name="mesh_status">Bluetooth: рядом %1$d чел., соединений: %2$d</string>
+    <string name="mesh_nostr_status">Чат района (интернет): подключено %1$d из %2$d релеев</string>
+    <string name="mesh_nostr_off">Чат района (интернет): выключен. Выберите район, чтобы включить.</string>
+    <string name="mesh_public">Кому: всем рядом</string>
+    <string name="mesh_area_chat">Кому: район #%1$s</string>
+    <string name="mesh_private">Кому: %1$s (лично)</string>
+    <string name="mesh_people">Отправить</string>
+    <string name="mesh_no_people">Рядом пока никого нет.</string>
+    <string name="mesh_hint">Напишите сообщение</string>
+    <string name="mesh_send">Отправить</string>
+    <string name="mesh_name">Имя</string>
+    <string name="mesh_name_title">Ваше имя в чате</string>
+    <string name="mesh_area">Район</string>
+    <string name="mesh_area_title">Район для чата через интернет (geohash)</string>
+    <string name="mesh_area_help">Каналы местоположения Bitchat используют geohash, например u3qc для города или u3qcn для района. Оставьте пустым, чтобы выключить чат через интернет. Только чат района использует интернет, через публичные релеи Nostr ниже.</string>
+    <string name="mesh_bad_area">Это не geohash. Используйте буквы и цифры, например u3qcn.</string>
+    <string name="mesh_relays">Релеи</string>
+    <string name="mesh_relays_title">Релеи Nostr, по одному в строке (wss://…)</string>
+    <string name="mesh_wipe">Новая личность</string>
+    <string name="mesh_wiped">Создана новая личность для чата.</string>
+    <string name="mesh_ok">ОК</string>
+    <string name="mesh_cancel">Отмена</string>
+    <string name="mesh_unverified">не проверено</string>
+    <string name="mesh_delivered">доставлено: %1$s</string>
+</resources>

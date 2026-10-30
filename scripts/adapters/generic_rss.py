@@ -16,7 +16,28 @@ from .common import (
     post_shell,
     rfc822_to_iso,
     strip_author_prefix,
+    to_iso,
 )
+
+
+def _item_link(item) -> str:
+    """The item's page: RSS <link> text, else Atom rel="alternate" (or no rel), never rel="self"/"replies"/"enclosure"."""
+    text = child_text(item, "link")
+    if text.strip():
+        return text.strip()
+    fallback = ""
+    for child in list(item):
+        if local_name(child.tag) != "link":
+            continue
+        href = (child.attrib.get("href") or child.text or "").strip()
+        rel = (child.attrib.get("rel") or "alternate").lower()
+        if not href:
+            continue
+        if rel == "alternate":
+            return href
+        if rel not in ("self", "replies", "enclosure", "edit", "related") and not fallback:
+            fallback = href
+    return fallback
 
 
 def _channel(root):
@@ -107,18 +128,18 @@ def parse(payload, feed: dict | None = None) -> dict:
             text = clean_meta_text(strip_author_prefix(text))
         elif item_title and item_title not in text:
             text = (item_title + "\n\n" + text).strip() if text else item_title
-        link = child_text(item, "link")
-        if not link:
-            for child in list(item):
-                if local_name(child.tag) == "link":
-                    link = child.attrib.get("href") or (child.text or "")
-                    if link:
-                        break
+        link = _item_link(item)
         guid = child_text(item, "guid") or child_text(item, "id") or link
+        if not guid and (item_title or text):
+            import hashlib
+
+            guid = "h" + hashlib.sha1(((item_title or text) + "|" + (child_text(item, "pubDate") or child_text(item, "published"))).encode("utf-8")).hexdigest()[:16]
         if platform in ("instagram", "threads"):
             guid = meta_status_id(platform, guid, link)
         published = child_text(item, "pubDate") or child_text(item, "published") or child_text(item, "updated")
         date = rfc822_to_iso(published) if "GMT" in published or "," in published else published
+        if date and not date[:4].isdigit():
+            date = to_iso(published)
         media = list(parts["media"])
         seen = {m.get("url") for m in media}
         for extra in _enclosures(item):

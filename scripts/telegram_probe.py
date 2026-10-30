@@ -195,4 +195,10 @@ def main(argv: list | None = None) -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     sys.exit(main())

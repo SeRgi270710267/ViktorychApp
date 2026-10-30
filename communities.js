@@ -30,8 +30,70 @@
     downvotes: getDownvotes(),
     comments: {},
     commentPromises: {},
-    loading: {}
+    loading: {},
+    docAt: {}
   };
+
+  /* Local-first: every list, community and thread paints from the device
+     cache at once and refreshes in the background (stale-while-revalidate).
+     "Loading" shows only on a true first visit with nothing cached. */
+  var DOC_TTL = 5 * 60 * 1000;
+  function swr() {
+    var local = window.ViktorychLocal;
+    return local && local.swr ? local.swr : null;
+  }
+  function cacheGet(key) {
+    var c = swr();
+    try { return c ? c.get(key) : null; } catch (err) { return null; }
+  }
+  function cachePut(key, value) {
+    var c = swr();
+    try { return c ? c.put(key, value) : false; } catch (err) { return false; }
+  }
+  function slimDoc(doc) {
+    var copy = Object.assign({}, doc);
+    copy.posts = (doc.posts || []).slice(0, 30);
+    return copy;
+  }
+  function storeDoc(name, doc) {
+    if (!doc || doc.missing) return;
+    if (!cachePut("cm:doc:" + name, doc)) cachePut("cm:doc:" + name, slimDoc(doc));
+  }
+  /* Fill state from the cache so the first paint has data. */
+  function cachedDoc(name) {
+    if (!name || state.docs[name]) return state.docs[name] || null;
+    var hit = cacheGet("cm:doc:" + name);
+    if (hit && hit.value && Array.isArray(hit.value.posts)) {
+      state.docs[name] = hit.value;
+      state.docAt[name] = hit.at;
+    }
+    return state.docs[name] || null;
+  }
+  function cachedComments(key) {
+    if (state.comments[key]) return state.comments[key];
+    var hit = cacheGet("cm:c:" + key);
+    if (hit && hit.value && Array.isArray(hit.value.replies)) state.comments[key] = hit.value;
+    return state.comments[key] || null;
+  }
+  /* Background refresh for a community that is on screen from cache. */
+  function revalidate(name) {
+    var doc = state.docs[name];
+    if (!doc || doc.missing || state.loading[name]) return;
+    if (state.docAt[name] && Date.now() - state.docAt[name] < DOC_TTL) return;
+    state.loading[name] = true;
+    state.docAt[name] = Date.now();
+    Promise.all([
+      loadDoc(name, true).catch(function () { return null; }),
+      loadInternal(name).catch(function () { return null; })
+    ]).finally(function () { state.loading[name] = false; render(); });
+  }
+  (function hydrateIndex() {
+    var hit = cacheGet("cm:index");
+    if (hit && hit.value && Array.isArray(hit.value.communities) && hit.value.communities.length) {
+      state.index = { communities: hit.value.communities };
+      state.indexAt = hit.at;
+    }
+  })();
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -78,9 +140,15 @@
   function toast(text) {
     if (window.ViktorychCommunities && window.ViktorychCommunities.toast) window.ViktorychCommunities.toast(text);
   }
-  function hidden(handle, text, platform) {
-    if (window.ViktorychCommunities && window.ViktorychCommunities.hidden) return window.ViktorychCommunities.hidden(handle, text, platform);
+  /* extra carries the item id and its community, so a single hidden comment
+     or a blocked subreddit is dropped before its card, avatar or media. */
+  function hidden(handle, text, platform, extra) {
+    if (window.ViktorychCommunities && window.ViktorychCommunities.hidden) return window.ViktorychCommunities.hidden(handle, text, platform, extra);
     return false;
+  }
+  function blockBtn(name, id, author, platform) {
+    if (!window.ViktorychCommunities || !window.ViktorychCommunities.blockMenu) return "";
+    return '<button class="cm-reddit-action-btn cm-block-btn" type="button" data-cm="block-menu" data-sub="' + esc(name) + '" data-id="' + esc(id) + '" data-author="' + esc(author || "") + '" data-platform="' + esc(platform) + '" aria-label="' + esc(tr("More")) + '" aria-haspopup="menu">' + svgMore + '</button>';
   }
   function note(item) {
     if (window.ViktorychCommunities && window.ViktorychCommunities.note) window.ViktorychCommunities.note(item);
@@ -109,10 +177,10 @@
      but they are not Reddit: label and link them as their own forum. */
   function isForum(name) {
     var row = indexRow(name);
-    if (row && row.type === "discourse") return true;
+    if (row && (row.type === "discourse" || row.type === "nzlay")) return true;
     var builtins = DEFAULT_INDEX.communities || [];
     for (var i = 0; i < builtins.length; i++) {
-      if (builtins[i] && builtins[i].name === name && builtins[i].type === "discourse") return true;
+      if (builtins[i] && builtins[i].name === name && (builtins[i].type === "discourse" || builtins[i].type === "nzlay")) return true;
     }
     var doc = state.docs && state.docs[name];
     return !!(doc && (doc.type === "discourse" || doc.source === "discourse" || doc.source === "flarum"));
@@ -237,6 +305,17 @@
     ]
   };
 
+  /* The NZlay forum is its own X-style community, drawn by nzlay-forum.js.
+     It joins the hub only when its switch is on, and page() hands its pages
+     straight to that module. */
+  if (typeof window !== "undefined" && window.ViktorychNzlayForum && window.ViktorychNzlayForum.enabled() && window.ViktorychNzlayForum.row) {
+    DEFAULT_INDEX.communities.unshift(window.ViktorychNzlayForum.row);
+  }
+
+  function nzlayActive(route) {
+    return route && route.sub === "nzlay" && window.ViktorychNzlayForum && window.ViktorychNzlayForum.enabled();
+  }
+
   /* Built-in communities always stay in the hub. A stale, partial, or empty index
      (service worker cache, a sync run between Reddit and Discourse, a failed
      Worker read) must never make one of them disappear. */
@@ -265,6 +344,7 @@
       state.index = mergeBuiltins(doc);
       state.indexAt = Date.now();
       state.indexPromise = null;
+      if (doc && doc.communities && doc.communities.length) cachePut("cm:index", { communities: state.index.communities });
       rememberCommunities();
       return state.index;
     }
@@ -284,8 +364,8 @@
     return state.indexPromise;
   }
 
-  function loadDoc(name) {
-    if (state.docs[name] && !state.docs[name].missing) return Promise.resolve(state.docs[name]);
+  function loadDoc(name, force) {
+    if (!force && state.docs[name] && !state.docs[name].missing) return Promise.resolve(state.docs[name]);
     state.docPromises = state.docPromises || {};
     if (state.docPromises[name]) return state.docPromises[name];
     var url = basePath() + "data/communities/" + encodeURIComponent(name) + ".json";
@@ -294,6 +374,8 @@
       return res.json();
     }).then(function (doc) {
       state.docs[name] = doc || { name: name, posts: [] };
+      state.docAt[name] = Date.now();
+      storeDoc(name, state.docs[name]);
       delete state.docPromises[name];
       rememberCommunities();
       return state.docs[name];
@@ -303,11 +385,14 @@
         return res2.json();
       }).then(function (doc2) {
         state.docs[name] = doc2 || { name: name, posts: [] };
+        state.docAt[name] = Date.now();
+        storeDoc(name, state.docs[name]);
         delete state.docPromises[name];
         rememberCommunities();
         return state.docs[name];
       }).catch(function () {
-        state.docs[name] = { name: name, title: name, posts: [], missing: true };
+        /* Offline or a failed refresh: keep the copy already on screen. */
+        if (!(state.docs[name] && !state.docs[name].missing)) state.docs[name] = { name: name, title: name, posts: [], missing: true };
         delete state.docPromises[name];
         return state.docs[name];
       });
@@ -332,11 +417,12 @@
       var data = doc && doc.replies ? doc : { replies: [] };
       data.at = Date.now();
       state.comments[key] = data;
+      cachePut("cm:c:" + key, data);
       delete state.commentPromises[key];
       return data;
     }).catch(function () {
-      /* Keep the thread usable: fall back to any comments shipped in the doc. */
-      state.comments[key] = { replies: [], missing: true, at: Date.now() };
+      /* Keep the thread usable: keep cached comments, else fall back to any shipped in the doc. */
+      if (!(state.comments[key] && !state.comments[key].missing)) state.comments[key] = { replies: [], missing: true, at: Date.now() };
       delete state.commentPromises[key];
       return state.comments[key];
     });
@@ -388,9 +474,9 @@
       '</div></div>';
   }
 
-  function redditPosts(doc) {
+  function redditPosts(doc, name) {
     return (doc && doc.posts || []).filter(function (post) {
-      return post && !hidden(post.author, (post.title || "") + " " + (post.text || ""), "reddit");
+      return post && !hidden(post.author, (post.title || "") + " " + (post.text || ""), "reddit", { id: post.id, community: name || (doc && doc.name) || "" });
     });
   }
   function internalPosts(name) {
@@ -398,7 +484,7 @@
     if (!bag || !signedIn()) return [];
     return (bag.posts || []).filter(function (post) {
       var author = post.author || {};
-      return !hidden(author.handle, post.body, "app");
+      return !hidden(author.handle, post.body, "app", { id: post.id, community: name, authorId: author.publicId || author.id || "" });
     });
   }
   function scoreOf(item) {
@@ -407,7 +493,7 @@
     return Number((bag.likes || {})[item.id]) || 0;
   }
   function feedItems(name, doc) {
-    var reddit = redditPosts(doc).map(function (post) {
+    var reddit = redditPosts(doc, name).map(function (post) {
       return { source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, score: post.score, post: post };
     });
     var internal = internalPosts(name).filter(function (post) { return !post.parentId; }).map(function (post) {
@@ -437,7 +523,7 @@
     var cached = state.comments[commentKey(name, parentId)];
     var list = cached && !cached.missing ? (cached.replies || []) : inlineReplies(doc, parentId);
     var reddit = list.filter(function (reply) {
-      return !hidden(reply.author, reply.text, "reddit");
+      return !hidden(reply.author, reply.text, "reddit", { id: reply.id, community: name });
     }).map(function (reply) {
       return { source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply };
     });
@@ -603,6 +689,7 @@
           '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(count(post.comments)) + " " + esc(tr("Comments")) + '</span></a>' +
           '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
           (sourceHref ? '<a class="cm-reddit-action-btn reddit-link" href="' + esc(sourceHref) + '" target="_blank" rel="noopener noreferrer">' + (forum ? svgCommunities : svgSnoo) + '<span>' + esc(sourceLabel) + '</span> ' + svgExternal + '</a>' : "") +
+          blockBtn(name, post.id, post.author, "reddit") +
         '</div>' +
       '</div>' +
     '</article>';
@@ -633,7 +720,7 @@
           votePill(name, post.id, total, v, false) +
           '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></a>' +
           '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
-          (post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '<span>' + esc(tr("Delete")) + '</span></button>' : "") +
+          (post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '<span>' + esc(tr("Delete")) + '</span></button>' : blockBtn(name, post.id, authorHandle, "app")) +
         '</div>' +
       '</div>' +
     '</article>';
@@ -792,6 +879,7 @@
     var waiting = false;
     rows.slice(0, 8).forEach(function (row) {
       var name = row.name;
+      if (cachedDoc(name)) revalidate(name);
       if (!state.docs[name]) {
         waiting = true;
         if (!state.loading[name]) {
@@ -807,7 +895,7 @@
       if (doc.missing) return;
       var bag = state.internal[name];
       if (bag && bag.locked) return;
-      redditPosts(doc).forEach(function (post) {
+      redditPosts(doc, name).forEach(function (post) {
         items.push({ source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, post: post });
       });
       internalPosts(name).filter(function (post) { return !post.parentId; }).forEach(function (post) {
@@ -924,8 +1012,9 @@
   function communityPage(route) {
     var name = nameOf(route.sub);
     if (!name) return head(tr("Communities"), "#/communities") + '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + "</h2></div>";
-    var doc = state.docs[name];
-    if (!doc || state.loading[name]) {
+    var doc = cachedDoc(name);
+    if (doc) revalidate(name);
+    if (!doc) {
       if (!state.loading[name]) {
         state.loading[name] = true;
         Promise.all([
@@ -1043,8 +1132,9 @@
   function threadPage(route) {
     var name = nameOf(route.sub);
     var id = decodeURIComponent(route.post || "");
-    var doc = state.docs[name];
-    if (!doc || state.loading[name]) {
+    var doc = cachedDoc(name);
+    if (doc) revalidate(name);
+    if (!doc) {
       if (!state.loading[name]) {
         state.loading[name] = true;
         Promise.all([
@@ -1083,7 +1173,14 @@
     /* A topic thread loads its own comment page; a reply focus reuses whatever
        the topic file already brought in. */
     var isTopic = !!(reddit && reddit.kind === "post" && !(internal && signedIn()));
-    var comments = state.comments[commentKey(name, id)];
+    var comments = cachedComments(commentKey(name, id));
+    if (comments && !comments.missing && comments.at && Date.now() - comments.at > DOC_TTL && !state.commentPromises[commentKey(name, id)]) {
+      comments.at = Date.now();
+      loadComments(name, id, true).then(function () {
+        var now = (location.hash || "").split("?")[0];
+        if (now.indexOf("/communities/" + name + "/" + id) >= 0) render();
+      });
+    }
     var commentsLoading = isTopic && isForum(name) && !comments;
     if (commentsLoading) {
       loadComments(name, id).then(function () {
@@ -1107,6 +1204,7 @@
             '<div class="cm-comment-actions">' +
               votePill(name, item.reply.id, rTotal, rV, true) +
               '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
+              blockBtn(name, item.reply.id, item.reply.author, "reddit") +
             '</div>' +
           '</div>' +
         '</article>';
@@ -1134,7 +1232,7 @@
             votePill(name, item.post.id, aTotal, aV, true) +
             '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
             '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="#/communities/' + encodeURIComponent(name) + '/' + encodeURIComponent(id) + '">' + svgShare + '</button>' +
-            (item.post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(item.post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '</button>' : "") +
+            (item.post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(item.post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '</button>' : blockBtn(name, item.post.id, aAuthorHandle, "app")) +
           '</div>' +
         '</div>' +
       '</article>';
@@ -1180,6 +1278,7 @@
   }
 
   function page(route) {
+    if (nzlayActive(route)) return window.ViktorychNzlayForum.page(route, { head: head, toast: toast, requestRender: render });
     if (route.post) return threadPage(route);
     if (route.sub) return communityPage(route);
     return listPage();
@@ -1317,6 +1416,7 @@
       else people.push(src.slice(2));
     });
     names.slice(0, 16).forEach(function (name) {
+      if (cachedDoc(name)) revalidate(name);
       if (!state.docs[name]) {
         waiting = true;
         if (!state.loading[name]) {
@@ -1332,7 +1432,7 @@
       if (doc.missing) return;
       var bag = state.internal[name];
       if (bag && bag.locked) return;
-      redditPosts(doc).forEach(function (post) {
+      redditPosts(doc, name).forEach(function (post) {
         var item = { source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, post: post };
         items.push({ created: item.created, item: item });
       });
@@ -1748,6 +1848,14 @@
       }
       setDownvotes(state.downvotes);
       render();
+      return;
+    }
+    if (act === "block-menu") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (window.ViktorychCommunities && window.ViktorychCommunities.blockMenu) {
+        window.ViktorychCommunities.blockMenu({ id: el.dataset.id || "", handle: el.dataset.author || "", platform: el.dataset.platform || "reddit", community: el.dataset.sub || "", comment: !!el.closest(".cm-reddit-comment") });
+      }
       return;
     }
     if (act === "focus-reply") {
