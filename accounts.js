@@ -4524,6 +4524,7 @@ function signupPayload() {
       if (id === "about") return !!showAbout;
       if (id === "gifts") return !!showGifts;
       if (id === "highlights") return !!(mine || highlightHtml);
+      if (id === "friends") return !friendsHiddenFor(account);
       if (id === "games") return !!(window.ViktorychGameSocial && window.ViktorychGameSocial.profileTabAvailable && window.ViktorychGameSocial.profileTabAvailable(account, mine));
       return true;
     }
