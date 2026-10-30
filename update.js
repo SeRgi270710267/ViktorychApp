@@ -9,7 +9,7 @@
   if (root) root.ViktorychUpdate = api;
   if (typeof document !== "undefined") api.start();
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  var PREFIX = "viktorych-a156-";
+  var PREFIX = "viktorych-a157-";
   var SNOOZE_MS = 30 * 60 * 1000;
   var CHECK_MS = 3 * 60 * 1000;
   var RESTORE_MS = 2 * 60 * 1000;
@@ -441,22 +441,28 @@
       item.classList.toggle("is-now", state.phase === "working" && rank === here);
     }
     var showNotes = state.phase === "offer" && state.notes.length > 0;
+    // One time only: removing the icon keeps data on Android and computers.
+    if (showNotes && state.tipLine == null) {
+      var dd = window.ViktorychDeviceData;
+      state.tipLine = dd && dd.tipOnce ? dd.tipOnce() : "";
+    }
+    var notes = showNotes && state.tipLine ? state.notes.concat([state.tipLine]) : state.notes;
     box.notes.hidden = !showNotes;
     box.notesTitle.textContent = tr("What's new");
     if (showNotes) {
       var list = box.notesList;
-      var same = list.childNodes.length === state.notes.length;
+      var same = list.childNodes.length === notes.length;
       var k;
       if (same) {
-        for (k = 0; k < state.notes.length; k++) {
-          if (list.childNodes[k].textContent !== state.notes[k]) { same = false; break; }
+        for (k = 0; k < notes.length; k++) {
+          if (list.childNodes[k].textContent !== notes[k]) { same = false; break; }
         }
       }
       if (!same) {
         list.textContent = "";
-        for (k = 0; k < state.notes.length; k++) {
+        for (k = 0; k < notes.length; k++) {
           var li = document.createElement("li");
-          li.textContent = state.notes[k];
+          li.textContent = notes[k];
           list.appendChild(li);
         }
       }
