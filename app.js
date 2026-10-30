@@ -9600,6 +9600,7 @@ const here = parseRoute();
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
     if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "followers_you_follow" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
+    if (rest[0] === "games") return { name: "profile", platform, handle, tab: "games", query };
     return { name: "profile", platform, handle, query };
   }
 
