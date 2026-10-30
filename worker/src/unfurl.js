@@ -4,7 +4,7 @@
    first, then R2 (unfurl/<sha>.json, 30 days), then the site. Failures are
    cached for a day so a dead link costs one fetch a day. No KV writes. */
 
-import { parseMeta, safeTarget } from "../../shared/unfurl-meta.js";
+import { oembedPlayer, parseMeta, safeTarget } from "../../shared/unfurl-meta.js";
 
 export const UNFURL_TTL_S = 30 * 24 * 3600;
 export const UNFURL_FAIL_TTL_S = 24 * 3600;
@@ -99,9 +99,36 @@ export async function fetchMeta(target, fetcher) {
     if (/^image\//.test(type)) return { url: url.href, title: "", description: "", image: url.href, site: "", domain: url.hostname.replace(/^www\./, ""), large: true };
     if (type && type.indexOf("html") < 0) return null;
     const html = await readCapped(response);
-    return parseMeta(html, url.href);
+    const meta = parseMeta(html, url.href);
+    if (meta && meta.oembed) {
+      const discovered = meta.oembed;
+      delete meta.oembed;
+      // A page with no player page in og:video may still name one in its
+      // oEmbed answer (Rumble, PeerTube). One extra small fetch, cached with
+      // the row; video bytes are never fetched.
+      if (!(meta.video && /html/.test(meta.videoType || ""))) {
+        const embed = await oembedFetch(discovered, fetcher);
+        if (embed) meta.embed = embed;
+      }
+    }
+    return meta;
   }
   return null;
+}
+
+const OEMBED_MAX = 64 * 1024;
+
+async function oembedFetch(raw, fetcher) {
+  const target = safeTarget(raw);
+  if (!target) return null;
+  try {
+    const response = await fetcher(target.href, { redirect: "manual", headers: { "user-agent": BOT_UA, accept: "application/json" } });
+    if (!response.ok) return null;
+    const text = (await readCapped(response)).slice(0, OEMBED_MAX);
+    return oembedPlayer(JSON.parse(text));
+  } catch (_) {
+    return null;
+  }
 }
 
 export async function handleUnfurl(request, deps) {

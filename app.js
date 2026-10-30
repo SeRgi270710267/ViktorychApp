@@ -1022,7 +1022,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1, feed_request: 1, feed_approved: 1, feed_rejected: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -1783,7 +1783,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1863,7 +1863,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
       nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
       nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")],
-      bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")]
+      bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")],
+      feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -3311,6 +3312,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (external && external.kind === "link" && external.openUrl) {
       return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(external.openUrl)}"><span class="link-card-copy"><span class="link-title">${esc(tr("Open on X"))}</span></span></a>`;
     }
+    const player = lvResolve(link.url, link);
+    if (player) return lvCard(player, link, post, false);
     const domain = link.domain || linkDomain(link.url);
     const blocked = linkImagesBlocked();
     const hasImage = !!link.image && !blocked;
@@ -3323,6 +3326,187 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const description = link.description && link.description !== link.title ? `<span class="link-desc">${esc(link.description)}</span>` : "";
     const cls = large ? "link-card lc-large" : (hasImage ? "link-card lc-small" : "link-card lc-text");
     return `<a class="${cls}" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
+  }
+
+  /* Video pages with an official embed player (video-providers.js) get a
+     lite card: a still and a play button. A tap swaps in the provider's own
+     iframe in place, never full screen, never autoplay before a tap. One
+     plays at a time and it pauses when scrolled away. The title row still
+     opens the page. Nothing is downloaded or relayed. */
+  function lvResolve(url, meta) {
+    const reg = window.ViktorychVideoProviders;
+    if (!reg || !url) return null;
+    try { return reg.resolve(url, meta || null, { origin: location.origin, host: location.hostname }); } catch (err) { return null; }
+  }
+
+  function lvCard(hit, link, post, pending) {
+    const pid = post && post.id ? String(post.id) : "";
+    const id = pid ? ` data-id="${esc(pid)}"` : "";
+    const domain = (link && link.domain) || linkDomain(hit.open);
+    const title = (link && (link.title || link.site)) || hit.name || domain;
+    const thumb = hit.thumb && !linkImagesBlocked() ? `<img decoding="async" class="link-card-img" src="${esc(hit.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
+    const desc = link && link.description && link.description !== link.title ? `<span class="link-desc">${esc(link.description)}</span>` : "";
+    const cls = "link-card lc-large lv-card" + (hit.aspect === "9:16" ? " lv-tall" : "") + (pending ? " lp-slot" : "");
+    const slot = pending ? ` data-lp="${esc(hit.open)}"` : "";
+    const facade = `<button type="button" class="lv-facade" data-act="lv-play" aria-label="${esc(tr("Play video") + ": " + title)}">${thumb}<span class="lv-name">${esc(hit.name)}</span><span class="link-card-play" aria-hidden="true">${icon("play")}</span></button>`;
+    const copy = `<a class="link-card-copy lv-copy" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(hit.open)}" title="${esc(tr("Open link"))}"><span class="link-site">${esc(domain || hit.name)}</span><span class="link-title">${esc(title)}</span>${desc}</a>`;
+    return `<div class="${cls}"${slot}${id} data-lv="${esc(hit.key)}" data-lv-src="${esc(hit.embed)}" data-lv-pause="${esc(hit.pause || "")}"><span class="lv-stage"><span class="lv-box">${facade}</span></span>${copy}</div>`;
+  }
+
+  function lvPlaying(card) {
+    return !!(card && card.classList.contains("lv-on") && !card.classList.contains("lv-paused"));
+  }
+
+  function lvUnload(card) {
+    if (!card) return;
+    const frame = card.querySelector("iframe.lv-frame");
+    if (frame) frame.remove();
+    card.classList.remove("lv-on", "lv-paused");
+    if (STATE.lvObserver) STATE.lvObserver.unobserve(card);
+    if (STATE.lvCard === card) STATE.lvCard = null;
+  }
+
+  /* Players with a documented pause message pause in place; the rest unload
+     back to the still, which also stops them. */
+  function lvPause(card) {
+    if (!lvPlaying(card)) return;
+    const frame = card.querySelector("iframe.lv-frame");
+    const reg = window.ViktorychVideoProviders;
+    const msg = reg && reg.pauseMessage ? reg.pauseMessage(card.getAttribute("data-lv-pause") || "") : "";
+    if (frame && msg && frame.contentWindow) {
+      try {
+        frame.contentWindow.postMessage(msg, new URL(frame.src).origin);
+        card.classList.add("lv-paused");
+        return;
+      } catch (err) { /* fall through to unload */ }
+    }
+    lvUnload(card);
+  }
+
+  function lvPauseAll(except) {
+    document.querySelectorAll(".lv-card.lv-on").forEach((card) => { if (card !== except) lvPause(card); });
+    if (STATE.lvCard && STATE.lvCard !== except && !STATE.lvCard.isConnected) lvUnload(STATE.lvCard);
+  }
+
+  function lvStopFeed() {
+    if (STATE.inlineEl) {
+      const el = STATE.inlineEl;
+      STATE.inlineEl = null;
+      setInlinePaused(el, false);
+      el.classList.remove("is-inline");
+      pausePreview(el);
+    }
+    if (STATE.autoEl) {
+      pausePreview(STATE.autoEl);
+      STATE.autoEl = null;
+    }
+  }
+
+  /* This card is the one playing now: everything else stops. */
+  function lvClaim(card) {
+    lvPauseAll(card);
+    lvStopFeed();
+    card.classList.remove("lv-paused");
+    STATE.lvCard = card;
+  }
+
+  function lvWatch(card) {
+    if (!("IntersectionObserver" in window)) return;
+    if (!STATE.lvObserver) {
+      STATE.lvObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => { if (entry.intersectionRatio < 0.25) lvPause(entry.target); });
+      }, { threshold: [0, 0.25, 0.5] });
+    }
+    STATE.lvObserver.observe(card);
+  }
+
+  function lvListen() {
+    if (STATE.lvListening) return;
+    STATE.lvListening = true;
+    // A tap inside a player moves focus into its frame: that card now owns playback.
+    window.addEventListener("blur", () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (active && active.tagName === "IFRAME" && active.classList.contains("lv-frame")) {
+          const card = active.closest(".lv-card");
+          if (card) lvClaim(card);
+        }
+      }, 0);
+    });
+    // YouTube and Vimeo report play; the page only reads that one fact.
+    window.addEventListener("message", (event) => {
+      const frames = document.querySelectorAll("iframe.lv-frame");
+      let card = null;
+      frames.forEach((frame) => { if (!card && frame.contentWindow === event.source) card = frame.closest(".lv-card"); });
+      if (!card) return;
+      let data = event.data;
+      if (typeof data === "string") { try { data = JSON.parse(data); } catch (err) { return; } }
+      if (!data || typeof data !== "object") return;
+      const ytPlaying = data.event === "onStateChange" ? data.info === 1 : (data.event === "infoDelivery" && data.info && data.info.playerState === 1);
+      if (ytPlaying || data.event === "play") {
+        if (STATE.lvCard !== card || card.classList.contains("lv-paused")) lvClaim(card);
+      }
+    });
+  }
+
+  function lvHello(frame, kind) {
+    let origin = "";
+    try { origin = new URL(frame.src).origin; } catch (err) { return; }
+    const send = (msg) => { try { if (frame.contentWindow) frame.contentWindow.postMessage(msg, origin); } catch (err) { /* frame gone */ } };
+    if (kind === "youtube") send(JSON.stringify({ event: "listening", id: "lv", channel: "widget" }));
+    if (kind === "vimeo") send(JSON.stringify({ method: "addEventListener", value: "play" }));
+  }
+
+  function lvPlay(btn) {
+    const card = btn && btn.closest(".lv-card");
+    if (!card) return;
+    const src = card.getAttribute("data-lv-src") || "";
+    const link = card.querySelector("a.lv-copy");
+    if (!/^https:\/\//i.test(src)) {
+      if (link) window.open(link.href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    lvListen();
+    lvClaim(card);
+    const box = card.querySelector(".lv-box");
+    let frame = card.querySelector("iframe.lv-frame");
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.className = "lv-frame";
+      frame.title = tr("Video player");
+      frame.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write");
+      frame.setAttribute("allowfullscreen", "");
+      // The page sends no referrer; official players need the origin to start.
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      const kind = card.getAttribute("data-lv-pause") || "";
+      frame.addEventListener("load", () => lvHello(frame, kind));
+      frame.src = src;
+      box.appendChild(frame);
+    }
+    card.classList.add("lv-on");
+    lvWatch(card);
+    try { frame.focus({ preventScroll: true }); } catch (err) { /* old browsers */ }
+  }
+
+  /* A full render swaps the feed for fresh nodes; the playing card moves
+     into its new spot (moveBefore keeps the frame alive where supported). */
+  function lvAdopt() {
+    const old = STATE.lvCard;
+    if (!old || old.isConnected) return;
+    const key = old.getAttribute("data-lv");
+    const pid = old.getAttribute("data-id") || "";
+    let fresh = null;
+    document.querySelectorAll(".lv-card[data-lv]").forEach((node) => {
+      if (!fresh && node.getAttribute("data-lv") === key && (node.getAttribute("data-id") || "") === pid) fresh = node;
+    });
+    if (!fresh || !fresh.parentNode) { lvUnload(old); return; }
+    const parent = fresh.parentNode;
+    try {
+      if (typeof parent.moveBefore === "function") { parent.moveBefore(old, fresh); fresh.remove(); }
+      else fresh.replaceWith(old);
+    } catch (err) {
+      fresh.replaceWith(old);
+    }
   }
 
   // Link previews, X style. A post with a link gets one card: an embedded
@@ -3457,6 +3641,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const slots = document.querySelectorAll(".lp-slot[data-lp]");
     slots.forEach((slot) => {
       if (slot.getAttribute("data-lp") !== url) return;
+      if (slot.classList.contains("lv-on")) return;
       const post = slot.dataset.id ? findAnyPost(slot.dataset.id) : null;
       const html = linkPreviewHtml(url, post, slot.dataset.id || "");
       if (html) slot.outerHTML = html;
@@ -3550,6 +3735,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const row = LINK_PREVIEW.mem[url];
     if (!row) {
       lpFetch(url);
+      // Known players draw their card at once; the title fills in later.
+      const reg = window.ViktorychVideoProviders;
+      const early = reg && reg.known && reg.known(url) ? lvResolve(url, null) : null;
+      if (early) return lvCard(early, null, post || (id ? { id: id } : null), true);
       return linkChip(url, id, true);
     }
     if (row.quoteRef) {
@@ -3561,6 +3750,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       return linkChip(url, id, true);
     }
     if (row.quote) return quoteCard(row.quote);
+    const player = lvResolve(url, row.meta || null);
+    if (player) return lvCard(player, row.meta || null, post || (id ? { id: id } : null), false);
     if (row.meta) return row.asPost ? linkPostCard(row.meta, id) : linkCard(row.meta, post || (id ? { id: id } : null));
     return linkChip(url, id, false);
   }
@@ -5731,6 +5922,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function inlineTap(tile) {
     bindInlineSeek();
+    lvPauseAll(null);
     const post = playPost(tile) || {};
     const media = playMedia(tile, post) || {};
     const gif = media.type === "animated_gif" || !!tile.querySelector(".gif-badge");
@@ -5859,6 +6051,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function syncPreview() {
+    lvAdopt();
+    if (STATE.viewer && STATE.lvCard) lvPause(STATE.lvCard);
+    // A link card player that is on screen holds the floor: no muted previews.
+    if (!STATE.inlineEl && lvPlaying(STATE.lvCard) && !STATE.viewer) {
+      if (STATE.autoEl) pausePreview(STATE.autoEl);
+      STATE.autoEl = null;
+      paintAutoplayDebug();
+      return;
+    }
     if (STATE.viewer && STATE.viewer.video && STATE.inlineEl) {
       pausePreview(STATE.inlineEl);
       STATE.inlineEl.classList.remove("is-inline");
@@ -5921,6 +6122,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function openFullVideo(tile) {
     const post = playPost(tile);
     if (!post) return;
+    lvPauseAll(null);
     const media = playMedia(tile, post) || {};
     const video = tile.querySelector("video");
     const time = video && isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : (Number(tile._hold) || 0);
@@ -5970,6 +6172,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (ids.some((item) => isFollowed(item))) {
       return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
     }
+    /* Not in the app yet: only the owner adds it, everyone else asks. */
+    const ask = window.FeedRequests && window.FeedRequests.gateButton ? window.FeedRequests.gateButton(ids, large) : "";
+    if (ask) return ask;
     return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
   }
 
@@ -9634,6 +9839,7 @@ const here = parseRoute();
     if (parts[0] === "customize") return { name: "customize", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     if (parts[0] === "feeds" && parts[1] === "lists") return { name: "sourcelists", query };
+    if (parts[0] === "feeds" && parts[1] === "requests") return { name: "feedrequests", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -9801,7 +10007,7 @@ const here = parseRoute();
       case "online":
         return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
-        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" };
+        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" || r.name === "feedrequests" };
       case "lists":
         return { id: "lists", href: "#/lists", icon: "lists", label: tr("Lists"), active: (r) => r.name === "lists" || r.name === "list" };
       case "history":
@@ -14540,7 +14746,7 @@ const here = parseRoute();
       const face = profile.avatar || nl.avatar || "";
       return `<div class="acct-row"><a class="who-main" href="${esc(userHash("news", key))}">${avatar(face, name)}<span class="who-copy"><span class="name">${esc(name)}</span><span class="handle">${esc(profile.displayHandle || key)}</span></span></a>${followButtonClean(id)}</div>`;
     }).join("");
-    const box = `<form class="add-account nl-add"><label class="search"><span>${icon("mail")}</span><input id="nl-add-input" value="${esc(NL_DRAFT.text)}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="${esc(tr("Paste a newsletter link"))}" aria-label="${esc(tr("Add a newsletter"))}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>`;
+    const box = `<form class="add-account nl-add"><label class="search"><span>${icon("mail")}</span><input id="nl-add-input" value="${esc(NL_DRAFT.text)}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="${esc(tr("Paste a newsletter link"))}" aria-label="${esc(tr("Add a newsletter"))}"></label><button class="follow" type="submit">${esc(window.FeedRequests && window.FeedRequests.asks && window.FeedRequests.asks() ? tr("Request") : tr("Add"))}</button></form>`;
     return `<section class="feed-section nl-section"><h2>${esc(tr("Newsletters"))}</h2><p class="feeds-hint">${esc(tr("Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts."))}</p>${box}${rows}</section>`;
   }
 
@@ -15751,6 +15957,9 @@ const here = parseRoute();
     if (kind === "birthday_self") return tr("Happy birthday");
     if (kind === "package") return tr("Package update: {name}", { name: (note && note.name) || tr("Packages") });
     if (kind === "tv_signin") return esc(tr("Approve sign-in on TV?"));
+    if (kind === "feed_request") return tr("Source request: {name}", { name: who });
+    if (kind === "feed_approved") return tr("Source request approved: {name}", { name: who });
+    if (kind === "feed_rejected") return tr("Source request not approved: {name}", { name: who });
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
@@ -15821,6 +16030,7 @@ const here = parseRoute();
     if (kind === "live") return "mic";
     if (kind === "community_note") return "communities";
     if (kind === "tv_signin") return "tv";
+    if (kind === "feed_request" || kind === "feed_approved" || kind === "feed_rejected") return "rss";
     return "bellOn";
   }
 
@@ -16609,6 +16819,7 @@ const here = parseRoute();
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${esc(label)}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     const lang = window.SI18n ? window.SI18n.getLang() : "en";
+    if (section === "feed-requests" && window.FeedRequests) return window.FeedRequests.ownerView(sub);
     if ((section === "accessibility" && sub === "display-language") || section === "display-language") {
       const q = String(STATE.langQ || "").trim().toLowerCase();
       const choices = [
@@ -16917,6 +17128,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/suggestions", tr("Suggestions in your feed"), tr("People you may know, account types, and swipeable cards."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
+      ${window.FeedRequests ? window.FeedRequests.settingsRowHtml() : ""}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
       ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
       ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Theme, data usage, notifications, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
@@ -17594,7 +17806,7 @@ if (STATE.histClear) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "feedrequests", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
@@ -19226,7 +19438,7 @@ if (STATE.histClear) {
      screen now; the live render replaces it in place when data arrives. Each
      finished screen is saved (bounded, least recently used first out, wiped on
      sign-out). Pages that hold secrets, private lists or live media are never saved. */
-  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1 };
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1, feedrequests: 1 };
   function routeLoading(html) {
     if (!html) return true;
     if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
@@ -19352,6 +19564,7 @@ if (STATE.histClear) {
     if (route.name === "explore") return exploreView(route);
     if (route.name === "feeds") return feedsView();
     if (route.name === "sourcelists") return window.SourceLists ? window.SourceLists.view() : feedsView();
+    if (route.name === "feedrequests") return window.FeedRequests ? window.FeedRequests.myView() : feedsView();
     if (route.name === "lists") return listsView();
     if (route.name === "list") return listView(route);
     if (route.name === "history" || route.name === "bookmarks") return historyView(route.name === "history" ? route : { name: "history", tab: "bookmarks", query: route.query });
@@ -21750,6 +21963,10 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (post) noteArticle(post, {});
       return;
     }
+    if (act === "lv-play") {
+      lvPlay(el);
+      return;
+    }
     if (act === "open-link") {
       const post = findAnyPost(el.dataset.id);
       if (post) noteArticle(post, {});
@@ -23710,6 +23927,21 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       event.preventDefault();
       const nlInput = addForm.querySelector("input");
       const nlParsed = parseAccountInput(nlInput && nlInput.value);
+      /* Only the owner adds sources. Everyone else's add box sends a request,
+         unless the source is already in the app or allowed for them. */
+      if (addForm.dataset.frPass === "1") delete addForm.dataset.frPass;
+      else if (window.FeedRequests && window.FeedRequests.gateAdd && window.FeedRequests.gateAdd({
+        raw: nlInput && nlInput.value,
+        parsed: nlParsed,
+        existing: nlParsed && !addForm.classList.contains("nl-add") ? feedIdFromPaste(nlParsed) : "",
+        newsletter: addForm.classList.contains("nl-add") || !!(nlParsed && (nlParsed.platform === "news" || nlParsed.platform === "rss")),
+        proceed: () => {
+          addForm.dataset.frPass = "1";
+          if (addForm.requestSubmit) addForm.requestSubmit();
+          else addForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        },
+        done: () => { addForm.reset(); if (addForm.classList.contains("nl-add")) NL_DRAFT.text = ""; }
+      })) return;
       /* Newsletter links follow on this device for everyone; other feed URLs too unless the owner adds them to the catalog. */
       if (addForm.classList.contains("nl-add") && nlInput && String(nlInput.value || "").trim()) {
         followNewsletter(nlInput.value).then((ok) => { if (ok) { NL_DRAFT.text = ""; addForm.reset(); } });
@@ -29866,6 +30098,35 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       accountHash: accountHash,
       platformIcon: platformIcon,
       STATE: STATE
+    });
+  }
+  if (window.FeedRequests) {
+    window.FeedRequests.attach({
+      tr: tr,
+      esc: esc,
+      avatar: avatar,
+      icon: icon,
+      pageHead: pageHead,
+      settingsHead: settingsHead,
+      signedOwner: signedOwner,
+      accountsApi: accountsApi,
+      accountToken: accountToken,
+      toast: toast,
+      render: () => render({ y: window.scrollY }),
+      readStored: readStored,
+      writeStored: writeStored,
+      STATE: STATE,
+      lang: () => (window.SI18n ? window.SI18n.getLang() : "en"),
+      serverOff: () => serverOffList(),
+      inCatalog: (id) => !!feedById(id),
+      follow: (id) => applyFollow([id], true),
+      followedIds: () => (STATE.settings.follows || []).slice(),
+      unfollowLocal: (ids) => { ids.forEach((id) => setFollowed(id, false)); saveSettings(); render({ y: window.scrollY }); },
+      newsletterInfo: (raw) => newsletterFetch("url=" + encodeURIComponent(String(raw || "").trim().replace(/^(?:news|newsletter):/i, ""))).then((doc) => {
+        if (!doc || !doc.key) return null;
+        const profile = newsProfile(doc);
+        return { key: doc.key, name: profile.name || "", avatar: profile.avatar || "" };
+      })
     });
   }
   if (window.SourceLists) {
