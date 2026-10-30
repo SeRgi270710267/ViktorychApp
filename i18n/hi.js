@@ -5059,5 +5059,14 @@ SI18n.addPack("hi", {
   "You’re the owner. Add it directly.": "आप मालिक हैं। इसे सीधे जोड़ें।",
   "{count} requests": "{count} अनुरोध",
   "{count} updated": "{count} अपडेट किए गए",
-  "{count} waiting": "{count} प्रतीक्षा में"
+  "{count} waiting": "{count} प्रतीक्षा में",
+  "Featured": "फ़ीचर्ड",
+  "All communities": "सभी कम्युनिटी",
+  "No folder": "कोई फ़ोल्डर नहीं",
+  "Open folder {name}": "{name} फ़ोल्डर खोलें",
+  "Delete folder {name}? Its communities stay joined.": "{name} फ़ोल्डर हटाएँ? इसकी कम्युनिटी में आप जुड़े रहेंगे।",
+  "Move communities here with Move to folder.": "फ़ोल्डर में ले जाएँ से कम्युनिटी यहाँ लाएँ।",
+  "Join a community to see it here.": "यहाँ देखने के लिए किसी कम्युनिटी से जुड़ें।",
+  "Pinned communities show first on Explore for everyone.": "पिन की गई कम्युनिटी सभी के लिए एक्सप्लोर में सबसे पहले दिखती हैं।",
+  "Couldn't save the pins.": "पिन सेव नहीं हो सके।"
 });

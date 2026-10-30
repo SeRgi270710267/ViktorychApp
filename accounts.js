@@ -2263,6 +2263,7 @@ var numberNote = form.passkey
       savedPosts: settings.savedPosts || {},
       feedTabs: settings.feedTabs || [],
       communityTabs: cleanCommunityTabs(settings.communityTabs),
+      communityFolders: cleanCommunityFolders(settings.communityFolders),
       noteTabs: settings.noteTabs || [],
       lastNoteTab: settings.lastNoteTab || "all",
       mutedWords: settings.mutedWords || [],
@@ -2378,6 +2379,38 @@ var numberNote = form.passkey
       tabs.push({ id: id, name: name, sources: sources, home: tab.home === true });
     });
     return { at: Number(bag && bag.at) || 0, tabs: tabs };
+  }
+  /* Folders for the joined communities on the Communities Home row. Private
+     to the account: synced like the rest of its settings, never published. */
+  function cleanCommunityFolders(bag) {
+    var list = bag && Array.isArray(bag.folders) ? bag.folders : [];
+    var folders = [];
+    var seen = {};
+    var used = {};
+    list.forEach(function (folder) {
+      if (!folder || typeof folder !== "object" || folders.length >= 20) return;
+      var id = String(folder.id || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
+      var name = String(folder.name || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 40);
+      if (!id || !name || seen[id]) return;
+      seen[id] = true;
+      var items = [];
+      (Array.isArray(folder.items) ? folder.items : []).forEach(function (item) {
+        var key = String(item || "").toLowerCase();
+        if (/^[a-z0-9_]{2,21}$/.test(key) && !used[key] && items.length < 60) { used[key] = true; items.push(key); }
+      });
+      folders.push({ id: id, name: name, items: items });
+    });
+    var order = [];
+    (bag && Array.isArray(bag.order) ? bag.order : []).forEach(function (key) {
+      key = String(key || "");
+      if (order.length < 200 && /^(?:f:[A-Za-z0-9]{1,24}|c:[a-z0-9_]{2,21})$/.test(key) && order.indexOf(key) < 0) order.push(key);
+    });
+    return { at: Number(bag && bag.at) || 0, folders: folders, order: order };
+  }
+  function pickCommunityFolders(local, remote) {
+    var l = cleanCommunityFolders(local);
+    var r = cleanCommunityFolders(remote);
+    return l.at >= r.at ? l : r;
   }
   function pickCommunityTabs(local, remote) {
     var l = cleanCommunityTabs(local);
@@ -2503,6 +2536,7 @@ var numberNote = form.passkey
       savedPosts: unionObjects(local.savedPosts, remote.savedPosts),
       feedTabs: unionById(local.feedTabs, remote.feedTabs),
       communityTabs: pickCommunityTabs(local.communityTabs, remote.communityTabs),
+      communityFolders: pickCommunityFolders(local.communityFolders, remote.communityFolders),
       noteTabs: mergeNoteTabs(local.noteTabs, remote.noteTabs),
       noteTabsSame: local.noteTabsSame === true || local.noteTabsSame === false ? local.noteTabsSame !== false : remote.noteTabsSame !== false,
       lastNoteTab: local.lastNoteTab || remote.lastNoteTab || "all",

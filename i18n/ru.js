@@ -5072,5 +5072,14 @@ SI18n.addPack("ru", {
   "You’re the owner. Add it directly.": "Вы владелец. Добавьте напрямую.",
   "{count} requests": "Запросов: {count}",
   "{count} updated": "Обновлено: {count}",
-  "{count} waiting": "Ожидают: {count}"
+  "{count} waiting": "Ожидают: {count}",
+  "Featured": "Избранное",
+  "All communities": "Все сообщества",
+  "No folder": "Без папки",
+  "Open folder {name}": "Открыть папку {name}",
+  "Delete folder {name}? Its communities stay joined.": "Удалить папку {name}? Вы останетесь в её сообществах.",
+  "Move communities here with Move to folder.": "Перенесите сюда сообщества через «Переместить в папку».",
+  "Join a community to see it here.": "Вступите в сообщество, чтобы увидеть его здесь.",
+  "Pinned communities show first on Explore for everyone.": "Закреплённые сообщества показываются первыми в «Обзоре» для всех.",
+  "Couldn't save the pins.": "Не удалось сохранить закрепления."
 });
