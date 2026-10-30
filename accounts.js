@@ -3615,6 +3615,11 @@ function signupPayload() {
   function followErrorText(res) {
     if (!res) return tr("Couldn’t update that follow. Try again.");
     if (res.status === 429 || res.error === "rate_limited") return tr("Too many follows. Wait a few minutes and try again.");
+    if (res.error === "owner_only") {
+      if (res.request && window.FeedRequests && window.FeedRequests.noteRequested) window.FeedRequests.noteRequested(res.request);
+      return tr("Only the owner adds new sources. Your request was sent.");
+    }
+    if (res.error === "banned") return tr("This source isn’t available.");
     if (res.status === 403 || res.error === "blocked") return tr("You can’t follow this account.");
     if (res.status === 404) return tr("That account isn’t here.");
     return tr("Couldn’t update that follow. Try again.");

@@ -1783,7 +1783,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
      localStorage so lazy modules, the live row and the index mount skip
      features the owner turned off without asking the server again. */
   const SERVER_OFF_KEY = "viktorychapp-server-off";
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat"];
+  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1863,7 +1863,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       nzlay_forum_post: [tr("NZlay forum posting"), tr("Signing in to NZlay and posting or replying from the community. Reading stays on without it.")],
       nzlay_forum_regone: [tr("NZlay forum ReGone links"), tr("Players-online and Play in the community, rank and linked-player badges on authors, and room join links.")],
       nft: [tr("Gift NFTs"), tr("Lets people make a collectible NFT of a gift with our own art, from their own wallet. Off until you turn it on and set the contract.")],
-      bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")]
+      bitchat: [tr("Nearby chat (Bitchat)"), tr("The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.")],
+      feed_requests: [tr("Source requests"), tr("Only you add accounts and feeds. Others press the same buttons to send you a request you allow, block or ban.")]
     };
     const rows = SERVER_FEATURES.map((name) => {
       const on = !off.includes(name);
@@ -5970,6 +5971,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (ids.some((item) => isFollowed(item))) {
       return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
     }
+    /* Not in the app yet: only the owner adds it, everyone else asks. */
+    const ask = window.FeedRequests && window.FeedRequests.gateButton ? window.FeedRequests.gateButton(ids, large) : "";
+    if (ask) return ask;
     return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
   }
 
@@ -9634,6 +9638,7 @@ const here = parseRoute();
     if (parts[0] === "customize") return { name: "customize", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     if (parts[0] === "feeds" && parts[1] === "lists") return { name: "sourcelists", query };
+    if (parts[0] === "feeds" && parts[1] === "requests") return { name: "feedrequests", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -9801,7 +9806,7 @@ const here = parseRoute();
       case "online":
         return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
-        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" };
+        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" || r.name === "sourcelists" || r.name === "feedrequests" };
       case "lists":
         return { id: "lists", href: "#/lists", icon: "lists", label: tr("Lists"), active: (r) => r.name === "lists" || r.name === "list" };
       case "history":
@@ -14540,7 +14545,7 @@ const here = parseRoute();
       const face = profile.avatar || nl.avatar || "";
       return `<div class="acct-row"><a class="who-main" href="${esc(userHash("news", key))}">${avatar(face, name)}<span class="who-copy"><span class="name">${esc(name)}</span><span class="handle">${esc(profile.displayHandle || key)}</span></span></a>${followButtonClean(id)}</div>`;
     }).join("");
-    const box = `<form class="add-account nl-add"><label class="search"><span>${icon("mail")}</span><input id="nl-add-input" value="${esc(NL_DRAFT.text)}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="${esc(tr("Paste a newsletter link"))}" aria-label="${esc(tr("Add a newsletter"))}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>`;
+    const box = `<form class="add-account nl-add"><label class="search"><span>${icon("mail")}</span><input id="nl-add-input" value="${esc(NL_DRAFT.text)}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="${esc(tr("Paste a newsletter link"))}" aria-label="${esc(tr("Add a newsletter"))}"></label><button class="follow" type="submit">${esc(window.FeedRequests && window.FeedRequests.asks && window.FeedRequests.asks() ? tr("Request") : tr("Add"))}</button></form>`;
     return `<section class="feed-section nl-section"><h2>${esc(tr("Newsletters"))}</h2><p class="feeds-hint">${esc(tr("Substack, Beehiiv, Buttondown, Ghost, Medium, Mailchimp archives or any site with a feed. Issues show up as posts."))}</p>${box}${rows}</section>`;
   }
 
@@ -16613,6 +16618,7 @@ const here = parseRoute();
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${esc(label)}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     const lang = window.SI18n ? window.SI18n.getLang() : "en";
+    if (section === "feed-requests" && window.FeedRequests) return window.FeedRequests.ownerView(sub);
     if ((section === "accessibility" && sub === "display-language") || section === "display-language") {
       const q = String(STATE.langQ || "").trim().toLowerCase();
       const choices = [
@@ -16921,6 +16927,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/suggestions", tr("Suggestions in your feed"), tr("People you may know, account types, and swipeable cards."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
+      ${window.FeedRequests ? window.FeedRequests.settingsRowHtml() : ""}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
       ${isStandalone() ? "" : `<button class="set-row" type="button" data-act="install"><span class="set-copy"><b>${esc(tr("Install app"))}</b><span class="set-sub">${esc(tr("Add it to your Home Screen or desktop."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>`}
       ${accountToken() ? `<button class="set-row" type="button" data-act="run-setup"><span class="set-copy"><b>${esc(tr("Run setup again"))}</b><span class="set-sub">${esc(tr("Theme, data usage, notifications, install and follows."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button>` : ""}
@@ -17598,7 +17605,7 @@ if (STATE.histClear) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "sourcelists", "feedrequests", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault", "packages"].includes(route.name);
     const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const liveExtra = route.name === "home" && window.ViktorychLive && window.ViktorychLive.rowExtra ? window.ViktorychLive.rowExtra() : 0;
@@ -19230,7 +19237,7 @@ if (STATE.histClear) {
      screen now; the live render replaces it in place when data arrives. Each
      finished screen is saved (bounded, least recently used first out, wiped on
      sign-out). Pages that hold secrets, private lists or live media are never saved. */
-  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1 };
+  const SNAP_SKIP = { vault: 1, drive: 1, storage: 1, packages: 1, games: 1, shorts: 1, watch: 1, spaces: 1, compose: 1, lock: 1, sourcelists: 1, feedrequests: 1 };
   function routeLoading(html) {
     if (!html) return true;
     if (html.indexOf('class="tab-loading"') >= 0 || html.indexOf('role="progressbar"') >= 0) return true;
@@ -19356,6 +19363,7 @@ if (STATE.histClear) {
     if (route.name === "explore") return exploreView(route);
     if (route.name === "feeds") return feedsView();
     if (route.name === "sourcelists") return window.SourceLists ? window.SourceLists.view() : feedsView();
+    if (route.name === "feedrequests") return window.FeedRequests ? window.FeedRequests.myView() : feedsView();
     if (route.name === "lists") return listsView();
     if (route.name === "list") return listView(route);
     if (route.name === "history" || route.name === "bookmarks") return historyView(route.name === "history" ? route : { name: "history", tab: "bookmarks", query: route.query });
@@ -23714,6 +23722,21 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       event.preventDefault();
       const nlInput = addForm.querySelector("input");
       const nlParsed = parseAccountInput(nlInput && nlInput.value);
+      /* Only the owner adds sources. Everyone else's add box sends a request,
+         unless the source is already in the app or allowed for them. */
+      if (addForm.dataset.frPass === "1") delete addForm.dataset.frPass;
+      else if (window.FeedRequests && window.FeedRequests.gateAdd && window.FeedRequests.gateAdd({
+        raw: nlInput && nlInput.value,
+        parsed: nlParsed,
+        existing: nlParsed && !addForm.classList.contains("nl-add") ? feedIdFromPaste(nlParsed) : "",
+        newsletter: addForm.classList.contains("nl-add") || !!(nlParsed && (nlParsed.platform === "news" || nlParsed.platform === "rss")),
+        proceed: () => {
+          addForm.dataset.frPass = "1";
+          if (addForm.requestSubmit) addForm.requestSubmit();
+          else addForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        },
+        done: () => { addForm.reset(); if (addForm.classList.contains("nl-add")) NL_DRAFT.text = ""; }
+      })) return;
       /* Newsletter links follow on this device for everyone; other feed URLs too unless the owner adds them to the catalog. */
       if (addForm.classList.contains("nl-add") && nlInput && String(nlInput.value || "").trim()) {
         followNewsletter(nlInput.value).then((ok) => { if (ok) { NL_DRAFT.text = ""; addForm.reset(); } });
@@ -29870,6 +29893,35 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       accountHash: accountHash,
       platformIcon: platformIcon,
       STATE: STATE
+    });
+  }
+  if (window.FeedRequests) {
+    window.FeedRequests.attach({
+      tr: tr,
+      esc: esc,
+      avatar: avatar,
+      icon: icon,
+      pageHead: pageHead,
+      settingsHead: settingsHead,
+      signedOwner: signedOwner,
+      accountsApi: accountsApi,
+      accountToken: accountToken,
+      toast: toast,
+      render: () => render({ y: window.scrollY }),
+      readStored: readStored,
+      writeStored: writeStored,
+      STATE: STATE,
+      lang: () => (window.SI18n ? window.SI18n.getLang() : "en"),
+      serverOff: () => serverOffList(),
+      inCatalog: (id) => !!feedById(id),
+      follow: (id) => applyFollow([id], true),
+      followedIds: () => (STATE.settings.follows || []).slice(),
+      unfollowLocal: (ids) => { ids.forEach((id) => setFollowed(id, false)); saveSettings(); render({ y: window.scrollY }); },
+      newsletterInfo: (raw) => newsletterFetch("url=" + encodeURIComponent(String(raw || "").trim().replace(/^(?:news|newsletter):/i, ""))).then((doc) => {
+        if (!doc || !doc.key) return null;
+        const profile = newsProfile(doc);
+        return { key: doc.key, name: profile.name || "", avatar: profile.avatar || "" };
+      })
     });
   }
   if (window.SourceLists) {

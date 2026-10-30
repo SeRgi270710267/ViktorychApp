@@ -297,7 +297,9 @@ export async function fileRequest(env, viewer, body, deps, opts) {
   const source = resolveSource(body.input, { kind: body.kind === "community" ? "community" : "", newsKey: body.key });
   if (!source.ok) return { status: 400, body: { error: source.error || "bad_input", message: source.message || "" } };
   if (await bannedKeys(env, source.keys)) return { status: 403, body: { error: "banned", message: "This source isn't available." } };
-  if (source.kind !== "feed" && source.kind !== "community" && await allowedFor(env, source.keys, publicId)) {
+  // A device source the owner allowed, or somebody already followed before
+  // requests existed, opens at once.
+  if (isDeviceFollow(source.key) && await inApp(env, source.key, publicId)) {
     return { status: 200, body: { state: "allowed", key: source.key } };
   }
   const hit = await deps.rateHit(env, "feed-req:" + publicId, REQUESTS_PER_DAY, DAY_MS);

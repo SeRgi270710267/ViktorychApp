@@ -280,9 +280,9 @@
     const pending = (page.requests || []).map((r) => `<article class="feeds-row"><span class="feeds-copy"><span class="feeds-name">${esc(r.input)}</span><span class="feeds-sub">${esc(tr("Waiting for approval"))}</span></span></article>`).join("");
     return `<p class="feeds-hint">${esc(tr("Extra sources the owner added for you. Mute any account from its posts to hide it."))}</p>
       <section class="feeds-section"><h2>${esc(tr("Your extra sources"))}</h2>${rows || `<p class="feeds-hint">${esc(tr("None yet"))}</p>`}</section>
-      <section class="feeds-section"><h2>${esc(tr("Request an account"))}</h2>
+      ${window.FeedRequests && window.FeedRequests.active() ? `<a class="feeds-banner sl-link" href="#/feeds/requests"><span>${esc(tr("My source requests"))}</span><span aria-hidden="true">›</span></a>` : `<section class="feeds-section"><h2>${esc(tr("Request an account"))}</h2>
       <div class="feeds-add"><input class="search" data-sl-field="request" placeholder="${esc(tr("Paste a link or @handle"))}" autocomplete="off"><button type="button" class="follow" data-sl-act="request">${esc(tr("Request"))}</button></div>
-      ${pending}</section>`;
+      ${pending}</section>`}`;
   }
 
   function view() {
