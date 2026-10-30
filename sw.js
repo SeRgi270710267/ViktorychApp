@@ -4,7 +4,7 @@ const VERSION = "viktorych-a152-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T04:10:48Z-mute-block
+// cache-bust: 2026-10-30T04:27:21Z-mute-block
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -210,6 +210,7 @@ const SHELL_FILES = [
   "./shared/for-you-weights.js",
   "./shared/feed-sources.js",
   "./feeds-page.js",
+  "./source-lists.js",
   "./shared/home-fresh.js",
   "./shared/pill-data.js",
   "./shared/tiktok-lock.js",

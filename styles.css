@@ -6077,6 +6077,11 @@ header.nav.nav-land { display: none; }
 .feeds-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
 .feeds-banner { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 8px 16px 0; padding: 10px 12px; border-radius: 12px; background: var(--hover-soft); color: var(--muted); font-size: 14px; }
 .feeds-banner.is-error { color: #f4212e; }
+.feeds-banner.sl-link { color: var(--text); text-decoration: none; font-weight: 700; }
+.feeds-banner.sl-link:hover { background: var(--hover); }
+.sl-page .feeds-section h2 { color: var(--text); }
+.sl-page .feeds-section h2 + h2, .sl-page .feeds-add + h2 { color: var(--muted); }
+.sl-request .feeds-row-end select { width: auto; max-width: 160px; }
 .feeds-section { border-bottom: 1px solid var(--line); }
 .feeds-section h2 { margin: 0; padding: 14px 16px 6px; font-size: 15px; font-weight: 800; color: var(--muted); }
 .feeds-count { font-weight: 400; }
