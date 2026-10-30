@@ -20,7 +20,7 @@
 
 import { usageReport, FREE_LIMITS } from "./usage.js";
 import { ownerKeyAlerts } from "./owner-keys.js";
-import { RENDER_BACKUP, quietHours } from "./render-warm.js";
+import { RENDER_BACKUP, quietHours, renderHours } from "./render-warm.js";
 
 export const WATCH_KEY = "owner/watchdog.json";
 export const REPO = "ViktorychGroup/ViktorychApp";
@@ -317,7 +317,9 @@ export async function runWatchdog(env, now, fetcher) {
   // (src/render-warm.js), so the watchdog never spends free instance hours
   // waking it. Hourly: the cheap /backup/health. Once a day: /v1/health,
   // which also proves the backup can reach D1 and R2.
-  if (String(env.RENDER_WARM || "1") !== "0" && !quietHours(env).includes(hourUtc)) {
+  // Near Render's free monthly hours the backup is left asleep until the 1st.
+  const renderRest = String(env.RENDER_WARM || "1") === "0" || quietHours(env).includes(hourUtc) || !!((await renderHours(env, at)) || {}).paused;
+  if (!renderRest) {
     const root = String(env.BACKUP_HEALTH_URL || RENDER_BACKUP).replace(/\/(v1\/health)?$/, "").replace(/\/$/, "");
     try {
       const res = await timed(f, root + "/backup/health", 60000);

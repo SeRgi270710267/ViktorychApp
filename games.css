@@ -308,6 +308,26 @@ html.game-immersive #app { visibility: hidden; }
   transition: opacity 0.2s;
 }
 .game-pad-note.on { opacity: 1; }
+.game-pad-note .game-pad-go { pointer-events: auto; color: #fff; font-weight: 700; text-decoration: underline; }
+.game-pad-note .game-pad-go svg { display: none; }
+/* In the TV app: ReGone with a controller in the app's own game screen. */
+.games-tvpad { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 12px; }
+.games-tvpad .games-empty { margin: 0; }
+.games-pad-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: #eff3f4;
+  color: #0f1419;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.games-pad-play svg { width: 22px; height: 22px; fill: currentColor; }
+.games-pad-play:focus-visible { outline: 3px solid #1d9bf0; outline-offset: 2px; }
 
 /* Performance mode: the app behind the game stops animating. */
 html.game-on body *:not(#game-host):not(#game-host *) { animation-play-state: paused !important; }

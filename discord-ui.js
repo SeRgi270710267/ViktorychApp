@@ -8,7 +8,7 @@
   }
   function trn(key, n, vars) {
     var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
-    return fn ? fn(key, n, vars) : String(n);
+    return fn ? fn(key, n, vars) : String(n) + " " + key; // plain English when no language pack is loaded
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
@@ -1170,12 +1170,15 @@
 
   // App-native servers (servers-ui.js) sit above the mirrored Discord list.
   function nativeServersHtml() {
-    const mod = window.ViktorychServers;
+    // The list also renders outside a page (node checks), where there is no window.
+    const host = typeof window !== "undefined" ? window : null;
+    if (!host) return "";
+    const mod = host.ViktorychServers;
     if (mod && mod.listHtml) {
       try { return mod.listHtml(); } catch (err) { return ""; }
     }
-    if (window.ViktorychLazy && window.ViktorychLazy.ensure) {
-      try { window.ViktorychLazy.ensure("servers"); } catch (err) { /* offline */ }
+    if (host.ViktorychLazy && host.ViktorychLazy.ensure) {
+      try { host.ViktorychLazy.ensure("servers"); } catch (err) { /* offline */ }
     }
     return "";
   }
@@ -1203,8 +1206,9 @@
     const sub = whoId && window.ViktorychPresence ? window.ViktorychPresence.dmSubHtml(whoId, place) : esc(place);
     const catchup = '<button type="button" class="show-more odai-btn" data-act="odai-unread" data-id="' + esc(id) + '" data-scope="dm">' + esc(tr("Summarize unread")) + "</button>";
     const suggest = '<button type="button" class="show-more odai-btn" data-act="odai-suggest" data-id="' + esc(id) + '" data-scope="dm">' + esc(tr("Suggest replies")) + "</button>";
+    const gameInvite = whoId && typeof window !== "undefined" && window.ViktorychGameSocial ? window.ViktorychGameSocial.dmHeadHtml(whoId, ch.name) : "";
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + catchup + suggest + pinBtn + "</header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + catchup + suggest + gameInvite + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       pinPanelHtml(id) +
       ("<button type=\"button\" class=\"dmsgs-jump\" hidden" + ">" + tr("Jump to present") + "<" + "/button>") +
@@ -1916,9 +1920,16 @@
     });
   }
 
+  /* A copy for the first paint. The full index stays in the IndexedDB doc
+     cache; a big one is not copied to localStorage, which is for settings. */
+  const INDEX_LOCAL_MAX = 60000;
   function rememberIndex(index) {
     if (!index || typeof index !== "object") return;
-    try { localStorage.setItem(INDEX_KEY, JSON.stringify(index)); }
+    try {
+      const text = JSON.stringify(index);
+      if (text.length > INDEX_LOCAL_MAX) localStorage.removeItem(INDEX_KEY);
+      else localStorage.setItem(INDEX_KEY, text);
+    }
     catch (err) { /* private mode can refuse */ }
   }
 

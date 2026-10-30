@@ -11,19 +11,19 @@ let mf;
 
 function nasaUser() {
   return {
-    id: "11348282",
-    name: "NASA",
-    screen_name: "NASA",
+    id: "20000001",
+    name: "SampleAgency",
+    screen_name: "SampleAgency",
     description: "Making the seemingly impossible, possible.",
     avatar_url: "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB_normal.jpg",
-    banner_url: "https://pbs.twimg.com/profile_banners/11348282/1788992290",
+    banner_url: "https://pbs.twimg.com/profile_banners/20000001/1788992290",
     followers: 92310709,
     following: 115,
     tweets: 74449,
     location: "Pale Blue Dot",
     joined: "Wed Dec 19 20:20:32 +0000 2007",
-    website: { url: "http://www.nasa.gov/" },
-    url: "https://x.com/NASA",
+    website: { url: "http://www.sampleagency.gov/" },
+    url: "https://x.com/SampleAgency",
     verification: { verified: true, type: "government" }
   };
 }
@@ -163,18 +163,18 @@ test("owner adds and removes an X account in private storage", async () => {
     method: "POST",
     ip: "203.0.113.98",
     token: owner.body.token,
-    body: { handle: "https://x.com/NASA/status/1234567890", platform: "x" }
+    body: { handle: "https://x.com/SampleAgency/status/1234567890", platform: "x" }
   });
   assert.equal(added.status, 200);
-  assert.equal(added.body.account.handle, "NASA");
-  assert.equal(added.body.account.permanentId, "11348282");
-  assert.equal(added.body.account.name, "NASA");
+  assert.equal(added.body.account.handle, "SampleAgency");
+  assert.equal(added.body.account.permanentId, "20000001");
+  assert.equal(added.body.account.name, "SampleAgency");
   assert.equal(added.body.account.verifiedType, "government");
   assert.equal(added.body.account.followers, 92310709);
   assert.equal(added.body.account.following, 115);
   assert.equal(added.body.account.postsCount, 74449);
   assert.equal(added.body.account.joined, "2007-12-19");
-  assert.equal(added.body.account.website, "https://www.nasa.gov/");
+  assert.equal(added.body.account.website, "https://www.sampleagency.gov/");
   assert.ok(added.body.account.avatar.indexOf("_400x400.") >= 0);
   assert.ok(added.body.account.banner.endsWith("/1500x500"));
   assert.equal(added.body.account.bio.indexOf("impossible") >= 0, true);
@@ -188,11 +188,11 @@ test("owner adds and removes an X account in private storage", async () => {
     method: "POST",
     ip: "203.0.113.99",
     token: owner.body.token,
-    body: { url: "https://twitter.com/NASA" }
+    body: { url: "https://twitter.com/SampleAgency" }
   });
   assert.equal(twitter.status, 200);
-  assert.equal(twitter.body.account.handle, "NASA");
-  assert.equal(twitter.body.account.permanentId, "11348282");
+  assert.equal(twitter.body.account.handle, "SampleAgency");
+  assert.equal(twitter.body.account.permanentId, "20000001");
 
   const listed = await call("/v1/owner/accounts", { ip: "203.0.113.100", token: owner.body.token });
   assert.equal(listed.status, 200);
@@ -204,11 +204,11 @@ test("owner adds and removes an X account in private storage", async () => {
 
   const bindings = await mf.getBindings();
   const stored = JSON.parse(await (await bindings.DATA.get("owner/added-accounts.json")).text());
-  assert.equal(stored.added[0].handle, "NASA");
-  assert.equal(stored.added[0].permanentId, "11348282");
+  assert.equal(stored.added[0].handle, "SampleAgency");
+  assert.equal(stored.added[0].permanentId, "20000001");
   assert.ok(Array.isArray(stored.removed));
 
-  const removed = await call("/v1/owner/accounts/NASA", {
+  const removed = await call("/v1/owner/accounts/SampleAgency", {
     method: "DELETE",
     ip: "203.0.113.102",
     token: owner.body.token
@@ -216,10 +216,10 @@ test("owner adds and removes an X account in private storage", async () => {
   assert.equal(removed.status, 200);
   assert.equal(removed.body.added.length, 0);
   const after = JSON.parse(await (await bindings.DATA.get("owner/added-accounts.json")).text());
-  assert.ok(after.removed.some((item) => item.toLowerCase() === "nasa"));
-  assert.ok(after.removedIds.indexOf("11348282") >= 0);
+  assert.ok(after.removed.some((item) => item.toLowerCase() === "sampleagency"));
+  assert.ok(after.removedIds.indexOf("20000001") >= 0);
 
-  const strangerDelete = await call("/v1/owner/accounts/NASA", {
+  const strangerDelete = await call("/v1/owner/accounts/SampleAgency", {
     method: "DELETE",
     ip: "203.0.113.103",
     token: stranger.body.token
@@ -230,11 +230,11 @@ test("owner adds and removes an X account in private storage", async () => {
     method: "POST",
     ip: "203.0.113.104",
     token: owner.body.token,
-    body: { handle: "@NASA" }
+    body: { handle: "@SampleAgency" }
   });
   assert.equal(back.status, 200);
   const restored = JSON.parse(await (await bindings.DATA.get("owner/added-accounts.json")).text());
-  assert.equal(restored.removed.some((item) => item.toLowerCase() === "nasa"), false);
-  assert.equal(restored.removedIds.indexOf("11348282"), -1);
-  assert.equal(restored.added[0].handle, "NASA");
+  assert.equal(restored.removed.some((item) => item.toLowerCase() === "sampleagency"), false);
+  assert.equal(restored.removedIds.indexOf("20000001"), -1);
+  assert.equal(restored.added[0].handle, "SampleAgency");
 });

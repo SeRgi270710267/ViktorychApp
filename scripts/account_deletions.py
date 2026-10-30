@@ -193,12 +193,12 @@ def _selftest() -> int:
             {"id": "keep", "name": "Keep"},
             {"id": "app:" + user, "publicId": user, "name": "Gone", "handle": "secret-handle"},
         ],
-        "follows": ["x:nasa", "app:" + user, {"id": "app:" + other, "handle": "bee"}],
+        "follows": ["x:sampleagency", "app:" + user, {"id": "app:" + other, "handle": "bee"}],
         "note": None,
     }
     cleaned = scrub_value(doc, {digest}, salt)
     assert cleaned["people"] == [{"id": "keep", "name": "Keep"}]
-    assert cleaned["follows"] == ["x:nasa", {"id": "app:" + other, "handle": "bee"}]
+    assert cleaned["follows"] == ["x:sampleagency", {"id": "app:" + other, "handle": "bee"}]
     assert cleaned["note"] is None
     listed = json.dumps({"hashes": [digest]})
     assert user not in listed and "secret-handle" not in listed

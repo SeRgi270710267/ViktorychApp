@@ -239,7 +239,7 @@ shared/tiktok-play.js|TikTok returned
 shared/webauthn.js|RSASSA-PKCS1-v1_5
 404.html|Open ViktorychApp
 404.html|Abrir ViktorychApp
-index.html|Elon Musk
+index.html|Copper Lane
 index.html|“Lack of electricity” is an oversimplification. Everything is hard about bringing massive compute online at extremely high speed. If there was twice as much time, this would be relatively easy, but there is not.
 index.html|Johann Sebastian Bach is the Shakespeare of music. Best there ever was.
 index.html|Something went wrong
@@ -252,6 +252,7 @@ index.html|Regístrate
 index.html|Entrar
 reactions.js|Shift+F10
 reactions.js|800px 0px
+community-notes.js|800px 0px
 servers-ui.js|MENTION_EVERYONE
 servers-ui.js|CREATE_INVITE
 servers-ui.js|MANAGE_MESSAGES
@@ -264,6 +265,7 @@ people.js|Fediverse
 own: onboarding.js
 # data-saver.js: the fifth column of KEYS is a code note, never rendered
 data-saver.js|HD video variants
+data-saver.js|Community Notes only for posts on screen, refreshed less often
 data-saver.js|1.1 GB on-device model
 data-saver.js|113 MB translation model
 data-saver.js|23 MB search model
@@ -275,3 +277,15 @@ inbox-mail.js|ViktorychApp codes
 inbox-mail.js|from:(simplelogin.co OR simplelogin.io) OR to:(@{alias-domain})
 # The sharing pool public signing key (a technical token, not text).
 shared/peer-pool.js|ZsSShgUc_CvKHYj9txhq2MDMY4tAMLSmylktqcrAMVM
+shared/regone.js|NZlay Mini 01 - EU
+shared/regone.js|NZlay Medium 01 - EU
+shared/regone.js|NZlay Large 01 - EU
+shared/regone.js|NZlay Mega 05 - EU
+shared/regone.js|NZlay Mini 01 - USA
+shared/regone.js|NZlay Medium 03 - USA
+shared/regone.js|NZlay Large 01 - USA
+shared/regone.js|NZlay Large 02 - USA
+
+discord-key-helper.js
+# The OS close shortcut shown in the desktop close hint.
+desktop-app.js|Alt+F4
