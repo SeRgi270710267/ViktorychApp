@@ -99,6 +99,8 @@ const SHELL_FILES = [
   "./pymk.css",
   "./tv.js",
   "./tv.css",
+  "./tv-tune.js",
+  "./tv-tune.css",
   "./shared/tv-boot.js",
   "./shared/short-link.js",
   "./shared/x-range.js",

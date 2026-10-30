@@ -1345,6 +1345,8 @@ def main() -> None:
     check(busy_sync.returncode == 0, "the sync trims busy sources' replies and reads their replies hourly")
     tv_flow = subprocess.run(["node", str(ROOT / "scripts" / "tv_boot_test.js")], cwd=ROOT)
     check(tv_flow.returncode == 0, "TV mode detects TVs, keeps its light defaults switchable, and publishes the TV app files")
+    tv_tune = subprocess.run(["node", str(ROOT / "scripts" / "tv_tune_test.js")], cwd=ROOT)
+    check(tv_tune.returncode == 0, "the TV app's first-open check picks defaults from the TV's specs and never overwrites a setting changed by hand")
     tv_pair = subprocess.run(["node", str(ROOT / "scripts" / "tv_pair_test.mjs")], cwd=ROOT)
     check(tv_pair.returncode == 0, "a phone signs a TV in with a one-use code that expires")
     tv_short = subprocess.run(["node", str(ROOT / "scripts" / "tv_short_pair_test.mjs")], cwd=ROOT)

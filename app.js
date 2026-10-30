@@ -4611,8 +4611,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if ((hls.levels || []).length) { hls.autoLevelCapping = sdTop(hls.levels); hls.capLevelToPlayerSize = true; }
       return;
     }
-    const top = (hls.levels || []).length - 1;
+    let top = (hls.levels || []).length - 1;
     if (top < 0) return;
+    // TV tuning: stay under this TV's max video quality, in a codec it decodes in hardware.
+    const tune = window.ViktorychTVTune;
+    const tvTop = tune && tune.pickTop ? tune.pickTop(hls.levels) : -1;
+    if (tvTop >= 0) top = tvTop;
     hls.capLevelToPlayerSize = false;
     hls.currentLevel = top;
   }
