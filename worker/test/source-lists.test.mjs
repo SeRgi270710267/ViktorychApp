@@ -130,16 +130,17 @@ test("source lists reach only assigned accounts", async () => {
   assert.deepEqual(ownerSees.body.lists, [], "the owner's own feed stays clean");
   assert.equal((await call("/v1/me/source-lists", { ip: "203.0.113.45" })).status, 401);
 
-  // Requests land in the owner's queue and approve into a list.
+  // Requests land in the owner's source request queue and allow into a list.
   const asked = await call("/v1/me/source-lists/requests", { method: "POST", ip: "203.0.113.46", token: other.token, body: { input: "https://feeds.example/other.xml" } });
   assert.equal(asked.status, 200, JSON.stringify(asked.body));
-  let view = await call("/v1/owner/source-lists", { ip: "203.0.113.47", token: owner.token });
+  let view = await call("/v1/owner/feed-requests", { ip: "203.0.113.47", token: owner.token });
   assert.equal(view.body.requests.length, 1);
-  assert.equal(view.body.requests[0].by.handle, "otherbirch");
-  const approved = await call(`/v1/owner/source-lists/requests/${view.body.requests[0].id}/approve`, { method: "POST", ip: "203.0.113.48", token: owner.token, body: { newList: "For otherbirch" } });
+  assert.equal(view.body.requests[0].requesters[0].handle, "otherbirch");
+  const approved = await call(`/v1/owner/feed-requests/${view.body.requests[0].id}/allow`, { method: "POST", ip: "203.0.113.48", token: owner.token, body: { dest: "list", newList: "For otherbirch" } });
   assert.equal(approved.status, 200, JSON.stringify(approved.body));
-  assert.equal(approved.body.requests.length, 0);
-  const made3 = approved.body.lists.find((row) => row.name === "For otherbirch");
+  assert.equal(approved.body.pending, 0);
+  const listsNow = await call("/v1/owner/source-lists", { ip: "203.0.113.52", token: owner.token });
+  const made3 = listsNow.body.lists.find((row) => row.name === "For otherbirch");
   assert.equal(made3.members[0].handle, "otherbirch");
 
   // Unassign and delete stop the fetch.

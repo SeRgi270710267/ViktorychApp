@@ -1,4 +1,5 @@
 import { eachLimit } from "./limit.js";
+import { bannedSpec } from "./feed-requests.js";
 import { isRunner } from "./job-runner.js";
 /* Owner-only feed catalog. Anonymous callers get 404. Other accounts get 403.
    The catalog stays in private R2. A sync dispatch does not include the handle. */
@@ -705,60 +706,8 @@ async function handleOwnerFeeds(request, env, path, deps) {
     const body = await deps.readJson(request, 4000);
     if (body.error) return deps.json(400, { error: body.error });
     if (body.confirm !== true) return deps.json(400, { error: "confirm" });
-    const spec = detectInput(body.input || "");
-    if (!spec.ok) return deps.json(400, { error: spec.error, message: spec.message });
-    const probed = await probeAccount(spec);
-    if (probed.error) return probeError(deps, probed);
-    const doc = await readCatalog(env);
-    const id = accountId(Object.assign({}, spec, { channelId: probed.channelId || spec.channelId || "", handle: probed.profile.handle || spec.handle }));
-    doc.removed = doc.removed.filter((item) => item !== id);
-    let row = findAccount(doc, id);
-    const now = Date.now();
-    if (!row) {
-      if (doc.accounts.length >= ACCOUNT_CAP) return deps.json(400, { error: "full", message: ERROR_TEXT.full });
-      row = {
-        id,
-        platform: spec.platform,
-        handle: probed.profile.handle || spec.handle,
-        host: spec.host || "",
-        redditKind: spec.redditKind || "",
-        name: probed.profile.name || spec.handle,
-        label: "",
-        avatar: probed.profile.avatar || "",
-        url: probed.profile.url || spec.url,
-        channelId: probed.channelId || "",
-        permanentId: probed.profile.permanentId || "",
-        groupId: "",
-        order: doc.accounts.length,
-        pinned: false,
-        muted: false,
-        paused: false,
-        tabs: [],
-        addedAt: new Date(now).toISOString(),
-        posts: cleanPosts(probed.posts),
-        health: healthOf(probed.status, probed.code, null, now, probed.retryAfter)
-      };
-      doc.accounts.push(row);
-    } else {
-      row.name = probed.profile.name || row.name;
-      row.avatar = probed.profile.avatar || row.avatar;
-      row.url = probed.profile.url || row.url;
-      row.handle = probed.profile.handle || row.handle;
-      if (probed.channelId) row.channelId = probed.channelId;
-      if (probed.profile.permanentId) row.permanentId = probed.profile.permanentId;
-      row.paused = false;
-      row.posts = cleanPosts(probed.posts).length ? cleanPosts(probed.posts) : cleanPosts(row.posts);
-      row.health = healthOf(probed.status, probed.code, row.health, now, probed.retryAfter);
-    }
-    await writeCatalog(env, doc);
-    try {
-      if (row.platform === "x") await mirrorX(env, row, false);
-      if (row.platform === "tiktok") await mirrorTikTok(env, row, false);
-    } catch (err) { /* the catalog row is already stored */ }
-    let dispatched = false;
-    try { dispatched = await deps.dispatchWorkflows(env, ["sync.yml"]); }
-    catch (err) { dispatched = false; }
-    return deps.json(200, { account: publicAccount(row), dispatched });
+    const added = await addToCatalog(env, body.input || "", deps);
+    return deps.json(added.status, added.body, added.extra || null);
   }
 
   if (path === "/v1/owner/feeds/groups" && method === "POST") {
@@ -980,3 +929,91 @@ async function sweepOwnerFeeds(env, now) {
 }
 
 export { handleOwnerFeeds, sweepOwnerFeeds, CATALOG_KEY, probeAccount };
+
+/* Adds one account to the owner catalog. The owner POST route and an
+   allowed source request both land here, so a ban is checked once. */
+export async function addToCatalog(env, input, deps) {
+  const spec = detectInput(input || "");
+  if (!spec.ok) return { status: 400, body: { error: spec.error, message: spec.message } };
+  if (await bannedSpec(env, spec)) return { status: 403, body: { error: "banned" } };
+  const probed = await probeAccount(spec);
+  if (probed.error) return probeResult(probed);
+  const doc = await readCatalog(env);
+  const id = accountId(Object.assign({}, spec, { channelId: probed.channelId || spec.channelId || "", handle: probed.profile.handle || spec.handle }));
+  doc.removed = doc.removed.filter((item) => item !== id);
+  let row = findAccount(doc, id);
+  const now = Date.now();
+  if (!row) {
+    if (doc.accounts.length >= ACCOUNT_CAP) return { status: 400, body: { error: "full", message: ERROR_TEXT.full } };
+    row = {
+      id,
+      platform: spec.platform,
+      handle: probed.profile.handle || spec.handle,
+      host: spec.host || "",
+      redditKind: spec.redditKind || "",
+      name: probed.profile.name || spec.handle,
+      label: "",
+      avatar: probed.profile.avatar || "",
+      url: probed.profile.url || spec.url,
+      channelId: probed.channelId || "",
+      permanentId: probed.profile.permanentId || "",
+      groupId: "",
+      order: doc.accounts.length,
+      pinned: false,
+      muted: false,
+      paused: false,
+      tabs: [],
+      addedAt: new Date(now).toISOString(),
+      posts: cleanPosts(probed.posts),
+      health: healthOf(probed.status, probed.code, null, now, probed.retryAfter)
+    };
+    doc.accounts.push(row);
+  } else {
+    row.name = probed.profile.name || row.name;
+    row.avatar = probed.profile.avatar || row.avatar;
+    row.url = probed.profile.url || row.url;
+    row.handle = probed.profile.handle || row.handle;
+    if (probed.channelId) row.channelId = probed.channelId;
+    if (probed.profile.permanentId) row.permanentId = probed.profile.permanentId;
+    row.paused = false;
+    row.posts = cleanPosts(probed.posts).length ? cleanPosts(probed.posts) : cleanPosts(row.posts);
+    row.health = healthOf(probed.status, probed.code, row.health, now, probed.retryAfter);
+  }
+  await writeCatalog(env, doc);
+  try {
+    if (row.platform === "x") await mirrorX(env, row, false);
+    if (row.platform === "tiktok") await mirrorTikTok(env, row, false);
+  } catch (err) { /* the catalog row is already stored */ }
+  let dispatched = false;
+  try { dispatched = await deps.dispatchWorkflows(env, ["sync.yml"]); }
+  catch (err) { dispatched = false; }
+  return { status: 200, body: { account: publicAccount(row), dispatched } };
+}
+
+/* A banned source stops being fetched: its catalog row is paused and the
+   X/TikTok mirrors drop it. keys are lowercased source keys. */
+export async function pauseCatalogKeys(env, keys) {
+  const want = new Set((keys || []).map((key) => String(key || "").toLowerCase()).filter(Boolean));
+  if (!want.size) return 0;
+  const doc = await readCatalog(env);
+  let changed = 0;
+  for (const row of doc.accounts) {
+    const id = String(row.id || "").toLowerCase();
+    const alias = (String(row.platform || "") + ":" + String(row.handle || "")).toLowerCase();
+    if (!want.has(id) && !want.has(alias)) continue;
+    if (!row.paused) changed += 1;
+    row.paused = true;
+    try {
+      if (row.platform === "x") await mirrorX(env, row, true);
+      if (row.platform === "tiktok") await mirrorTikTok(env, row, true);
+    } catch (err) { /* the pause is stored below */ }
+  }
+  if (changed) await writeCatalog(env, doc);
+  return changed;
+}
+
+function probeResult(probed) {
+  const status = probed.error === "not_found" ? 404 : probed.error === "rate" ? 429 : probed.error === "bad_feed" || probed.error === "private_host" ? 400 : 503;
+  const extra = probed.error === "rate" ? { "retry-after": String(Math.max(1, Number(probed.retryAfter) || 60)) } : null;
+  return { status, body: { error: probed.error, message: ERROR_TEXT[probed.error] || ERROR_TEXT.down }, extra };
+}

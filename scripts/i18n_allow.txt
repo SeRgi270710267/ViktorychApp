@@ -7,6 +7,7 @@ keys: shared/gift-catalog.js
 keys: shared/presence.js
 keys: shared/pill-data.js
 keys: shared/owner-keys.js
+keys: mesh-chat.js
 # Pack keys picked by a ternary inside tr().
 x-compose.js|Reply
 x-compose.js|5 minutes
