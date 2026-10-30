@@ -9458,7 +9458,13 @@ const here = parseRoute();
   }
 
   function parseRouteInner() {
-    const hash = location.hash || "#/";
+    let hash = location.hash || "#/";
+    /* Messages is now Inbox. #/inbox… links open the same page as #/messages…,
+       which old links, servers and the Discord mirror keep using. */
+    if (/^#\/inbox(?=$|[/?])/.test(hash)) {
+      hash = "#/messages" + hash.slice(7);
+      try { history.replaceState(history.state, "", hash); } catch (err) { /* the address bar keeps #/inbox */ }
+    }
     const qAt = hash.indexOf("?");
     const query = qAt >= 0 ? new URLSearchParams(hash.slice(qAt + 1)) : new URLSearchParams();
     const path = (qAt >= 0 ? hash.slice(0, qAt) : hash).replace(/^#/, "") || "/";
@@ -9494,6 +9500,7 @@ const here = parseRoute();
       if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "mutuals" || parts[2] === "requests") return { name: "connections", personId: parts[1], tab: parts[2], platform: "", handle: "", query };
       return { name: "person", id: parts[1], query };
     }
+    if (parts[0] === "messages" && parts[1] === "sms") return { name: "messages", sms: true, channel: "", server: "", query };
     if (parts[0] === "messages") {
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
       const server = (parts[1] === "s" || parts[1] === "join") && parts[2] ? parts[2] : "";
@@ -9691,7 +9698,7 @@ const here = parseRoute();
       case "notifications":
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
-        return { id: "messages", href: "#/messages", icon: "mail", label: tr("Messages"), active: (r) => r.name === "messages" };
+        return { id: "messages", href: "#/messages", icon: "mail", label: tr("Inbox"), active: (r) => r.name === "messages" };
       case "online":
         return { id: "online", href: "#/online", icon: "user", label: tr("Friends"), barLabel: tr("Online"), active: (r) => r.name === "online" };
       case "feeds":
@@ -15934,7 +15941,7 @@ const here = parseRoute();
     } else {
       const map = {
         notifications: tr("Notifications"),
-        messages: tr("Messages"),
+        messages: tr("Inbox"),
         feeds: tr("Feeds"),
         lists: tr("Lists"),
         list: tr("List"),
@@ -18772,6 +18779,20 @@ if (STATE.histClear) {
   function nativeServerHash(hash) {
     return /^#\/messages\/(?:s|join)\//.test(hash || "");
   }
+  /* Owner-only SMS codes inside Inbox. The module loads on demand. */
+  function inboxSmsView(route) {
+    if (window.ViktorychInboxSms && window.ViktorychInboxSms.page) return window.ViktorychInboxSms.page(route);
+    ensureLazy("inboxsms");
+    const chips = window.ViktorychInbox && window.ViktorychInbox.tabsHtml ? window.ViktorychInbox.tabsHtml() : "";
+    return `<div class="inbox-sms"><header class="dmsgs-head"><h1>${esc(tr("Inbox"))}</h1></header>${chips}<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div></div>`;
+  }
+  /* Which Inbox view a hash shows: a change between them repaints the page. */
+  function inboxViewKey(hash) {
+    const h = String(hash || "");
+    if (/^#\/(?:messages|inbox)\/sms(?:$|[/?])/.test(h)) return "sms";
+    const m = h.match(/[?&]f=([a-z-]+)/);
+    return m ? m[1] : "";
+  }
   function lazySkeleton(title) {
     /* Local-first: a page whose module is still loading paints its last
        saved screen instead of a skeleton when this device has one. */
@@ -18933,8 +18954,9 @@ if (STATE.histClear) {
       ensureLazy("servers");
       return `<div class="dmsgs"><div class="dmsgs-skel" style="flex:1"><span></span><span></span><span></span><span></span></div></div>`;
     }
+    if (route.name === "messages" && route.sms) return inboxSmsView(route);
     if (route.name === "messages" && window.FeedsDiscord) return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + window.FeedsDiscord.page(route);
-    if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
+    if (route.name === "messages") return (window.ProfileGifts && window.ProfileGifts.dmBar ? window.ProfileGifts.dmBar() : "") + notesView(tr("Inbox"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
     return homeView({ tab: "foryou", query: new URLSearchParams() });
   }
@@ -23655,7 +23677,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       scrollFreeze = false;
       return;
     }
-    if (!nativePrev && !nativeNext && /^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
+    if (!nativePrev && !nativeNext && /^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && inboxViewKey(prevHash) === inboxViewKey(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
       lastKey = nextHash;
       STATE.scrollKey = "#/messages";
       routing = false;

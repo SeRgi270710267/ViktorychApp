@@ -4,7 +4,7 @@ const VERSION = "viktorych-a152-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T04:41:33Z-mute-block
+// cache-bust: 2026-10-30T04:56:43Z-inbox
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -111,7 +111,7 @@ const SHELL_FILES = [
   "./split.js",
   "./discord-ui.js",
   "./discord-picks.js",
-  "./discord-ui.css",
+  "./discord-ui.css","./inbox.js","./inbox-sms.js","./inbox-sms.css",
   "./spaces.js",
   "./spaces.css",
   "./stories.js",
