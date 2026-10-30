@@ -8,9 +8,11 @@ plugins { id "com.android.application" }
 
 // Bump appVersion (and appVersionName) for a new APK, then update
 // tv/version.json in the site. The site reads ?tvapp=N to offer the update.
-def appVersion = 1
-def appVersionName = "1.0.0"
+def appVersion = 3
+def appVersionName = "1.2.0"
 def host = "viktorychapp.pages.dev"
+// If the short address does not load, the WebView falls back to GitHub Pages.
+def fallbackHost = "viktorychgroup.github.io"
 
 // A per-user build (the "Custom app name" builder) passes TV_APP_LABEL and
 // TV_APP_ICON. It keeps the same package, key and versionCode as the base
@@ -25,7 +27,9 @@ def customIcon = icons.contains(System.getenv("TV_APP_ICON") ?: "") ? System.get
 def isCustom = customLabel.length() > 0
 def iconRes = customIcon == "default" ? "ic_launcher" : "ic_" + customIcon
 def bannerRes = customIcon == "default" ? "banner" : "banner_" + customIcon
-def startUrl = "https://" + host + "/?tv=1&src=tvapp&tvapp=" + appVersion + (isCustom ? "&tvcustom=1" : "") + "#/home"
+def startQuery = "?tv=1&src=tvapp&tvapp=" + appVersion + (isCustom ? "&tvcustom=1" : "") + "#/home"
+def startUrl = "https://" + host + "/" + startQuery
+def fallbackUrl = "https://" + fallbackHost + "/ViktorychApp/" + startQuery
 
 android {
     namespace "app.viktorych.tv"
@@ -48,6 +52,8 @@ android {
         resValue "string", "app_host", host
         buildConfigField "String", "START_URL", "\"" + startUrl + "\""
         buildConfigField "String", "APP_HOST", "\"" + host + "\""
+        buildConfigField "String", "FALLBACK_HOST", "\"" + fallbackHost + "\""
+        buildConfigField "String", "FALLBACK_URL", "\"" + fallbackUrl + "\""
         buildConfigField "boolean", "CUSTOM", isCustom ? "true" : "false"
         // The label goes in as UTF-16 escapes so no character can break the Java source.
         buildConfigField "String", "CUSTOM_LABEL", "\"" + customLabel.collect { String.format("\\u%04x", (int) it.charAt(0)) }.join("") + "\""
@@ -80,4 +86,5 @@ android {
 
 dependencies {
     implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0"
+    testImplementation "junit:junit:4.13.2"
 }

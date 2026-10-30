@@ -9,6 +9,14 @@ export const FEATURES = {
   lives: { paths: ["/v1/live"] },
   telegram: { paths: ["/tg"] },
   pills: { paths: ["/v1/pills"] },
+  // NZlay's public Top 100 on the Games page. On by default.
+  regone_leaderboard: { paths: ["/v1/games/regone/top"] },
+  // ReGone extras read from NZlay's public pages, each on by default and
+  // switchable here: players online, the room list, and stats for a name
+  // someone linked to their own account.
+  regone_online: { paths: ["/v1/games/regone/online"] },
+  regone_rooms: { paths: ["/v1/games/regone/rooms", "/v1/games/rooms"] },
+  regone_profile_stats: { paths: ["/v1/games/regone/profile-stats"] },
   // Off until the owner turns it on: NIP-05 names and post links to Nostr events.
   nostr: { paths: ["/v1/nostr", "/.well-known/nostr.json"], defaultOff: true }
 };

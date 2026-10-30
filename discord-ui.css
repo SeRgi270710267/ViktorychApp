@@ -866,3 +866,15 @@ body:has(.dmsgs) .fab { display: none; }
 }
 .dpick-keywarn p { margin: 0; flex: 1; color: var(--text); font-size: 14px; line-height: 18px; }
 .dpick-keywarn .dpick-btn { text-decoration: none; display: inline-block; }
+
+/* Key needs replacing: a quiet grey note, X style. */
+.dpick-keywarn.calm {
+  border: 1px solid var(--border, #2f3336);
+  background: transparent;
+}
+.dpick-keywarn.calm p { color: var(--muted, #71767b); }
+.dpick-keywarn.calm .dpick-link { text-decoration: none; font-weight: 700; }
+
+/* Discord's own check, solved by the owner. */
+.dpick-hc { display: flex; justify-content: center; min-height: 78px; margin: 12px 0; }
+.dpick-sheet a.dpick-link, .dpick-sheet a.dpick-btn { text-decoration: none; display: inline-block; text-align: center; }

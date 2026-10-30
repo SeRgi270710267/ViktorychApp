@@ -18,9 +18,9 @@ import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 import { actorHidden, canMention } from "./social.js";
 
 const encoder = new TextEncoder();
-const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1, package: 1, game_invite: 1, community_note: 1 };
-const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms"];
-const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
+const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, birthday: 1, birthday_self: 1, gift: 1, package: 1, game_invite: 1, tv_signin: 1, community_note: 1 };
+const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms", "games"];
+const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", games: "push", mentionsFrom: "all" };
 const BACKOFF_MS = [2000, 10000, 60000, 300000, 1800000];
 const DEAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -159,6 +159,7 @@ function httpsUrl(value) {
 async function addLockColumns(env) {
   const alters = [
     "ALTER TABLE push_subscriptions ADD COLUMN shorts_locked INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE push_subscriptions ADD COLUMN push_fmt INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE notification_state ADD COLUMN shorts_locked INTEGER NOT NULL DEFAULT 1"
   ];
   for (let i = 0; i < alters.length; i++) {
@@ -330,6 +331,7 @@ function itemFromRow(row, readUntil) {
     others: Math.max(0, Number(extra.others) || 0),
     ids: Array.isArray(extra.ids) ? extra.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
     handles: Array.isArray(extra.handles) ? extra.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : [],
+    expiresAt: Math.max(0, Number(extra.expiresAt) || 0),
     actorId: clip(row.actor_id, 16)
   };
 }
@@ -502,7 +504,8 @@ function payloadOf(input) {
       handle: clip(actor && actor.handle, 80).replace(/^@/, "")
     })) : [],
     ids: Array.isArray(input.ids) ? input.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
-    handles: Array.isArray(input.handles) ? input.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : []
+    handles: Array.isArray(input.handles) ? input.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : [],
+    expiresAt: Math.max(0, Number(input.expiresAt) || 0)
   });
 }
 
@@ -660,12 +663,15 @@ async function sendPush(env, publicId, item, viewer) {
   const keys = await vapidPublic(env);
   if (!keys.publicKey || !keys.privateJwk) return { ok: true, skipped: true };
   const subs = await env.DB.prepare(
-    "SELECT endpoint_hash, endpoint, p256dh, auth, shorts_locked FROM push_subscriptions WHERE public_id = ? LIMIT 10"
+    "SELECT endpoint_hash, endpoint, p256dh, auth, shorts_locked, push_fmt FROM push_subscriptions WHERE public_id = ? LIMIT 10"
   ).bind(publicId).all();
   const rows = (subs && subs.results) || [];
   const base = viewer || await lockViewer(env, publicId);
   const titleKey = titleKeyFor(item);
   if (!titleKey) return { ok: true, skipped: true };
+  // Devices on the new service worker get the compact payload: kind, a
+  // content-addressed short id and a count. No names, text, links or icons.
+  const compact = encoder.encode(JSON.stringify(await compactPush(item)));
   const payload = encoder.encode(JSON.stringify({
     titleKey,
     titleVars: {
@@ -689,7 +695,7 @@ async function sendPush(env, publicId, item, viewer) {
     if (tiktokNoteHidden(item, Object.assign({}, base, { locked: deviceLocked }))) continue;
     try {
       const jwt = await vapidJwt(sub.endpoint, keys.publicKey, keys.privateJwk);
-      const body = await encryptPush(payload, sub.p256dh, sub.auth);
+      const body = await encryptPush(Number(sub.push_fmt) === 2 ? compact : payload, sub.p256dh, sub.auth);
       const res = await fetch(sub.endpoint, {
         method: "POST",
         headers: {
@@ -717,6 +723,16 @@ async function sendPush(env, publicId, item, viewer) {
   return { ok: !failed || !rows.length, skipped: !rows.length };
 }
 
+// The compact push: {v:2,k:kind,i:shortId,n:count}. The short id is the
+// first 9 bytes of SHA-256 over the note id (12 base64url characters), so a
+// device can match it against its own cache without the id itself travelling.
+export async function compactPush(item) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(String((item && item.id) || ""))));
+  const out = { v: 2, k: clip(item && item.kind, 24), i: b64url(digest.slice(0, 9)) };
+  const others = Number(item && item.others) || 0;
+  if (others > 0) out.n = others;
+  return out;
+}
 const CN_TITLES = ["Your Community Note is now showing", "Readers added context to your post", "Readers added context to a post you interacted with"];
 
 function titleKeyFor(item) {
@@ -744,6 +760,7 @@ function titleKeyFor(item) {
   if (kind === "gift") return "{name} sent you a gift";
   if (kind === "game_invite") return "{name} invited you to play";
   if (kind === "community_note") return CN_TITLES.indexOf(item && item.text) >= 0 ? item.text : CN_TITLES[2];
+  if (kind === "tv_signin") return "Approve sign-in on TV?";
   return "New post notifications for @{handle}";
 }
 
@@ -760,6 +777,7 @@ function prefKind(kind) {
   if (kind === "repost") return "reposts";
   if (kind === "follow" || kind === "follow_request" || kind === "follow_accept" || kind === "friend_request" || kind === "friend_accept") return "follows";
   if (kind === "dm") return "dms";
+  if (kind === "game_invite") return "games";
   return "";
 }
 
@@ -880,7 +898,11 @@ async function planPlain(env, input) {
   }, state.readUntil);
   const deliveryId = "d:" + key;
   const deliveries = [];
-  if (!readAt && mode === "push" && quietUntil > now) {
+  // An invite that expires in minutes is worth nothing after quiet hours,
+  // so the caller can keep it in the app only.
+  if (!readAt && mode === "push" && input.noPush === true) {
+    deliveries.push({ mode: "inapp", publicId, item, deliveryId: "", readUntil: state.readUntil });
+  } else if (!readAt && mode === "push" && quietUntil > now) {
     statements.push(outboxStatement(env, publicId, key, deliveryId, quietUntil));
     deliveries.push({ mode: "inapp", publicId, item, deliveryId: "", readUntil: state.readUntil });
   } else if (!readAt && mode === "push") {
@@ -1310,9 +1332,10 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     const now = Date.now();
     const deviceLocked = lockFlag(body.locked != null ? body.locked : body.shortsLocked);
     const shortsLocked = deviceLocked === false ? 0 : 1;
+    const pushFmt = Number(body.fmt) === 2 ? 2 : 1;
     await env.DB.prepare(
-      "INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at, shorts_locked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, endpoint_hash) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh, auth = excluded.auth, ua = excluded.ua, updated_at = excluded.updated_at, expires_at = excluded.expires_at, shorts_locked = excluded.shorts_locked"
-    ).bind(row.public_id, hash, endpoint, clip(keys.p256dh, 200), clip(keys.auth, 200), clip(request.headers.get("user-agent"), 160), now, now, exp, shortsLocked).run();
+      "INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at, shorts_locked, push_fmt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, endpoint_hash) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh, auth = excluded.auth, ua = excluded.ua, updated_at = excluded.updated_at, expires_at = excluded.expires_at, shorts_locked = excluded.shorts_locked, push_fmt = excluded.push_fmt"
+    ).bind(row.public_id, hash, endpoint, clip(keys.p256dh, 200), clip(keys.auth, 200), clip(request.headers.get("user-agent"), 160), now, now, exp, shortsLocked, pushFmt).run();
     return json(200, { ok: true });
   }
   if (path === "/v1/push/subscribe" && request.method === "DELETE") {
