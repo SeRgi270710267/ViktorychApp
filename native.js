@@ -304,7 +304,9 @@
     if (pip) {
       var canDoc = !!(window.documentPictureInPicture && documentPictureInPicture.requestWindow);
       var canEl = !!(document.pictureInPictureEnabled && media && media.requestPictureInPicture);
-      pip.hidden = !(media && (canDoc || canEl));
+      /* Server voice calls play hidden audio and tiles; they aren't for a pop-out. */
+      var voice = !!(media && media.hasAttribute && media.hasAttribute("data-voice"));
+      pip.hidden = !(media && !voice && (canDoc || canEl));
     }
     if (media && media.tagName === "IFRAME") setTimeout(function () { fillSession(media); }, 0);
   }
