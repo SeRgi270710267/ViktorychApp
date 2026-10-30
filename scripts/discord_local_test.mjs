@@ -12,8 +12,8 @@ import { pathToFileURL, fileURLToPath } from "node:url";
    a captcha opens a popup whose answer goes back to Discord once. Nothing
    ever posts a message. Remove key deletes the database. */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const KEY = "MTAxMDEwMTAxMDEwMTAxMDEw.GabcDE.local-test-key-0123456789abcdefghijklmnopqr";
-const NEW_KEY = "MTAxMDEwMTAxMDEwMTAxMDEw.GxyzAB.local-test-key-replacement-0123456789abcd";
+const KEY = "MTAxMDEwMTAxMDEwMTAxMDEw.GabcDE.local-test-key-0123456789abcdefghijklmnopqr"; // secret-scan: allow fake test key, not a real account
+const NEW_KEY = "MTAxMDEwMTAxMDEwMTAxMDEw.GxyzAB.local-test-key-replacement-0123456789abcd"; // secret-scan: allow fake test key, not a real account
 function fail(message) { console.error("FAIL: " + message); process.exitCode = 1; throw new Error(message); }
 function ok(message) { console.log("ok " + message); }
 function mime(file) {
