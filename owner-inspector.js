@@ -13,7 +13,7 @@
     q: "", sort: "created", filter: "all",
     list: null, listKey: "", loading: false, error: "", more: false, totals: null,
     detail: {}, detailLoading: {}, detailError: {},
-    audit: null, auditLoading: false, kindPick: {}
+    audit: null, auditLoading: false, sheet: null
   };
   function kindLabel(k) {
     const words = { person: tr("Person"), business: tr("Business"), organization: tr("Organization"), media: tr("Media"), government: tr("Government"), creator: tr("Creator"), bot: tr("Bot"), community: tr("Community"), other: tr("Other") };
@@ -116,7 +116,8 @@
     const totals = S.totals ? `<p class="oi-totals">${esc((String(S.totals.accounts) === "1" ? tr("1 account") : tr("{count} accounts", { count: String(S.totals.accounts) })))} · ${esc(tr("{count} online now", { count: String(S.totals.online) }))}</p>` : "";
     const search = `<form class="oi-search" data-oi-form="search"><label class="search"><span class="sr">${icon("search")}</span><input id="oi-q" type="search" name="q" value="${esc(S.q)}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(tr("Search name, any username or account ID"))}" aria-label="${esc(tr("Search accounts"))}"></label></form>`;
     const filterBar = `<div class="oi-chips" role="group" aria-label="${esc(tr("Filter"))}">${filters.map((f) => chip(f[1], S.filter === f[0], `data-oi-act="filter" data-oi-v="${f[0]}"`)).join("")}</div>`;
-    const sortBar = `<label class="oi-sort"><span>${esc(tr("Sort by"))}</span><select data-oi-field="sort" aria-label="${esc(tr("Sort by"))}">${sorts.map((s) => `<option value="${s[0]}"${S.sort === s[0] ? " selected" : ""}>${esc(s[1])}</option>`).join("")}</select></label>`;
+    const sortName = (sorts.find((x) => x[0] === S.sort) || sorts[0])[1];
+    const sortBar = `<button type="button" class="oi-sort" data-oi-act="open-sort" aria-haspopup="dialog"><span>${esc(tr("Sort by"))}</span><b>${esc(sortName)}</b>${icon("chevR")}</button>`;
     let body;
     if (S.list == null) body = `<p class="oi-empty">${esc(tr("Loading…"))}</p>`;
     else if (S.error) body = `<div class="oi-empty"><p>${esc(S.error)}</p><button type="button" class="oi-btn" data-oi-act="retry">${esc(tr("Retry"))}</button></div>`;
@@ -124,7 +125,8 @@
     else body = S.list.map(rowHtml).join("") + (S.more ? `<button type="button" class="oi-more" data-oi-act="more">${esc(S.loading ? tr("Loading…") : tr("Show more"))}</button>` : "");
     const note = `<p class="oi-note">${icon("lock")}<span>${esc(tr("Only you see this. Privacy settings don’t hide usernames from the owner. Opening an account is logged."))}</span></p>`;
     const audit = `<a class="oi-audit-link" href="#/settings/accounts-inspector/audit">${esc(tr("Access log"))}</a>`;
-    return `<div class="oi-page">${note}${search}<div class="oi-bar">${filterBar}${sortBar}</div><div class="oi-meta">${totals}${audit}</div><section class="oi-list">${body}</section></div>`;
+    S.sorts = sorts;
+    return `<div class="oi-page">${note}${search}<div class="oi-bar">${filterBar}</div><div class="oi-bar oi-bar-sort">${sortBar}</div><div class="oi-meta">${totals}${audit}</div><section class="oi-list">${body}</section></div>`;
   }
 
   /* ---------- detail ---------- */
@@ -255,8 +257,14 @@
       line(tr("Last synced"), esc(when(st.syncedAt)))
     ].join("")) : "";
 
-    const picked = S.kindPick[d.id] != null ? S.kindPick[d.id] : (d.kind.owner || "");
-    const actions = section(tr("Owner actions"), `<div class="oi-actions"><a class="oi-btn" href="#/@${encodeURIComponent(d.handle)}">${esc(tr("View profile"))}</a><button type="button" class="oi-btn" data-acct="open-reports">${esc(tr("Review reports"))}</button><button type="button" class="oi-btn" data-oi-act="copy-id" data-oi-id="${esc(d.id)}">${esc(tr("Copy account ID"))}</button></div><div class="oi-kind"><label><span>${esc(tr("Account type"))}</span><select data-oi-field="kind" data-oi-id="${esc(d.id)}">${KINDS.map((k) => `<option value="${k}"${picked === k ? " selected" : ""}>${esc(kindLabel(k))}</option>`).join("")}</select></label><button type="button" class="oi-btn" data-oi-act="save-kind" data-oi-id="${esc(d.id)}">${esc(tr("Save"))}</button></div>`);
+    const kindNow = d.kind.owner ? kindLabel(d.kind.owner) : tr("Their choice");
+    const actRow = (attrs, title, sub, tag) => `<${tag || "button type=\"button\""} class="set-row oi-act-row" ${attrs}><span class="set-copy"><b>${esc(title)}</b>${sub ? `<span class="set-sub">${esc(sub)}</span>` : ""}</span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></${tag ? "a" : "button"}>`;
+    const actions = `<section class="oi-sec oi-sec-rows"><h2>${esc(tr("Owner actions"))}</h2>${[
+      actRow(`href="#/@${encodeURIComponent(d.handle)}"`, tr("View profile"), "", "a"),
+      actRow('data-acct="open-reports"', tr("Review reports"), ""),
+      actRow(`data-oi-act="copy-id" data-oi-id="${esc(d.id)}"`, tr("Copy account ID"), ""),
+      actRow(`data-oi-act="open-kind" data-oi-id="${esc(d.id)}" aria-haspopup="dialog"`, tr("Account type"), kindNow)
+    ].join("")}</section>`;
 
     const foot = `<p class="oi-note oi-note-foot">${icon("lock")}<span>${esc(d.audited ? tr("This view was logged in the access log.") : tr("Only you see this."))}</span></p>`;
     return `<div class="oi-page oi-detail">${head}${names}${dnames}${account}${privacy}${linked}${activity}${communities}${requests}${moderation}${devices}${settings}${actions}${foot}</div>`;
@@ -275,15 +283,43 @@
     return `<div class="oi-page"><p class="oi-note">${icon("lock")}<span>${esc(tr("Every time you open an account's details it is written here."))}</span></p><section class="oi-list">${rows}</section></div>`;
   }
 
+  /* ---------- X-style bottom sheets (sort, account type, confirm) ---------- */
+
+  function radioRow(act, value, label, on, extra) {
+    return `<button type="button" class="oi-opt" role="radio" aria-checked="${on ? "true" : "false"}" data-oi-act="${act}" data-oi-v="${esc(value)}" ${extra || ""}><span>${esc(label)}</span><i class="oi-radio${on ? " on" : ""}" aria-hidden="true"></i></button>`;
+  }
+  function sheetHtml() {
+    const sh = S.sheet;
+    if (!sh) return "";
+    let title = "", body = "", foot = "";
+    if (sh.type === "sort") {
+      title = tr("Sort by");
+      body = `<div role="radiogroup">${(S.sorts || []).map((x) => radioRow("pick-sort", x[0], x[1], S.sort === x[0])).join("")}</div>`;
+      foot = `<button type="button" class="oi-pill oi-pill-outline" data-oi-act="close-sheet">${esc(tr("Cancel"))}</button>`;
+    } else if (sh.type === "kind") {
+      const d = S.detail[sh.id];
+      const cur = d ? (d.kind.owner || "") : "";
+      title = tr("Account type");
+      body = `<p class="oi-sheet-sub">${esc(tr("Shown on their profile. “Their choice” keeps what they picked."))}</p><div role="radiogroup">${KINDS.map((k) => radioRow("pick-kind", k, kindLabel(k), cur === k, `data-oi-id="${esc(sh.id)}"`)).join("")}</div>`;
+      foot = `<button type="button" class="oi-pill oi-pill-outline" data-oi-act="close-sheet">${esc(tr("Cancel"))}</button>`;
+    } else if (sh.type === "confirm") {
+      title = tr("Change account type?");
+      body = `<p class="oi-sheet-sub">${esc(tr("Change this account’s type to “{kind}”?", { kind: kindLabel(sh.kind) }))}</p>`;
+      foot = `<button type="button" class="oi-pill oi-pill-accent" data-oi-act="save-kind" data-oi-id="${esc(sh.id)}"${sh.busy ? " disabled" : ""}>${esc(sh.busy ? tr("Saving…") : tr("Change"))}</button><button type="button" class="oi-pill oi-pill-outline" data-oi-act="close-sheet">${esc(tr("Cancel"))}</button>`;
+    }
+    return `<div class="oi-sheet-wrap" data-oi-act="close-sheet"><div class="oi-sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}" data-oi-stop="1"><div class="oi-grab" aria-hidden="true"></div><h3>${esc(title)}</h3>${body}<div class="oi-sheet-foot">${foot}</div></div></div>`;
+  }
+
   function view(sub) {
     const id = String(sub || "");
     const back = id ? "#/settings/accounts-inspector" : "#/settings";
     const title = id === "audit" ? tr("Access log") : id ? (S.detail[id] ? "@" + S.detail[id].handle : tr("Account")) : tr("Accounts");
     const head = hooks.settingsHead ? hooks.settingsHead(title, back) : "";
     if (!ownerOn()) return head + `<p class="oi-empty">${esc(tr("Only the owner can see this."))}</p>`;
-    if (id === "audit") return head + auditView();
-    if (id) return head + detailView(id);
-    return head + listView();
+    if (id === "audit") { S.sheet = null; return head + auditView(); }
+    if (id) return head + detailView(id) + sheetHtml();
+    if (S.sheet && S.sheet.type !== "sort") S.sheet = null;
+    return head + listView() + sheetHtml();
   }
 
   function settingsRowHtml() {
@@ -302,6 +338,8 @@
   function onClick(event) {
     const btn = event.target && event.target.closest ? event.target.closest("[data-oi-act]") : null;
     if (!btn || !hooks) return;
+    const inner = event.target.closest("[data-oi-stop]");
+    if (btn.classList.contains("oi-sheet-wrap") && inner) return;
     event.preventDefault();
     const act = btn.dataset.oiAct;
     if (act === "filter") { S.filter = btn.dataset.oiV || "all"; S.list = null; loadList(true); paint(); return; }
@@ -310,12 +348,29 @@
     if (act === "retry-detail") { const id = btn.dataset.oiId; S.detailError[id] = ""; loadDetail(id, true); paint(); return; }
     if (act === "copy-id") { copy(btn.dataset.oiId || ""); return; }
     if (act === "reveal") { btn.textContent = btn.dataset.oiFull || ""; btn.classList.remove("oi-masked"); return; }
-    if (act === "save-kind") {
+    if (act === "close-sheet") { S.sheet = null; paint(); return; }
+    if (act === "open-sort") { S.sheet = { type: "sort" }; paint(); return; }
+    if (act === "pick-sort") { S.sheet = null; if (S.sort !== btn.dataset.oiV) { S.sort = btn.dataset.oiV || "created"; S.list = null; loadList(true); } paint(); return; }
+    if (act === "open-kind") { S.sheet = { type: "kind", id: btn.dataset.oiId }; paint(); return; }
+    if (act === "pick-kind") {
       const id = btn.dataset.oiId;
       const d = S.detail[id];
-      const kind = S.kindPick[id] != null ? S.kindPick[id] : (d ? d.kind.owner : "");
-      if (!window.confirm(tr("Change this account’s type to “{kind}”?", { kind: kindLabel(kind) }))) return;
+      const kind = btn.dataset.oiV || "";
+      if (d && (d.kind.owner || "") === kind) { S.sheet = null; paint(); return; }
+      S.sheet = { type: "confirm", id, kind };
+      paint();
+      return;
+    }
+    if (act === "save-kind") {
+      const sh = S.sheet;
+      if (!sh || sh.type !== "confirm" || sh.busy) return;
+      const id = sh.id;
+      const kind = sh.kind;
+      const d = S.detail[id];
+      sh.busy = true;
+      paint();
       api("/v1/owner/account-kind", "PUT", { id, kind }).then((res) => {
+        S.sheet = null;
         if (res.ok) { if (d) d.kind.owner = kind; toast(tr("Saved")); } else toast(tr("Couldn’t save. Try again."));
         paint();
       });
@@ -339,8 +394,6 @@
   function onChange(event) {
     const el = event.target;
     if (!el || !el.dataset) return;
-    if (el.dataset.oiField === "sort") { S.sort = el.value; S.list = null; loadList(true); paint(); }
-    if (el.dataset.oiField === "kind") S.kindPick[el.dataset.oiId] = el.value;
   }
   function onSubmit(event) {
     const form = event.target && event.target.closest ? event.target.closest("form[data-oi-form]") : null;
@@ -361,6 +414,7 @@
     document.addEventListener("input", onInput, true);
     document.addEventListener("change", onChange, true);
     document.addEventListener("submit", onSubmit, true);
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && S.sheet) { S.sheet = null; paint(); } }, true);
   }
 
   window.OwnerInspector = { attach, view, settingsRowHtml };

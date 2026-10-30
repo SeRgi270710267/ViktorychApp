@@ -12,8 +12,11 @@
 .oi-chip { flex: none; height: 32px; padding: 0 14px; border-radius: 9999px; border: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: 14px; font-weight: 600; line-height: 30px; cursor: pointer; white-space: nowrap; }
 span.oi-chip { cursor: default; font-weight: 500; }
 .oi-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
-.oi-sort { display: flex; align-items: center; gap: 6px; flex: none; color: var(--muted); font-size: 13px; }
-.oi-sort select, .oi-kind select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; height: 32px; padding: 0 8px; font: inherit; font-size: 14px; }
+.oi-bar-sort { padding: 0; }
+.oi-sort { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 0 16px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.oi-sort:hover { background: var(--hover); }
+.oi-sort b { margin-left: auto; color: var(--text); font-weight: 400; }
+.oi-sort svg { width: 18px; height: 18px; fill: currentColor; }
 .oi-meta { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); }
 .oi-totals { margin: 0; color: var(--muted); font-size: 13px; }
 .oi-audit-link { color: var(--link, var(--blue)); font-size: 13px; text-decoration: none; }
@@ -66,9 +69,31 @@ span.oi-chip { cursor: default; font-weight: 500; }
 .oi-cell { display: flex; flex-direction: column; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
 .oi-cell b { font-size: 18px; font-weight: 800; }
 .oi-cell span { color: var(--muted); font-size: 12px; }
-.oi-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.oi-kind { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.oi-kind label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.oi-sec-rows { padding: 12px 0 0; }
+.oi-sec-rows h2 { padding: 0 16px; }
+.oi-act-row { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: none; }
+/* X-style sheet: bottom sheet on phones, centered dialog on wide screens. */
+.oi-sheet-wrap { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: flex-end; justify-content: center; background: rgba(91, 112, 131, .4); }
+.oi-sheet { width: 100%; max-height: 85vh; overflow-y: auto; background: var(--bg); color: var(--text); border-radius: 16px 16px 0 0; padding: 4px 0 calc(16px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 0 15px rgba(255, 255, 255, .12); }
+.oi-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--muted); opacity: .5; margin: 8px auto 8px; }
+.oi-sheet h3 { margin: 8px 0 4px; padding: 0 24px; font-size: 20px; line-height: 24px; font-weight: 800; }
+.oi-sheet-sub { margin: 4px 0 8px; padding: 0 24px; color: var(--muted); font-size: 15px; line-height: 20px; }
+.oi-opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 52px; padding: 0 24px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.oi-opt:hover { background: var(--hover); }
+.oi-radio { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--muted); box-sizing: border-box; }
+.oi-radio.on { border-color: var(--blue); background: radial-gradient(circle, var(--blue) 0 5px, transparent 5.5px); }
+.oi-sheet-foot { display: flex; flex-direction: column; gap: 12px; padding: 16px 24px 0; }
+.oi-pill { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 0 24px; border-radius: 9999px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.oi-pill-accent { border: 0; background: var(--blue); color: #fff; }
+.oi-pill-accent:hover { filter: brightness(.92); }
+.oi-pill-accent[disabled] { opacity: .5; cursor: default; }
+.oi-pill-outline { border: 1px solid var(--line); background: transparent; color: var(--text); }
+.oi-pill-outline:hover { background: var(--hover); }
+@media (min-width: 700px) {
+  .oi-sheet-wrap { align-items: center; }
+  .oi-sheet { width: 320px; max-width: calc(100vw - 32px); border-radius: 16px; padding: 12px 0 24px; }
+  .oi-grab { display: none; }
+}
 @media (max-width: 500px) {
   .oi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .oi-bar { flex-wrap: wrap; }
