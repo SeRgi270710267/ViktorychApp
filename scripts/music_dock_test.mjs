@@ -169,7 +169,8 @@ async function exercise(browser, origin, vp) {
   try {
     await page.waitForSelector(".mu-tile[data-id='tone-a']", { timeout: 20000 });
   } catch (err) {
-    fail(where + " music page did not list the test song");
+    const seen = await page.evaluate(() => ({ hash: location.hash, tiles: document.querySelectorAll(".mu-tile").length, grid: !!document.querySelector(".mu-grid, .mu-shelf"), text: String((document.querySelector("main") || document.body).innerText || "").replace(/\s+/g, " ").slice(0, 160) })).catch((e) => ({ err: String(e).slice(0, 120) }));
+    fail(where + " music page did not list the test song " + JSON.stringify(seen) + " errors=" + JSON.stringify(errors.slice(0, 3)));
   }
   await page.click(".mu-tile[data-id='tone-a']");
   await wait(page, where + " step 134", () => { const a = document.getElementById("mu-audio"); return a && !a.paused && a.currentTime > 0.2; }, null, { timeout: 15000 });
