@@ -38,6 +38,7 @@
     side: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 4.5v15" stroke="currentColor" stroke-width="1.8"/></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5.5 8.5 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5.5 6.5 6.5-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5.5 12.5 4 4 9-9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7.5 4.5 12 9 16.5M5 12h9.5a5 5 0 0 1 0 10H12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
@@ -444,11 +445,14 @@
     var rows = quickRows(cur).map(function (row) {
       var v = values[row.id];
       if (v === undefined) v = row.def;
-      var on = row.type === "bool" ? (v ? " is-on" : "") : "";
-      var val = row.type === "bool" ? '<i class="lai-sw' + on + '" aria-hidden="true"></i>' : '<span class="lai-q-val">' + esc(shown(row, v)) + "</span>";
-      return '<button type="button" class="lai-q" data-lai="quick" data-id="' + esc(row.id) + '"><span class="lai-q-name">' + esc(tr(row.label)) + "</span>" + val + "</button>";
+      // Rows look like X's own settings: a label, the value under it in grey,
+      // and a checkbox for on/off or a chevron for a choice.
+      if (row.type === "bool") {
+        return '<button type="button" class="lai-q" role="checkbox" aria-checked="' + (v ? "true" : "false") + '" data-lai="quick" data-id="' + esc(row.id) + '"><span class="lai-q-text"><span class="lai-q-name">' + esc(tr(row.label)) + '</span></span><i class="lai-cb' + (v ? " is-on" : "") + '" aria-hidden="true">' + I.check + "</i></button>";
+      }
+      return '<button type="button" class="lai-q" data-lai="quick" data-id="' + esc(row.id) + '"><span class="lai-q-text"><span class="lai-q-name">' + esc(tr(row.label)) + '</span><span class="lai-q-val">' + esc(shown(row, v)) + '</span></span><i class="lai-chev" aria-hidden="true">' + I.chev + "</i></button>";
     }).join("");
-    return '<section class="lai-browse" aria-label="' + esc(tr("Quick settings")) + '"><p class="lai-browse-head">' + esc(tr("Or tap one to change it")) + '</p><div class="lai-tabs" role="tablist">' + tabs + '</div><div class="lai-qs" role="tabpanel">' + rows + "</div></section>";
+    return '<section class="lai-browse" aria-label="' + esc(tr("Quick settings")) + '"><p class="lai-browse-head">' + esc(tr("Quick settings")) + '</p><div class="lai-tabs" role="tablist">' + tabs + '</div><div class="lai-qs" role="tabpanel">' + rows + "</div></section>";
   }
   function quick(id) {
     var R = reg();

@@ -5342,6 +5342,5 @@ SI18n.addPack("es", {
   "New display name": "Nuevo nombre",
   "New names start visible to friends only.": "Los nombres nuevos empiezan visibles solo para amigos.",
   "Remove this display name?": "¿Quitar este nombre?",
-  "Quick settings": "Ajustes rápidos",
-  "Or tap one to change it": "O toca uno para cambiarlo"
+  "Quick settings": "Ajustes rápidos"
 });

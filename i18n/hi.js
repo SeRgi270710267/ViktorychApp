@@ -5244,7 +5244,6 @@ SI18n.addPack("hi", {
   "New names start visible to friends only.": "नए नाम शुरू में केवल दोस्तों को दिखते हैं।",
   "Remove this display name?": "यह डिस्प्ले नाम हटाएँ?",
   "Quick settings": "झटपट सेटिंग्स",
-  "Or tap one to change it": "या बदलने के लिए किसी पर टैप करें",
   "+{n} more at 10 different people · up to {cap} a day": "10 अलग-अलग लोगों पर +{n} और · दिन में अधिकतम {cap}",
   "+{n} once": "+{n} एक बार",
   "+{n} once they stay a week, post and keep a streak · up to {cap} a day": "+{n} जब वे एक हफ़्ता रुकें, पोस्ट करें और स्ट्रीक बनाए रखें · दिन में अधिकतम {cap}",

@@ -5341,6 +5341,5 @@ SI18n.addPack("ru", {
   "New display name": "Новое отображаемое имя",
   "New names start visible to friends only.": "Новые имена сначала видны только друзьям.",
   "Remove this display name?": "Удалить это отображаемое имя?",
-  "Quick settings": "Быстрые настройки",
-  "Or tap one to change it": "Или нажмите, чтобы изменить"
+  "Quick settings": "Быстрые настройки"
 });
