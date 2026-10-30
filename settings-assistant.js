@@ -16,7 +16,7 @@
     ["#/settings/display/navigation", "Customize navigation", "Reorder and choose the icons in the bottom bar.", "bottom bar navigation icons tabs menu reorder barra inferior navegación iconos menú нижняя панель навигация иконки меню"],
     ["#/settings/device", "Device performance", "Choose how much this device does itself.", "performance battery speed ai on-device model offline rendimiento batería velocidad modelo производительность батарея скорость модель ии"],
     ["#/settings/languages", "Languages", "", "language translate translation idioma traducir traducción язык перевод переводить"],
-    ["#/settings/display-language", "Display language", "", "interface language english spanish russian idioma interfaz inglés español ruso язык интерфейса английский испанский русский"],
+    ["#/settings/display-language", "Display language", "", "interface language english spanish russian idioma interfaz inglés español ruso язык интерфейса английский испанский русский hindi हिन्दी हिंदी भाषा"],
     ["#/settings/data", "Data usage", "", "data saver mobile cellular wifi images video quality ahorro datos móviles calidad трафик экономия мобильные данные качество"],
     ["#/settings/notifications", "Notifications", "", "notifications alerts push sound badge notificaciones alertas avisos sonido уведомления оповещения звук пуш"],
     ["#/settings/notifications/discord", "Discord alerts", "Mentions and keywords from channels this app already shows.", "discord keywords channels canales palabras clave каналы ключевые слова"],

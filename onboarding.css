@@ -1,0 +1,745 @@
+/* First-time setup in the X black look, laid out like a new phone on small
+   screens and like the Windows 11 first-run card on wide ones. onboarding.js
+   and the account steps in accounts.js share this markup (.oobe). Only
+   transform and opacity animate; reduced motion turns every move into a
+   short crossfade. */
+:root {
+  --oobe-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --oobe-ease: cubic-bezier(0.2, 0, 0, 1);
+  --oobe-out: cubic-bezier(0.4, 0, 1, 1);
+  --oobe-move: 420ms;
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --oobe-spring: linear(0, 0.034 1.4%, 0.13 3%, 0.464 7.7%, 0.698 11.6%, 0.86 15.6%, 0.958 19.8%, 1.013 24.4%, 1.035 29.6%, 1.033 35.4%, 1.009 48%, 0.998 63.4%, 1);
+  }
+}
+html[data-onb-open] body { overflow: hidden; }
+
+.oobe {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  height: var(--oobe-vh, 100dvh);
+  background: var(--bg, #000);
+  color: var(--text, #e7e9ea);
+  font-family: var(--font, inherit);
+  -webkit-font-smoothing: antialiased;
+}
+/* accounts.js keeps its own class names on the same frame. */
+.oobe.acct-back { padding: 0; background: var(--bg, #000); align-items: stretch; z-index: 90; }
+.oobe .oobe-card.acct-modal {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--bg, #000);
+}
+.oobe-card {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg, #000);
+  color: inherit;
+}
+.oobe-side { display: none; }
+.oobe-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.oobe-head {
+  display: grid;
+  grid-template-columns: minmax(52px, auto) 1fr minmax(52px, auto);
+  align-items: center;
+  gap: 8px;
+  height: 53px;
+  padding: 0 max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px));
+  flex: none;
+}
+.oobe-head > :last-child { justify-self: end; }
+.oobe-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s var(--oobe-ease);
+}
+.oobe-icon:hover { background: var(--hover, rgba(231, 233, 234, 0.1)); }
+.oobe-icon:active { transform: scale(0.92); }
+.oobe-icon .oobe-ico { width: 22px; height: 22px; }
+.oobe-skip {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s var(--oobe-ease);
+}
+.oobe-skip:hover { background: var(--hover, rgba(231, 233, 234, 0.1)); }
+.oobe-skip:active { transform: scale(0.95); }
+
+/* iOS page dots. The bright dot glides from the last step to this one. */
+.oobe-dots {
+  position: relative;
+  justify-self: center;
+  display: inline-flex;
+  gap: 6px;
+  height: 6px;
+}
+.oobe-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text, #e7e9ea);
+  opacity: 0.22;
+}
+.oobe-dots i.done { opacity: 0.5; }
+.oobe-dot-ind {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--text, #e7e9ea);
+  transform: translateX(calc(var(--oobe-n) * 12px));
+  animation: oobe-dot 520ms var(--oobe-spring) both;
+}
+@keyframes oobe-dot { from { transform: translateX(calc(var(--oobe-from) * 12px)); } }
+
+.oobe-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  view-transition-name: oobe-step;
+}
+.oobe-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 max(24px, env(safe-area-inset-right, 0px)) 8px max(24px, env(safe-area-inset-left, 0px));
+}
+.oobe-main {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 12px 0 8px;
+}
+.oobe-step.is-center .oobe-main { margin: auto; text-align: center; }
+.oobe-step-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 4px 0 16px;
+  border-radius: 14px;
+  background: var(--hover, rgba(231, 233, 234, 0.1));
+  color: var(--text, #e7e9ea);
+}
+.oobe-step-ico .oobe-ico { width: 26px; height: 26px; }
+.oobe-title {
+  margin: 0 0 8px;
+  font-size: 31px;
+  line-height: 36px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.oobe-title:focus, .oobe-title:focus-visible { outline: none; }
+.oobe-sub {
+  margin: 0 0 20px;
+  color: var(--muted, #71767b);
+  font-size: 15px;
+  line-height: 20px;
+}
+.oobe-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: 488px;
+  margin: 0 auto;
+  padding: 12px max(24px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+  flex: none;
+}
+
+/* The X pill: white on black, black on white. */
+.oobe-btn,
+.oobe .acct-next {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--fill, #eff3f4);
+  color: var(--on-fill, #0f1419);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s, transform 0.16s var(--oobe-ease);
+}
+.oobe-btn:hover:not(:disabled),
+.oobe .acct-next:hover:not(:disabled) { background: var(--fill-hover, #d7dbdc); }
+.oobe-btn:active:not(:disabled),
+.oobe .acct-next:active:not(:disabled) { transform: scale(0.97); }
+.oobe-btn:disabled,
+.oobe .acct-next:disabled { opacity: 0.5; cursor: default; }
+.oobe .acct-next { margin-top: 20px; }
+.oobe .oobe-foot .acct-next { margin-top: 0; }
+.oobe-link,
+.oobe .acct-quiet {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text, #e7e9ea);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s var(--oobe-ease);
+}
+.oobe-link:hover,
+.oobe .acct-quiet:hover { background: var(--hover, rgba(231, 233, 234, 0.1)); text-decoration: none; }
+.oobe-link:active,
+.oobe .acct-quiet:active { transform: scale(0.97); }
+.oobe .acct-quiet { display: block; width: 100%; margin-top: 8px; }
+.oobe-alt { display: flex; flex-direction: column; gap: 2px; text-align: center; color: var(--muted, #71767b); font-size: 15px; }
+.oobe-alt p { margin: 0; }
+.oobe-alt .oobe-link { min-height: 36px; padding: 0 6px; color: var(--link, var(--blue, #1d9bf0)); font-weight: 400; }
+.oobe-alt .oobe-link:hover { background: transparent; text-decoration: underline; }
+.oobe-btn:focus-visible,
+.oobe-link:focus-visible,
+.oobe-skip:focus-visible,
+.oobe-icon:focus-visible,
+.oobe-opt:focus-visible,
+.oobe-theme:focus-visible,
+.oobe-seg:focus-visible,
+.oobe-follow:focus-visible,
+.oobe-ava:focus-within,
+.oobe .acct-next:focus-visible,
+.oobe .acct-quiet:focus-visible { outline: 2px solid var(--blue, #1d9bf0); outline-offset: 2px; }
+
+/* Welcome: the mark springs in, then "Hello" cycles through languages. */
+.oobe-hero { display: flex; justify-content: center; margin: 0 0 24px; }
+.oobe-hero-mark {
+  width: 64px;
+  height: 64px;
+  color: var(--text, #e7e9ea);
+  animation: oobe-reveal 1100ms var(--oobe-spring) both;
+}
+@keyframes oobe-reveal {
+  0% { opacity: 0; transform: scale(0.3) rotate(-14deg); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+.oobe-hello {
+  position: relative;
+  height: 56px;
+  margin: 0 0 12px;
+  overflow: hidden;
+}
+.oobe-hello span {
+  position: absolute;
+  inset: 0;
+  font-size: 44px;
+  line-height: 56px;
+  font-weight: 800;
+  opacity: 0;
+  animation: oobe-hello calc(var(--n) * 2s) calc(var(--i) * 2s + 500ms) infinite both;
+}
+@keyframes oobe-hello {
+  0% { opacity: 0; transform: translateY(24px); }
+  1.6%, 8.4% { opacity: 1; transform: none; }
+  10%, 100% { opacity: 0; transform: translateY(-24px); }
+}
+
+/* Options: languages, how to start, data usage. */
+.oobe-opts { display: flex; flex-direction: column; gap: 10px; }
+.oobe-opt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 16px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s, transform 0.16s var(--oobe-ease);
+}
+.oobe-opt:hover { background: var(--hover, rgba(231, 233, 234, 0.06)); }
+.oobe-opt:active { transform: scale(0.985); }
+.oobe-opt.on { border-color: var(--text, #e7e9ea); box-shadow: inset 0 0 0 1px var(--text, #e7e9ea); }
+.oobe-opt-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  background: var(--hover, rgba(231, 233, 234, 0.1));
+}
+.oobe-opt-ico .oobe-ico { width: 24px; height: 24px; }
+.oobe-opt.on .oobe-opt-ico .oobe-ico,
+.oobe-rail li.now .oobe-rail-dot { fill: currentColor; }
+.oobe-opt-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.oobe-opt-text b { font-size: 17px; font-weight: 700; }
+.oobe-opt-text small { color: var(--muted, #71767b); font-size: 14px; line-height: 18px; }
+.oobe-chev { width: 20px; height: 20px; flex: none; color: var(--muted, #71767b); }
+.oobe-radio {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: 2px solid var(--muted, #71767b);
+  border-radius: 50%;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.oobe-radio::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--text, #e7e9ea);
+  transform: scale(0);
+  transition: transform 0.3s var(--oobe-spring);
+}
+.oobe-opt.on .oobe-radio { border-color: var(--text, #e7e9ea); }
+.oobe-opt.on .oobe-radio::after { transform: scale(1); }
+.oobe-note { color: var(--muted, #71767b); font-size: 15px; line-height: 20px; margin: 16px 0 0; }
+.oobe-error { color: var(--red-text, #f4212e); font-size: 14px; margin: 12px 0 0; }
+
+/* Profile picture. */
+.oobe-ava-wrap { display: flex; justify-content: center; margin: 4px 0 16px; }
+.oobe-ava {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--hover, #2f3336);
+  cursor: pointer;
+}
+.oobe-ava.square { border-radius: 16px; }
+.oobe-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.oobe-silhouette { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; color: var(--muted, #71767b); }
+.oobe-silhouette .oobe-ico { width: 64px; height: 64px; }
+.oobe-cam { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
+.oobe-cam .oobe-ico { width: 44px; height: 44px; padding: 10px; border-radius: 50%; background: rgba(15, 20, 25, 0.75); box-sizing: border-box; }
+.oobe-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.oobe-segs { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
+.oobe-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s var(--oobe-ease);
+}
+.oobe-seg:active { transform: scale(0.96); }
+.oobe-seg.on { border-color: var(--text, #e7e9ea); box-shadow: inset 0 0 0 1px var(--text, #e7e9ea); }
+.oobe-seg-ico { width: 16px; height: 16px; border: 2px solid currentColor; border-radius: 50%; }
+.oobe-seg-ico.square { border-radius: 4px; }
+.oobe-seg.on .oobe-seg-ico { background: currentColor; }
+.oobe-field {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line, #333639);
+  border-radius: 4px;
+  padding: 8px 8px 6px;
+  text-align: left;
+}
+.oobe-field:focus-within { border-color: var(--blue, #1d9bf0); box-shadow: 0 0 0 1px var(--blue, #1d9bf0); }
+.oobe-field span { font-size: 13px; color: var(--muted, #71767b); }
+.oobe-field:focus-within span { color: var(--blue, #1d9bf0); }
+.oobe-field input { border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 17px; padding: 4px 0 0; }
+
+/* Theme with a live post preview. */
+.oobe-preview {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  margin: 0 0 20px;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 16px;
+  text-align: left;
+}
+.oobe-preview-ava { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: 50%; background: var(--hover, #2f3336); color: var(--muted, #71767b); }
+.oobe-preview-ava .oobe-ico { width: 22px; height: 22px; }
+.oobe-preview-body { flex: 1; min-width: 0; }
+.oobe-preview-body p { margin: 0 0 4px; font-size: 15px; line-height: 20px; overflow-wrap: anywhere; }
+.oobe-preview-body p span { color: var(--muted, #71767b); }
+.oobe-preview-bar { display: flex; justify-content: space-between; max-width: 260px; margin-top: 10px; }
+.oobe-preview-bar i { width: 34px; height: 8px; border-radius: 4px; background: var(--muted, #71767b); opacity: 0.4; }
+.oobe-preview-bar i.hot { background: #f91880; opacity: 1; }
+.oobe-themes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.oobe-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px 8px 10px;
+  border: 1px solid var(--line, #2f3336);
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.16s var(--oobe-ease), border-color 0.2s;
+}
+.oobe-theme:active { transform: scale(0.96); }
+.oobe-theme.on { border-color: var(--blue, #1d9bf0); box-shadow: inset 0 0 0 1px var(--blue, #1d9bf0); }
+.oobe-swatch {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  height: 52px;
+  padding: 0 12px;
+  border-radius: 9px;
+  box-sizing: border-box;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+}
+.oobe-swatch i { display: block; height: 6px; border-radius: 3px; width: 70%; }
+.oobe-swatch i + i { width: 45%; }
+.oobe-swatch.t-default { background: #fff; }
+.oobe-swatch.t-default i { background: #0f1419; }
+.oobe-swatch.t-dim { background: #15202b; }
+.oobe-swatch.t-dim i { background: #f7f9f9; }
+.oobe-swatch.t-lightsout { background: #000; }
+.oobe-swatch.t-lightsout i { background: #e7e9ea; }
+.oobe-swatch.is-flag { border: 1px solid rgba(128, 128, 128, 0.35); }
+
+/* Notifications: the bell swings once it is on. */
+.oobe-bell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 112px;
+  height: 112px;
+  margin: 8px auto 4px;
+}
+.oobe-bell::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--hover, rgba(231, 233, 234, 0.1)); }
+.oobe-bell-ico { position: relative; width: 52px; height: 52px; transform-origin: 50% 12%; animation: oobe-swing 2.8s 600ms var(--oobe-ease) infinite; }
+.oobe-bell.on .oobe-bell-ico { fill: currentColor; }
+.oobe-bell i { position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--line, #2f3336); animation: oobe-ripple 2.8s 600ms ease-out infinite; }
+.oobe-bell i + i { animation-delay: 1.2s; }
+@keyframes oobe-swing {
+  0%, 40%, 100% { transform: rotate(0); }
+  8% { transform: rotate(14deg); }
+  16% { transform: rotate(-12deg); }
+  24% { transform: rotate(8deg); }
+  32% { transform: rotate(-4deg); }
+}
+@keyframes oobe-ripple { 0% { opacity: 0.8; transform: scale(1); } 70%, 100% { opacity: 0; transform: scale(1.6); } }
+
+/* Install: a phone with the app mark floats up. */
+.oobe-device {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 152px;
+  margin: 8px auto 8px;
+  border: 2px solid var(--text, #e7e9ea);
+  border-radius: 20px;
+  box-sizing: border-box;
+  animation: oobe-float 900ms var(--oobe-spring) both;
+}
+.oobe-device span { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; background: var(--fill, #eff3f4); color: var(--on-fill, #0f1419); animation: oobe-pop 700ms 350ms var(--oobe-spring) both; }
+.oobe-device-mark { width: 22px; height: 22px; }
+@keyframes oobe-float { from { opacity: 0; transform: translateY(24px); } }
+@keyframes oobe-pop { from { opacity: 0; transform: scale(0.2); } }
+.oobe-steps { margin: 12px 0 0; padding-left: 22px; font-size: 15px; line-height: 26px; text-align: left; }
+
+/* Who to follow. */
+.oobe-people { list-style: none; margin: 0 -12px; padding: 0; }
+.oobe-person { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; }
+.oobe-pic { width: 44px; height: 44px; flex: none; border-radius: 50%; overflow: hidden; background: var(--initials-bg, #3d4248); color: var(--initials-fg, #fff); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+html[data-ava-shape="square"] .oobe-pic { border-radius: 8px; }
+.oobe-pic img { width: 100%; height: 100%; object-fit: cover; }
+.oobe-who { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; }
+.oobe-who b,
+.oobe-who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oobe-who small { color: var(--muted, #71767b); font-size: 13px; }
+.oobe-follow {
+  flex: none;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--fill, #eff3f4);
+  color: var(--on-fill, #0f1419);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, transform 0.15s var(--oobe-ease);
+}
+.oobe-follow:active { transform: scale(0.94); }
+.oobe-follow.on { background: transparent; color: inherit; border-color: var(--line, #2f3336); }
+.oobe-skel { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.oobe-skel i { height: 44px; border-radius: 12px; background: var(--hover, #16181c); animation: oobe-pulse 1.2s ease-in-out infinite; }
+@keyframes oobe-pulse { 50% { opacity: 0.4; } }
+
+/* Finale: a ring grows, the tick springs in, sparks fly out. */
+.oobe-done { position: relative; width: 112px; height: 112px; margin: 0 auto 24px; display: flex; align-items: center; justify-content: center; }
+.oobe-done-ring { position: absolute; inset: 0; border-radius: 50%; background: var(--fill, #eff3f4); animation: oobe-ring 700ms var(--oobe-spring) both; }
+.oobe-done-tick { position: relative; width: 56px; height: 56px; color: var(--on-fill, #0f1419); stroke-width: 2.6; animation: oobe-tick 700ms 220ms var(--oobe-spring) both; }
+@keyframes oobe-ring { from { opacity: 0; transform: scale(0.2); } }
+@keyframes oobe-tick { from { opacity: 0; transform: scale(0.2) rotate(-30deg); } }
+.oobe-burst { position: absolute; inset: 0; }
+.oobe-burst i { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: var(--blue, #1d9bf0); opacity: 0; animation: oobe-spark 900ms 260ms var(--oobe-ease) both; }
+.oobe-burst i:nth-child(1) { --a: 0deg; }
+.oobe-burst i:nth-child(2) { --a: 45deg; background: #f91880; }
+.oobe-burst i:nth-child(3) { --a: 90deg; background: #00ba7c; }
+.oobe-burst i:nth-child(4) { --a: 135deg; background: #ffd400; }
+.oobe-burst i:nth-child(5) { --a: 180deg; background: #7856ff; }
+.oobe-burst i:nth-child(6) { --a: 225deg; background: #ff7a00; }
+.oobe-burst i:nth-child(7) { --a: 270deg; }
+.oobe-burst i:nth-child(8) { --a: 315deg; background: #f91880; }
+@keyframes oobe-spark {
+  0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(0.4); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(-96px) scale(1); }
+}
+.oobe.oobe-leave { animation: oobe-leave 560ms var(--oobe-out) forwards; pointer-events: none; }
+.oobe.oobe-leave .oobe-card { animation: oobe-leave-card 560ms var(--oobe-out) forwards; }
+@keyframes oobe-leave { to { opacity: 0; } }
+@keyframes oobe-leave-card { to { transform: scale(1.08); } }
+
+/* Account steps from accounts.js inside the frame. */
+.oobe .acct-sub { margin: 0 0 8px; color: var(--muted, #71767b); font-size: 15px; line-height: 20px; }
+.oobe .oobe-main > .acct-sub:first-of-type { margin-top: -12px; }
+.oobe .acct-field:first-child { margin-top: 8px; }
+.oobe .acct-pref-row { display: flex; align-items: center; gap: 16px; margin: 20px 0 0; padding: 14px 16px; border: 1px solid var(--line, #2f3336); border-radius: 16px; }
+.oobe .acct-pref-row .tab-switch { width: auto; min-height: 0; padding: 0; border: 0; flex: none; }
+.oobe .acct-pref-text b { font-size: 15px; }
+.oobe .acct-number { text-align: center; }
+.oobe .acct-check { margin-top: 16px; }
+
+/* Validation shake. */
+.oobe-shake { animation: oobe-shake 420ms var(--oobe-ease); }
+@keyframes oobe-shake {
+  15% { transform: translateX(-9px); }
+  35% { transform: translateX(8px); }
+  55% { transform: translateX(-5px); }
+  75% { transform: translateX(3px); }
+}
+
+/* Shared-axis move. Without view transitions the new step slides in. */
+.oobe-enter.oobe-from-fwd { animation: oobe-in-fwd var(--oobe-move) var(--oobe-spring) both; }
+.oobe-enter.oobe-from-back { animation: oobe-in-back var(--oobe-move) var(--oobe-spring) both; }
+@keyframes oobe-in-fwd { from { opacity: 0; transform: translateX(56px); } }
+@keyframes oobe-in-back { from { opacity: 0; transform: translateX(-56px); } }
+@keyframes oobe-out-fwd { to { opacity: 0; transform: translateX(-56px); } }
+@keyframes oobe-out-back { to { opacity: 0; transform: translateX(56px); } }
+@keyframes oobe-fade-in { from { opacity: 0; } }
+@keyframes oobe-fade-out { to { opacity: 0; } }
+@keyframes oobe-rise { from { opacity: 0; transform: translateY(14px); } }
+/* Staggered entrance of what is on the new step. */
+.oobe-enter .oobe-main > *,
+.oobe-enter .oobe-foot > * { animation: oobe-rise 460ms var(--oobe-spring) both; }
+.oobe-enter .oobe-main > :nth-child(2) { animation-delay: 40ms; }
+.oobe-enter .oobe-main > :nth-child(3) { animation-delay: 80ms; }
+.oobe-enter .oobe-main > :nth-child(4) { animation-delay: 120ms; }
+.oobe-enter .oobe-main > :nth-child(5) { animation-delay: 160ms; }
+.oobe-enter .oobe-main > :nth-child(n + 6) { animation-delay: 200ms; }
+.oobe-enter .oobe-foot > * { animation-delay: 160ms; }
+.oobe-enter .oobe-foot > :nth-child(n + 2) { animation-delay: 220ms; }
+.oobe-enter .oobe-opts > *,
+.oobe-enter .oobe-themes > *,
+.oobe-enter .oobe-people > * { animation: oobe-rise 460ms var(--oobe-spring) both; animation-delay: 140ms; }
+.oobe-enter .oobe-opts > :nth-child(2),
+.oobe-enter .oobe-themes > :nth-child(2),
+.oobe-enter .oobe-people > :nth-child(2) { animation-delay: 190ms; }
+.oobe-enter .oobe-opts > :nth-child(3),
+.oobe-enter .oobe-themes > :nth-child(3),
+.oobe-enter .oobe-people > :nth-child(3) { animation-delay: 240ms; }
+.oobe-enter .oobe-opts > :nth-child(n + 4),
+.oobe-enter .oobe-themes > :nth-child(n + 4),
+.oobe-enter .oobe-people > :nth-child(n + 4) { animation-delay: 290ms; }
+
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-group(oobe-step) { animation-duration: var(--oobe-move); }
+::view-transition-old(oobe-step) { animation: oobe-out-fwd 260ms var(--oobe-out) both; }
+::view-transition-new(oobe-step) { animation: oobe-in-fwd var(--oobe-move) var(--oobe-spring) both; }
+html[data-oobe-dir="back"]::view-transition-old(oobe-step) { animation-name: oobe-out-back; }
+html[data-oobe-dir="back"]::view-transition-new(oobe-step) { animation-name: oobe-in-back; }
+
+.oobe-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Small phones and landscape: tighter type. */
+@media (max-width: 380px), (max-height: 600px) {
+  .oobe-title { font-size: 26px; line-height: 31px; }
+  .oobe-hello { height: 44px; }
+  .oobe-hello span { font-size: 34px; line-height: 44px; }
+  .oobe-hero { margin-bottom: 12px; }
+  .oobe-hero-mark { width: 48px; height: 48px; }
+  .oobe-step-ico { width: 40px; height: 40px; margin-bottom: 10px; }
+  .oobe-foot { padding-top: 8px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* Wide screens: a centred split card like the Windows 11 first run, with
+   the animated mark and the step rail on the left. */
+@media (min-width: 960px) and (min-height: 600px) {
+  .oobe { align-items: center; padding: 24px; box-sizing: border-box; height: 100dvh; }
+  .oobe .oobe-card,
+  .oobe .oobe-card.acct-modal {
+    width: min(1040px, 100%);
+    height: min(680px, calc(100dvh - 48px));
+    border: 1px solid var(--line, #2f3336);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 24px 80px rgba(0, 0, 0, 0.5);
+  }
+  .oobe-side {
+    display: flex;
+    flex-direction: column;
+    width: 340px;
+    flex: none;
+    padding: 40px 32px 32px;
+    box-sizing: border-box;
+    border-right: 1px solid var(--line, #2f3336);
+  }
+  .oobe-brand { display: flex; margin-bottom: 48px; }
+  .oobe-mark { width: 44px; height: 44px; color: var(--text, #e7e9ea); animation: oobe-reveal 1100ms var(--oobe-spring) both; }
+  .oobe[data-step="welcome"] .oobe-mark { width: 88px; height: 88px; }
+  .oobe[data-step="welcome"] .oobe-hero { display: none; }
+  .oobe-rail { position: relative; isolation: isolate; list-style: none; margin: 0; padding: 0; }
+  .oobe-rail li { display: flex; align-items: center; gap: 14px; height: 48px; padding: 0 12px; color: var(--muted, #71767b); font-size: 17px; }
+  .oobe-rail li.now { color: var(--text, #e7e9ea); font-weight: 700; }
+  .oobe-rail li.done { color: var(--text, #e7e9ea); }
+  .oobe-rail-dot { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex: none; border: 2px solid currentColor; border-radius: 50%; box-sizing: border-box; }
+  .oobe-rail li.done .oobe-rail-dot { background: var(--text, #e7e9ea); border-color: var(--text, #e7e9ea); color: var(--bg, #000); }
+  .oobe-rail li.now .oobe-rail-dot { background: currentColor; box-shadow: inset 0 0 0 3px var(--bg, #000); }
+  .oobe-rail-tick { width: 14px; height: 14px; stroke-width: 3; }
+  .oobe-rail-ind {
+    position: absolute;
+    z-index: -1;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 48px;
+    border-radius: 9999px;
+    background: var(--hover, rgba(231, 233, 234, 0.1));
+    transform: translateY(calc(var(--oobe-g) * 48px));
+    animation: oobe-rail 560ms var(--oobe-spring) both;
+  }
+  @keyframes oobe-rail { from { transform: translateY(calc(var(--oobe-gfrom) * 48px)); } }
+  .oobe-count { margin: auto 0 0; color: var(--muted, #71767b); font-size: 14px; }
+  .oobe-dots { display: none; }
+  .oobe-head { height: 64px; padding: 8px 16px 0; }
+  .oobe-scroll { padding: 0 56px 8px; }
+  .oobe-main { padding-top: 16px; max-width: 480px; margin: 0; }
+  .oobe-step.is-center .oobe-main { margin: auto; }
+  .oobe-foot { max-width: none; padding: 16px 56px 32px; flex-direction: row-reverse; align-items: center; justify-content: flex-start; flex-wrap: wrap; }
+  .oobe-foot .oobe-btn,
+  .oobe-foot .acct-next { width: auto; min-width: 180px; }
+  .oobe-step.is-center .oobe-foot { flex-direction: column; align-items: center; }
+  .oobe-step.is-center .oobe-foot .oobe-btn { min-width: 280px; }
+}
+
+/* Reduced motion: crossfades only. */
+@media (prefers-reduced-motion: reduce) {
+  .oobe-enter.oobe-from-fwd,
+  .oobe-enter.oobe-from-back { animation: oobe-fade-in 180ms linear both; }
+  .oobe-enter .oobe-main > *,
+  .oobe-enter .oobe-foot > *,
+  .oobe-enter .oobe-opts > *,
+  .oobe-enter .oobe-themes > *,
+  .oobe-enter .oobe-people > * { animation: none; }
+  ::view-transition-old(oobe-step) { animation: oobe-fade-out 160ms linear both; }
+  ::view-transition-new(oobe-step) { animation: oobe-fade-in 200ms linear both; }
+  html[data-oobe-dir="back"]::view-transition-old(oobe-step) { animation-name: oobe-fade-out; }
+  html[data-oobe-dir="back"]::view-transition-new(oobe-step) { animation-name: oobe-fade-in; }
+  .oobe-hero-mark,
+  .oobe-mark,
+  .oobe-dot-ind,
+  .oobe-rail-ind,
+  .oobe-device,
+  .oobe-device span,
+  .oobe-done-ring,
+  .oobe-done-tick,
+  .oobe-bell-ico,
+  .oobe-bell i,
+  .oobe-skel i,
+  .oobe-shake { animation: none; }
+  .oobe-hello span { animation: none; }
+  .oobe-hello span:first-child { opacity: 1; }
+  .oobe.oobe-leave,
+  .oobe.oobe-leave .oobe-card { animation: oobe-fade-out 160ms linear forwards; }
+  .oobe-btn, .oobe-opt, .oobe-theme, .oobe-seg, .oobe-follow, .oobe-icon, .oobe-skip, .oobe-link, .oobe-radio::after { transition: none; }
+}
+
+/* Passkey step: a key that settles into place. */
+.oobe-key { display: flex; align-items: center; justify-content: center; width: 112px; height: 112px; margin: 20px auto 8px; border-radius: 50%; background: var(--hover, rgba(231, 233, 234, 0.1)); }
+.oobe-key-ico { width: 52px; height: 52px; animation: oobe-key 900ms 200ms var(--oobe-spring) both; }
+@keyframes oobe-key { from { opacity: 0; transform: rotate(-60deg) scale(0.6); } }
+@media (prefers-reduced-motion: reduce) { .oobe-key-ico { animation: none; } }

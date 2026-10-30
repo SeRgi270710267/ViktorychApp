@@ -183,13 +183,13 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   });
   await sql("INSERT INTO sessions (token_hash, public_id, created_at, expires_at) VALUES (?, ?, ?, ?)", "extra-session-a", a, now, now + 100000);
   await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?)", a, payload, now);
-  await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?)", b, JSON.stringify({ follows: ["x:nasa"], bookmarks: { keep: 1 } }), now);
+  await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, ?, ?)", b, JSON.stringify({ follows: ["x:sampleagency"], bookmarks: { keep: 1 } }), now);
   await sql("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, 'post-1', 'repost', '', '{}', ?)", a, now);
   await sql("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, 'post-2', 'repost', '', '{}', ?)", b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", a, "app:" + b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", a, "app:" + o, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", b, "app:" + a, now);
-  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:nasa', '', ?)", b, now);
+  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:sampleagency', '', ?)", b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", o, "app:" + b, now);
   await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)", o, "app:" + a, now);
   await sql("INSERT INTO drive_vault (public_id, kdf, iterations, salt, verifier, verifier_iv, created_at, updated_at) VALUES (?, 'pbkdf2', 1, 's', 'v', 'i', ?, ?)", a, now, now);
@@ -254,6 +254,8 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + a, now + 100000);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + b, now + 100000);
   await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES ('shared.bin', 'file', 0, '', 'fid', 1, 4, 'abc', 'application/octet-stream', 0, 0, 0, 0, ?)", now);
+  await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, '', 'fid-a', 77, 4, 'sha-a', 'image/webp', 0, 1, 0, 0, 1)", "media/avatars/" + a + "/x.webp");
+  await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, '', 'fid-b', 78, 4, 'sha-b', 'image/webp', 0, 1, 0, 0, 1)", "media/avatars/" + b + "/keep.webp");
 
   await bindings.DATA.put("media/avatars/" + a + "/x.webp", "ava-a");
   await bindings.DATA.put("media/banners/" + a + "/y.webp", "ban-a");
@@ -269,8 +271,8 @@ test("deletes one account everywhere and leaves everyone else", async () => {
       { id: "keeper", name: "Keep" }
     ]
   }));
-  await bindings.DATA.put("follows.json", JSON.stringify(["x:nasa", "app:" + a, { id: "app:" + b }]));
-  await bindings.DATA.put("follows/home.json", JSON.stringify({ ids: ["app:" + a, "x:nasa"] }));
+  await bindings.DATA.put("follows.json", JSON.stringify(["x:sampleagency", "app:" + a, { id: "app:" + b }]));
+  await bindings.DATA.put("follows/home.json", JSON.stringify({ ids: ["app:" + a, "x:sampleagency"] }));
 
   const noOrigin = await del({ ip: "198.51.100.10", token: ada.token, body: { handle: "ada_wipe", accountNumber: ada.accountNumber }, origin: "" });
   assert.equal(noOrigin.status, 403);
@@ -345,7 +347,7 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   const adaSession = await call("/v1/session", { ip: "198.51.100.33", token: ada.token });
   assert.equal(adaSession.status, 401);
   const beeFollows = await bindings.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY target_id").bind(b).all();
-  assert.deepEqual(beeFollows.results.map((row) => row.target_id), ["x:nasa"]);
+  assert.deepEqual(beeFollows.results.map((row) => row.target_id), ["x:sampleagency"]);
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ? AND target_id = ?", o, "app:" + b), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ? OR target_id = ?", a, "app:" + a), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM community_posts WHERE id = 'post-bee'"), 1);
@@ -361,7 +363,14 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_items WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_pace WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM rate_limits WHERE bucket = ?", "follow:" + b), 1);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files"), 1);
+  // The shared row and the other account's avatar stay; the deleted account's
+  // Telegram copy is dropped and queued for removal from the channel.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files"), 2);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files WHERE object_key LIKE ?", "media/avatars/" + a + "/%"), 0);
+  const forget = await bindings.DATA.list({ prefix: "backup/tg-forget/" });
+  assert.equal(forget.objects.length, 1);
+  const queued = await (await bindings.DATA.get(forget.objects[0].key)).json();
+  assert.deepEqual(queued.messages, [77]);
   const beeSync = await one("SELECT payload FROM sync_state WHERE public_id = ?", b);
   assert.equal(JSON.parse(beeSync.payload).bookmarks.keep, 1);
 
@@ -377,8 +386,8 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.deepEqual(people.people, [{ id: "keeper", name: "Keep" }]);
   assert.equal(JSON.stringify(people).includes(a), false);
   assert.equal(JSON.stringify(people).includes("ada_wipe"), false);
-  assert.deepEqual(await readJson("follows.json"), ["x:nasa", { id: "app:" + b }]);
-  assert.deepEqual(await readJson("follows/home.json"), { ids: ["x:nasa"] });
+  assert.deepEqual(await readJson("follows.json"), ["x:sampleagency", { id: "app:" + b }]);
+  assert.deepEqual(await readJson("follows/home.json"), { ids: ["x:sampleagency"] });
 
   const expected = userHash(a);
   assert.match(expected, /^[0-9a-f]{64}$/);
@@ -479,7 +488,7 @@ test("a stopped deletion resumes from the cron and drops rows written after the 
 
   const now = Date.now();
   await sql("INSERT INTO sync_state (public_id, payload, updated_at) VALUES (?, '{}', ?)", id, now);
-  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:nasa', '', ?)", id, now);
+  await sql("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, 'x:sampleagency', '', ?)", id, now);
   await sql("INSERT INTO sessions (token_hash, public_id, created_at, expires_at) VALUES ('stray-job', ?, ?, ?)", id, now, now + 1000);
 
   const cronTime = Date.UTC(2026, 0, 1, 0, 7, 0);

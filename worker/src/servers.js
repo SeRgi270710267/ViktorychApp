@@ -479,7 +479,7 @@ export async function handleServers(request, env, path, url, deps) {
   const parts = path.split("/").slice(3).map((p) => { try { return decodeURIComponent(p); } catch (e) { return p; } });
   const method = request.method;
 
-  if (parts[0] === "pub" && method === "GET") return servePublic(request, env, url);
+  if (parts[0] === "pub" && method === "GET") return servePublic(request, env, url, deps);
   if (parts[0] === "file" && method === "GET") return serveFile(request, env, url, deps);
   if (parts[0] === "invite" && parts[1]) {
     if (parts.length === 2 && method === "GET") return invitePreview(request, env, deps, parts[1]);
@@ -917,10 +917,12 @@ function parseRange(header, size) {
   return { offset: start, length: end - start + 1 };
 }
 
-async function serveObject(request, env, key, publicMode) {
+async function serveObject(request, env, key, publicMode, deps) {
   if (!env.DATA) return new Response("storage", { status: 503 });
-  const head = await env.DATA.head(key);
-  if (!head) return new Response("not found", { status: 404 });
+  let head = null;
+  try { head = await env.DATA.head(key); }
+  catch (err) { head = null; }
+  if (!head) return serveTelegramCopy(env, key, publicMode, deps);
   const size = head.size;
   const range = parseRange(request.headers.get("range"), size);
   if (range && range.bad) return new Response("range", { status: 416, headers: { "content-range": "bytes */" + size } });
@@ -946,10 +948,29 @@ async function serveObject(request, env, key, publicMode) {
   return new Response(obj.body, { status: 200, headers });
 }
 
-async function servePublic(request, env, url) {
+/* The Telegram backup keeps a byte-for-byte copy of server files. It is
+   read only when the R2 object is missing or R2 fails. No range support:
+   the copy is at most 19 MB and is sent whole. */
+async function serveTelegramCopy(env, key, publicMode, deps) {
+  const copy = deps && deps.tgObject ? await deps.tgObject(env, key) : null;
+  if (!copy) return new Response("not found", { status: 404 });
+  const type = copy.headers.get("content-type") || "application/octet-stream";
+  const inline = INLINE_TYPES.test(type);
+  const headers = new Headers();
+  headers.set("content-type", inline ? type : "application/octet-stream");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("content-security-policy", "default-src 'none'; sandbox");
+  headers.set("cache-control", publicMode ? "public, max-age=86400" : "private, max-age=86400");
+  headers.set("content-disposition", (inline ? "inline" : "attachment") + "; filename*=UTF-8''file");
+  const length = copy.headers.get("content-length");
+  if (length) headers.set("content-length", length);
+  return new Response(copy.body, { status: 200, headers });
+}
+
+async function servePublic(request, env, url, deps) {
   const key = String(url.searchParams.get("k") || "");
   if (!/^srv\/[a-f0-9]{16}\/[ibekv]\/[a-f0-9]{16}$/.test(key)) return new Response("not found", { status: 404 });
-  return serveObject(request, env, key, true);
+  return serveObject(request, env, key, true, deps);
 }
 
 async function serveFile(request, env, url, deps) {
@@ -960,7 +981,7 @@ async function serveFile(request, env, url, deps) {
   if (!exp || exp < Date.now()) return new Response("expired", { status: 403 });
   const want = (await deps.hmacHex(pepper(env), "srvf:" + key + ":" + exp)).slice(0, 32);
   if (want !== sig) return new Response("forbidden", { status: 403 });
-  return serveObject(request, env, key, false);
+  return serveObject(request, env, key, false, deps);
 }
 
 /* ---------- invites and membership ---------- */

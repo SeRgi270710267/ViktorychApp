@@ -3,6 +3,8 @@
    A schema miss does not hide a note: actorHidden stays false when the
    tables are not ready, so a transient error cannot drop mail. */
 
+import { tempDmGate } from "./temp-accounts.js";
+
 export const SOCIAL_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS account_blocks (
     blocker_id TEXT NOT NULL,
@@ -620,6 +622,8 @@ async function writeMessage(request, env, viewer, deps) {
   if (await blocksEither(env, viewer.public_id, otherId)) {
     return deps.json(403, { error: "blocked", message: "You can’t do that with this account." });
   }
+  const tempGate = await tempDmGate(env, viewer, otherId, deps.rateHit);
+  if (tempGate) return deps.json(tempGate.status, { error: tempGate.error, message: "Temporary accounts can message only a few new people a day. Save this account to lift the limit." }, { "retry-after": String(tempGate.retry || 3600) });
   const id = newKey("dm_");
   const now = Date.now();
   await env.DB.prepare(

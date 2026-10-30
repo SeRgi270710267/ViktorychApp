@@ -475,7 +475,7 @@
 .sc-action-btn:hover {
   background: var(--blue-dim);
   border-color: var(--blue);
-  color: var(--blue);
+  color: var(--link, var(--blue));
 }
 .sc-action-btn.is-toggle-active {
   background: var(--blue);

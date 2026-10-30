@@ -1,27 +1,26 @@
-FROM node:22-bookworm-slim
+# Pinned so a new Node release can never break a Render build by surprise.
+FROM node:22.23.4-bookworm-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install dependencies first for Docker caching
-COPY backup-server/package.json ./package.json
-RUN npm install --omit=dev
-
-# Copy application files
-COPY worker/ ./worker/
+# Shared Cloudflare mode needs no npm packages: Node 22 has fetch, streams
+# and Web APIs built in. Miniflare (local mode) is a dev dependency only, so
+# builds are fast and the image is small, which shortens cold starts.
+COPY worker/src/ ./worker/src/
 COPY shared/ ./shared/
+COPY backup-server/package.json ./package.json
 COPY backup-server/server.mjs ./server.mjs
 COPY backup-server/cloudflare.mjs ./cloudflare.mjs
+COPY backup-server/pool-room.mjs ./pool-room.mjs
 
-# Default port (Render standard 10000)
+ENV NODE_ENV=production
 ENV PORT=10000
 ENV HOST=0.0.0.0
 ENV DATA_DIR=/data
+# The free instance has 512 MB. A smaller heap makes V8 collect garbage
+# before the container hits the limit and gets killed.
+ENV NODE_OPTIONS="--max-old-space-size=320"
 
 EXPOSE 10000
 
-# Local fallback storage (shared Cloudflare mode stores nothing on disk)
-VOLUME ["/data"]
-
-# Run the backup accounts server
 CMD ["node", "server.mjs"]

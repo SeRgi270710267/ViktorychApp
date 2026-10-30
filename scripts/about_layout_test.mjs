@@ -2,6 +2,7 @@
    The edit sheet is separate. Empty sections stay out of other people's view. */
 import fs from "node:fs";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
@@ -30,7 +31,7 @@ function staticChecks() {
   const external = read("app.js");
   const profile = external.slice(external.indexOf("function profileView"), external.indexOf("function statusView"));
   if (profile.includes("ProfileAbout") || profile.includes("?tab=about")) fail("external profiles must not grow an About tab");
-  if (!read("sw.js").includes('VERSION = "viktorych-a116-__SW_VERSION__"')) fail("service worker cache was not bumped");
+  if (!read("sw.js").includes('VERSION = "viktorych-a162-__SW_VERSION__"')) fail("service worker cache was not bumped");
   console.log("ok about layout rules");
 }
 
@@ -114,7 +115,7 @@ async function browserChecks() {
       if (box.pencil < 1) fail(width + " missing edit pencil");
       if (box.lock < 1) fail(width + " missing privacy icon");
       if (!box.text.includes("sample one · sample two")) fail(width + " languages were not dotted");
-      if (!box.text.includes("3 family members") && !box.text.includes("3 familiares") && !box.text.includes("3 родственников")) fail(width + " family count missing");
+      if (!box.text.includes("3 family members") && !box.text.includes("3 familiares") && !box.text.includes("3 родственников") && !box.text.includes("3 родственника")) fail(width + " family count missing");
       await page.close();
     }
     const hidden = await (async () => {
@@ -133,4 +134,8 @@ async function browserChecks() {
 }
 
 staticChecks();
+/* Badge achievement toast and its settings ride along with the profile badges. */
+execFileSync(process.execPath, [path.join(root, "scripts", "achievement_test.js")], { stdio: "inherit" });
+/* Settings alerts reuse the same pop-out for warnings and the auto-open countdown. */
+execFileSync(process.execPath, [path.join(root, "scripts", "setting_alerts_test.js")], { stdio: "inherit" });
 await browserChecks();

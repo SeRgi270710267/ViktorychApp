@@ -547,7 +547,8 @@ export async function handleFriendPresence(request, env, deps) {
   const views = await decorate(env, account.public_id, visible.map((row) => row.public_id), now);
   const byId = new Map();
   views.forEach((view) => byId.set(view.id, view));
-  const games = await playingNow(env, visible.map((row) => row.public_id));
+  const games = await playingNow(env, visible.map((row) => row.public_id), account.public_id);
+  const rooms = games.rooms || new Map();
   const friends = visible.map((row) => {
     const view = byId.get(row.public_id) || { state: "offline", exact: false, lastSeen: 0, emoji: "", text: "" };
     const photo = avatarOf(request, row);
@@ -563,7 +564,9 @@ export async function handleFriendPresence(request, env, deps) {
       emoji: view.emoji || "",
       text: view.text || "",
       // Only for friends whose presence you can already see.
-      playing: view.state && view.state !== "offline" ? games.get(String(row.public_id)) || "" : ""
+      playing: view.state && view.state !== "offline" ? games.get(String(row.public_id)) || "" : "",
+      // A room they picked themselves, when their games privacy lets you see it.
+      room: view.state && view.state !== "offline" && rooms.get(String(row.public_id)) ? rooms.get(String(row.public_id)).room : ""
     };
   });
   friends.sort((a, b) => {

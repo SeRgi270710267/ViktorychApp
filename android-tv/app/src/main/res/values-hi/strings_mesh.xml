@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nearby chat (Bitchat-compatible mesh). Kept apart from strings.xml. -->
+<resources>
+    <string name="mesh_title">आस-पास चैट (Bitchat)</string>
+    <string name="mesh_intro">जब इंटरनेट या ऐप ब्लॉक हो, तब बात करने का एक बैकअप तरीका। यह ब्लूटूथ से आस-पास के लोगों से चैट करता है और फ़ोन पर Bitchat ऐप के साथ काम करता है। संदेश पास के डिवाइसों से होकर 7 हॉप तक जाते हैं। सार्वजनिक संदेश आस-पास कोई भी पढ़ सकता है; निजी संदेश एंड-टू-एंड एन्क्रिप्टेड होते हैं। यह सिर्फ़ तब चलता है जब यह स्क्रीन खुली हो, इसलिए बाकी समय बैटरी या डेटा खर्च नहीं होता।</string>
+    <string name="mesh_turned_off">आस-पास चैट बंद है। ऐप ब्लूटूथ या Nostr का उपयोग नहीं करेगा।</string>
+    <string name="mesh_on">चालू करें</string>
+    <string name="mesh_off">बंद करें</string>
+    <string name="mesh_back">वापस</string>
+    <string name="mesh_allow">ब्लूटूथ की अनुमति दें</string>
+    <string name="mesh_need_allow">ब्लूटूथ की अनुमति अभी नहीं है। आस-पास के लोगों से चैट के लिए \"ब्लूटूथ की अनुमति दें\" दबाएँ।</string>
+    <string name="mesh_perm_denied">ब्लूटूथ की अनुमति नहीं मिली। आप अब भी इंटरनेट पर क्षेत्र चैट इस्तेमाल कर सकते हैं।</string>
+    <string name="mesh_location_note">इस Android संस्करण पर ब्लूटूथ डिवाइस खोजने के लिए लोकेशन अनुमति और लोकेशन चालू होना ज़रूरी है। आपकी लोकेशन न पढ़ी जाती है न भेजी जाती है।</string>
+    <string name="mesh_no_ble">इस डिवाइस में ब्लूटूथ LE नहीं है। सिर्फ़ इंटरनेट पर क्षेत्र चैट इस्तेमाल हो सकती है।</string>
+    <string name="mesh_bt_off">ब्लूटूथ बंद है। इसे TV सेटिंग में चालू करें।</string>
+    <string name="mesh_central_only">दूसरे इस TV को ब्लूटूथ पर नहीं खोज सकते (इसकी ब्लूटूथ चिप प्रसारण नहीं कर सकती), पर यह आस-पास के फ़ोन से जुड़ सकता है।</string>
+    <string name="mesh_status">ब्लूटूथ: आस-पास %1$d लोग, %2$d कनेक्शन</string>
+    <string name="mesh_nostr_status">क्षेत्र चैट (इंटरनेट): %2$d में से %1$d रिले जुड़े</string>
+    <string name="mesh_nostr_off">क्षेत्र चैट (इंटरनेट): बंद। इस्तेमाल के लिए क्षेत्र चुनें।</string>
+    <string name="mesh_public">किसे: आस-पास सभी</string>
+    <string name="mesh_area_chat">किसे: क्षेत्र #%1$s</string>
+    <string name="mesh_private">किसे: %1$s (निजी)</string>
+    <string name="mesh_people">भेजें</string>
+    <string name="mesh_no_people">अभी आस-पास कोई नहीं है।</string>
+    <string name="mesh_hint">संदेश लिखें</string>
+    <string name="mesh_send">भेजें</string>
+    <string name="mesh_name">नाम</string>
+    <string name="mesh_name_title">चैट में आपका नाम</string>
+    <string name="mesh_area">क्षेत्र</string>
+    <string name="mesh_area_title">इंटरनेट चैट का क्षेत्र (geohash)</string>
+    <string name="mesh_area_help">Bitchat लोकेशन चैनल geohash इस्तेमाल करते हैं, जैसे शहर के लिए u3qc या इलाके के लिए u3qcn। इंटरनेट चैट बंद करने के लिए खाली छोड़ें। सिर्फ़ क्षेत्र चैट इंटरनेट इस्तेमाल करती है, नीचे दिए सार्वजनिक Nostr रिले के ज़रिए।</string>
+    <string name="mesh_bad_area">यह geohash नहीं है। u3qcn जैसे अक्षर और अंक इस्तेमाल करें।</string>
+    <string name="mesh_relays">रिले</string>
+    <string name="mesh_relays_title">Nostr रिले, हर लाइन में एक (wss://…)</string>
+    <string name="mesh_wipe">नई पहचान</string>
+    <string name="mesh_wiped">नई चैट पहचान बनाई गई।</string>
+    <string name="mesh_ok">ठीक है</string>
+    <string name="mesh_cancel">रद्द करें</string>
+    <string name="mesh_unverified">असत्यापित</string>
+    <string name="mesh_delivered">%1$s को पहुँचा</string>
+</resources>

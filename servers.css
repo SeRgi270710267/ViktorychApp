@@ -11,9 +11,9 @@
 .vsrv-iconbtn.sm { width: 26px; height: 26px; }
 .vsrv-iconbtn.sm .vsrv-ic { width: 15px; height: 15px; }
 .vsrv-iconbtn:hover, .vsrv-iconbtn:focus-visible { background: var(--hover); color: var(--text); outline: none; }
-.vsrv-iconbtn.on { color: var(--blue); }
+.vsrv-iconbtn.on { color: var(--link, var(--blue)); }
 .vsrv-iconbtn:disabled { opacity: .35; cursor: default; }
-.vsrv-linkbtn { border: 0; background: none; padding: 0; color: var(--blue); cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.vsrv-linkbtn { border: 0; background: none; padding: 0; color: var(--link, var(--blue)); cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .vsrv-linkbtn:hover { text-decoration: underline; }
 .vsrv-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 18px;
@@ -98,7 +98,7 @@
 .vsrv-side-invite, .vsrv-side-add {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; margin-bottom: 6px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 600; text-align: left;
 }
-.vsrv-side-invite { color: var(--blue); }
+.vsrv-side-invite { color: var(--link, var(--blue)); }
 .vsrv-side-invite:hover, .vsrv-side-add:hover { background: var(--hover-soft); }
 .vsrv-cat { margin-top: 14px; }
 .vsrv-cat-head { display: flex; align-items: center; padding-right: 2px; }
@@ -188,7 +188,7 @@ span.vsrv-conv-topic { border-left: 0; cursor: default; }
 .vsrv-text { font-size: 15px; line-height: 22px; word-wrap: break-word; overflow-wrap: anywhere; white-space: normal; }
 .vsrv-text.jumbo { font-size: 44px; line-height: 52px; }
 .vsrv-text.jumbo .vsrv-emoji { width: 48px; height: 48px; }
-.vsrv-text a { color: var(--blue); text-decoration: none; }
+.vsrv-text a { color: var(--link, var(--blue)); text-decoration: none; }
 .vsrv-text a:hover { text-decoration: underline; }
 .vsrv-text code { padding: 1px 4px; border-radius: 4px; background: var(--search); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .vsrv-code { margin: 4px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--search); font-size: 13px; line-height: 18px; overflow-x: auto; white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -201,7 +201,7 @@ span.vsrv-conv-topic { border-left: 0; cursor: default; }
 .vsrv-spoiler.open { background: var(--search); color: inherit; }
 .vsrv-mention {
   display: inline; border: 0; padding: 0 2px; border-radius: 4px; font-weight: 600; cursor: pointer;
-  background: rgba(29, 155, 240, .15); color: var(--blue) !important;
+  background: rgba(29, 155, 240, .15); color: var(--link, var(--blue)) !important;
 }
 .vsrv-mention.role { background: rgba(127, 127, 127, .15); color: var(--rc, var(--blue)) !important; cursor: default; }
 .vsrv-mention.all { cursor: default; }
@@ -243,7 +243,7 @@ span.vsrv-conv-topic { border-left: 0; cursor: default; }
   display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--search); cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text);
 }
-.vsrv-rx.me { border-color: var(--blue); background: rgba(29, 155, 240, .14); color: var(--blue); }
+.vsrv-rx.me { border-color: var(--blue); background: rgba(29, 155, 240, .14); color: var(--link, var(--blue)); }
 .vsrv-rx:disabled { cursor: default; }
 .vsrv-rx .vsrv-emoji { width: 18px; height: 18px; vertical-align: 0; }
 .vsrv-rx .vsrv-uni { font-size: 16px; line-height: 1; }
@@ -266,9 +266,9 @@ span.vsrv-conv-topic { border-left: 0; cursor: default; }
 }
 .vsrv-file.audio { flex-direction: column; align-items: stretch; }
 .vsrv-file.audio audio { width: 100%; }
-.vsrv-file-ic { width: 28px; height: 28px; color: var(--blue); }
+.vsrv-file-ic { width: 28px; height: 28px; color: var(--link, var(--blue)); }
 .vsrv-file-txt { display: flex; flex-direction: column; min-width: 0; }
-.vsrv-file-name { font-weight: 600; color: var(--blue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vsrv-file-name { font-weight: 600; color: var(--link, var(--blue)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vsrv-file-size { color: var(--muted); font-size: 12px; }
 .vsrv-card { display: flex; flex-direction: column; max-width: 440px; margin-top: 6px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; color: inherit; text-decoration: none; }
 .vsrv-card:hover { background: var(--hover-soft); }
@@ -293,10 +293,10 @@ span.vsrv-conv-topic { border-left: 0; cursor: default; }
 @keyframes vsrv-dot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
 .vsrv-compose-wrap { position: relative; padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px)); flex: none; }
 .vsrv-compose { display: flex; align-items: flex-end; gap: 4px; padding: 2px 4px 2px 8px; border-radius: 16px; background: var(--search); }
-.vsrv-compose .vsrv-iconbtn { margin-bottom: 3px; color: var(--blue); }
+.vsrv-compose .vsrv-iconbtn { margin-bottom: 3px; color: var(--link, var(--blue)); }
 .vsrv-compose .vsrv-input { flex: 1; min-width: 0; }
 .vsrv-attach { cursor: pointer; }
-.vsrv-send { width: 34px; height: 34px; margin-bottom: 3px; border: 0; border-radius: 999px; background: none; color: var(--blue); cursor: pointer; display: flex; align-items: center; justify-content: center; flex: none; }
+.vsrv-send { width: 34px; height: 34px; margin-bottom: 3px; border: 0; border-radius: 999px; background: none; color: var(--link, var(--blue)); cursor: pointer; display: flex; align-items: center; justify-content: center; flex: none; }
 .vsrv-send:hover { background: var(--hover); }
 .vsrv-slow { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 12px; margin: 0 4px 11px; }
 .vsrv-slow .vsrv-ic { width: 14px; height: 14px; }
@@ -308,7 +308,7 @@ span.vsrv-conv-topic { border-left: 0; cursor: default; }
 .vsrv-replybar > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vsrv-replybar strong { color: var(--text); }
 .vsrv-ping { border: 0; background: none; color: var(--muted); font-weight: 700; font-size: 12px; cursor: pointer; }
-.vsrv-ping.on { color: var(--blue); }
+.vsrv-ping.on { color: var(--link, var(--blue)); }
 .vsrv-tray { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; }
 .vsrv-tray-item { position: relative; width: 120px; flex: none; padding: 8px; border-radius: 12px; background: var(--search); display: flex; flex-direction: column; gap: 6px; }
 .vsrv-tray-item img { width: 100%; height: 80px; object-fit: cover; border-radius: 8px; }
@@ -417,7 +417,7 @@ html.vsrv-locked, html.vsrv-locked body { overflow: hidden; }
 .vsrv-tabs button:hover { background: var(--hover-soft); }
 .vsrv-tabs button[aria-selected="true"] { color: var(--text); font-weight: 700; }
 .vsrv-tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 3px; border-radius: 3px; background: var(--blue); }
-.vsrv-upload-pick { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; color: var(--blue); font-weight: 600; font-size: 14px; }
+.vsrv-upload-pick { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; color: var(--link, var(--blue)); font-weight: 600; font-size: 14px; }
 .vsrv-upload-pick:hover .vsrv-sicon { opacity: .85; }
 .vsrv-sheet.small .vsrv-upload-pick { display: flex; margin: 4px auto 10px; }
 .vsrv-ov { display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; }
@@ -704,7 +704,7 @@ button.vsrv-pill.on { background: var(--text); color: var(--bg); border-color: v
   .vsrv-dots i, .vsrv-side-skel span, .vsrv-msg.flash, .vsrv-sheet, .vsrv-sheet-bg { animation: none; }
 }
 .vsrv-emoji-gone { color: var(--muted); }
-.vsrv-irow-new .vsrv-sicon { color: var(--blue); }
+.vsrv-irow-new .vsrv-sicon { color: var(--link, var(--blue)); }
 @media (hover: none) and (pointer: coarse) {
   /* Long-press opens the message menu (with Copy text), not the iOS callout. */
   .vsrv-msg { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
