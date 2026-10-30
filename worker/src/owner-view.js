@@ -15,21 +15,22 @@
    secrets, and private message text. scrubSecrets() drops such keys as a last
    line of defense before anything leaves the Worker. */
 
+import { isSiteOwner } from "./display-names.js";
+
 const OWNER_TTL_MS = 30 * 1000;
 const ownerCache = new Map();
 
-/* true only for the account flagged owner = 1. Cached 30 s per isolate. */
-export async function isOwnerViewer(env, viewerId) {
+/* true only for the account flagged owner = 1. Reuses the display-names owner
+   check (#488, isSiteOwner); pass the request to memoize per request. Without
+   one, a 30 s per-isolate cache keeps hot paths cheap. */
+export async function isOwnerViewer(env, viewerId, request) {
   const id = String(viewerId || "");
   if (!id || !env || !env.DB) return false;
+  if (request && typeof request === "object") return isSiteOwner(env, request, id);
   const hit = ownerCache.get(id);
   const now = Date.now();
   if (hit && hit.until > now) return hit.owner;
-  let owner = false;
-  try {
-    const row = await env.DB.prepare("SELECT owner FROM accounts WHERE public_id = ?").bind(id).first();
-    owner = !!(row && Number(row.owner) === 1);
-  } catch (err) { owner = false; }
+  const owner = await isSiteOwner(env, null, id);
   ownerCache.set(id, { owner, until: now + OWNER_TTL_MS });
   if (ownerCache.size > 500) ownerCache.delete(ownerCache.keys().next().value);
   return owner;

@@ -201,6 +201,7 @@
       line(tr("Who can send requests"), esc(word(AUD(), pp.friendsSetting.whoCanRequest))),
       line(tr("Who sees the friends list"), esc(word(AUD(), pp.friendsSetting.listAudience))),
       line(tr("Shares online status"), esc(pp.friendsSetting.shareOnline ? tr("On") : tr("Off"))),
+      (pp.friends || []).some((f) => f.privacy) ? line(tr("Private friendships"), esc(String((pp.friends || []).filter((f) => f.privacy).length))) : "",
       line(tr("Friend requests"), esc(tr("{in} received · {out} sent", { in: String(num(pp.requestsIn)), out: String(num(pp.requestsOut)) }))),
       (pp.lockedFollows.count || pp.lockedFollows.lockSet) ? line(tr("Locked follows"), esc(String(pp.lockedFollows.count) + (pp.lockedFollows.lockSet ? " · " + tr("Lock set") : ""))) : ""
     ].join("")}</div></section>` : "";
@@ -298,6 +299,13 @@
 
   /* ---------- audit ---------- */
 
+  function auditWhat(action, at) {
+    const a = String(action || "view");
+    if (a.indexOf("names:") === 0) return tr("Saw hidden display names {when}", { when: at });
+    if (a.indexOf("locked:") === 0) return tr("Saw locked follows {when}", { when: at });
+    if (/friend/.test(a)) return tr("Saw hidden friendships {when}", { when: at });
+    return tr("Opened {when}", { when: at });
+  }
   function auditView() {
     if (S.audit == null && !S.auditLoading) {
       S.auditLoading = true;
@@ -305,7 +313,7 @@
     }
     const rows = S.audit == null ? `<p class="oi-empty">${esc(tr("Loading…"))}</p>`
       : !S.audit.length ? `<p class="oi-empty">${esc(tr("No accounts opened yet"))}</p>`
-      : S.audit.map((r) => `<a class="oi-row" href="#/settings/accounts-inspector/${encodeURIComponent(r.id)}"><span class="oi-copy"><span class="oi-name"><b>@${esc(r.handle || r.id)}</b></span><span class="oi-sub">${esc(tr("Opened {when}", { when: when(r.at) }))}</span></span></a>`).join("");
+      : S.audit.map((r) => `<a class="oi-row" href="#/settings/accounts-inspector/${encodeURIComponent(r.id)}"><span class="oi-copy"><span class="oi-name"><b>@${esc(r.handle || r.id)}</b></span><span class="oi-sub">${esc(auditWhat(r.action, when(r.at)))}</span></span></a>`).join("");
     return `<div class="oi-page"><p class="oi-note">${icon("lock")}<span>${esc(tr("Every time you open an account's details it is written here."))}</span></p><section class="oi-list">${rows}</section></div>`;
   }
 
@@ -336,7 +344,7 @@
       title = titles[sh.list] || tr("Friends");
       body = rows.length ? `<div class="oi-people">${rows.map((p) => {
         const label = p.handle ? "@" + p.handle : String(p.target || p.id || "—");
-        const inner = `<span class="set-copy"><b>${esc(p.name || label)}</b><span class="set-sub">${esc(label)}${p.at ? " · " + esc(date(p.at)) : ""}</span></span>${p.locked ? `<span class="oi-tag oi-tag-lock">${icon("lock")}${esc(tr("Locked"))}</span>` : ""}`;
+        const inner = `<span class="set-copy"><b>${esc(p.name || label)}</b><span class="set-sub">${esc(label)}${p.at ? " · " + esc(date(p.at)) : ""}</span></span>${p.locked ? `<span class="oi-tag oi-tag-lock">${icon("lock")}${esc(tr("Locked"))}</span>` : ""}${p.privacy ? `<span class="oi-tag oi-tag-lock">${icon("lock")}${esc(tr("Private friendship"))}</span>` : ""}`;
         return p.id && p.handle ? `<a class="set-row oi-person" href="#/settings/accounts-inspector/${encodeURIComponent(p.id)}" data-oi-act="close-sheet-go">${inner}</a>` : `<div class="set-row oi-person">${inner}</div>`;
       }).join("")}</div>${rows.length >= (pp.max || 500) ? `<p class="oi-sheet-sub">${esc(tr("Showing the first {count}", { count: String(pp.max || 500) }))}</p>` : ""}` : `<p class="oi-sheet-sub">${esc(tr("No one here"))}</p>`;
       foot = `<button type="button" class="oi-pill oi-pill-outline" data-oi-act="close-sheet">${esc(tr("Close"))}</button>`;

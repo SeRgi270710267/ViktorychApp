@@ -286,6 +286,12 @@ async function accountDetail(env, id, deps) {
   const friends = has("account_friends")
     ? (await all(env, "SELECT f.friend_id AS pid, a.handle, a.display_name, f.created_at AS at FROM account_friends f LEFT JOIN accounts a ON a.public_id = f.friend_id WHERE f.user_id = ? ORDER BY f.created_at DESC LIMIT " + PEOPLE_MAX, [id])).map((r) => person(r))
     : [];
+  // Per-friendship privacy (friendship_privacy, #491): the owner still sees each
+  // such friendship, marked with the rule the person set.
+  if (has("friendship_privacy") && friends.length) {
+    const rules = new Map((await all(env, "SELECT friend_id, mode FROM friendship_privacy WHERE public_id = ? AND mode <> 'inherit'", [id])).map((r) => [String(r.friend_id), String(r.mode || "")]));
+    for (const f of friends) if (rules.has(f.id)) f.privacy = rules.get(f.id);
+  }
   const followers = has("account_follows")
     ? (await all(env, "SELECT f.follower_id AS pid, a.handle, a.display_name, f.created_at AS at FROM account_follows f LEFT JOIN accounts a ON a.public_id = f.follower_id WHERE f.target_id = ? ORDER BY f.created_at DESC LIMIT " + PEOPLE_MAX, ["app:" + id])).map((r) => person(r))
     : [];
@@ -419,8 +425,23 @@ export async function handleOwnerInspector(request, env, path, url, deps) {
   if (path === "/v1/owner/inspector/accounts") return deps.json(200, await listAccounts(env, url), NO_STORE);
 
   if (path === "/v1/owner/inspector/audit") {
-    const rows = await all(env, "SELECT l.at, l.target_id, l.action, a.handle FROM owner_access_log l LEFT JOIN accounts a ON a.public_id = l.target_id ORDER BY l.at DESC LIMIT 100", []);
-    return deps.json(200, { rows: rows.map((r) => ({ at: Number(r.at) || 0, id: String(r.target_id), handle: r.handle || "", action: r.action })) }, NO_STORE);
+    // One log for every owner bypass: the inspector and friendship privacy write
+    // owner_access_log; display names (#488) write display_name_audit; locked
+    // follows write locked_follow_audit. Missing tables are skipped.
+    const me = String(gate.row.public_id);
+    const sources = [
+      ["owner_access_log", "SELECT l.at, l.target_id AS tid, l.action, a.handle FROM owner_access_log l LEFT JOIN accounts a ON a.public_id = l.target_id ORDER BY l.at DESC LIMIT 100", [], ""],
+      ["display_name_audit", "SELECT l.at, l.target_id AS tid, l.action, a.handle FROM display_name_audit l LEFT JOIN accounts a ON a.public_id = l.target_id WHERE l.viewer_id = ? ORDER BY l.at DESC LIMIT 100", [me], "names:"],
+      ["locked_follow_audit", "SELECT l.at, l.subject_id AS tid, l.action, a.handle FROM locked_follow_audit l LEFT JOIN accounts a ON a.public_id = l.subject_id WHERE l.owner_id = ? ORDER BY l.at DESC LIMIT 100", [me], "locked:"]
+    ];
+    const tables = await tableSet(env);
+    let rows = [];
+    for (const [table, sql, args, tag] of sources) {
+      if (!tables.has(table)) continue;
+      try { rows = rows.concat((await all(env, sql, args)).map((r) => ({ at: Number(r.at) || 0, id: String(r.tid || ""), handle: r.handle || "", action: tag + String(r.action || "view") }))); } catch (err) { /* skip */ }
+    }
+    rows.sort((a, b) => b.at - a.at);
+    return deps.json(200, { rows: rows.slice(0, 100) }, NO_STORE);
   }
 
   const one = path.match(/^\/v1\/owner\/inspector\/accounts\/([A-Za-z0-9_-]{1,64})$/);

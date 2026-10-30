@@ -134,6 +134,8 @@ test("owner sees every hidden friend, follow, locked follow and Friends-off stat
   await db.prepare("INSERT INTO locked_follows (owner_id, target_id, follow_at, created_at) VALUES (?, ?, ?, ?)").bind(aid, "app:" + fid, now, now).run();
   await db.prepare("CREATE TABLE IF NOT EXISTS locked_follow_prefs (public_id TEXT PRIMARY KEY, code_hash TEXT NOT NULL DEFAULT '', code_salt TEXT NOT NULL DEFAULT '', code_rounds INTEGER NOT NULL DEFAULT 0, hide_entry INTEGER NOT NULL DEFAULT 0, relock_secs INTEGER NOT NULL DEFAULT 60, fails INTEGER NOT NULL DEFAULT 0, fail_until INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)").run();
   await db.prepare("INSERT INTO locked_follow_prefs (public_id, code_hash, code_salt) VALUES (?, 'lockhashvalue', 'locksaltvalue')").bind(aid).run();
+  await db.prepare("CREATE TABLE IF NOT EXISTS friendship_privacy (public_id TEXT NOT NULL, friend_id TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'inherit', audience TEXT NOT NULL DEFAULT '{}', updated_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (public_id, friend_id))").run();
+  await db.prepare("INSERT INTO friendship_privacy (public_id, friend_id, mode) VALUES (?, ?, 'only_me')").bind(aid, fid).run();
   const off = await call("/v1/friends/settings", { method: "PUT", token: alder.token, ip: "203.0.113.43", body: { enabled: false, listAudience: "me" } });
   assert.equal(off.status, 200, JSON.stringify(off.body));
 
@@ -155,6 +157,7 @@ test("owner sees every hidden friend, follow, locked follow and Friends-off stat
   assert.deepEqual(p.friends.map((x) => x.handle), ["hazelhidden"], "friends list even with Friends off and list hidden");
   assert.deepEqual(p.followers.map((x) => x.handle), ["hazelhidden"]);
   assert.deepEqual(p.lockedFollowing.map((x) => x.handle), ["hazelhidden"], "locked follow shows");
+  assert.equal(p.friends[0].privacy, "only_me", "a private friendship is shown and marked");
   assert.equal(p.friendsSetting.on, false);
   assert.equal(p.friendsSetting.listAudience, "me");
   assert.equal(p.lockedFollows.lockSet, true);
@@ -163,7 +166,15 @@ test("owner sees every hidden friend, follow, locked follow and Friends-off stat
   assert.ok(detail.text.indexOf("lockhashvalue") < 0 && detail.text.indexOf("locksaltvalue") < 0, "lock code hash and salt never leave");
   assert.ok(detail.text.indexOf(alder.token) < 0);
   const audit = await call("/v1/owner/inspector/audit", { token: OWNER_TOKEN });
-  assert.ok(audit.body.rows.some((r) => r.id === aid), "the look is audited");
+  assert.ok(audit.body.rows.some((r) => r.id === aid && r.action === "view"), "the look is audited");
+  const ownerId = String(ownerRow.public_id);
+  await db.prepare("INSERT INTO display_name_audit (at, viewer_id, target_id, action, detail) VALUES (?, ?, ?, 'list', '{}')").bind(Date.now(), ownerId, aid).run();
+  const audit2 = await call("/v1/owner/inspector/audit", { token: OWNER_TOKEN });
+  assert.ok(audit2.body.rows.some((r) => r.id === aid && r.action === "names:list"), "display-name bypasses (#488) show in the same log");
+  const { isOwnerViewer } = await import("../src/owner-view.js");
+  const env = { DB: db };
+  assert.equal(await isOwnerViewer(env, ownerId), true);
+  assert.equal(await isOwnerViewer(env, aid), false);
 });
 
 test("owner-view helpers: scrubSecrets drops secrets anywhere, keeps safe counts", async () => {
