@@ -464,3 +464,64 @@ test("replies carry their parent chain for feeds and the post page", async () =>
   assert.equal(row.parent.parent.authorHandle, "ana_chain");
   assert.equal(row.parent.parent.parent, undefined);
 });
+
+test("home hands back the joined and hidden communities for For you mixing", async () => {
+  const kim = await call("/v1/signup", { method: "POST", ip: "203.0.113.230", body: { displayName: "Kim Mix", handle: "kim_mix" } });
+  assert.equal(kim.status, 201);
+  const join = (name, ip) => call("/v1/communities/" + name + "/join", { method: "POST", ip, token: kim.body.token });
+  assert.equal((await join("mixsubone", "203.0.113.231")).status, 200);
+  assert.equal((await join("mixforum", "203.0.113.232")).status, 200);
+  const muted = await call("/v1/communities/mixforum/feed", { method: "POST", ip: "203.0.113.233", token: kim.body.token, body: { muted: true } });
+  assert.equal(muted.status, 200);
+  const home = await call("/v1/posts", { ip: "203.0.113.234", token: kim.body.token });
+  assert.equal(home.status, 200);
+  const prefs = home.body.communityPrefs;
+  assert.ok(prefs, "communityPrefs rides on /v1/posts");
+  assert.deepEqual(prefs.joined.slice().sort(), ["mixforum", "mixsubone"]);
+  assert.deepEqual(prefs.hidden, ["mixforum"]);
+  assert.equal(prefs.all, false);
+  const off = await call("/v1/communities/home", { method: "POST", ip: "203.0.113.235", token: kim.body.token, body: { showHome: false } });
+  assert.equal(off.status, 200);
+  const none = await call("/v1/posts", { ip: "203.0.113.236", token: kim.body.token });
+  assert.equal(none.body.communitiesHome, false);
+  assert.equal(none.body.communityPrefs, undefined);
+});
+
+test("featured communities: anyone signed in reads the owner's pinned order, only the owner writes it", async () => {
+  const sign = async (handle, ip) => {
+    const res = await call("/v1/signup", { method: "POST", ip, body: { displayName: "Pin " + handle, handle } });
+    assert.equal(res.status, 201);
+    return res.body;
+  };
+  const lee = await sign("lee_pins", "203.0.115.1");
+  const mo = await sign("mo_pins", "203.0.115.2");
+  const empty = await call("/v1/communities/featured", { ip: "203.0.115.3", token: lee.token });
+  assert.equal(empty.status, 200);
+  assert.deepEqual(empty.body.featured, []);
+  assert.equal(empty.body.canEdit, false);
+  const anon = await call("/v1/communities/featured", { ip: "203.0.115.4" });
+  assert.notEqual(anon.status, 200);
+  const denied = await call("/v1/owner/communities/featured", { method: "POST", ip: "203.0.115.5", token: lee.token, body: { names: ["pinone"] } });
+  assert.equal(denied.status, 403);
+
+  const db = await mf.getD1Database("DB");
+  const realOwner = await db.prepare("SELECT public_id FROM accounts WHERE owner = 1").first();
+  if (realOwner) await db.prepare("UPDATE accounts SET owner = 0 WHERE public_id = ?").bind(realOwner.public_id).run();
+  await db.prepare("UPDATE accounts SET owner = 1 WHERE public_id = ?").bind(mo.account.publicId).run();
+  try {
+    const saved = await call("/v1/owner/communities/featured", { method: "POST", ip: "203.0.115.6", token: mo.token, body: { names: ["PinTwo", "r/pinone", "pintwo", "bad name!", "nzlay"] } });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.body.featured, ["pintwo", "pinone", "nzlay"]);
+    const mine = await call("/v1/communities/featured", { ip: "203.0.115.7", token: mo.token });
+    assert.equal(mine.body.canEdit, true);
+    const seen = await call("/v1/communities/featured", { ip: "203.0.115.8", token: lee.token });
+    assert.deepEqual(seen.body.featured, ["pintwo", "pinone", "nzlay"], "non-owners see the pins in the owner's order");
+    const reordered = await call("/v1/owner/communities/featured", { method: "POST", ip: "203.0.115.9", token: mo.token, body: { names: ["nzlay", "pintwo"] } });
+    assert.deepEqual(reordered.body.featured, ["nzlay", "pintwo"], "reorder and unpin");
+    const rows = await db.prepare("SELECT * FROM community_featured ORDER BY pos").all();
+    assert.deepEqual(rows.results.map((row) => Object.keys(row).sort()), [["name", "pos", "updated_at"], ["name", "pos", "updated_at"]], "only names and positions are kept");
+  } finally {
+    await db.prepare("UPDATE accounts SET owner = 0 WHERE public_id = ?").bind(mo.account.publicId).run();
+    if (realOwner) await db.prepare("UPDATE accounts SET owner = 1 WHERE public_id = ?").bind(realOwner.public_id).run();
+  }
+});
