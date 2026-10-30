@@ -37,6 +37,12 @@ async function loadPlaywright() {
 function check(ok, msg) { if (!ok) throw new Error("local ai page: " + msg); }
 const settings = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}"));
 // Saves can land a moment after the click on a busy runner, so wait for them.
+// Type into the box and send. press() focuses the box first, so a re-render
+// between fill and Enter can't swallow the message.
+async function say(page, text) {
+  await page.fill(".lai-input", text);
+  await page.press(".lai-input", "Enter");
+}
 const settled = (page, fn) => page.waitForFunction(fn, null, { timeout: 8000 }).catch(() => {});
 
 async function main() {
@@ -66,8 +72,7 @@ async function main() {
       check(empty.barW <= 754, size.name + " box is at most 752px wide");
       if (size.mobile) check(empty.barTop > empty.h * 0.6, "phone box sits at the bottom");
       else check(empty.barTop < empty.h * 0.6, "desktop box is centred");
-      await page.fill(".lai-input", "make text bigger and stop autoplay on mobile data");
-      await page.keyboard.press("Enter");
+      await say(page, "make text bigger and stop autoplay on mobile data");
       await page.waitForSelector('[data-lai="apply"]', { timeout: 10000 });
       const card = await page.evaluate(() => ({ rows: [...document.querySelectorAll(".lai-ch-name")].map((a) => a.getAttribute("href")), barTop: document.querySelector(".lai-bar").getBoundingClientRect().top, h: innerHeight, empty: document.querySelector(".lai").classList.contains("is-empty") }));
       check(!card.empty && card.rows.length === 2, size.name + " card lists both changes");
@@ -83,8 +88,7 @@ async function main() {
       await settled(page, () => { const v = JSON.parse(localStorage.getItem("viktorychapp-settings-v1") || "{}"); return v.fontSize === 15 && v.autoplay === "all"; });
       s = await settings(page);
       check(s.fontSize === 15 && s.autoplay === "all", size.name + " Undo puts it back");
-      await page.fill(".lai-input", "delete my account");
-      await page.keyboard.press("Enter");
+      await say(page, "delete my account");
       await page.waitForSelector(".lai-open.danger", { timeout: 10000 });
       const danger = await page.evaluate(() => ({ cards: document.querySelectorAll(".lai-msg.ai:last-child .lai-card").length, href: document.querySelector(".lai-open.danger").getAttribute("href") }));
       check(danger.cards === 0 && /^#\/settings/.test(danger.href), "delete account is only a link");

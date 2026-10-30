@@ -559,6 +559,9 @@
     el.addEventListener("keydown", onKey);
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && S.root && S.root.isConnected && !S.root.contains(e.target)) onKey(e); });
     document.addEventListener("click", function (e) { if (S.menu && S.root && !S.root.contains(e.target)) { S.menu = false; paintBar(); } });
+    // Remember if the box had focus, so a re-render of the page under us puts it back.
+    el.addEventListener("focusin", function (e) { if (e.target && e.target.classList.contains("lai-input")) S.inFocus = true; });
+    el.addEventListener("focusout", function (e) { if (e.target && e.target.classList.contains("lai-input") && el.isConnected) S.inFocus = false; });
     el.addEventListener("input", function (e) { if (e.target && e.target.classList.contains("lai-input")) { grow(e.target); paintSendState(); } });
     return el;
   }
@@ -753,7 +756,11 @@
       });
       micCheck();
     }
-    if (S.root.parentNode !== spot) spot.appendChild(S.root);
+    if (S.root.parentNode !== spot) {
+      spot.appendChild(S.root);
+      var box = S.root.querySelector(".lai-input");
+      if (S.inFocus && box && (!document.activeElement || document.activeElement === document.body)) box.focus();
+    }
     document.documentElement.classList.add("lai-on");
   }
   function unmount() {
