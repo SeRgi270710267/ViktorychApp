@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nearby chat (Bitchat-compatible mesh). Kept apart from strings.xml. -->
+<resources>
+    <string name="mesh_title">Nearby chat (Bitchat)</string>
+    <string name="mesh_intro">A backup way to talk when the internet or the app is blocked. It chats with people nearby over Bluetooth, and works with the Bitchat app on phones. Messages hop between nearby devices, up to 7 hops. Anyone nearby can read public messages; private messages are end-to-end encrypted. It only runs while this screen is open, so it does not use battery or data otherwise.</string>
+    <string name="mesh_turned_off">Nearby chat is off. The app will not use Bluetooth or Nostr.</string>
+    <string name="mesh_on">Turn on</string>
+    <string name="mesh_off">Turn off</string>
+    <string name="mesh_back">Back</string>
+    <string name="mesh_allow">Allow Bluetooth</string>
+    <string name="mesh_need_allow">Bluetooth is not allowed yet. Press Allow Bluetooth to chat with people nearby.</string>
+    <string name="mesh_perm_denied">Bluetooth permission was not given. You can still use the area chat over the internet.</string>
+    <string name="mesh_location_note">On this Android version, finding Bluetooth devices needs the Location permission and Location turned on. Your location is not read or sent.</string>
+    <string name="mesh_no_ble">This device has no Bluetooth LE. Only the area chat over the internet can be used.</string>
+    <string name="mesh_bt_off">Bluetooth is off. Turn it on in the TV settings.</string>
+    <string name="mesh_central_only">Others cannot find this TV over Bluetooth (its Bluetooth chip can\'t broadcast), but it can still connect to phones nearby.</string>
+    <string name="mesh_status">Bluetooth: %1$d people nearby, %2$d connections</string>
+    <string name="mesh_nostr_status">Area chat (internet): %1$d of %2$d relays connected</string>
+    <string name="mesh_nostr_off">Area chat (internet): off. Pick an area to use it.</string>
+    <string name="mesh_public">To: everyone nearby</string>
+    <string name="mesh_area_chat">To: area #%1$s</string>
+    <string name="mesh_private">To: %1$s (private)</string>
+    <string name="mesh_people">Send to</string>
+    <string name="mesh_no_people">Nobody nearby yet.</string>
+    <string name="mesh_hint">Type a message</string>
+    <string name="mesh_send">Send</string>
+    <string name="mesh_name">Name</string>
+    <string name="mesh_name_title">Your name in the chat</string>
+    <string name="mesh_area">Area</string>
+    <string name="mesh_area_title">Area for the internet chat (geohash)</string>
+    <string name="mesh_area_help">Bitchat location channels use a geohash, such as u3qc for a city or u3qcn for a district. Leave it empty to turn the internet chat off. Only the area chat uses the internet, through the public Nostr relays below.</string>
+    <string name="mesh_bad_area">That is not a geohash. Use letters and digits like u3qcn.</string>
+    <string name="mesh_relays">Relays</string>
+    <string name="mesh_relays_title">Nostr relays, one per line (wss://…)</string>
+    <string name="mesh_wipe">New identity</string>
+    <string name="mesh_wiped">New chat identity made.</string>
+    <string name="mesh_ok">OK</string>
+    <string name="mesh_cancel">Cancel</string>
+    <string name="mesh_unverified">unverified</string>
+    <string name="mesh_delivered">delivered to %1$s</string>
+</resources>

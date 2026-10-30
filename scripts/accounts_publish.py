@@ -16,7 +16,10 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -321,6 +324,60 @@ def mark_wall() -> None:
     (folder / "on").write_text("1\n", encoding="utf-8")
 
 
+SEAL_KEYS = (
+    "feeds.json",
+    "feeds.config.json",
+    "stories.json",
+    "people.json",
+    "suggestions.json",
+    "status.json",
+    "data/music.json",
+)
+
+
+def seal(site: Path, source: Path, audience: str, read=None) -> int:
+    """Encrypt the reader copy of read-mostly catalogs into site/sealed/.
+
+    The app reads these from Pages with a daily key from the Worker, so most
+    loads skip the Worker and D1. Best effort: any failure leaves the site
+    as it was and the app keeps reading the API.
+    """
+    if not (os.environ.get("ACCOUNT_PEPPER") or "").strip() or not shutil.which("node"):
+        print("[seal] skipped")
+        return 0
+    if read is None:
+        try:
+            from r2_catalog import read_catalog as read
+        except ImportError:
+            read = None
+    count = 0
+    with tempfile.TemporaryDirectory() as tmp:
+        for key in SEAL_KEYS:
+            payload = None
+            if read is not None:
+                try:
+                    payload = read(key)
+                except Exception:
+                    payload = None
+            if payload is None and (source / key).is_file():
+                payload = (source / key).read_bytes()
+            if not payload:
+                continue
+            dest = Path(tmp) / key
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(payload)
+            count += 1
+        if not count:
+            return 0
+        script = Path(__file__).resolve().parent / "seal_data.mjs"
+        try:
+            subprocess.run(["node", str(script), "--site", str(site), "--in", tmp, "--audience", audience], check=False, timeout=120)
+        except (OSError, subprocess.SubprocessError):
+            print("[seal] skipped")
+            return 0
+    return count
+
+
 def publish(site: Path, source: Path, preserve_remote: bool = False) -> int:
     if not _token() or not _account():
         return unlocked("Cloudflare credentials are not set;")
@@ -386,8 +443,10 @@ def publish(site: Path, source: Path, preserve_remote: bool = False) -> int:
     except (urllib.error.URLError, TimeoutError, OSError):
         return unlocked("data upload failed;")
     turnstile = (os.environ.get("TURNSTILE_SITEKEY") or "").strip()
+    audience = read_audience(site)
     lock_shell(site, api, turnstile)
     strip(site)
+    seal(site, source, audience)
     mark_wall()
     print("login wall on; app data is served to signed-in sessions")
     return 0
@@ -434,4 +493,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     sys.exit(main())

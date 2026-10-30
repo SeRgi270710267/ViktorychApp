@@ -47,7 +47,9 @@ from adapters.common import (  # noqa: E402
     post_is_bridge_error,
     save_document,
 )
+import busy_sources  # noqa: E402
 from meta_media import refresh_saved  # noqa: E402
+import source_breaker  # noqa: E402
 from site_paths import user_agent  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header, open_url, proxy_token_header  # noqa: E402
 from x_fetch import MAX_ATTEMPTS, host_of, is_retryable, job_expired, prefetch, retry_delay  # noqa: E402
@@ -359,9 +361,34 @@ def _stop_fetch() -> bool:
     return over_deadline() or job_expired()
 
 
+def load_breaker() -> None:
+    try:
+        from tiktok_sync import r2_get
+
+        source_breaker.load(r2_get(source_breaker.KEY))
+    except Exception as exc:
+        print(f"[breaker] {exc}", file=sys.stderr)
+    paused = source_breaker.paused_hosts()
+    if paused:
+        print(f"[breaker] paused hosts: {', '.join(paused)}", file=sys.stderr)
+
+
+def save_breaker() -> None:
+    tripped = source_breaker.finish()
+    for host in tripped:
+        print(f"[breaker] {host} failed three runs in a row; paused", file=sys.stderr)
+    try:
+        from tiktok_sync import r2_put
+
+        r2_put(source_breaker.KEY, source_breaker.dump())
+    except Exception as exc:
+        print(f"[breaker] {exc}", file=sys.stderr)
+
+
 def load_http_cache() -> None:
     """Restore ETags from disk, then from R2. Bodies are not stored."""
     global _HTTP_CACHE
+    load_breaker()
     if not HTTP_CACHE_PATH.is_file():
         try:
             from tiktok_sync import r2_get
@@ -382,6 +409,7 @@ def load_http_cache() -> None:
 
 
 def save_http_cache() -> None:
+    save_breaker()
     if not _HTTP_CACHE:
         return
     stored = {}
@@ -505,7 +533,27 @@ def accept_feed(name: str, payload, feed: dict) -> dict:
     """Parse one response. An error page is a failed fetch, not a list of posts."""
     if isinstance(payload, str) and (document_is_bridge_error(payload) or items_are_only_bridge_errors(payload)):
         raise BridgeError("bridge error feed")
-    result = run_adapter(name, payload, feed)
+    try:
+        result = run_adapter(name, payload, feed)
+        failure = None
+    except (SystemExit, BridgeError):
+        raise
+    except Exception as exc:
+        result, failure = None, exc
+    if not isinstance(result, dict) or not (result.get("posts") or []):
+        # The source may have switched formats (RSS to Atom or JSON Feed).
+        # A structured-feed fallback runs on top of the adapter, never instead.
+        from adapters.fallbacks import universal
+
+        try:
+            rescued = universal(payload, feed) if isinstance(payload, str) else None
+        except Exception:
+            rescued = None
+        if rescued and rescued.get("posts"):
+            print(f"[fallback] {feed.get('id')}: {len(rescued['posts'])} posts via the structured-feed fallback ({name} found none)", file=sys.stderr)
+            result = rescued
+        elif failure is not None:
+            raise failure
     if not isinstance(result, dict):
         return {"posts": [], "profiles": []}
     posts = [post for post in (result.get("posts") or []) if not post_is_bridge_error(post)]
@@ -519,19 +567,28 @@ def accept_feed(name: str, payload, feed: dict) -> dict:
 def _fetch_one(url: str, adapter_name: str, feed: dict, errors: list, attempts: int = MAX_ATTEMPTS):
     """Read and parse one URL, retrying a rate limit or a server error once."""
     last = None
+    if url.startswith(("http://", "https://")) and not source_breaker.allowed(url):
+        errors.append(f"{url}: host paused after repeated failures")
+        print(f"[paused] {feed.get('id')}: {url}", file=sys.stderr)
+        return None, None
     for attempt in range(max(1, attempts)):
         if _stop_fetch():
             return None, None
         try:
             payload = read_source(url)
-            return payload, accept_feed(adapter_name, payload, feed)
+            parsed = accept_feed(adapter_name, payload, feed)
+            source_breaker.record(url, True)
+            return payload, parsed
         except NotModified:
+            source_breaker.record(url, True)
             return "", {"_not_modified": True}
         except BridgeError as exc:
+            source_breaker.record(url, False)
             errors.append(f"{url}: {exc}")
             print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
             return None, None
         except (ValueError, KeyError, TypeError) as exc:
+            source_breaker.record(url, False)
             errors.append(f"{url}: {exc}")
             print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
             return None, None
@@ -545,6 +602,7 @@ def _fetch_one(url: str, adapter_name: str, feed: dict, errors: list, attempts: 
                 continue
             break
     if last is not None:
+        source_breaker.record(url, False)
         print(f"[skip] {feed.get('id')}: {url}: {last}", file=sys.stderr)
     return None, None
 
@@ -1090,6 +1148,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
 
     health = {key: dict(value) for key, value in (existing.get("sourceHealth") or {}).items() if isinstance(value, dict)}
     stamp = now_iso()
+    replies_read = set()
+    replies_skipped = 0
     if not use_fixtures:
         try:
             from auto_add import apply_auto_adds
@@ -1321,6 +1381,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             reply_url = ""
             if feed.get("fetchReplies", True):
                 reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
+            # A busy source's replies page is read hourly, not every run; its
+            # last replies ride along from the previous feeds.json meanwhile.
+            if reply_url and not busy_sources.replies_due(health.get(feed["id"]), busy_sources.still_busy(health.get(feed["id"]), time.time()), time.time()):
+                reply_url = ""
+                replies_skipped += 1
+                print(f"[busy] {feed['id']}: replies page skipped this run")
+            elif reply_url:
+                replies_read.add(feed["id"])
             articles_url = ""
             if feed.get("fetchArticles", True):
                 bare = source_url.split("?")[0].rstrip("/")
@@ -1513,6 +1581,15 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             if profile.get("id") in configured_ids:
                 profile["configured"] = True
     health = prune_health(health, configured_ids)
+    for feed_id in replies_read:
+        if isinstance(health.get(feed_id), dict):
+            health[feed_id]["repliesAt"] = stamp
+    try:
+        collected, trimmed = busy_sources.settle(collected, health, stamp, cap=int(config.get("cap") or 300))
+        if trimmed or replies_skipped:
+            print(f"[busy] {trimmed} posts left to the archive, {replies_skipped} replies pages skipped")
+    except Exception as exc:
+        print(f"[busy] {exc}", file=sys.stderr)
     posts = dedupe_posts(collected, cap=int(config.get("cap") or 300))
     try:
         from adapters.common import credit_carried
@@ -1567,6 +1644,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         "_video_ok": video_ok,
         "_video_failed": video_failed,
     }
+
+
+def existing_parse_health(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("parseHealth")
+    except (OSError, UnicodeError, ValueError, AttributeError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def main() -> None:
@@ -1634,6 +1719,12 @@ def main() -> None:
             from adapters.discord import public_error
 
             print(public_error(exc), file=sys.stderr)
+    try:
+        from normalize import enforce_document
+
+        doc["parseHealth"] = enforce_document(doc, fresh_comment_ids, existing_parse_health(out), log=lambda line: print(line, file=sys.stderr))
+    except Exception as exc:
+        print(f"[normalize] {exc}", file=sys.stderr)
     save_document(out, doc)
     try:
         from people import publish
@@ -1719,6 +1810,19 @@ def main() -> None:
                 write_status()
         except Exception as exc:
             print(f"[health] {exc}", file=sys.stderr)
+        try:
+            # X Community Notes on our X posts: once a day, streamed and
+            # filtered, only when this refresh still has time to spare.
+            from x_notes_mirror import mirror as mirror_x_notes
+
+            limit = feed_deadline()
+            spare = (limit - time.monotonic()) if limit else 240.0
+            if spare < 90:
+                print("[xnotes] skipped; refresh budget spent", file=sys.stderr)
+            else:
+                print(f"[xnotes] {mirror_x_notes(doc['posts'], budget=min(180.0, spare - 30))}")
+        except Exception as exc:
+            print(f"[xnotes] {exc}", file=sys.stderr)
         if video_failed is not None:
             try:
                 from video_media import write_video_status
@@ -1727,6 +1831,24 @@ def main() -> None:
             except Exception as exc:
                 print(f"[video] status: {exc}", file=sys.stderr)
 
+    if not args.fixtures:
+        # Owner source lists go to private R2 only, never into feeds.json.
+        try:
+            from source_lists import run_lists
+
+            if over_deadline():
+                print("[lists] skipped; refresh budget spent", file=sys.stderr)
+            else:
+                print("[lists] " + json.dumps(run_lists(config)))
+        except Exception as exc:
+            print(f"[lists] {type(exc).__name__}", file=sys.stderr)
+
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     main()

@@ -368,7 +368,7 @@ def fallback_argv(argv: list, page: str, status: int, text: str):
 
 
 def _selftest() -> int:
-    secret = "sessionid=super-secret-cookie-value"
+    secret = "sessionid=super-secret-cookie-value"  # secret-scan: allow synthetic test value
     assert mask_text is not None
     action, reason = decide_attempt(403, "", True)
     assert action == "hold" and reason == "forbidden", action
@@ -444,6 +444,12 @@ def _selftest() -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     import sys
     if "--selftest" in sys.argv:
         raise SystemExit(_selftest())

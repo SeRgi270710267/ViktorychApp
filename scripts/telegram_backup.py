@@ -186,8 +186,33 @@ def current_secrets() -> list:
     return secrets
 
 
+# Actions logs on a public repository are public. Handles and account ids in
+# object keys are replaced with a short keyed hash before a line is printed.
+# The hash key is the bot token, so the label cannot be reversed from a list
+# of candidate handles, and the same name keeps the same label in one run.
+REDACT_RULES = (
+    re.compile(r"(tiktok/id/)(\d{5,22})(?=/)"),
+    re.compile(r"(tiktok/)(?!id/)([A-Za-z0-9._]{2,24})(?=/)"),
+    re.compile(r"(live-buf/\d{1,3}/)([A-Za-z0-9._]{2,24})(?=/)"),
+    re.compile(r"((?:media/avatars|media/banners|stories/app|stories/library|highlights|uploads|exports)/)(\d{12})(?=/)"),
+)
+
+
+def redact_label(value: str) -> str:
+    salt = (os.environ.get("TELEGRAM_BOT_TOKEN") or "viktorych").encode("utf-8")
+    import hmac
+    return "~" + hmac.new(salt, str(value).encode("utf-8"), hashlib.sha256).hexdigest()[:8]
+
+
+def redact_names(text: str) -> str:
+    out = str(text or "")
+    for rule in REDACT_RULES:
+        out = rule.sub(lambda m: m.group(1) + redact_label(m.group(2)), out)
+    return out
+
+
 def log(message: str) -> None:
-    print(scrub(message, current_secrets()), flush=True)
+    print(redact_names(scrub(message, current_secrets())), flush=True)
 
 
 def parse_shard(arg: str | None = None) -> tuple[int, int] | None:
@@ -332,6 +357,21 @@ def is_media_key(key: str, content_type: str = "") -> bool:
 
 
 GALLERY_PREFIXES = ("media/avatars/", "media/banners/", "stories/")
+# Files people uploaded in the app, referenced from D1 rows. They cannot be
+# downloaded again from anywhere else, so they are copied byte for byte and
+# never deleted from R2. The Worker reads the Telegram copy when R2 fails.
+UPLOAD_PREFIXES = ("post-media/", "srv/", "highlights/", "uploads/")
+# Public catalogs copied to Telegram as a dated fallback. The Worker reads
+# snap/<key> only after R2 and lastgood/<key> are both unusable.
+SNAPSHOT_KEYS = (
+    "feeds.json",
+    "stories.json",
+    "people.json",
+    "suggestions.json",
+    "data/music.json",
+    "data/communities/index.json",
+)
+SNAPSHOT_BUCKET = "snap"
 KEY_URI = re.compile(r'#EXT-X-KEY:[^\n]*URI="([^"]+)"', re.IGNORECASE)
 
 
@@ -351,6 +391,8 @@ def structural_role(key: str) -> str:
         return "live"
     if any(lowered.startswith(prefix) for prefix in GALLERY_PREFIXES):
         return "gallery"
+    if any(lowered.startswith(prefix) for prefix in UPLOAD_PREFIXES):
+        return "upload"
     if any(lowered.startswith(prefix) for prefix in ACCOUNT_PREFIXES):
         return "account"
     return ""
@@ -456,6 +498,14 @@ def plan_kind(key: str, size: int, content_type: str, local: bool, loop_version:
             return "keep-other"
         if size <= public_bytes():
             return "mirror"
+        return "too-big"
+    if role == "upload":
+        if size <= 0:
+            return "keep-other"
+        if size <= public_bytes():
+            return "mirror"
+        if local and size <= PART_BYTES * 64:
+            return "archive"
         return "too-big"
     if role == "comments":
         if size <= 0:
@@ -2719,6 +2769,115 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
     return "ok"
 
 
+def delete_message(cf: dict, message_id: int) -> bool:
+    """Best effort. A bot that is a channel admin can delete its posts."""
+    bot = cf.get("bot") or ""
+    channel = cf.get("channel") or ""
+    if not bot or not channel or int(message_id or 0) <= 0:
+        return False
+    body = urllib.parse.urlencode({"chat_id": channel, "message_id": int(message_id)}).encode("utf-8")
+    request = urllib.request.Request(PUBLIC_API + "/bot" + bot + "/deleteMessage", data=body, method="POST", headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as res:
+            data = json.loads(res.read().decode("utf-8") or "{}")
+            return bool(data.get("ok"))
+    except Exception:
+        return False
+
+
+FORGET_PREFIX = "backup/tg-forget/"
+
+
+def forget_deleted_accounts(rows: list, manifest: dict, cf: dict, directory: Path) -> int:
+    """Deleted accounts: the Worker already dropped their telegram_files rows
+    and wrote backup/tg-forget/<id>-<time>.json. Delete those channel
+    messages, drop the manifest entries, then remove the queue object."""
+    done = 0
+    for obj in rows:
+        key = str(obj.get("key") or "")
+        if not key.startswith(FORGET_PREFIX) or not key.endswith(".json"):
+            continue
+        path = directory / "forget.json"
+        try:
+            download_object(cf["token"], cf["account"], obj["bucket"], key, path)
+            doc = json.loads(path.read_text(encoding="utf-8") or "{}")
+        except Exception:
+            continue
+        finally:
+            path.unlink(missing_ok=True)
+        gone = set(str(item) for item in (doc.get("keys") or []) if isinstance(item, str))
+        messages = set(int(item) for item in (doc.get("messages") or []) if isinstance(item, int) and item > 0)
+        for entry in manifest.get("files") or []:
+            if entry.get("key") in gone:
+                for part in entry.get("parts") or []:
+                    if int(part.get("message_id") or 0) > 0:
+                        messages.add(int(part["message_id"]))
+        removed = sum(1 for mid in sorted(messages) if delete_message(cf, mid))
+        manifest["files"] = [entry for entry in manifest.get("files") or [] if entry.get("key") not in gone]
+        if cf.get("database") and gone:
+            for item in gone:
+                try:
+                    d1_exec(cf["token"], cf["account"], cf["database"], "DELETE FROM telegram_files WHERE object_key = ?", [item])
+                except Exception:
+                    pass
+        save_manifest(cf, manifest, directory)
+        delete_object(cf["token"], cf["account"], obj["bucket"], key)
+        done += 1
+        log("[telegram-backup] forgot a deleted account: %s files, %s of %s messages removed" % (len(gone), removed, len(messages)))
+    return done
+
+
+def snapshot_data(rows: list, manifest: dict, cf: dict, state: dict, directory: Path) -> int:
+    """Copy the public catalogs to Telegram as snap/<key>. Only a changed
+    file is sent, and the previous snapshot message is deleted, so the
+    channel holds one copy of each. The Worker reads it only after R2 and
+    lastgood/ both fail."""
+    if not cf.get("database"):
+        return 0
+    stored = 0
+    for name in SNAPSHOT_KEYS:
+        candidates = [row for row in rows if row.get("key") == name and int(row.get("size") or 0) > 0]
+        candidates.sort(key=lambda row: (row.get("bucket") != cf.get("manifest_bucket"), str(row.get("bucket") or "")))
+        if not candidates:
+            continue
+        obj = candidates[0]
+        size = int(obj.get("size") or 0)
+        if size > public_bytes():
+            log("[telegram-backup] snapshot %s skipped_too_big %s" % (name, size))
+            continue
+        src = directory / "snapshot.json"
+        try:
+            sha = download_object(cf["token"], cf["account"], obj["bucket"], name, src)
+            doc = json.loads(src.read_text(encoding="utf-8") or "null")
+        except Exception:
+            src.unlink(missing_ok=True)
+            continue
+        if not isinstance(doc, dict) or doc.get("catalogSeed") is True:
+            src.unlink(missing_ok=True)
+            continue
+        key = "snap/" + name
+        prior = find_entry(manifest, SNAPSHOT_BUCKET, key)
+        if prior and prior.get("sha256") == sha and part_done(prior, "file", 0):
+            src.unlink(missing_ok=True)
+            continue
+        old = [int(part.get("message_id") or 0) for part in (prior or {}).get("parts") or []]
+        if not budget_ok(state, src.stat().st_size):
+            src.unlink(missing_ok=True)
+            break
+        snap = {"bucket": SNAPSHOT_BUCKET, "key": key, "size": src.stat().st_size, "etag": sha, "content_type": "application/json"}
+        entry = ensure_entry(manifest, snap, "mirror", sha, True, False)
+        stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+        upload_path(PUBLIC_API, cf["bot"], cf["channel"], src, "snapshot %s %s" % (name, stamp), state, entry, "file", 0, sha, 0, "application/json", cf)
+        entry["snapshot_at"] = int(time.time())
+        save_manifest(cf, manifest, directory)
+        src.unlink(missing_ok=True)
+        for mid in old:
+            delete_message(cf, mid)
+        stored += 1
+    log("[telegram-backup] snapshots stored %s" % stored)
+    return stored
+
+
 def backup(loop_only: bool = False, shard: tuple[int, int] | None = None) -> int:
     cf = prepare_clients()
     if cf is None:
@@ -2781,7 +2940,9 @@ def backup(loop_only: bool = False, shard: tuple[int, int] | None = None) -> int
                 return loop_rank(str(obj.get("key") or ""), version)
             kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version, blocked)
             key = str(obj.get("key") or "")
-            if key.startswith("comments/"):
+            if structural_role(key) == "upload":
+                first = -1
+            elif key.startswith("comments/"):
                 first = 0
             elif key.startswith("tiktok/"):
                 first = 1
@@ -2797,6 +2958,17 @@ def backup(loop_only: bool = False, shard: tuple[int, int] | None = None) -> int
 
         stopped = False
         failed_objects: list[str] = []
+        if not loop_only and (not shard or shard[0] == 0):
+            try:
+                forget_deleted_accounts(rows, manifest, cf, directory)
+            except Exception as err:
+                log("[telegram-backup] forget queue failed")
+                log(scrub(str(err), current_secrets()))
+            try:
+                snapshot_data(rows, manifest, cf, state, directory)
+            except Exception as err:
+                log("[telegram-backup] snapshots failed")
+                log(scrub(str(err), current_secrets()))
         if not loop_only:
             log("[telegram-backup] social originals for added accounts are downloaded by media-extract")
         for obj in sort_objects(rows, rank):
@@ -3143,6 +3315,18 @@ process.stdout.write([
     check(parse_shard("1/3") == (1, 3) and parse_shard("invalid") is None, "shard parser parses K/N format")
     check(shard_match("test-key-abc", (0, 2)) != shard_match("test-key-abc", (1, 2)), "shard matcher splits keys disjointly")
     check(next_bot({"bots": ["botA", "botB"]}, {"bot_lasts": {"botA": 1000000000.0, "botB": 0.0}}) == "botB", "multi-bot pool chooses the idle bot")
+    check(plan_kind("post-media/0123456789abcdef.jpg", 2000, "image/jpeg", False) == "mirror", "an uploaded post photo is copied and kept on R2")
+    check(plan_kind("post-media/0123456789abcdef.mp4", SMALL_BYTES + 1, "video/mp4", False) == "too-big", "a big upload is not re-encoded or deleted")
+    check(plan_kind("post-media/0123456789abcdef.mp4", SMALL_BYTES + 1, "video/mp4", True) == "archive", "a big upload uses archive parts when the local server runs")
+    check(plan_kind("srv/0123456789abcdef/i/0123456789abcdef", 500, "image/png", False) == "mirror", "a server file is copied and kept on R2")
+    check(not may_delete("mirror", True, 10) and not may_delete("archive", True, 10), "uploads never leave R2")
+    check(structural_role("feeds.json") == "live" and "feeds.json" in SNAPSHOT_KEYS, "feeds.json is snapshotted, not mirrored as media")
+    masked = redact_names("stored viktorych-data/live-buf/0/somebody.name/77/1/seg1.m4s tiktok/somebody/123456789/video tiktok/id/1234567/99999999/video media/avatars/123456789012/x.webp")
+    check("somebody" not in masked and "1234567/" not in masked and "123456789012" not in masked and "seg1.m4s" in masked, "handles and account ids are masked in public logs")
+    worker_src = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
+    for name in SNAPSHOT_KEYS:
+        check('"' + name + '"' in worker_src.split("const TG_SNAPSHOT_KEYS")[1].split(";")[0], "the Worker reads the %s snapshot" % name)
+    check("TG_PRIVATE_KEY.test(decoded)" in worker_src, "snapshots and uploads are not served on /tg")
     print("telegram backup selftest ok")
     return 0
 
@@ -3198,4 +3382,10 @@ def main(argv: list | None = None) -> int:
 
 
 if __name__ == "__main__":
+    try:
+        from log_redact import auto as _redact_logs
+
+        _redact_logs()
+    except ImportError:
+        pass
     sys.exit(main())

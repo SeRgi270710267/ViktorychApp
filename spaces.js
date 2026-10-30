@@ -707,7 +707,7 @@
     const value = Math.floor(Number(n));
     if (!Number.isFinite(value) || value < 0) return "";
     const text = (typeof window !== "undefined" && window.SI18n) ? window.SI18n.formatCount(value) : String(value);
-    return tr("{count} listening", { count: text });
+    return trn("listening", value, { count: text });
   }
 
   function marquee(text) {

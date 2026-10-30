@@ -1,7 +1,8 @@
 /* API reads under a stalled connection: when the first root says nothing
    for a moment the next root starts too, the first good answer wins, and
    the stalled try is cancelled. A root that hangs for good times out and
-   the read moves on. Writes still go to one root at a time. */
+   the read moves on. Writes still go to one root at a time, and a stalled write times out
+   without being sent again. */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
@@ -31,7 +32,7 @@ function load(extra) {
     addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true,
     CustomEvent: function () {}, t: (k) => k,
     SI18n: { productName: () => "ViktorychApp" },
-    VIKTORYCH_ACCOUNTS: Object.assign({ api: "https://a.test", backupApi: "https://b.test", gate: false, hedgeMs: 60, readTimeoutMs: 400 }, extra || {}),
+    VIKTORYCH_ACCOUNTS: Object.assign({ api: "https://a.test", backupApi: "https://b.test", gate: false, hedgeMs: 60, readTimeoutMs: 400, poolBalance: false }, extra || {}),
     fetch: (u, i) => fakeFetch(u, i),
     location: { hash: "#/", replace() {} },
     matchMedia: () => ({ matches: false }),
@@ -87,4 +88,15 @@ sent.length = 0;
 await accounts.call("/v1/x", { method: "POST", body: {} });
 await new Promise((r) => setTimeout(r, 120));
 assert.equal(sent.length, 1);
+
+// A stalled write times out with a 504 and is not resent to the backup.
+accounts = load({ writeTimeoutMs: 200 });
+behave = { "https://a.test": "hang", "https://b.test": "ok" };
+sent.length = 0;
+t0 = Date.now();
+body = await accounts.call("/v1/x", { method: "POST", body: {} });
+assert.equal(body.status, 504);
+assert.equal(body.error, "timeout");
+assert.equal(sent.length, 1, "a timed-out write is not sent twice");
+assert.ok(Date.now() - t0 < 1500, "a stalled write ends");
 console.log("api hedge ok");

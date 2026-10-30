@@ -13,7 +13,10 @@
   var PILL_KEY = "viktorych-pill-v1";
   var QUEUE_KEY = "viktorych-actions-v1";
   var OPENS_KEY = "viktorych-opens-v1";
-  var SCREEN_LIMIT = 180000;
+  /* The last painted screen is restored on the first frame from
+     localStorage, so only its top part is kept: enough to fill a tall
+     screen, never the whole scrolled timeline. */
+  var SCREEN_LIMIT = 60000;
   var state = { queue: [], scrolls: {}, opens: {}, restored: false, screen: null };
   var scrollTimer = 0;
 
@@ -358,9 +361,18 @@
     return value === "" || value === "#" || value === "#/" || value === "#/home";
   }
 
+  /* Cut long HTML after the last whole post (or tag) that fits. */
+  function trimHtml(html, limit) {
+    html = String(html || "");
+    if (html.length <= limit) return html;
+    var cut = html.lastIndexOf("</article>", limit - 10);
+    if (cut > limit / 4) return html.slice(0, cut + 10);
+    cut = html.lastIndexOf(">", limit - 1);
+    return cut > 0 ? html.slice(0, cut + 1) : "";
+  }
+
   function capture(info) {
-    var html = String(info && info.html || "");
-    if (html.length > SCREEN_LIMIT) html = html.slice(0, SCREEN_LIMIT);
+    var html = trimHtml(info && info.html, SCREEN_LIMIT);
     var screen = {
       schema: LOCAL_SCHEMA,
       hash: info && info.hash || "#/",
@@ -568,6 +580,438 @@
     return state.restored;
   }
 
+
+  /* Stale-while-revalidate cache shared by every page. Reads are synchronous,
+     so a page with cached data paints it on the first frame and never shows a
+     spinner; the caller refreshes in the background and calls put() with the
+     new copy.
+
+     Two tiers. localStorage holds only small entries (it shares about 5 Mi
+     characters with every setting on this address, 2.5 Mi on iOS). Bigger
+     entries, and small ones pushed out of localStorage, live in IndexedDB and
+     are read into memory at start, newest first, so they still paint at once.
+     Private pages (messages, bookmarks, lists, drafts, notifications) stay in
+     the small tier only, where the device seal and the private wipe reach
+     them; a private page too big for it is simply not saved. */
+  var SWR_PREFIX = "viktorych-swr-v1:";
+  var SWR_INDEX = "viktorych-swr-v1-index";
+  var SWR_MAX_BYTES = 240000;
+  var SWR_MAX_ENTRY = 48000;
+  var SWR_MAX_ENTRIES = 40;
+  var SWR_DB = "viktorych-swr";
+  var SWR_DB_MAX_BYTES = 12000000;
+  var SWR_DB_MAX_ENTRY = 600000;
+  var SWR_DB_MAX_ENTRIES = 300;
+  var SWR_WARM_BYTES = 2000000;
+  var swrMemo = {};
+  var swrIndex = null;
+  var swrDbAdapter = null;
+  var swrDbTried = false;
+  var swrDbMeta = {};
+  var swrDbLoading = null;
+  var swrDbTouched = {};
+  var swrTouchTimer = 0;
+
+  function swrStore(store) { return store || local(); }
+  function swrPrivate(key) { return String(key).indexOf("private-list") >= 0; }
+
+  function idbAdapter() {
+    if (typeof indexedDB === "undefined" || !indexedDB) return null;
+    var opening = null;
+    function open() {
+      if (!opening) {
+        opening = new Promise(function (resolve) {
+          try {
+            var req = indexedDB.open(SWR_DB, 1);
+            req.onupgradeneeded = function () {
+              var db = req.result;
+              if (!db.objectStoreNames.contains("v")) db.createObjectStore("v");
+              if (!db.objectStoreNames.contains("m")) db.createObjectStore("m");
+            };
+            req.onsuccess = function () { resolve(req.result); };
+            req.onerror = function () { resolve(null); };
+            req.onblocked = function () { resolve(null); };
+          } catch (err) { resolve(null); }
+        });
+      }
+      return opening;
+    }
+    function run(names, mode, fn) {
+      return open().then(function (db) {
+        if (!db) return null;
+        return new Promise(function (resolve) {
+          try {
+            var tx = db.transaction(names, mode);
+            var out = { value: null };
+            fn(tx, out);
+            tx.oncomplete = function () { resolve(out.value); };
+            tx.onerror = function () { resolve(null); };
+            tx.onabort = function () { resolve(null); };
+          } catch (err) { resolve(null); }
+        });
+      });
+    }
+    return {
+      get: function (key) {
+        return run(["v"], "readonly", function (tx, out) {
+          var req = tx.objectStore("v").get(key);
+          req.onsuccess = function () { out.value = req.result || null; };
+        });
+      },
+      put: function (key, row, meta) {
+        return run(["v", "m"], "readwrite", function (tx, out) {
+          tx.objectStore("v").put(row, key);
+          tx.objectStore("m").put(meta, key);
+          out.value = true;
+        });
+      },
+      touch: function (metas) {
+        return run(["m"], "readwrite", function (tx) {
+          Object.keys(metas).forEach(function (key) { tx.objectStore("m").put(metas[key], key); });
+        });
+      },
+      del: function (key) {
+        return run(["v", "m"], "readwrite", function (tx) {
+          tx.objectStore("v").delete(key);
+          tx.objectStore("m").delete(key);
+        });
+      },
+      list: function () {
+        return run(["m"], "readonly", function (tx, out) {
+          var store = tx.objectStore("m");
+          var keys = store.getAllKeys();
+          var vals = store.getAll();
+          vals.onsuccess = function () {
+            var ks = keys.result || [];
+            out.value = (vals.result || []).map(function (meta, i) {
+              return { k: String(ks[i]), b: Number(meta && meta.b) || 0, u: Number(meta && meta.u) || 0 };
+            });
+          };
+        });
+      },
+      clear: function () {
+        return run(["v", "m"], "readwrite", function (tx) {
+          tx.objectStore("v").clear();
+          tx.objectStore("m").clear();
+        });
+      }
+    };
+  }
+  function swrDb() {
+    if (!swrDbTried) { swrDbTried = true; swrDbAdapter = idbAdapter(); }
+    return swrDbAdapter;
+  }
+  /* Tests (and the TV shell) can hand in their own async store. */
+  function swrUseDb(adapter) {
+    swrDbAdapter = adapter || null;
+    swrDbTried = true;
+    swrDbMeta = {};
+    swrDbLoading = null;
+  }
+  function swrDbReady() {
+    var db = swrDb();
+    if (!db) return Promise.resolve(swrDbMeta);
+    if (!swrDbLoading) {
+      swrDbLoading = Promise.resolve(db.list()).then(function (rows) {
+        (rows || []).forEach(function (row) {
+          if (!row || !row.k) return;
+          if (!swrDbMeta[row.k]) swrDbMeta[row.k] = { b: row.b, u: row.u };
+        });
+        return swrDbMeta;
+      }).catch(function () { return swrDbMeta; });
+    }
+    return swrDbLoading;
+  }
+  function swrDbTotal() {
+    return Object.keys(swrDbMeta).reduce(function (sum, key) { return sum + (Number(swrDbMeta[key].b) || 0); }, 0);
+  }
+  function swrDbForget(key) {
+    var db = swrDb();
+    delete swrDbMeta[key];
+    if (swrMemo[key] && swrMemo[key].db) delete swrMemo[key];
+    if (db) Promise.resolve(db.del(key)).catch(function () {});
+  }
+  function swrDbPut(key, value, at, bytes) {
+    var db = swrDb();
+    if (!db) return Promise.resolve(false);
+    return swrDbReady().then(function () {
+      swrDbMeta[key] = { b: bytes, u: at };
+      var keys = Object.keys(swrDbMeta).filter(function (k) { return k !== key; })
+        .sort(function (a, b) { return (swrDbMeta[a].u || 0) - (swrDbMeta[b].u || 0); });
+      while (keys.length && (swrDbTotal() > SWR_DB_MAX_BYTES || Object.keys(swrDbMeta).length > SWR_DB_MAX_ENTRIES)) swrDbForget(keys.shift());
+      return Promise.resolve(db.put(key, { v: value, at: at }, { b: bytes, u: at })).then(function (ok) { return !!ok; });
+    }).catch(function () { return false; });
+  }
+  /* Memory for IndexedDB entries is bounded too: least recently used out. */
+  function swrMemoDb(key, hit) {
+    swrMemo[key] = hit;
+    var keys = Object.keys(swrMemo).filter(function (k) { return swrMemo[k] && swrMemo[k].db; });
+    var total = keys.reduce(function (sum, k) { return sum + (swrMemo[k].b || 0); }, 0);
+    if (total <= SWR_WARM_BYTES) return;
+    keys.sort(function (a, b) { return (swrMemo[a].u || 0) - (swrMemo[b].u || 0); });
+    while (keys.length > 1 && total > SWR_WARM_BYTES) {
+      var drop = keys.shift();
+      if (drop === key) continue;
+      total -= swrMemo[drop].b || 0;
+      delete swrMemo[drop];
+    }
+  }
+  function swrDbLoad(key) {
+    var db = swrDb();
+    if (!db) return Promise.resolve(null);
+    return Promise.resolve(db.get(key)).then(function (row) {
+      if (!row || !("v" in row)) return null;
+      if (swrMemo[key] && !swrMemo[key].db) return swrMemo[key];
+      var meta = swrDbMeta[key] || {};
+      var hit = { value: row.v, at: Number(row.at) || 0, db: true, b: Number(meta.b) || 0, u: Number(meta.u) || Date.now() };
+      swrMemoDb(key, hit);
+      return hit;
+    }).catch(function () { return null; });
+  }
+  /* Read the newest IndexedDB entries into memory so they paint at once. */
+  function swrWarm() {
+    if (!swrDb()) return Promise.resolve(0);
+    return swrDbReady().then(function () {
+      var keys = Object.keys(swrDbMeta).sort(function (a, b) { return (swrDbMeta[b].u || 0) - (swrDbMeta[a].u || 0); });
+      var budget = SWR_WARM_BYTES;
+      var picked = [];
+      keys.forEach(function (key) {
+        var b = Number(swrDbMeta[key].b) || 0;
+        if (swrMemo[key] || b > budget) return;
+        budget -= b;
+        picked.push(key);
+      });
+      return Promise.all(picked.map(swrDbLoad)).then(function (rows) { return rows.filter(Boolean).length; });
+    });
+  }
+  function swrDbTouch(key) {
+    var meta = swrDbMeta[key];
+    if (!meta) return;
+    meta.u = Date.now();
+    swrDbTouched[key] = { b: meta.b, u: meta.u };
+    clearTimeout(swrTouchTimer);
+    swrTouchTimer = setTimeout(function () {
+      var db = swrDb();
+      var batch = swrDbTouched;
+      swrDbTouched = {};
+      if (db && db.touch) Promise.resolve(db.touch(batch)).catch(function () {});
+    }, 1500);
+    if (swrTouchTimer && swrTouchTimer.unref) swrTouchTimer.unref();
+  }
+
+  function swrReadIndex(store) {
+    if (swrIndex) return swrIndex;
+    var raw = readJson(swrStore(store), SWR_INDEX);
+    swrIndex = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    return swrIndex;
+  }
+  function swrWriteIndex(store) { writeJson(swrStore(store), SWR_INDEX, swrIndex || {}); }
+  function swrTotal(index) {
+    return Object.keys(index).reduce(function (sum, key) { return sum + (Number(index[key].b) || 0); }, 0);
+  }
+  /* Remove from the small tier only. */
+  function swrDropLocal(key, store) {
+    var index = swrReadIndex(store);
+    delete index[key];
+    if (swrMemo[key] && !swrMemo[key].db) delete swrMemo[key];
+    try { swrStore(store).removeItem(SWR_PREFIX + key); } catch (err) { /* already gone */ }
+  }
+  /* Move one small-tier entry to IndexedDB (public pages) or drop it. */
+  function swrDemote(key, store, raw) {
+    var target = swrStore(store);
+    if (raw == null) { try { raw = target ? target.getItem(SWR_PREFIX + key) : null; } catch (err) { raw = null; } }
+    var memo = swrMemo[key];
+    swrDropLocal(key, store);
+    if (swrPrivate(key) || !swrDb() || !raw || raw.length > SWR_DB_MAX_ENTRY) return false;
+    var parsed = null;
+    try { parsed = JSON.parse(raw); } catch (err) { parsed = null; }
+    if (!parsed || !("v" in parsed)) return false;
+    var at = Number(parsed.at) || Date.now();
+    var hit = { value: parsed.v, at: at, db: true, b: raw.length, u: memo && memo.u || at };
+    if (memo) swrMemoDb(key, hit);
+    swrDbPut(key, parsed.v, at, raw.length);
+    return true;
+  }
+  function swrDrop(key, store) {
+    swrDropLocal(key, store);
+    if (swrMemo[key]) delete swrMemo[key];
+    if (swrDbMeta[key] || swrDb()) swrDbForget(key);
+  }
+  /* Push least recently used small-tier entries down until `need` more fit. */
+  function swrEvict(need, store, keep) {
+    var index = swrReadIndex(store);
+    var keys = Object.keys(index).filter(function (key) { return key !== keep; })
+      .sort(function (a, b) { return (index[a].u || 0) - (index[b].u || 0); });
+    while (keys.length && (swrTotal(index) + need > SWR_MAX_BYTES || Object.keys(index).length >= SWR_MAX_ENTRIES)) {
+      swrDemote(keys.shift(), store);
+    }
+  }
+  function swrGet(key, store) {
+    key = String(key || "");
+    if (!key) return null;
+    var index = swrReadIndex(store);
+    var meta = index[key];
+    var hit = swrMemo[key];
+    if (hit && hit.db) {
+      hit.u = Date.now();
+      swrDbTouch(key);
+      return hit;
+    }
+    if (!meta) {
+      if (swrDb() && !swrPrivate(key)) swrDbReady().then(function () { if (swrDbMeta[key] && !swrMemo[key]) swrDbLoad(key); });
+      return null;
+    }
+    if (!hit) {
+      var raw = readJson(swrStore(store), SWR_PREFIX + key);
+      if (!raw || !("v" in raw)) { swrDropLocal(key, store); swrWriteIndex(store); return null; }
+      hit = swrMemo[key] = { value: raw.v, at: Number(raw.at) || 0 };
+    }
+    meta.u = Date.now();
+    clearTimeout(swrGet.timer);
+    swrGet.timer = setTimeout(function () { swrWriteIndex(store); }, 500);
+    if (swrGet.timer && swrGet.timer.unref) swrGet.timer.unref();
+    return hit;
+  }
+  function swrPutDb(key, value, at, bytes, store) {
+    swrDropLocal(key, store);
+    swrWriteIndex(store);
+    if (swrPrivate(key) || bytes > SWR_DB_MAX_ENTRY || !swrDb()) {
+      if (swrMemo[key]) delete swrMemo[key];
+      if (swrDbMeta[key]) swrDbForget(key);
+      return false;
+    }
+    swrMemoDb(key, { value: value, at: at, db: true, b: bytes, u: at });
+    swrDbPut(key, value, at, bytes);
+    return true;
+  }
+  function swrPut(key, value, store) {
+    key = String(key || "");
+    if (!key) return false;
+    var at = Date.now();
+    var text = "";
+    try { text = JSON.stringify({ v: value, at: at }); } catch (err) { return false; }
+    if (text.length > SWR_MAX_ENTRY) return swrPutDb(key, value, at, text.length, store);
+    var index = swrReadIndex(store);
+    delete index[key];
+    swrEvict(text.length, store, key);
+    var target = swrStore(store);
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        if (!target) break;
+        target.setItem(SWR_PREFIX + key, text);
+        index[key] = { b: text.length, u: at };
+        swrMemo[key] = { value: value, at: at };
+        swrWriteIndex(store);
+        if (swrDbMeta[key]) swrDbForget(key);
+        return true;
+      } catch (err) {
+        /* Quota: the device is fuller than our budget assumed. Move the
+           oldest half of this tier down (at least one entry) and try again. */
+        var older = Object.keys(index).filter(function (k) { return k !== key; })
+          .sort(function (a, b) { return (index[a].u || 0) - (index[b].u || 0); });
+        if (!older.length) break;
+        older.slice(0, Math.max(1, Math.ceil(older.length / 2))).forEach(function (k) { swrDemote(k, store); });
+      }
+    }
+    return swrPutDb(key, value, at, text.length, store);
+  }
+  function swrFresh(key, ttl, store) {
+    var hit = swrGet(key, store);
+    return !!(hit && Date.now() - hit.at < (ttl || 0));
+  }
+  function swrClear(store) {
+    var index = swrReadIndex(store);
+    Object.keys(index).forEach(function (key) { swrDropLocal(key, store); });
+    swrIndex = {};
+    swrMemo = {};
+    writeJson(swrStore(store), SWR_INDEX, null);
+    var target = swrStore(store);
+    swrLocalKeys(target).forEach(function (key) { try { target.removeItem(SWR_PREFIX + key); } catch (err) { /* already gone */ } });
+    swrDbMeta = {};
+    swrDbTouched = {};
+    var db = swrDb();
+    if (db) Promise.resolve(db.clear()).catch(function () {});
+  }
+  function swrReset() { swrIndex = null; swrMemo = {}; swrDbMeta = {}; swrDbLoading = null; }
+  function swrLocalKeys(store) {
+    var out = [];
+    try {
+      if (!store) return out;
+      if (typeof store.length === "number" && typeof store.key === "function") {
+        for (var i = 0; i < store.length; i++) {
+          var name = store.key(i);
+          if (name && name.indexOf(SWR_PREFIX) === 0) out.push(name.slice(SWR_PREFIX.length));
+        }
+      } else if (typeof store.keys === "function") {
+        store.keys().forEach(function (name) { if (String(name).indexOf(SWR_PREFIX) === 0) out.push(String(name).slice(SWR_PREFIX.length)); });
+      }
+    } catch (err) { /* nothing to list */ }
+    return out;
+  }
+  /* Older builds kept up to 1.5 M characters of page snapshots here, which
+     filled localStorage. On start, entries too big for the small tier and
+     entries the index lost track of move to IndexedDB (private ones are
+     dropped), and the small tier is trimmed to its new budget. */
+  function swrMigrate(store) {
+    var target = swrStore(store);
+    var report = { moved: 0, dropped: 0, freed: 0 };
+    if (!target) return report;
+    var index = swrReadIndex(store);
+    swrLocalKeys(target).forEach(function (key) {
+      var raw = null;
+      try { raw = target.getItem(SWR_PREFIX + key); } catch (err) { raw = null; }
+      var size = raw ? raw.length : 0;
+      var meta = index[key];
+      if (meta && size <= SWR_MAX_ENTRY) { meta.b = size; return; }
+      report.freed += size + SWR_PREFIX.length + key.length;
+      if (swrDemote(key, store, raw)) report.moved += 1; else report.dropped += 1;
+    });
+    Object.keys(index).forEach(function (key) {
+      var present = null;
+      try { present = target.getItem(SWR_PREFIX + key); } catch (err) { present = null; }
+      if (present == null) delete index[key];
+    });
+    var before = swrTotal(index);
+    var count = Object.keys(index).length;
+    swrEvict(0, store, "");
+    var after = swrTotal(index);
+    report.freed += before - after;
+    report.moved += count - Object.keys(index).length;
+    swrWriteIndex(store);
+    return report;
+  }
+  /* Route snapshots: the last painted HTML of a page, shown at once while its
+     module or data loads. Pages that hold private data opt out by not saving. */
+  /* Pages with private data (messages, bookmarks, lists, drafts, notifications)
+     keep their snapshot under a "private-list" key, so the device seal encrypts
+     it and the private wipe removes it with the rest of the private lists. */
+  var PRIVATE_ROUTE = /^#\/(?:messages|chat|bookmarks|lists?|drafts|notifications)(?:[/?]|$)/;
+  function routeKey(hash) {
+    return (PRIVATE_ROUTE.test(String(hash)) ? "private-list:route:" : "route:") + hash;
+  }
+  function wipePrivateRoutes(store) {
+    var index = swrReadIndex(store);
+    Object.keys(index).forEach(function (key) { if (swrPrivate(key)) swrDropLocal(key, store); });
+    swrLocalKeys(swrStore(store)).forEach(function (key) { if (swrPrivate(key)) swrDropLocal(key, store); });
+    Object.keys(swrMemo).forEach(function (key) { if (swrPrivate(key)) delete swrMemo[key]; });
+    swrWriteIndex(store);
+  }
+  function saveRoute(hash, html) {
+    if (!hash || !html || html.length > 150000 || /<script/i.test(html)) return false;
+    clearTimeout(saveRoute.timers && saveRoute.timers[hash]);
+    saveRoute.timers = saveRoute.timers || {};
+    saveRoute.timers[hash] = setTimeout(function () {
+      var memo = swrMemo[routeKey(hash)];
+      if (memo && memo.value === html) return;
+      swrPut(routeKey(hash), html);
+    }, 400);
+    return true;
+  }
+  function readRoute(hash) {
+    var hit = hash ? swrGet(routeKey(hash)) : null;
+    return hit && typeof hit.value === "string" ? hit.value : "";
+  }
+
   function wipe() {
     state.queue = [];
     state.scrolls = {};
@@ -576,10 +1020,29 @@
     state.restored = false;
     var store = local();
     [SCREEN_KEY, SCROLL_KEY, PILL_KEY, QUEUE_KEY, OPENS_KEY].forEach(function (key) { writeJson(store, key, null); });
+    swrClear(store);
     var api = storageApi();
     if (api && typeof indexedDB !== "undefined") {
       api.openDb().then(function (db) { return api.clearDocs(db, "all"); }).catch(function () {});
     }
+  }
+
+  /* Keep localStorage for small settings: move or trim what older builds
+     left there (see swrMigrate and local-budget.js). */
+  function migrateLocal(store) {
+    store = store || local();
+    var report = { swr: swrMigrate(store), screen: 0, budget: null };
+    var saved = readJson(store, SCREEN_KEY);
+    if (saved && typeof saved.html === "string" && saved.html.length > SCREEN_LIMIT) {
+      var before = saved.html.length;
+      saved.html = trimHtml(saved.html, SCREEN_LIMIT);
+      report.screen = before - saved.html.length;
+      writeJson(store, SCREEN_KEY, saved);
+    }
+    var scope = typeof self !== "undefined" ? self : typeof globalThis !== "undefined" ? globalThis : null;
+    var budget = scope ? scope.ViktorychLocalBudget : null;
+    if (budget && budget.migrate) report.budget = budget.migrate(store);
+    return report;
   }
 
   function syncSender(action) {
@@ -604,8 +1067,12 @@
     }, true);
     window.addEventListener("online", function () { flush(syncSender); });
     window.addEventListener("viktorych-account-deleted", wipe);
+    swrWarm().catch(function () {});
     var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 800); };
-    idle(function () { warmOpens(); });
+    idle(function () {
+      migrateLocal();
+      warmOpens();
+    });
   }
 
   return {
@@ -643,6 +1110,18 @@
     wasRestored: wasRestored,
     restoreEarly: restoreEarly,
     wipe: wipe,
+    swr: {
+      get: swrGet, put: swrPut, fresh: swrFresh, drop: swrDrop, clear: swrClear, reset: swrReset,
+      load: swrDbLoad, warm: swrWarm, ready: swrDbReady, useDb: swrUseDb, migrate: swrMigrate,
+      limits: { bytes: SWR_MAX_BYTES, entry: SWR_MAX_ENTRY, entries: SWR_MAX_ENTRIES, dbBytes: SWR_DB_MAX_BYTES, dbEntry: SWR_DB_MAX_ENTRY, dbEntries: SWR_DB_MAX_ENTRIES, warm: SWR_WARM_BYTES }
+    },
+    screenLimit: SCREEN_LIMIT,
+    trimHtml: trimHtml,
+    migrateLocal: migrateLocal,
+    saveRoute: saveRoute,
+    readRoute: readRoute,
+    routeKey: routeKey,
+    wipePrivate: function (store) { wipePrivateRoutes(store || local()); },
     start: start
   };
 });

@@ -455,7 +455,7 @@
     var when = "";
     if (slot.scheduleAt) {
       var stamp = "";
-      try { stamp = new Date(slot.scheduleAt).toLocaleString(); } catch (err) { stamp = ""; }
+      try { stamp = new Date(slot.scheduleAt).toLocaleString((window.SI18n ? window.SI18n.locale() : undefined)); } catch (err) { stamp = ""; }
       when = '<p class="xc-loc">' + esc(tr("Schedule")) + (stamp ? " · " + esc(stamp) : "") + "</p>";
     }
     var place = slot.location ? '<p class="xc-loc">' + esc(slot.location) + "</p>" : "";
@@ -620,6 +620,33 @@
       next.unshift(snap);
       writeStore(DRAFT_KEY, { items: next.slice(0, 21) });
     }, 400);
+  }
+  // Write every open draft now (closing the app skips the 400 ms save delay).
+  // Text is kept on this device; attached media can't be, so it is counted.
+  function flushDrafts() {
+    clearTimeout(saveTimer);
+    var doc = draftDoc();
+    var unsaved = 0;
+    var wrote = false;
+    ["post", "reply", "quote"].forEach(function (name) {
+      var slot = slots[name];
+      if (!slot) return;
+      var hasText = slot.posts.some(function (post) { return String(post.text || "").trim(); });
+      var media = (slot.media || []).length;
+      if (!hasText && !media && !slot.poll) return;
+      var snap = snapshot(name);
+      doc.items = [snap].concat(doc.items.filter(function (item) { return item.id !== snap.id; }));
+      unsaved += media;
+      wrote = true;
+    });
+    if (!wrote) return { unsaved: 0, failed: false };
+    doc.items = doc.items.slice(0, 21);
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(doc));
+    } catch (err) {
+      return { unsaved: unsaved, failed: true };
+    }
+    return { unsaved: unsaved, failed: false };
   }
   function toast(message) {
     if (host && host.toast) host.toast(message);
@@ -1202,12 +1229,6 @@
     }, true);
     document.addEventListener("keydown", function (event) {
       var open = host && host.modalOpen && host.modalOpen();
-      var typing = event.target && event.target.getAttribute && event.target.getAttribute("data-xc") === "text";
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && (open || typing)) {
-        event.preventDefault();
-        publish(open ? modalSlot : (event.target.getAttribute("data-slot") || "post"));
-        return;
-      }
       if (event.key === "Escape" && aiMenu && !open) {
         aiMenu = "";
         aiTones = false;
@@ -1331,6 +1352,16 @@
     requestClose: requestClose,
     onEscape: onEscape,
     publish: publish,
+    // Ctrl/Cmd+Enter is bound in keys.js; it posts from the open dialog or
+    // from the focused inline composer.
+    publishFrom: function (el) {
+      var open = host && host.modalOpen && host.modalOpen();
+      var typing = el && el.getAttribute && el.getAttribute("data-xc") === "text";
+      if (!open && !typing) return false;
+      publish(open ? modalSlot : (el.getAttribute("data-slot") || "post"));
+      return true;
+    },
+    flushDrafts: flushDrafts,
     bind: function (next) { host = next || null; }
   };
 })();

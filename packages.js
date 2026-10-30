@@ -50,13 +50,13 @@ function errorLabel(code, p) {
 function when(value) {
   var d = new Date(value);
   if (!value || isNaN(d)) return "";
-  try { return d.toLocaleString(document.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" }); }
+  try { return d.toLocaleString((window.SI18n ? window.SI18n.locale() : undefined), { dateStyle: "medium", timeStyle: "short" }); }
   catch (err) { return d.toISOString().slice(0, 16).replace("T", " "); }
 }
 function day(value) {
   var d = new Date(value);
   if (!value || isNaN(d)) return "";
-  try { return d.toLocaleDateString(document.documentElement.lang || undefined, { weekday: "short", day: "numeric", month: "short" }); }
+  try { return d.toLocaleDateString((window.SI18n ? window.SI18n.locale() : undefined), { weekday: "short", day: "numeric", month: "short" }); }
   catch (err) { return String(value).slice(0, 10); }
 }
 

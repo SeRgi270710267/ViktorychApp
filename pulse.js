@@ -107,8 +107,13 @@
       return false;
     });
   }
+  /* Save data checks three times less often. */
+  function every() {
+    var saver = typeof window !== "undefined" ? window.ViktorychDataSaver : null;
+    return saver && saver.every ? saver.every(EVERY_MS) : EVERY_MS;
+  }
   function wait() {
-    if (!failures) return EVERY_MS + Math.floor(Math.random() * 3000);
+    if (!failures) return every() + Math.floor(Math.random() * 3000);
     var cap = Math.min(5 * 60 * 1000, EVERY_MS * Math.pow(2, Math.min(failures, 6)));
     return EVERY_MS + Math.floor(Math.random() * cap);
   }
@@ -121,7 +126,7 @@
     if (hidden()) { drop(); return; }
     if (!signedIn() || !sourceUrl()) { schedule(EVERY_MS * 3); return; }
     if (lead(Date.now())) load().then(function () { schedule(wait()); });
-    else { readSaved(); schedule(EVERY_MS); }
+    else { readSaved(); schedule(every()); }
   }
 
   if (channel) {
@@ -156,6 +161,8 @@
       if (typeof fn === "function") listeners.push(fn);
       return function () { listeners = listeners.filter(function (f) { return f !== fn; }); };
     },
+    /* Where the pulse is read; signed pool manifests sit beside it. */
+    url: function () { return sourceUrl(); },
     _apply: apply,
     _tick: tick
   };
