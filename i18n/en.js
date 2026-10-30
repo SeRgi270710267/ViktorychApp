@@ -4539,5 +4539,20 @@ SI18n.addPack("en", {
   "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.": "The installed app hides the page scrollbar. You can still scroll with the wheel, trackpad, keyboard or touch. Browser tabs always show it.",
   "Full screen shortcut": "Full screen shortcut",
   "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.": "Ctrl+Shift+F (⌘+Shift+F on Mac) turns full screen on and off. Esc or F11 also leaves it.",
-  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them."
+  "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.": "Your computer’s own minimize, maximize and close buttons always stay in the corner. The app draws its title bar next to them.",
+  "Followers you know": "Followers you know",
+  "This platform doesn’t show who follows this account publicly": "This platform doesn’t show who follows this account publicly",
+  "This platform doesn’t show who this account follows publicly": "This platform doesn’t show who this account follows publicly",
+  "{platform} shows {count} followers, but only lists them inside its own app.": "{platform} shows {count} followers, but only lists them inside its own app.",
+  "{platform} shows {count} following, but only lists them inside its own app.": "{platform} shows {count} following, but only lists them inside its own app.",
+  "{platform} only shows this list inside its own app.": "{platform} only shows this list inside its own app.",
+  "Turn on Nostr to see this list": "Turn on Nostr to see this list",
+  "Nostr lists are read from relays on this device.": "Nostr lists are read from relays on this device.",
+  "Open Nostr settings": "Open Nostr settings",
+  "This list is hidden": "This list is hidden",
+  "This account chose not to show this list publicly.": "This account chose not to show this list publicly.",
+  "Couldn’t load this list right now": "Couldn’t load this list right now",
+  "The public sources for this list are busy. Try again in a bit.": "The public sources for this list are busy. Try again in a bit.",
+  "No followers you know yet": "No followers you know yet",
+  "When someone you follow follows this account, they’ll show up here.": "When someone you follow follows this account, they’ll show up here."
 });

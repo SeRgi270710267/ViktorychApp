@@ -4,11 +4,7 @@ const VERSION = "viktorych-a152-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-10-30T02:18:46Z-community-notes-ui
-// cache-bust: 2026-10-30T02:38:07Z-priv
-// cache-bust: 2026-10-30T02:56:00Z-tv-first-open
-// cache-bust: 2026-10-30T03:14:51Z-busy
-// cache-bust: 2026-10-30T03:50:00Z-nzlay-forum
+// cache-bust: 2026-10-30T03:54:03Z-nzlay-forum
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -202,6 +198,7 @@ const SHELL_FILES = [
   "./mention-suggest.js",
   "./settings-assistant.js",
   "./nostr.js",
+  "./follow-lists.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/x-compose.js",

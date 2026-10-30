@@ -8599,7 +8599,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
         const hit = entries.filter((entry) => entry.isIntersecting);
         hit.forEach((entry) => { if (entry.target.id === "author-more") loadOlderAuthorPosts(entry.target.getAttribute("data-id")); });
-        if (hit.some((entry) => entry.target.id !== "author-more")) revealMoreTimeline();
+        hit.forEach((entry) => { if (entry.target.id === "ext-graph-more") extGraphMore(entry.target); });
+        if (hit.some((entry) => entry.target.id !== "author-more" && entry.target.id !== "ext-graph-more")) revealMoreTimeline();
       }, { rootMargin: "600px" });
     }
     ARCHIVE_OBS.disconnect();
@@ -8609,6 +8610,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (liveSentinel) ARCHIVE_OBS.observe(liveSentinel);
     const authorSentinel = document.getElementById("author-more");
     if (authorSentinel) ARCHIVE_OBS.observe(authorSentinel);
+    const graphSentinel = document.getElementById("ext-graph-more");
+    if (graphSentinel) ARCHIVE_OBS.observe(graphSentinel);
   }
 
   function ensureYtSubs(feed) {
@@ -9132,7 +9135,7 @@ const here = parseRoute();
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
       const platform = parts[1] === "twitter" ? "x" : parts[1];
-      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "friends" || parts[3] === "mutuals" || parts[3] === "requests") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
+      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "followers_you_follow" || parts[3] === "friends" || parts[3] === "mutuals" || parts[3] === "requests") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
       return { name: "user", platform: platform, handle: parts[2], query };
     }
     if (parts[0] === "p" && parts[1]) {
@@ -9196,6 +9199,7 @@ const here = parseRoute();
     } else if (["bsky", "mastodon", "nostr"].includes(parts[0]) && parts[1]) {
       // Profiles followed on this device (fediverse, Bluesky, Nostr) open live.
       if (parts[2] === "status" && parts[3]) return { name: "status", platform: parts[0], handle: parts[1], id: parts.slice(3).join("/"), query };
+      if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "followers_you_follow") return { name: "connections", platform: parts[0], handle: parts[1], tab: parts[2], query };
       return { name: "user", platform: parts[0], handle: parts[1], query };
     } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram", "tiktok", "app"].includes(parts[0])) {
       platform = parts[0];
@@ -9205,7 +9209,7 @@ const here = parseRoute();
       return { name: "home", tab: "foryou", query };
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
-    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
+    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "followers_you_follow" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
     return { name: "profile", platform, handle, query };
   }
 
@@ -12819,7 +12823,7 @@ const here = parseRoute();
     const self = !!(me && row.id === "app:" + me.publicId);
     const bio = row.bio ? `<span class="connect-bio">${esc(row.bio)}</span>` : "";
     const button = self ? "" : followButtonClean(row.id);
-    const handle = row.handle ? "@" + esc(row.handle) : "";
+    const handle = row.displayHandle ? esc(row.displayHandle) : row.handle ? "@" + esc(row.handle) : "";
     const appId = String(row.id || "").startsWith("app:") ? String(row.id).slice(4) : "";
     let face = avatar(row.avatar, row.name || row.handle, "", row.avatarFace);
     if (/^\d{12}$/.test(appId) && window.ViktorychPresence) face = window.ViktorychPresence.wrap(appId, face);
@@ -12850,11 +12854,187 @@ const here = parseRoute();
     return { id: feed.id, name: feed.name || feed.handle, handle: feed.handle || "" };
   }
 
+  /* ---------- Following / Followers of external accounts ----------
+     Read live through ViktorychFollowLists (follow-lists.js): Bluesky,
+     the fediverse and Nostr from this device; X and YouTube through the
+     Worker pool. Nothing is stored. A platform that keeps these lists
+     behind its own sign-in gets a calm empty state with the count. */
+  const EXT_GRAPH_LIVE = ["x", "bsky", "bluesky", "mastodon", "nostr", "youtube"];
+  STATE.extSubjects = STATE.extSubjects || {};
+  STATE.extKnown = STATE.extKnown || {};
+
+  function extGraphName(platform) {
+    const p = platform === "bsky" ? "bluesky" : platform;
+    return PLATFORM[p] || String(platform || "").toUpperCase();
+  }
+
+  /* Ids and counts a list source needs, from what the app already knows,
+     then one cheap header read when something is missing. */
+  function extGraphSubject(platform, handle) {
+    const key = liveKey(platform, handle);
+    const feed = findFeed(platform, handle);
+    const live = STATE.liveUsers[key];
+    const prof = (live && live.profile) || {};
+    const held = STATE.extSubjects[key] || {};
+    const pick = (field) => (held[field] != null ? held[field] : prof[field] != null ? prof[field] : feed && feed[field] != null ? feed[field] : null);
+    const subject = {
+      platform: platform,
+      handle: String(handle || "").replace(/^@/, ""),
+      name: pick("name") || "",
+      displayHandle: pick("displayHandle") || "",
+      following: pick("following"),
+      followers: pick("followers"),
+      remoteId: pick("remoteId") || "",
+      instance: pick("instance") || "",
+      pubkey: pick("pubkey") || "",
+      channelId: pick("channelId") || (/^UC[A-Za-z0-9_-]{22}$/.test(String(handle || "")) ? handle : ""),
+      ready: true
+    };
+    if (platform === "mastodon" && !subject.remoteId) subject.ready = false;
+    if (platform === "youtube" && !subject.channelId) subject.ready = false;
+    if (platform === "nostr" && !subject.pubkey && !/^(npub1|nprofile1)|^[0-9a-f]{64}$/i.test(subject.handle)) subject.ready = false;
+    if (!held.asked && (!subject.ready || subject.following == null || !subject.name)) {
+      held.asked = true;
+      STATE.extSubjects[key] = held;
+      const done = (data) => {
+        if (data && typeof data === "object" && !data.error) Object.assign(held, data);
+        held.settled = true;
+        render();
+      };
+      if (platform === "bsky" || platform === "bluesky") loadBskyHeader(subject.handle).then(done, () => done(null));
+      else if (platform === "mastodon") loadMastodonHeader(subject.handle).then(done, () => done(null));
+      else if (platform === "x") fxHeader(subject.handle).then(done, () => done(null));
+      else if (platform === "youtube" || platform === "nostr") {
+        const row = ensureLiveUser(platform, subject.handle);
+        Promise.resolve(row && row.pageTask).then(() => done(row && row.profile), () => done(null));
+      } else held.settled = true;
+    }
+    if (!subject.ready && held.settled) subject.failed = true;
+    return subject;
+  }
+
+  function extGraphRows(items) {
+    return (items || []).map(connectRow).join("");
+  }
+
+  function extGraphEmpty(platform, tab, subject, row) {
+    const name = extGraphName(platform);
+    const count = tab === "followers" ? subject.followers : subject.following;
+    const countText = count != null && isFinite(Number(count)) ? formatCount(Number(count)) : "";
+    if (!window.ViktorychFollowLists || !window.ViktorychFollowLists.supports(platform, tab) || (row && row.none)) {
+      const title = tab === "followers" ? tr("This platform doesn’t show who follows this account publicly") : tr("This platform doesn’t show who this account follows publicly");
+      const body = countText
+        ? (tab === "followers" ? tr("{platform} shows {count} followers, but only lists them inside its own app.", { platform: name, count: countText }) : tr("{platform} shows {count} following, but only lists them inside its own app.", { platform: name, count: countText }))
+        : tr("{platform} only shows this list inside its own app.", { platform: name });
+      return `<div class="empty ext-graph-empty">${countText ? `<div class="ext-graph-count"><b>${esc(countText)}</b> <span>${esc(tab === "followers" ? tr("Followers") : tr("Following count"))}</span></div>` : ""}<h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
+    }
+    if (row && row.unavailable === "nostr_off") {
+      return `<div class="empty ext-graph-empty"><h2>${esc(tr("Turn on Nostr to see this list"))}</h2><p>${esc(tr("Nostr lists are read from relays on this device."))}</p><a class="retry" href="#/settings/nostr">${esc(tr("Open Nostr settings"))}</a></div>`;
+    }
+    if (row && row.hidden) {
+      return `<div class="empty ext-graph-empty"><h2>${esc(tr("This list is hidden"))}</h2><p>${esc(tr("This account chose not to show this list publicly."))}</p></div>`;
+    }
+    if (subject.failed || (row && (row.error || row.unavailable))) {
+      return `<div class="empty ext-graph-empty"><h2>${esc(tr("Couldn’t load this list right now"))}</h2><p>${esc(tr("The public sources for this list are busy. Try again in a bit."))}</p><button class="retry" type="button" data-act="ext-graph-retry" data-platform="${esc(platform)}" data-handle="${esc(subject.handle)}" data-tab="${esc(tab)}">${esc(tr("Retry"))}</button></div>`;
+    }
+    const title = tab === "followers" ? tr("No followers yet") : tr("Not following anyone yet");
+    const copy = tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
+    return emptyBlock(title, copy);
+  }
+
+  /* People this viewer follows who follow the subject. Bluesky answers
+     exactly (public getRelationships); elsewhere it is what the loaded
+     Followers pages and the app's own followers already show. */
+  function extKnownRows(platform, subject, appRows) {
+    const out = [];
+    const seen = {};
+    const add = (item) => {
+      const id = String(item && item.id || "").toLowerCase();
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      out.push(item);
+    };
+    (appRows || []).forEach((item) => { if (isFollowed(item.id)) add(item); });
+    const FL = window.ViktorychFollowLists;
+    const loaded = FL ? FL.state(platform, subject.handle, "followers") : null;
+    ((loaded && loaded.items) || []).forEach((item) => { if (isFollowed(item.id)) add(item); });
+    if ((platform === "bsky" || platform === "bluesky") && FL) {
+      const key = liveKey(platform, subject.handle);
+      const known = STATE.extKnown[key];
+      const mine = (STATE.settings.follows || []).filter((id) => /^(bsky|bluesky):/.test(String(id))).map((id) => String(id).replace(/^[a-z]+:/, ""));
+      const sig = mine.join(",");
+      // Asked again when the follow list changes (sign-in sync) or after five minutes.
+      if (!known || known.sig !== sig || Date.now() - known.at > 5 * 60 * 1000) {
+        STATE.extKnown[key] = { at: Date.now(), sig: sig, items: (known && known.items) || [], loading: mine.length > 0 };
+        if (mine.length) FL.bskyFollowersAmong(subject, mine).then((items) => { STATE.extKnown[key] = { at: Date.now(), sig: sig, items: items }; render(); });
+      }
+      (STATE.extKnown[key].items || []).forEach(add);
+    }
+    return out;
+  }
+
+  function externalConnectionsView(route, tab, appPack) {
+    const platform = route.platform || "x";
+    const FL = window.ViktorychFollowLists;
+    const subject = extGraphSubject(platform, route.handle);
+    const name = subject.name || subject.handle;
+    const shown = String(subject.displayHandle || subject.handle || "").replace(/^@/, "");
+    const sub = platform === "nostr" ? (subject.displayHandle || "") : (shown ? "@" + shown : "");
+    const head = `<div class="topbar profile-bar ext-graph-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
+    const tabLink = (id, label) => `<a class="tab${tab === id ? " on" : ""}" role="tab" aria-selected="${tab === id ? "true" : "false"}" href="${esc(connectionsHash(route, id))}"><span>${esc(label)}</span></a>`;
+    const tabs = `<div class="tabs ptabs ext-graph-tabs" role="tablist" aria-label="${esc(tr("Profile"))}">${tabLink("followers_you_follow", tr("Followers you know"))}${tabLink("followers", tr("Followers"))}${tabLink("following", tr("Following count"))}</div>`;
+    const appRows = (appPack && appPack.accounts) || [];
+    if (tab === "followers_you_follow") {
+      if (FL && FL.supports(platform, "followers") && subject.ready) FL.load(platform, subject, "followers", render);
+      const known = extKnownRows(platform, subject, appRows);
+      if (known.length) return head + tabs + `<div class="ext-graph-list">${extGraphRows(known)}</div>`;
+      const waiting = STATE.extKnown[liveKey(platform, subject.handle)];
+      if (waiting && waiting.loading) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+      return head + tabs + emptyBlock(tr("No followers you know yet"), tr("When someone you follow follows this account, they’ll show up here."));
+    }
+    const merged = tab === "followers" ? appRows.slice() : [];
+    const live = FL && FL.supports(platform, tab);
+    if (!live) {
+      if (merged.length) return head + tabs + `<div class="ext-graph-list">${extGraphRows(merged)}</div>` + extGraphEmpty(platform, tab, subject, null);
+      return head + tabs + extGraphEmpty(platform, tab, subject, null);
+    }
+    if (!subject.ready) {
+      if (subject.failed) return head + tabs + extGraphEmpty(platform, tab, subject, null);
+      return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+    }
+    const row = FL.load(platform, subject, tab, render);
+    if (row.count != null) {
+      if (tab === "followers" && subject.followers == null) subject.followers = row.count;
+      if (tab === "following" && subject.following == null) subject.following = row.count;
+    }
+    (row.items || []).forEach((item) => merged.push(item));
+    if (!merged.length) {
+      if (row.loading || !row.at) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+      return head + tabs + extGraphEmpty(platform, tab, subject, row);
+    }
+    const more = row.cursor && !row.error ? `<div id="ext-graph-more" class="reply-empty ext-graph-more" data-platform="${esc(platform)}" data-handle="${esc(subject.handle)}" data-tab="${esc(tab)}">${row.loading ? esc(tr("Loading…")) : ""}</div>` : "";
+    const tail = row.error && merged.length ? `<div class="ext-graph-more"><button class="retry" type="button" data-act="ext-graph-more" data-platform="${esc(platform)}" data-handle="${esc(subject.handle)}" data-tab="${esc(tab)}">${esc(tr("Retry"))}</button></div>` : "";
+    return head + tabs + `<div class="ext-graph-list">${extGraphRows(merged)}</div>` + more + tail;
+  }
+
+  function extGraphMore(el) {
+    const FL = window.ViktorychFollowLists;
+    if (!FL || !el) return;
+    const platform = el.getAttribute("data-platform") || "x";
+    const tab = el.getAttribute("data-tab") === "followers" ? "followers" : "following";
+    const subject = extGraphSubject(platform, el.getAttribute("data-handle") || "");
+    if (!subject.ready) return;
+    const row = FL.state(platform, subject.handle, tab);
+    if (row && row.error) row.error = false;
+    FL.load(platform, subject, tab, render, true);
+    render();
+  }
+
   function connectionsView(route) {
     if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
       return pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This account is currently locked."));
     }
-    const tab = (route.tab === "followers" || route.tab === "friends" || route.tab === "mutuals" || route.tab === "requests") ? route.tab : "following";
+    const tab = (route.tab === "followers" || route.tab === "followers_you_follow" || route.tab === "friends" || route.tab === "mutuals" || route.tab === "requests") ? route.tab : "following";
     const subject = connectionsSubject(route);
     const name = subject.name || subject.handle || route.handle || "";
     const sub = subject.handle ? "@" + subject.handle : "";
@@ -12878,6 +13058,16 @@ const here = parseRoute();
     }
     if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
     const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
+    // An account from another platform: its own public lists, read live,
+    // with the app's followers of it (when signed in) kept on top.
+    if (!route.personId && subject.kind !== "account" && (route.platform || "x") !== "app") {
+      let appPack = null;
+      if (signed && subject.id && window.ViktorychAccounts && window.ViktorychAccounts.ensureList && tab !== "following") {
+        window.ViktorychAccounts.ensureList(subject.id, "followers");
+        appPack = window.ViktorychAccounts.listPack(subject.id, "followers");
+      }
+      return externalConnectionsView(route, tab === "followers" || tab === "followers_you_follow" ? tab : "following", appPack);
+    }
     if (subject.kind === "account" && subject.id && window.ViktorychAccounts && window.ViktorychAccounts.graphListHtml) {
       if (!signed) return head + tabs + emptyBlock(tr("Followers"), tr("Sign in to see this list."));
       return head + tabs + window.ViktorychAccounts.graphListHtml(subject.id, tab, subject.handle || name);
@@ -20513,6 +20703,18 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "show-original") {
       if (window.FeedsTranslate) window.FeedsTranslate.showOriginal(el.dataset.key);
       else { STATE.originalShown[el.dataset.key] = true; render(); }
+      return;
+    }
+    if (act === "ext-graph-retry" || act === "ext-graph-more") {
+      if (window.ViktorychFollowLists) {
+        const platform = el.dataset.platform || "x";
+        if (act === "ext-graph-retry") {
+          window.ViktorychFollowLists.retry(platform, el.dataset.handle || "", el.dataset.tab || "following");
+          const held = STATE.extSubjects[liveKey(platform, el.dataset.handle || "")];
+          if (held && held.settled && !held.remoteId && !held.channelId && !held.pubkey) delete STATE.extSubjects[liveKey(platform, el.dataset.handle || "")];
+        } else extGraphMore(el);
+      }
+      render();
       return;
     }
     if (act === "follow") {
