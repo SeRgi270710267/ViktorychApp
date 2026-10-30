@@ -376,6 +376,17 @@
     load();
   }
 
+  /* Feeds › Add account hands a pasted Discord invite here: the sheet opens
+     with it filled in and looks it up. Nothing joins until the owner taps. */
+  function openInvite(raw) {
+    if (!isOwner()) return false;
+    open();
+    state.inviteInput = String(raw || "").trim().slice(0, 200);
+    paint();
+    previewInvite();
+    return true;
+  }
+
   function close() {
     state.open = false;
     state.step = "list";
@@ -473,6 +484,7 @@
 
   root.DiscordPicks = {
     open: open,
+    openInvite: openInvite,
     close: close,
     addButtonHtml: addButtonHtml,
     isOwner: isOwner,
