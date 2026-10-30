@@ -2,6 +2,8 @@
 
 A takeover guide for the next assistant or coding agent. Written from the state of the project on 2026-10-28. Anything marked "unverified" was not re-checked, so check it before you rely on it.
 
+> **Keep usage low:** read [LOW-USAGE.md](LOW-USAGE.md) before doing any work.
+
 ## 0. Running with nobody
 
 If no assistant is working on the project, read `docs/RUNNING-WITHOUT-BOT.md`. The Worker watchdog (`worker/src/watchdog.js`) keeps workflows on, re-runs a stuck deploy and reports health.
