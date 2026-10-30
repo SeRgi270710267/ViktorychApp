@@ -1022,7 +1022,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, friend_request: 1, friend_accept: 1, dm: 1, discord: 1, live: 1, game_invite: 1, tv_signin: 1, community_note: 1, feed_request: 1, feed_approved: 1, feed_rejected: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -15751,6 +15751,9 @@ const here = parseRoute();
     if (kind === "birthday_self") return tr("Happy birthday");
     if (kind === "package") return tr("Package update: {name}", { name: (note && note.name) || tr("Packages") });
     if (kind === "tv_signin") return esc(tr("Approve sign-in on TV?"));
+    if (kind === "feed_request") return tr("Source request: {name}", { name: who });
+    if (kind === "feed_approved") return tr("Source request approved: {name}", { name: who });
+    if (kind === "feed_rejected") return tr("Source request not approved: {name}", { name: who });
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
@@ -15821,6 +15824,7 @@ const here = parseRoute();
     if (kind === "live") return "mic";
     if (kind === "community_note") return "communities";
     if (kind === "tv_signin") return "tv";
+    if (kind === "feed_request" || kind === "feed_approved" || kind === "feed_rejected") return "rss";
     return "bellOn";
   }
 
