@@ -698,6 +698,11 @@
       var picks = Array.prototype.slice.call(bar.el.querySelectorAll(".rx-pick"));
       if (key === "ArrowLeft" || key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); moveIn(picks, target, key === "ArrowLeft" ? -1 : 1); return; }
       if (key === "Home" || key === "End") { event.preventDefault(); event.stopPropagation(); (key === "Home" ? picks[0] : picks[picks.length - 1]).focus(); return; }
+      if (/^[1-9]$/.test(key) && !event.ctrlKey && !event.metaKey && !event.altKey && picks[Number(key) - 1]) {
+        event.preventDefault(); event.stopPropagation();
+        if (!event.repeat) pick(picks[Number(key) - 1].getAttribute("data-rx-pick"));
+        return;
+      }
       if (key === "ArrowUp" || key === "ArrowDown" || key === "Tab") { event.preventDefault(); event.stopPropagation(); closeBar(true); return; }
       if (key === "Enter" || key === " " || key === "NumpadEnter" || event.keyCode === 13) {
         event.preventDefault(); event.stopPropagation();
@@ -798,6 +803,8 @@
 
   root.ViktorychReactions = {
     start: start,
+    // The "e" shortcut in keys.js opens the bar from a post's Like button.
+    openBar: function (btn) { if (btn) openBar(btn, true); return !!btn; },
     settingsHtml: settingsHtml,
     applyLocal: applyLocal,
     farFrom: farFrom,
