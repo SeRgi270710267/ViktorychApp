@@ -93,6 +93,8 @@
       ["friends", tr("Friends")],
       ["lists", tr("Custom lists")]
     ];
+    // Friends off: no Friends audience.
+    if (window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff()) choices = choices.filter(function (row) { return row[0] !== "friends"; });
     var menu = choices.map(function (row) {
       return '<option value="' + row[0] + '">' + esc(row[1]) + "</option>";
     }).join("");
