@@ -2446,7 +2446,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<span class="ava silhouette${extra}" aria-hidden="true">${SILHOUETTE_SVG}</span>`;
   }
 
-  function avatar(src, name, cls, accountFace) {
+  function avatar(src, name, cls, accountFace, eager) {
     const extra = cls ? " " + cls : "";
     const face = faceChoice("picture", src, accountFace);
     if (face === "none") return `<span class="ava-none"></span>`;
@@ -2455,7 +2455,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const lib = window.ViktorychComments;
     const sized = lib && lib.smallAvatar && linkImagesBlocked() ? lib.smallAvatar(src, true) : src;
     const safeSrc = ruSafeImageUrl(sized);
-    return `<img decoding="async" class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
+    const loadAttr = eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
+    return `<img decoding="async" class="ava${extra}" src="${esc(safeSrc)}" alt="" ${loadAttr} referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
   }
 
   function affSlot(source) {
@@ -4064,9 +4065,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   // Hosts that are blocked or throttled for many readers in Russia or India.
   // Only hosts the Worker's /v1/media relay allows are listed. The relay
   // passes the original bytes through; nothing is re-encoded.
-  const BLOCKED_IN_RU = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|yt3\.ggpht\.com)$/i;
+  const BLOCKED_IN_RU = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|yt3\.ggpht\.com|googleusercontent\.com)$/i;
   const BLOCKED_IN_IN = /(?:^|\.)(?:tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
-  const RELAYABLE = /(?:^|\.)(?:twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|ytimg\.com|yt3\.ggpht\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
+  const RELAYABLE = /(?:^|\.)(?:twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|ytimg\.com|yt3\.ggpht\.com|googleusercontent\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
 
   function isRuVisitor() {
     const mode = (STATE.settings && STATE.settings.networkMode) || localStorage.getItem("viktorychapp-network-mode") || "auto";
@@ -8218,13 +8219,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!id || CMT_PREFETCHED[id] || !commentPrefetchable(post)) return;
     if (linkImagesBlocked() || !CMT_LIB.canPrefetch({ saveData: !!connectionInfo().saveData })) return;
     const now = Date.now();
-    if (now - cmtPrefetchAt < 3000 || cmtPrefetchCount >= 12) return;
+    if (now - cmtPrefetchAt < 1500 || cmtPrefetchCount >= 36) return;
     cmtPrefetchAt = now;
     cmtPrefetchCount += 1;
     CMT_PREFETCHED[id] = true;
     CMT_LIB.idle(() => {
       commentsGet(post, "top", { scope: "prefetch" }).catch(() => {});
-    }, 3000);
+    }, 2000);
   }
 
   let CMT_DWELL_OBS = null;
@@ -8248,7 +8249,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
               const key = el.getAttribute("data-post") || "";
               const post = findAnyPost(key);
               if (post) prefetchComments(post);
-            }, 1200));
+            }, 600));
           } else if (timer) {
             clearTimeout(timer);
             CMT_DWELL.delete(el);
@@ -9885,7 +9886,7 @@ const here = parseRoute();
     // Community mirror authors have no profile here: their links open the community.
     const whoHref = post.cmMirror ? "#/communities/" + encodeURIComponent(post.community.name) : accountHash(post.platform, who);
     const whoCard = post.cmMirror ? "" : ` data-card="${esc(post.platform + ":" + who)}"`;
-    const avaLink = `<a href="${esc(whoHref)}"${whoCard} aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
+    const avaLink = `<a href="${esc(whoHref)}"${whoCard} aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName, "", null, eager)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
@@ -12572,7 +12573,7 @@ const here = parseRoute();
       : "";
     const tabLoading = !list.length && tabStillLoading(tab);
     if (tabLoading && !tabFlights[tab] && !(tabRetries[tab] && tabRetries[tab].timer)) setTimeout(() => refreshHomeTabs([tab]), 0);
-    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(groupThreads(list).map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i === 0 })), tab) : emptyBlock(
+    const body = tabLoading ? `<div class="tab-loading" role="progressbar" aria-label="${esc(tr("Loading"))}">` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("") + `</div>` : (list.length ? withSuggestions(groupThreads(list).map((p, i) => p && p.busyGroup ? busyRow(p) : card(p, null, { eager: i < 4 })), tab) : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     ) + findAccounts);
