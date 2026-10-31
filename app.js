@@ -1610,21 +1610,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       bio: String(feed.bio || "").slice(0, 280)
     };
   }
-  const feedByIdMap = new Map();
-  function feedById(id) {
-    if (!id) return null;
-    const key = String(id);
-    const fList = feeds();
-    if (feedByIdMap.get("__src") !== fList) {
-      feedByIdMap.clear();
-      feedByIdMap.set("__src", fList);
-      for (let i = 0; i < fList.length; i++) {
-        const item = fList[i];
-        if (item && item.id) feedByIdMap.set(item.id, item);
-      }
-    }
-    return feedByIdMap.get(key) || null;
-  }
+  function feedById(id) { return feeds().find((f) => f.id === id); }
 
   function cleanGroups(list) {
     const out = [];
@@ -1823,13 +1809,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff());
   }
   const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "friends_off", "local_ai"];
-  let serverOffMemo = null;
   function serverOffList() {
-    if (serverOffMemo) return serverOffMemo;
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
-      serverOffMemo = Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
-      return serverOffMemo;
+      return Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
     } catch (err) { return []; }
   }
   /* True only once the server list has been fetched and the feature is not
@@ -1840,7 +1823,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return at > 0 && SERVER_FEATURES.includes(name) && !serverOffList().includes(name);
   };
   function storeServerOff(list) {
-    serverOffMemo = Array.isArray(list) ? list.filter((name) => SERVER_FEATURES.includes(name)) : [];
     try {
       localStorage.setItem(SERVER_OFF_KEY, JSON.stringify(list || []));
       localStorage.setItem(SERVER_OFF_KEY + "-at", String(Date.now()));
@@ -2017,14 +1999,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
-  let catalogRowsMemo = null;
-  const catalogAccountMap = new Map();
-  function invalidateCatalogMemo() {
-    catalogRowsMemo = null;
-    catalogAccountMap.clear();
-  }
   function catalogRows() {
-    if (catalogRowsMemo) return catalogRowsMemo;
     let rows = feeds().slice();
     const extra = STATE.catalog && STATE.catalog.feeds;
     if (Array.isArray(extra)) extra.forEach((row) => {
@@ -2086,18 +2061,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (isShortsLocked()) {
       rows = rows.filter((feed) => !isLockedTiktok(feed));
     }
-    catalogRowsMemo = rows.filter(keepAfterRemove);
-    return catalogRowsMemo;
+    return rows.filter(keepAfterRemove);
   }
   function catalogAccount(platform, handle) {
     const key = String(handle || "").replace(/^@/, "");
     if (!key) return null;
     const platformName = platform || "x";
-    const cacheKey = platformName + ":" + key.toLowerCase();
-    if (catalogAccountMap.has(cacheKey)) return catalogAccountMap.get(cacheKey);
     const lower = key.toLowerCase();
     const rows = catalogRows().filter((feed) => (feed.platform || "x") === platformName);
-    let current = rows.find((feed) => {
+    const current = rows.find((feed) => {
       if (String(feed.handle || "").toLowerCase() === lower) return true;
       if (feed.channelId && feed.channelId === key) return true;
       if (feed.id === platformName + ":" + key) return true;
@@ -2105,11 +2077,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (feed.secUid && String(feed.secUid) === key) return true;
       return false;
     });
-    if (!current) {
-      current = rows.find((feed) => (feed.previousHandles || []).some((item) => String(item || "").replace(/^@/, "").toLowerCase() === lower)) || null;
-    }
-    catalogAccountMap.set(cacheKey, current);
-    return current;
+    if (current) return current;
+    return rows.find((feed) => (feed.previousHandles || []).some((item) => String(item || "").replace(/^@/, "").toLowerCase() === lower)) || null;
   }
   function accountHash(platform, handle) {
     if ((platform || "") === "app") return profileHash("x", handle);
@@ -5991,27 +5960,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   let previewQueued = false;
-  let previewScrollTimer = 0;
-  let isFastScrolling = false;
   function schedulePreview() {
     if (previewQueued) return;
     previewQueued = true;
-    isFastScrolling = true;
-    clearTimeout(previewScrollTimer);
-    previewScrollTimer = setTimeout(() => {
-      isFastScrolling = false;
-      syncPreview();
-    }, 120);
     const tick = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
     tick(() => {
       previewQueued = false;
-      if (isFastScrolling) {
-        if (STATE.autoEl && !previewEligible(STATE.autoEl)) {
-          pausePreview(STATE.autoEl);
-          STATE.autoEl = null;
-        }
-        return;
-      }
       syncPreview();
     });
   }
@@ -6688,6 +6642,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const locked = window.ViktorychLocked;
     if (locked && typeof locked.hides === "function") {
       try { if (locked.hides(post)) return true; } catch (err) { /* never hide on a broken filter */ }
+    }
+    const list = window.ViktorychBlocklist;
+    if (list && typeof list.hides === "function") {
+      try { if (list.hides(post)) return true; } catch (err) { /* a broken list must not hide the thread */ }
     }
     if (!blockReason(post)) return false;
     // Show hidden keeps the row as a placeholder that loads nothing.
@@ -20498,58 +20456,15 @@ if (STATE.histClear) {
     });
   }
 
-  let lastCommittedHtml = "";
-  function postCardReuse(liveRoot, frag) {
-    const livePosts = liveRoot.querySelectorAll("article.post[data-post]");
-    if (!livePosts.length) return;
-    const liveMap = new Map();
-    livePosts.forEach((el) => {
-      const id = el.getAttribute("data-post");
-      if (id && !liveMap.has(id)) liveMap.set(id, el);
-    });
-    const freshPosts = frag.querySelectorAll("article.post[data-post]");
-    freshPosts.forEach((fresh) => {
-      const id = fresh.getAttribute("data-post");
-      const live = id ? liveMap.get(id) : null;
-      if (!live) return;
-      if (live.className === fresh.className && live.innerHTML === fresh.innerHTML) {
-        fresh.replaceWith(live);
-      }
-    });
-  }
-  function navReuse(liveRoot, frag) {
-    const liveNav = liveRoot.querySelector("nav.nav");
-    const freshNav = frag.querySelector("nav.nav");
-    if (liveNav && freshNav && liveNav.className === freshNav.className && liveNav.innerHTML === freshNav.innerHTML) {
-      freshNav.replaceWith(liveNav);
-    }
-    const liveSidebar = liveRoot.querySelector("aside.sidebar");
-    const freshSidebar = frag.querySelector("aside.sidebar");
-    if (liveSidebar && freshSidebar && liveSidebar.className === freshSidebar.className && liveSidebar.innerHTML === freshSidebar.innerHTML) {
-      freshSidebar.replaceWith(liveSidebar);
-    }
-    const liveBottom = liveRoot.querySelector("nav.bottom-nav");
-    const freshBottom = frag.querySelector("nav.bottom-nav");
-    if (liveBottom && freshBottom && liveBottom.className === freshBottom.className && liveBottom.innerHTML === freshBottom.innerHTML) {
-      freshBottom.replaceWith(liveBottom);
-    }
-  }
   function commitApp(html) {
     const app = document.getElementById("app");
     if (!app) return;
-    if (html === lastCommittedHtml && app.firstChild) {
-      hscrollSettle({ reveal: false });
-      return;
-    }
-    lastCommittedHtml = html;
     hscrollHolding = true;
     hscrollHoldGen = STATE.renderGen || 0;
     hscrollRemember(app);
     const tpl = document.createElement("template");
     tpl.innerHTML = html;
     hscrollReuse(app, tpl.content);
-    postCardReuse(app, tpl.content);
-    navReuse(app, tpl.content);
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
     scheduleImageSweep();
@@ -20816,7 +20731,7 @@ if (STATE.histClear) {
      render with a gap for input while the feed loads. Renders from the
      user's own input stay synchronous. */
   var renderQ = { held: false, heldAt: 0, pending: false, opts: null, last: 0, scheduled: false, flushing: false };
-  const RENDER_GAP_MS = 32;
+  const RENDER_GAP_MS = 120;
   const RENDER_HOLD_MAX_MS = 1500;
 
   function inUserInput() {
@@ -26071,7 +25986,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function adoptSavedFeed(doc) {
     if (!doc || !Array.isArray(doc.posts) || !doc.posts.length) return;
-    invalidateCatalogMemo();
     const current = STATE.data;
     if (current && window.HomeFresh && !window.HomeFresh.newer(doc, current)) return;
     const mode = arrivalMode();
@@ -26370,7 +26284,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function adoptFeeds(doc) {
     if (!doc || !STATE.data) return;
-    invalidateCatalogMemo();
     STATE.data.feeds = doc.feeds || [];
     STATE.settings = loadSettings();
     saveSettings();
