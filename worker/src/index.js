@@ -2652,7 +2652,7 @@ async function handleOwnerMedia(request, env, url) {
   });
 }
 
-const PUBLIC_MEDIA_HOST = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|yt3\.ggpht\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
+const PUBLIC_MEDIA_HOST = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|yt3\.ggpht\.com|googleusercontent\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
 
 function publicMediaHostOk(hostname) {
   return PUBLIC_MEDIA_HOST.test(String(hostname || ""));
