@@ -108,38 +108,38 @@
   function writeStored(suffix, value) {
     try { localStorage.setItem("viktorychapp-" + suffix, value); } catch (err) { /* full quota */ }
   }
+  var rawSessionMemo = null;
   var sessionCache = null;
-  var sessionCacheValid = false;
   function removeStored(suffix) {
-    if (suffix === "account-v1") { sessionCache = null; sessionCacheValid = false; }
+    if (suffix === "account-v1") { sessionCache = null; rawSessionMemo = null; }
     names(suffix).forEach(function (name) {
       try { localStorage.removeItem(name); } catch (err) { /* already gone */ }
     });
   }
   function readSession() {
-    if (sessionCacheValid) return sessionCache;
+    var raw = readStored("account-v1");
+    if (raw === rawSessionMemo) return sessionCache;
+    rawSessionMemo = raw;
     try {
-      var raw = readStored("account-v1");
       var parsed = raw ? JSON.parse(raw) : null;
       if (!parsed || !parsed.token || !parsed.account) {
         sessionCache = null;
-        sessionCacheValid = true;
         return null;
       }
       sessionCache = parsed;
-      sessionCacheValid = true;
       return sessionCache;
     } catch (err) {
       removeStored("account-v1");
+      rawSessionMemo = null;
       sessionCache = null;
-      sessionCacheValid = true;
       return null;
     }
   }
   function writeSession(session) {
+    var str = JSON.stringify(session);
+    rawSessionMemo = str;
     sessionCache = session;
-    sessionCacheValid = true;
-    writeStored("account-v1", JSON.stringify(session));
+    writeStored("account-v1", str);
   }
   function readPending() {
     try {
