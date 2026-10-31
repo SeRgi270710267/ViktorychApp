@@ -611,6 +611,7 @@
   const IA_WAIT_MS = 2500;
   function useArchiveMedia(img) {
     if (!img || img.tagName !== "IMG") return false;
+    if (img.dataset.fallback === "avatar") return false;
     if (!IA.ready) {
       if (img.dataset.iaSkip === "1") return false;
       img.dataset.iaWait = "1";
@@ -734,6 +735,7 @@
     sweepTimer = setTimeout(() => sweepBrokenImages(), ms == null ? 1500 : ms);
   }
   window.ViktorychMediaFallback = { sweep: sweepBrokenImages };
+  window.ruSafeImageUrl = ruSafeImageUrl;
 
   /* Tell the service worker to forget a stored copy of a picture that did not
      load, so a cached failure never sticks to this device. */
@@ -6378,7 +6380,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const quotedHandle = internalPostHandle(quoted.handle || "", quoted);
     return `<div class="quote"${open}>
       <div class="quote-head">
-        ${avatar(quoted.avatar, quoted.author || quoted.handle)}
+        ${avatar(quoted.avatar, quoted.author || quoted.handle, isOrgVerified(asQuoted, quoted) ? "sq" : "")}
         <span class="name">${esc(quoted.author || quoted.handle || tr("Post noun"))}${badge(quoted.verifiedType)}</span>
         ${quotedHandle ? `<span class="handle">@${esc(quotedHandle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
@@ -9476,7 +9478,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const tombHandle = internalPostHandle(post.handle || "", post);
     return `<article class="post tombstone">
       <div class="post-row">
-        ${avatar(face.avatar, post.author || post.handle)}
+        ${avatar(face.avatar, post.author || post.handle, isOrgVerified(post, face) ? "sq" : "")}
         <div class="post-main">
           <div class="byline">
             <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || tr("Post noun"))}${badge(face.verified)}</a>${affSlot(post)}
@@ -9886,7 +9888,7 @@ const here = parseRoute();
     // Community mirror authors have no profile here: their links open the community.
     const whoHref = post.cmMirror ? "#/communities/" + encodeURIComponent(post.community.name) : accountHash(post.platform, who);
     const whoCard = post.cmMirror ? "" : ` data-card="${esc(post.platform + ":" + who)}"`;
-    const avaLink = `<a href="${esc(whoHref)}"${whoCard} aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName, "", null, eager)}</a>`;
+    const avaLink = `<a href="${esc(whoHref)}"${whoCard} aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName, isOrgVerified(post, face) ? "sq" : "", null, eager)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
@@ -14113,7 +14115,7 @@ const here = parseRoute();
     }, banner)}
     <div class="pinfo" data-live-error="${esc(row.errorDetail || row.error || "")}">
       <div class="pava-row">
-        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(profile.avatar, profile.name, "pava"), profile.platform, profile.handle) : avatar(profile.avatar, profile.name, "pava")}
+        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(profile.avatar, profile.name, isOrgVerified(null, profile) ? "pava sq" : "pava"), profile.platform, profile.handle) : avatar(profile.avatar, profile.name, isOrgVerified(null, profile) ? "pava sq" : "pava")}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="${tr("Share")}">${icon("share")}</button>
           ${bellButton(liveFollowId(profile), profile.handle)}
@@ -14524,7 +14526,7 @@ const here = parseRoute();
     }, banner)}
     <div class="pinfo">
       <div class="pava-row">
-        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(feed.avatar, feed.name, "pava"), feed.platform, feed.handle) : avatar(feed.avatar, feed.name, "pava")}
+        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(feed.avatar, feed.name, isOrgVerified(null, feed) ? "pava sq" : "pava"), feed.platform, feed.handle) : avatar(feed.avatar, feed.name, isOrgVerified(null, feed) ? "pava sq" : "pava")}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="${tr("Share")}">${icon("share")}</button>
           ${bellButton(feed.id, feed.handle)}
@@ -14642,8 +14644,8 @@ const here = parseRoute();
           <span class="status-end">${postSourceBadges(post)}${statusMenu(post)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
-      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
-      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
+      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author, isOrgVerified(post, face) ? "sq" : "")}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author, isOrgVerified(post, face) ? "sq" : "")}</a>${names}</div>${body}</article>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><h1 class="grow">${tr("Post noun")}</h1></div></div>
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
@@ -18675,6 +18677,14 @@ if (STATE.histClear) {
     };
   }
 
+  function isOrgVerified(post, face) {
+    const v = (face && (face.verified || face.verifiedType)) ||
+              (post && (post.verifiedType || (post.verified && post.verified !== true && post.verified !== "blue"))) || "";
+    if (v === "business" || v === "organization") return true;
+    const feed = post ? feedOf(post) : null;
+    return !!(feed && (feed.verifiedType === "business" || feed.verifiedType === "organization"));
+  }
+
   function authorFace(post) {
     if (isRepost(post)) {
       const creator = creatorOf(post);
@@ -19638,7 +19648,7 @@ if (STATE.histClear) {
     const ancHandle = internalPostHandle(post.handle || "", post);
     const shown = parentShown ? mentionless(post) : replyBody(post);
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
-      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
+      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle, isOrgVerified(post, face) ? "sq" : "")}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
         <div class="byline">
           <a class="name" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
@@ -20468,7 +20478,7 @@ if (STATE.histClear) {
     hscrollReuse(app, tpl.content);
     while (app.firstChild) app.removeChild(app.firstChild);
     app.appendChild(tpl.content);
-    scheduleImageSweep();
+    scheduleImageSweep(50);
     hscrollSettle({ reveal: true });
     if (window.ViktorychAccounts && window.ViktorychAccounts.bindProfileTabs) window.ViktorychAccounts.bindProfileTabs();
   }
@@ -24887,7 +24897,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const bannerFace = faceChoice("banner", profile.banner, profile.bannerFace);
     const banner = bannerFace === "none" ? "" : (bannerFace === "photo" ? `<div class="hbanner" style="background:url(${encodeURI(profile.banner)}) center/cover"></div>` : `<div class="hbanner"></div>`);
     const pid = presenceIdOf(profile);
-    let face = avatar(profile.avatar, profile.name, "pava", profile.avatarFace);
+    let face = avatar(profile.avatar, profile.name, isOrgVerified(null, profile) ? "pava sq" : "pava", profile.avatarFace);
     let seen = "";
     if (pid && window.ViktorychPresence) {
       face = window.ViktorychPresence.wrap(pid, face);

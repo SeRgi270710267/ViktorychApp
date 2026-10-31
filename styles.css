@@ -6617,6 +6617,9 @@ html[data-ava-shape="square"] :is(.ava, .ava img, .pava, .pava img, .m-ava .ava,
   .xdock-ava, .shorts-ava, .shorts-account-face, .sp-stack .sp-face, .sp-ava .sp-initial, .tv-chat-ava, .feeds-face > :first-child) {
   border-radius: clamp(2px, 10%, 12px) !important;
 }
+:is(.ava.sq, .ava.sq img, .pava.sq, .pava.sq img, .ava.sq.silhouette, .ava.sq.initials, .pava.sq.silhouette, .pava.sq.initials) {
+  border-radius: clamp(2px, 10%, 12px) !important;
+}
 @media (max-width: 999px) {
   .status-author .more-btn svg { transform: rotate(90deg); }
 }
