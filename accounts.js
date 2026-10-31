@@ -108,23 +108,37 @@
   function writeStored(suffix, value) {
     try { localStorage.setItem("viktorychapp-" + suffix, value); } catch (err) { /* full quota */ }
   }
+  var sessionCache = null;
+  var sessionCacheValid = false;
   function removeStored(suffix) {
+    if (suffix === "account-v1") { sessionCache = null; sessionCacheValid = false; }
     names(suffix).forEach(function (name) {
       try { localStorage.removeItem(name); } catch (err) { /* already gone */ }
     });
   }
   function readSession() {
+    if (sessionCacheValid) return sessionCache;
     try {
       var raw = readStored("account-v1");
       var parsed = raw ? JSON.parse(raw) : null;
-      if (!parsed || !parsed.token || !parsed.account) return null;
-      return parsed;
+      if (!parsed || !parsed.token || !parsed.account) {
+        sessionCache = null;
+        sessionCacheValid = true;
+        return null;
+      }
+      sessionCache = parsed;
+      sessionCacheValid = true;
+      return sessionCache;
     } catch (err) {
       removeStored("account-v1");
+      sessionCache = null;
+      sessionCacheValid = true;
       return null;
     }
   }
   function writeSession(session) {
+    sessionCache = session;
+    sessionCacheValid = true;
     writeStored("account-v1", JSON.stringify(session));
   }
   function readPending() {
@@ -224,6 +238,11 @@
      backoff with full jitter (Retry-After is the floor). While it is open,
      calls go to the next root. The first root that is not open wins, so the
      primary comes back on its own once its wait ends. */
+  /* A call that ran out of time means the root is not answering at all, so
+     it backs off minutes, not seconds: a hung server used to be retried
+     within a second or two and every write paid its whole timeout waiting
+     for it. Ordinary 5xx/429 failures keep the short backoff. "lag" is the
+     hedged read's race: another root answered while this one sat silent. */
   var BREAKER_KEY = "viktorychapp-breaker-v1";
   var breakerMemo = null;
   var breakerMemoAt = 0;
@@ -249,13 +268,15 @@
     var row = breakerRead()[root];
     return row && Number(row.until) > Date.now() ? Number(row.until) : 0;
   }
-  function breakerFail(root, retryAfter) {
+  var breakerFailKinds = { fail: { step: 2000, cap: 5 * 60 * 1000, floor: 1000 }, timeout: { step: 30000, cap: 15 * 60 * 1000, floor: 10000 }, lag: { step: 10000, cap: 10 * 60 * 1000, floor: 5000 } };
+  function breakerFail(root, retryAfter, kind) {
     if (!root) return;
+    var way = breakerFailKinds[kind === "timeout" ? "timeout" : kind === "lag" ? "lag" : "fail"] || breakerFailKinds.fail;
     var all = breakerRead();
     var row = all[root] || { n: 0 };
     row.n = Math.min(Number(row.n || 0) + 1, 8);
-    var cap = Math.min(5 * 60 * 1000, 2000 * Math.pow(2, row.n - 1));
-    var floor = Math.max(1000, Number(retryAfter) || 0);
+    var cap = Math.min(way.cap, way.step * Math.pow(2, row.n - 1));
+    var floor = Math.max(way.floor, Number(retryAfter) || 0);
     row.until = Date.now() + Math.max(floor, Math.floor(Math.random() * cap));
     all[root] = row;
     breakerWrite(all);
@@ -504,8 +525,8 @@
     activeApiRoot = order[0] || String(config().api || "").replace(/\/$/, "");
     return activeApiRoot;
   }
-  function rotateApi(failedRoot, retryAfter) {
-    breakerFail(failedRoot || activeApiRoot, retryAfter);
+  function rotateApi(failedRoot, retryAfter, kind) {
+    breakerFail(failedRoot || activeApiRoot, retryAfter, kind);
     activeApiRoot = "";
     wakeBackup(failedRoot);
   }
@@ -694,7 +715,7 @@
         if (init && init.signal && init.signal.aborted) throw err;
         // Still waking up is not a failure: move on without opening its breaker.
         if (cold && t.timedOut()) { wakeBackup(""); return attempt(i + 1); }
-        rotateApi(apiRoot, 0);
+        rotateApi(apiRoot, 0, t.timedOut() ? "timeout" : undefined);
         if (i + 1 < order.length) return attempt(i + 1);
         throw err;
       });
@@ -809,8 +830,8 @@
   }
   function later(fn, ms) { return typeof setTimeout === "function" ? setTimeout(fn, ms) : 0; }
   function stopLater(id) { if (id && typeof clearTimeout === "function") clearTimeout(id); }
-  var READ_TIMEOUT = 15000;
-  var DATA_TIMEOUT = 20000;
+  var READ_TIMEOUT = 8000;
+  var DATA_TIMEOUT = 12000;
   var WRITE_TIMEOUT = 30000;
   var UPLOAD_TIMEOUT = 120000;
   /* A signal that aborts after ms, or when the caller's own signal aborts.
@@ -954,7 +975,7 @@
         // A write that timed out may still have arrived, so it is not sent
         // to another root (that could apply it twice).
         if (t.timedOut()) {
-          rotateApi(root, 0);
+          rotateApi(root, 0, "timeout");
           troubleNote(false);
           return { status: 504, error: "timeout" };
         }
@@ -993,9 +1014,9 @@
           var root = list[next++];
           var ctrl = typeof AbortController === "function" ? new AbortController() : null;
           var started = Date.now();
-          var run = { root: root, ctrl: ctrl, timer: 0 };
+          var run = { root: root, ctrl: ctrl, timer: 0, startedAt: started, timedOut: false };
           var sent = send(root, ctrl ? ctrl.signal : null);
-          if (ctrl) run.timer = later(function () { try { ctrl.abort(); } catch (err) { /* over */ } }, (Number(config().readTimeoutMs) || READ_TIMEOUT));
+          if (ctrl) run.timer = later(function () { run.timedOut = true; try { ctrl.abort(); } catch (err) { /* over */ } }, (Number(config().readTimeoutMs) || READ_TIMEOUT));
           running.push(run);
           function drop() {
             stopLater(run.timer);
@@ -1013,7 +1034,14 @@
               return;
             }
             var winner = run;
-            running.forEach(function (other) { if (other !== winner) { stopLater(other.timer); try { other.ctrl && other.ctrl.abort(); } catch (err) { /* over */ } } });
+            running.forEach(function (other) {
+              if (other === winner) return;
+              // The winner answered while this root sat silent: that root is
+              // the stalled one even when the abort beat its own timer.
+              if (Date.now() - other.startedAt >= (Number(config().hedgeMs) || HEDGE_MS)) rotateApi(other.root, 0, "lag");
+              stopLater(other.timer);
+              try { other.ctrl && other.ctrl.abort(); } catch (err2) { /* over */ }
+            });
             running = [];
             settled = true;
             stopLater(hedgeTimer);
@@ -1023,7 +1051,7 @@
             drop();
             if (settled) return;
             speedNote(root, Date.now() - started + 5000);
-            rotateApi(root, 0);
+            rotateApi(root, 0, run.timedOut ? "timeout" : undefined);
             lastErr = err;
             if (!launch()) maybeEnd();
           });
@@ -6752,7 +6780,7 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {});
   }
-  var relationCache = { blocks: null, mutes: null, loading: false };
+  var relationCache = { blocks: null, mutes: null, loading: false, blockSetMemo: null };
   function ensureRelations() {
     var session = readSession();
     if (!session || !hasApi() || relationCache.loading || relationCache.blocks) return;
@@ -6763,6 +6791,7 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
     ]).then(function (pair) {
       relationCache.loading = false;
       relationCache.blocks = pair[0] && pair[0].status === 200 && Array.isArray(pair[0].accounts) ? pair[0].accounts : [];
+      relationCache.blockSetMemo = null;
       relationCache.mutes = pair[1] && pair[1].status === 200 && Array.isArray(pair[1].accounts) ? pair[1].accounts : [];
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { relationCache.loading = false; });
@@ -6785,6 +6814,7 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
     api("/v1/" + kind, { method: remove ? "DELETE" : "PUT", token: session.token, body: { id: id } }).then(function (res) {
       relationCache.blocks = null;
       relationCache.mutes = null;
+      relationCache.blockSetMemo = null;
       if (res && res.status === 200 && window.ViktorychAccounts && window.ViktorychAccounts.toast) {
         var note = tr("Account muted");
         if (kind === "blocks" && remove) note = tr("Account unblocked");
@@ -7248,6 +7278,14 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
     setGraphQuery(el.dataset.graphId, el.dataset.graphTab, el.value);
   });
 
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("storage", function (e) {
+      if (!e || !e.key || e.key.indexOf("account-v1") >= 0) {
+        sessionCache = null;
+        sessionCacheValid = false;
+      }
+    });
+  }
   window.ViktorychAccounts = {
     aiSettings: aiSettings,
     aiSetting: aiSetting,
@@ -7338,11 +7376,13 @@ else if (act === "usage-retry") { loadUsage(true); if (window.ViktorychAccounts.
     setGraphQuery: setGraphQuery,
     relationWrite: relationWrite,
     blockSet: function () {
+      if (relationCache.blockSetMemo) return relationCache.blockSetMemo;
       var ids = {};
       (relationCache.blocks || []).forEach(function (item) {
         var id = String(item.id || "");
         if (id) ids[id] = true;
       });
+      relationCache.blockSetMemo = ids;
       return ids;
     },
     syncFollows: syncFollows,
