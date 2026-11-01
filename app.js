@@ -1810,7 +1810,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function friendsOffNow() {
     return !!(window.ViktorychFriendsPref && window.ViktorychFriendsPref.isOff());
   }
-  const SERVER_FEATURES = ["shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "friends_off", "local_ai", "local_ai_setup"];
+  const SERVER_FEATURES = ["contacts", "shorts", "stories", "lives", "telegram", "pills", "nostr", "regone_leaderboard", "regone_online", "regone_rooms", "regone_profile_stats", "nzlay_forum", "nzlay_forum_post", "nzlay_forum_regone", "nft", "bitchat", "feed_requests", "friends_off", "local_ai", "local_ai_setup"];
   function serverOffList() {
     try {
       const list = JSON.parse(localStorage.getItem(SERVER_OFF_KEY) || "[]");
@@ -1876,6 +1876,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     loadOwnerFeatures();
     const off = (ownerFeatureState && ownerFeatureState.off) || serverOffList();
     const labels = {
+      contacts: [tr("Contacts"), tr("The Contacts address book on this device, with dialer protocol handling and contact sync.")],
       shorts: [tr("Shorts"), tr("Shorts pages, TikTok live watching and its cron work.")],
       stories: [tr("Stories"), tr("Story uploads, the story bar and expiry sweeps.")],
       lives: [tr("Lives"), tr("Going live, the live row and live sweeps.")],
@@ -10064,6 +10065,7 @@ const here = parseRoute();
       }
       return { name: "drive", section: "files", trash: false, folder: "", view: "", album: "", query };
     }
+    if (parts[0] === "contacts") return { name: "contacts", sub: parts[1] || "", query };
     if (parts[0] === "vault") return { name: "vault", tab: parts[1] || "my", query };
     if (parts[0] === "packages") return { name: "packages", tab: parts[1] || "active", query };
     if (parts[0] === "communitynotes") return { name: "communitynotes", tab: parts[1] || "", query };
@@ -10246,6 +10248,8 @@ const here = parseRoute();
         return { id: "history", href: "#/history", icon: "clock", label: tr("History"), active: (r) => r.name === "history" };
       case "music":
         return { id: "music", href: "#/music", icon: "muNote", label: tr("Music"), active: (r) => false };
+      case "contacts":
+        return { id: "contacts", href: "#/contacts", icon: "phone", label: tr("Contacts"), active: (r) => r.name === "contacts", visible: () => featureOn("contacts") };
       case "shorts":
         return { id: "shorts", href: "#/shorts", icon: "shorts", label: tr("Shorts"), active: (r) => r.name === "shorts", visible: () => !!(window.ViktorychShorts && window.ViktorychShorts.visible()) };
       case "games":
@@ -17808,7 +17812,7 @@ const here = parseRoute();
 
   const DRAWER_LOCKED = ["home", "settings", "logout", "customize"];
   const DRAWER_PRIMARY = ["home", "explore", "notifications", "profile", "online", "premium", "communities", "bookmarks", "points", "lists", "spaces", "golive", "requests", "studio", "localai", "settings", "help", "logout", "customize"];
-  const DRAWER_EXTRA = ["tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "packages", "storage", "games", "music"];
+  const DRAWER_EXTRA = ["contacts", "tv", "messages", "feeds", "history", "shorts", "subscriptions", "vault", "packages", "storage", "games", "music"];
   const DRAWER_IDS = DRAWER_PRIMARY.concat(DRAWER_EXTRA);
   const DRAWER_NAV = {
     home: "home",
@@ -20075,6 +20079,12 @@ if (STATE.histClear) {
 
   function view(route) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
+    if (route.name === "contacts") {
+      if (!featureOn("contacts")) return pageHead(tr("Contacts")) + emptyBlock(tr("Contacts"), tr("Contacts is turned off right now."));
+      if (window.ViktorychContacts) return window.ViktorychContacts.page(route);
+      ensureLazy("contacts");
+      return lazySkeleton(tr("Contacts"));
+    }
     if (route.name === "shorts") {
       if (window.ViktorychShorts && window.ViktorychShorts.visible()) return window.ViktorychShorts.page(route);
       if (!window.ViktorychShorts) { ensureLazy("shorts"); return lazySkeleton(tr("Shorts")); }
@@ -21122,6 +21132,10 @@ if (STATE.histClear) {
         else if (window.ViktorychPrivacy.paint) window.ViktorychPrivacy.paint();
       }
       if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
+      if (window.ViktorychContacts) {
+        if (route.name === "contacts") window.ViktorychContacts.mount(route);
+        else if (window.ViktorychContacts.unmount) window.ViktorychContacts.unmount();
+      }
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
         else window.ViktorychShorts.unmount();
@@ -27642,6 +27656,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function consumeShareTarget() {
+    const p = new URLSearchParams(location.search);
+    if (p.has("tel") || p.has("call") || p.has("contact")) {
+      const q = encodeURIComponent(p.get("tel") || p.get("call") || p.get("contact") || "");
+      history.replaceState(null, "", location.pathname + "#/contacts?tel=" + q);
+      return;
+    }
     const params = new URLSearchParams(location.search);
     const media = params.get("media") || "";
     const posting = params.get("post") === "1";

@@ -4,7 +4,7 @@ const VERSION = "viktorych-a278-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-11-01T14:33:06.910Z-display-names-x-ui
+// cache-bust: 2026-11-01T15:05:00.000Z-feat-contacts-pwa
 
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
@@ -195,6 +195,8 @@ const SHELL_FILES = [
   "./drive.js",
   "./drive.css",
   "./settings-registry.js",
+  "./contacts-ui.js",
+  "./contacts.css",
   "./local-ai.js",
   "./local-ai-ui.js",
   "./local-ai.css",

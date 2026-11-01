@@ -1,0 +1,437 @@
+/* contacts.css - ViktorychApp Native Contacts directory styles */
+.contacts-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-left: 1px solid var(--border-color, #2f3336);
+  border-right: 1px solid var(--border-color, #2f3336);
+  background: var(--bg-color, #000);
+  color: var(--text-color, #e7e9ea);
+  box-sizing: border-box;
+}
+
+.ct-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-color, #2f3336);
+}
+
+.ct-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 53px;
+  padding: 0 16px;
+}
+
+.ct-top-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ct-title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+  margin: 0;
+}
+
+.ct-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ct-icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-color, #e7e9ea);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+
+.ct-icon-btn:hover {
+  background: rgba(239, 243, 244, 0.1);
+}
+
+.ct-icon-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.ct-search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #16181c;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  padding: 8px 16px;
+  margin: 4px 16px 12px 16px;
+}
+
+.ct-search-box:focus-within {
+  background: #000;
+  border-color: #1d9bf0;
+}
+
+.ct-search-box svg {
+  width: 18px;
+  height: 18px;
+  fill: #71767b;
+  flex-shrink: 0;
+}
+
+.ct-search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 15px;
+  width: 100%;
+}
+
+.ct-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color, #2f3336);
+}
+
+.ct-tab {
+  flex: 1;
+  text-align: center;
+  padding: 14px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #71767b;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s ease;
+}
+
+.ct-tab:hover {
+  background: rgba(239, 243, 244, 0.05);
+  color: #e7e9ea;
+}
+
+.ct-tab.active {
+  color: #e7e9ea;
+}
+
+.ct-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 25%;
+  right: 25%;
+  height: 4px;
+  background: #1d9bf0;
+  border-radius: 2px;
+}
+
+.ct-hero-card {
+  padding: 16px;
+  margin: 16px;
+  background: #16181c;
+  border: 1px solid var(--border-color, #2f3336);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ct-hero-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.ct-hero-sub {
+  font-size: 13px;
+  color: #71767b;
+  line-height: 18px;
+}
+
+.ct-btn-primary {
+  background: #eff3f4;
+  color: #0f1419;
+  border: none;
+  border-radius: 9999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.15s ease;
+}
+
+.ct-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.ct-btn-primary svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.ct-btn-secondary {
+  background: transparent;
+  color: #eff3f4;
+  border: 1px solid #536471;
+  border-radius: 9999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ct-btn-secondary:hover {
+  background: rgba(239, 243, 244, 0.1);
+}
+
+.ct-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ct-group-head {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d9bf0;
+  background: rgba(22, 24, 28, 0.6);
+  position: sticky;
+  top: 140px;
+  z-index: 10;
+}
+
+.ct-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(47, 51, 54, 0.5);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ct-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ct-row-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ct-ava {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: #202327;
+  color: #1d9bf0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ct-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.ct-name {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ct-sub {
+  font-size: 13px;
+  color: #71767b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ct-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ct-act-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #1d9bf0;
+  background: rgba(29, 155, 240, 0.1);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.ct-act-btn:hover {
+  background: rgba(29, 155, 240, 0.2);
+}
+
+.ct-act-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.ct-act-btn.del {
+  color: #f4212e;
+  background: rgba(244, 33, 46, 0.1);
+}
+
+.ct-act-btn.del:hover {
+  background: rgba(244, 33, 46, 0.2);
+}
+
+.ct-empty {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.ct-empty-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.ct-empty-sub {
+  font-size: 14px;
+  color: #71767b;
+  margin-bottom: 24px;
+  line-height: 20px;
+}
+
+/* Detail & Edit Views */
+.ct-detail-card {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color, #2f3336);
+}
+
+.ct-detail-ava {
+  width: 80px;
+  height: 80px;
+  border-radius: 9999px;
+  background: #202327;
+  color: #1d9bf0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.ct-detail-name {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.ct-detail-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.ct-detail-act-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #1d9bf0;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.ct-detail-act-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  background: rgba(29, 155, 240, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ct-detail-act-circle svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.ct-edit-form {
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ct-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ct-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #71767b;
+}
+
+.ct-input {
+  background: #16181c;
+  border: 1px solid var(--border-color, #2f3336);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+}
+
+.ct-input:focus {
+  border-color: #1d9bf0;
+  background: #000;
+}
