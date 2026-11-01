@@ -1162,7 +1162,7 @@
     if (S.engine.state === "ready" || S.engine.state === "loading") return;
     detectOnce().then(function () {
       var m = currentModel();
-      if (m && m.engine !== "instant" && (S.have[m.id] || m.engine === "nano")) {
+      if (m && m.engine !== "instant" && m.engine !== "nano" && S.have[m.id]) {
         loadModel(m).catch(function () {});
       }
     }).catch(function () {});
