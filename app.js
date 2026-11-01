@@ -28899,6 +28899,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function scheduleDeviceIndex() {
+    if (window.ViktorychLocalAIPage && window.ViktorychLocalAIPage.prewarm) {
+      try { window.ViktorychLocalAIPage.prewarm(); } catch (err) {}
+    }
     if (parseRoute().name !== "explore" && parseRoute().name !== "settings") return;
     const run = () => {
       if (gameBusy()) return;

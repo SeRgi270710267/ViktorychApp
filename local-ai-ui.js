@@ -1158,5 +1158,15 @@
   }
   if (window.SI18n && window.SI18n.onChange) window.SI18n.onChange(function () { if (S.root) paint(); });
 
-  window.ViktorychLocalAIPage = { page: page, mount: mount, unmount: unmount, _state: S, send: send, setup: function () { startSetup("full"); } };
+  function prewarm() {
+    if (S.engine.state === "ready" || S.engine.state === "loading") return;
+    detectOnce().then(function () {
+      var m = currentModel();
+      if (m && m.engine !== "instant" && (S.have[m.id] || m.engine === "nano")) {
+        loadModel(m).catch(function () {});
+      }
+    }).catch(function () {});
+  }
+
+  window.ViktorychLocalAIPage = { page: page, mount: mount, unmount: unmount, prewarm: prewarm, _state: S, send: send, setup: function () { startSetup("full"); } };
 })();
