@@ -10163,6 +10163,9 @@ const here = parseRoute();
     STATE.settings.noteClearedAt = Date.now();
     STATE.settings.noteDismissed = {};
     saveSettings();
+    if (window.ViktorychSettingAlerts && window.ViktorychSettingAlerts.clearNotes) {
+      window.ViktorychSettingAlerts.clearNotes();
+    }
     markNoteTabRead("all");
     updateBadge(bellUnread());
   }
@@ -22719,6 +22722,9 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "data-saver") {
       const saver = dataSaver();
       if (saver) saver.apply(!(STATE.settings && STATE.settings.saveData === true));
+      if (window.ViktorychSettingAlerts && window.ViktorychSettingAlerts.check) {
+        setTimeout(window.ViktorychSettingAlerts.check, 50);
+      }
       return;
     }
     if (act === "data-pref") {

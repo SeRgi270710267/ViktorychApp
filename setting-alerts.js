@@ -514,15 +514,51 @@
     });
   }
 
-  /* A passing condition is over: drop its System notice and its pop-out. */
-  function clearTransient(def, s) {
-    s.log = s.log.filter(function (e) { return e.id !== def.id; });
+  function closePop(def) {
     var A = popoutApi();
     var cur = A && A.popCurrent ? A.popCurrent() : null;
     if (cur && cur.id === "sa-" + def.id && A.popClose) A.popClose("done");
+  }
+
+  function syncNotesUi() {
     var doc = root.document;
     var notes = doc && doc.querySelector ? doc.querySelector(".sa-notes") : null;
     if (notes) redraw(".sa-notes", function () { return notesHtml() || '<section class="sa-notes" hidden></section>'; });
+    invalidateNotesCache();
+  }
+
+  function invalidateNotesCache() {
+    try {
+      if (root.ViktorychLocal && root.ViktorychLocal.saveRoute && root.ViktorychLocal.readRoute) {
+        var saved = root.ViktorychLocal.readRoute("#/notifications");
+        if (saved && typeof saved === "string") {
+          var cleaned = saved.replace(/<section class="sa-notes"[^>]*>[\s\S]*?<\/section>/g, "");
+          root.ViktorychLocal.saveRoute("#/notifications", cleaned);
+        }
+      }
+    } catch (err) { /* ignore cache clean errors */ }
+  }
+
+  /* A passing condition is over: drop its System notice and its pop-out. */
+  function clearTransient(def, s) {
+    s.log = s.log.filter(function (e) { return e.id !== def.id; });
+    closePop(def);
+    syncNotesUi();
+  }
+
+  /* When an alert condition is resolved or turned off, hide its active System
+     notes so users don't see stale notices after fixing the problem. */
+  function clearResolved(def, s) {
+    if (def.transient) {
+      clearTransient(def, s);
+      return;
+    }
+    var changed = false;
+    s.log.forEach(function (e) {
+      if (e.id === def.id && !e.gone) { e.gone = true; changed = true; }
+    });
+    closePop(def);
+    if (changed) syncNotesUi();
   }
 
   function logAlert(def, level, v) {
@@ -535,6 +571,7 @@
   function fire(def, level, r, s, p) {
     var v = varsOf(def, r);
     var entry = logAlert(def, level, v).log.pop();
+    s.log.forEach(function (e) { if (e.id === def.id) e.gone = true; });
     s.log.push(entry);
     var rank = RANK[level];
     if (!def.silent && !(rank < RANK.critical && quietNow(p))) feedback(def, level, entry);
@@ -571,11 +608,13 @@
         fire(def, level, r, s, p);
         fired.push({ id: def.id, level: level });
       } else if (RANK[level] < RANK[prev]) {
-        if (def.transient && level === "ok") clearTransient(def, s);
+        if (level === "ok") clearResolved(def, s);
         /* Re-arm only once usage is clearly lower, so a value that hovers on
            a threshold does not pop again and again. */
         var eased = def.kind === "percent" ? levelOf(def, r, p, 2) : level;
         if (RANK[eased] < RANK[prev]) s.fired[def.id] = eased;
+      } else if (level === "ok" && s.log.some(function (e) { return e.id === def.id && !e.gone; })) {
+        clearResolved(def, s);
       }
     });
     saveState(s);
@@ -958,7 +997,8 @@
     dataReadings(out);
 
     var conn = nav.connection || null;
-    var saverOn = settings.saveData === true;
+    var ds = root.ViktorychDataSaver;
+    var saverOn = settings.saveData === true || !!(ds && ds.isOn && ds.isOn()) || (settings.autoplay && settings.autoplay !== "all" && (settings.imageLoad === "wifi" || settings.imageSize === "small"));
     if (conn && !saverOn) {
       var slow = /^(slow-2g|2g)$/.test(String(conn.effectiveType || ""));
       var cell = conn.type === "cellular";
@@ -1174,16 +1214,35 @@
     if (act === "back") { goBack(); return true; }
     if (act === "note-dismiss") {
       var at = Number(el.getAttribute("data-at"));
-      var s = state();
-      s.log.forEach(function (e) { if (e.at === at) e.gone = true; });
-      saveState(s);
       var row = el.closest ? el.closest("[data-sa-note]") : null;
-      if (row && row.parentNode) row.parentNode.removeChild(row);
+      var noteLink = row && row.querySelector ? row.querySelector("[data-id]") : null;
+      var alertId = noteLink ? noteLink.getAttribute("data-id") : "";
+      var s = state();
+      s.log.forEach(function (e) { if (e.at === at || (alertId && e.id === alertId)) e.gone = true; });
+      if (alertId === "mobile-data") { p.off["mobile-data"] = true; setPrefs({ off: p.off }); }
+      saveState(s);
+      if (row && row.parentNode) {
+        var sec = row.parentNode;
+        sec.removeChild(row);
+        if (sec.classList && sec.classList.contains("sa-notes") && !sec.querySelector(".sa-note")) sec.hidden = true;
+      }
+      invalidateNotesCache();
       return true;
     }
     if (act === "note-open") {
       var def = byId(el.getAttribute("data-id"));
-      if (def) { if (event) event.preventDefault(); openSettings(def, { manual: true, title: def.label(), desc: "", level: "info" }); }
+      if (def) {
+        if (def.id === "mobile-data") {
+          var dsApi = root.ViktorychDataSaver;
+          if (dsApi && dsApi.apply) dsApi.apply(true);
+          var st = state();
+          st.log.forEach(function (e) { if (e.id === "mobile-data") e.gone = true; });
+          saveState(st);
+          syncNotesUi();
+        }
+        if (event) event.preventDefault();
+        openSettings(def, { manual: true, title: def.label(), desc: "", level: "info" });
+      }
       return true;
     }
     if (act === "preview") { preview(el.getAttribute("data-value")); return true; }
@@ -1323,6 +1382,12 @@
     goBack: goBack,
     preview: preview,
     state: state,
+    clearNotes: function () {
+      var s = state();
+      s.log.forEach(function (e) { e.gone = true; });
+      saveState(s);
+      syncNotesUi();
+    },
     redirectState: function () {
       return { pending: redirect.pending ? redirect.pending.id : "", counting: !!redirect.countdown, active: redirect.active ? { id: redirect.active.id, from: redirect.active.from, to: redirect.active.to } : null };
     },

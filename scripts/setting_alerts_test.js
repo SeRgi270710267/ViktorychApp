@@ -104,6 +104,10 @@ function setup(opts) {
   const listeners = {};
   const winListeners = {};
   const shows = [];
+  function dispatchDocClick(target) {
+    const ev = { target, preventDefault() {}, stopPropagation() {} };
+    (listeners.click || []).forEach((fn) => fn(ev));
+  }
   const document = {
     readyState: "complete", body: dom.body, documentElement: dom.html, visibilityState: "visible", activeElement: dom.body,
     createElement(tag) { return dom.el(tag); },
@@ -177,7 +181,7 @@ function setup(opts) {
     dom.body.appendChild(page);
     return page;
   }
-  return { sa, ach: sandbox.ViktorychAchievements, sandbox, dom, document, store, session, shows, advance, setHash, renderPage, now: () => clock };
+  return { sa, ach: sandbox.ViktorychAchievements, sandbox, dom, document, store, session, shows, advance, setHash, renderPage, dispatchDocClick, now: () => clock };
 }
 
 const GB = 1024 * 1024 * 1024;
@@ -539,6 +543,86 @@ const popsOf = (t, id) => t.shows.filter((s) => s.id === id);
   const iconCss = read("setting-alerts.css") + read("badges.css");
   assert(/\.sa-note-ico svg[^}]*\}/.test(iconCss) && iconCss.includes("fill: currentColor"), "glyphs fill with currentColor");
   assert(!EMOJI.test(read("setting-alerts.js")), "setting-alerts.js has no emoji");
+  // Regression: mobile-data alert auto-resolves when Data Saver is on,
+  // dismissing removes duplicates and mutes subsequent cellular popups,
+  // and tapping 'Turn on Data saver' activates ViktorychDataSaver.
+  {
+    const m = setup({ prefs: { autoOpen: false } });
+    let dsApplied = false;
+    m.sandbox.ViktorychDataSaver = {
+      _on: false,
+      isOn() { return this._on; },
+      apply(v) { this._on = !!v; dsApplied = true; return this._on; }
+    };
+    m.sandbox.navigator.connection = { type: "cellular" };
+
+    // 1. Initial measurement on cellular triggers mobile-data info notice
+    let out = await m.sa.measure();
+    assert(out["mobile-data"], "mobile-data flagged on cellular");
+    m.sa.evaluate(out);
+    assert(m.sa.notesHtml().includes("mobile-data") || m.sa.notesHtml().includes("data-saver") || m.sa.notesHtml().includes("sa-note"), "mobile-data notice present in notesHtml");
+
+    // 2. Measure again on cellular: deduplication ensures no duplicate active notes
+    out = await m.sa.measure();
+    m.sa.evaluate(out);
+    const count = (m.sa.notesHtml().match(/data-sa-note=/g) || []).length;
+    assert.equal(count, 1, "deduplication prevents duplicate mobile-data notes in notesHtml");
+
+    // 3. Test dismissing a mobile-data notice via note-dismiss
+    const noteEl = m.dom.el("article");
+    noteEl.className = "sa-note";
+    const xBtn = m.dom.el("button");
+    xBtn.setAttribute("data-sa", "note-dismiss");
+    const activeEntry = m.sa.state().log.find((e) => e.id === "mobile-data" && !e.gone);
+    xBtn.setAttribute("data-at", String(activeEntry.at));
+    const innerLink = m.dom.el("a");
+    innerLink.setAttribute("data-id", "mobile-data");
+    noteEl.appendChild(innerLink);
+    noteEl.appendChild(xBtn);
+    xBtn.closest = (sel) => (sel === "[data-sa]" ? xBtn : sel === "[data-sa-note]" ? noteEl : null);
+    m.dom.body.appendChild(noteEl);
+    m.dispatchDocClick(xBtn);
+    assert(!m.sa.notesHtml().includes("mobile-data"), "dismissed note is gone from notesHtml");
+    assert.equal(m.sa.prefs().off["mobile-data"], true, "mobile-data is muted after explicit dismissal");
+
+    // 4. Activating Data Saver clears resolved mobile-data notices automatically
+    const pr = m.sa.prefs();
+    delete pr.off["mobile-data"];
+    m.sa.setPrefs({ off: pr.off });
+    m.sa.evaluate({ "mobile-data": null });
+    m.advance(180000);
+    out = await m.sa.measure();
+    m.sa.evaluate(out);
+    assert(m.sa.notesHtml().includes("data-sa-note="), "notice returns when unmuted");
+
+    m.sandbox.ViktorychDataSaver._on = true;
+    out = await m.sa.measure();
+    assert.equal(out["mobile-data"], null, "measure sees data saver and clears mobile-data");
+    m.sa.evaluate(out);
+    assert(!m.sa.notesHtml().includes("mobile-data"), "notesHtml no longer shows resolved mobile-data note");
+
+    // 5. Turn off Data Saver to test tapping 'Turn on Data saver' (note-open on mobile-data)
+    m.sandbox.ViktorychDataSaver._on = false;
+    m.advance(180000);
+    out = await m.sa.measure();
+    m.sa.evaluate(out);
+    assert(m.sa.notesHtml().includes("data-sa-note="), "notice reappears on cellular when data saver is off");
+    const linkEl = m.dom.el("a");
+    linkEl.setAttribute("data-sa", "note-open");
+    linkEl.setAttribute("data-id", "mobile-data");
+    linkEl.closest = (sel) => (sel === "[data-sa]" ? linkEl : null);
+    m.document.body.appendChild(linkEl);
+    m.dispatchDocClick(linkEl);
+    assert.equal(dsApplied, true, "clicking action button applies data saver");
+    assert(!m.sa.notesHtml().includes("mobile-data"), "note cleared immediately upon activation");
+
+    // 6. Test clearNotes clears all
+    m.sa.evaluate(disk(81));
+    assert(m.sa.notesHtml().length > 0, "storage warning exists");
+    m.sa.clearNotes();
+    assert.equal(m.sa.notesHtml(), "", "clearNotes empties notesHtml");
+  }
+
   console.log("ok setting alerts");
   /* The local-store alert's numbers come from the localStorage budget. */
   require("child_process").execFileSync(process.execPath, [require("path").join(__dirname, "local_budget_test.js")], { stdio: "inherit" });
