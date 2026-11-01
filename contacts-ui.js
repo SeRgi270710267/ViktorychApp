@@ -155,7 +155,10 @@
           '<div class="gc-mig-title">' + esc(tr("New: Google Contacts Clone Ready")) + '</div>' +
           '<div class="gc-mig-sub">' + esc(tr("Your installed ViktorychApp can now handle device phone calls, address book sync, and vCards offline.")) + '</div>' +
         '</div>' +
-        '<button class="gc-btn-action" data-act="ct-dismiss-mig">' + esc(tr("Got it")) + '</button>' +
+        '<div class="gc-mig-actions">' +
+          '<button class="gc-btn-upgrade" data-act="ct-upgrade-pwa">' + icon("plus") + ' ' + esc(tr("Upgrade app shortcut")) + '</button>' +
+          '<button class="gc-btn-action" data-act="ct-dismiss-mig">' + esc(tr("Got it")) + '</button>' +
+        '</div>' +
       '</div>' +
     '</div>';
   }
@@ -450,6 +453,19 @@
   }
 
   function onAct(act, el) {
+    if (act === "ct-upgrade-pwa") {
+      dismissMigration();
+      if (typeof window !== "undefined") {
+        if (window.installPromptNow && window.installPromptNow()) {
+          var p = window.installPromptNow();
+          if (p && p.prompt) p.prompt();
+        } else {
+          location.hash = "#/settings/resources";
+        }
+      }
+      return;
+    }
+
     if (act === "ct-dismiss-mig") {
       dismissMigration();
       return;

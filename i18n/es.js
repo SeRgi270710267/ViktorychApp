@@ -5782,5 +5782,6 @@ SI18n.addPack("es", {
   "Install ViktorychApp to open phone numbers directly and manage your contacts offline.": "Instale ViktorychApp para abrir números de teléfono directamente y gestionar sus contactos sin conexión.",
   "No Name": "Sin nombre",
   "Mobile": "Móvil",
-  "Phone": "Teléfono"
+  "Phone": "Teléfono",
+  "Upgrade app shortcut": "Actualizar acceso directo"
 });

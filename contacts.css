@@ -713,3 +713,35 @@
   font-weight: 700;
   cursor: pointer;
 }
+
+.gc-mig-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gc-btn-upgrade {
+  background: #1d9bf0;
+  color: #fff;
+  border: none;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.15s ease;
+}
+
+.gc-btn-upgrade:hover {
+  opacity: 0.9;
+}
+
+.gc-btn-upgrade svg {
+  width: 14px;
+  height: 14px;
+}
