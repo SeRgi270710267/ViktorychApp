@@ -5784,5 +5784,8 @@ SI18n.addPack("en", {
   "Viktorych Profiles": "Viktorych Profiles",
   "Share contact": "Share contact",
   "Send message": "Send message",
-  "Viktorych / X Profile": "Viktorych / X Profile"
+  "Viktorych / X Profile": "Viktorych / X Profile",
+  "Default dialer, phone calls & offline contacts on Android.": "Default dialer, phone calls & offline contacts on Android.",
+  "Refresh native Android dialer, protocol handlers and shortcuts.": "Refresh native Android dialer, protocol handlers and shortcuts.",
+  "To upgrade system integration, reinstall from browser menu or allow Android WebAPK background update.": "To upgrade system integration, reinstall from browser menu or allow Android WebAPK background update."
 });

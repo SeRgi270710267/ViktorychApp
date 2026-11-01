@@ -5787,5 +5787,8 @@ SI18n.addPack("es", {
   "Viktorych Profiles": "Perfiles de Viktorych",
   "Share contact": "Compartir contacto",
   "Send message": "Enviar mensaje",
-  "Viktorych / X Profile": "Perfil de Viktorych / X"
+  "Viktorych / X Profile": "Perfil de Viktorych / X",
+  "Default dialer, phone calls & offline contacts on Android.": "Marcador predeterminado, llamadas y contactos sin conexión en Android.",
+  "Refresh native Android dialer, protocol handlers and shortcuts.": "Actualizar el marcador nativo de Android, controladores de protocolos y accesos directos.",
+  "To upgrade system integration, reinstall from browser menu or allow Android WebAPK background update.": "Para actualizar la integración del sistema, vuelva a instalar desde el menú del navegador o espere la actualización de WebAPK."
 });

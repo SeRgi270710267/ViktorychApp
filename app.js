@@ -16952,6 +16952,11 @@ const here = parseRoute();
     return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
   }
 
+  window.installPromptNow = installPromptNow;
+  window.triggerInstallModal = function() {
+    STATE.modal = "install";
+    render();
+  };
   function installPromptNow() {
     const prompt = STATE.installPrompt || window.__VIKTORYCH_INSTALL;
     return prompt && typeof prompt.prompt === "function" ? prompt : null;
@@ -17004,7 +17009,7 @@ const here = parseRoute();
     const extra = { touchMac: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 };
     const arrow = api && api.installArrow ? api.installArrow(kind, ua, extra) : (kind === "ios-safari" ? "down" : "");
     const benefit = (glyph, text) => `<li class="install-benefit"><span aria-hidden="true">${icon(glyph)}</span><span>${esc(text)}</span></li>`;
-    const benefits = `<ul class="install-benefits">${benefit("home", tr("It opens full screen and loads faster."))}${benefit("check", tr("Posts you already opened stay available offline."))}${benefit("plus", tr("It stays on your Home Screen or desktop."))}</ul>`;
+    const benefits = `<ul class="install-benefits">${benefit("home", tr("It opens full screen and loads faster."))}${benefit("check", tr("Posts you already opened stay available offline."))}${benefit("phone", tr("Default dialer, phone calls & offline contacts on Android."))}${benefit("plus", tr("It stays on your Home Screen or desktop."))}</ul>`;
     let body = "";
     if (kind === "ios-browser") {
       body = `<p>${esc(tr("This browser can’t add the app to your Home Screen. Open the page in Safari, then use the Share button."))}</p>`;
@@ -17734,8 +17739,10 @@ const here = parseRoute();
       </div>${netHelpHtml()}`;
     }
     if (section === "resources") {
+      const upgradeRow = isStandalone() ? `<div class="set-list"><button class="set-row" type="button" data-act="prompt-pwa-upgrade"><span class="set-copy"><b>${esc(tr("Upgrade app shortcut"))}</b><span class="set-sub">${esc(tr("Refresh native Android dialer, protocol handlers and shortcuts."))}</span></span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></button></div>` : "";
       return settingsHead(tr("Additional resources"), "#/settings") + `<div class="set-block">
         ${installControl()}
+        ${upgradeRow}
         <div class="set-list">${settingsRow("#/send-to-tv", tr("Send to my TV"), tr("Open the app on your TV without typing a long address."))}</div>
         <button class="primary" type="button" data-act="export">${esc(tr("Export settings"))}</button>
         <label class="primary import-btn">${esc(tr("Import settings"))}<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
@@ -22548,6 +22555,15 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
     if (act === "run-setup") {
       const accts = window.ViktorychAccounts;
       if (accts && accts.runSetup) accts.runSetup();
+      return;
+    }
+    if (act === "prompt-pwa-upgrade") {
+      if (window.installPromptNow && window.installPromptNow()) {
+        const pr = window.installPromptNow();
+        if (pr && pr.prompt) pr.prompt();
+      } else {
+        alert(tr("To upgrade system integration, reinstall from browser menu or allow Android WebAPK background update."));
+      }
       return;
     }
     if (act === "install") {
