@@ -4976,7 +4976,10 @@ function signupPayload() {
       var badge = item.followsYou ? '<span class="pill-badge">' + esc(tr("Follows you")) + '</span>' : "";
       var remove = mine && tab === "followers" && item.removable ? '<button class="outline" type="button" data-act="remove-follower" data-id="' + esc(person.id) + '">' + esc(tr("Remove follower")) + '</button>' : "";
       var accept = mine && tab === "requests" ? '<button class="friend-btn friend-accept" type="button" data-act="accept-follow" data-id="' + esc(person.id) + '">' + esc(tr("Accept")) + '</button><button class="friend-btn friend-decline" type="button" data-act="decline-follow" data-id="' + esc(person.id) + '">' + esc(tr("Decline")) + '</button>' : "";
-      var href = person.handle ? "#/@" + encodeURIComponent(person.handle) : (person.id ? "#/p/" + encodeURIComponent(String(person.id).replace(/^app:/, "")) : "#/");
+      var pid = String(person.id || "");
+      var cut = pid.indexOf(":");
+      var pPlat = String(item.platform || (cut > 0 ? pid.slice(0, cut) : "app")).toLowerCase();
+      var href = person.handle ? (pPlat && pPlat !== "app" && pPlat !== "x" ? "#/" + encodeURIComponent(pPlat) + "/" + encodeURIComponent(person.handle) : "#/@" + encodeURIComponent(person.handle)) : (pid ? "#/p/" + encodeURIComponent(pid.replace(/^app:/, "")) : "#/");
       var letter = String(person.name || person.handle || "?").trim().charAt(0).toUpperCase() || "?";
       var face = publicAvatar(person.avatar, person.avatarFace, "", letter);
       // Your own Following list: ⋯ or a long press locks the follow. The
