@@ -3485,8 +3485,6 @@ SI18n.addPack("es", {
   "Verified account": "Cuenta verificada",
   "Who can see it": "Quién puede verla",
   "Explain this post": "Explicar este post",
-  "Explain this post by {handle}: \"{text}\"": "Explicar este post de {handle}: \"{text}\"",
-  "Explain this post: \"{text}\"": "Explicar este post: \"{text}\"",
   "Profile picture shape": "Forma de la foto de perfil",
   "Round": "Redonda",
   "Square": "Cuadrada",

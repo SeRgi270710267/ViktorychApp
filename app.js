@@ -22005,9 +22005,8 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if (!post) { goHash("#/ai"); return; }
       const author = post.handle ? `@${internalPostHandle(post.handle)}` : (post.author || "");
       const body = String(post.text || post.title || "").trim();
-      const prompt = body
-        ? (author ? tr("Explain this post by {handle}: \"{text}\"", { handle: author, text: body }) : tr("Explain this post: \"{text}\"", { text: body }))
-        : tr("Explain this post");
+      const prefix = tr("Explain this post");
+      const prompt = body ? (prefix + (author ? " (" + author + "): " : ": ") + "\"" + body + "\"") : prefix;
       goHash("#/ai?q=" + encodeURIComponent(prompt) + "&postId=" + encodeURIComponent(post.id));
       return;
     }

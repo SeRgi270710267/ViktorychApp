@@ -3485,8 +3485,6 @@ SI18n.addPack("en", {
   "Verified account": "Verified account",
   "Who can see it": "Who can see it",
   "Explain this post": "Explain this post",
-  "Explain this post by {handle}: \"{text}\"": "Explain this post by {handle}: \"{text}\"",
-  "Explain this post: \"{text}\"": "Explain this post: \"{text}\"",
   "Profile picture shape": "Profile picture shape",
   "Round": "Round",
   "Square": "Square",

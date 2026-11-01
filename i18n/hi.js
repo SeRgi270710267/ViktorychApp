@@ -3938,8 +3938,6 @@ SI18n.addPack("hi", {
   "Menus": "मेन्यू",
   "Menu: {name}": "मेन्यू: {name}",
   "Explain this post": "इस पोस्ट को समझाएँ",
-  "Explain this post by {handle}: \"{text}\"": "{handle} की इस पोस्ट को समझाएँ: \"{text}\"",
-  "Explain this post: \"{text}\"": "इस पोस्ट को समझाएँ: \"{text}\"",
   "Nearby chat (Bitchat)": "आस-पास चैट (Bitchat)",
   "The backup chat offered when nothing else loads: Bluetooth on the TV app, public Nostr area chat in browsers.": "जब कुछ और लोड न हो, तब मिलने वाली बैकअप चैट: TV ऐप में ब्लूटूथ, ब्राउज़र में सार्वजनिक Nostr इलाक़ा चैट।",
   "Nearby chat": "आस-पास चैट",
