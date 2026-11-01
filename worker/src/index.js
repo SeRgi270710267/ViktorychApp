@@ -4195,6 +4195,11 @@ async function handleTikTokAccounts(request, env) {
       }
     }
     await writeTikTokAccounts(env, doc);
+    if (env.DB && gate.row && gate.row.public_id && handle) {
+      const followId = "tiktok:" + handle;
+      const snap = cleanFollowSnapshot(followId, { handle, name: row.name || handle, avatar: row.avatar || "", platform: "tiktok" });
+      await env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(follower_id, target_id) DO UPDATE SET snapshot = CASE WHEN excluded.snapshot <> '' THEN excluded.snapshot ELSE account_follows.snapshot END").bind(gate.row.public_id, followId, snap, Date.now()).run();
+    }
     let dispatched = false;
     try { dispatched = await dispatchAddedAccounts(env); }
     catch (err) { dispatched = false; }
@@ -4883,6 +4888,11 @@ async function handleAddedAccounts(request, env, url) {
       }
     }
     await writeAddedAccounts(env, doc);
+    if (env.DB && gate.row && gate.row.public_id && handle) {
+      const followId = "x:" + handle;
+      const snap = cleanFollowSnapshot(followId, { handle, name: row.name || handle, avatar: row.avatar || "", bio: row.bio || "", platform: "x" });
+      await env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(follower_id, target_id) DO UPDATE SET snapshot = CASE WHEN excluded.snapshot <> '' THEN excluded.snapshot ELSE account_follows.snapshot END").bind(gate.row.public_id, followId, snap, Date.now()).run();
+    }
     let dispatched = false;
     try { dispatched = await dispatchWorkflows(env, ["sync.yml", "media-extract.yml"]); }
     catch (err) { dispatched = false; }
@@ -5028,15 +5038,23 @@ function followFeedCard(targetId, snapshot) {
   try { snap = snapshot ? JSON.parse(snapshot) : {}; }
   catch (err) { snap = {}; }
   if (!snap || typeof snap !== "object") snap = {};
+  const raw = String(targetId || "");
+  const cut = raw.indexOf(":");
+  const derivedPlatform = cut > 0 ? raw.slice(0, cut).toLowerCase() : "";
+  const derivedHandle = cut > 0 ? raw.slice(cut + 1).replace(/^@/, "") : "";
+  const handle = typeof snap.handle === "string" && snap.handle ? snap.handle : derivedHandle;
+  const displayName = typeof snap.displayName === "string" ? snap.displayName : "";
+  const name = typeof snap.name === "string" && snap.name ? snap.name : (displayName || handle);
+  const platform = typeof snap.platform === "string" && snap.platform ? snap.platform : (derivedPlatform && derivedPlatform !== "app" ? derivedPlatform : "");
   return {
     id: targetId,
     kind: "feed",
-    handle: typeof snap.handle === "string" ? snap.handle : "",
-    name: typeof snap.name === "string" && snap.name ? snap.name : (typeof snap.displayName === "string" ? snap.displayName : ""),
-    displayName: typeof snap.displayName === "string" ? snap.displayName : "",
+    handle,
+    name,
+    displayName,
     avatar: typeof snap.avatar === "string" ? snap.avatar : "",
     bio: typeof snap.bio === "string" ? snap.bio : "",
-    platform: typeof snap.platform === "string" ? snap.platform : ""
+    platform
   };
 }
 

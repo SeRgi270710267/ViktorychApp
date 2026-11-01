@@ -1535,6 +1535,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(left || "").toLowerCase() === String(right || "").toLowerCase();
   }
   function isFollowed(id) {
+    if (id && window.ViktorychLocked && window.ViktorychLocked.hidesId && window.ViktorychLocked.hidesId(id)) return false;
     const list = String(id || "").indexOf("app:") === 0 ? (STATE.settings.accountFollows || []) : (STATE.settings.follows || []);
     return list.some((item) => sameFollowId(item, id));
   }
@@ -14068,8 +14069,13 @@ const here = parseRoute();
       if (!target.own && (target.feedId || target.handle) && target.platform !== "app") rows.push(profileSheetRow("busy-menu", tr("Posting volume"), `data-key="${esc(target.feedId || ((target.platform || "x") + ":" + String(target.handle || "").toLowerCase()))}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}" data-platform="${esc(target.platform || "x")}"`));
       const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
       if (!target.own && target.feedId.indexOf("app:") === 0 && signed) rows.push(profileSheetRow("profile-block", tr("Block"), `data-id="${esc(target.feedId)}"`));
-      const lockId = target.feedId || (target.platform === "app" && target.handle ? "app:@" + String(target.handle).replace(/^@/, "") : "");
-      if (!target.own && lockId && signed && window.ViktorychLocked && isFollowed(lockId)) rows.push(profileSheetRow("profile-lock-follow", tr("Lock follow"), `data-id="${esc(lockId)}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}"`));
+      const rawHandle = String(target.handle || "").replace(/^@/, "");
+      const fallbackLockId = target.platform && rawHandle ? (target.platform === "app" ? "app:@" + rawHandle : target.platform + ":" + rawHandle) : "";
+      const baseLockId = target.feedId || fallbackLockId;
+      const lockCandidates = (window.FeedsPeople && window.FeedsPeople.followIds && baseLockId ? window.FeedsPeople.followIds(baseLockId) : []).concat([target.feedId, fallbackLockId]).filter(Boolean);
+      const followedLockId = lockCandidates.find((id) => isFollowed(id));
+      const lockId = followedLockId || (fallbackLockId && String(baseLockId).indexOf("person:") === 0 ? fallbackLockId : baseLockId);
+      if (!target.own && lockId && signed && window.ViktorychLocked && (followedLockId || accountFollowed(baseLockId))) rows.push(profileSheetRow("profile-lock-follow", tr("Lock follow"), `data-id="${esc(lockId)}" data-name="${esc(target.name || "")}" data-handle="${esc(target.handle || "")}"`));
       if (target.feedId) rows.push(profileSheetRow("profile-lists", tr("Add or remove from lists")));
       if (target.feedId || target.handle) rows.push(profileSheetRow("profile-cm-tab", tr("Add to Communities tab"), `data-id="${esc(target.feedId || (target.platform + ":" + target.handle))}" data-name="${esc(target.name || target.handle || "")}"`));
     }
