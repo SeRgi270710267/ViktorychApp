@@ -6323,7 +6323,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0), tr("Like"))}
         ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), shownCount(stats.bookmarks, booked ? 1 : 0), tr("Bookmark"))}
         ${btn("share", "share", "share", tr("Share"), "", tr("Share"))}
-        ${laiBtn}
       </div>
     </div>`;
     }
@@ -9419,6 +9418,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const items = follow
       + `<button type="button" data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button>`
       + `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`
+      + (localAiOn() ? `<button type="button" data-act="lai-post" data-id="${esc(post.id)}">${icon("spark")} ${tr("Explain this post")}</button>` : "")
       + `<button type="button" class="odai-btn" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button>`
       + (post.appPost ? appMenuItems(post) : (post.url ? `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""))
       + blockMenuItems(post, "status")
@@ -14678,7 +14678,7 @@ const here = parseRoute();
             <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>${affSlot(post)}
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(statusHandle)}</a>
           </div>
-          <span class="status-end">${postSourceBadges(post)}${statusMenu(post)}</span>`;
+          <span class="status-end">${postSourceBadges(post)}${localAiOn() ? `<button class="explain-btn lai-explain-btn" type="button" data-act="lai-post" data-id="${esc(post.id)}" aria-label="${esc(tr("Explain this post"))}" data-tooltip="${esc(tr("Explain this post"))}">${icon("spark")}</button>` : ""}${statusMenu(post)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
       ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author, isOrgVerified(post, face) ? "sq" : "")}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
@@ -25052,7 +25052,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     paintProfileChrome();
     const homeStories = parseRoute().name === "home" && document.querySelector(".story-shell");
     const isBarNav = document.documentElement.getAttribute("data-nav-layout") === "bar";
-    if ((window.innerWidth >= 1024 && !isBarNav) || homeStories) {
+    if ((window.innerWidth >= 500 && !isBarNav) || homeStories) {
       STATE.headerHidden = false;
       paintChromeHidden(false);
       return;
