@@ -6312,6 +6312,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const quoteOnX = replyOnX ? `<button type="button" data-act="xc-quote" data-id="${esc(id)}">${tr("Quote on X")}</button>` : "";
     const repostMenu = menuOpen ? `<div class="menu repost-menu" data-act="stop" role="menu" aria-label="${esc(tr("Repost"))}"><button type="button" data-act="repost-do" data-id="${esc(id)}">${reposted ? tr("Undo repost") : tr("Repost")}</button><button type="button" data-act="quote-open" data-id="${esc(id)}">${tr("Quote")}</button>${quoteOnX}</div>` : "";
     const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0), tr("Repost"))}${repostMenu}</span>`;
+    const laiBtn = localAiOn() ? btn("lai-action", "lai-post", "spark", tr("Explain this post"), "", tr("Explain this post")) : "";
     if (detail) {
       return `<div class="actions status-actions">
       <div class="action-stats">
@@ -6321,6 +6322,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0), tr("Like"))}
         ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), shownCount(stats.bookmarks, booked ? 1 : 0), tr("Bookmark"))}
         ${btn("share", "share", "share", tr("Share"), "", tr("Share"))}
+        ${laiBtn}
       </div>
     </div>`;
     }
@@ -6333,6 +6335,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${btn("views", "open-status", "views", tr("Views"), shownCount(stats.views, 0), tr("Views"))}
       </div>
       <div class="action-more">
+        ${laiBtn}
         ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), "", tr("Bookmark"))}
         ${btn("share", "share", "share", tr("Share"), "", tr("Share"))}
       </div>
@@ -9904,7 +9907,7 @@ const here = parseRoute();
     const busyItem = busyKey ? `<button data-act="busy-menu" data-key="${esc(busyKey)}" data-name="${esc(post.author || post.name || "")}" data-handle="${esc(post.handle || "")}" data-platform="${esc(post.platform || "x")}">${tr("Posting volume")}</button>` : "";
     const giftItem = `<button type="button" data-gift="reply" data-parent="${esc(post.id || "")}" data-handle="${esc(post.handle || "")}">${tr("Send a gift")}</button>`;
     const blockItems = STATE.menu === post.id ? blockMenuItems(post, mode) : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: post.cmSource || PLATFORM[post.platform] || tr("Web") })}</a>${post.cmMirror ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : ""}`}</div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop">${localAiOn() ? `<button type="button" data-act="lai-post" data-id="${esc(post.id)}">${icon("spark")} ${tr("Explain this post")}</button>` : ""}<button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${giftItem}${cnMenu(post)}${forYouItem}${busyItem}${histItem}${repostItem}${quoteDelete}${blockItems}${post.appPost ? appMenuItems(post) : `<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: post.cmSource || PLATFORM[post.platform] || tr("Web") })}</a>${post.cmMirror ? `<button type="button" data-act="mute-community" data-name="${esc(post.community.name)}">${esc(tr("Mute community"))}</button>` : ""}`}</div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -9945,7 +9948,7 @@ const here = parseRoute();
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${post.edited ? `<span class="edited">${tr("Edited")}</span>` : ""}
             ${postSourceBadges(post)}
-            ${shown.text && String(shown.text).trim().length > 20 ? `<button class="explain-btn odai-btn" type="button" data-act="odai-summarize" data-key="${esc(post.id)}" data-scope="post" aria-label="${esc(tr("Explain this post"))}" data-tooltip="${esc(tr("Explain this post"))}">${icon("aiExplain")}</button>` : ""}
+            ${localAiOn() ? `<button class="explain-btn lai-explain-btn" type="button" data-act="lai-post" data-id="${esc(post.id)}" aria-label="${esc(tr("Explain this post"))}" data-tooltip="${esc(tr("Explain this post"))}">${icon("spark")}</button>` : ""}
             <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="${tr("More")}">${icon("more")}</button>
           </div>
           ${reply}
@@ -21994,6 +21997,18 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       if ((location.hash || "#/") !== next) history.replaceState(null, "", next);
       SCROLLS[routeScrollKey()] = 0;
       render({ y: 0 });
+      return;
+    }
+    if (act === "lai-post") {
+      const post = locatePost(el.dataset.id) || findAnyPost(el.dataset.id);
+      STATE.menu = null;
+      if (!post) { goHash("#/ai"); return; }
+      const author = post.handle ? `@${internalPostHandle(post.handle)}` : (post.author || "");
+      const body = String(post.text || post.title || "").trim();
+      const prompt = body
+        ? (author ? tr("Explain this post by {handle}: \"{text}\"", { handle: author, text: body }) : tr("Explain this post: \"{text}\"", { text: body }))
+        : tr("Explain this post");
+      goHash("#/ai?q=" + encodeURIComponent(prompt) + "&postId=" + encodeURIComponent(post.id));
       return;
     }
     if (act === "foryou-hide" || act === "foryou-less") {

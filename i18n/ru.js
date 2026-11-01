@@ -3485,6 +3485,8 @@ SI18n.addPack("ru", {
   "Verified account": "Подтверждённый аккаунт",
   "Who can see it": "Кто может видеть",
   "Explain this post": "Объяснить этот пост",
+  "Explain this post by {handle}: \"{text}\"": "Объяснить этот пост от {handle}: «{text}»",
+  "Explain this post: \"{text}\"": "Объяснить этот пост: «{text}»",
   "Profile picture shape": "Форма фото профиля",
   "Round": "Круглая",
   "Square": "Квадратная",

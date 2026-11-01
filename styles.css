@@ -6547,7 +6547,7 @@ html[data-theme="default"] .logo-preview { color: #000; }
    subtext 13/16, 40px avatar in a 40px column, 8px gap, 16px side padding).
    Desktop (1000px and up) keeps its own X desktop rules above. */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-.explain-btn { display: none; }
+/* .explain-btn handled below */
 /* The handle shrinks first and never grows, so "· 12h" sits right after it. */
 .byline .handle { flex: 0 100 auto; }
 @media (max-width: 999px) {
@@ -7326,3 +7326,38 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 .lai-fab { position: fixed; right: 20px; bottom: 20px; z-index: 19; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--blue); color: #fff; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
 .lai-fab svg { width: 26px; height: 26px; fill: currentColor; }
 @media (max-width: 699px) { .lai-fab { right: 16px; bottom: calc(140px + env(safe-area-inset-bottom)); width: 48px; height: 48px; } }
+
+
+.byline .explain-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  border-radius: 9999px;
+  margin-left: auto;
+  cursor: pointer;
+}
+.byline .explain-btn:hover {
+  color: var(--link, var(--blue));
+  background: var(--blue-dim);
+}
+.byline .explain-btn + .more-btn {
+  margin-left: 2px;
+}
+.byline .explain-btn svg {
+  width: 18.75px;
+  height: 18.75px;
+  fill: currentColor;
+}
+.action.lai-action:hover {
+  color: var(--link, var(--blue));
+}
+.action.lai-action:hover .ic::after {
+  background: var(--blue-dim);
+}

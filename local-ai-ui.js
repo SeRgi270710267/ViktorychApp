@@ -1140,6 +1140,18 @@
       if (S.inFocus && box && (!document.activeElement || document.activeElement === document.body)) box.focus();
     }
     document.documentElement.classList.add("lai-on");
+    var queryPrompt = route && route.query && route.query.get && route.query.get("q");
+    if (queryPrompt && queryPrompt.trim()) {
+      var qVal = queryPrompt.trim();
+      var input = S.root.querySelector(".lai-input");
+      if (input) { input.value = qVal; grow(input); }
+      if (!S.setup && !S.busy) {
+        var mNow = currentModel();
+        if (mNow.engine === "instant" || S.engine.state === "ready") {
+          send(qVal);
+        }
+      }
+    }
   }
   function unmount() {
     document.documentElement.classList.remove("lai-on");
