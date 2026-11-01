@@ -27,6 +27,7 @@ function staticChecks() {
   const external = app.slice(app.indexOf("function profileView"), app.indexOf("function statusView"));
   if (external.includes("?tab=gifts") || external.includes("ProfileGifts")) fail("external profiles must not show gifts");
   if (!read("sw.js").includes('VERSION = "viktorych-a278-__SW_VERSION__"')) fail("service worker cache was not bumped");
+
   console.log("ok points layout rules");
 }
 

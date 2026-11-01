@@ -4,7 +4,8 @@ const VERSION = "viktorych-a278-__SW_VERSION__";
 const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
-// cache-bust: 2026-11-01T14:23:00.022Z-explain-post-clean
+// cache-bust: 2026-11-01T14:33:06.910Z-display-names-x-ui
+
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -277,6 +278,7 @@ const LAZY_FILES = ["./hls-1.7.3.min.js", "./mpegts-1.8.0.min.js", "./fonts/inte
 function versionSha(version) {
   const text = String(version || "");
   const prefix = "viktorych-a278-";
+
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";

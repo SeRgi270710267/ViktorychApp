@@ -222,6 +222,7 @@ def selftest() -> int:
     assert not shell_changed(["data/communities/x.json", "feeds.json", ""])
     assert live_shell_sha('const VERSION = "viktorych-a278-' + "a" * 40 + '";') == "a" * 40
     assert live_shell_sha('const VERSION = "viktorych-a278-__SW_VERSION__";') == ""
+
     now = time.time()
     later = datetime.fromtimestamp(now + 5, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     earlier = datetime.fromtimestamp(now - 60, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
