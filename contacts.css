@@ -745,3 +745,50 @@
   width: 14px;
   height: 14px;
 }
+
+.gc-avatar.img {
+  object-fit: cover;
+  background: #202327;
+}
+
+.gc-detail-avatar.img {
+  object-fit: cover;
+  background: #202327;
+}
+
+.gc-match-tag {
+  display: inline-block;
+  font-size: 11px;
+  color: #1d9bf0;
+  background: rgba(29, 155, 240, 0.12);
+  padding: 1px 6px;
+  border-radius: 9999px;
+  margin-left: 6px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.gc-matched-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d9bf0;
+  background: rgba(29, 155, 240, 0.15);
+  border: 1px solid rgba(29, 155, 240, 0.3);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  text-decoration: none;
+  margin-top: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.gc-matched-badge:hover {
+  background: rgba(29, 155, 240, 0.25);
+}
+
+.gc-matched-badge svg {
+  width: 14px;
+  height: 14px;
+}

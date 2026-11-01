@@ -5783,5 +5783,9 @@ SI18n.addPack("es", {
   "No Name": "Sin nombre",
   "Mobile": "Móvil",
   "Phone": "Teléfono",
-  "Upgrade app shortcut": "Actualizar acceso directo"
+  "Upgrade app shortcut": "Actualizar acceso directo",
+  "Viktorych Profiles": "Perfiles de Viktorych",
+  "Share contact": "Compartir contacto",
+  "Send message": "Enviar mensaje",
+  "Viktorych / X Profile": "Perfil de Viktorych / X"
 });

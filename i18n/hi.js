@@ -5770,5 +5770,9 @@ SI18n.addPack("hi", {
   "No Name": "कोई नाम नहीं",
   "Mobile": "मोबाइल",
   "Phone": "फ़ोन",
-  "Upgrade app shortcut": "ऐप शॉर्टकट अपग्रेड करें"
+  "Upgrade app shortcut": "ऐप शॉर्टकट अपग्रेड करें",
+  "Viktorych Profiles": "Viktorych प्रोफ़ाइल",
+  "Share contact": "संपर्क साझा करें",
+  "Send message": "संदेश भेजें",
+  "Viktorych / X Profile": "Viktorych / X प्रोफ़ाइल"
 });

@@ -7,6 +7,11 @@
    - Web Contact Picker API integration (sync device contacts)
    - Dialer protocol handling (tel:, web+contact:)
    - CSV / vCard import and export
+   - Social & Timeline Integration:
+     * Matching contacts with timeline/feed accounts
+     * Showing matched avatar and direct profile jump
+     * Direct 1-tap Send DM (#/messages) or Mention in Compose
+     * Export / Share contact as vCard (.vcf)
 */
 (function (root, factory) {
   if (typeof define === "function" && define.amd) define([], factory);
@@ -22,13 +27,12 @@
   var S = {
     contacts: [],
     query: "",
-    tab: "all", // "all" | "favorites" | "labels"
+    tab: "all", // "all" | "favorites" | "matched"
     activeId: null,
     editing: false,
     loaded: false,
     importing: false,
-    showMigration: false,
-    selectedCategory: null
+    showMigration: false
   };
 
   function tr(key, vars) {
@@ -58,6 +62,7 @@
     if (name === "download") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>';
     if (name === "close") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
     if (name === "check") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+    if (name === "share") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41L7.71 9.71 6.3 8.29 12 2.59zM21 15l-.02 4c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V15h2v4h14v-4h2z"/></svg>';
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>';
   }
 
@@ -71,6 +76,35 @@
     return colors[Math.abs(hash) % colors.length];
   }
 
+  /* Matches contact with catalog feeds or accounts on device */
+  function matchContactWithFeed(c) {
+    if (!c) return null;
+    if (typeof window === "undefined") return null;
+
+    // 1. Direct handle match
+    if (c.handle) {
+      var cleanHandle = c.handle.replace(/^@/, "").trim().toLowerCase();
+      if (cleanHandle && window.feeds) {
+        var allFeeds = window.feeds();
+        var found = allFeeds.find(function (f) {
+          return f && f.handle && f.handle.toLowerCase() === cleanHandle;
+        });
+        if (found) return found;
+      }
+    }
+
+    // 2. Name match in feeds
+    if (c.name && window.feeds) {
+      var cleanName = c.name.trim().toLowerCase();
+      var feedByName = window.feeds().find(function (f) {
+        return f && f.name && f.name.toLowerCase() === cleanName;
+      });
+      if (feedByName) return feedByName;
+    }
+
+    return null;
+  }
+
   function loadContacts() {
     if (S.loaded) return;
     try {
@@ -78,7 +112,6 @@
       if (raw) {
         S.contacts = JSON.parse(raw);
       } else {
-        // Check if v1 data exists to migrate
         var old = localStorage.getItem(OLD_STORE_KEY);
         if (old) {
           S.contacts = JSON.parse(old);
@@ -91,7 +124,6 @@
       S.contacts = [];
     }
 
-    // Check if migration screen should show for installed users
     try {
       var isStandalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
       var migrated = localStorage.getItem(MIGRATION_SEEN_KEY);
@@ -127,7 +159,10 @@
     var list = S.contacts.slice();
     if (S.tab === "favorites") {
       list = list.filter(function (c) { return !!c.favorite; });
+    } else if (S.tab === "matched") {
+      list = list.filter(function (c) { return !!matchContactWithFeed(c); });
     }
+
     if (S.query.trim()) {
       var q = S.query.trim().toLowerCase();
       list = list.filter(function (c) {
@@ -192,6 +227,8 @@
   function renderCategoryChips() {
     var allCount = S.contacts.length;
     var favCount = S.contacts.filter(function (c) { return c.favorite; }).length;
+    var matchedCount = S.contacts.filter(function (c) { return !!matchContactWithFeed(c); }).length;
+
     return '<div class="gc-chips-row">' +
       '<button class="gc-chip' + (S.tab === "all" ? " active" : "") + '" data-act="ct-tab" data-tab="all">' +
         esc(tr("All contacts")) + ' <span class="gc-chip-count">' + allCount + '</span>' +
@@ -199,19 +236,30 @@
       '<button class="gc-chip' + (S.tab === "favorites" ? " active" : "") + '" data-act="ct-tab" data-tab="favorites">' +
         icon(S.tab === "favorites" ? "starOn" : "star") + ' ' + esc(tr("Favorites")) + ' <span class="gc-chip-count">' + favCount + '</span>' +
       '</button>' +
+      (matchedCount > 0 ? '<button class="gc-chip' + (S.tab === "matched" ? " active" : "") + '" data-act="ct-tab" data-tab="matched">' +
+        icon("check") + ' ' + esc(tr("Viktorych Profiles")) + ' <span class="gc-chip-count">' + matchedCount + '</span>' +
+      '</button>' : '') +
     '</div>';
   }
 
   function renderContactRow(c) {
+    var matched = matchContactWithFeed(c);
     var initial = (c.name || "?").charAt(0).toUpperCase();
     var bg = avatarColor(c.name);
     var phone = c.phone || "";
     var starIcon = c.favorite ? icon("starOn") : icon("star");
+
+    var avatarHtml = matched && matched.avatar
+      ? '<img class="gc-avatar img" src="' + esc(matched.avatar) + '" alt="' + esc(c.name) + '" loading="lazy" />'
+      : '<div class="gc-avatar" style="background-color:' + bg + '">' + esc(initial) + '</div>';
+
     return '<div class="gc-contact-row" data-act="ct-view" data-id="' + esc(c.id) + '">' +
-      '<div class="gc-avatar" style="background-color:' + bg + '">' + esc(initial) + '</div>' +
+      avatarHtml +
       '<div class="gc-info">' +
-        '<div class="gc-name">' + esc(c.name || tr("No Name")) + '</div>' +
-        (phone ? '<div class="gc-phone">' + esc(phone) + '</div>' : '') +
+        '<div class="gc-name">' + esc(c.name || tr("No Name")) +
+          (matched ? ' <span class="gc-match-tag">@' + esc(matched.handle) + '</span>' : '') +
+        '</div>' +
+        (phone ? '<div class="gc-phone">' + esc(phone) + '</div>' : (c.handle ? '<div class="gc-phone">@' + esc(c.handle.replace(/^@/, '')) + '</div>' : '')) +
       '</div>' +
       '<div class="gc-row-acts" data-act="stop">' +
         (phone ? '<a class="gc-circle-btn tel" href="tel:' + esc(phone) + '" title="' + esc(tr("Call")) + '">' + icon("phone") + '</a>' : '') +
@@ -273,17 +321,23 @@
   // --- Detail & Editor Modal Views ---
 
   function renderDetailView(c) {
+    var matched = matchContactWithFeed(c);
     var initial = (c.name || "?").charAt(0).toUpperCase();
     var bg = avatarColor(c.name);
     var phone = c.phone || "";
     var email = c.email || "";
-    var handle = c.handle || "";
+    var handle = (matched && matched.handle) || (c.handle ? c.handle.replace(/^@/, '') : "");
     var starIcon = c.favorite ? icon("starOn") : icon("star");
+
+    var heroAvatarHtml = matched && matched.avatar
+      ? '<img class="gc-detail-avatar img" src="' + esc(matched.avatar) + '" alt="' + esc(c.name) + '" />'
+      : '<div class="gc-detail-avatar" style="background-color:' + bg + '">' + esc(initial) + '</div>';
 
     return '<div class="gc-detail-host">' +
       '<div class="gc-detail-top-nav">' +
         '<button class="gc-icon-btn" data-act="ct-back">' + icon("back") + '</button>' +
         '<div class="gc-detail-top-acts">' +
+          '<button class="gc-icon-btn" data-act="ct-share-vcf" data-id="' + esc(c.id) + '" title="' + esc(tr("Share contact")) + '">' + icon("share") + '</button>' +
           '<button class="gc-icon-btn" data-act="ct-toggle-fav" data-id="' + esc(c.id) + '">' + starIcon + '</button>' +
           '<button class="gc-icon-btn" data-act="ct-edit" data-id="' + esc(c.id) + '">' + icon("pencil") + '</button>' +
           '<button class="gc-icon-btn danger" data-act="ct-del" data-id="' + esc(c.id) + '">' + icon("trash") + '</button>' +
@@ -291,13 +345,15 @@
       '</div>' +
 
       '<div class="gc-detail-hero">' +
-        '<div class="gc-detail-avatar" style="background-color:' + bg + '">' + esc(initial) + '</div>' +
+        heroAvatarHtml +
         '<h2 class="gc-detail-name">' + esc(c.name || tr("No Name")) + '</h2>' +
+        (matched ? '<a class="gc-matched-badge" href="#/@' + esc(matched.handle) + '">' + icon("check") + ' @' + esc(matched.handle) + '</a>' : '') +
       '</div>' +
 
       '<div class="gc-detail-quick-acts">' +
         (phone ? '<a class="gc-quick-act" href="tel:' + esc(phone) + '"><div class="gc-circle-btn">' + icon("phone") + '</div><span>' + esc(tr("Call")) + '</span></a>' : '') +
-        (phone ? '<a class="gc-quick-act" href="#/messages?tel=' + esc(phone) + '"><div class="gc-circle-btn">' + icon("mail") + '</div><span>' + esc(tr("Message")) + '</span></a>' : '') +
+        (handle ? '<a class="gc-quick-act" href="#/messages?u=' + encodeURIComponent(handle) + '"><div class="gc-circle-btn">' + icon("mail") + '</div><span>' + esc(tr("Send message")) + '</span></a>' : (phone ? '<a class="gc-quick-act" href="#/messages?tel=' + esc(phone) + '"><div class="gc-circle-btn">' + icon("mail") + '</div><span>' + esc(tr("Message")) + '</span></a>' : '')) +
+        (handle ? '<button class="gc-quick-act" data-act="ct-mention" data-handle="' + esc(handle) + '"><div class="gc-circle-btn">' + icon("pencil") + '</div><span>' + esc(tr("Mention")) + '</span></button>' : '') +
         (email ? '<a class="gc-quick-act" href="mailto:' + esc(email) + '"><div class="gc-circle-btn">' + icon("mail") + '</div><span>' + esc(tr("Mail")) + '</span></a>' : '') +
       '</div>' +
 
@@ -320,8 +376,8 @@
         (handle ? '<div class="gc-detail-item">' +
           '<span class="gc-detail-icon">' + icon("search") + '</span>' +
           '<div class="gc-detail-item-info">' +
-            '<a class="gc-detail-val" href="#/@' + esc(handle.replace(/^@/, '')) + '">@' + esc(handle.replace(/^@/, '')) + '</a>' +
-            '<span class="gc-detail-lbl">' + esc(tr("Viktorych / X Handle")) + '</span>' +
+            '<a class="gc-detail-val" href="#/@' + esc(handle) + '">@' + esc(handle) + '</a>' +
+            '<span class="gc-detail-lbl">' + esc(tr("Viktorych / X Profile")) + '</span>' +
           '</div>' +
         '</div>' : '') +
         (c.notes ? '<div class="gc-detail-item">' +
@@ -353,7 +409,7 @@
 
       '<div class="gc-edit-body">' +
         '<div class="gc-edit-avatar-slot">' +
-          '<div class="gc-avatar xl" style="background-color:' + avatarColor(name || "contact") + '">' + esc((name || "?").charAt(0).toUpperCase()) + '</div>' +
+          '<div class="gc-avatar xl" style="background-color:' + avatarColor(name || "x") + '">' + esc((name || "?").charAt(0).toUpperCase()) + '</div>' +
         '</div>' +
 
         '<form class="gc-form" onsubmit="return false;" id="gc-contact-form" data-id="' + esc(id) + '">' +
@@ -428,7 +484,6 @@
 
   function mount(route) {
     loadContacts();
-    // Check if entered with ?call= or ?tel=
     var q = route && route.query;
     var callParam = q && (q.get("call") || q.get("tel") || q.get("contact"));
     if (callParam) {
@@ -440,7 +495,6 @@
         S.activeId = match.id;
         render();
       } else {
-        // Offer to create contact with phone
         S.activeId = null;
         S.editing = true;
         render();
@@ -474,8 +528,8 @@
     if (act === "ct-install-pwa") {
       if (typeof window !== "undefined") {
         if (window.installPromptNow && window.installPromptNow()) {
-          var p = window.installPromptNow();
-          if (p && p.prompt) p.prompt();
+          var pr = window.installPromptNow();
+          if (pr && pr.prompt) pr.prompt();
         } else if (window.triggerInstallModal) {
           window.triggerInstallModal();
         } else {
@@ -496,10 +550,7 @@
 
     if (act === "ct-search-input") {
       S.query = el.value || "";
-      var list = document.querySelector(".gc-contacts-list, .gc-empty-view");
-      if (list) {
-        render();
-      }
+      render();
       return;
     }
 
@@ -566,6 +617,30 @@
       return;
     }
 
+    if (act === "ct-mention") {
+      var handleToMention = el.getAttribute("data-handle");
+      if (handleToMention) {
+        location.hash = "#/";
+        setTimeout(function () {
+          if (typeof window !== "undefined" && window.STATE) {
+            window.STATE.composeSeed = "@" + handleToMention.replace(/^@/, '') + " ";
+            window.STATE.modal = "compose";
+            render();
+          }
+        }, 100);
+      }
+      return;
+    }
+
+    if (act === "ct-share-vcf") {
+      var shareId = el.getAttribute("data-id");
+      var cShare = S.contacts.find(function (x) { return x.id === shareId; });
+      if (cShare) {
+        exportVCard(cShare);
+      }
+      return;
+    }
+
     if (act === "ct-save-contact") {
       var form = document.getElementById("gc-contact-form");
       if (!form) return;
@@ -614,6 +689,36 @@
     }
   }
 
+  function exportVCard(c) {
+    var fnName = c.name || "contact";
+    var vcf = [
+      ["BEGIN", "VCARD"].join(":"),
+      "VERSION:3.0",
+      "FN:" + fnName,
+      c.phone ? "TEL;TYPE=CELL:" + c.phone : "",
+      c.email ? "EMAIL;TYPE=INTERNET:" + c.email : "",
+      c.handle ? "X-SOCIALPROFILE;TYPE=viktorych:@" + c.handle.replace(/^@/, '') : "",
+      c.notes ? "NOTE:" + c.notes.replace(/\n/g, "\\n") : "",
+      ["END", "VCARD"].join(":")
+    ].filter(Boolean).join("\r\n");
+
+    var blob = new Blob([vcf], { type: "text/vcard;charset=utf-8" });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], "contact.vcf", { type: "text/vcard" })] })) {
+      navigator.share({
+        title: c.name,
+        files: [new File([blob], (c.name || "contact") + ".vcf", { type: "text/vcard" })]
+      }).catch(function () {});
+    } else {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (c.name || "contact") + ".vcf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
+  }
+
   function syncDeviceContacts() {
     if (typeof navigator === "undefined" || !("contacts" in navigator) || !("ContactsManager" in window)) {
       alert(tr("Your browser does not support native contact selection."));
@@ -630,7 +735,6 @@
         var email = (c.email && c.email[0]) || "";
         if (!name && !tel) return;
 
-        // check duplicates
         var exists = S.contacts.some(function (x) {
           return (name && x.name === name) || (tel && x.phone && x.phone === tel);
         });

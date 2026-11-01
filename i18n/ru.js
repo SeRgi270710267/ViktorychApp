@@ -5782,5 +5782,9 @@ SI18n.addPack("ru", {
   "No Name": "Без имени",
   "Mobile": "Мобильный",
   "Phone": "Телефон",
-  "Upgrade app shortcut": "Обновить ярлык приложения"
+  "Upgrade app shortcut": "Обновить ярлык приложения",
+  "Viktorych Profiles": "Профили Viktorych",
+  "Share contact": "Поделиться контактом",
+  "Send message": "Отправить сообщение",
+  "Viktorych / X Profile": "Профиль Viktorych / X"
 });
