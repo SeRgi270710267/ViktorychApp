@@ -687,14 +687,14 @@
     if (tryDeviceRelay(img)) return;
     if (tryRuProxyFallback(img)) return;
     if (img.dataset.fallback === "avatar") {
-      /* Like X: a picture that cannot load shows the default silhouette. */
+      const letter = img.dataset.initials || "?";
       const span = document.createElement("span");
-      const cls = String(img.className || "").split(/\s+/).filter((name) => name && name !== "initials");
+      const cls = String(img.className || "").split(/\s+/).filter((name) => name && name !== "silhouette");
       if (cls.indexOf("ava") < 0) cls.unshift("ava");
-      cls.push("silhouette");
+      if (cls.indexOf("initials") < 0) cls.push("initials");
       span.className = cls.join(" ");
       span.setAttribute("aria-hidden", "true");
-      span.innerHTML = SILHOUETTE_SVG;
+      span.textContent = letter;
       img.replaceWith(span);
       return;
     }
@@ -11058,7 +11058,7 @@ const here = parseRoute();
     return `<div class="topbar tall">
       <h1 class="vh">${tr("Home")}</h1>
       <div class="mhead">
-        <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button>
+        <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}">${viewerFace()}</button>
         ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
@@ -12600,7 +12600,7 @@ const here = parseRoute();
 
   function pageHead(title, extra, back, action) {
     return `<div class="topbar tall"><div class="mhead">
-        <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button>
+        <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}">${viewerFace()}</button>
         ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
@@ -16993,7 +16993,7 @@ const here = parseRoute();
       ? `<a class="icon-btn" href="${backHref}" aria-label="${esc(tr("Back"))}">${icon("back")}</a>`
       : `<button class="icon-btn" type="button" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button>`;
     return `<div class="topbar tall"><div class="mhead">
-        <button class="m-ava" type="button" data-act="drawer" aria-label="${esc(tr("Menu"))}"><span class="ava initials">Y</span></button>
+        <button class="m-ava" type="button" data-act="drawer" aria-label="${esc(tr("Menu"))}">${viewerFace()}</button>
         ${mobileLogo()}
         <a class="m-icon" href="#/settings" aria-label="${esc(tr("Settings"))}">${icon("spark")}</a>
       </div>
@@ -18689,15 +18689,18 @@ if (STATE.histClear) {
   function authorFace(post) {
     if (isRepost(post)) {
       const creator = creatorOf(post);
+      const reposter = post.repostedBy || {};
+      const byFeed = reposter.feedId ? feedById(reposter.feedId) : (reposter.handle ? findFeed(reposter.platform || post.platform || "x", reposter.handle) : null);
+      const reposterAva = reposter.avatar || (byFeed && byFeed.avatar) || "";
       return {
-        avatar: post.avatar || creator.avatar || "",
-        verified: post.verifiedType || creator.verifiedType || ""
+        avatar: post.avatar || (creator && creator.avatar) || reposterAva || "",
+        verified: post.verifiedType || (creator && creator.verifiedType) || ""
       };
     }
     const feed = feedOf(post);
     return {
-      avatar: post.avatar || feed.avatar || "",
-      verified: post.verifiedType || feed.verifiedType || ""
+      avatar: post.avatar || (feed && feed.avatar) || "",
+      verified: post.verifiedType || (feed && feed.verifiedType) || ""
     };
   }
 
