@@ -2036,6 +2036,17 @@
    "cat": "data",
    "sync": "account",
    "ai": false
+  },
+  {
+   "id": "aiSetup",
+   "label": "aiSetup",
+   "desc": "Internal app data.",
+   "type": "data",
+   "store": "state",
+   "key": "aiSetup",
+   "cat": "data",
+   "sync": "account",
+   "ai": false
   }
  ],
  "macros": [

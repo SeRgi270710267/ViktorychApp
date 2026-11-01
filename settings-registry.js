@@ -180,7 +180,7 @@
   /* ---- Internal app data (not settings; never edited by the assistant) ---- */
   ["version", "initialized", "follows", "seenFeeds", "seenDefaults", "likes", "bookmarks", "reposts", "savedPosts", "bellNotes", "bellSeen", "bellRead", "bellsAt",
     "lastNoteTab", "noteClearedAt", "noteDismissed", "builtinNoteRead", "historyCut", "accountFollows", "newsletters", "redditVotes",
-    "prefsAt", "syncUi", "syncUiAt", "musicPrefs"].forEach(function (key) {
+    "prefsAt", "syncUi", "syncUiAt", "musicPrefs", "aiSetup"].forEach(function (key) {
     add({ id: key, label: key, desc: "Internal app data.", type: "data", store: "state", key: key, cat: "data", sync: "account", ai: false });
   });
 
