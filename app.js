@@ -26503,8 +26503,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   /* A calm note when our servers keep failing or stalling while the device
      is online. The offline note wins when both apply. */
+  let netLimitedTimer = 0;
   function setLimited(on) {
     STATE.netLimited = !!on;
+    if (netLimitedTimer) { clearTimeout(netLimitedTimer); netLimitedTimer = 0; }
+    if (STATE.netLimited) {
+      netLimitedTimer = setTimeout(() => {
+        STATE.netLimited = false;
+        paintNetNote();
+      }, 8000);
+    }
     paintNetNote();
   }
 

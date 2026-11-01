@@ -834,10 +834,15 @@
   var HEDGE_MS = 3000;
   var trouble = { all: 0, at: 0 };
   function troubleNote(ok) {
-    var was = trouble.all >= 2;
+    var was = trouble.all >= 4;
+    var nowTime = Date.now();
     if (ok) trouble.all = 0;
-    else { trouble.all += 1; trouble.at = Date.now(); }
-    var now = trouble.all >= 2;
+    else {
+      if (trouble.at && (nowTime - trouble.at) > 60000) trouble.all = 1;
+      else trouble.all += 1;
+      trouble.at = nowTime;
+    }
+    var now = trouble.all >= 4;
     if (was !== now) {
       try { window.dispatchEvent(new CustomEvent("viktorych-api-trouble", { detail: { on: now } })); } catch (err) { /* old browser */ }
     }
