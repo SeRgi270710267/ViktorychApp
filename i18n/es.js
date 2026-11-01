@@ -5774,5 +5774,13 @@ SI18n.addPack("es", {
   "Your browser does not support native contact selection.": "Su navegador no admite la selección nativa de contactos.",
   "Imported {n} contacts": "Se importaron {n} contactos",
   "Please enter a contact name.": "Por favor, introduzca un nombre de contacto.",
-  "Delete contact?": "¿Eliminar contacto?"
+  "Delete contact?": "¿Eliminar contacto?",
+  "New: Google Contacts Clone Ready": "Nuevo: Clon de Google Contactos listo",
+  "Your installed ViktorychApp can now handle device phone calls, address book sync, and vCards offline.": "Su ViktorychApp instalada ahora puede gestionar llamadas telefónicas del dispositivo, sincronización de la libreta de direcciones y vCards sin conexión.",
+  "Got it": "Entendido",
+  "Make Contacts Default App": "Hacer de Contactos la app predeterminada",
+  "Install ViktorychApp to open phone numbers directly and manage your contacts offline.": "Instale ViktorychApp para abrir números de teléfono directamente y gestionar sus contactos sin conexión.",
+  "No Name": "Sin nombre",
+  "Mobile": "Móvil",
+  "Phone": "Teléfono"
 });

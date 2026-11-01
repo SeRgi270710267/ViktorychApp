@@ -5773,5 +5773,13 @@ SI18n.addPack("ru", {
   "Your browser does not support native contact selection.": "Ваш браузер не поддерживает выбор контактов на устройстве.",
   "Imported {n} contacts": "Импортировано {n} контактов",
   "Please enter a contact name.": "Пожалуйста, введите имя контакта.",
-  "Delete contact?": "Удалить контакт?"
+  "Delete contact?": "Удалить контакт?",
+  "New: Google Contacts Clone Ready": "Новинка: клон Google Контактов готов",
+  "Your installed ViktorychApp can now handle device phone calls, address book sync, and vCards offline.": "Установленное приложение ViktorychApp теперь может обрабатывать телефонные вызовы, синхронизировать контакты и vCard офлайн.",
+  "Got it": "Понятно",
+  "Make Contacts Default App": "Сделать Контакты приложением по умолчанию",
+  "Install ViktorychApp to open phone numbers directly and manage your contacts offline.": "Установите ViktorychApp, чтобы открывать телефонные номера напрямую и управлять контактами офлайн.",
+  "No Name": "Без имени",
+  "Mobile": "Мобильный",
+  "Phone": "Телефон"
 });
