@@ -597,7 +597,7 @@ html.is-split-drag * {
   right: 0;
   top: 0;
   height: env(safe-area-inset-top, 0px);
-  background: var(--bg);
+  background: transparent;
   pointer-events: none;
 }
 .mhead { display: none; }
@@ -2812,7 +2812,7 @@ button.show-replies {
     right: 0;
     transition: transform 0.2s ease;
   }
-  .topbar.is-hidden { transform: translateY(calc(-100% + env(safe-area-inset-top))); }
+  .topbar.is-hidden { transform: translateY(-100%); }
   .topbar {
     padding-top: env(safe-area-inset-top);
     padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
@@ -3529,16 +3529,14 @@ html.vk-fs .vk-fs-exit.on { transform: translate(-50%, 0); opacity: 1; pointer-e
     left: 0;
     right: 0;
     height: calc(env(safe-area-inset-top, 0px) + 1px);
-    background: var(--bg);
+    background: transparent;
     pointer-events: none;
   }
   body:has(.profile-top)::before { background: transparent; }
   .topbar {
-    background:
-      linear-gradient(var(--bg), var(--bg)) 0 0 / 100% calc(env(safe-area-inset-top, 0px) + 1px) no-repeat,
-      var(--topbar);
+    background: var(--topbar);
   }
-  .topbar::before { height: calc(env(safe-area-inset-top, 0px) + 1px); }
+  .topbar::before { height: calc(env(safe-area-inset-top, 0px) + 1px); background: transparent; }
 }
 
 .home-fresh {
@@ -6628,9 +6626,15 @@ html[data-ava-shape="square"] :is(.ava, .ava img, .pava, .pava img, .m-ava .ava,
    handler). Transform and opacity only, so it stays on the compositor. */
 @media (max-width: 499px) {
   .topbar { will-change: transform; }
-  .bottom-nav, .fab { transition: opacity 0.2s ease; }
-  html.chrome-hidden .bottom-nav { opacity: 0.45; }
-  html.chrome-hidden .fab { opacity: 0.45; }
+  .bottom-nav, .fab { transition: transform 0.2s ease, opacity 0.2s ease; will-change: transform; }
+  html.chrome-hidden .bottom-nav {
+    transform: translateY(calc(100% + env(safe-area-inset-bottom)));
+  }
+  html.chrome-hidden .fab {
+    transform: translateY(calc(100% + 80px));
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 @media (max-width: 499px) and (prefers-reduced-motion: reduce) {
   .topbar, .bottom-nav, .fab { transition: none; }
