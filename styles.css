@@ -154,7 +154,8 @@ img { max-width: 100%; }
   top: 0;
   z-index: 26;
   height: 100vh;
-  padding: 8px 12px 0;
+  height: 100dvh;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px calc(8px + env(safe-area-inset-bottom, 0px)) calc(12px + var(--safe-l, env(safe-area-inset-left, 0px)));
   display: flex;
   flex-direction: column;
 }
@@ -588,6 +589,9 @@ html.is-split-drag * {
   background: var(--topbar);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+  padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
 }
 .topbar::before {
   content: "";
@@ -2747,6 +2751,7 @@ button.show-replies {
 
 @media (max-width: 1279px) {
   .nav-split { display: none; }
+  .app { max-width: none; width: 100%; }
 }
 @media (max-width: 1279px) and (min-width: 500px) {
   .nav { width: 88px; flex-basis: 88px; padding: 0 4px; align-items: center; }
@@ -6624,11 +6629,12 @@ html[data-ava-shape="square"] :is(.ava, .ava img, .pava, .pava img, .m-ava .ava,
 /* X mobile chrome: the translucent top bar slides away and the bottom bar
    fades while scrolling down (html.chrome-hidden, set from one rAF scroll
    handler). Transform and opacity only, so it stays on the compositor. */
-@media (max-width: 499px) {
-  .topbar { will-change: transform; }
+@media (max-width: 1024px) {
+  .topbar { will-change: transform; transition: transform 0.2s ease; }
+  .topbar.is-hidden { transform: translateY(-100%); }
   .bottom-nav, .fab { transition: transform 0.2s ease, opacity 0.2s ease; will-change: transform; }
   html.chrome-hidden .bottom-nav {
-    transform: translateY(calc(100% + env(safe-area-inset-bottom)));
+    transform: translateY(calc(100% + env(safe-area-inset-bottom, 0px)));
   }
   html.chrome-hidden .fab {
     transform: translateY(calc(100% + 80px));

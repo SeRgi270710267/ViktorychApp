@@ -25051,7 +25051,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     scrollTick = 0;
     paintProfileChrome();
     const homeStories = parseRoute().name === "home" && document.querySelector(".story-shell");
-    if (window.innerWidth >= 500 || homeStories) {
+    const isBarNav = document.documentElement.getAttribute("data-nav-layout") === "bar";
+    if ((window.innerWidth >= 1024 && !isBarNav) || homeStories) {
       STATE.headerHidden = false;
       paintChromeHidden(false);
       return;
