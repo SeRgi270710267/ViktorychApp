@@ -1374,7 +1374,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.privacyZeroTrace = parsed.privacyZeroTrace === true;
       parsed.privacyAntiFingerprint = parsed.privacyAntiFingerprint !== false;
       if (!parsed.appearance) parsed.appearance = "lightsout";
-      if (parsed.showPictures !== "default" && parsed.showPictures !== "none") parsed.showPictures = "show";
+      if (parsed.showPictures !== "none") parsed.showPictures = "show";
       if (parsed.showBanners !== "default" && parsed.showBanners !== "none") parsed.showBanners = "show";
       if (parsed.notify !== true) parsed.notify = false;
       if (parsed.autoplay !== "wifi" && parsed.autoplay !== "never") parsed.autoplay = "all";
@@ -2439,8 +2439,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function faceChoice(kind, src, accountFace) {
     const viewer = faceSetting(kind === "banner" ? "showBanners" : "showPictures");
-    if (viewer === "none" || viewer === "default") return viewer;
-    if (accountFace === "none" || accountFace === "default") return accountFace;
+    if (viewer === "none") return "none";
+    if (accountFace === "none") return "none";
     return src ? "photo" : "default";
   }
 
@@ -2452,11 +2452,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const extra = cls ? " " + cls : "";
     const face = faceChoice("picture", src, accountFace);
     if (face === "none") return `<span class="ava-none"></span>`;
-    if (face === "default") return silhouette(extra);
+    if (face === "default" && !src) return silhouette(extra);
     const letter = initials(name);
     const lib = window.ViktorychComments;
     const sized = lib && lib.smallAvatar && linkImagesBlocked() ? lib.smallAvatar(src, true) : src;
-    const safeSrc = ruSafeImageUrl(sized);
+    const safeSrc = ruSafeImageUrl(sized || src);
+    if (!safeSrc) return silhouette(extra);
     const loadAttr = eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
     const onError = `this.onerror=null;var s=document.createElement('span');s.className='ava initials${extra}';s.setAttribute('aria-hidden','true');s.textContent='${letter}';this.replaceWith(s);`;
     return `<img decoding="async" class="ava${extra}" src="${esc(safeSrc)}" alt="" ${loadAttr} referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}" onerror="${onError}">`;

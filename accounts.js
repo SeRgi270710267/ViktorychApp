@@ -1642,7 +1642,7 @@ var numberNote = form.passkey
     var faces = window.ViktorychFaces;
     var pick = faces && (kind === "banner" ? faces.banner : faces.picture);
     if (pick) return pick(src, accountFace);
-    if (accountFace === "none" || accountFace === "default") return accountFace;
+    if (accountFace === "none") return "none";
     return src ? "photo" : "default";
   }
   function presenceWrap(id, html, opener) {
@@ -1653,9 +1653,9 @@ var numberNote = form.passkey
   function publicAvatar(src, accountFace, cls, initials) {
     var mode = faceOf("picture", src, accountFace);
     if (mode === "none") return '<span class="ava-none"></span>';
-    var classes = "ava" + (cls ? " " + cls : "") + (mode === "default" ? " silhouette" : "");
+    var classes = "ava" + (cls ? " " + cls : "") + (mode === "default" && !src ? " silhouette" : "");
     var letter = String(initials || "?").trim().charAt(0).toUpperCase() || "?";
-    if (mode === "photo") return photoHtml(src, classes, letter);
+    if (src || mode === "photo") return photoHtml(src, classes, letter);
     return '<span class="' + classes + '" aria-hidden="true">' + PERSON + "</span>";
   }
   function publicBanner(src, accountFace) {
