@@ -2458,7 +2458,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const sized = lib && lib.smallAvatar && linkImagesBlocked() ? lib.smallAvatar(src, true) : src;
     const safeSrc = ruSafeImageUrl(sized);
     const loadAttr = eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
-    return `<img decoding="async" class="ava${extra}" src="${esc(safeSrc)}" alt="" ${loadAttr} referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
+    const onError = `this.onerror=null;var s=document.createElement('span');s.className='ava initials${extra}';s.setAttribute('aria-hidden','true');s.textContent='${letter}';this.replaceWith(s);`;
+    return `<img decoding="async" class="ava${extra}" src="${esc(safeSrc)}" alt="" ${loadAttr} referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}" onerror="${onError}">`;
   }
 
   function affSlot(source) {
